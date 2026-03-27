@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Loader2, Power, FileText, X } from "lucide-react";
 import { useLatestAllocation, usePlatformStatus, useToggleAutoTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
@@ -46,6 +46,16 @@ export function TradeWorkflowBar() {
   const toggleAutoTrading = useToggleAutoTrading();
 
   const [autoTradingConfirm, setAutoTradingConfirm] = useState<"enable" | "disable" | null>(null);
+  const [whitepaperOpen, setWhitepaperOpen] = useState(false);
+
+  const closeWhitepaper = useCallback(() => setWhitepaperOpen(false), []);
+
+  useEffect(() => {
+    if (!whitepaperOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeWhitepaper(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [whitepaperOpen, closeWhitepaper]);
 
   const autoTradingEnabled = status?.auto_trading ?? false;
 
@@ -131,6 +141,38 @@ export function TradeWorkflowBar() {
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           )}
         </button>
+
+        <button
+          onClick={() => setWhitepaperOpen(true)}
+          className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] border bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/50"
+        >
+          <FileText className="h-4 w-4" />
+          <span>Platform Whitepaper</span>
+        </button>
+
+        {whitepaperOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeWhitepaper}>
+            <div className="relative w-[90vw] h-[90vh] max-w-5xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-indigo-400" />
+                  Platform Whitepaper
+                </h3>
+                <button
+                  onClick={closeWhitepaper}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <iframe
+                src={`${import.meta.env.BASE_URL}whitepaper.pdf`}
+                className="flex-1 w-full bg-white"
+                title="Platform Whitepaper"
+              />
+            </div>
+          </div>
+        )}
 
         {/* CONVICTION METER — shown when there's an active allocation */}
         {avgConviction !== null && allocation?.allocation && (

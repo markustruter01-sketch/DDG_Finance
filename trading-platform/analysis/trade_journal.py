@@ -97,6 +97,10 @@ def init_db() -> None:
             )
         """)
         _migrate_add_price_columns(conn)
+
+    from execution.profit_sweep import init_vault_db
+    init_vault_db()
+
     logger.info(f"Trade journal initialised at: {DB_PATH}")
 
 

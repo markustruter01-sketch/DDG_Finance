@@ -24,7 +24,7 @@ from decimal import Decimal
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.requests import MarketOrderRequest, StopOrderRequest
 from alpaca.trading.models import Order, Position, TradeAccount
 from loguru import logger
 
@@ -143,6 +143,45 @@ def place_order(
     except Exception as exc:
         logger.error(f"Broker | Order failed for {ticker}: {exc}")
         raise RuntimeError(f"Order placement failed for {ticker}: {exc}") from exc
+
+
+def place_stop_order(ticker: str, qty: float, stop_price: float) -> dict:
+    """
+    Place a GTC stop-sell order for an existing position (risk overlay).
+    Used after fill to lock in a 2% hard stop on overheated assets.
+    qty   — number of shares / coins to protect
+    stop  — trigger price (e.g. fill_price * 0.98)
+    """
+    is_crypto = is_crypto_pair(ticker)
+    symbol    = ticker.replace("/", "") if is_crypto else ticker
+    tif       = TimeInForce.GTC
+
+    req = StopOrderRequest(
+        symbol=symbol,
+        qty=round(qty, 8),
+        side=OrderSide.SELL,
+        time_in_force=tif,
+        stop_price=round(stop_price, 4),
+    )
+
+    logger.info(
+        f"Broker | Stop-sell {ticker} qty={qty:.6f} stop=${stop_price:.4f} (GTC)"
+    )
+    try:
+        order: Order = _client().submit_order(req)
+        result = {
+            "id":         str(order.id),
+            "symbol":     order.symbol,
+            "side":       order.side.value,
+            "stop_price": stop_price,
+            "qty":        qty,
+            "status":     order.status.value,
+        }
+        logger.info(f"Broker | Stop order placed: {result['id']} status={result['status']}")
+        return result
+    except Exception as exc:
+        logger.warning(f"Broker | Stop order failed for {ticker}: {exc}")
+        raise RuntimeError(f"Stop order failed for {ticker}: {exc}") from exc
 
 
 def get_latest_price(ticker: str) -> float | None:

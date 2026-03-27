@@ -58,7 +58,7 @@ def _fetch_account_state() -> dict[str, Any]:
 
 async def run_analysis_cycle(
     lookback_days_macro: int = 90,
-    market_period: str = "6mo",
+    market_period: str = "1y",
     news_lookback_days: int = 3,
     n_loss_feedback: int = 5,
     dry_run: bool = False,

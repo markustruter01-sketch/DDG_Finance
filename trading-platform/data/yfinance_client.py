@@ -53,8 +53,35 @@ ALL_TICKERS: list[str] = [t for tickers in UNIVERSE.values() for t in tickers]
 ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
 CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]
 
-MA_3MO_BARS = 63
-MA_6MO_BARS = 126
+MA_3MO_BARS  = 63
+MA_6MO_BARS  = 126
+MA_200D_BARS = 200
+RSI_PERIOD   = 14
+
+_cached_market_data: dict | None = None
+
+
+def get_cached_market_data() -> dict | None:
+    """Return the most-recently fetched market data (or None on first boot)."""
+    return _cached_market_data
+
+
+def _compute_rsi(closes: list[float], period: int = RSI_PERIOD) -> float | None:
+    """Wilder's RSI using simple average seed (standard for quant systems)."""
+    if len(closes) < period + 1:
+        return None
+    recent = closes[-(period + 1):]
+    gains, losses = [], []
+    for i in range(1, len(recent)):
+        diff = recent[i] - recent[i - 1]
+        gains.append(max(diff, 0.0))
+        losses.append(max(-diff, 0.0))
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return float(100.0 - (100.0 / (1 + rs)))
 
 
 def _is_retryable_http_error(exc: BaseException) -> bool:
@@ -125,6 +152,22 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         ma_6mo = float(np.mean(closes[-MA_6MO_BARS:]))
         momentum_6mo = "positive" if latest_price > ma_6mo else "negative"
 
+    z_score_200d: float | None = None
+    if len(closes) >= MA_200D_BARS:
+        window_200 = closes[-MA_200D_BARS:]
+        sma_200  = float(np.mean(window_200))
+        std_200  = float(np.std(window_200, ddof=0))
+        z_score_200d = round((latest_price - sma_200) / std_200, 3) if std_200 > 0 else 0.0
+
+    rsi_14d: float | None = _compute_rsi(closes)
+    if rsi_14d is not None:
+        rsi_14d = round(rsi_14d, 2)
+
+    is_overheated = bool(
+        (z_score_200d is not None and z_score_200d > 2.0) or
+        (rsi_14d is not None and rsi_14d > 75)
+    )
+
     return {
         "ticker":                       ticker,
         "latest_price":                 latest_price,
@@ -138,6 +181,9 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         "ma_6mo":                       round(ma_6mo, 4) if ma_6mo else None,
         "momentum_3mo":                 momentum_3mo,
         "momentum_6mo":                 momentum_6mo,
+        "z_score_200d":                 z_score_200d,
+        "rsi_14d":                      rsi_14d,
+        "is_overheated":                is_overheated,
         "data_points":                  len(closes),
     }
 
@@ -155,7 +201,7 @@ async def _fetch_bars_alpaca(
             "timeframe": "1Day",
             "start": start_date,
             "end": end_date,
-            "limit": 200,
+            "limit": 400,
             "feed": "iex",
             "adjustment": "all",
         }
@@ -250,7 +296,12 @@ async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> d
         f"Market Data | Complete — {fetched}/{len(tickers_to_fetch)} tickers fetched successfully"
     )
 
-    return {"by_ticker": by_ticker, "by_category": by_category}
+    result = {"by_ticker": by_ticker, "by_category": by_category}
+
+    global _cached_market_data
+    _cached_market_data = result
+
+    return result
 
 
 async def fetch_single_ticker(ticker: str, period: str = "6mo") -> dict[str, Any]:

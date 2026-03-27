@@ -1,7 +1,7 @@
 """
 Trade Executor — Converts Allocations → Alpaca Orders
 --------------------------------------------------------
-v4.0 — Regime-Switching Architecture
+v4.1 — Risk Profile Override + High-Yield Vault Integration
 
 Takes the validated RegimeAnalysisOutput (or CryptoAnalysisOutput) from the
 analysis phase and executes each slot:
@@ -10,15 +10,28 @@ analysis phase and executes each slot:
   2. Liquidate positions no longer in today's plan (exits).
   3. For each active slot, compute notional USD from kelly_fraction × equity.
   4. Skip SGOV slots and slots already held at correct size (within 10%).
-  5. Place market buy orders.
-  6. Log every new trade to the SQLite journal for the RAG loop.
-  7. Capture intended_price and actual_fill_price for slippage tracking.
+  5. ── RISK OVERLAY (Module 3) ──────────────────────────────────────────
+     Before placing any buy, check the asset's Z-Score and RSI from the
+     most recently cached market data:
+       IF Z-Score > 2.0  OR  RSI(14) > 75  → asset is OVERHEATED
+         • Cut LLM-requested notional by 50%.
+         • Reroute remaining 50% into SGOV (cash equivalent).
+         • After fill: place a GTC stop-sell at 2% below fill price.
+     ──────────────────────────────────────────────────────────────────────
+  6. Place market buy orders.
+  7. Log every new trade to the SQLite journal for the RAG loop.
+  8. Capture intended_price and actual_fill_price for slippage tracking.
+  9. ── HIGH-YIELD VAULT (Module 1) ──────────────────────────────────────
+     After all orders complete, run the profit sweep to compound gains
+     into JEPQ.  Vault shares are never liquidated by this executor.
+     ──────────────────────────────────────────────────────────────────────
 
 Fixed Universe:
   Equities:    SPY, QQQ          (DAY orders, min $100)
   Safe Havens: TLT, GLD          (DAY orders, min $100)
   Crypto Spot: BTC/USD, ETH/USD, ATOM/USD  (GTC orders, min $25)
-  Cash:        SGOV              (never traded)
+  Cash:        SGOV              (never actively bought except for reroutes)
+  Vault:       JEPQ              (profit sweep only, LLM cannot sell)
 """
 
 import time
@@ -38,17 +51,38 @@ from execution.broker import (
     get_order,
     get_positions,
     place_order,
+    place_stop_order,
 )
+from data.yfinance_client import get_cached_market_data
 
 MIN_NOTIONAL_USD    = 100.0
 MIN_NOTIONAL_CRYPTO = 25.0
 CASH_TICKER         = "SGOV"
+VAULT_TICKER        = "JEPQ"
 
 KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD", "ATOMUSD"}
+
+OVERHEATED_Z_THRESHOLD  = 2.0
+OVERHEATED_RSI_THRESHOLD = 75.0
+OVERHEAT_CUT_RATIO      = 0.50   # 50 % cut for overheated asset
+OVERHEAT_STOP_PCT       = 0.02   # 2 % stop loss below fill price
 
 
 def _normalize_symbol(ticker: str) -> str:
     return ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+
+
+def _get_heat_metrics(ticker: str) -> dict:
+    """Pull Z-score, RSI, is_overheated from the most recent market-data cache."""
+    market_data = get_cached_market_data()
+    if market_data is None:
+        return {"z_score_200d": None, "rsi_14d": None, "is_overheated": False}
+    d = market_data.get("by_ticker", {}).get(ticker, {})
+    return {
+        "z_score_200d":  d.get("z_score_200d"),
+        "rsi_14d":       d.get("rsi_14d"),
+        "is_overheated": bool(d.get("is_overheated", False)),
+    }
 
 
 def execute_allocations(
@@ -68,6 +102,8 @@ def execute_allocations(
 
     is_crypto_only = isinstance(output, CryptoAnalysisOutput)
 
+    protected_symbols = {_normalize_symbol(VAULT_TICKER)}
+
     active_tickers_raw = {
         a.ticker for a in output.allocations
         if a.ticker != CASH_TICKER and a.kelly_fraction > 0
@@ -75,21 +111,26 @@ def execute_allocations(
     active_symbols = {_normalize_symbol(t) for t in active_tickers_raw}
 
     results = {
-        "equity":      equity,
-        "dry_run":     dry_run,
-        "crypto_only": is_crypto_only,
-        "placed":      [],
-        "skipped":     [],
-        "closed":      [],
-        "errors":      [],
+        "equity":           equity,
+        "dry_run":          dry_run,
+        "crypto_only":      is_crypto_only,
+        "placed":           [],
+        "skipped":          [],
+        "closed":           [],
+        "errors":           [],
+        "risk_overrides":   [],
+        "vault_sweep":      None,
     }
 
     results = _close_stale_positions(
-        current_positions, active_symbols, results, dry_run, crypto_only=is_crypto_only
+        current_positions, active_symbols, protected_symbols,
+        results, dry_run, crypto_only=is_crypto_only,
     )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         results = _execute_slot(slot, equity, current_positions, results, dry_run)
+
+    results = _run_vault_sweep(equity, results, dry_run)
 
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE COMPLETE")
@@ -97,7 +138,8 @@ def execute_allocations(
         f"  Placed:  {len(results['placed'])} orders | "
         f"Closed: {len(results['closed'])} positions | "
         f"Skipped: {len(results['skipped'])} | "
-        f"Errors: {len(results['errors'])}"
+        f"Errors: {len(results['errors'])} | "
+        f"Risk overrides: {len(results['risk_overrides'])}"
     )
     logger.info("=" * 60)
 
@@ -107,6 +149,7 @@ def execute_allocations(
 def _close_stale_positions(
     current_positions: dict,
     active_symbols: set,
+    protected_symbols: set,
     results: dict,
     dry_run: bool,
     crypto_only: bool = False,
@@ -114,6 +157,9 @@ def _close_stale_positions(
     stale = []
     for sym in current_positions:
         if sym in active_symbols or sym == CASH_TICKER:
+            continue
+        if sym in protected_symbols:
+            logger.debug(f"Vault position {sym} is protected — never closing")
             continue
         if crypto_only and sym not in KNOWN_CRYPTO_SYMBOLS:
             continue
@@ -189,11 +235,43 @@ def _execute_slot(
             })
             return results
 
+    heat = _get_heat_metrics(ticker)
+    overheated = heat["is_overheated"]
+    z_score    = heat["z_score_200d"]
+    rsi        = heat["rsi_14d"]
+
+    sgov_notional = 0.0
+
+    if overheated:
+        original_notional = notional_usd
+        notional_usd  = round(notional_usd * OVERHEAT_CUT_RATIO, 2)
+        sgov_notional = round(original_notional - notional_usd, 2)
+        trigger = []
+        if z_score is not None and z_score > OVERHEATED_Z_THRESHOLD:
+            trigger.append(f"Z-score={z_score:+.2f} > {OVERHEATED_Z_THRESHOLD}")
+        if rsi is not None and rsi > OVERHEATED_RSI_THRESHOLD:
+            trigger.append(f"RSI={rsi:.1f} > {OVERHEATED_RSI_THRESHOLD}")
+        logger.warning(
+            f"⚠ Risk Overlay | {ticker} OVERHEATED ({', '.join(trigger)}) — "
+            f"cutting ${original_notional:,.2f} → ${notional_usd:,.2f} "
+            f"(${sgov_notional:,.2f} rerouted to {CASH_TICKER})"
+        )
+        results["risk_overrides"].append({
+            "slot":              slot.slot,
+            "ticker":            ticker,
+            "z_score":           z_score,
+            "rsi":               rsi,
+            "original_notional": original_notional,
+            "cut_notional":      notional_usd,
+            "sgov_rerouted":     sgov_notional,
+        })
+
     logger.info(
         f"Slot {slot.slot}: {ticker:10s} | "
         f"kelly={slot.kelly_fraction:.1%} | "
         f"notional=${notional_usd:,.2f} | "
         f"conv={slot.conviction_score:.0%}"
+        + (f" | ⚠ OVERHEATED (2% stop)" if overheated else "")
     )
 
     intended_price = get_latest_price(ticker)
@@ -208,8 +286,17 @@ def _execute_slot(
             "kelly":          slot.kelly_fraction,
             "conviction":     slot.conviction_score,
             "intended_price": intended_price,
+            "overheated":     overheated,
             "dry_run":        True,
         })
+        if overheated and sgov_notional >= 1.0:
+            results["placed"].append({
+                "slot":         f"{slot.slot}a",
+                "ticker":       CASH_TICKER,
+                "notional_usd": sgov_notional,
+                "reason":       "overheat_reroute",
+                "dry_run":      True,
+            })
         return results
 
     try:
@@ -232,7 +319,7 @@ def _execute_slot(
             slippage_pct = (actual_fill_price - intended_price) / intended_price * 100
             slippage_info = f" | slippage={slippage_pct:+.4f}%"
 
-        results["placed"].append({
+        result_entry = {
             "slot":              slot.slot,
             "ticker":            ticker,
             "notional_usd":      notional_usd,
@@ -240,8 +327,16 @@ def _execute_slot(
             "order_status":      order["status"],
             "intended_price":    intended_price,
             "actual_fill_price": actual_fill_price,
-        })
+            "overheated":        overheated,
+        }
+        results["placed"].append(result_entry)
         logger.info(f"  → Fill price: ${actual_fill_price or 'pending'}{slippage_info}")
+
+        if overheated and actual_fill_price and actual_fill_price > 0:
+            _place_overheated_stop(ticker, notional_usd, actual_fill_price, results)
+
+        if overheated and sgov_notional >= MIN_NOTIONAL_USD:
+            _reroute_to_sgov(slot, sgov_notional, results)
 
     except Exception as exc:
         logger.error(f"Slot {slot.slot}: order failed for {ticker}: {exc}")
@@ -251,6 +346,77 @@ def _execute_slot(
             "error":  str(exc),
         })
 
+    return results
+
+
+def _place_overheated_stop(
+    ticker: str,
+    notional_usd: float,
+    fill_price: float,
+    results: dict,
+) -> None:
+    """Place a GTC stop-sell at 2 % below fill price for an overheated asset."""
+    stop_price = round(fill_price * (1.0 - OVERHEAT_STOP_PCT), 4)
+    qty = notional_usd / fill_price
+
+    logger.warning(
+        f"⚠ Risk Overlay | Placing 2% stop for {ticker}: "
+        f"fill=${fill_price:.4f} → stop=${stop_price:.4f} qty={qty:.6f}"
+    )
+    try:
+        stop_order = place_stop_order(ticker=ticker, qty=qty, stop_price=stop_price)
+        results["risk_overrides"][-1]["stop_order"] = stop_order
+    except Exception as exc:
+        logger.warning(f"Risk Overlay | Stop order failed for {ticker}: {exc} — position unprotected")
+        results["risk_overrides"][-1]["stop_order_error"] = str(exc)
+
+
+def _reroute_to_sgov(
+    slot: RegimeAllocationSlot | CryptoAllocationSlot,
+    sgov_notional: float,
+    results: dict,
+) -> None:
+    """Buy SGOV with the capital cut from an overheated slot."""
+    logger.info(f"  → Risk reroute: buying {CASH_TICKER} ${sgov_notional:,.2f}")
+    try:
+        sgov_order = place_order(ticker=CASH_TICKER, notional_usd=sgov_notional)
+        log_trade(
+            trade_id=sgov_order["id"],
+            ticker=CASH_TICKER,
+            asset_class="cash",
+            conviction_score=1.0,
+            original_thesis=f"Risk overlay reroute from overheated slot {slot.slot} ({slot.ticker})",
+        )
+        results["placed"].append({
+            "slot":       f"{slot.slot}a",
+            "ticker":     CASH_TICKER,
+            "notional_usd": sgov_notional,
+            "order_id":   sgov_order["id"],
+            "reason":     "overheat_reroute",
+        })
+    except Exception as exc:
+        logger.warning(f"Risk reroute to {CASH_TICKER} failed: {exc}")
+        results["errors"].append({"ticker": CASH_TICKER, "error": f"SGOV reroute failed: {exc}"})
+
+
+def _run_vault_sweep(equity: float, results: dict, dry_run: bool) -> dict:
+    """Run the profit sweep after all allocations are executed."""
+    try:
+        from execution.profit_sweep import run_profit_sweep
+        sweep = run_profit_sweep(current_equity=equity, dry_run=dry_run)
+        results["vault_sweep"] = sweep
+        if sweep.get("swept"):
+            logger.info(
+                f"Vault | Swept ${sweep['sweep_amount']:,.2f} → {sweep.get('vault_symbol', 'JEPQ')} "
+                f"(total vaulted: ${sweep.get('total_vaulted_usd', 0):,.2f})"
+            )
+        elif sweep.get("reason") == "first_run_hwm_initialised":
+            logger.info(f"Vault | High Water Mark initialised at ${sweep['hwm']:,.2f}")
+        else:
+            logger.debug(f"Vault | No sweep: {sweep.get('reason')}")
+    except Exception as exc:
+        logger.error(f"Vault | Sweep failed: {exc}")
+        results["vault_sweep"] = {"swept": False, "reason": f"error: {exc}"}
     return results
 
 

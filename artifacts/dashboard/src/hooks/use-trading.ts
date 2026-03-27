@@ -255,6 +255,37 @@ export function useRefreshCommentary() {
   });
 }
 
+// --- Vault ---
+
+export interface VaultState {
+  initialised: boolean;
+  id?: number;
+  hwm?: number;
+  total_vaulted_usd?: number;
+  total_sweeps?: number;
+  vault_symbol?: string;
+  last_sweep_date?: string | null;
+  last_sweep_amount?: number | null;
+  message?: string;
+}
+
+export function useVault() {
+  return useQuery<VaultState>({
+    queryKey: ["/vault"],
+    queryFn: async () => (await api.get("/vault")).data,
+    refetchInterval: 60000,
+  });
+}
+
+export function useManualSweep() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dry_run: boolean = false) =>
+      (await api.post(`/vault/sweep?dry_run=${dry_run}`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/vault"] }),
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {

@@ -108,6 +108,7 @@ def build_user_prompt(
         lines.append("(Use momentum signals as HARD FILTER per allocation rules)")
         lines.append("")
 
+    any_overheated = False
     for cat, tickers in market_data.get("by_category", {}).items():
         if cat == "cash":
             continue
@@ -115,15 +116,33 @@ def build_user_prompt(
         for ticker, d in tickers.items():
             if "error" not in d:
                 mom = _momentum_badge(d)
+                z   = d.get("z_score_200d")
+                rsi = d.get("rsi_14d")
+                heat_parts = []
+                if z is not None:
+                    heat_parts.append(f"Z={z:+.2f}")
+                if rsi is not None:
+                    heat_parts.append(f"RSI={rsi:.1f}")
+                heat_str = " | " + " ".join(heat_parts) if heat_parts else ""
+                overheat_flag = ""
+                if d.get("is_overheated"):
+                    overheat_flag = " ⚠️ OVERHEATED"
+                    any_overheated = True
                 lines.append(
                     f"    {ticker:10s}: ${d['latest_price']:.2f} | "
                     f"1d={d['return_1d_pct']:+.1f}% | "
                     f"60d={d.get('return_60d_pct', 0):+.1f}% | "
-                    f"vol={d.get('annualized_volatility_20d_pct', 0):.1f}% | "
-                    f"{mom}"
+                    f"vol={d.get('annualized_volatility_20d_pct', 0):.1f}%"
+                    f"{heat_str} | {mom}{overheat_flag}"
                 )
             else:
                 lines.append(f"    {ticker:10s}: DATA UNAVAILABLE ({d['error']})")
+        lines.append("")
+
+    if any_overheated:
+        lines.append("⚠️  OVERHEATED ASSET RULE: Z-Score > 2.0 OR RSI > 75 signals irrational exuberance.")
+        lines.append("   → Lower conviction scores for overheated assets. Prefer rotating to SGOV or uncorrelated safe havens.")
+        lines.append("   → The execution engine will automatically cut any overheated allocation by 50% as a hard guard.")
         lines.append("")
 
     lines.append("=== RECENT NEWS HEADLINES ===")

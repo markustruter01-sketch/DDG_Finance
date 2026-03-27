@@ -1,0 +1,37 @@
+Architecture Update: The "High-Yield Growth Vault" & Risk Profile Overlay
+
+We are implementing two advanced quantitative modules to our Python backend: a Profit Sweep mechanism to secure and compound our gains, and a Risk Overlay to prevent buying the top of overheated markets.
+
+Module 1: The High-Yield Growth Vault (Profit Sweep)
+We must automatically sweep a percentage of only new realized profits into a high-yield growth asset (JEPQ or SCHD) to generate compounding dividend income.
+
+Initialization: If trade_journal.db is empty on the first run, the system MUST query the Alpaca API for the portfolio_value and set that exact amount as the permanent initial High_Water_Mark (HWM).
+
+The Daily Math: Calculate Eligible_Profit = max(0, Current_Equity - HWM).
+
+The Sweep: If Eligible_Profit > 0, calculate Sweep_Amount = Eligible_Profit * 0.20 (Sweeping 20% of new profits).
+
+Execution: Execute a market buy for JEPQ using exactly the Sweep_Amount.
+
+State Update: Update the HWM in the database to Current_Equity - Sweep_Amount. Update a Vaulted_Shares ledger. The LLM is strictly forbidden from selling Vaulted_Shares to fund other trades.
+
+Module 2: Overheated Asset Algorithms (Z-Score & RSI)
+We need to protect against irrational market bubbles. Calculate these metrics for every asset before passing data to the LLM:
+
+200-Day Z-Score: (Current Price - 200-day SMA) / 200-day Standard Deviation.
+
+14-Day RSI: Relative Strength Index.
+
+Inject these metrics into the LLM prompt, noting that Z-Score > 2.0 or RSI > 75 means the asset is statistically overheated.
+
+Module 3: The Risk Profile Override (Hard-Coded Execution Check)
+Before firing any Alpaca buy order requested by the LLM, the Python backend must check the asset's metrics.
+
+IF Z-Score > 2.0 OR RSI > 75:
+
+Position Cut: Slash the LLM's requested capital allocation for that asset by 50%. Reroute the remaining 50% into our cash equivalent (SGOV).
+
+Tightened Stop: Override the standard bracket order. Set the stop_loss for this specific Alpaca order to a strict 2% below the fill price.
+
+Your Task:
+Provide the updated Python code that integrates both the Profit Sweep logic and the Risk Profile Override into our daily execution script. Ensure the mathematical formulas and database updates are explicitly handled before any trades are sent to Alpaca.

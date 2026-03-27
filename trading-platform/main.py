@@ -506,6 +506,35 @@ Current open positions:
         raise HTTPException(status_code=503, detail=f"AI commentary unavailable: {exc}")
 
 
+# ── High-Yield Growth Vault endpoints ─────────────────────────────────────────
+
+@router.get("/vault", tags=["Vault"])
+async def vault_state() -> dict:
+    """Return current High-Yield Growth Vault state (HWM, total vaulted, sweeps)."""
+    from execution.profit_sweep import get_vault_state
+    state = get_vault_state()
+    if state is None:
+        return {
+            "initialised": False,
+            "message": "Vault not yet initialised — run a pipeline cycle to set the High Water Mark.",
+        }
+    return {"initialised": True, **state}
+
+
+@router.post("/vault/sweep", tags=["Vault"])
+async def manual_vault_sweep(dry_run: bool = False) -> dict:
+    """Manually trigger a profit-sweep check against the current equity."""
+    from execution.profit_sweep import run_profit_sweep
+    from execution.broker import get_account
+    try:
+        acct = get_account()
+        equity = acct["equity"]
+        result = run_profit_sweep(current_equity=equity, dry_run=dry_run)
+        return {"status": "ok", "dry_run": dry_run, "current_equity": equity, "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Vault sweep failed: {exc}")
+
+
 # ── Phase 1 compatibility endpoint ────────────────────────────────────────────
 
 @router.get("/data/snapshot", tags=["Debug"])

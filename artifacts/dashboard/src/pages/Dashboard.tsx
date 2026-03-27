@@ -204,9 +204,11 @@ function AnimatedCurrency({ value, className }: { value: number; className?: str
 
 function PortfolioMetrics() {
   const { data } = usePortfolio();
+  const { data: vault } = useVault();
+
   if (!data) return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {[0, 1, 2].map(i => <div key={i} className="h-24 rounded-xl bg-card/40 animate-pulse border border-border" />)}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-24 rounded-xl bg-card/40 animate-pulse border border-border" />)}
     </div>
   );
 
@@ -214,8 +216,15 @@ function PortfolioMetrics() {
   const pnl = data.account.equity - 100000;
   const pnlPct = (pnl / 100000) * 100;
 
+  const vaultSymbol    = vault?.vault_symbol ?? "JEPQ";
+  const totalVaulted   = vault?.total_vaulted_usd ?? 0;
+  const hwm            = vault?.hwm ?? 0;
+  const totalSweeps    = vault?.total_sweeps ?? 0;
+  const isVaultInit    = vault?.initialised ?? false;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Total Equity */}
       <Card className={cn(
         "bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 relative overflow-hidden transition-all duration-500",
         isProfit && "hover:border-green-500/30",
@@ -223,7 +232,7 @@ function PortfolioMetrics() {
       )}>
         {isProfit && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/50 to-transparent" />}
         {!isProfit && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />}
-        <CardContent className="p-5">
+        <CardContent className="p-4">
           <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
             Total Equity
             {Math.abs(pnlPct) > 1 && (
@@ -236,31 +245,92 @@ function PortfolioMetrics() {
               </motion.span>
             )}
           </div>
-          <AnimatedCurrency value={data.account.equity} className={cn("text-3xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+          <AnimatedCurrency value={data.account.equity} className={cn("text-2xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
           <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", isProfit ? "text-green-400/70" : "text-red-400/70")}>
             {isProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {isProfit ? `+${formatCurrency(pnl)} profit` : `${formatCurrency(pnl)} drawdown`}
+            {isProfit ? `+${formatCurrency(pnl)}` : `${formatCurrency(pnl)}`}
           </div>
         </CardContent>
       </Card>
+
+      {/* Available Cash */}
       <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-blue-500/20 transition-all duration-500">
-        <CardContent className="p-5">
+        <CardContent className="p-4">
           <div className="text-xs font-medium text-muted-foreground mb-1.5">Available Cash</div>
-          <AnimatedCurrency value={data.account.cash} className="text-3xl font-mono font-bold text-white tracking-tight" />
+          <AnimatedCurrency value={data.account.cash} className="text-2xl font-mono font-bold text-white tracking-tight" />
           <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
-            Uninvested capital
             <span className="text-[9px] font-mono text-blue-400/60">{((data.account.cash / data.account.equity) * 100).toFixed(0)}% liquid</span>
           </div>
         </CardContent>
       </Card>
+
+      {/* Buying Power */}
       <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-purple-500/20 transition-all duration-500">
-        <CardContent className="p-5">
+        <CardContent className="p-4">
           <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
             Buying Power
             <Zap className="h-3 w-3 text-purple-400/60" />
           </div>
-          <AnimatedCurrency value={data.account.buying_power} className="text-3xl font-mono font-bold text-white tracking-tight" />
-          <div className="text-xs text-muted-foreground mt-1.5">With margin included</div>
+          <AnimatedCurrency value={data.account.buying_power} className="text-2xl font-mono font-bold text-white tracking-tight" />
+          <div className="text-xs text-muted-foreground mt-1.5">With margin</div>
+        </CardContent>
+      </Card>
+
+      {/* High-Yield Growth Vault */}
+      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-amber-500/25 transition-all duration-500 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+        <CardContent className="p-4">
+          <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+            <Vault className="h-3 w-3 text-amber-400/70" />
+            Growth Vault
+            <span className="text-[9px] font-mono text-amber-400/60 bg-amber-500/10 px-1 rounded">{vaultSymbol}</span>
+          </div>
+          {isVaultInit ? (
+            <>
+              <div className="text-2xl font-mono font-bold text-amber-400 tracking-tight">
+                ${hwm.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                <ArrowUpRight className="h-3 w-3 text-amber-400/50" />
+                HWM · {totalSweeps} sweep{totalSweeps !== 1 ? "s" : ""}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-mono font-bold text-amber-400/40 tracking-tight">—</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-1.5">Not yet initialised</div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Total Yield Generated */}
+      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-green-500/20 transition-all duration-500 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
+        <CardContent className="p-4">
+          <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+            <Coins className="h-3 w-3 text-green-400/70" />
+            Total Yield
+          </div>
+          {isVaultInit ? (
+            <>
+              <div className={cn(
+                "text-2xl font-mono font-bold tracking-tight",
+                totalVaulted > 0 ? "text-green-400 text-glow-success" : "text-muted-foreground/60"
+              )}>
+                {totalVaulted > 0 ? `+${formatCurrency(totalVaulted)}` : "$0.00"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                <GrowthIcon className="h-3 w-3 text-green-400/50" />
+                Swept to {vaultSymbol}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-mono font-bold text-green-400/40 tracking-tight">$0.00</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-1.5">Awaiting first sweep</div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -457,7 +527,7 @@ function SpeechBubble({
           </div>
 
           {/* Commentary text */}
-          <div className="min-h-[64px] flex items-start">
+          <div className="min-h-[52px] flex items-start">
             {thinking ? (
               <div className="flex items-center gap-2 mt-1">
                 {[0, 1, 2].map(i => (
@@ -467,15 +537,15 @@ function SpeechBubble({
                     transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
                   />
                 ))}
-                <span className="text-xs text-muted-foreground ml-1">Thinking…</span>
+                <span className="text-[11px] text-muted-foreground ml-1">Thinking…</span>
               </div>
             ) : commentary ? (
-              <p ref={textRef} className="text-sm leading-relaxed text-slate-300 font-light">
+              <p ref={textRef} className="text-[11px] leading-relaxed text-slate-300 font-light line-clamp-5">
                 {commentary}
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground/50 italic">
-                Click refresh to generate AI commentary on current performance and learnings.
+              <p className="text-[11px] text-muted-foreground/50 italic">
+                Auto-refreshing every 90s — click Refresh to generate now.
               </p>
             )}
           </div>
@@ -606,6 +676,16 @@ function AIBrainSection() {
 
   const thinking = isLoading || isRefreshing;
 
+  // Auto-refresh commentary every 90 seconds when not already thinking
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!isRefreshing && !isLoading) {
+        refresh();
+      }
+    }, 90_000);
+    return () => clearInterval(id);
+  }, [isRefreshing, isLoading, refresh]);
+
   return (
     <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden">
       {/* Background glow */}
@@ -617,13 +697,26 @@ function AIBrainSection() {
         <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
           Learning Intelligence
         </span>
+        {/* Live auto-refresh indicator */}
+        <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
+          <motion.span
+            className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
+            animate={{ opacity: [0.3, 1, 0.3] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+          auto-refresh 90s
+        </span>
       </div>
 
-      <div className="relative flex items-center gap-5">
-        {/* Brain SVG — fixed width */}
-        <div className="flex-shrink-0 w-36 h-28">
+      <div className="relative flex items-start gap-5">
+        {/* Brain SVG — larger with floating animation */}
+        <motion.div
+          className="flex-shrink-0 w-52 h-44"
+          animate={{ y: [0, -6, 0, 4, 0], x: [0, 3, 0, -3, 0] }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        >
           <BrainSVG thinking={thinking} />
-        </div>
+        </motion.div>
 
         {/* Speech bubble */}
         <SpeechBubble

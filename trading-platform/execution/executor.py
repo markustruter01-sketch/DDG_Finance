@@ -60,7 +60,11 @@ from execution.broker import (
     place_order,
     place_stop_order,
 )
+from execution.compliance import check_wash_sale, DRIP_ENABLED
+from execution.ratchet_stop import initialise_ratchet_stop, delete_stop
 from data.yfinance_client import get_cached_market_data
+
+logger.info(f"Executor | DRIP_ENABLED={DRIP_ENABLED} (vault dividends accumulate as cash)")
 
 MIN_NOTIONAL_USD    = 100.0
 MIN_NOTIONAL_CRYPTO = 25.0
@@ -231,6 +235,11 @@ def _close_stale_positions(
         try:
             order = close_position(symbol)
             results["closed"].append({"symbol": symbol, "order": order})
+            # Remove any persisted ratchet stop for this position
+            try:
+                delete_stop(symbol)
+            except Exception:
+                pass
         except Exception as exc:
             logger.error(f"Failed to close {symbol}: {exc}")
             results["errors"].append({"symbol": symbol, "error": str(exc)})
@@ -357,6 +366,22 @@ def _execute_slot(
         + (f" | ⚠ OVERHEATED (2% stop)" if overheated else "")
     )
 
+    # ── STEP 5: Wash-Sale Compliance Check ──────────────────────────────────
+    # Before placing any buy, verify we're not repurchasing a substantially
+    # identical security within 30 days of a realised loss.
+    if not is_crypto:  # wash-sale rule applies to securities, not crypto
+        ws = check_wash_sale(ticker)
+        if ws["blocked"]:
+            logger.warning(
+                f"⚖ Wash-Sale Block | Slot {slot.slot}: {ticker} — {ws['reason']}"
+            )
+            results["skipped"].append({
+                "slot":   slot.slot,
+                "ticker": ticker,
+                "reason": f"wash_sale_compliance: {ws['reason']}",
+            })
+            return results, remaining_cash
+
     intended_price = get_latest_price(ticker)
     if intended_price:
         logger.info(f"  → Intended price (pre-order snapshot): ${intended_price:.4f}")
@@ -422,7 +447,7 @@ def _execute_slot(
         )
 
         if overheated and actual_fill_price and actual_fill_price > 0:
-            _place_overheated_stop(ticker, notional_usd, actual_fill_price, results)
+            _place_ratchet_stop(ticker, notional_usd, actual_fill_price, results, dry_run)
 
         if overheated and sgov_notional >= MIN_NOTIONAL_USD:
             _reroute_to_sgov(slot, sgov_notional, results)
@@ -438,25 +463,37 @@ def _execute_slot(
     return results, remaining_cash
 
 
-def _place_overheated_stop(
+def _place_ratchet_stop(
     ticker: str,
     notional_usd: float,
     fill_price: float,
     results: dict,
+    dry_run: bool = False,
 ) -> None:
-    """Place a GTC stop-sell at 2 % below fill price for an overheated asset."""
-    stop_price = round(fill_price * (1.0 - OVERHEAT_STOP_PCT), 4)
+    """
+    ATR Ratchet Stop — replaces the static 2% stop.
+    Sets an initial stop at fill_price - 2×ATR(14).
+    The stop is persisted and can only be ratcheted UP on future cycles.
+    Falls back to a 2% static stop if ATR is unavailable.
+    """
     qty = notional_usd / fill_price
-
     logger.warning(
-        f"⚠ Risk Overlay | Placing 2% stop for {ticker}: "
-        f"fill=${fill_price:.4f} → stop=${stop_price:.4f} qty={qty:.6f}"
+        f"⚠ Risk Overlay | Initialising ATR ratchet stop for {ticker}: "
+        f"fill=${fill_price:.4f} qty={qty:.6f}"
     )
     try:
-        stop_order = place_stop_order(ticker=ticker, qty=qty, stop_price=stop_price)
-        results["risk_overrides"][-1]["stop_order"] = stop_order
+        stop_result = initialise_ratchet_stop(
+            ticker=ticker,
+            fill_price=fill_price,
+            qty=qty,
+            dry_run=dry_run,
+        )
+        if stop_result:
+            results["risk_overrides"][-1]["stop_order"] = stop_result.get("order")
+            results["risk_overrides"][-1]["stop_price"] = stop_result.get("stop_price")
+            results["risk_overrides"][-1]["atr"]        = stop_result.get("atr")
     except Exception as exc:
-        logger.warning(f"Risk Overlay | Stop order failed for {ticker}: {exc} — position unprotected")
+        logger.warning(f"Risk Overlay | Ratchet stop init failed for {ticker}: {exc} — position unprotected")
         results["risk_overrides"][-1]["stop_order_error"] = str(exc)
 
 

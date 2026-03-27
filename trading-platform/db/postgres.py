@@ -1,0 +1,170 @@
+"""
+PostgreSQL Connection Layer
+-----------------------------
+Provides a thread-safe connection pool backed by Replit's managed
+PostgreSQL database.  All schema definitions live here so that every
+module (trade_journal, profit_sweep, ratchet_stop) can share tables.
+
+Environment variables (set automatically by Replit):
+  DATABASE_URL  — postgres://user:pass@host:port/dbname
+  PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE  (individual vars)
+
+Fallback: if PostgreSQL is unreachable, is_pg_available() returns False
+and callers transparently fall back to SQLite.  This preserves local
+development compatibility.
+
+Tables managed here
+-------------------
+  trades
+  performance_snapshots
+  vault_ledger
+  ratchet_stops
+"""
+
+from __future__ import annotations
+
+import os
+from contextlib import contextmanager
+from typing import Generator
+
+from loguru import logger
+
+try:
+    import psycopg2
+    from psycopg2 import pool as pg_pool
+    _PSYCOPG2_AVAILABLE = True
+except ImportError:
+    _PSYCOPG2_AVAILABLE = False
+    logger.warning("DB | psycopg2 not installed — PostgreSQL unavailable, using SQLite fallback")
+
+
+# ── Connection pool ────────────────────────────────────────────────────────
+
+_pool: "pg_pool.ThreadedConnectionPool | None" = None
+_pg_ok: bool = False
+
+
+def _get_dsn() -> str | None:
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+    host = os.environ.get("PGHOST")
+    if host:
+        return (
+            f"postgresql://{os.environ['PGUSER']}:{os.environ['PGPASSWORD']}"
+            f"@{host}:{os.environ.get('PGPORT', 5432)}/{os.environ['PGDATABASE']}"
+        )
+    return None
+
+
+def _init_pool() -> None:
+    global _pool, _pg_ok
+    if not _PSYCOPG2_AVAILABLE:
+        return
+    dsn = _get_dsn()
+    if dsn is None:
+        logger.warning("DB | No DATABASE_URL found — using SQLite fallback")
+        return
+    try:
+        _pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=8, dsn=dsn)
+        _pg_ok = True
+        logger.info("DB | PostgreSQL connection pool initialised (min=1, max=8)")
+    except Exception as exc:
+        logger.error(f"DB | Failed to create PostgreSQL pool: {exc} — falling back to SQLite")
+        _pg_ok = False
+
+
+# Initialise on import
+_init_pool()
+
+
+def is_pg_available() -> bool:
+    return _pg_ok and _pool is not None
+
+
+@contextmanager
+def get_conn() -> "Generator[psycopg2.extensions.connection, None, None]":
+    """
+    Yield a psycopg2 connection from the pool.
+    Commits on success, rolls back on exception, returns conn to pool on exit.
+    Raises RuntimeError if PostgreSQL is not available.
+    """
+    if not is_pg_available():
+        raise RuntimeError("PostgreSQL is not available")
+    conn = _pool.getconn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        _pool.putconn(conn)
+
+
+# ── Schema bootstrap ───────────────────────────────────────────────────────
+
+_SCHEMA_SQL = """
+-- Trade journal
+CREATE TABLE IF NOT EXISTS trades (
+    trade_id          TEXT PRIMARY KEY,
+    date              DATE NOT NULL,
+    ticker            TEXT NOT NULL,
+    asset_class       TEXT NOT NULL,
+    conviction_score  DOUBLE PRECISION NOT NULL,
+    original_thesis   TEXT NOT NULL,
+    pnl_percentage    DOUBLE PRECISION,
+    status            TEXT NOT NULL DEFAULT 'Active',
+    intended_price    DOUBLE PRECISION,
+    actual_fill_price DOUBLE PRECISION
+);
+CREATE INDEX IF NOT EXISTS idx_trades_status_date ON trades (status, date DESC);
+
+-- Performance snapshots
+CREATE TABLE IF NOT EXISTS performance_snapshots (
+    date               DATE PRIMARY KEY,
+    equity             DOUBLE PRECISION NOT NULL,
+    daily_pnl_pct      DOUBLE PRECISION NOT NULL,
+    cumulative_pnl_pct DOUBLE PRECISION NOT NULL,
+    win_rate           DOUBLE PRECISION NOT NULL,
+    trades_placed      INTEGER NOT NULL DEFAULT 0
+);
+
+-- Vault ledger (single row, id = 1)
+CREATE TABLE IF NOT EXISTS vault_ledger (
+    id                    INTEGER PRIMARY KEY CHECK (id = 1),
+    hwm                   DOUBLE PRECISION NOT NULL,
+    total_vaulted_usd     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_sweeps          INTEGER NOT NULL DEFAULT 0,
+    vault_symbol          TEXT NOT NULL DEFAULT 'JEPQ',
+    last_sweep_date       DATE,
+    last_sweep_amount     DOUBLE PRECISION,
+    da_adjustment         DOUBLE PRECISION NOT NULL DEFAULT 0
+);
+
+-- Ratchet stops
+CREATE TABLE IF NOT EXISTS ratchet_stops (
+    symbol        TEXT PRIMARY KEY,
+    stop_price    DOUBLE PRECISION NOT NULL,
+    fill_price    DOUBLE PRECISION NOT NULL,
+    atr           DOUBLE PRECISION NOT NULL,
+    last_updated  DATE NOT NULL
+);
+"""
+
+
+def ensure_schema() -> None:
+    """
+    Create all tables if they don't already exist.
+    Safe to call repeatedly — fully idempotent.
+    """
+    if not is_pg_available():
+        logger.debug("DB | ensure_schema skipped (PostgreSQL unavailable)")
+        return
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_SCHEMA_SQL)
+        logger.info("DB | PostgreSQL schema verified / created")
+    except Exception as exc:
+        logger.error(f"DB | Schema bootstrap failed: {exc}")

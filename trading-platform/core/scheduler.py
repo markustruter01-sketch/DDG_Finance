@@ -29,7 +29,7 @@ from loguru import logger
 
 from config.settings import settings
 from core.pipeline import run_pipeline, run_postmortem
-from core.market_clock import is_market_open
+from core.market_clock import is_market_open, is_early_close_day
 from execution.broker import get_account
 from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripped
 
@@ -97,6 +97,22 @@ async def _intraday_cycle() -> None:
 
     if not is_market_open():
         logger.info("Scheduler | Market closed — skipping intraday cycle")
+        return
+
+    # ── Early-close guard ─────────────────────────────────────────────────
+    # NYSE early-close days (Black Friday, Christmas Eve, NYE) end at 1 PM ET.
+    # The CronTrigger fires at :01, :16, :31, :46 through hour 15, but we
+    # must stop at 13:00 on half-days.  is_market_open() (Alpaca clock) is
+    # authoritative; this guard is a belt-and-suspenders safety net.
+    from datetime import datetime
+    import pytz
+    et = pytz.timezone("America/New_York")
+    now_et = datetime.now(et)
+    if is_early_close_day() and now_et.hour >= 13:
+        logger.info(
+            f"Scheduler | Early-close day — market closed at 13:00 ET "
+            f"(now {now_et.strftime('%H:%M')} ET). Skipping cycle."
+        )
         return
 
     today = date.today()

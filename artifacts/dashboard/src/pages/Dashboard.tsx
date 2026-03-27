@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useState } from "react";
 import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
@@ -11,13 +11,37 @@ import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
   LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
-  RefreshCw, Sparkles, Brain,
+  RefreshCw, Sparkles, Brain, Trophy, Flame, Zap,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
 } from "recharts";
+
+function useCountUp(target: number, duration = 1200, enabled = true) {
+  const [value, setValue] = useState(0);
+  const prevTarget = useRef(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) { setValue(target); return; }
+    const from = prevTarget.current;
+    prevTarget.current = target;
+    const start = performance.now();
+    const animate = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(from + (target - from) * eased);
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target, duration, enabled]);
+
+  return value;
+}
 
 // ── System Status Banner ───────────────────────────────────────────────────────
 
@@ -170,6 +194,11 @@ function Header() {
 
 // ── Portfolio Metrics ──────────────────────────────────────────────────────────
 
+function AnimatedCurrency({ value, className }: { value: number; className?: string }) {
+  const animated = useCountUp(value, 1400);
+  return <span className={className}>{formatCurrency(animated)}</span>;
+}
+
 function PortfolioMetrics() {
   const { data } = usePortfolio();
   if (!data) return (
@@ -179,30 +208,56 @@ function PortfolioMetrics() {
   );
 
   const isProfit = data.account.equity >= 100000;
+  const pnl = data.account.equity - 100000;
+  const pnlPct = (pnl / 100000) * 100;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5">
+      <Card className={cn(
+        "bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 relative overflow-hidden transition-all duration-500",
+        isProfit && "hover:border-green-500/30",
+        !isProfit && "hover:border-red-500/30"
+      )}>
+        {isProfit && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/50 to-transparent" />}
+        {!isProfit && <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />}
         <CardContent className="p-5">
-          <div className="text-xs font-medium text-muted-foreground mb-1.5">Total Equity</div>
-          <div className="text-3xl font-mono font-bold text-white tracking-tight">{formatCurrency(data.account.equity)}</div>
-          <div className={cn("text-xs mt-1 font-medium", isProfit ? "text-green-400" : "text-red-400")}>
-            {isProfit ? "↑" : "↓"} Paper Trading Account
+          <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+            Total Equity
+            {Math.abs(pnlPct) > 1 && (
+              <motion.span
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className={cn("text-[9px] font-mono px-1 py-0.5 rounded", isProfit ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}
+              >
+                {pnl >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
+              </motion.span>
+            )}
+          </div>
+          <AnimatedCurrency value={data.account.equity} className={cn("text-3xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+          <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", isProfit ? "text-green-400/70" : "text-red-400/70")}>
+            {isProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {isProfit ? `+${formatCurrency(pnl)} profit` : `${formatCurrency(pnl)} drawdown`}
           </div>
         </CardContent>
       </Card>
-      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5">
+      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-blue-500/20 transition-all duration-500">
         <CardContent className="p-5">
           <div className="text-xs font-medium text-muted-foreground mb-1.5">Available Cash</div>
-          <div className="text-3xl font-mono font-bold text-white tracking-tight">{formatCurrency(data.account.cash)}</div>
-          <div className="text-xs text-muted-foreground mt-1">Uninvested capital</div>
+          <AnimatedCurrency value={data.account.cash} className="text-3xl font-mono font-bold text-white tracking-tight" />
+          <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
+            Uninvested capital
+            <span className="text-[9px] font-mono text-blue-400/60">{((data.account.cash / data.account.equity) * 100).toFixed(0)}% liquid</span>
+          </div>
         </CardContent>
       </Card>
-      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5">
+      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-purple-500/20 transition-all duration-500">
         <CardContent className="p-5">
-          <div className="text-xs font-medium text-muted-foreground mb-1.5">Buying Power</div>
-          <div className="text-3xl font-mono font-bold text-white tracking-tight">{formatCurrency(data.account.buying_power)}</div>
-          <div className="text-xs text-muted-foreground mt-1">With margin included</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+            Buying Power
+            <Zap className="h-3 w-3 text-purple-400/60" />
+          </div>
+          <AnimatedCurrency value={data.account.buying_power} className="text-3xl font-mono font-bold text-white tracking-tight" />
+          <div className="text-xs text-muted-foreground mt-1.5">With margin included</div>
         </CardContent>
       </Card>
     </div>
@@ -488,10 +543,146 @@ function AIBrainSection() {
   );
 }
 
+// ── Live Activity Ticker ──────────────────────────────────────────────────────
+
+function ActivityTicker() {
+  const { data: journal } = useJournal();
+  const { data: positions } = useLivePositions();
+
+  const items = useMemo(() => {
+    const entries: Array<{ key: string; text: string; color: string }> = [];
+    if (positions?.positions) {
+      for (const p of positions.positions) {
+        const pct = (p.unrealized_plpc * 100).toFixed(2);
+        entries.push({
+          key: `pos-${p.symbol}`,
+          text: `${p.symbol} ${p.unrealized_pl >= 0 ? "+" : ""}${pct}%`,
+          color: p.unrealized_pl >= 0 ? "text-green-400" : "text-red-400",
+        });
+      }
+    }
+    if (journal?.trades) {
+      const recent = journal.trades.slice(0, 8);
+      for (const t of recent) {
+        if (t.status === "Active") continue;
+        const prefix = t.status === "Closed_Win" ? "WIN" : "LOSS";
+        entries.push({
+          key: `j-${t.trade_id}`,
+          text: `${prefix} ${t.ticker} ${t.pnl_percentage >= 0 ? "+" : ""}${t.pnl_percentage.toFixed(2)}%`,
+          color: t.status === "Closed_Win" ? "text-green-400" : "text-red-400",
+        });
+      }
+    }
+    return entries;
+  }, [journal, positions]);
+
+  if (items.length === 0) return null;
+
+  const doubled = [...items, ...items];
+
+  return (
+    <div className="w-full overflow-hidden bg-slate-950/60 border-b border-white/5 h-7 flex items-center relative">
+      <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
+      <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
+      <div className="ticker-animate flex items-center gap-6 whitespace-nowrap">
+        {doubled.map((item, i) => (
+          <span key={`${item.key}-${i}`} className={cn("text-[10px] font-mono tracking-wide flex items-center gap-1.5", item.color)}>
+            <span className="text-white/20">|</span>
+            {item.text}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Best Trade Hero ──────────────────────────────────────────────────────────
+
+function BestTradeHero() {
+  const { data: winData } = useRagWins();
+  const { data: lossData } = useRagLosses();
+
+  const bestWin = useMemo(() => {
+    if (!winData?.wins.length) return null;
+    return winData.wins.reduce((best, w) => w.pnl_percentage > best.pnl_percentage ? w : best);
+  }, [winData]);
+
+  const worstLoss = useMemo(() => {
+    if (!lossData?.losses.length) return null;
+    return lossData.losses.reduce((worst, l) => l.pnl_percentage < worst.pnl_percentage ? l : worst);
+  }, [lossData]);
+
+  if (!bestWin && !worstLoss) return null;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {bestWin && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="hero-win-glow rounded-xl border border-green-500/20 bg-gradient-to-br from-green-500/5 to-slate-950 p-4 relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-400/60 to-transparent" />
+          <div className="absolute -top-6 -right-6 w-24 h-24 bg-green-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="flex items-center gap-2 mb-2">
+            <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
+              <Trophy className="h-4 w-4 text-yellow-400" />
+            </motion.div>
+            <span className="text-[10px] uppercase font-semibold tracking-wider text-green-400">Best Win</span>
+            <span className="text-[10px] text-muted-foreground/50 ml-auto">{bestWin.date}</span>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-mono text-lg font-bold text-white">{bestWin.ticker}</span>
+            <span className="font-mono text-2xl font-bold text-green-400 text-glow-success-strong">+{bestWin.pnl_percentage.toFixed(2)}%</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic truncate">"{bestWin.original_thesis}"</p>
+        </motion.div>
+      )}
+      {worstLoss && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="hero-loss-glow rounded-xl border border-red-500/20 bg-gradient-to-br from-red-500/5 to-slate-950 p-4 relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-400/60 to-transparent" />
+          <div className="absolute -top-6 -right-6 w-24 h-24 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="flex items-center gap-2 mb-2">
+            <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}>
+              <Flame className="h-4 w-4 text-red-400" />
+            </motion.div>
+            <span className="text-[10px] uppercase font-semibold tracking-wider text-red-400">Biggest Loss</span>
+            <span className="text-[10px] text-muted-foreground/50 ml-auto">{worstLoss.date}</span>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="font-mono text-lg font-bold text-white">{worstLoss.ticker}</span>
+            <span className="font-mono text-2xl font-bold text-red-400 text-glow-danger-strong">{worstLoss.pnl_percentage.toFixed(2)}%</span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 mt-1.5 italic truncate">"{worstLoss.original_thesis}"</p>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
 // ── Live Positions ────────────────────────────────────────────────────────────
+
+const positionRowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  visible: (i: number) => ({
+    opacity: 1, x: 0,
+    transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" as const },
+  }),
+};
 
 function LivePositionsSection() {
   const { data, isLoading } = useLivePositions();
+
+  const totalUnrealized = useMemo(() => {
+    if (!data?.positions) return 0;
+    return data.positions.reduce((sum, p) => sum + p.unrealized_pl, 0);
+  }, [data]);
 
   return (
     <Card className="border-white/5 overflow-hidden">
@@ -503,6 +694,11 @@ function LivePositionsSection() {
             <Badge variant={data.count > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0 ml-1">
               {data.count}
             </Badge>
+          )}
+          {data && data.count > 0 && (
+            <span className={cn("ml-auto text-xs font-mono font-semibold", totalUnrealized >= 0 ? "text-green-400 text-glow-success" : "text-red-400 text-glow-danger")}>
+              {totalUnrealized >= 0 ? "+" : ""}{formatCurrency(totalUnrealized)}
+            </span>
           )}
         </CardTitle>
       </CardHeader>
@@ -526,10 +722,22 @@ function LivePositionsSection() {
             {isLoading && (
               <tr><td colSpan={10} className="px-5 py-6 text-center text-muted-foreground italic text-xs">Loading positions...</td></tr>
             )}
-            {!isLoading && data?.positions.map((pos) => {
+            {!isLoading && data?.positions.map((pos, i) => {
               const isUp = pos.unrealized_pl >= 0;
               return (
-                <tr key={pos.symbol} className={cn("transition-colors hover:bg-white/[0.02]", isUp ? "border-l-2 border-l-green-500/20" : "border-l-2 border-l-red-500/20")}>
+                <motion.tr
+                  key={pos.symbol}
+                  custom={i}
+                  initial="hidden"
+                  animate="visible"
+                  variants={positionRowVariants}
+                  className={cn(
+                    "transition-all duration-300 cursor-default",
+                    isUp
+                      ? "border-l-2 border-l-green-500/30 hover:bg-green-500/[0.04] hover:shadow-[inset_0_0_30px_rgba(34,197,94,0.04)]"
+                      : "border-l-2 border-l-red-500/30 hover:bg-red-500/[0.04] hover:shadow-[inset_0_0_30px_rgba(239,68,68,0.04)]"
+                  )}
+                >
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-white text-sm">{pos.symbol}</span>
@@ -572,13 +780,22 @@ function LivePositionsSection() {
                   <td className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate" title={pos.original_thesis ?? ""}>
                     {pos.original_thesis ?? "—"}
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
             {!isLoading && (!data || data.positions.length === 0) && (
               <tr>
-                <td colSpan={10} className="px-5 py-8 text-center text-muted-foreground italic text-xs">
-                  No open positions — system is in cash.
+                <td colSpan={10} className="px-5 py-8 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <motion.div
+                      animate={{ opacity: [0.3, 0.6, 0.3] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Target className="h-8 w-8 text-muted-foreground/20" />
+                    </motion.div>
+                    <p className="text-muted-foreground/50 italic text-xs">No open positions — system is in cash</p>
+                    <p className="text-[9px] text-muted-foreground/30">Awaiting next analysis cycle</p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -783,15 +1000,26 @@ function AllocationSection() {
 
   if (!data?.allocation) return (
     <Card className="border-dashed border-white/10 bg-transparent h-48 flex items-center justify-center">
-      <p className="text-muted-foreground italic text-sm">No allocation plan yet — press Start Analysis.</p>
+      <div className="flex flex-col items-center gap-2">
+        <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}>
+          <LayoutList className="h-8 w-8 text-muted-foreground/20" />
+        </motion.div>
+        <p className="text-muted-foreground italic text-sm">No allocation plan yet — press Start Analysis.</p>
+      </div>
     </Card>
   );
+
+  const slotCount = data.allocation.length;
+  const avgConviction = data.allocation.reduce((s, sl) => s + sl.conviction_score, 0) / slotCount;
 
   return (
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <LayoutList className="h-4 w-4 text-primary" /> Target Allocation (10 Slots)
+          <LayoutList className="h-4 w-4 text-primary" /> Target Allocation ({slotCount} Slots)
+          <span className={cn("text-[9px] font-mono ml-1 px-1.5 py-0.5 rounded-full border", avgConviction >= 0.8 ? "text-green-400 border-green-500/30 bg-green-500/10" : avgConviction >= 0.75 ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
+            avg {Math.round(avgConviction * 100)}%
+          </span>
         </CardTitle>
         <span className="text-[10px] text-muted-foreground terminal-text">Generated: {formatDate(data.run_utc)}</span>
       </CardHeader>
@@ -808,15 +1036,22 @@ function AllocationSection() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {data.allocation.map((slot) => {
+            {data.allocation.map((slot, idx) => {
               const isCash = slot.ticker === "SGOV";
+              const isCrypto = slot.ticker.includes("/");
               return (
-                <tr key={slot.slot} className={cn("transition-colors hover:bg-white/[0.02]", isCash && "opacity-40 hover:opacity-80")}>
+                <motion.tr
+                  key={slot.slot}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.04, duration: 0.3 }}
+                  className={cn("transition-all duration-300 hover:bg-white/[0.03]", isCash && "opacity-40 hover:opacity-80")}
+                >
                   <td className="px-5 py-3 text-center text-muted-foreground terminal-text text-xs">{slot.slot}</td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-white text-sm">{slot.ticker}</span>
-                      <Badge variant={isCash ? "outline" : "default"} className="text-[9px] px-1 py-0 uppercase">{slot.asset_class}</Badge>
+                      <Badge variant={isCash ? "outline" : "default"} className={cn("text-[9px] px-1 py-0 uppercase", isCrypto && "bg-purple-500/20 text-purple-400 border-purple-500/30")}>{slot.asset_class}</Badge>
                     </div>
                   </td>
                   <td className="px-5 py-3">
@@ -824,8 +1059,8 @@ function AllocationSection() {
                       <span className="terminal-text text-[10px] w-7 text-right">{Math.round(slot.conviction_score * 100)}%</span>
                       <div className="w-14 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                         <div
-                          className={cn("h-full rounded-full", slot.conviction_score >= 0.8 ? "bg-green-500" : slot.conviction_score >= 0.75 ? "bg-primary" : "bg-amber-500")}
-                          style={{ width: `${slot.conviction_score * 100}%` }}
+                          className={cn("h-full rounded-full conviction-bar-animate", slot.conviction_score >= 0.8 ? "bg-green-500" : slot.conviction_score >= 0.75 ? "bg-primary" : "bg-amber-500")}
+                          style={{ width: `${slot.conviction_score * 100}%`, animationDelay: `${idx * 60}ms` }}
                         />
                       </div>
                     </div>
@@ -836,10 +1071,10 @@ function AllocationSection() {
                     <span className="text-muted-foreground mx-1">/</span>
                     <span className="text-green-400">+{formatPercentAbs(slot.take_profit_pct)}</span>
                   </td>
-                  <td className="px-5 py-3 text-[10px] text-muted-foreground truncate max-w-[220px] hover:whitespace-normal" title={slot.thesis}>
+                  <td className="px-5 py-3 text-[10px] text-muted-foreground truncate max-w-[220px] hover:whitespace-normal hover:text-slate-300 transition-colors" title={slot.thesis}>
                     {slot.thesis}
                   </td>
-                </tr>
+                </motion.tr>
               );
             })}
           </tbody>
@@ -855,11 +1090,20 @@ function JournalSection() {
   const { data } = useJournal();
   if (!data) return null;
 
+  const winRate = data.summary.total > 0 && data.summary.wins != null
+    ? ((data.summary.wins / data.summary.total) * 100).toFixed(0)
+    : null;
+
   return (
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-sm">
           <History className="h-4 w-4 text-primary" /> Trade Journal
+          {winRate && (
+            <span className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded-full border", Number(winRate) >= 50 ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-red-400 border-red-500/30 bg-red-500/10")}>
+              {winRate}% win
+            </span>
+          )}
         </CardTitle>
         <div className="flex gap-3 terminal-text text-[10px]">
           <span className="text-muted-foreground">Total: {data.summary.total}</span>
@@ -870,7 +1114,7 @@ function JournalSection() {
       </CardHeader>
       <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
         <table className="w-full text-sm text-left">
-          <thead className="text-[10px] uppercase bg-slate-950/60 text-muted-foreground sticky top-0 backdrop-blur-md">
+          <thead className="text-[10px] uppercase bg-slate-950/60 text-muted-foreground sticky top-0 backdrop-blur-md z-10">
             <tr>
               <th className="px-5 py-2.5 font-semibold">Date</th>
               <th className="px-5 py-2.5 font-semibold">Asset</th>
@@ -879,27 +1123,42 @@ function JournalSection() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {data.trades.map((trade) => (
-              <tr key={trade.trade_id} className="hover:bg-white/[0.02]">
-                <td className="px-5 py-2.5 terminal-text text-muted-foreground text-[10px] whitespace-nowrap">{trade.date}</td>
-                <td className="px-5 py-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white text-sm">{trade.ticker}</span>
-                    <span className="text-[9px] text-muted-foreground uppercase">{trade.asset_class}</span>
-                  </div>
-                </td>
-                <td className="px-5 py-2.5 text-center">
-                  <Badge variant={trade.status === 'Active' ? 'default' : trade.status === 'Closed_Win' ? 'success' : 'danger'} className="text-[9px]">
-                    {trade.status.replace('Closed_', '')}
-                  </Badge>
-                </td>
-                <td className="px-5 py-2.5 text-right">
-                  {trade.status === 'Active'
-                    ? <span className="text-muted-foreground text-xs">—</span>
-                    : <PnlText value={trade.pnl_percentage} />}
-                </td>
-              </tr>
-            ))}
+            {data.trades.map((trade, idx) => {
+              const isWin = trade.status === "Closed_Win";
+              const isLoss = trade.status === "Closed_Loss";
+              return (
+                <motion.tr
+                  key={trade.trade_id}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(idx * 0.03, 0.5), duration: 0.25 }}
+                  className={cn(
+                    "transition-all duration-300",
+                    isWin && "hover:bg-green-500/[0.04]",
+                    isLoss && "hover:bg-red-500/[0.04]",
+                    !isWin && !isLoss && "hover:bg-white/[0.02]"
+                  )}
+                >
+                  <td className="px-5 py-2.5 terminal-text text-muted-foreground text-[10px] whitespace-nowrap">{trade.date}</td>
+                  <td className="px-5 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-white text-sm">{trade.ticker}</span>
+                      <span className={cn("text-[9px] uppercase", trade.ticker.includes("/") ? "text-purple-400/70" : "text-muted-foreground")}>{trade.asset_class}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-2.5 text-center">
+                    <Badge variant={trade.status === 'Active' ? 'default' : isWin ? 'success' : 'danger'} className="text-[9px]">
+                      {trade.status.replace('Closed_', '')}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-2.5 text-right">
+                    {trade.status === 'Active'
+                      ? <span className="text-muted-foreground text-xs">—</span>
+                      : <PnlText value={trade.pnl_percentage} />}
+                  </td>
+                </motion.tr>
+              );
+            })}
             {data.trades.length === 0 && (
               <tr><td colSpan={4} className="px-5 py-8 text-center text-muted-foreground italic text-xs">No trades logged yet.</td></tr>
             )}
@@ -925,11 +1184,10 @@ function LearningContextSection() {
     <div className="space-y-2">
       <div className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider px-1 flex items-center gap-2">
         <Activity className="h-3 w-3 text-primary" /> Learning Context
-        <span className="font-normal normal-case text-muted-foreground/60">— injected into tomorrow's LLM prompt</span>
+        <span className="font-normal normal-case text-muted-foreground/60">— injected into LLM prompt</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {/* Wins */}
         {hasWins && (
           <Card className="border-green-500/20 bg-green-500/5 overflow-hidden">
             <div className="px-4 py-2.5 bg-green-500/10 border-b border-green-500/15">
@@ -938,11 +1196,17 @@ function LearningContextSection() {
               </span>
             </div>
             <div className="divide-y divide-green-500/8">
-              {winData.wins.map((win) => (
-                <div key={win.trade_id} className="p-3 hover:bg-green-500/5 transition-colors">
+              {winData.wins.map((win, i) => (
+                <motion.div
+                  key={win.trade_id}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                  className="p-3 hover:bg-green-500/5 transition-all duration-300 group"
+                >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-sm font-bold text-white">{win.ticker}</span>
+                      <span className="font-mono text-sm font-bold text-white group-hover:text-green-300 transition-colors">{win.ticker}</span>
                       <Badge className="text-[9px] py-0 px-1 bg-green-500/10 text-green-400 border-green-500/20 border">{win.asset_class}</Badge>
                     </div>
                     <PnlText value={win.pnl_percentage} />
@@ -950,13 +1214,12 @@ function LearningContextSection() {
                   <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-green-500/30 pl-2.5">
                     "{win.original_thesis}"
                   </p>
-                </div>
+                </motion.div>
               ))}
             </div>
           </Card>
         )}
 
-        {/* Losses */}
         {hasLosses && (
           <Card className="border-red-500/20 bg-red-500/5 overflow-hidden">
             <div className="px-4 py-2.5 bg-red-500/10 border-b border-red-500/15">
@@ -965,11 +1228,17 @@ function LearningContextSection() {
               </span>
             </div>
             <div className="divide-y divide-red-500/8">
-              {lossData.losses.map((loss) => (
-                <div key={loss.trade_id} className="p-3 hover:bg-red-500/5 transition-colors">
+              {lossData.losses.map((loss, i) => (
+                <motion.div
+                  key={loss.trade_id}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                  className="p-3 hover:bg-red-500/5 transition-all duration-300 group"
+                >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-sm font-bold text-white">{loss.ticker}</span>
+                      <span className="font-mono text-sm font-bold text-white group-hover:text-red-300 transition-colors">{loss.ticker}</span>
                       <Badge className="text-[9px] py-0 px-1 bg-red-500/10 text-red-400 border-red-500/20 border">{loss.asset_class}</Badge>
                     </div>
                     <PnlText value={loss.pnl_percentage} />
@@ -977,7 +1246,7 @@ function LearningContextSection() {
                   <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-red-500/30 pl-2.5">
                     "{loss.original_thesis}"
                   </p>
-                </div>
+                </motion.div>
               ))}
             </div>
           </Card>
@@ -994,6 +1263,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
       <SystemStatusBanner />
+      <ActivityTicker />
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
@@ -1010,13 +1280,18 @@ export default function Dashboard() {
           <PortfolioMetrics />
         </motion.div>
 
+        {/* BEST/WORST TRADE HERO */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+          <BestTradeHero />
+        </motion.div>
+
         {/* AI BRAIN */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.13 }}>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
           <AIBrainSection />
         </motion.div>
 
         {/* LIVE POSITIONS */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
           <LivePositionsSection />
         </motion.div>
 

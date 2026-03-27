@@ -287,18 +287,21 @@ function PortfolioMetrics() {
           </div>
           {isVaultInit ? (
             <>
-              <div className="text-2xl font-mono font-bold text-amber-400 tracking-tight">
-                ${hwm.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              <div className={cn(
+                "text-2xl font-mono font-bold tracking-tight",
+                totalVaulted > 0 ? "text-amber-400" : "text-amber-400/40"
+              )}>
+                {totalVaulted > 0 ? formatCurrency(totalVaulted) : "$0.00"}
               </div>
               <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
                 <ArrowUpRight className="h-3 w-3 text-amber-400/50" />
-                HWM · {totalSweeps} sweep{totalSweeps !== 1 ? "s" : ""}
+                {totalSweeps} sweep{totalSweeps !== 1 ? "s" : ""} · HWM ${hwm.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
             </>
           ) : (
             <>
-              <div className="text-2xl font-mono font-bold text-amber-400/40 tracking-tight">—</div>
-              <div className="text-[10px] text-muted-foreground/50 mt-1.5">Not yet initialised</div>
+              <div className="text-2xl font-mono font-bold text-amber-400/40 tracking-tight">$0.00</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-1.5">Awaiting first profit sweep</div>
             </>
           )}
         </CardContent>

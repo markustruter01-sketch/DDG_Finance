@@ -680,10 +680,175 @@ function RegimeAllocationPanel({ regime, allocation }: {
   );
 }
 
+// ── Brain Insights Modal ──────────────────────────────────────────────────────
+
+function BrainInsightsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data: commentary } = useAICommentary();
+  const { data: alloc } = useLatestAllocation();
+  const { data: winData } = useRagWins();
+  const { data: lossData } = useRagLosses();
+
+  if (!open) return null;
+
+  const regime = alloc?.regime;
+  const allocation = alloc?.allocation ?? [];
+  const topAlloc = allocation.filter((s: any) => s.ticker !== "SGOV").slice(0, 5);
+  const topWins = winData?.wins?.slice(0, 3) ?? [];
+  const topLosses = lossData?.losses?.slice(0, 3) ?? [];
+  const regimeMeta = regime ? (REGIME_META[regime] ?? REGIME_META["Bull"]) : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-indigo-500/30 bg-slate-950 shadow-[0_0_80px_rgba(99,102,241,0.12)] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top accent */}
+        <div className="h-px bg-gradient-to-r from-indigo-500/60 via-violet-400/40 to-transparent" />
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Brain className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+            <span className="text-sm font-semibold text-white">AI Brain — Strategy Intelligence</span>
+            {regimeMeta && regime && (
+              <span className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded border ml-1", regimeMeta.color, regimeMeta.bg, regimeMeta.border)}>
+                {regimeMeta.label}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="flex-shrink-0 p-1 rounded-lg hover:bg-white/8 text-muted-foreground hover:text-white transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {/* Strategy Summary */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="h-3 w-3 text-indigo-400" />
+              <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">Current Strategy</span>
+            </div>
+            {commentary?.commentary ? (
+              <p className="text-sm text-white/80 leading-relaxed border-l-2 border-indigo-500/40 pl-3">
+                {commentary.commentary}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No commentary available yet — the AI will generate one on the next cycle.</p>
+            )}
+          </div>
+
+          {/* Target Allocations */}
+          {topAlloc.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <BarChart3 className="h-3 w-3 text-violet-400" />
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-violet-400/80">Target Positions</span>
+              </div>
+              <div className="space-y-1.5">
+                {topAlloc.map((slot: any) => {
+                  const pct = Math.round(slot.kelly_fraction * 100);
+                  const conv = Math.round(slot.conviction_score * 100);
+                  const barColor = ASSET_CLASS_COLORS[slot.asset_class] ?? "#6366f1";
+                  const isCrypto = slot.ticker.includes("/");
+                  return (
+                    <div key={slot.slot} className="flex items-center gap-3">
+                      <span className={cn("font-mono text-xs font-bold w-16 flex-shrink-0", isCrypto ? "text-purple-300" : "text-white")}>
+                        {slot.ticker}
+                      </span>
+                      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                      </div>
+                      <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">{pct}%</span>
+                      <span className={cn("text-[9px] font-mono w-8 text-right", conv >= 80 ? "text-green-400" : "text-amber-400")}>
+                        {conv}cv
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Learnings */}
+          {(topWins.length > 0 || topLosses.length > 0) && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Activity className="h-3 w-3 text-primary" />
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground/70">What the AI Has Learned</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {topWins.length > 0 && (
+                  <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-3 space-y-2">
+                    <span className="text-[9px] uppercase font-semibold text-green-400 tracking-wider flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> What Worked
+                    </span>
+                    {topWins.map((win: any) => (
+                      <div key={win.trade_id} className="border-l-2 border-green-500/30 pl-2">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="font-mono text-xs font-bold text-white">{win.ticker}</span>
+                          <span className="text-[9px] text-green-400">+{win.pnl_percentage?.toFixed(1)}%</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
+                          {win.original_thesis}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {topLosses.length > 0 && (
+                  <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 space-y-2">
+                    <span className="text-[9px] uppercase font-semibold text-red-400 tracking-wider flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" /> What Failed
+                    </span>
+                    {topLosses.map((loss: any) => (
+                      <div key={loss.trade_id} className="border-l-2 border-red-500/30 pl-2">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="font-mono text-xs font-bold text-white">{loss.ticker}</span>
+                          <span className="text-[9px] text-red-400">{loss.pnl_percentage?.toFixed(1)}%</span>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground leading-snug line-clamp-2">
+                          {loss.original_thesis}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {topWins.length === 0 && topLosses.length === 0 && topAlloc.length === 0 && !commentary?.commentary && (
+            <div className="text-center py-6 text-muted-foreground text-xs italic">
+              The brain is still learning — check back after the first trading cycle completes.
+            </div>
+          )}
+        </div>
+
+        {/* Footer hint */}
+        <div className="px-6 pb-4 text-[9px] text-muted-foreground/40 text-center">
+          Model: Llama 3.3 70B · Groq · Updated every 90s
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function AIBrainSection() {
   const { data, isLoading } = useAICommentary();
   const { mutate: refresh, isPending: isRefreshing } = useRefreshCommentary();
   const { data: alloc } = useLatestAllocation();
+  const [showInsights, setShowInsights] = useState(false);
 
   const thinking = isLoading || isRefreshing;
 
@@ -698,52 +863,66 @@ function AIBrainSection() {
   }, [isRefreshing, isLoading, refresh]);
 
   return (
-    <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden">
-      {/* Background glow */}
-      <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-500/4 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+    <>
+      <AnimatePresence>
+        {showInsights && <BrainInsightsModal open={showInsights} onClose={() => setShowInsights(false)} />}
+      </AnimatePresence>
 
-      <div className="relative flex items-center gap-2 mb-4">
-        <Brain className="h-3.5 w-3.5 text-indigo-400" />
-        <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
-          Learning Intelligence
-        </span>
-        {/* Live auto-refresh indicator */}
-        <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
-          <motion.span
-            className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
-            animate={{ opacity: [0.3, 1, 0.3] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-500/4 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+
+        <div className="relative flex items-center gap-2 mb-4">
+          <Brain className="h-3.5 w-3.5 text-indigo-400" />
+          <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
+            Learning Intelligence
+          </span>
+          {/* Live auto-refresh indicator */}
+          <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
+            <motion.span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            auto-refresh 90s
+          </span>
+        </div>
+
+        <div className="relative flex items-start gap-5">
+          {/* Brain SVG — clickable to open insights */}
+          <motion.div
+            className="flex-shrink-0 w-52 h-44 cursor-pointer relative group"
+            animate={{ y: [0, -6, 0, 4, 0], x: [0, 3, 0, -3, 0] }}
+            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+            onClick={() => setShowInsights(true)}
+            title="Click to view AI strategy & learnings"
+          >
+            <BrainSVG thinking={thinking} />
+            {/* Hover hint */}
+            <div className="absolute inset-0 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <span className="text-[9px] font-semibold text-indigo-300/80 bg-slate-950/80 rounded-full px-2 py-0.5 border border-indigo-500/20 backdrop-blur-sm">
+                tap to inspect
+              </span>
+            </div>
+          </motion.div>
+
+          {/* Speech bubble */}
+          <SpeechBubble
+            commentary={data?.commentary}
+            generatedAt={data?.generated_at}
+            cached={data?.cached}
+            cacheAge={data?.cache_age_seconds}
+            thinking={thinking}
+            onRefresh={() => refresh()}
+            isRefreshing={isRefreshing}
           />
-          auto-refresh 90s
-        </span>
+        </div>
+
+        {/* Regime + allocation breakdown */}
+        <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
       </div>
-
-      <div className="relative flex items-start gap-5">
-        {/* Brain SVG — larger with floating animation */}
-        <motion.div
-          className="flex-shrink-0 w-52 h-44"
-          animate={{ y: [0, -6, 0, 4, 0], x: [0, 3, 0, -3, 0] }}
-          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <BrainSVG thinking={thinking} />
-        </motion.div>
-
-        {/* Speech bubble */}
-        <SpeechBubble
-          commentary={data?.commentary}
-          generatedAt={data?.generated_at}
-          cached={data?.cached}
-          cacheAge={data?.cache_age_seconds}
-          thinking={thinking}
-          onRefresh={() => refresh()}
-          isRefreshing={isRefreshing}
-        />
-      </div>
-
-      {/* Regime + allocation breakdown */}
-      <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
-    </div>
+    </>
   );
 }
 
@@ -1276,7 +1455,7 @@ function AllocationSection() {
         <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}>
           <LayoutList className="h-8 w-8 text-muted-foreground/20" />
         </motion.div>
-        <p className="text-muted-foreground italic text-sm">No allocation plan yet — press Start Analysis.</p>
+        <p className="text-muted-foreground italic text-sm">No allocation plan yet — the AI will generate one on the next cycle.</p>
       </div>
     </Card>
   );

@@ -2,18 +2,17 @@ import { useMemo } from "react";
 import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
-  usePerformanceSummary, useSystemHealth,
+  usePerformanceSummary,
 } from "@/hooks/use-trading";
-import { cn, formatCurrency, formatPercent, formatPercentAbs, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
-  Activity, ShieldAlert, Database, History, TrendingDown, TrendingUp,
-  LayoutList, Wifi, WifiOff, AlertTriangle, Target, BarChart3,
-  CheckCircle2, ArrowUpRight, ArrowDownRight,
+  Activity, ShieldAlert, History, TrendingDown, TrendingUp,
+  LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -21,19 +20,39 @@ import {
 
 // ── System Status Banner ───────────────────────────────────────────────────────
 
+const EXPECTED_JOBS = 3;
+
 function SystemStatusBanner() {
-  const { data: health, isError, isLoading } = useSystemHealth();
+  const { data, isError } = usePlatformStatus();
 
-  if (isLoading) return null;
+  let sysStatus: "online" | "degraded" | "offline";
+  let reason: string;
 
-  const status = isError ? "offline" : (health?.system_status ?? "offline");
-  const reason = isError
-    ? "Cannot reach trading API — check that the server is running"
-    : (health?.status_reason ?? "Unknown");
+  if (isError || !data) {
+    sysStatus = "offline";
+    reason = "Cannot reach trading API — check that the server is running";
+  } else {
+    const jobCount = data.scheduler_jobs.length;
+    const lastStatus = data.last_run.last_run_status;
+    const errorCount = data.last_run.error_count;
 
-  if (status === "online") {
+    if (jobCount < EXPECTED_JOBS) {
+      sysStatus = "degraded";
+      reason = `Only ${jobCount}/${EXPECTED_JOBS} scheduler jobs registered`;
+    } else if (lastStatus === "error") {
+      sysStatus = "degraded";
+      reason = `Last run failed (${errorCount} total error${errorCount !== 1 ? "s" : ""})`;
+    } else {
+      sysStatus = "online";
+      reason = lastStatus === "never_run"
+        ? "Scheduler running — no analysis run yet today"
+        : "All systems operational";
+    }
+  }
+
+  if (sysStatus === "online") {
     return (
-      <div className="w-full bg-green-500/8 border-b border-green-500/15">
+      <div className="sticky top-14 z-30 w-full bg-green-500/8 border-b border-green-500/15 backdrop-blur-md">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
@@ -46,9 +65,9 @@ function SystemStatusBanner() {
     );
   }
 
-  if (status === "degraded") {
+  if (sysStatus === "degraded") {
     return (
-      <div className="w-full bg-amber-500/10 border-b border-amber-500/20">
+      <div className="sticky top-14 z-30 w-full bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-md">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
           <span className="text-xs text-amber-400 font-medium">DEGRADED</span>
@@ -59,7 +78,7 @@ function SystemStatusBanner() {
   }
 
   return (
-    <div className="w-full bg-red-500/10 border-b border-red-500/20">
+    <div className="sticky top-14 z-30 w-full bg-red-500/10 border-b border-red-500/20 backdrop-blur-md">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
         <WifiOff className="h-3.5 w-3.5 text-red-400" />
         <span className="text-xs text-red-400 font-medium">OFFLINE</span>
@@ -265,14 +284,30 @@ function LivePositionsSection() {
 
 // ── Performance Section ───────────────────────────────────────────────────────
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface ChartPayloadEntry {
+  dataKey: string;
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface ChartTooltipProps {
+  active?: boolean;
+  payload?: ChartPayloadEntry[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
       <p className="text-muted-foreground mb-1">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.dataKey} style={{ color: p.color }} className="font-mono">
-          {p.name}: {typeof p.value === "number" ? (p.dataKey === "equity" ? formatCurrency(p.value) : `${p.value >= 0 ? "+" : ""}${p.value.toFixed(2)}%`) : p.value}
+          {p.name}:{" "}
+          {p.dataKey === "equity"
+            ? formatCurrency(p.value)
+            : `${p.value >= 0 ? "+" : ""}${p.value.toFixed(2)}%`}
         </p>
       ))}
     </div>
@@ -311,7 +346,7 @@ function PerformanceSection() {
       <CardContent className="p-5">
 
         {/* Summary stat cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           {[
             {
               label: "Total Return",
@@ -345,6 +380,15 @@ function PerformanceSection() {
               label: "Total Trades",
               value: summary?.total_trades != null ? String(summary.total_trades) : "—",
               color: "text-white",
+            },
+            {
+              label: "Avg Conviction",
+              value: summary?.avg_conviction != null
+                ? `${(summary.avg_conviction * 100).toFixed(1)}%`
+                : "—",
+              color: summary?.avg_conviction != null
+                ? summary.avg_conviction >= 0.75 ? "text-green-400" : "text-amber-400"
+                : "text-muted-foreground",
             },
           ].map((stat) => (
             <div key={stat.label} className="bg-slate-900/70 rounded-xl p-3 border border-white/5">

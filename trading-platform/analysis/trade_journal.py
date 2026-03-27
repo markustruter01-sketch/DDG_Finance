@@ -279,9 +279,15 @@ def get_performance_summary() -> dict:
             ORDER  BY date DESC
             LIMIT  1
         """).fetchone()
+        conviction_row = conn.execute("""
+            SELECT AVG(conviction_score) AS avg_conviction
+            FROM   trades
+            WHERE  status IN ('Closed_Win', 'Closed_Loss')
+        """).fetchone()
     result = dict(row) if row else {}
     if latest:
         result["latest_equity"] = latest["equity"]
         result["total_return_pct"] = latest["cumulative_pnl_pct"]
         result["latest_date"] = latest["date"]
+    result["avg_conviction"] = conviction_row["avg_conviction"] if conviction_row else None
     return result

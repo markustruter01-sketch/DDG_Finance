@@ -142,6 +142,7 @@ export interface PerformanceSummary {
   latest_equity: number | null;
   total_return_pct: number | null;
   latest_date: string | null;
+  avg_conviction: number | null;
 }
 
 // --- Hooks ---

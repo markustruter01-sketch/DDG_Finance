@@ -29,6 +29,7 @@ export interface PlatformStatus {
     last_allocation: any[] | null;
     last_exec_result: any;
   };
+  auto_trading: boolean;
 }
 
 export interface PortfolioData {
@@ -281,6 +282,14 @@ export function useRunPostMortem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => (await api.post("/run/postmortem")).data,
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+export function useToggleAutoTrading() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (enabled: boolean) => (await api.post("/auto-trading", { enabled })).data,
     onSuccess: () => qc.invalidateQueries(),
   });
 }

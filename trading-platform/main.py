@@ -31,7 +31,7 @@ from loguru import logger
 
 from config.settings import settings
 from core.pipeline import get_last_run, run_pipeline, run_postmortem
-from core.scheduler import get_job_status, get_scheduler
+from core.scheduler import get_job_status, get_scheduler, is_auto_trading_enabled, set_auto_trading
 from execution.broker import get_account, get_positions, get_open_orders
 from execution.kill_switch import (
     get_state as ks_get_state,
@@ -77,9 +77,10 @@ async def lifespan(app: FastAPI):
 
     scheduler = get_scheduler()
     scheduler.start()
-    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} jobs registered")
-    for job in get_job_status():
-        logger.info(f"  {job['id']}: next={job['next_fire_utc']}")
+    for job in scheduler.get_jobs():
+        job.pause()
+    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} jobs registered (paused — auto-trading OFF)")
+    logger.info("Enable auto-trading via dashboard toggle or POST /auto-trading")
 
     yield
 
@@ -172,6 +173,7 @@ async def status() -> dict:
         "kill_switch":   ks_get_state(),
         "scheduler_jobs": get_job_status(),
         "last_run":      get_last_run(),
+        "auto_trading":  is_auto_trading_enabled(),
     }
 
 
@@ -332,6 +334,27 @@ async def reset_kill_switch(request: KillResetRequest) -> dict:
     logger.info(f"Kill switch reset via API | opening_equity={request.opening_equity}")
     ks_reset(opening_equity=request.opening_equity)
     return {"status": "reset", "kill_switch": ks_get_state()}
+
+
+class AutoTradingRequest(BaseModel):
+    enabled: bool
+
+
+@app.get("/auto-trading", tags=["Control"])
+async def auto_trading_status() -> dict:
+    """Return whether the automatic trading system is currently enabled."""
+    return {
+        "auto_trading_enabled": is_auto_trading_enabled(),
+        "jobs": get_job_status(),
+    }
+
+
+@app.post("/auto-trading", tags=["Control"])
+async def toggle_auto_trading(request: AutoTradingRequest) -> dict:
+    """Enable or disable the automatic trading scheduler."""
+    logger.info(f"Auto-trading toggle requested: enabled={request.enabled}")
+    result = set_auto_trading(request.enabled)
+    return result
 
 
 @app.get("/allocation/latest", tags=["Portfolio"])

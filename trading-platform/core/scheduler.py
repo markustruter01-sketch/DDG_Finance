@@ -28,10 +28,13 @@ from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripp
 
 
 _scheduler: AsyncIOScheduler | None = None
+_auto_trading_enabled: bool = False
 
 
 def get_scheduler() -> AsyncIOScheduler:
-    """Return the singleton scheduler instance (creates it if needed)."""
+    """Return the singleton scheduler instance (creates it if needed).
+    Jobs are registered but paused — auto-trading starts OFF by default.
+    Enable via set_auto_trading(True) or POST /auto-trading."""
     global _scheduler
     if _scheduler is None:
         _scheduler = AsyncIOScheduler(timezone="America/New_York")
@@ -154,3 +157,28 @@ def get_job_status() -> list[dict]:
             "next_fire_utc": str(job.next_run_time) if job.next_run_time else "paused",
         })
     return jobs
+
+
+def is_auto_trading_enabled() -> bool:
+    return _auto_trading_enabled
+
+
+def set_auto_trading(enabled: bool) -> dict:
+    global _auto_trading_enabled
+    scheduler = get_scheduler()
+
+    if enabled:
+        for job in scheduler.get_jobs():
+            job.resume()
+        _auto_trading_enabled = True
+        logger.info("AUTO-TRADING ENABLED — all scheduler jobs resumed")
+    else:
+        for job in scheduler.get_jobs():
+            job.pause()
+        _auto_trading_enabled = False
+        logger.warning("AUTO-TRADING DISABLED — all scheduler jobs paused")
+
+    return {
+        "auto_trading_enabled": _auto_trading_enabled,
+        "jobs": get_job_status(),
+    }

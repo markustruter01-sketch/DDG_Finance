@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
-import { Loader2, Play, TrendingUp, CheckCircle2, Clock, Zap } from "lucide-react";
+import { Loader2, Play, TrendingUp, CheckCircle2, Clock, Zap, Power } from "lucide-react";
 import { useRunAnalysis } from "@/hooks/use-trading";
-import { useLatestAllocation, usePlatformStatus } from "@/hooks/use-trading";
+import { useLatestAllocation, usePlatformStatus, useToggleAutoTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -78,9 +78,13 @@ export function TradeWorkflowBar() {
   const runAnalysis = useRunAnalysis();
   const { data: allocation } = useLatestAllocation();
   const { data: status } = usePlatformStatus();
+  const toggleAutoTrading = useToggleAutoTrading();
 
   const [workflowState, setWorkflowState] = useState<WorkflowState>("idle");
   const [pendingConfirm, setPendingConfirm] = useState(false);
+  const [autoTradingConfirm, setAutoTradingConfirm] = useState<"enable" | "disable" | null>(null);
+
+  const autoTradingEnabled = status?.auto_trading ?? false;
 
   const avgConviction = useMemo(() => {
     if (!allocation?.allocation) return null;
@@ -95,6 +99,22 @@ export function TradeWorkflowBar() {
       return () => clearTimeout(t);
     }
   }, [workflowState]);
+
+  const handleAutoTradingToggle = async () => {
+    const enabling = autoTradingConfirm === "enable";
+    setAutoTradingConfirm(null);
+    try {
+      await toggleAutoTrading.mutateAsync(enabling);
+      toast({
+        title: enabling ? "Auto Trading Enabled" : "Auto Trading Disabled",
+        description: enabling
+          ? "The autonomous trading system is now active. It will run daily at 9:31 AM ET."
+          : "The autonomous trading system has been paused. No scheduled trades will execute.",
+      });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Toggle Failed", description: err.message });
+    }
+  };
 
   const handleStartAnalysis = async () => {
     setWorkflowState("analyzing");
@@ -129,6 +149,41 @@ export function TradeWorkflowBar() {
 
   return (
     <div className="w-full">
+      {/* Confirm overlay for Auto Trading toggle */}
+      {autoTradingConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-white mb-2">
+              {autoTradingConfirm === "enable" ? "Enable Auto Trading?" : "Disable Auto Trading?"}
+            </h3>
+            <p className="text-muted-foreground text-sm mb-6">
+              {autoTradingConfirm === "enable"
+                ? "This will activate the autonomous trading system. It will automatically run daily analysis at 9:31 AM ET, monitor drawdowns every 30 minutes, and reconcile trades at 4:10 PM ET — all using your Alpaca paper trading account."
+                : "This will pause all automated trading activity. No scheduled analysis, kill switch checks, or post-mortem reconciliation will run until you re-enable it. Manual operations will still work."}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setAutoTradingConfirm(null)}
+                className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-white border border-white/10 hover:border-white/20 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAutoTradingToggle}
+                className={cn(
+                  "px-6 py-2 rounded-lg text-sm font-semibold text-white transition-colors shadow-lg",
+                  autoTradingConfirm === "enable"
+                    ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30"
+                    : "bg-red-600 hover:bg-red-500 shadow-red-900/30"
+                )}
+              >
+                {autoTradingConfirm === "enable" ? "Yes, Enable Auto Trading" : "Yes, Disable Auto Trading"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirm overlay for Place Trades */}
       {pendingConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -220,6 +275,28 @@ export function TradeWorkflowBar() {
             Trades Placed Successfully
           </div>
         )}
+
+        {/* AUTO TRADING TOGGLE */}
+        <button
+          onClick={() => setAutoTradingConfirm(autoTradingEnabled ? "disable" : "enable")}
+          disabled={toggleAutoTrading.isPending}
+          className={cn(
+            "relative group flex items-center gap-2.5 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] overflow-hidden border",
+            autoTradingEnabled
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50"
+              : "bg-slate-800/60 border-white/10 text-muted-foreground hover:text-white hover:border-white/20"
+          )}
+        >
+          {toggleAutoTrading.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Power className={cn("h-4 w-4", autoTradingEnabled && "drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]")} />
+          )}
+          <span>{autoTradingEnabled ? "Auto Trading ON" : "Auto Trading OFF"}</span>
+          {autoTradingEnabled && (
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          )}
+        </button>
 
         {/* Reset button when in ready state (let them re-run analysis) */}
         {isReady && (

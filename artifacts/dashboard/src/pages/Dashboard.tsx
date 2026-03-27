@@ -2,6 +2,7 @@ import { usePlatformStatus, usePortfolio, useLatestAllocation, useJournal, useRa
 import { cn, formatCurrency, formatPercent, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
+import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import { Activity, Clock, ShieldAlert, BarChart3, Database, History, TrendingDown, LayoutList } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -294,23 +295,29 @@ export default function Dashboard() {
       <Header />
       
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-          <ControlPanel />
+
+        {/* PRIMARY ACTION HERO */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+          <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-8 py-6 shadow-[0_0_60px_rgba(59,130,246,0.06)] overflow-hidden">
+            <div className="absolute top-0 left-0 w-72 h-72 bg-primary/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-48 h-48 bg-primary/3 rounded-full blur-2xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+            <TradeWorkflowBar />
+          </div>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <PortfolioSection />
         </motion.div>
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <motion.div className="col-span-1 lg:col-span-2 space-y-8" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <motion.div className="col-span-1 lg:col-span-2 space-y-8" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
             <AllocationSection />
             <JournalSection />
           </motion.div>
           
-          <motion.div className="space-y-8" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <motion.div className="space-y-8" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
             <RagSection />
+            <ControlPanel />
           </motion.div>
         </div>
 

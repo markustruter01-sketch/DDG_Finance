@@ -76,6 +76,7 @@ export interface LivePositionsData {
 export interface AllocationPlan {
   status: string;
   run_utc: string;
+  regime: string | null;
   allocation: Array<{
     slot: number;
     ticker: string;

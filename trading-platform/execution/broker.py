@@ -178,11 +178,10 @@ def _get_latest_crypto_price(ticker: str) -> float | None:
         api_key=settings.alpaca_api_key,
         secret_key=settings.alpaca_secret_key,
     )
-    symbol = ticker.replace("/", "")
-    req = CryptoLatestTradeRequest(symbol_or_symbols=symbol)
+    req = CryptoLatestTradeRequest(symbol_or_symbols=ticker)
     trades = data_client.get_crypto_latest_trade(req)
-    if symbol in trades:
-        price = float(trades[symbol].price)
+    if ticker in trades:
+        price = float(trades[ticker].price)
         logger.debug(f"Broker | Latest crypto price {ticker}: ${price:.4f}")
         return price
     return None

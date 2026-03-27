@@ -41,6 +41,7 @@ _state: dict[str, Any] = {
     "last_run_utc":     None,
     "last_run_status":  "never_run",
     "last_allocation":  None,
+    "last_regime":      None,
     "last_exec_result": None,
     "run_count":        0,
     "error_count":      0,
@@ -203,3 +204,7 @@ def _update_state(
         _state["error_count"] += 1
     if allocation:
         _state["last_allocation"] = result.get("allocation_summary")
+        if isinstance(allocation, RegimeAnalysisOutput):
+            _state["last_regime"] = allocation.regime
+        else:
+            _state["last_regime"] = "Crypto"

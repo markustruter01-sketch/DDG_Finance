@@ -186,14 +186,12 @@ async def _fetch_bars_crypto(
 ) -> dict[str, Any]:
     @_make_retry_decorator()
     async def _request() -> list[dict]:
-        symbol = ticker.replace("/", "")
         url = f"{ALPACA_CRYPTO_BASE_URL}/bars"
         params = {
-            "symbols": symbol,
+            "symbols": ticker,
             "timeframe": "1Day",
-            "start": start_date,
-            "end": end_date,
-            "limit": 200,
+            "start": start_date + "T00:00:00Z",
+            "end": end_date + "T23:59:59Z",
         }
         response = await client.get(
             url,
@@ -203,7 +201,7 @@ async def _fetch_bars_crypto(
         )
         response.raise_for_status()
         data = response.json()
-        return data.get("bars", {}).get(symbol, [])
+        return data.get("bars", {}).get(ticker, [])
 
     try:
         bars = await _request()

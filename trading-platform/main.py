@@ -388,6 +388,7 @@ async def latest_allocation() -> dict:
     return {
         "status": "ok",
         "run_utc": last.get("last_run_utc"),
+        "regime": last.get("last_regime"),
         "allocation": allocation,
     }
 

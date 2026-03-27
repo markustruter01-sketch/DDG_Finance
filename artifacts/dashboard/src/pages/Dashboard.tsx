@@ -3,6 +3,7 @@ import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
+  type AllocationPlan,
 } from "@/hooks/use-trading";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
@@ -11,7 +12,7 @@ import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
   LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
-  RefreshCw, Sparkles, Brain, Trophy, Flame, Zap,
+  RefreshCw, Sparkles, Brain, Trophy, Flame, Zap, X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -503,9 +504,103 @@ function SpeechBubble({
   );
 }
 
+const REGIME_META: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  Bull:    { color: "text-green-400",  bg: "bg-green-500/15",  border: "border-green-500/40",  label: "BULL" },
+  Bear:    { color: "text-red-400",    bg: "bg-red-500/15",    border: "border-red-500/40",    label: "BEAR" },
+  Sideways:{ color: "text-amber-400",  bg: "bg-amber-500/15",  border: "border-amber-500/40",  label: "SIDEWAYS" },
+  Crypto:  { color: "text-purple-400", bg: "bg-purple-500/15", border: "border-purple-500/40", label: "CRYPTO" },
+};
+
+const ASSET_CLASS_COLORS: Record<string, string> = {
+  equity:      "#3b82f6",
+  safe_haven:  "#f59e0b",
+  crypto_spot: "#a855f7",
+  cash:        "#22c55e",
+};
+
+function RegimeAllocationPanel({ regime, allocation }: {
+  regime: string | null | undefined;
+  allocation: AllocationPlan["allocation"];
+}) {
+  if (!allocation || allocation.length === 0) return null;
+  const meta = regime ? (REGIME_META[regime] ?? REGIME_META["Bull"]) : null;
+
+  return (
+    <div className="relative mt-4 pt-4 border-t border-white/5">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground/70">
+          Macro Regime
+        </span>
+        {meta && regime && (
+          <motion.span
+            key={regime}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded border", meta.color, meta.bg, meta.border)}
+          >
+            {meta.label}
+          </motion.span>
+        )}
+        <span className="ml-auto text-[9px] uppercase font-semibold tracking-wider text-muted-foreground/70">
+          Target Allocation
+        </span>
+      </div>
+      <div className="grid gap-1.5">
+        {allocation.map((slot, idx) => {
+          const pct = Math.round(slot.kelly_fraction * 100);
+          const isCrypto = slot.ticker.includes("/");
+          const isCash = slot.ticker === "SGOV";
+          const barColor = ASSET_CLASS_COLORS[slot.asset_class] ?? "#6366f1";
+          return (
+            <motion.div
+              key={slot.slot}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="flex items-center gap-2"
+            >
+              <span className={cn("font-mono text-xs font-bold w-16 flex-shrink-0", isCrypto ? "text-purple-300" : isCash ? "text-green-400/70" : "text-white")}>
+                {slot.ticker}
+              </span>
+              <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, delay: idx * 0.07, ease: "easeOut" }}
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: barColor }}
+                />
+              </div>
+              <span className="text-[10px] font-mono text-muted-foreground w-7 text-right flex-shrink-0">
+                {pct}%
+              </span>
+              <span className={cn(
+                "text-[9px] font-mono w-6 text-right flex-shrink-0",
+                slot.conviction_score >= 0.8 ? "text-green-400" : "text-amber-400"
+              )}>
+                {Math.round(slot.conviction_score * 100)}
+              </span>
+            </motion.div>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-3 mt-2">
+        {Object.entries(ASSET_CLASS_COLORS).map(([cls, color]) => (
+          <span key={cls} className="flex items-center gap-1 text-[8px] text-muted-foreground/50">
+            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            {cls.replace("_", " ")}
+          </span>
+        ))}
+        <span className="ml-auto text-[8px] text-muted-foreground/40">conv%</span>
+      </div>
+    </div>
+  );
+}
+
 function AIBrainSection() {
   const { data, isLoading } = useAICommentary();
   const { mutate: refresh, isPending: isRefreshing } = useRefreshCommentary();
+  const { data: alloc } = useLatestAllocation();
 
   const thinking = isLoading || isRefreshing;
 
@@ -539,6 +634,9 @@ function AIBrainSection() {
           isRefreshing={isRefreshing}
         />
       </div>
+
+      {/* Regime + allocation breakdown */}
+      <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
     </div>
   );
 }
@@ -676,8 +774,62 @@ const positionRowVariants = {
   }),
 };
 
+function ThesisModal({ ticker, thesis, onClose }: {
+  ticker: string;
+  thesis: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="thesis-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        onClick={onClose}
+      >
+        <motion.div
+          key="thesis-panel"
+          initial={{ opacity: 0, scale: 0.95, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 8 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="relative max-w-lg w-full rounded-2xl border border-indigo-500/30 bg-slate-900 shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="h-px bg-gradient-to-r from-indigo-500/60 via-violet-400/40 to-transparent" />
+          <div className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-violet-400">AI Thesis</span>
+                <span className="font-mono text-xs font-bold text-white ml-1">{ticker}</span>
+              </div>
+              <button onClick={onClose} className="p-1 rounded-md hover:bg-white/8 transition-colors text-muted-foreground hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {thesis ? (
+              <p className="text-sm leading-relaxed text-slate-200 font-light">{thesis}</p>
+            ) : (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                <p className="text-sm text-amber-300/80 leading-relaxed">
+                  <span className="font-semibold">Legacy position</span> — this position was opened before the v4.0 regime-switching architecture was deployed. No AI thesis was recorded at entry time.
+                </p>
+                <p className="text-xs text-muted-foreground/60 mt-2">Future positions opened by the regime engine will always include a full thesis.</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function LivePositionsSection() {
   const { data, isLoading } = useLivePositions();
+  const [thesisModal, setThesisModal] = useState<{ ticker: string; thesis: string | null } | null>(null);
 
   const totalUnrealized = useMemo(() => {
     if (!data?.positions) return 0;
@@ -777,8 +929,15 @@ function LivePositionsSection() {
                       </span>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
-                  <td className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate" title={pos.original_thesis ?? ""}>
-                    {pos.original_thesis ?? "—"}
+                  <td
+                    className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate cursor-pointer hover:text-indigo-400 transition-colors"
+                    title="Click to view full thesis"
+                    onClick={() => setThesisModal({ ticker: pos.symbol, thesis: pos.original_thesis })}
+                  >
+                    {pos.original_thesis
+                      ? <span className="border-b border-dashed border-indigo-500/30">{pos.original_thesis}</span>
+                      : <span className="text-muted-foreground/40 italic text-[10px]">legacy — click to view</span>
+                    }
                   </td>
                 </motion.tr>
               );
@@ -802,6 +961,13 @@ function LivePositionsSection() {
           </tbody>
         </table>
       </div>
+      {thesisModal && (
+        <ThesisModal
+          ticker={thesisModal.ticker}
+          thesis={thesisModal.thesis}
+          onClose={() => setThesisModal(null)}
+        />
+      )}
     </Card>
   );
 }

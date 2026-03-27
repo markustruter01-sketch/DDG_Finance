@@ -2483,7 +2483,9 @@ export default function Dashboard() {
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-        {/* PRIMARY ACTION HERO */}
+        {/* ═══ TIER 1: WHAT'S HAPPENING RIGHT NOW ═══ */}
+
+        {/* AUTO-TRADING + PORTFOLIO METRICS */}
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-7 py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
             <div className="absolute top-0 left-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2491,70 +2493,77 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        {/* PORTFOLIO METRICS */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
           <PortfolioMetrics />
         </motion.div>
 
-        {/* BEST/WORST TRADE HERO */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-          <BestTradeHero />
+        {/* LIVE POSITIONS — the #1 most important section */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+          <LivePositionsSection />
         </motion.div>
 
-        {/* AI AGENTS: Trading Brain + Auditor side-by-side, equal height */}
+        {/* ECONOMIC CALENDAR — blackout events can halt trading */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <EconomicCalendarPanel />
+        </motion.div>
+
+        {/* ═══ TIER 2: PORTFOLIO HEALTH & RISK ═══ */}
+
+        {/* RISK METRICS + SENTIMENT + CORRELATION — unified risk zone */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <RiskMetricsPanel />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+            <SentimentGauges />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+            <CorrelationMatrix />
+          </motion.div>
+        </div>
+
+        {/* PERFORMANCE + ATTRIBUTION — how the system is doing */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+            <PerformanceSection />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <AttributionPanel />
+          </motion.div>
+        </div>
+
+        {/* ═══ TIER 3: AI INTELLIGENCE ═══ */}
+
+        {/* ORACLE + AUDITOR — side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="flex flex-col">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="flex flex-col">
             <AIBrainSection />
           </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="flex flex-col">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="flex flex-col">
             <AuditorAgentSection />
           </motion.div>
         </div>
 
-        {/* LIVE POSITIONS */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-          <LivePositionsSection />
+        {/* BEST/WORST TRADE — motivational, not urgent */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
+          <BestTradeHero />
         </motion.div>
 
-        {/* PERFORMANCE */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-          <PerformanceSection />
-        </motion.div>
-
-        {/* RISK METRICS + SENTIMENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-            <RiskMetricsPanel />
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
-            <SentimentGauges />
-          </motion.div>
-        </div>
-
-        {/* ATTRIBUTION + CORRELATION */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
-            <AttributionPanel />
-          </motion.div>
-          <motion.div className="space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
-            <CorrelationMatrix />
-            <EconomicCalendarPanel />
-          </motion.div>
-        </div>
+        {/* ═══ TIER 4: TOOLS & HISTORY ═══ */}
 
         {/* BACKTESTER */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
           <BacktesterPanel />
         </motion.div>
 
-        {/* ALLOCATION + JOURNAL | LEARNING + CONTROLS */}
+        {/* ALLOCATION + JOURNAL | LEARNING + VAULT + CONTROLS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <motion.div className="col-span-1 lg:col-span-2 space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+          <motion.div className="col-span-1 lg:col-span-2 space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <AllocationSection />
             <JournalSection />
           </motion.div>
 
-          <motion.div className="space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <motion.div className="space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}>
             <LearningContextSection />
             <VaultPanel />
             <ControlPanel />

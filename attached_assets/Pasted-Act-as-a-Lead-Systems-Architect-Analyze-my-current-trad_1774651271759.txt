@@ -1,0 +1,15 @@
+Act as a Lead Systems Architect. Analyze my current trading codebase and generate a comprehensive 'Technical Logic Blueprint' that can be used for deep-learning research. Please provide a detailed response covering the following sections:
+
+Mathematical Core: Explain the specific formulas used for the 2x ATR trailing stops, RSI/Z-score overrides, and how the system mathematically differentiates between 'Calm' and 'Volatile' regimes.
+
+The Learning Framework: Describe the Retrieval-Augmented Generation (RAG) loop. Explain how 'failed trades' are vectorized and how the LLM interprets historical market conditions to adjust future heuristic reasoning.
+
+Algorithmic Guardrails: Define the logic of the 4% drawdown kill switch and the 20% High Water Mark (HWM) dividend sweep. Explicitly detail the distribution-adjustment logic used to maintain HWM integrity.
+
+Operational Infrastructure: Describe the transition from ephemeral SQLite to persistent PostgreSQL, the timezone-synchronization logic for NYSE hours, and the exponential backoff strategy for API rate-limiting.
+
+Risk & Compliance Logic: Map out the 'Similarity Matrix' for ETF wash sale prevention and how the system identifies 'substantially identical' assets.
+
+Front-End Architecture & UI/UX Integration: Analyze the client-side implementation, specifically the dual-agent interface where the 'Auditing Agent' sits directly beneath the 'Primary Trading Agent'. Detail how the front-end handles real-time state synchronization for the agent's thought processes, how the UI visually flags heuristic conflicts or compliance warnings (e.g., proximity to the 4% kill switch), and the component structure for the Human-in-the-Loop (HITL) manual override/approval mechanics.
+
+Output Requirement: Present this as a cohesive, narrative-style technical document. Rely primarily on detailed, descriptive paragraphs rather than bulleted lists to explain the mechanics. Use clear headings to separate sections, and seamlessly weave any necessary pseudo-code or formulas directly into the paragraph structure so a deep-research AI can read it as a continuous, comprehensive explanation of the system's functional profile.

@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "15P0TxQcEb7yLvxsKpkB9"
+uri = "file://Technical_Logic_Blueprint.md"
+type = "text"
+title = "Technical Logic Blueprint — AI Trading Platform"

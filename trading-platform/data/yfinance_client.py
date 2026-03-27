@@ -4,11 +4,12 @@ Market Data Client — Regime-Switching Architecture
 Fetches OHLCV price data, trailing returns, moving averages, and momentum
 signals for the FIXED asset universe.
 
-Fixed universe (7 instruments + SGOV):
-  Equities   : SPY, QQQ
-  Safe Havens: TLT, GLD
-  Crypto Spot: BTC/USD, ETH/USD, ATOM/USD
-  Cash Equiv : SGOV
+Fixed universe (16 instruments + SGOV):
+  Equities (Sectors): SPY, QQQ, XLK, XLF, XLV, XLE, IWM
+  Safe Havens/Bonds : TLT, IEF, GLD, SLV
+  Commodities       : USO, PDBC
+  Crypto Spot       : BTC/USD, ETH/USD
+  Cash Equiv        : SGOV
 
 Momentum signals (key for regime-switching allocation):
   - 3-month MA (≈63 trading days): price vs MA → "positive" / "negative"
@@ -42,13 +43,14 @@ ALPACA_DATA_BASE_URL = "https://data.alpaca.markets/v2"
 ALPACA_CRYPTO_BASE_URL = "https://data.alpaca.markets/v1beta3/crypto/us"
 
 UNIVERSE: dict[str, list[str]] = {
-    "equity":      ["SPY", "QQQ"],
-    "safe_haven":  ["TLT", "GLD"],
-    "crypto_spot": ["BTC/USD", "ETH/USD", "ATOM/USD"],
+    "equity":      ["SPY", "QQQ", "XLK", "XLF", "XLV", "XLE", "IWM"],
+    "safe_haven":  ["TLT", "IEF", "GLD", "SLV"],
+    "commodity":   ["USO", "PDBC"],
+    "crypto_spot": ["BTC/USD", "ETH/USD"],
     "cash":        ["SGOV"],
 }
 
-ETF_CATEGORIES = ["equity", "safe_haven", "cash"]
+ETF_CATEGORIES = ["equity", "safe_haven", "commodity", "cash"]
 ALL_TICKERS: list[str] = [t for tickers in UNIVERSE.values() for t in tickers]
 ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
 CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]

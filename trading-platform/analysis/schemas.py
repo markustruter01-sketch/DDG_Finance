@@ -1,17 +1,24 @@
 """
 Pydantic Schemas — Structured LLM Output
 ------------------------------------------
-v4.0 — Regime-Switching Architecture
+v4.2 — Expanded Universe + 10% Position Cap Architecture
 
 RegimeAnalysisOutput  — variable-slot allocation driven by Bull/Bear/Sideways regime
-CryptoAnalysisOutput  — off-hours crypto-only allocation (BTC/ETH/ATOM)
+CryptoAnalysisOutput  — off-hours crypto-only allocation (BTC/USD, ETH/USD)
 
-The old rigid 10-slot / fixed-quota model has been replaced by a dynamic
-regime-switching model:
-  - Fixed asset universe of 7 liquid, uncorrelated instruments
-  - LLM scores the macro regime FIRST, then allocates accordingly
-  - Variable slot count (1–6); SGOV fills remaining capital automatically
-  - Kelly fractions can reach up to 1.0 to allow 100% concentration in 1 asset
+Asset universe (16 instruments + SGOV):
+  Equities (Sectors) : SPY, QQQ, XLK, XLF, XLV, XLE, IWM
+  Safe Havens/Bonds  : TLT, IEF, GLD, SLV
+  Commodities        : USO, PDBC
+  Crypto Spot        : BTC/USD, ETH/USD
+  Cash               : SGOV
+
+Position sizing rules (enforced in executor, not here):
+  - Max single position: 10% of equity (hard cap)
+  - No margin: trades blocked when available cash ≤ 0
+  - LLM kelly_fractions sum ≤ 1.0 as always
+
+Slot limits raised to 10 to accommodate wider universe.
 """
 
 from typing import Literal
@@ -20,9 +27,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 REGIME_UNIVERSE: dict[str, list[str]] = {
-    "equity":      ["SPY", "QQQ"],
-    "safe_haven":  ["TLT", "GLD"],
-    "crypto_spot": ["BTC/USD", "ETH/USD", "ATOM/USD"],
+    "equity":      ["SPY", "QQQ", "XLK", "XLF", "XLV", "XLE", "IWM"],
+    "safe_haven":  ["TLT", "IEF", "GLD", "SLV"],
+    "commodity":   ["USO", "PDBC"],
+    "crypto_spot": ["BTC/USD", "ETH/USD"],
     "cash":        ["SGOV"],
 }
 
@@ -31,7 +39,7 @@ ALL_REGIME_TICKERS: set[str] = {t for tickers in REGIME_UNIVERSE.values() for t 
 CRYPTO_SPOT_TICKERS: set[str] = set(REGIME_UNIVERSE["crypto_spot"])
 
 RegimeLabel = Literal["Bull", "Bear", "Sideways"]
-AssetClass = Literal["equity", "safe_haven", "crypto_spot", "cash"]
+AssetClass = Literal["equity", "safe_haven", "commodity", "crypto_spot", "cash"]
 CryptoAssetClass = Literal["crypto_spot", "cash"]
 
 
@@ -40,7 +48,7 @@ def is_crypto_pair(ticker: str) -> bool:
 
 
 class RegimeAllocationSlot(BaseModel):
-    slot: int = Field(..., ge=1, le=6)
+    slot: int = Field(..., ge=1, le=10)
     ticker: str
     asset_class: AssetClass
     conviction_score: float = Field(..., ge=0.0, le=1.0)
@@ -88,7 +96,7 @@ class RegimeAllocationSlot(BaseModel):
 class RegimeAnalysisOutput(BaseModel):
     regime: RegimeLabel
     regime_rationale: str = Field(..., min_length=20)
-    allocations: list[RegimeAllocationSlot] = Field(..., min_length=1, max_length=6)
+    allocations: list[RegimeAllocationSlot] = Field(..., min_length=1, max_length=10)
 
     @model_validator(mode="after")
     def validate_slot_numbers(self) -> "RegimeAnalysisOutput":
@@ -107,17 +115,20 @@ class RegimeAnalysisOutput(BaseModel):
         tickers = [a.ticker for a in non_cash]
 
         if self.regime == "Bull":
-            risk_assets = set(REGIME_UNIVERSE["equity"] + REGIME_UNIVERSE["crypto_spot"])
+            risk_assets = set(
+                REGIME_UNIVERSE["equity"]
+                + REGIME_UNIVERSE["crypto_spot"]
+                + REGIME_UNIVERSE["commodity"]
+            )
             bad = [t for t in tickers if t not in risk_assets]
             if bad:
                 raise ValueError(
-                    f"Bull regime: only equity/crypto_spot allowed, got: {bad}. "
-                    f"Use SPY, QQQ, BTC/USD, ETH/USD, ATOM/USD."
+                    f"Bull regime: only equity/crypto_spot/commodity allowed, got: {bad}. "
+                    f"Approved: {sorted(risk_assets)}"
                 )
-            if len(non_cash) < 1 or len(non_cash) > 3:
+            if len(non_cash) < 1 or len(non_cash) > 7:
                 raise ValueError(
-                    f"Bull regime requires 1–3 risk asset slots (plus optional SGOV), "
-                    f"got {len(non_cash)} non-cash slots."
+                    f"Bull regime requires 1–7 risk asset slots, got {len(non_cash)}."
                 )
 
         elif self.regime == "Bear":
@@ -126,7 +137,7 @@ class RegimeAnalysisOutput(BaseModel):
             if bad:
                 raise ValueError(
                     f"Bear regime: only safe_haven/cash allowed, got: {bad}. "
-                    f"Use TLT, GLD, or SGOV if all safe havens have negative momentum."
+                    f"Use TLT, IEF, GLD, SLV, or SGOV if safe havens have negative momentum."
                 )
 
         return self

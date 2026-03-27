@@ -103,7 +103,7 @@ async def run_analysis_cycle(
     if crypto_only:
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
         news_ok   = len(news_data["all_headlines"])
-        logger.info(f"  Data snapshot: Crypto={market_ok}/3 tickers | News={news_ok} headlines")
+        logger.info(f"  Data snapshot: Crypto={market_ok}/2 tickers | News={news_ok} headlines")
     else:
         macro_ok  = sum(1 for v in macro_data.values() if v.get("value") is not None)
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
@@ -179,14 +179,21 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
                     f"  {error_msg}\n\n"
                     f"Please fix and return corrected JSON only. Key rules:\n"
                     f"  - 'regime' must be exactly 'Bull', 'Bear', or 'Sideways'\n"
-                    f"  - Bull: 1-3 slots of equity/crypto_spot with positive momentum\n"
-                    f"  - Bear: 1-2 slots of TLT/GLD (safe_haven) with positive momentum, else SGOV\n"
-                    f"  - Sideways: 0-2 mean-reversion slots, or single SGOV slot\n"
-                    f"  - Only approved tickers: SPY, QQQ, TLT, GLD, BTC/USD, ETH/USD, ATOM/USD, SGOV\n"
+                    f"  - Bull: 3-7 slots of equity/crypto_spot/commodity with positive momentum\n"
+                    f"  - Bear: 1-4 slots of safe_haven (TLT, IEF, GLD, SLV) with positive momentum, else SGOV\n"
+                    f"  - Sideways: 0-3 mean-reversion slots (any class), or single SGOV slot\n"
+                    f"  - Only approved tickers: SPY, QQQ, XLK, XLF, XLV, XLE, IWM, "
+                    f"TLT, IEF, GLD, SLV, USO, PDBC, BTC/USD, ETH/USD, SGOV\n"
                     f"  - Slots numbered 1, 2, 3 ... sequentially\n"
                     f"  - kelly_fraction sum (excluding SGOV) must not exceed 1.0\n"
-                    f"  - asset_class must match ticker: equity→SPY/QQQ, safe_haven→TLT/GLD, "
-                    f"crypto_spot→BTC/USD/ETH/USD/ATOM/USD, cash→SGOV\n"
+                    f"  - asset_class must match ticker:\n"
+                    f"      equity→SPY/QQQ/XLK/XLF/XLV/XLE/IWM\n"
+                    f"      safe_haven→TLT/IEF/GLD/SLV\n"
+                    f"      commodity→USO/PDBC\n"
+                    f"      crypto_spot→BTC/USD/ETH/USD\n"
+                    f"      cash→SGOV\n"
+                    f"  - Each position is capped at 10% of equity by the executor. "
+                    f"Plan allocations with this in mind: use 10 slots at 10% each to deploy 100%.\n"
                 )
 
     raise RuntimeError(
@@ -224,9 +231,9 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
                     f"Your previous JSON output failed validation with this error:\n"
                     f"  {error_msg}\n\n"
                     f"Please fix and return corrected JSON only. Rules:\n"
-                    f"  - Only approved tickers: BTC/USD, ETH/USD, ATOM/USD, SGOV\n"
-                    f"  - asset_class: 'crypto_spot' for BTC/ETH/ATOM, 'cash' for SGOV\n"
-                    f"  - 1 to 3 slots, numbered sequentially from 1\n"
+                    f"  - Only approved tickers: BTC/USD, ETH/USD, SGOV (ATOM/USD is NOT valid)\n"
+                    f"  - asset_class: 'crypto_spot' for BTC/USD and ETH/USD, 'cash' for SGOV\n"
+                    f"  - 1 to 2 slots, numbered sequentially from 1\n"
                     f"  - kelly_fraction sum (excluding SGOV) <= 1.0\n"
                     f"  - Only allocate to crypto with POSITIVE momentum. Default SGOV if uncertain.\n"
                 )
@@ -250,9 +257,9 @@ def _mock_regime_llm_response() -> str:
                 "ticker": "GLD",
                 "asset_class": "safe_haven",
                 "conviction_score": 0.88,
-                "kelly_fraction": 0.50,
-                "thesis": "Gold breaking out above key resistance. Real rates declining as inflation expectations "
-                          "remain elevated. 3-month and 6-month momentum both positive.",
+                "kelly_fraction": 0.25,
+                "thesis": "Gold breaking out above key resistance. Real rates declining as inflation "
+                          "expectations remain elevated. Momentum positive on both MAs.",
                 "stop_loss_pct": -0.05,
                 "take_profit_pct": 0.12,
             },
@@ -261,11 +268,33 @@ def _mock_regime_llm_response() -> str:
                 "ticker": "TLT",
                 "asset_class": "safe_haven",
                 "conviction_score": 0.82,
-                "kelly_fraction": 0.50,
+                "kelly_fraction": 0.25,
                 "thesis": "Long-duration Treasuries benefiting from flight-to-quality. Momentum positive "
                           "on both MAs as recession risk increases and Fed nears peak rates.",
                 "stop_loss_pct": -0.05,
                 "take_profit_pct": 0.10,
+            },
+            {
+                "slot": 3,
+                "ticker": "IEF",
+                "asset_class": "safe_haven",
+                "conviction_score": 0.78,
+                "kelly_fraction": 0.25,
+                "thesis": "Intermediate Treasuries offer lower duration risk with positive momentum. "
+                          "Defensive positioning appropriate given elevated VIX.",
+                "stop_loss_pct": -0.04,
+                "take_profit_pct": 0.08,
+            },
+            {
+                "slot": 4,
+                "ticker": "SLV",
+                "asset_class": "safe_haven",
+                "conviction_score": 0.75,
+                "kelly_fraction": 0.25,
+                "thesis": "Silver following gold higher as inflation hedge demand increases. "
+                          "Positive momentum on 3-month MA signal.",
+                "stop_loss_pct": -0.06,
+                "take_profit_pct": 0.15,
             },
         ],
     })
@@ -275,7 +304,7 @@ def _mock_crypto_llm_response() -> str:
     return json.dumps({
         "market_regime": (
             "Crypto markets consolidating with BTC holding key support. "
-            "ETH showing relative strength. ATOM lagging with negative momentum."
+            "ETH showing relative strength with positive momentum on both MAs."
         ),
         "allocations": [
             {

@@ -1,36 +1,43 @@
 """
 Trade Executor — Converts Allocations → Alpaca Orders
 --------------------------------------------------------
-v4.1 — Risk Profile Override + High-Yield Vault Integration
+v4.2 — 10% Hard Cap + Margin Block + Expanded Universe
 
 Takes the validated RegimeAnalysisOutput (or CryptoAnalysisOutput) from the
 analysis phase and executes each slot:
 
-  1. Fetch current account equity.
+  1. Fetch current account equity + cash balance.
   2. Liquidate positions no longer in today's plan (exits).
   3. For each active slot, compute notional USD from kelly_fraction × equity.
-  4. Skip SGOV slots and slots already held at correct size (within 10%).
-  5. ── RISK OVERLAY (Module 3) ──────────────────────────────────────────
-     Before placing any buy, check the asset's Z-Score and RSI from the
-     most recently cached market data:
-       IF Z-Score > 2.0  OR  RSI(14) > 75  → asset is OVERHEATED
-         • Cut LLM-requested notional by 50%.
-         • Reroute remaining 50% into SGOV (cash equivalent).
-         • After fill: place a GTC stop-sell at 2% below fill price.
+  4. ── POSITION SIZING CAP (NEW) ──────────────────────────────────────────
+     Hard cap: max notional per position = equity × 10%.
+     If LLM requests more, cap at the 10% limit and leave remainder in cash.
      ──────────────────────────────────────────────────────────────────────
-  6. Place market buy orders.
-  7. Log every new trade to the SQLite journal for the RAG loop.
-  8. Capture intended_price and actual_fill_price for slippage tracking.
-  9. ── HIGH-YIELD VAULT (Module 1) ──────────────────────────────────────
-     After all orders complete, run the profit sweep to compound gains
-     into JEPQ.  Vault shares are never liquidated by this executor.
+  5. ── MARGIN BLOCK (NEW) ─────────────────────────────────────────────────
+     Track remaining cash across slot executions.
+     If remaining_cash ≤ 0: BLOCK trade (no margin allowed).
+     If notional > remaining_cash: cap notional to remaining_cash.
+     ──────────────────────────────────────────────────────────────────────
+  6. Skip SGOV slots and slots already held at correct size (within 10%).
+  7. ── RISK OVERLAY (Module 3) ──────────────────────────────────────────
+     IF Z-Score > 2.0 OR RSI(14) > 75 → asset is OVERHEATED:
+       • Cut notional by 50%.  Reroute 50% to SGOV.
+       • After fill: place GTC stop-sell at 2% below fill price.
+     ──────────────────────────────────────────────────────────────────────
+  8. Place market buy orders.
+  9. Log every new trade to the SQLite journal for the RAG loop.
+  10. Capture intended_price and actual_fill_price for slippage tracking.
+  11. ── HIGH-YIELD VAULT (Module 1) ──────────────────────────────────────
+     After all orders complete, run the profit sweep → JEPQ.
+     Vault shares are never liquidated by this executor.
      ──────────────────────────────────────────────────────────────────────
 
-Fixed Universe:
-  Equities:    SPY, QQQ          (DAY orders, min $100)
-  Safe Havens: TLT, GLD          (DAY orders, min $100)
-  Crypto Spot: BTC/USD, ETH/USD, ATOM/USD  (GTC orders, min $25)
-  Cash:        SGOV              (never actively bought except for reroutes)
+Universe (v4.2):
+  Equities:    SPY, QQQ, XLK, XLF, XLV, XLE, IWM  (DAY orders, min $100)
+  Safe Havens: TLT, IEF, GLD, SLV                  (DAY orders, min $100)
+  Commodities: USO, PDBC                            (DAY orders, min $100)
+  Crypto Spot: BTC/USD, ETH/USD                     (GTC orders, min $25)
+  Cash:        SGOV              (never actively bought except reroutes)
   Vault:       JEPQ              (profit sweep only, LLM cannot sell)
 """
 
@@ -60,7 +67,9 @@ MIN_NOTIONAL_CRYPTO = 25.0
 CASH_TICKER         = "SGOV"
 VAULT_TICKER        = "JEPQ"
 
-KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD", "ATOMUSD"}
+KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD"}
+
+MAX_POSITION_PCT        = 0.10   # 10 % hard cap per position (Step 2)
 
 OVERHEATED_Z_THRESHOLD  = 2.0
 OVERHEATED_RSI_THRESHOLD = 75.0
@@ -95,7 +104,8 @@ def execute_allocations(
 
     acct = get_account()
     equity = acct["equity"]
-    logger.info(f"Account equity: ${equity:,.2f} | cash: ${acct['cash']:,.2f}")
+    raw_cash = acct["cash"]
+    max_position_usd = round(equity * MAX_POSITION_PCT, 2)
 
     current_positions = {p["symbol"]: p for p in get_positions()}
     logger.info(f"Current open positions: {list(current_positions.keys()) or 'none'}")
@@ -110,6 +120,38 @@ def execute_allocations(
     }
     active_symbols = {_normalize_symbol(t) for t in active_tickers_raw}
 
+    # ── MARGIN BLOCK: compute available cash including exit proceeds ─────────
+    # Positions being exited this cycle free up cash. Add their market value to
+    # the settled cash balance so that the margin block is evaluated AFTER exits.
+    stale_symbols = {
+        sym for sym in current_positions
+        if sym not in active_symbols
+        and sym != CASH_TICKER
+        and sym not in protected_symbols
+        and (not is_crypto_only or sym in KNOWN_CRYPTO_SYMBOLS)
+    }
+    exit_proceeds = sum(
+        current_positions[sym]["market_value"]
+        for sym in stale_symbols
+        if current_positions[sym]["market_value"] > 0
+    )
+    remaining_cash = max(raw_cash, 0.0) + exit_proceeds
+    # Hard cap: can never spend more than total equity (prevents cross-day margin)
+    remaining_cash = min(remaining_cash, equity)
+
+    logger.info(
+        f"Account equity: ${equity:,.2f} | settled_cash: ${raw_cash:,.2f} | "
+        f"exit_proceeds: ${exit_proceeds:,.2f} | "
+        f"available_cash: ${remaining_cash:,.2f} | "
+        f"max_position (10%): ${max_position_usd:,.2f}"
+    )
+
+    if remaining_cash <= 0:
+        logger.warning(
+            f"MARGIN BLOCK | Available cash (incl. exit proceeds) is ${remaining_cash:,.2f} ≤ $0. "
+            f"All new buy orders blocked to prevent margin trading."
+        )
+
     results = {
         "equity":           equity,
         "dry_run":          dry_run,
@@ -120,6 +162,8 @@ def execute_allocations(
         "errors":           [],
         "risk_overrides":   [],
         "vault_sweep":      None,
+        "margin_blocks":    0,
+        "cap_overrides":    0,
     }
 
     results = _close_stale_positions(
@@ -128,7 +172,10 @@ def execute_allocations(
     )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
-        results = _execute_slot(slot, equity, current_positions, results, dry_run)
+        results, remaining_cash = _execute_slot(
+            slot, equity, max_position_usd, remaining_cash,
+            current_positions, results, dry_run,
+        )
 
     results = _run_vault_sweep(equity, results, dry_run)
 
@@ -139,7 +186,9 @@ def execute_allocations(
         f"Closed: {len(results['closed'])} positions | "
         f"Skipped: {len(results['skipped'])} | "
         f"Errors: {len(results['errors'])} | "
-        f"Risk overrides: {len(results['risk_overrides'])}"
+        f"Risk overrides: {len(results['risk_overrides'])} | "
+        f"Cap overrides: {results['cap_overrides']} | "
+        f"Margin blocks: {results['margin_blocks']}"
     )
     logger.info("=" * 60)
 
@@ -192,10 +241,12 @@ def _close_stale_positions(
 def _execute_slot(
     slot: RegimeAllocationSlot | CryptoAllocationSlot,
     equity: float,
+    max_position_usd: float,
+    remaining_cash: float,
     current_positions: dict,
     results: dict,
     dry_run: bool,
-) -> dict:
+) -> tuple[dict, float]:
     ticker = slot.ticker
     symbol = _normalize_symbol(ticker)
     is_crypto = is_crypto_pair(ticker)
@@ -203,10 +254,42 @@ def _execute_slot(
     if ticker == CASH_TICKER or slot.kelly_fraction == 0.0:
         logger.info(f"Slot {slot.slot}: {ticker:10s} → CASH/SKIP (kelly=0)")
         results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "cash_or_zero_kelly"})
-        return results
+        return results, remaining_cash
 
     notional_usd = equity * slot.kelly_fraction
     min_notional = MIN_NOTIONAL_CRYPTO if is_crypto else MIN_NOTIONAL_USD
+
+    # ── STEP 2: 10% Hard Cap ────────────────────────────────────────────────
+    if notional_usd > max_position_usd:
+        logger.warning(
+            f"📏 Cap Override | Slot {slot.slot}: {ticker} | "
+            f"LLM requested ${notional_usd:,.2f} (kelly={slot.kelly_fraction:.1%}) → "
+            f"capped at ${max_position_usd:,.2f} (10% of equity). "
+            f"${notional_usd - max_position_usd:,.2f} left in cash."
+        )
+        notional_usd = max_position_usd
+        results["cap_overrides"] += 1
+
+    # ── STEP 3: Margin Block ─────────────────────────────────────────────────
+    if remaining_cash <= 0:
+        logger.warning(
+            f"🚫 Margin Block | Slot {slot.slot}: {ticker} | "
+            f"No cash remaining (${remaining_cash:,.2f}). Trade blocked."
+        )
+        results["margin_blocks"] += 1
+        results["skipped"].append({
+            "slot": slot.slot, "ticker": ticker,
+            "reason": f"margin_block (remaining_cash=${remaining_cash:,.2f})",
+        })
+        return results, remaining_cash
+
+    if notional_usd > remaining_cash:
+        logger.warning(
+            f"💰 Cash Cap | Slot {slot.slot}: {ticker} | "
+            f"notional ${notional_usd:,.2f} > remaining cash ${remaining_cash:,.2f}. "
+            f"Capping to available cash."
+        )
+        notional_usd = remaining_cash
 
     if notional_usd < min_notional:
         logger.info(
@@ -217,7 +300,7 @@ def _execute_slot(
             "slot": slot.slot, "ticker": ticker,
             "reason": f"below_min_notional (${notional_usd:.2f})",
         })
-        return results
+        return results, remaining_cash
 
     if symbol in current_positions:
         existing_value = current_positions[symbol]["market_value"]
@@ -233,7 +316,7 @@ def _execute_slot(
                 "slot": slot.slot, "ticker": ticker,
                 "reason": f"already_held_within_10pct (diff={diff_pct:.1%})",
             })
-            return results
+            return results, remaining_cash
 
     heat = _get_heat_metrics(ticker)
     overheated = heat["is_overheated"]
@@ -297,7 +380,8 @@ def _execute_slot(
                 "reason":       "overheat_reroute",
                 "dry_run":      True,
             })
-        return results
+        remaining_cash -= notional_usd
+        return results, remaining_cash
 
     try:
         order = place_order(ticker=ticker, notional_usd=notional_usd)
@@ -312,6 +396,8 @@ def _execute_slot(
             intended_price=intended_price,
         )
         logger.info(f"  → Logged to journal: trade_id={order_id}")
+
+        remaining_cash -= notional_usd
 
         actual_fill_price = _poll_fill_price(order_id, ticker)
         slippage_info = ""
@@ -330,7 +416,10 @@ def _execute_slot(
             "overheated":        overheated,
         }
         results["placed"].append(result_entry)
-        logger.info(f"  → Fill price: ${actual_fill_price or 'pending'}{slippage_info}")
+        logger.info(
+            f"  → Fill price: ${actual_fill_price or 'pending'}{slippage_info} | "
+            f"remaining cash: ${remaining_cash:,.2f}"
+        )
 
         if overheated and actual_fill_price and actual_fill_price > 0:
             _place_overheated_stop(ticker, notional_usd, actual_fill_price, results)
@@ -346,7 +435,7 @@ def _execute_slot(
             "error":  str(exc),
         })
 
-    return results
+    return results, remaining_cash
 
 
 def _place_overheated_stop(

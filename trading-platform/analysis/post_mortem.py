@@ -2,35 +2,29 @@
 Post-Mortem Updater
 ---------------------
 Runs daily (after market close) to reconcile closed Alpaca paper trading
-positions against the trade_journal.db.
+positions against the trade_journal.db, then saves a performance snapshot.
 
 Logic:
   1. Pull all FILLED orders from the Alpaca paper account.
   2. For each filled order that has a corresponding 'Active' journal entry,
      compute the realised P&L vs the journal's entry price.
   3. Call update_trade_outcome() to stamp the trade Closed_Win / Closed_Loss.
-
-Note on P&L calculation:
-  Alpaca's filled orders carry a `filled_avg_price` (exit price).
-  The entry price is reconstructed from the original order's `filled_avg_price`
-  when the trade was first logged. Because paper trading orders may be
-  partially filled or split across multiple orders, we match on trade_id
-  which equals the original Alpaca order ID stored at order placement time.
-
-  For a long position:
-      pnl_pct = (exit_price - entry_price) / entry_price * 100
-
-  The entry price is stored in the journal at log_trade() time by the
-  execution module. If it is unavailable (e.g. SGOV cash-equivalent fills),
-  the trade is skipped silently.
+  4. Fetch current account equity and save a performance_snapshots row.
 """
 
 import asyncio
+from datetime import date
 from typing import Any
 
 from loguru import logger
 
-from analysis.trade_journal import get_all_active_trades, update_trade_outcome
+from analysis.trade_journal import (
+    get_all_active_trades,
+    update_trade_outcome,
+    get_journal_summary,
+    save_performance_snapshot,
+    get_performance_snapshots,
+)
 from config.settings import settings
 
 
@@ -45,10 +39,7 @@ def _get_trading_client():
 
 
 async def _fetch_closed_orders() -> list[dict[str, Any]]:
-    """
-    Fetch all closed (filled) orders from Alpaca paper account.
-    Runs the blocking SDK call in a thread pool.
-    """
+    """Fetch all closed (filled) orders from Alpaca paper account."""
     from alpaca.trading.requests import GetOrdersRequest
     from alpaca.trading.enums import QueryOrderStatus
 
@@ -75,21 +66,37 @@ async def _fetch_closed_orders() -> list[dict[str, Any]]:
     return await loop.run_in_executor(None, _blocking_fetch)
 
 
+async def _fetch_current_equity() -> float | None:
+    """Fetch current Alpaca account equity for the performance snapshot."""
+    def _blocking_fetch() -> float | None:
+        try:
+            client = _get_trading_client()
+            acct = client.get_account()
+            return float(acct.equity)
+        except Exception as exc:
+            logger.warning(f"Post-mortem | Could not fetch equity for snapshot: {exc}")
+            return None
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _blocking_fetch)
+
+
 async def run_post_mortem() -> dict[str, Any]:
     """
     Daily post-mortem reconciliation.
 
     Matches Alpaca closed orders against active journal entries, computes
-    realised P&L, and updates the journal status accordingly.
+    realised P&L, updates journal status, then saves a performance snapshot.
 
     Returns:
-        Summary dict with counts of wins, losses, and skipped trades.
+        Summary dict with counts of wins, losses, skipped, and snapshot info.
     """
     logger.info("Post-mortem | Starting daily reconciliation...")
 
     active_trades = get_all_active_trades()
     if not active_trades:
         logger.info("Post-mortem | No active journal entries to reconcile.")
+        await _save_snapshot(wins=0, losses=0)
         return {"wins": 0, "losses": 0, "skipped": 0, "message": "no active trades"}
 
     active_by_id = {t["trade_id"]: t for t in active_trades}
@@ -144,4 +151,48 @@ async def run_post_mortem() -> dict[str, Any]:
         f"Post-mortem | Complete — "
         f"Wins: {wins} | Losses: {losses} | Skipped: {skipped}"
     )
+
+    snapshot_info = await _save_snapshot(wins=wins, losses=losses)
+    summary["snapshot"] = snapshot_info
     return summary
+
+
+async def _save_snapshot(wins: int, losses: int) -> dict[str, Any]:
+    """
+    Save a performance snapshot row after post-mortem reconciliation.
+    Computes daily P&L %, cumulative P&L %, and win rate from the full journal.
+    """
+    today = date.today().isoformat()
+    equity = await _fetch_current_equity()
+    if equity is None:
+        logger.warning("Post-mortem | Skipping performance snapshot — equity unavailable")
+        return {"saved": False, "reason": "equity unavailable"}
+
+    journal = get_journal_summary()
+    total_closed = (journal.get("wins") or 0) + (journal.get("losses") or 0)
+    win_rate = wins / max(wins + losses, 1) if (wins + losses) > 0 else 0.0
+
+    snapshots = get_performance_snapshots(limit=1000)
+    initial_equity = snapshots[0]["equity"] if snapshots else equity
+    cumulative_pnl_pct = (equity - initial_equity) / initial_equity * 100 if initial_equity else 0.0
+
+    prev_equity = snapshots[-1]["equity"] if snapshots else equity
+    daily_pnl_pct = (equity - prev_equity) / prev_equity * 100 if prev_equity else 0.0
+
+    trades_placed_today = wins + losses
+
+    save_performance_snapshot(
+        snap_date=today,
+        equity=equity,
+        daily_pnl_pct=daily_pnl_pct,
+        cumulative_pnl_pct=cumulative_pnl_pct,
+        win_rate=win_rate,
+        trades_placed=trades_placed_today,
+    )
+    return {
+        "saved": True,
+        "date": today,
+        "equity": equity,
+        "daily_pnl_pct": daily_pnl_pct,
+        "cumulative_pnl_pct": cumulative_pnl_pct,
+    }

@@ -1,19 +1,19 @@
 """
 Feedback Injection — The Learning Loop (RAG)
 ----------------------------------------------
-Queries the trade_journal.db for the 5 most recent Closed_Loss trades
+Queries the trade_journal.db for recent Closed_Win and Closed_Loss trades
 and injects them into the system prompt sent to the Groq LLM.
 
-This is the core of the platform's "memory" — the model is explicitly
-instructed to review its own past failures and adjust its reasoning to
-avoid repeating the same mistakes.
+This is the core of the platform's "memory":
+- The model reviews past FAILURES to avoid repeating losing logic.
+- The model reviews past WINS to reinforce strategies that worked.
 
 This function MUST be called before every daily analysis cycle.
 """
 
 from loguru import logger
 
-from analysis.trade_journal import get_recent_losses
+from analysis.trade_journal import get_recent_losses, get_recent_wins
 
 
 BASE_SYSTEM_PROMPT = """You are a Senior Quantitative Analyst and Portfolio Manager.
@@ -76,49 +76,77 @@ Do NOT repeat any of the logical errors described above. If you see similar
 conditions today, be sceptical and consider SGOV (cash) instead.
 """
 
+WIN_FEEDBACK_TEMPLATE = """
+REINFORCEMENT — WHAT WORKED RECENTLY:
+The following {n} strategies produced positive returns. Study the conditions
+and thesis that drove these wins. When you see similar macro setups today,
+these patterns are worth repeating (at appropriate conviction levels).
 
-def build_system_prompt_with_feedback(n_losses: int = 5) -> str:
+{win_entries}
+
+Use these successful patterns as positive signal — but re-evaluate whether
+current conditions still support the same thesis before repeating them.
+"""
+
+
+def build_system_prompt_with_feedback(n_losses: int = 5, n_wins: int = 3) -> str:
     """
     Build the full system prompt for today's analysis cycle.
 
-    Queries the last N Closed_Loss trades from the journal and injects
-    them as a mandatory feedback block into the system prompt.
+    Injects both a 'what failed' (losses) block and a 'what worked' (wins)
+    block so the LLM learns bidirectionally from its trading history.
 
     Args:
         n_losses: Number of recent losses to inject (default 5).
+        n_wins:   Number of recent wins to inject (default 3).
 
     Returns:
         Complete system prompt string ready to send to Groq.
     """
     losses = get_recent_losses(limit=n_losses)
+    wins   = get_recent_wins(limit=n_wins)
 
-    if not losses:
-        logger.info("Feedback injection | No past losses in journal — using clean prompt")
-        return BASE_SYSTEM_PROMPT
+    full_prompt = BASE_SYSTEM_PROMPT
 
-    loss_entries = []
-    for i, loss in enumerate(losses, 1):
-        loss_entries.append(
-            f"  Loss #{i}: {loss['ticker']} ({loss['asset_class']}) | "
-            f"P&L: {loss['pnl_percentage']:+.2f}% | "
-            f"Date: {loss['date']}\n"
-            f"  Failed Thesis: \"{loss['original_thesis']}\""
+    if losses:
+        loss_entries = []
+        for i, loss in enumerate(losses, 1):
+            loss_entries.append(
+                f"  Loss #{i}: {loss['ticker']} ({loss['asset_class']}) | "
+                f"P&L: {loss['pnl_percentage']:+.2f}% | "
+                f"Date: {loss['date']}\n"
+                f"  Failed Thesis: \"{loss['original_thesis']}\""
+            )
+        full_prompt += LOSS_FEEDBACK_TEMPLATE.format(
+            n=len(losses),
+            loss_entries="\n\n".join(loss_entries),
         )
+        logger.info(f"Feedback injection | Injected {len(losses)} past losses into system prompt")
+        for loss in losses:
+            logger.debug(f"  Loss: {loss['ticker']} {loss['pnl_percentage']:+.2f}% on {loss['date']}")
+    else:
+        logger.info("Feedback injection | No past losses in journal")
 
-    feedback_block = LOSS_FEEDBACK_TEMPLATE.format(
-        n=len(losses),
-        loss_entries="\n\n".join(loss_entries),
-    )
-
-    full_prompt = BASE_SYSTEM_PROMPT + feedback_block
-
-    logger.info(
-        f"Feedback injection | Injected {len(losses)} past losses into system prompt"
-    )
-    for loss in losses:
-        logger.debug(
-            f"  Injected: {loss['ticker']} {loss['pnl_percentage']:+.2f}% "
-            f"on {loss['date']}"
+    if wins:
+        win_entries = []
+        for i, win in enumerate(wins, 1):
+            win_entries.append(
+                f"  Win #{i}: {win['ticker']} ({win['asset_class']}) | "
+                f"P&L: {win['pnl_percentage']:+.2f}% | "
+                f"Date: {win['date']}\n"
+                f"  Winning Thesis: \"{win['original_thesis']}\""
+            )
+        full_prompt += WIN_FEEDBACK_TEMPLATE.format(
+            n=len(wins),
+            win_entries="\n\n".join(win_entries),
         )
+        logger.info(f"Feedback injection | Injected {len(wins)} past wins into system prompt")
+        for win in wins:
+            logger.debug(f"  Win:  {win['ticker']} {win['pnl_percentage']:+.2f}% on {win['date']}")
+    else:
+        logger.info("Feedback injection | No past wins in journal")
+
+    if not losses and not wins:
+        logger.info("Feedback injection | No trading history — using clean prompt")
 
     return full_prompt

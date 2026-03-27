@@ -4,11 +4,15 @@ Trading Platform — FastAPI Application
 Serves as both the HTTP API and the host for the APScheduler background jobs.
 
 Endpoints:
-  GET  /health              — Liveness probe
+  GET  /health              — Liveness probe + system health status
   GET  /status              — Full platform state (scheduler, kill switch, last run)
   GET  /portfolio           — Live Alpaca account + open positions
+  GET  /positions/live      — Live positions enriched with allocation entry conditions
   GET  /journal             — Trade journal summary
-  GET  /journal/losses      — Recent losses (the RAG feedback window)
+  GET  /journal/losses      — Recent losses (the RAG loss feedback window)
+  GET  /journal/wins        — Recent wins (the RAG win feedback window)
+  GET  /performance         — Full daily performance snapshot history
+  GET  /performance/summary — Aggregate performance statistics
   POST /run                 — Manually trigger a full pipeline cycle
   POST /run/postmortem      — Manually trigger the post-mortem reconciliation
   POST /kill                — Manually trip the kill switch
@@ -37,10 +41,15 @@ from execution.kill_switch import (
 from analysis.trade_journal import (
     get_journal_summary,
     get_recent_losses,
+    get_recent_wins,
     get_all_trades,
+    get_performance_snapshots,
+    get_performance_summary,
     init_db,
 )
 from core.market_clock import is_market_open, get_next_open
+
+EXPECTED_JOB_COUNT = 3
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -85,7 +94,7 @@ app = FastAPI(
         "Groq LLM (Llama 3.3 70B) → Kelly-sized 10-slot allocation → "
         "Alpaca paper trading execution."
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
@@ -105,8 +114,43 @@ class KillResetRequest(BaseModel):
 
 @app.get("/health", tags=["System"])
 async def health() -> dict:
-    """Liveness probe. Always returns 200 if the server is up."""
-    return {"status": "ok", "version": "1.0.0"}
+    """
+    Liveness probe + structured system health.
+
+    system_status:
+      'online'   — scheduler has all expected jobs, last run did not error
+      'degraded' — scheduler missing jobs OR last run errored
+      'offline'  — server just started (no runs yet) but jobs are present
+    """
+    jobs = get_job_status()
+    last = get_last_run()
+
+    job_count = len(jobs)
+    last_status = last.get("last_run_status", "never")
+    error_count = last.get("error_count", 0)
+
+    if job_count < EXPECTED_JOB_COUNT:
+        system_status = "degraded"
+        status_reason = f"Only {job_count}/{EXPECTED_JOB_COUNT} scheduler jobs registered"
+    elif last_status == "error":
+        system_status = "degraded"
+        status_reason = f"Last run failed ({error_count} total errors)"
+    elif last_status in ("never", "never_run"):
+        system_status = "online"
+        status_reason = "Scheduler running — no analysis run yet today"
+    else:
+        system_status = "online"
+        status_reason = "All systems operational"
+
+    return {
+        "status": "ok",
+        "version": "1.1.0",
+        "system_status": system_status,
+        "status_reason": status_reason,
+        "scheduler_job_count": job_count,
+        "last_run_status": last_status,
+        "error_count": error_count,
+    }
 
 
 @app.get("/status", tags=["System"])
@@ -143,6 +187,53 @@ async def portfolio() -> dict:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
 
 
+@app.get("/positions/live", tags=["Portfolio"])
+async def live_positions() -> dict:
+    """
+    Live Alpaca positions enriched with allocation plan entry conditions.
+
+    Each position is joined with the latest allocation plan (by ticker) to
+    include: stop_loss_pct, take_profit_pct, conviction_score, kelly_fraction,
+    thesis, stop_loss_price ($), take_profit_price ($).
+    """
+    try:
+        positions = get_positions()
+        last_run  = get_last_run()
+        allocation = last_run.get("last_allocation") or []
+
+        alloc_by_ticker: dict[str, Any] = {}
+        for slot in allocation:
+            ticker = slot.get("ticker", "")
+            if ticker and ticker not in alloc_by_ticker:
+                alloc_by_ticker[ticker] = slot
+
+        enriched = []
+        for pos in positions:
+            symbol = pos.get("symbol", "")
+            alloc = alloc_by_ticker.get(symbol, {})
+            entry_price = pos.get("avg_entry_price", 0) or 0
+            stop_loss_pct   = alloc.get("stop_loss_pct")
+            take_profit_pct = alloc.get("take_profit_pct")
+
+            enriched.append({
+                **pos,
+                "asset_class":      alloc.get("asset_class", "unknown"),
+                "conviction_score": alloc.get("conviction_score"),
+                "kelly_fraction":   alloc.get("kelly_fraction"),
+                "stop_loss_pct":    stop_loss_pct,
+                "take_profit_pct":  take_profit_pct,
+                "stop_loss_price":  round(entry_price * (1 + stop_loss_pct), 4)
+                                    if entry_price and stop_loss_pct is not None else None,
+                "take_profit_price": round(entry_price * (1 + take_profit_pct), 4)
+                                     if entry_price and take_profit_pct is not None else None,
+                "original_thesis":  alloc.get("thesis"),
+            })
+
+        return {"count": len(enriched), "positions": enriched}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
+
+
 @app.get("/journal", tags=["Journal"])
 async def journal() -> dict:
     """Trade journal summary + full trade history."""
@@ -154,11 +245,41 @@ async def journal() -> dict:
 @app.get("/journal/losses", tags=["Journal"])
 async def journal_losses(n: int = 5) -> dict:
     """
-    The N most recent losing trades — exactly what the RAG loop feeds
-    into the next Groq system prompt.
+    The N most recent losing trades — what the RAG loop feeds into the
+    next Groq system prompt as failure examples.
     """
     losses = get_recent_losses(limit=n)
     return {"count": len(losses), "losses": losses}
+
+
+@app.get("/journal/wins", tags=["Journal"])
+async def journal_wins(n: int = 5) -> dict:
+    """
+    The N most recent winning trades — what the RAG loop feeds into the
+    next Groq system prompt as positive reinforcement examples.
+    """
+    wins = get_recent_wins(limit=n)
+    return {"count": len(wins), "wins": wins}
+
+
+@app.get("/performance", tags=["Performance"])
+async def performance_history(limit: int = 90) -> dict:
+    """
+    Full daily performance snapshot history (up to 90 days by default).
+    Each row: date, equity, daily_pnl_pct, cumulative_pnl_pct, win_rate, trades_placed.
+    """
+    snapshots = get_performance_snapshots(limit=limit)
+    return {"count": len(snapshots), "snapshots": snapshots}
+
+
+@app.get("/performance/summary", tags=["Performance"])
+async def performance_summary_endpoint() -> dict:
+    """
+    Aggregate performance statistics across all recorded snapshots.
+    Returns total_return_pct, best/worst day, overall win rate, total trades.
+    """
+    summary = get_performance_summary()
+    return summary
 
 
 @app.post("/run", tags=["Control"])
@@ -194,7 +315,7 @@ async def trip_kill_switch() -> dict:
     and blocks further trading for the rest of the day.
     """
     logger.warning("Kill switch MANUALLY tripped via API")
-    ks_check(current_equity=0.0)   # force-trips by setting equity to 0
+    ks_check(current_equity=0.0)
     return {"status": "tripped", "kill_switch": ks_get_state()}
 
 

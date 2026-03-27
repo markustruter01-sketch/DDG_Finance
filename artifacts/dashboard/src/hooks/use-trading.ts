@@ -1,11 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 
-const api = axios.create({
-  baseURL: "/trading-api",
-});
+const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+
+const api = axios.create({ baseURL: BASE });
 
 // --- Types ---
+
+export interface SystemHealth {
+  status: string;
+  version: string;
+  system_status: "online" | "degraded" | "offline";
+  status_reason: string;
+  scheduler_job_count: number;
+  last_run_status: string;
+  error_count: number;
+}
+
 export interface PlatformStatus {
   market: { is_open: boolean; next_open: string | null };
   kill_switch: { tripped: boolean; drawdown_pct: number; opening_equity: number | null; threshold_pct: number };
@@ -32,6 +43,29 @@ export interface PortfolioData {
     unrealized_plpc: number;
   }>;
   open_orders: Array<any>;
+}
+
+export interface LivePosition {
+  symbol: string;
+  qty: number;
+  avg_entry_price: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pl: number;
+  unrealized_plpc: number;
+  asset_class: string;
+  conviction_score: number | null;
+  kelly_fraction: number | null;
+  stop_loss_pct: number | null;
+  take_profit_pct: number | null;
+  stop_loss_price: number | null;
+  take_profit_price: number | null;
+  original_thesis: string | null;
+}
+
+export interface LivePositionsData {
+  count: number;
+  positions: LivePosition[];
 }
 
 export interface AllocationPlan {
@@ -63,20 +97,63 @@ export interface TradeJournal {
   }>;
 }
 
+export interface RagEntry {
+  trade_id: string;
+  date: string;
+  ticker: string;
+  asset_class: string;
+  conviction_score: number;
+  pnl_percentage: number;
+  original_thesis: string;
+}
+
 export interface RagLosses {
   count: number;
-  losses: Array<{
-    trade_id: string;
-    date: string;
-    ticker: string;
-    asset_class: string;
-    conviction_score: number;
-    pnl_percentage: number;
-    original_thesis: string;
-  }>;
+  losses: RagEntry[];
+}
+
+export interface RagWins {
+  count: number;
+  wins: RagEntry[];
+}
+
+export interface PerformanceSnapshot {
+  date: string;
+  equity: number;
+  daily_pnl_pct: number;
+  cumulative_pnl_pct: number;
+  win_rate: number;
+  trades_placed: number;
+}
+
+export interface PerformanceHistory {
+  count: number;
+  snapshots: PerformanceSnapshot[];
+}
+
+export interface PerformanceSummary {
+  total_days: number | null;
+  total_trades: number | null;
+  best_day_pct: number | null;
+  worst_day_pct: number | null;
+  avg_win_rate: number | null;
+  max_cumulative_pnl_pct: number | null;
+  min_cumulative_pnl_pct: number | null;
+  latest_equity: number | null;
+  total_return_pct: number | null;
+  latest_date: string | null;
 }
 
 // --- Hooks ---
+
+export function useSystemHealth() {
+  return useQuery<SystemHealth>({
+    queryKey: ["/health"],
+    queryFn: async () => (await api.get("/health")).data,
+    refetchInterval: 10000,
+    retry: 1,
+  });
+}
 
 export function usePlatformStatus() {
   return useQuery<PlatformStatus>({
@@ -90,6 +167,14 @@ export function usePortfolio() {
   return useQuery<PortfolioData>({
     queryKey: ["/portfolio"],
     queryFn: async () => (await api.get("/portfolio")).data,
+    refetchInterval: 30000,
+  });
+}
+
+export function useLivePositions() {
+  return useQuery<LivePositionsData>({
+    queryKey: ["/positions/live"],
+    queryFn: async () => (await api.get("/positions/live")).data,
     refetchInterval: 30000,
   });
 }
@@ -115,6 +200,27 @@ export function useRagLosses() {
   });
 }
 
+export function useRagWins() {
+  return useQuery<RagWins>({
+    queryKey: ["/journal/wins"],
+    queryFn: async () => (await api.get("/journal/wins?n=3")).data,
+  });
+}
+
+export function usePerformanceHistory() {
+  return useQuery<PerformanceHistory>({
+    queryKey: ["/performance"],
+    queryFn: async () => (await api.get("/performance")).data,
+  });
+}
+
+export function usePerformanceSummary() {
+  return useQuery<PerformanceSummary>({
+    queryKey: ["/performance/summary"],
+    queryFn: async () => (await api.get("/performance/summary")).data,
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {
@@ -123,9 +229,7 @@ export function useRunAnalysis() {
     mutationFn: async (data: { dry_run: boolean; force: boolean }) => {
       return (await api.post("/run", data)).data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries();
-    }
+    onSuccess: () => { qc.invalidateQueries(); }
   });
 }
 

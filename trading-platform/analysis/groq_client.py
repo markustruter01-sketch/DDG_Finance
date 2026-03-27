@@ -21,7 +21,7 @@ from loguru import logger
 
 from config.settings import settings
 
-MODEL = "llama3-70b-8192"
+MODEL = "llama-3.3-70b-versatile"
 
 _client: Groq | None = None
 

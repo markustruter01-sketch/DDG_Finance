@@ -23,7 +23,12 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
   - `data/news_client.py` — 5 category news feed via NewsAPI (async)
   - `config/settings.py` — Pydantic BaseSettings with all API key config
   - `main.py` — FastAPI stub with `/data/snapshot` test endpoint
-- **Phase 2 — LLM Analysis**: Not started
+- **Phase 2 — Trade Journal & RAG Loop**: COMPLETE
+  - `analysis/trade_journal.py` — SQLite journal (log, update, query losses)
+  - `analysis/post_mortem.py` — Daily Alpaca reconciliation → auto-close W/L
+  - `analysis/groq_client.py` — Groq API (llama-3.3-70b-versatile, free)
+  - `analysis/feedback_injection.py` — RAG: injects 5 recent losses into system prompt
+- **Phase 3 — LLM Analysis Cycle**: Not started
 - **Phase 3 — Portfolio/Kelly**: Not started
 - **Phase 4 — Execution/Alpaca**: Not started
 - **Phase 5 — Scheduler/Kill Switch**: Not started
@@ -38,7 +43,8 @@ cd trading-platform && uvicorn main:app --reload
 - `NEWS_API_KEY` — newsapi.org
 - `ALPACA_API_KEY` — Alpaca paper trading key ID
 - `ALPACA_SECRET_KEY` — Alpaca paper trading secret
-- `ANTHROPIC_API_KEY` — Claude API (Phase 2+)
+- `GROQ_API_KEY` — Groq free API (llama-3.3-70b-versatile)
+- `ANTHROPIC_API_KEY` — Claude API (optional, future use)
 
 ## Stack
 

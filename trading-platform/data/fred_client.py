@@ -44,7 +44,10 @@ MACRO_SERIES: dict[str, str] = {
     "CPIAUCSL": "CPI All Items",
     "PPIACO": "PPI All Commodities",
     "DCOILWTICO": "WTI Crude Oil Price",
-    "GOLDAMGBD228NLBM": "Gold Price (London Fix)",
+    # Gold spot price via FRED: the London fixing series (GOLDAMGBD228NLBM) was
+    # discontinued. We proxy gold sentiment through yfinance (GLD ETF) instead.
+    # Here we pull USD/CNY rate which is a key macro risk signal for commodities.
+    "DEXCHUS": "USD/CNY Exchange Rate",
     "DEXUSEU": "USD/EUR Exchange Rate",
     "VIXCLS": "CBOE VIX",
 }
@@ -111,12 +114,14 @@ async def _fetch_series(
     }
 
 
-async def fetch_macro_data(lookback_days: int = 30) -> dict[str, Any]:
+async def fetch_macro_data(lookback_days: int = 90) -> dict[str, Any]:
     """
     Fetch all macro series concurrently.
 
     Args:
         lookback_days: How many days back to request observations from FRED.
+                       Defaults to 90 so monthly series (CPI, PPI, UNRATE)
+                       always have at least one observation in the window.
 
     Returns:
         Dict mapping series_id -> {name, value, date}

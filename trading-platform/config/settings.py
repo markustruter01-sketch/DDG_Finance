@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     # --- Logging ---
     log_level: str = Field(default="INFO", description="Loguru log level")
     log_file: str = Field(default="logs/trading.log", description="Log file path")
+
+    @field_validator(
+        "fred_api_key", "news_api_key",
+        "alpaca_api_key", "alpaca_secret_key",
+        "anthropic_api_key", "deepseek_api_key",
+        mode="before",
+    )
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 settings = Settings()

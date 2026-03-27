@@ -47,7 +47,8 @@ REQUIRED (conviction >= 0.75 for each):
 - Wildcard:       exactly 1 slot   → pick 1 from: QQQ, SPY, TLT, HYG, EEM
 
 OPTIONAL (remaining 3 slots — use conviction to decide):
-- Allocate remaining 3 slots to any approved category.
+- Allocate remaining 3 slots to any approved category above, OR to raw crypto_spot pairs:
+  BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD (asset_class "crypto_spot").
 - Use ticker "SGOV" with asset_class "cash" only for slots where
   conviction_score < 0.75 AND they are not in the required count above.
 
@@ -72,7 +73,7 @@ REQUIRED OUTPUT FORMAT:
     {
       "slot": 1,
       "ticker": "<TICKER>",
-      "asset_class": "<crypto|commodity|currency|wildcard|cash>",
+      "asset_class": "<crypto|commodity|currency|wildcard|crypto_spot|cash>",
       "conviction_score": <0.0-1.0>,
       "kelly_fraction": <0.0-0.20>,
       "thesis": "<1-2 sentence rationale>",

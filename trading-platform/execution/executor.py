@@ -115,7 +115,6 @@ def _close_stale_positions(
         if sym in active_symbols or sym == CASH_TICKER:
             continue
         if crypto_only:
-            is_crypto_sym = sym.endswith("USD") and not sym.startswith("U") and len(sym) > 4
             known_crypto_syms = {"BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "AVAXUSD", "LINKUSD"}
             if sym not in known_crypto_syms:
                 continue

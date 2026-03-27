@@ -3,6 +3,7 @@ import { Loader2, Power, FileText, X } from "lucide-react";
 import { useLatestAllocation, usePlatformStatus, useToggleAutoTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { PdfViewer } from "@/components/PdfViewer";
 
 function ConvictionRing({ value }: { value: number }) {
   const pct = Math.round(value * 100);
@@ -165,11 +166,7 @@ export function TradeWorkflowBar() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <iframe
-                src={`${import.meta.env.BASE_URL}whitepaper.pdf`}
-                className="flex-1 w-full bg-white"
-                title="Platform Whitepaper"
-              />
+              <PdfViewer url={`${import.meta.env.BASE_URL}whitepaper.pdf`} />
             </div>
           </div>
         )}

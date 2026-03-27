@@ -16,15 +16,15 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **Brokerage**: Alpaca API (Paper Trading)
 - **Data Sources**: FRED API, Alpaca Market Data, NewsAPI
 - **LLM**: Groq (Llama 3.3 70B Versatile)
-- **Database**: SQLite trade journal with RAG feedback loop
+- **Database**: PostgreSQL (primary) with SQLite fallback; trade journal, vault ledger, ratchet stops, performance snapshots
 - **Validation**: Pydantic v2
-- **Scheduling**: APScheduler (3 jobs: 15-min intraday full-market cycle, 15-min 24/7 crypto-only cycle, evening post-mortem)
+- **Scheduling**: APScheduler (4 jobs: 15-min intraday full-market cycle, 15-min 24/7 crypto-only cycle, evening post-mortem, daily auditor at 4:30 PM ET)
 
 ### Architecture
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI async clients
-- `analysis/` — Trade journal (SQLite), post-mortem reconciliation, Groq LLM client, RAG feedback injection, analyzer pipeline
+- `analysis/` — Trade journal, post-mortem reconciliation, Groq LLM client, RAG feedback injection, analyzer pipeline, **auditor agent** (HITL supervisor)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
 - `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
@@ -64,6 +64,8 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `GET /journal/wins` — Top N winning trades
 - `GET /journal/losses` — Top N losing trades
 - `GET /ai/commentary` — Latest LLM analysis commentary
+- `GET /auditor/report` — Latest HITL audit report (JSON)
+- `POST /auditor/run` — Trigger manual audit cycle
 - `POST /run` — Trigger analysis cycle
 - `POST /run/postmortem` — Trigger post-mortem
 - `POST /kill` — Trip kill switch

@@ -286,6 +286,52 @@ export function useManualSweep() {
   });
 }
 
+// --- Auditor Agent ---
+
+export interface AuditFinding {
+  check: string;
+  passed: boolean;
+  severity: "INFO" | "WARNING" | "ALERT" | "HOLD";
+  message: string;
+  details: Record<string, any>;
+}
+
+export interface AuditReport {
+  run_at: string;
+  overall: "ALL_CLEAR" | "REVIEW_RECOMMENDED" | "ACTION_REQUIRED" | "never_run";
+  total_checks: number;
+  failed_checks: number;
+  alert_count: number;
+  findings: AuditFinding[];
+  recommendations: string[];
+  report_path: string;
+}
+
+export interface AuditorResponse {
+  status: string;
+  message?: string;
+  report: AuditReport | null;
+}
+
+export function useAuditorReport() {
+  return useQuery<AuditorResponse>({
+    queryKey: ["/auditor/report"],
+    queryFn: async () => (await api.get("/auditor/report")).data,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
+export function useTriggerAudit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post("/auditor/run")).data,
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ["/auditor/report"] }), 30000);
+    },
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {

@@ -3,8 +3,8 @@ import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
-  useVault, useManualSweep,
-  type AllocationPlan,
+  useVault, useManualSweep, useAuditorReport, useTriggerAudit,
+  type AllocationPlan, type AuditFinding,
 } from "@/hooks/use-trading";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
@@ -15,6 +15,8 @@ import {
   LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
   RefreshCw, Sparkles, Brain, Trophy, Flame, Zap, X,
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
+  Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
+  Lightbulb, Play,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -48,7 +50,7 @@ function useCountUp(target: number, duration = 1200, enabled = true) {
 
 // ── System Status Banner ───────────────────────────────────────────────────────
 
-const EXPECTED_JOBS = 3;
+const EXPECTED_JOBS = 4;
 
 function tradingModeLabel(mode: string | undefined): string {
   switch (mode) {
@@ -957,6 +959,421 @@ function AIBrainSection() {
 
         {/* Regime + allocation breakdown */}
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
+      </div>
+    </>
+  );
+}
+
+// ── Auditor Agent Section ────────────────────────────────────────────────────
+
+const AUDIT_SCAN_LINES = [
+  { y: 20, delay: 0 },
+  { y: 45, delay: 0.6 },
+  { y: 70, delay: 1.2 },
+  { y: 95, delay: 1.8 },
+];
+
+function AuditorShieldSVG({ scanning }: { scanning: boolean }) {
+  return (
+    <svg viewBox="0 0 140 150" className="w-full h-full drop-shadow-[0_0_24px_rgba(234,179,8,0.5)]">
+      <defs>
+        <radialGradient id="shieldGrad" cx="50%" cy="40%" r="55%">
+          <stop offset="0%" stopColor="rgba(234,179,8,0.15)" />
+          <stop offset="100%" stopColor="rgba(161,98,7,0.03)" />
+        </radialGradient>
+        <linearGradient id="shieldStroke" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="rgba(250,204,21,0.7)" />
+          <stop offset="100%" stopColor="rgba(161,98,7,0.3)" />
+        </linearGradient>
+        <filter id="shieldGlow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="scanGlow">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="shieldClip">
+          <path d="M70 12 L120 35 L120 80 Q120 120 70 140 Q20 120 20 80 L20 35 Z" />
+        </clipPath>
+      </defs>
+
+      {/* Outer energy rings */}
+      {[72, 62, 52].map((r, i) => (
+        <motion.circle key={r} cx={70} cy={75} r={r}
+          fill="none" stroke="rgba(234,179,8,0.18)" strokeWidth={i === 0 ? 1.2 : 0.8}
+          animate={{ opacity: [0.1, 0.4, 0.1] }}
+          transition={{ duration: 2.8 + i * 0.5, repeat: Infinity, delay: i * 0.6, ease: "easeInOut" }}
+        />
+      ))}
+
+      {/* Shield body */}
+      <motion.path
+        d="M70 12 L120 35 L120 80 Q120 120 70 140 Q20 120 20 80 L20 35 Z"
+        fill="url(#shieldGrad)" stroke="url(#shieldStroke)" strokeWidth="2"
+        animate={{ opacity: scanning ? [0.7, 1, 0.7] : [0.6, 0.85, 0.6] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Inner shield border */}
+      <motion.path
+        d="M70 22 L112 42 L112 78 Q112 112 70 130 Q28 112 28 78 L28 42 Z"
+        fill="none" stroke="rgba(234,179,8,0.25)" strokeWidth="1"
+        animate={{ opacity: [0.2, 0.5, 0.2] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Scanning lines (animate inside shield) */}
+      <g clipPath="url(#shieldClip)">
+        {AUDIT_SCAN_LINES.map((line, i) => (
+          <motion.line key={i}
+            x1={20} y1={line.y} x2={120} y2={line.y}
+            stroke="rgba(250,204,21,0.35)" strokeWidth="1" filter="url(#scanGlow)"
+            animate={scanning ? {
+              y1: [line.y, line.y + 100, line.y],
+              y2: [line.y, line.y + 100, line.y],
+              opacity: [0, 0.7, 0],
+            } : { opacity: [0.05, 0.2, 0.05] }}
+            transition={{ duration: 3, repeat: Infinity, delay: line.delay, ease: "easeInOut" }}
+          />
+        ))}
+      </g>
+
+      {/* Central eye */}
+      <motion.ellipse cx={70} cy={70} rx={16} ry={10}
+        fill="none" stroke="rgba(250,204,21,0.6)" strokeWidth="1.5"
+        filter="url(#shieldGlow)"
+        animate={{ opacity: [0.5, 1, 0.5] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+      />
+      <motion.circle cx={70} cy={70} r={4}
+        fill="rgba(250,204,21,0.9)" filter="url(#shieldGlow)"
+        animate={{ opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+      />
+      {scanning && (
+        <motion.circle cx={70} cy={70} r={8}
+          fill="none" stroke="rgba(250,204,21,0.4)" strokeWidth="1.2"
+          animate={{ opacity: [0.2, 0.7, 0.2], r: [8, 12, 8] }}
+          transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+
+      {/* Check marks on shield */}
+      <motion.path d="M55 90 L65 100 L85 80" fill="none" stroke="rgba(74,222,128,0.5)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+        animate={{ opacity: scanning ? [0.3, 0.8, 0.3] : [0.4, 0.6, 0.4] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </svg>
+  );
+}
+
+const SEVERITY_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; bg: string; border: string }> = {
+  INFO:    { icon: CheckCircle2, color: "text-green-400",  bg: "bg-green-500/10",  border: "border-green-500/30" },
+  WARNING: { icon: AlertTriangle, color: "text-amber-400", bg: "bg-amber-500/10",  border: "border-amber-500/30" },
+  ALERT:   { icon: AlertOctagon, color: "text-red-400",    bg: "bg-red-500/10",    border: "border-red-500/30" },
+  HOLD:    { icon: Lock,         color: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/30" },
+};
+
+const OVERALL_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  ALL_CLEAR:          { label: "ALL CLEAR",    color: "text-green-400",  bg: "bg-green-500/15",  border: "border-green-500/40" },
+  REVIEW_RECOMMENDED: { label: "REVIEW",       color: "text-amber-400",  bg: "bg-amber-500/15",  border: "border-amber-500/40" },
+  ACTION_REQUIRED:    { label: "ACTION REQ",   color: "text-red-400",    bg: "bg-red-500/15",    border: "border-red-500/40" },
+  never_run:          { label: "STANDBY",      color: "text-slate-400",  bg: "bg-slate-500/15",  border: "border-slate-500/40" },
+};
+
+function AuditorDialogueBubble({
+  report, scanning, onRunAudit, isTriggering,
+}: {
+  report: AuditFinding[] | null;
+  scanning: boolean;
+  onRunAudit: () => void;
+  isTriggering: boolean;
+}) {
+  return (
+    <div className="relative flex-1 min-w-0">
+      <div className="absolute left-0 top-1/2 -translate-x-3 -translate-y-1/2 w-3 h-4 overflow-hidden">
+        <div className="absolute inset-0 border-r border-b border-amber-500/40 bg-slate-900 rotate-[135deg] origin-top-right scale-75" />
+      </div>
+
+      <div className="relative rounded-2xl border border-amber-500/30 bg-slate-900/80 backdrop-blur-sm shadow-[0_0_30px_rgba(234,179,8,0.08)] overflow-hidden">
+        <div className="h-px bg-gradient-to-r from-amber-500/60 via-yellow-400/40 to-transparent" />
+
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <motion.div
+              animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Eye className="h-3.5 w-3.5 text-amber-400" />
+            </motion.div>
+            <span className="text-[10px] uppercase font-semibold tracking-wider text-amber-400">
+              Audit Findings
+            </span>
+            <span className="ml-auto text-[9px] text-muted-foreground/50">
+              daily 4:30PM ET
+            </span>
+          </div>
+
+          <div className="min-h-[52px]">
+            {scanning ? (
+              <div className="flex items-center gap-2 mt-1">
+                {[0, 1, 2].map(i => (
+                  <motion.div key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400"
+                    animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
+                  />
+                ))}
+                <span className="text-[11px] text-muted-foreground ml-1">Running audit…</span>
+              </div>
+            ) : report && report.length > 0 ? (
+              <div className="space-y-1.5">
+                {report.map((f, i) => {
+                  const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.INFO;
+                  const Icon = cfg.icon;
+                  return (
+                    <motion.div key={f.check}
+                      initial={{ opacity: 0, x: -4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="flex items-start gap-2"
+                    >
+                      <Icon className={cn("h-3 w-3 mt-0.5 flex-shrink-0", cfg.color)} />
+                      <span className="text-[10px] leading-snug text-slate-300">
+                        <span className="font-semibold">{f.check.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}:</span>{" "}
+                        {f.passed ? "Pass" : f.message.length > 60 ? f.message.slice(0, 60) + "…" : f.message}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground/50 italic">
+                No audit run yet — click Run Audit to generate the first report.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            {report ? (
+              <span className="text-[9px] text-muted-foreground/40">
+                {report.filter(f => f.passed).length}/{report.length} checks passed
+              </span>
+            ) : <span />}
+            <button
+              onClick={onRunAudit}
+              disabled={isTriggering || scanning}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all",
+                "border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 hover:border-amber-400/50",
+                "disabled:opacity-40 disabled:cursor-not-allowed"
+              )}
+            >
+              <Play className={cn("h-3 w-3", (isTriggering || scanning) && "animate-spin")} />
+              {isTriggering ? "Triggering…" : "Run Audit"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuditorInsightsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data: auditorData } = useAuditorReport();
+  const report = auditorData?.report;
+  if (!open) return null;
+
+  const findings = report?.findings ?? [];
+  const recommendations = report?.recommendations ?? [];
+  const overallMeta = report?.overall ? OVERALL_CONFIG[report.overall] ?? OVERALL_CONFIG.never_run : OVERALL_CONFIG.never_run;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 12 }}
+        transition={{ duration: 0.2 }}
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-amber-500/30 bg-slate-950 shadow-[0_0_80px_rgba(234,179,8,0.12)] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="h-px bg-gradient-to-r from-amber-500/60 via-yellow-400/40 to-transparent" />
+
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Shield className="h-4 w-4 text-amber-400 flex-shrink-0" />
+            <span className="text-sm font-semibold text-white">Auditor Agent — HITL Supervisor</span>
+            <span className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded border ml-1", overallMeta.color, overallMeta.bg, overallMeta.border)}>
+              {overallMeta.label}
+            </span>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 p-1 rounded-lg hover:bg-white/8 text-muted-foreground hover:text-white transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          {report?.run_at && (
+            <div className="text-[10px] text-muted-foreground/50">
+              Last run: {new Date(report.run_at).toLocaleString()} · {report.total_checks} checks · {report.failed_checks} failed · {report.alert_count} alerts
+            </div>
+          )}
+
+          {findings.length > 0 ? findings.map((f, i) => {
+            const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.INFO;
+            const Icon = cfg.icon;
+            return (
+              <motion.div key={f.check}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className={cn("rounded-xl border p-4", cfg.border, cfg.bg)}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className={cn("h-4 w-4", cfg.color)} />
+                  <span className={cn("text-xs font-bold uppercase tracking-wider", cfg.color)}>
+                    {f.check.replace(/_/g, " ")}
+                  </span>
+                  <span className={cn("ml-auto text-[10px] font-mono font-bold px-1.5 py-0.5 rounded", f.passed ? "text-green-400 bg-green-500/10" : "text-red-400 bg-red-500/10")}>
+                    {f.passed ? "PASS" : "FAIL"}
+                  </span>
+                </div>
+                <p className="text-sm text-white/80 leading-relaxed">{f.message}</p>
+                {f.details?.flags && Array.isArray(f.details.flags) && f.details.flags.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {f.details.flags.map((flag: string, fi: number) => (
+                      <div key={fi} className="flex items-start gap-1.5 text-[10px] text-white/60">
+                        <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0 text-amber-400/70" />
+                        <span>{flag}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {f.details?.holds && Array.isArray(f.details.holds) && f.details.holds.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {f.details.holds.map((hold: any, hi: number) => (
+                      <div key={hi} className="flex items-start gap-1.5 text-[10px] text-white/60">
+                        <Lock className="h-3 w-3 mt-0.5 flex-shrink-0 text-orange-400/70" />
+                        <span>{hold.ticker}: blocked by {hold.blocking_ticker} — {hold.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            );
+          }) : (
+            <p className="text-sm text-muted-foreground italic">No audit has been run yet.</p>
+          )}
+
+          {recommendations.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-3">
+                <Lightbulb className="h-3.5 w-3.5 text-yellow-400" />
+                <span className="text-[10px] uppercase font-semibold tracking-wider text-yellow-400/80">Prompt Engineering Recommendations</span>
+              </div>
+              <div className="space-y-2">
+                {recommendations.map((rec, i) => (
+                  <div key={i} className="flex items-start gap-2 rounded-lg border border-yellow-500/15 bg-yellow-500/5 p-3">
+                    <span className="text-[10px] font-mono text-yellow-400/60 flex-shrink-0 mt-0.5">{i + 1}.</span>
+                    <p className="text-[11px] text-white/70 leading-relaxed">{rec}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function AuditorAgentSection() {
+  const { data: auditorData } = useAuditorReport();
+  const { mutate: triggerAudit, isPending: isTriggering } = useTriggerAudit();
+  const [showInsights, setShowInsights] = useState(false);
+
+  const report  = auditorData?.report;
+  const overall = report?.overall ?? "never_run";
+  const findings = report?.findings ?? null;
+  const scanning = isTriggering;
+  const overallMeta = OVERALL_CONFIG[overall] ?? OVERALL_CONFIG.never_run;
+
+  return (
+    <>
+      <AnimatePresence>
+        {showInsights && <AuditorInsightsModal open={showInsights} onClose={() => setShowInsights(false)} />}
+      </AnimatePresence>
+
+      <div className="relative rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/90 to-amber-950/15 p-5 shadow-[0_0_60px_rgba(234,179,8,0.06)] overflow-hidden">
+        <div className="absolute top-0 left-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-yellow-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+
+        <div className="relative flex items-center gap-2 mb-4">
+          <Shield className="h-3.5 w-3.5 text-amber-400" />
+          <span className="text-[10px] uppercase font-semibold tracking-wider text-amber-400/80">
+            HITL Auditor
+          </span>
+          <motion.span
+            key={overall}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={cn("text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border", overallMeta.color, overallMeta.bg, overallMeta.border)}
+          >
+            {overallMeta.label}
+          </motion.span>
+          <span className="ml-auto flex items-center gap-1 text-[9px] text-amber-400/40">
+            <motion.span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400"
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            />
+            {report?.run_at ? `last: ${new Date(report.run_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "awaiting first run"}
+          </span>
+        </div>
+
+        <div className="relative flex items-start gap-5">
+          <motion.div
+            className="flex-shrink-0 w-44 h-44 cursor-pointer relative group"
+            animate={{ y: [0, -4, 0, 3, 0], x: [0, 2, 0, -2, 0] }}
+            transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+            onClick={() => setShowInsights(true)}
+            title="Click to view full audit details"
+          >
+            <AuditorShieldSVG scanning={scanning} />
+            <div className="absolute inset-0 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <span className="text-[9px] font-semibold text-amber-300/80 bg-slate-950/80 rounded-full px-2 py-0.5 border border-amber-500/20 backdrop-blur-sm">
+                tap to inspect
+              </span>
+            </div>
+          </motion.div>
+
+          <AuditorDialogueBubble
+            report={findings}
+            scanning={scanning}
+            onRunAudit={() => triggerAudit()}
+            isTriggering={isTriggering}
+          />
+        </div>
+
+        {report && report.recommendations && report.recommendations.length > 0 && (
+          <div className="relative mt-4 pt-4 border-t border-white/5">
+            <div className="flex items-center gap-2 mb-2">
+              <Lightbulb className="h-3 w-3 text-yellow-400/70" />
+              <span className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground/70">
+                Prompt Tweaks
+              </span>
+            </div>
+            <div className="space-y-1">
+              {report.recommendations.slice(0, 2).map((rec, i) => (
+                <p key={i} className="text-[10px] text-slate-400 leading-snug line-clamp-2">
+                  {rec}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -2025,10 +2442,15 @@ export default function Dashboard() {
           <BestTradeHero />
         </motion.div>
 
-        {/* AI BRAIN */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
-          <AIBrainSection />
-        </motion.div>
+        {/* AI AGENTS: Trading Brain + Auditor side-by-side */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+            <AIBrainSection />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+            <AuditorAgentSection />
+          </motion.div>
+        </div>
 
         {/* LIVE POSITIONS */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>

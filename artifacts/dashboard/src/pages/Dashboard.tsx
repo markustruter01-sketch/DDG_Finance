@@ -615,71 +615,68 @@ function LearningContextSection() {
   if (!hasLosses && !hasWins) return null;
 
   return (
-    <Card className="border-white/10 overflow-hidden">
-      <CardHeader className="bg-slate-900/50 border-b border-white/8 py-4">
-        <CardTitle className="flex items-center gap-2 text-sm text-white">
-          <Activity className="h-4 w-4 text-primary" /> Learning Context
-        </CardTitle>
-        <p className="text-[10px] text-muted-foreground mt-0.5">Both wins and losses are injected into tomorrow's LLM prompt.</p>
-      </CardHeader>
-      <CardContent className="p-0">
+    <div className="space-y-2">
+      <div className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider px-1 flex items-center gap-2">
+        <Activity className="h-3 w-3 text-primary" /> Learning Context
+        <span className="font-normal normal-case text-muted-foreground/60">— injected into tomorrow's LLM prompt</span>
+      </div>
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Wins */}
         {hasWins && (
-          <div className="border-b border-white/5">
-            <div className="px-4 py-2 bg-green-500/5 border-b border-green-500/10">
+          <Card className="border-green-500/20 bg-green-500/5 overflow-hidden">
+            <div className="px-4 py-2.5 bg-green-500/10 border-b border-green-500/15">
               <span className="text-[10px] uppercase font-semibold text-green-400 tracking-wider flex items-center gap-1.5">
                 <TrendingUp className="h-3 w-3" /> What Worked ({winData.count})
               </span>
             </div>
             <div className="divide-y divide-green-500/8">
               {winData.wins.map((win) => (
-                <div key={win.trade_id} className="p-4 hover:bg-green-500/5 transition-colors">
+                <div key={win.trade_id} className="p-3 hover:bg-green-500/5 transition-colors">
                   <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="font-mono text-sm font-bold text-white">{win.ticker}</span>
                       <Badge className="text-[9px] py-0 px-1 bg-green-500/10 text-green-400 border-green-500/20 border">{win.asset_class}</Badge>
                     </div>
                     <PnlText value={win.pnl_percentage} />
                   </div>
-                  <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-green-500/30 pl-3">
+                  <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-green-500/30 pl-2.5">
                     "{win.original_thesis}"
                   </p>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Losses */}
         {hasLosses && (
-          <div>
-            <div className="px-4 py-2 bg-red-500/5 border-b border-red-500/10">
+          <Card className="border-red-500/20 bg-red-500/5 overflow-hidden">
+            <div className="px-4 py-2.5 bg-red-500/10 border-b border-red-500/15">
               <span className="text-[10px] uppercase font-semibold text-red-400 tracking-wider flex items-center gap-1.5">
                 <TrendingDown className="h-3 w-3" /> What Failed ({lossData.count})
               </span>
             </div>
             <div className="divide-y divide-red-500/8">
               {lossData.losses.map((loss) => (
-                <div key={loss.trade_id} className="p-4 hover:bg-red-500/5 transition-colors">
+                <div key={loss.trade_id} className="p-3 hover:bg-red-500/5 transition-colors">
                   <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <span className="font-mono text-sm font-bold text-white">{loss.ticker}</span>
                       <Badge className="text-[9px] py-0 px-1 bg-red-500/10 text-red-400 border-red-500/20 border">{loss.asset_class}</Badge>
                     </div>
                     <PnlText value={loss.pnl_percentage} />
                   </div>
-                  <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-red-500/30 pl-3">
+                  <p className="text-[10px] leading-relaxed text-muted-foreground italic border-l-2 border-red-500/30 pl-2.5">
                     "{loss.original_thesis}"
                   </p>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         )}
-
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

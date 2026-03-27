@@ -168,8 +168,6 @@ async def _save_snapshot(wins: int, losses: int) -> dict[str, Any]:
         logger.warning("Post-mortem | Skipping performance snapshot — equity unavailable")
         return {"saved": False, "reason": "equity unavailable"}
 
-    journal = get_journal_summary()
-    total_closed = (journal.get("wins") or 0) + (journal.get("losses") or 0)
     win_rate = wins / max(wins + losses, 1) if (wins + losses) > 0 else 0.0
 
     snapshots = get_performance_snapshots(limit=1000)

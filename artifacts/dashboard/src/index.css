@@ -152,6 +152,24 @@
     animation: conviction-fill 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
+  /* CRT scanline */
+  @keyframes crt-scanline {
+    0%   { top: -8%; }
+    100% { top: 108%; }
+  }
+  .crt-scanline {
+    animation: crt-scanline 6s linear infinite;
+  }
+
+  /* Particle burst */
+  @keyframes particle-burst {
+    0%   { transform: translate(0,0) scale(1); opacity: 0.9; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+  }
+  .particle {
+    animation: particle-burst 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
   /* Custom scrollbar for terminal vibe */
   ::-webkit-scrollbar {
     width: 8px;

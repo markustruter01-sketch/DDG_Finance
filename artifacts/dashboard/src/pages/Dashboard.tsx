@@ -202,6 +202,42 @@ function AnimatedCurrency({ value, className }: { value: number; className?: str
   return <span className={className}>{formatCurrency(animated)}</span>;
 }
 
+// Slot-machine rolling digit — each numeric character independently rolls in
+function SlotDigit({ digit }: { digit: string }) {
+  if (!/\d/.test(digit)) return <span>{digit}</span>;
+  return (
+    <span
+      className="inline-block overflow-hidden"
+      style={{ height: "1.1em", verticalAlign: "bottom", minWidth: "0.55em", textAlign: "center" }}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={digit}
+          className="block"
+          initial={{ y: "100%", opacity: 0 }}
+          animate={{ y: "0%", opacity: 1 }}
+          exit={{ y: "-100%", opacity: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          style={{ lineHeight: "1.1em", height: "1.1em" }}
+        >
+          {digit}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+function RollingCurrency({ value, className }: { value: number; className?: string }) {
+  const formatted = formatCurrency(value);
+  return (
+    <span className={cn("inline-flex items-end", className)}>
+      {formatted.split("").map((char, i) => (
+        <SlotDigit key={i} digit={char} />
+      ))}
+    </span>
+  );
+}
+
 function PortfolioMetrics() {
   const { data } = usePortfolio();
   const { data: vault } = useVault();
@@ -251,7 +287,7 @@ function PortfolioMetrics() {
               </motion.span>
             )}
           </div>
-          <AnimatedCurrency value={data.account.equity} className={cn("text-2xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+          <RollingCurrency value={data.account.equity} className={cn("text-2xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
           <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", isProfit ? "text-green-400/70" : "text-red-400/70")}>
             {isProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {isProfit ? `+${formatCurrency(pnl)}` : `${formatCurrency(pnl)}`}
@@ -1537,8 +1573,31 @@ function AllocationSection() {
 
 // ── Journal Section ───────────────────────────────────────────────────────────
 
+type ParticleItem = { id: number; dx: number; dy: number; isWin: boolean };
+
 function JournalSection() {
   const { data } = useJournal();
+  const [particles, setParticles] = useState<ParticleItem[]>([]);
+  const prevClosedCount = useRef(0);
+
+  // Detect new closed trades and fire a radial particle burst
+  useEffect(() => {
+    if (!data?.trades) return;
+    const closed = data.trades.filter((t) => t.status !== "Active");
+    const prev = prevClosedCount.current;
+    if (closed.length > prev && prev > 0) {
+      const latest = closed[0];
+      const isWin = latest.status === "Closed_Win";
+      const burst: ParticleItem[] = Array.from({ length: 12 }, (_, i) => {
+        const angle = (i / 12) * Math.PI * 2;
+        const dist = 36 + Math.abs(Math.sin(i * 1.7)) * 28;
+        return { id: Date.now() + i, dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist, isWin };
+      });
+      setParticles((p) => [...p, ...burst]);
+    }
+    prevClosedCount.current = closed.length;
+  }, [data?.trades?.length]);
+
   if (!data) return null;
 
   const winRate = data.summary.total > 0 && data.summary.wins != null
@@ -1546,7 +1605,28 @@ function JournalSection() {
     : null;
 
   return (
-    <Card className="border-white/5 overflow-hidden">
+    <Card className="border-white/5 overflow-hidden relative">
+      {/* Particle burst anchor — fires at the top-right of the card header */}
+      <div className="absolute top-6 right-20 pointer-events-none z-20">
+        <AnimatePresence>
+          {particles.map((p) => (
+            <motion.div
+              key={p.id}
+              className="absolute rounded-full"
+              style={{
+                width: 5, height: 5,
+                backgroundColor: p.isWin ? "#22c55e" : "#ef4444",
+                boxShadow: p.isWin ? "0 0 6px #22c55e" : "0 0 6px #ef4444",
+              }}
+              initial={{ x: 0, y: 0, scale: 1, opacity: 0.95 }}
+              animate={{ x: p.dx, y: p.dy, scale: 0, opacity: 0 }}
+              transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+              onAnimationComplete={() => setParticles((prev) => prev.filter((x) => x.id !== p.id))}
+            />
+          ))}
+        </AnimatePresence>
+      </div>
+
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2 text-sm">
           <History className="h-4 w-4 text-primary" /> Trade Journal
@@ -1839,11 +1919,88 @@ function VaultPanel() {
   );
 }
 
+// ── Ambient Visual Overlays ──────────────────────────────────────────────────
+
+/** CRT scanline — a single translucent beam that slowly sweeps top→bottom */
+function CRTOverlay() {
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[9998] overflow-hidden">
+      <div
+        className="crt-scanline absolute left-0 right-0 h-[3px]"
+        style={{
+          background: "linear-gradient(to bottom, transparent, rgba(99,102,241,0.055), transparent)",
+          boxShadow: "0 0 10px rgba(99,102,241,0.07)",
+        }}
+      />
+      {/* Subtle edge vignette */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.28) 100%)",
+        }}
+      />
+    </div>
+  );
+}
+
+/** Left-edge regime pulse — color changes with macro regime */
+function RegimeGlow() {
+  const { data: alloc } = useLatestAllocation();
+  const regime = alloc?.regime;
+
+  const cfg = regime === "Bear"
+    ? { color: "rgba(239,68,68,0.18)", glow: "rgba(239,68,68,0.14)", key: "bear" }
+    : regime === "Neutral"
+    ? { color: "rgba(245,158,11,0.15)", glow: "rgba(245,158,11,0.11)", key: "neutral" }
+    : { color: "rgba(34,197,94,0.14)", glow: "rgba(34,197,94,0.10)", key: "bull" };
+
+  if (!regime) return null;
+
+  return (
+    <motion.div
+      key={cfg.key}
+      className="fixed left-0 top-0 bottom-0 w-[3px] pointer-events-none z-[9997]"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0.45, 1, 0.45] }}
+      transition={{ duration: 3.5, repeat: Infinity, ease: "easeInOut" }}
+      style={{ background: cfg.color, boxShadow: `3px 0 24px ${cfg.glow}` }}
+    />
+  );
+}
+
+/** Ambient bottom glow — warm amber on drawdown, cool blue when profitable */
+function EquityEcho() {
+  const { data } = usePortfolio();
+  if (!data) return null;
+
+  const isProfit = data.account.equity >= 100000;
+  const magnitude = Math.min(Math.abs(data.account.equity - 100000) / 20000, 1);
+  const baseAlpha = 0.035 + magnitude * 0.055;
+
+  return (
+    <motion.div
+      key={isProfit ? "profit" : "loss"}
+      className="fixed inset-0 pointer-events-none z-0"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 2.5, ease: "easeInOut" }}
+      style={{
+        background: isProfit
+          ? `radial-gradient(ellipse at 50% 100%, rgba(59,130,246,${baseAlpha}) 0%, transparent 60%)`
+          : `radial-gradient(ellipse at 50% 100%, rgba(245,158,11,${baseAlpha}) 0%, transparent 60%)`,
+      }}
+    />
+  );
+}
+
 // ── Dashboard Root ────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <CRTOverlay />
+      <RegimeGlow />
+      <EquityEcho />
       <Header />
       <SystemStatusBanner />
       <ActivityTicker />

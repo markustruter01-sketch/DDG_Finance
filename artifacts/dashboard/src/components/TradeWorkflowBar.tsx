@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Loader2, Power } from "lucide-react";
+import { Loader2, Power, FileText, X } from "lucide-react";
 import { useLatestAllocation, usePlatformStatus, useToggleAutoTrading } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";

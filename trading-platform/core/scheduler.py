@@ -1,12 +1,13 @@
 """
 APScheduler — 24/7 Job Definitions
 -------------------------------------
-Three recurring jobs:
+Four recurring jobs:
 
   Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Full analysis + execution cycle
   Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
   Job 3 | Every 15 min (24/7)                   — Crypto-only cycle (only fires
           when stock market is CLOSED)
+  Job 4 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
 
 During market hours, Job 1 handles the full universe (ETFs + crypto).
 Outside market hours (nights, weekends, holidays), Job 3 handles crypto-only
@@ -14,6 +15,9 @@ trading using raw crypto pairs (BTC/USD, ETH/USD, etc.) via Alpaca.
 
 The first cycle of each day (market-hours or crypto) resets the kill switch
 and captures opening equity.
+
+The Auditor Agent (Job 4) runs 20 minutes after market close — after the
+post-mortem has finished — so its findings reflect the day's complete trade data.
 
 The scheduler is started inside FastAPI's lifespan context manager in main.py
 so it is torn down cleanly on shutdown.
@@ -29,6 +33,7 @@ from loguru import logger
 
 from config.settings import settings
 from core.pipeline import run_pipeline, run_postmortem
+from analysis.auditor import run_full_audit
 from core.market_clock import is_market_open, is_early_close_day
 from execution.broker import get_account
 from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripped
@@ -88,6 +93,21 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         misfire_grace_time=300,
     )
     logger.info("Scheduler | Registered: crypto_cycle (every 15 min, 24/7, fires when market closed)")
+
+    scheduler.add_job(
+        func=_daily_audit_job,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour=16,
+            minute=30,
+            timezone="America/New_York",
+        ),
+        id="daily_audit",
+        name="HITL Auditor Agent Daily Report",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: daily_audit (Mon–Fri 16:30 ET — 20 min after post-mortem)")
 
 
 async def _intraday_cycle() -> None:
@@ -168,6 +188,26 @@ async def _evening_postmortem() -> None:
         )
     except Exception as exc:
         logger.error(f"Scheduler | evening_postmortem CRASHED: {exc}")
+
+
+async def _daily_audit_job() -> None:
+    """
+    Run the HITL Auditor Agent daily report.
+    Scheduled at 4:30 PM ET (20 minutes after evening_postmortem) so that
+    the audit always sees the day's fully reconciled trade outcomes.
+    Runs in a thread executor to avoid blocking the asyncio event loop.
+    """
+    logger.info("Scheduler | JOB STARTING: daily_audit (HITL Auditor Agent)")
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_full_audit)
+        logger.info(
+            f"Scheduler | daily_audit complete: "
+            f"overall={result['overall']} "
+            f"failed={result['failed_checks']}/{result['total_checks']} checks"
+        )
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_audit CRASHED: {exc}")
 
 
 def get_job_status() -> list[dict]:

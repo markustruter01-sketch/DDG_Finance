@@ -17,6 +17,8 @@ Endpoints:
   POST /run/postmortem      — Manually trigger the post-mortem reconciliation
   POST /kill                — Manually trip the kill switch
   POST /kill/reset          — Reset the kill switch for a new day
+  GET  /auditor/report      — Latest HITL audit report (JSON)
+  POST /auditor/run         — Manually trigger a full audit cycle
   GET  /docs                — Auto-generated Swagger UI (FastAPI default)
 """
 
@@ -51,8 +53,9 @@ from analysis.trade_journal import (
 )
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
+from analysis.auditor import run_full_audit, get_last_audit
 
-EXPECTED_JOB_COUNT = 3
+EXPECTED_JOB_COUNT = 4
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -536,6 +539,50 @@ async def manual_vault_sweep(dry_run: bool = False) -> dict:
 
 
 # ── Phase 1 compatibility endpoint ────────────────────────────────────────────
+
+# ── Auditor Agent (HITL Supervisor) ───────────────────────────────────────────
+
+@router.get("/auditor/report", tags=["Auditor"])
+async def auditor_report() -> dict:
+    """
+    Return the most recent HITL audit report.
+    If no audit has been run yet in this process session, returns an empty
+    placeholder.  The daily scheduled audit runs at 4:30 PM ET Mon–Fri.
+    Use POST /auditor/run to trigger one immediately.
+    """
+    result = get_last_audit()
+    if result["overall"] == "never_run":
+        return {
+            "status": "no_audit_yet",
+            "message": "No audit has been run yet. POST /auditor/run to trigger one.",
+            "report":  None,
+        }
+    return {"status": "ok", "report": result}
+
+
+@router.post("/auditor/run", tags=["Auditor"])
+async def trigger_audit(background_tasks: BackgroundTasks) -> dict:
+    """
+    Manually trigger a full HITL audit cycle in the background.
+    The audit runs the five checks (regime integrity, compliance, RAG bias,
+    phantom drawdown, ratchet integrity) and writes a Markdown report to
+    trading-platform/logs/daily_audit_report_YYYY-MM-DD.md.
+    """
+    logger.info("Auditor | Manual trigger via POST /auditor/run")
+
+    async def _bg_audit() -> None:
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, run_full_audit)
+        except Exception as exc:
+            logger.error(f"Auditor | Background audit failed: {exc}")
+
+    background_tasks.add_task(_bg_audit)
+    return {
+        "status": "audit_started",
+        "message": "Audit running in background — check GET /auditor/report in ~30 seconds",
+    }
+
 
 @router.get("/data/snapshot", tags=["Debug"])
 async def data_snapshot() -> dict:

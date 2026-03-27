@@ -1,0 +1,12 @@
+packages:
+  "framer-motion": "For smooth layout transitions and glowing card animations"
+  "date-fns": "For formatting timestamps"
+  "clsx": "For conditional class names"
+  "tailwind-merge": "For merging tailwind classes safely"
+  "axios": "For simplified API requests"
+
+images: []
+
+notes:
+  - API requests are proxied via Vite to the Python FastAPI running on port 8000 using the /trading-api prefix.
+  - The UI uses a strictly dark-mode trading terminal aesthetic.

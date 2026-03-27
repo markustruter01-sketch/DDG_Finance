@@ -39,7 +39,11 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
   - `execution/broker.py` — Full Alpaca wrapper: place_order, close_position, get_account/positions/orders, cancel/close all
   - `execution/kill_switch.py` — Daily drawdown guard: reset(), check(), is_tripped(); auto-liquidates at 5% drawdown
   - `execution/executor.py` — Allocation → orders: close stale, size by Kelly×equity, skip SGOV/zero, log to journal
-- **Phase 5 — Scheduler/Kill Switch**: Not started
+- **Phase 5 — Scheduler & API**: COMPLETE
+  - `core/pipeline.py` — End-to-end pipeline: kill switch guard → market guard → analysis → execution → post-mortem
+  - `core/scheduler.py` — APScheduler: 09:31 ET analysis, 30-min intraday kill switch check, 16:10 ET post-mortem
+  - `main.py` — Full FastAPI: /health /status /portfolio /journal /journal/losses /run /run/postmortem /kill /kill/reset /allocation/latest
+  - Workflow: "Trading Platform API" on port 8000 (uvicorn --reload)
 
 ### Run
 ```bash

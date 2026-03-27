@@ -163,6 +163,21 @@ def get_all_active_trades() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def get_all_trades(limit: int = 200) -> list[dict]:
+    """Return all trades ordered by date descending (for the /journal API)."""
+    with _get_conn() as conn:
+        cursor = conn.execute("""
+            SELECT trade_id, date, ticker, asset_class,
+                   conviction_score, original_thesis,
+                   pnl_percentage, status
+            FROM   trades
+            ORDER  BY date DESC
+            LIMIT  ?
+        """, (limit,))
+        rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_journal_summary() -> dict:
     """Return aggregate stats for logging/monitoring."""
     with _get_conn() as conn:

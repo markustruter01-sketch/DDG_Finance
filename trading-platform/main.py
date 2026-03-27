@@ -116,6 +116,7 @@ router = APIRouter(prefix=API_PREFIX)
 class RunRequest(BaseModel):
     dry_run: bool = False
     force: bool = False
+    crypto_only: bool = False
 
 
 class KillResetRequest(BaseModel):
@@ -323,7 +324,7 @@ async def manual_run(request: RunRequest, background_tasks: BackgroundTasks) -> 
         )
 
     logger.info(f"Manual run requested: dry_run={request.dry_run} force={request.force}")
-    result = await run_pipeline(force=request.force, dry_run=request.dry_run)
+    result = await run_pipeline(force=request.force, dry_run=request.dry_run, crypto_only=request.crypto_only)
     return result
 
 

@@ -1,19 +1,10 @@
 """
-Groq LLM Client — Free Inference via Llama 3
-----------------------------------------------
-Uses the Groq API (free tier) with Meta's llama3-70b-8192 model as the
-primary reasoning engine for daily macroeconomic analysis.
+Groq LLM Client — Regime-Switching Architecture
+-------------------------------------------------
+Uses Groq API (llama-3.3-70b-versatile) as the reasoning engine.
 
-Groq provides:
-  - Free API access with generous rate limits
-  - Extremely fast inference (LPU hardware)
-  - llama3-70b-8192: high-quality 70B parameter model with 8k context
-
-The client receives:
-  - A system prompt (which includes the RAG feedback from trade losses)
-  - A user prompt (macro data + market prices + news headlines)
-
-It returns a strictly-formatted JSON string that the caller parses with Pydantic.
+The user prompt now surfaces momentum signals (3-month MA, 6-month MA)
+prominently so the LLM can apply the Bull/Bear/Sideways allocation rules.
 """
 
 from groq import Groq
@@ -39,21 +30,6 @@ def call_groq(
     temperature: float = 0.2,
     max_tokens: int = 4096,
 ) -> str:
-    """
-    Send a chat completion request to Groq (llama3-70b-8192).
-
-    Args:
-        system_prompt: Full system context including RAG feedback injection.
-        user_prompt:   The macro + market + news data payload.
-        temperature:   Low temperature (0.2) for consistent, analytical output.
-        max_tokens:    Maximum tokens in the response.
-
-    Returns:
-        Raw string response from the model (expected to be JSON).
-
-    Raises:
-        RuntimeError: If the API call fails after logging the error.
-    """
     client = _get_client()
     logger.info(f"Groq | Sending request to {MODEL} (temp={temperature})")
 
@@ -62,7 +38,7 @@ def call_groq(
             model=MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "user",   "content": user_prompt},
             ],
             temperature=temperature,
             max_tokens=max_tokens,
@@ -81,6 +57,18 @@ def call_groq(
     except Exception as exc:
         logger.error(f"Groq | API call failed: {exc}")
         raise RuntimeError(f"Groq API call failed: {exc}") from exc
+
+
+def _momentum_badge(d: dict) -> str:
+    m3 = d.get("momentum_3mo", "?")
+    m6 = d.get("momentum_6mo", "?")
+    tag3 = "↑" if m3 == "positive" else ("↓" if m3 == "negative" else "~")
+    tag6 = "↑" if m6 == "positive" else ("↓" if m6 == "negative" else "~")
+    ma3  = d.get("ma_3mo")
+    ma6  = d.get("ma_6mo")
+    ma3s = f" MA3m=${ma3:.2f}" if ma3 else ""
+    ma6s = f" MA6m=${ma6:.2f}" if ma6 else ""
+    return f"3m:{tag3}{ma3s} | 6m:{tag6}{ma6s}"
 
 
 def build_user_prompt(
@@ -106,33 +94,48 @@ def build_user_prompt(
             lines.append("  Held Symbols: NONE (fully in cash)")
         lines.append("")
 
-    if not crypto_only:
+    if not crypto_only and macro_data:
         lines.append("=== MACROECONOMIC INDICATORS (FRED) ===")
         for sid, v in macro_data.items():
             if v.get("value") is not None:
                 lines.append(f"  {v['name']}: {v['value']} (as of {v['date']})")
+        lines.append("")
 
     if crypto_only:
-        lines.append("=== CRYPTO MARKET PRICES & MOMENTUM (24/7) ===")
+        lines.append("=== CRYPTO MOMENTUM & PRICE DATA ===")
     else:
-        lines.append("\n=== MARKET PRICES & MOMENTUM ===")
+        lines.append("=== ASSET UNIVERSE — PRICE & MOMENTUM SIGNALS ===")
+        lines.append("(Use momentum signals as HARD FILTER per allocation rules)")
+        lines.append("")
 
     for cat, tickers in market_data.get("by_category", {}).items():
+        if cat == "cash":
+            continue
         lines.append(f"  [{cat.upper()}]")
         for ticker, d in tickers.items():
             if "error" not in d:
+                mom = _momentum_badge(d)
                 lines.append(
-                    f"    {ticker}: ${d['latest_price']:.2f} | "
+                    f"    {ticker:10s}: ${d['latest_price']:.2f} | "
                     f"1d={d['return_1d_pct']:+.1f}% | "
-                    f"20d={d.get('return_20d_pct', 0):+.1f}% | "
-                    f"vol={d.get('annualized_volatility_20d_pct', 0):.1f}%"
+                    f"60d={d.get('return_60d_pct', 0):+.1f}% | "
+                    f"vol={d.get('annualized_volatility_20d_pct', 0):.1f}% | "
+                    f"{mom}"
                 )
+            else:
+                lines.append(f"    {ticker:10s}: DATA UNAVAILABLE ({d['error']})")
+        lines.append("")
 
-    lines.append("\n=== RECENT NEWS HEADLINES ===")
+    lines.append("=== RECENT NEWS HEADLINES ===")
     for headline in news_headlines[:15]:
         lines.append(f"  • {headline}")
+    lines.append("")
 
     if crypto_only:
-        lines.append("\nMODE: CRYPTO-ONLY (stock market closed). Allocate 6 slots using crypto pairs only.")
+        lines.append("MODE: CRYPTO-ONLY (stock market closed).")
+        lines.append("Only trade BTC/USD, ETH/USD, ATOM/USD with positive momentum. Default to SGOV if low conviction.")
+    else:
+        lines.append("TASK: Classify regime (Bull/Bear/Sideways), apply momentum filter, then output allocations.")
+        lines.append("Remember: NEVER FORCE A TRADE. If no high-conviction setup exists → 100% SGOV.")
 
     return "\n".join(lines)

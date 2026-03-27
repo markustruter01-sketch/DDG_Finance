@@ -28,7 +28,7 @@ from typing import Any, Union
 from loguru import logger
 
 from analysis.analyzer import run_analysis_cycle
-from analysis.schemas import AnalysisOutput, CryptoAnalysisOutput
+from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
 from execution.kill_switch import check as ks_check, is_tripped, reset as ks_reset
@@ -108,11 +108,14 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
-    allocation: Union[AnalysisOutput, CryptoAnalysisOutput, None] = None
+    allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
     try:
         logger.info("Pipeline | Step 1: Running analysis cycle...")
         allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)
-        result["market_regime"] = allocation.market_regime
+        if isinstance(allocation, RegimeAnalysisOutput):
+            result["market_regime"] = f"{allocation.regime}: {allocation.regime_rationale}"
+        else:
+            result["market_regime"] = allocation.market_regime
         result["allocation_summary"] = [
             {
                 "slot":             a.slot,
@@ -187,7 +190,7 @@ async def run_postmortem() -> dict:
 def _update_state(
     result: dict,
     started: datetime,
-    allocation: Union[AnalysisOutput, CryptoAnalysisOutput, None] = None,
+    allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None,
     trading_mode: str | None = None,
 ) -> None:
     _state["last_run_utc"]    = started.isoformat()

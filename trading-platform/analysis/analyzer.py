@@ -1,24 +1,23 @@
 """
-Intraday Analysis Cycle — Main Orchestrator
----------------------------------------------
-The brain of the platform. Called every 15 minutes:
+Intraday Analysis Cycle — Regime-Switching Architecture
+---------------------------------------------------------
+v4.0 — Dynamic Regime-Switching & Adaptive Allocation
 
-  During market hours (full universe):
-    1. Queries Alpaca for exact buying_power and held symbols (State Awareness).
-    2. Runs the RAG feedback injection (queries recent wins, losses, slippage).
-    3. Fetches live data: FRED macro (cached 1hr) + Alpaca market prices (fresh)
-       + NewsAPI headlines (cached 30min).
-    4. Assembles the system prompt (with feedback + buying power) + user prompt.
-    5. Calls Groq (llama-3.3-70b-versatile) for structured JSON allocation.
-    6. Validates and post-processes output via Pydantic + Kelly Criterion.
-    7. Returns the final 10-slot AnalysisOutput.
+Called every market session (or 15-min for crypto off-hours):
 
-  During off-hours (crypto-only):
-    1. Queries Alpaca for account state.
-    2. Runs the RAG feedback injection (crypto-focused).
-    3. Fetches crypto market data (fresh) + NewsAPI headlines (cached 30min).
-    4. Uses crypto-only system prompt (6 slots, crypto pairs only).
-    5. Returns the final 6-slot CryptoAnalysisOutput.
+  Full Market (Regime) mode:
+    1. Query Alpaca for account state (buying power + positions).
+    2. Run RAG feedback injection (recent wins, losses, slippage).
+    3. Fetch 6-month data: FRED macro (cached 1hr) + Alpaca market prices
+       (fresh, includes 3mo/6mo MA signals) + NewsAPI (cached 30min).
+    4. Assemble system prompt + user prompt with momentum signals.
+    5. Call Groq (llama-3.3-70b-versatile) for regime-switching JSON.
+    6. Validate with Pydantic (RegimeAnalysisOutput).
+    7. Apply even-weighting override and normalise Kelly fractions.
+    8. Return final RegimeAnalysisOutput.
+
+  Crypto-Only mode (off-hours):
+    Same pipeline with crypto-only universe: BTC/USD, ETH/USD, ATOM/USD.
 """
 
 import asyncio
@@ -29,12 +28,12 @@ from loguru import logger
 
 from analysis.feedback_injection import build_system_prompt_with_feedback
 from analysis.groq_client import build_user_prompt, call_groq
-from analysis.schemas import AnalysisOutput, CryptoAnalysisOutput
+from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from data.cache import fred_cache, news_cache
 from data.fred_client import fetch_macro_data
 from data.news_client import fetch_news
 from data.yfinance_client import fetch_market_data
-from portfolio.allocator import process_llm_output, process_crypto_llm_output
+from portfolio.allocator import process_regime_llm_output, process_crypto_llm_output
 
 
 def _fetch_account_state() -> dict[str, Any]:
@@ -59,13 +58,13 @@ def _fetch_account_state() -> dict[str, Any]:
 
 async def run_analysis_cycle(
     lookback_days_macro: int = 90,
-    market_period: str = "3mo",
+    market_period: str = "6mo",
     news_lookback_days: int = 3,
     n_loss_feedback: int = 5,
     dry_run: bool = False,
     crypto_only: bool = False,
-) -> Union[AnalysisOutput, CryptoAnalysisOutput]:
-    mode_label = "CRYPTO-ONLY" if crypto_only else "FULL MARKET"
+) -> Union[RegimeAnalysisOutput, CryptoAnalysisOutput]:
+    mode_label = "CRYPTO-ONLY" if crypto_only else "REGIME-SWITCHING FULL MARKET"
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE STARTING ({mode_label})")
     logger.info("=" * 60)
@@ -87,14 +86,14 @@ async def run_analysis_cycle(
     )
 
     if crypto_only:
-        logger.info("Step 3/5 | Fetching data (Crypto fresh | News cached 30min)...")
+        logger.info("Step 3/5 | Fetching data (Crypto 6mo + MA signals | News cached 30min)...")
         market_data, news_data = await asyncio.gather(
             fetch_market_data(period=market_period, crypto_only=True),
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
         )
         macro_data = {}
     else:
-        logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market fresh | News cached 30min)...")
+        logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 30min)...")
         macro_data, market_data, news_data = await asyncio.gather(
             fred_cache.get_or_fetch(fetch_macro_data, lookback_days=lookback_days_macro),
             fetch_market_data(period=market_period),
@@ -104,7 +103,7 @@ async def run_analysis_cycle(
     if crypto_only:
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
         news_ok   = len(news_data["all_headlines"])
-        logger.info(f"  Data snapshot: Crypto={market_ok}/6 tickers | News={news_ok} headlines")
+        logger.info(f"  Data snapshot: Crypto={market_ok}/3 tickers | News={news_ok} headlines")
     else:
         macro_ok  = sum(1 for v in macro_data.values() if v.get("value") is not None)
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
@@ -130,18 +129,16 @@ async def run_analysis_cycle(
             raw_json = _mock_crypto_llm_response()
             output = process_crypto_llm_output(raw_json)
         else:
-            raw_json = _mock_llm_response()
-            output = process_llm_output(raw_json)
+            raw_json = _mock_regime_llm_response()
+            output = process_regime_llm_output(raw_json)
     else:
         if crypto_only:
             output = _call_crypto_with_retry(system_prompt, user_prompt)
         else:
-            output = _call_with_retry(system_prompt, user_prompt)
+            output = _call_regime_with_retry(system_prompt, user_prompt)
 
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE COMPLETE ({mode_label})")
-    logger.info(f"  {output.market_regime}")
-    logger.info("")
     logger.info(output.summary())
     logger.info("=" * 60)
 
@@ -151,20 +148,20 @@ async def run_analysis_cycle(
 MAX_LLM_RETRIES = 3
 
 
-def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
+def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnalysisOutput:
     last_error: Exception | None = None
     current_user_prompt = user_prompt
 
     for attempt in range(1, MAX_LLM_RETRIES + 1):
-        logger.info(f"Step 5/{5} | LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+        logger.info(f"Step 5/5 | Regime LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
         try:
             raw_json = call_groq(
                 system_prompt=system_prompt,
                 user_prompt=current_user_prompt,
                 temperature=0.2,
-                max_tokens=4096,
+                max_tokens=2048,
             )
-            output = process_llm_output(raw_json)
+            output = process_regime_llm_output(raw_json)
             if attempt > 1:
                 logger.info(f"  LLM self-corrected on attempt {attempt}")
             return output
@@ -172,7 +169,7 @@ def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
         except Exception as exc:
             last_error = exc
             error_msg = str(exc)
-            logger.warning(f"  Attempt {attempt} failed: {error_msg[:200]}")
+            logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
 
             if attempt < MAX_LLM_RETRIES:
                 current_user_prompt = (
@@ -180,21 +177,20 @@ def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
                     f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
                     f"Your previous JSON output failed validation with this error:\n"
                     f"  {error_msg}\n\n"
-                    f"Please fix your response and return corrected JSON only. "
-                    f"Remember:\n"
-                    f"  - Exactly 10 slots numbered 1-10\n"
-                    f"  - At least 2 crypto slots (BITO, IBIT, GBTC, ETHA)\n"
-                    f"  - At least 2 commodity slots (GLD, SLV, USO, DBA, PDBC, CPER)\n"
-                    f"  - At least 1 currency slot (UUP, FXE, FXY, FXB, EUO, YCS)\n"
-                    f"  - At least 1 wildcard slot (QQQ, SPY, TLT, HYG, EEM)\n"
-                    f"  - Low conviction slots will be replaced with SGOV automatically\n"
-                    f"  - All tickers must match their declared asset_class\n"
-                    f"  - Total kelly_fractions must not exceed buying power\n"
+                    f"Please fix and return corrected JSON only. Key rules:\n"
+                    f"  - 'regime' must be exactly 'Bull', 'Bear', or 'Sideways'\n"
+                    f"  - Bull: 1-3 slots of equity/crypto_spot with positive momentum\n"
+                    f"  - Bear: 1-2 slots of TLT/GLD (safe_haven) with positive momentum, else SGOV\n"
+                    f"  - Sideways: 0-2 mean-reversion slots, or single SGOV slot\n"
+                    f"  - Only approved tickers: SPY, QQQ, TLT, GLD, BTC/USD, ETH/USD, ATOM/USD, SGOV\n"
+                    f"  - Slots numbered 1, 2, 3 ... sequentially\n"
+                    f"  - kelly_fraction sum (excluding SGOV) must not exceed 1.0\n"
+                    f"  - asset_class must match ticker: equity→SPY/QQQ, safe_haven→TLT/GLD, "
+                    f"crypto_spot→BTC/USD/ETH/USD/ATOM/USD, cash→SGOV\n"
                 )
 
     raise RuntimeError(
-        f"LLM failed to produce a valid allocation after {MAX_LLM_RETRIES} attempts. "
-        f"Last error: {last_error}"
+        f"Regime LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
     )
 
 
@@ -203,13 +199,13 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
     current_user_prompt = user_prompt
 
     for attempt in range(1, MAX_LLM_RETRIES + 1):
-        logger.info(f"Step 5/{5} | Crypto LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+        logger.info(f"Step 5/5 | Crypto LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
         try:
             raw_json = call_groq(
                 system_prompt=system_prompt,
                 user_prompt=current_user_prompt,
                 temperature=0.2,
-                max_tokens=4096,
+                max_tokens=2048,
             )
             output = process_crypto_llm_output(raw_json)
             if attempt > 1:
@@ -219,7 +215,7 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
         except Exception as exc:
             last_error = exc
             error_msg = str(exc)
-            logger.warning(f"  Attempt {attempt} failed: {error_msg[:200]}")
+            logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
 
             if attempt < MAX_LLM_RETRIES:
                 current_user_prompt = (
@@ -227,39 +223,50 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
                     f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
                     f"Your previous JSON output failed validation with this error:\n"
                     f"  {error_msg}\n\n"
-                    f"Please fix your response and return corrected JSON only. "
-                    f"Remember:\n"
-                    f"  - Exactly 6 slots numbered 1-6\n"
-                    f"  - Crypto pairs only: BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD\n"
-                    f"  - asset_class must be 'crypto_spot' or 'cash'\n"
-                    f"  - Use 'SGOV' with asset_class 'cash' for low conviction slots\n"
-                    f"  - At least 4 crypto_spot slots required\n"
-                    f"  - Total kelly_fractions must not exceed buying power\n"
+                    f"Please fix and return corrected JSON only. Rules:\n"
+                    f"  - Only approved tickers: BTC/USD, ETH/USD, ATOM/USD, SGOV\n"
+                    f"  - asset_class: 'crypto_spot' for BTC/ETH/ATOM, 'cash' for SGOV\n"
+                    f"  - 1 to 3 slots, numbered sequentially from 1\n"
+                    f"  - kelly_fraction sum (excluding SGOV) <= 1.0\n"
+                    f"  - Only allocate to crypto with POSITIVE momentum. Default SGOV if uncertain.\n"
                 )
 
     raise RuntimeError(
-        f"Crypto LLM failed to produce a valid allocation after {MAX_LLM_RETRIES} attempts. "
-        f"Last error: {last_error}"
+        f"Crypto LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
     )
 
 
-def _mock_llm_response() -> str:
+def _mock_regime_llm_response() -> str:
     return json.dumps({
-        "market_regime": (
-            "Risk-off environment: elevated VIX (25+), inverted yield curve normalising, "
-            "Fed on hold. Dollar strengthening moderately. Crypto under pressure."
+        "regime": "Bear",
+        "regime_rationale": (
+            "Elevated VIX above 25, inverted yield curve normalising from deeply negative levels, "
+            "Fed holding rates higher-for-longer with no pivot signal. Equity momentum is negative "
+            "on both 3-month and 6-month MAs. Safe havens showing positive momentum."
         ),
         "allocations": [
-            {"slot": 1,  "ticker": "IBIT",  "asset_class": "crypto",    "conviction_score": 0.78, "kelly_fraction": 0.08, "thesis": "Bitcoin ETF inflows remain strong despite macro headwinds. Asymmetric upside on Fed pivot.",     "stop_loss_pct": -0.07, "take_profit_pct": 0.15},
-            {"slot": 2,  "ticker": "BITO",  "asset_class": "crypto",    "conviction_score": 0.76, "kelly_fraction": 0.07, "thesis": "BTC futures ETF as secondary crypto exposure. Momentum positive on weekly timeframe.",           "stop_loss_pct": -0.07, "take_profit_pct": 0.14},
-            {"slot": 3,  "ticker": "SGOV",  "asset_class": "cash",      "conviction_score": 1.00, "kelly_fraction": 0.00, "thesis": "Low crypto conviction — cash equivalent.",                                                     "stop_loss_pct": -0.01, "take_profit_pct": 0.01},
-            {"slot": 4,  "ticker": "GLD",   "asset_class": "commodity",  "conviction_score": 0.88, "kelly_fraction": 0.14, "thesis": "Gold breaking out above $2400. Real rates declining, USD peaking. Safe haven demand surging.", "stop_loss_pct": -0.05, "take_profit_pct": 0.12},
-            {"slot": 5,  "ticker": "SLV",   "asset_class": "commodity",  "conviction_score": 0.82, "kelly_fraction": 0.10, "thesis": "Silver lagging gold. Industrial demand from solar panels robust. Catch-up trade probable.",    "stop_loss_pct": -0.06, "take_profit_pct": 0.13},
-            {"slot": 6,  "ticker": "USO",   "asset_class": "commodity",  "conviction_score": 0.77, "kelly_fraction": 0.08, "thesis": "WTI crude supported by OPEC+ cuts. $85-90 range likely to hold near-term.",                   "stop_loss_pct": -0.06, "take_profit_pct": 0.10},
-            {"slot": 7,  "ticker": "UUP",   "asset_class": "currency",  "conviction_score": 0.80, "kelly_fraction": 0.09, "thesis": "USD index strengthening on rate differential. Fed higher-for-longer vs ECB easing.",           "stop_loss_pct": -0.04, "take_profit_pct": 0.08},
-            {"slot": 8,  "ticker": "FXY",   "asset_class": "currency",  "conviction_score": 0.72, "kelly_fraction": 0.00, "thesis": "JPY recovery thesis requires BOJ pivot confirmation — not yet convincing.",                    "stop_loss_pct": -0.05, "take_profit_pct": 0.09},
-            {"slot": 9,  "ticker": "TLT",   "asset_class": "wildcard",  "conviction_score": 0.79, "kelly_fraction": 0.09, "thesis": "Long-duration treasuries as recession hedge. Yield curve normalisation benefits TLT.",         "stop_loss_pct": -0.05, "take_profit_pct": 0.12},
-            {"slot": 10, "ticker": "GLD",   "asset_class": "commodity",  "conviction_score": 0.85, "kelly_fraction": 0.12, "thesis": "Second gold position given macro backdrop. Double weight justified by strong conviction.",      "stop_loss_pct": -0.05, "take_profit_pct": 0.12},
+            {
+                "slot": 1,
+                "ticker": "GLD",
+                "asset_class": "safe_haven",
+                "conviction_score": 0.88,
+                "kelly_fraction": 0.50,
+                "thesis": "Gold breaking out above key resistance. Real rates declining as inflation expectations "
+                          "remain elevated. 3-month and 6-month momentum both positive.",
+                "stop_loss_pct": -0.05,
+                "take_profit_pct": 0.12,
+            },
+            {
+                "slot": 2,
+                "ticker": "TLT",
+                "asset_class": "safe_haven",
+                "conviction_score": 0.82,
+                "kelly_fraction": 0.50,
+                "thesis": "Long-duration Treasuries benefiting from flight-to-quality. Momentum positive "
+                          "on both MAs as recession risk increases and Fed nears peak rates.",
+                "stop_loss_pct": -0.05,
+                "take_profit_pct": 0.10,
+            },
         ],
     })
 
@@ -267,15 +274,31 @@ def _mock_llm_response() -> str:
 def _mock_crypto_llm_response() -> str:
     return json.dumps({
         "market_regime": (
-            "Crypto markets consolidating after recent rally. BTC holding above key support. "
-            "ETH showing relative strength. Altcoin rotation favouring SOL ecosystem."
+            "Crypto markets consolidating with BTC holding key support. "
+            "ETH showing relative strength. ATOM lagging with negative momentum."
         ),
         "allocations": [
-            {"slot": 1, "ticker": "BTC/USD",  "asset_class": "crypto_spot", "conviction_score": 0.85, "kelly_fraction": 0.15, "thesis": "Bitcoin holding key support with strong institutional inflows. Network hash rate at all-time highs.", "stop_loss_pct": -0.08, "take_profit_pct": 0.15},
-            {"slot": 2, "ticker": "ETH/USD",  "asset_class": "crypto_spot", "conviction_score": 0.82, "kelly_fraction": 0.12, "thesis": "Ethereum showing relative strength with growing DeFi TVL and staking yields.",                      "stop_loss_pct": -0.08, "take_profit_pct": 0.14},
-            {"slot": 3, "ticker": "SOL/USD",  "asset_class": "crypto_spot", "conviction_score": 0.78, "kelly_fraction": 0.10, "thesis": "Solana ecosystem growth accelerating with increasing DEX volume and NFT activity.",                   "stop_loss_pct": -0.10, "take_profit_pct": 0.18},
-            {"slot": 4, "ticker": "LINK/USD", "asset_class": "crypto_spot", "conviction_score": 0.76, "kelly_fraction": 0.08, "thesis": "Chainlink oracle demand growing with RWA tokenisation trend. CCIP adoption rising.",                  "stop_loss_pct": -0.10, "take_profit_pct": 0.16},
-            {"slot": 5, "ticker": "SGOV",     "asset_class": "cash",        "conviction_score": 1.00, "kelly_fraction": 0.00, "thesis": "Low conviction on remaining crypto — preserving capital in cash equivalent.",                          "stop_loss_pct": -0.01, "take_profit_pct": 0.01},
-            {"slot": 6, "ticker": "AVAX/USD", "asset_class": "crypto_spot", "conviction_score": 0.75, "kelly_fraction": 0.07, "thesis": "Avalanche subnet growth and institutional partnerships providing tailwinds.",                          "stop_loss_pct": -0.10, "take_profit_pct": 0.16},
+            {
+                "slot": 1,
+                "ticker": "BTC/USD",
+                "asset_class": "crypto_spot",
+                "conviction_score": 0.85,
+                "kelly_fraction": 0.50,
+                "thesis": "Bitcoin holding key support with strong institutional inflows. "
+                          "3-month and 6-month momentum both positive.",
+                "stop_loss_pct": -0.08,
+                "take_profit_pct": 0.18,
+            },
+            {
+                "slot": 2,
+                "ticker": "ETH/USD",
+                "asset_class": "crypto_spot",
+                "conviction_score": 0.80,
+                "kelly_fraction": 0.50,
+                "thesis": "Ethereum showing relative strength with growing staking yields "
+                          "and DeFi TVL recovery. Positive momentum on both MAs.",
+                "stop_loss_pct": -0.09,
+                "take_profit_pct": 0.20,
+            },
         ],
     })

@@ -1,34 +1,35 @@
 """
 Trade Executor — Converts Allocations → Alpaca Orders
 --------------------------------------------------------
-Takes the validated AnalysisOutput (or CryptoAnalysisOutput) from the analysis
-phase and executes each slot:
+v4.0 — Regime-Switching Architecture
+
+Takes the validated RegimeAnalysisOutput (or CryptoAnalysisOutput) from the
+analysis phase and executes each slot:
 
   1. Fetch current account equity.
   2. Liquidate positions no longer in today's plan (exits).
-  3. For each active slot, compute notional USD from Kelly fraction × equity.
-  4. Skip SGOV slots and slots that are already held at correct size.
-  5. Place market buy orders for new/changed positions.
+  3. For each active slot, compute notional USD from kelly_fraction × equity.
+  4. Skip SGOV slots and slots already held at correct size (within 10%).
+  5. Place market buy orders.
   6. Log every new trade to the SQLite journal for the RAG loop.
-  7. Capture intended_price (pre-order) and actual_fill_price (post-fill)
-     for slippage tracking.
+  7. Capture intended_price and actual_fill_price for slippage tracking.
 
-Supports both ETF orders (TimeInForce.DAY) and crypto spot orders
-(TimeInForce.GTC). Crypto pairs (BTC/USD, ETH/USD, etc.) use the "/" symbol
-format; Alpaca API symbols strip the "/" (e.g. BTCUSD).
-
-Design decisions:
-  - SGOV slots are never traded (they represent "do nothing" cash).
-  - We close stale positions BEFORE opening new ones (free capital first).
-  - A per-slot min notional of $100 is enforced for ETFs; $25 for crypto.
-  - ETF orders are DAY market orders; crypto orders are GTC market orders.
+Fixed Universe:
+  Equities:    SPY, QQQ          (DAY orders, min $100)
+  Safe Havens: TLT, GLD          (DAY orders, min $100)
+  Crypto Spot: BTC/USD, ETH/USD, ATOM/USD  (GTC orders, min $25)
+  Cash:        SGOV              (never traded)
 """
 
 import time
 
 from loguru import logger
 
-from analysis.schemas import AnalysisOutput, AllocationSlot, CryptoAnalysisOutput, CryptoAllocationSlot, is_crypto_pair
+from analysis.schemas import (
+    RegimeAnalysisOutput, RegimeAllocationSlot,
+    CryptoAnalysisOutput, CryptoAllocationSlot,
+    is_crypto_pair,
+)
 from analysis.trade_journal import log_trade, update_trade_fill_price
 from execution.broker import (
     close_position,
@@ -39,16 +40,21 @@ from execution.broker import (
     place_order,
 )
 
-MIN_NOTIONAL_USD = 100.0
+MIN_NOTIONAL_USD    = 100.0
 MIN_NOTIONAL_CRYPTO = 25.0
-CASH_TICKER      = "SGOV"
+CASH_TICKER         = "SGOV"
+
+KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD", "ATOMUSD"}
 
 
 def _normalize_symbol(ticker: str) -> str:
     return ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
 
 
-def execute_allocations(output: AnalysisOutput | CryptoAnalysisOutput, dry_run: bool = False) -> dict:
+def execute_allocations(
+    output: RegimeAnalysisOutput | CryptoAnalysisOutput,
+    dry_run: bool = False,
+) -> dict:
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
     logger.info("=" * 60)
@@ -69,23 +75,18 @@ def execute_allocations(output: AnalysisOutput | CryptoAnalysisOutput, dry_run: 
     active_symbols = {_normalize_symbol(t) for t in active_tickers_raw}
 
     results = {
-        "equity":          equity,
-        "dry_run":         dry_run,
-        "crypto_only":     is_crypto_only,
-        "placed":          [],
-        "skipped":         [],
-        "closed":          [],
-        "errors":          [],
+        "equity":      equity,
+        "dry_run":     dry_run,
+        "crypto_only": is_crypto_only,
+        "placed":      [],
+        "skipped":     [],
+        "closed":      [],
+        "errors":      [],
     }
 
-    if is_crypto_only:
-        results = _close_stale_positions(
-            current_positions, active_symbols, results, dry_run, crypto_only=True
-        )
-    else:
-        results = _close_stale_positions(
-            current_positions, active_symbols, results, dry_run, crypto_only=False
-        )
+    results = _close_stale_positions(
+        current_positions, active_symbols, results, dry_run, crypto_only=is_crypto_only
+    )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         results = _execute_slot(slot, equity, current_positions, results, dry_run)
@@ -114,10 +115,8 @@ def _close_stale_positions(
     for sym in current_positions:
         if sym in active_symbols or sym == CASH_TICKER:
             continue
-        if crypto_only:
-            known_crypto_syms = {"BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "AVAXUSD", "LINKUSD"}
-            if sym not in known_crypto_syms:
-                continue
+        if crypto_only and sym not in KNOWN_CRYPTO_SYMBOLS:
+            continue
         stale.append(sym)
 
     if not stale:
@@ -145,7 +144,7 @@ def _close_stale_positions(
 
 
 def _execute_slot(
-    slot: AllocationSlot | CryptoAllocationSlot,
+    slot: RegimeAllocationSlot | CryptoAllocationSlot,
     equity: float,
     current_positions: dict,
     results: dict,
@@ -156,7 +155,7 @@ def _execute_slot(
     is_crypto = is_crypto_pair(ticker)
 
     if ticker == CASH_TICKER or slot.kelly_fraction == 0.0:
-        logger.info(f"Slot {slot.slot:2d}: {ticker:8s} → CASH/SKIP (kelly=0)")
+        logger.info(f"Slot {slot.slot}: {ticker:10s} → CASH/SKIP (kelly=0)")
         results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "cash_or_zero_kelly"})
         return results
 
@@ -165,7 +164,8 @@ def _execute_slot(
 
     if notional_usd < min_notional:
         logger.info(
-            f"Slot {slot.slot:2d}: {ticker:8s} → SKIP (${notional_usd:.2f} < ${min_notional} min)"
+            f"Slot {slot.slot}: {ticker:10s} → SKIP "
+            f"(${notional_usd:.2f} < ${min_notional} min notional)"
         )
         results["skipped"].append({
             "slot": slot.slot, "ticker": ticker,
@@ -180,7 +180,7 @@ def _execute_slot(
 
         if diff_pct < 0.10:
             logger.info(
-                f"Slot {slot.slot:2d}: {ticker:8s} → HOLD "
+                f"Slot {slot.slot}: {ticker:10s} → HOLD "
                 f"(existing=${existing_value:,.2f}, target=${target_value:,.2f}, diff={diff_pct:.1%})"
             )
             results["skipped"].append({
@@ -190,7 +190,7 @@ def _execute_slot(
             return results
 
     logger.info(
-        f"Slot {slot.slot:2d}: {ticker:8s} | "
+        f"Slot {slot.slot}: {ticker:10s} | "
         f"kelly={slot.kelly_fraction:.1%} | "
         f"notional=${notional_usd:,.2f} | "
         f"conv={slot.conviction_score:.0%}"
@@ -202,13 +202,13 @@ def _execute_slot(
 
     if dry_run:
         results["placed"].append({
-            "slot":            slot.slot,
-            "ticker":          ticker,
-            "notional_usd":    notional_usd,
-            "kelly":           slot.kelly_fraction,
-            "conviction":      slot.conviction_score,
-            "intended_price":  intended_price,
-            "dry_run":         True,
+            "slot":           slot.slot,
+            "ticker":         ticker,
+            "notional_usd":   notional_usd,
+            "kelly":          slot.kelly_fraction,
+            "conviction":     slot.conviction_score,
+            "intended_price": intended_price,
+            "dry_run":        True,
         })
         return results
 

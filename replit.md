@@ -29,13 +29,21 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
 - `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
 
+### v4.0 — Regime-Switching Architecture
+- **Fixed 8-asset universe** — SPY, QQQ (equity), TLT, GLD (safe_haven), BTC/USD, ETH/USD, ATOM/USD (crypto_spot), SGOV (cash)
+- **3-step regime model** — Python calculates 3-month MA (63 bars) + 6-month MA (126 bars) → LLM classifies Bull/Bear/Sideways → dynamic allocation
+- **Bull Regime** — 100% capital in top 1–3 equity/crypto assets with positive momentum (both MAs), evenly weighted
+- **Bear Regime** — 100% capital in TLT/GLD with positive momentum; if both negative → 100% SGOV
+- **Sideways Regime** — Mean-reversion plays (max 2, conviction ≥ 0.80) or 100% SGOV
+- **Variable slot count** — 1–6 slots (replaces rigid 10-slot model); Python enforces even-weight sizing
+- **Never force a trade** — If no high-conviction setup aligns with momentum → 100% SGOV; SGOV is a valid complete output
+
 ### Key Features
-- **Dual-mode 24/7 trading** — Full market (10-slot ETF+crypto) during market hours, crypto-only (6-slot raw pairs) when market closed
+- **Dual-mode 24/7 trading** — Full regime-switching (market hours), crypto-only/BTC+ETH+ATOM (off-hours)
 - **15-minute intraday cycles** — ~26 analysis+execution cycles per market day for maximum learning
-- **24/7 crypto cycles** — BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD via Alpaca native crypto (GTC orders, $25 min notional)
-- **Smart data caching** — FRED macro data (1hr TTL, skipped in crypto-only), NewsAPI (30min TTL), Alpaca market data (always fresh)
-- **10 Kelly-Criterion-sized slots** across Crypto ETFs, Commodity ETFs, Currency ETFs, Wildcard categories (market hours)
-- **6 Kelly-Criterion-sized slots** for raw crypto pairs (off-hours)
+- **24/7 crypto cycles** — BTC/USD, ETH/USD, ATOM/USD via Alpaca native crypto (GTC orders, $25 min notional)
+- **Smart data caching** — FRED macro data (1hr TTL, skipped in crypto-only), NewsAPI (30min TTL), Alpaca market data (always fresh, 6-month lookback)
+- **Variable Kelly slots** — 1–6 slots, even-weight Python override (not LLM arithmetic), normalised to ≤ 100% equity
 - **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt (unified for ETF and crypto trades)
 - **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails
 - **Slippage tracking** — `intended_price` + `actual_fill_price` columns; post-mortem uses actual fill price as entry

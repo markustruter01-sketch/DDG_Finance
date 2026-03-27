@@ -1,0 +1,31 @@
+Architecture Update: Dynamic Regime-Switching & Adaptive Allocation
+
+We are completely overhauling the core trading logic. Discard the previous rules requiring exactly 10 trades and the rigid asset class quotas. We are implementing a dynamic, regime-switching quantitative model to maximize capital preservation and asymmetric upside.
+
+Step 1: The Fixed Asset Universe
+The bot will no longer scan the entire market. It will only monitor a specific, highly liquid basket of uncorrelated assets to prevent slippage:
+
+Equities: SPY (S&P 500), QQQ (Nasdaq 100)
+
+Safe Havens: TLT (20+ Year Treasuries), GLD (Gold)
+
+Crypto: BTC (Bitcoin), ETH (Ethereum), ATOM (Cosmos)
+
+Cash Equivalent: SGOV (Short-Term US Treasuries)
+
+Step 2: Macro Regime Scoring (The LLM Task)
+Every 24 hours, before evaluating individual asset prices, the Groq LLM must analyze the FRED economic data and NewsAPI headlines to define the current global Market Regime. It must output one of three states: Bull, Bear, or Sideways.
+
+Step 3: Dynamic Allocation Rules & Momentum
+The Python backend must calculate the 3-month and 6-month momentum (moving averages) for the entire asset universe. The LLM will use the Regime State and Momentum data to dictate the allocation:
+
+If Bull Regime: Allocate 100% of available capital evenly across the top 1 to 3 performing risk assets (Equities/Crypto) that have positive momentum.
+
+If Bear Regime: Allocate 100% of capital strictly to Safe Havens (TLT, GLD) showing positive momentum. If Safe Havens are also negative, default entirely to SGOV.
+
+If Sideways Regime: Do not trend-follow. Look for extreme oversold assets (Mean Reversion) for a short 2-5 day hold, or default entirely to SGOV to protect capital.
+
+Execution Constraint: Never force a trade. If the LLM cannot establish a high-conviction thesis aligning with the current momentum data, it must park 100% of the capital in SGOV (Cash). Update the Python execution logic to reflect this dynamic sizing, ensuring we never exceed Alpaca's stated buying_power.
+
+Your Task:
+Provide the updated Python code that calculates the moving averages for the asset universe and the updated LLM prompt structure that incorporates the Regime-Switching logic.

@@ -1,23 +1,23 @@
 """
-Market Data Client
---------------------
-Fetches OHLCV price data, trailing returns, and volatility for the trading universe.
+Market Data Client — Regime-Switching Architecture
+----------------------------------------------------
+Fetches OHLCV price data, trailing returns, moving averages, and momentum
+signals for the FIXED asset universe.
 
-PRIMARY: Alpaca Market Data API (free tier, no IP restrictions, real-time for US ETFs)
-FALLBACK: yfinance (works in local/residential environments, blocked on cloud IPs)
+Fixed universe (7 instruments + SGOV):
+  Equities   : SPY, QQQ
+  Safe Havens: TLT, GLD
+  Crypto Spot: BTC/USD, ETH/USD, ATOM/USD
+  Cash Equiv : SGOV
 
-Why Alpaca instead of yfinance in production:
-  Yahoo Finance blocks requests from shared-IP cloud environments (AWS, GCP, Replit, etc.)
-  Alpaca Market Data API is free for all users, reliable from any IP, and covers
-  all US-listed ETFs and most crypto tickers needed by this platform.
+Momentum signals (key for regime-switching allocation):
+  - 3-month MA (≈63 trading days): price vs MA → "positive" / "negative"
+  - 6-month MA (≈126 trading days): price vs MA → "positive" / "negative"
+  - These are passed to the LLM to enforce trend-following (Bull/Bear)
+    or mean-reversion (Sideways) rules.
 
-Universe:
-  Crypto ETFs   : BITO, IBIT, GBTC, ETHA
-  Crypto Spot   : BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD
-  Commodity ETFs: GLD, SLV, USO, DBA, PDBC, CPER
-  Currency ETFs : UUP, FXE, FXY, FXB, EUO, YCS
-  Wildcard      : QQQ, SPY, TLT, HYG, EEM
-  Cash Equiv    : SGOV
+PRIMARY: Alpaca Market Data API (free tier, no IP restrictions)
+FALLBACK: graceful error handling with partial data allowed
 """
 
 import asyncio
@@ -42,19 +42,19 @@ ALPACA_DATA_BASE_URL = "https://data.alpaca.markets/v2"
 ALPACA_CRYPTO_BASE_URL = "https://data.alpaca.markets/v1beta3/crypto/us"
 
 UNIVERSE: dict[str, list[str]] = {
-    "crypto": ["BITO", "IBIT", "GBTC", "ETHA"],
-    "crypto_spot": ["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "AVAX/USD", "LINK/USD"],
-    "commodity": ["GLD", "SLV", "USO", "DBA", "PDBC", "CPER"],
-    "currency": ["UUP", "FXE", "FXY", "FXB", "EUO", "YCS"],
-    "wildcard": ["QQQ", "SPY", "TLT", "HYG", "EEM"],
-    "cash_equivalent": ["SGOV"],
+    "equity":      ["SPY", "QQQ"],
+    "safe_haven":  ["TLT", "GLD"],
+    "crypto_spot": ["BTC/USD", "ETH/USD", "ATOM/USD"],
+    "cash":        ["SGOV"],
 }
 
-ETF_CATEGORIES = ["crypto", "commodity", "currency", "wildcard", "cash_equivalent"]
-
+ETF_CATEGORIES = ["equity", "safe_haven", "cash"]
 ALL_TICKERS: list[str] = [t for tickers in UNIVERSE.values() for t in tickers]
 ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
 CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]
+
+MA_3MO_BARS = 63
+MA_6MO_BARS = 126
 
 
 def _is_retryable_http_error(exc: BaseException) -> bool:
@@ -98,14 +98,12 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
     def pct_chg(n: int) -> float | None:
         return float((closes[-1] / closes[-n] - 1) * 100) if len(closes) >= n else None
 
-    ret_1d = pct_chg(2)
-    ret_5d = pct_chg(5)
+    ret_1d  = pct_chg(2)
+    ret_5d  = pct_chg(5)
     ret_20d = pct_chg(20)
     ret_60d = pct_chg(60)
 
-    daily_returns = [
-        (closes[i] / closes[i - 1] - 1) for i in range(1, len(closes))
-    ]
+    daily_returns = [(closes[i] / closes[i - 1] - 1) for i in range(1, len(closes))]
     if len(daily_returns) >= 20:
         last20 = daily_returns[-20:]
         mean = sum(last20) / len(last20)
@@ -114,16 +112,33 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
     else:
         volatility_20d = None
 
+    ma_3mo: float | None = None
+    ma_6mo: float | None = None
+    momentum_3mo: str = "insufficient_data"
+    momentum_6mo: str = "insufficient_data"
+
+    if len(closes) >= MA_3MO_BARS:
+        ma_3mo = float(np.mean(closes[-MA_3MO_BARS:]))
+        momentum_3mo = "positive" if latest_price > ma_3mo else "negative"
+
+    if len(closes) >= MA_6MO_BARS:
+        ma_6mo = float(np.mean(closes[-MA_6MO_BARS:]))
+        momentum_6mo = "positive" if latest_price > ma_6mo else "negative"
+
     return {
-        "ticker": ticker,
-        "latest_price": latest_price,
-        "latest_date": latest_date_str,
-        "return_1d_pct": ret_1d,
-        "return_5d_pct": ret_5d,
-        "return_20d_pct": ret_20d,
-        "return_60d_pct": ret_60d,
+        "ticker":                       ticker,
+        "latest_price":                 latest_price,
+        "latest_date":                  latest_date_str,
+        "return_1d_pct":                ret_1d,
+        "return_5d_pct":                ret_5d,
+        "return_20d_pct":               ret_20d,
+        "return_60d_pct":               ret_60d,
         "annualized_volatility_20d_pct": volatility_20d,
-        "data_points": len(closes),
+        "ma_3mo":                       round(ma_3mo, 4) if ma_3mo else None,
+        "ma_6mo":                       round(ma_6mo, 4) if ma_6mo else None,
+        "momentum_3mo":                 momentum_3mo,
+        "momentum_6mo":                 momentum_6mo,
+        "data_points":                  len(closes),
     }
 
 
@@ -199,8 +214,8 @@ async def _fetch_bars_crypto(
     return _compute_metrics(ticker, bars)
 
 
-async def fetch_market_data(period: str = "3mo", crypto_only: bool = False) -> dict[str, Any]:
-    period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 90)
+async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> dict[str, Any]:
+    period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 180)
     end_date = date.today().isoformat()
     start_date = (date.today() - timedelta(days=period_days)).isoformat()
 
@@ -240,8 +255,8 @@ async def fetch_market_data(period: str = "3mo", crypto_only: bool = False) -> d
     return {"by_ticker": by_ticker, "by_category": by_category}
 
 
-async def fetch_single_ticker(ticker: str, period: str = "3mo") -> dict[str, Any]:
-    period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 90)
+async def fetch_single_ticker(ticker: str, period: str = "6mo") -> dict[str, Any]:
+    period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 180)
     end_date = date.today().isoformat()
     start_date = (date.today() - timedelta(days=period_days)).isoformat()
     logger.info(f"Market Data | Fetching single ticker: {ticker}")

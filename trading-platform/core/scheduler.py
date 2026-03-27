@@ -1,14 +1,17 @@
 """
-APScheduler — Daily Job Definitions
---------------------------------------
-Three recurring jobs run every trading day:
+APScheduler — Intraday Job Definitions
+-----------------------------------------
+Two recurring jobs run every trading day:
 
-  Job 1 | 09:31 ET daily     — Full analysis + execution cycle
-  Job 2 | Every 30 min ET    — Kill switch drawdown check (10:00–15:30)
-  Job 3 | 16:10 ET daily     — Post-mortem P&L reconciliation
+  Job 1 | Every 15 min ET (09:31–15:45) — Full analysis + execution cycle
+  Job 2 | 16:10 ET daily               — Post-mortem P&L reconciliation
+
+The first cycle of each day (09:31) also resets the kill switch and
+captures opening equity. Subsequent cycles reuse cached FRED (1hr TTL)
+and NewsAPI (30min TTL) data while fetching fresh market prices.
 
 We use APScheduler's AsyncIOScheduler (non-blocking, compatible with FastAPI)
-with the US/Eastern timezone.  Jobs only run on weekdays — the market clock
+with the US/Eastern timezone. Jobs only run on weekdays — the market clock
 guard inside run_pipeline() handles holidays.
 
 The scheduler is started inside FastAPI's lifespan context manager in main.py
@@ -16,6 +19,7 @@ so it is torn down cleanly on shutdown.
 """
 
 import asyncio
+from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -23,18 +27,17 @@ from loguru import logger
 
 from config.settings import settings
 from core.pipeline import run_pipeline, run_postmortem
+from core.market_clock import is_market_open
 from execution.broker import get_account
 from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripped
 
 
 _scheduler: AsyncIOScheduler | None = None
 _auto_trading_enabled: bool = False
+_last_reset_date: date | None = None
 
 
 def get_scheduler() -> AsyncIOScheduler:
-    """Return the singleton scheduler instance (creates it if needed).
-    Jobs are registered but paused — auto-trading starts OFF by default.
-    Enable via set_auto_trading(True) or POST /auto-trading."""
     global _scheduler
     if _scheduler is None:
         _scheduler = AsyncIOScheduler(timezone="America/New_York")
@@ -43,41 +46,22 @@ def get_scheduler() -> AsyncIOScheduler:
 
 
 def _register_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Register all three recurring jobs on the scheduler."""
 
-    # ── Job 1: Daily analysis + execution at 09:31 ET ───────────────────────
     scheduler.add_job(
-        func=_morning_cycle,
+        func=_intraday_cycle,
         trigger=CronTrigger(
             day_of_week="mon-fri",
-            hour=9,
-            minute=31,
+            hour="9-15",
+            minute="1,16,31,46",
             timezone="America/New_York",
         ),
-        id="morning_cycle",
-        name="Daily Analysis & Execution",
+        id="intraday_cycle",
+        name="15-Min Analysis & Execution Cycle",
         replace_existing=True,
-        misfire_grace_time=300,   # If delayed up to 5 min, still run
+        misfire_grace_time=300,
     )
-    logger.info("Scheduler | Registered: morning_cycle (Mon–Fri 09:31 ET)")
+    logger.info("Scheduler | Registered: intraday_cycle (Mon–Fri every 15 min, 09:01–15:46 ET)")
 
-    # ── Job 2: Kill switch intraday check every 30 min ──────────────────────
-    scheduler.add_job(
-        func=_intraday_check,
-        trigger=CronTrigger(
-            day_of_week="mon-fri",
-            hour="10-15",
-            minute="0,30",
-            timezone="America/New_York",
-        ),
-        id="intraday_kill_switch",
-        name="Intraday Kill Switch Check",
-        replace_existing=True,
-        misfire_grace_time=120,
-    )
-    logger.info("Scheduler | Registered: intraday_kill_switch (Mon–Fri every 30 min, 10:00–15:30 ET)")
-
-    # ── Job 3: Post-mortem at 16:10 ET ──────────────────────────────────────
     scheduler.add_job(
         func=_evening_postmortem,
         trigger=CronTrigger(
@@ -94,47 +78,33 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | Registered: evening_postmortem (Mon–Fri 16:10 ET)")
 
 
-# ── Job implementations ───────────────────────────────────────────────────────
+async def _intraday_cycle() -> None:
+    global _last_reset_date
 
-async def _morning_cycle() -> None:
-    """
-    09:31 ET — Reset kill switch, capture opening equity, run full pipeline.
-    """
-    logger.info("Scheduler | JOB STARTING: morning_cycle")
+    logger.info("Scheduler | JOB STARTING: intraday_cycle")
+
+    if not is_market_open():
+        logger.info("Scheduler | Market closed — skipping intraday cycle")
+        return
+
+    today = date.today()
+    if _last_reset_date != today:
+        try:
+            acct = get_account()
+            ks_reset(opening_equity=acct["equity"])
+            _last_reset_date = today
+            logger.info(f"Scheduler | First cycle of {today} — opening equity: ${acct['equity']:,.2f}")
+        except Exception as exc:
+            logger.error(f"Scheduler | Failed to reset kill switch: {exc}")
+
     try:
-        acct = get_account()
-        ks_reset(opening_equity=acct["equity"])
-        logger.info(f"Scheduler | Opening equity: ${acct['equity']:,.2f}")
+        result = await run_pipeline(force=True, dry_run=False)
+        logger.info(f"Scheduler | intraday_cycle complete: status={result['status']}")
     except Exception as exc:
-        logger.error(f"Scheduler | Failed to reset kill switch: {exc}")
-
-    try:
-        result = await run_pipeline(force=False, dry_run=False)
-        logger.info(f"Scheduler | morning_cycle complete: status={result['status']}")
-    except Exception as exc:
-        logger.error(f"Scheduler | morning_cycle CRASHED: {exc}")
-
-
-async def _intraday_check() -> None:
-    """
-    Every 30 min — Check portfolio drawdown and trip kill switch if needed.
-    """
-    if is_tripped():
-        return  # Already tripped, nothing to do
-
-    logger.info("Scheduler | JOB: intraday_kill_switch check")
-    try:
-        tripped = ks_check()
-        if tripped:
-            logger.critical("Scheduler | KILL SWITCH TRIPPED — all positions liquidated")
-    except Exception as exc:
-        logger.error(f"Scheduler | Kill switch check failed: {exc}")
+        logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")
 
 
 async def _evening_postmortem() -> None:
-    """
-    16:10 ET — Reconcile today's closed orders with the trade journal.
-    """
     logger.info("Scheduler | JOB STARTING: evening_postmortem")
     try:
         result = await run_postmortem()
@@ -147,7 +117,6 @@ async def _evening_postmortem() -> None:
 
 
 def get_job_status() -> list[dict]:
-    """Return next-fire-time for all registered jobs."""
     scheduler = get_scheduler()
     jobs = []
     for job in scheduler.get_jobs():

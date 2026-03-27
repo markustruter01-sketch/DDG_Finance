@@ -18,7 +18,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **LLM**: Groq (Llama 3.3 70B Versatile)
 - **Database**: SQLite trade journal with RAG feedback loop
 - **Validation**: Pydantic v2
-- **Scheduling**: APScheduler (3 jobs: morning analysis, intraday kill switch, evening post-mortem)
+- **Scheduling**: APScheduler (2 jobs: 15-min intraday analysis+execution cycle, evening post-mortem)
 
 ### Architecture
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
@@ -30,12 +30,15 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
 
 ### Key Features
+- **15-minute intraday cycles** — ~26 analysis+execution cycles per market day for maximum learning
+- **Smart data caching** — FRED macro data (1hr TTL), NewsAPI (30min TTL), Alpaca market data (always fresh)
 - **10 Kelly-Criterion-sized slots** across Crypto, Commodity ETFs, Currency ETFs, Wildcard categories
 - **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt
 - **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails
 - **Slippage tracking** — `intended_price` + `actual_fill_price` columns; post-mortem uses actual fill price as entry
-- **Auto-trading toggle** — scheduler jobs start PAUSED; toggle resumes/pauses all 3 jobs; state tracked in module var
-- **Kill switch** — 5% daily drawdown auto-liquidation
+- **Auto-trading toggle** — scheduler jobs start PAUSED; toggle resumes/pauses all 2 jobs; state tracked in module var
+- **Pipeline execution lock** — asyncio.Lock prevents overlapping cycles
+- **Kill switch** — 5% daily drawdown auto-liquidation, date-based reset (first market-open cycle of each day)
 
 ### API Endpoints (all prefixed with API_PREFIX)
 - `GET /health` — System health

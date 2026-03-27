@@ -1,13 +1,14 @@
 """
-Daily Trading Pipeline — Full End-to-End Cycle
-------------------------------------------------
-Orchestrates the complete sequence for one trading day:
+Intraday Trading Pipeline — 15-Minute Cycle
+----------------------------------------------
+Orchestrates a complete analysis + execution cycle every 15 minutes:
 
-  1. Kill switch guard — abort if already tripped today.
-  2. Market clock guard — abort if market is closed.
-  3. Analysis cycle    — RAG → data fetch → Groq → Pydantic → Kelly.
-  4. Execution cycle   — close stale → size → place orders → journal.
-  5. Post-mortem       — reconcile yesterday's closed orders (P&L).
+  1. Execution lock    — skip if a previous cycle is still running.
+  2. Kill switch guard — abort if already tripped today.
+  3. Market clock guard — abort if market is closed.
+  4. Analysis cycle    — RAG → data fetch (cached FRED/News) → Groq → Kelly.
+  5. Execution cycle   — close stale → size → place orders → journal.
+  6. Post-mortem       — reconcile closed orders (separate evening job).
 
 This module is called by the APScheduler jobs AND by the manual
 POST /run API endpoint.  All results are stored in _last_run so the
@@ -28,14 +29,16 @@ from execution.kill_switch import check as ks_check, is_tripped, reset as ks_res
 from core.market_clock import is_market_open
 
 
-# ── In-memory state ──────────────────────────────────────────────────────────
+_pipeline_lock = asyncio.Lock()
+
 _state: dict[str, Any] = {
     "last_run_utc":     None,
     "last_run_status":  "never_run",
-    "last_allocation":  None,   # serialised AnalysisOutput summary
+    "last_allocation":  None,
     "last_exec_result": None,
     "run_count":        0,
     "error_count":      0,
+    "cycle_interval":   "15min",
 }
 
 
@@ -50,7 +53,7 @@ async def run_pipeline(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """
-    Execute the complete daily pipeline.
+    Execute a complete analysis + execution cycle.
 
     Args:
         force:   Skip the market-closed guard (for manual/testing runs).
@@ -59,9 +62,27 @@ async def run_pipeline(
     Returns:
         Dict with status, allocation summary, execution summary, errors.
     """
+    if _pipeline_lock.locked():
+        logger.warning("Pipeline lock held — skipping this cycle (previous still running)")
+        return {
+            "status": "skipped_locked",
+            "errors": ["Previous cycle still running"],
+            "run_count": _state["run_count"],
+        }
+
+    async with _pipeline_lock:
+        return await _run_pipeline_inner(force=force, dry_run=dry_run)
+
+
+async def _run_pipeline_inner(
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
     started = datetime.now(timezone.utc)
+    cycle_num = _state["run_count"] + 1
     logger.info("=" * 60)
-    logger.info(f"PIPELINE START | force={force} dry_run={dry_run}")
+    logger.info(f"PIPELINE CYCLE #{cycle_num} | force={force} dry_run={dry_run}")
     logger.info("=" * 60)
 
     result: dict[str, Any] = {

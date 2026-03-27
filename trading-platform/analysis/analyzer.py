@@ -1,11 +1,12 @@
 """
-Daily Analysis Cycle — Main Orchestrator
------------------------------------------
-This is the brain of the platform. Called once per trading day, it:
+Intraday Analysis Cycle — Main Orchestrator
+---------------------------------------------
+The brain of the platform. Called every 15 minutes during market hours:
 
   1. Queries Alpaca for exact buying_power and held symbols (State Awareness).
   2. Runs the RAG feedback injection (queries recent wins, losses, slippage).
-  3. Fetches live data concurrently: FRED macro + Alpaca market prices + NewsAPI.
+  3. Fetches live data: FRED macro (cached 1hr) + Alpaca market prices (fresh)
+     + NewsAPI headlines (cached 30min).
   4. Assembles the system prompt (with feedback + buying power) + user prompt.
   5. Calls Groq (llama-3.3-70b-versatile) for structured JSON allocation.
   6. Validates and post-processes output via Pydantic + Kelly Criterion.
@@ -21,6 +22,7 @@ from loguru import logger
 from analysis.feedback_injection import build_system_prompt_with_feedback
 from analysis.groq_client import build_user_prompt, call_groq
 from analysis.schemas import AnalysisOutput
+from data.cache import fred_cache, news_cache
 from data.fred_client import fetch_macro_data
 from data.news_client import fetch_news
 from data.yfinance_client import fetch_market_data
@@ -77,11 +79,11 @@ async def run_analysis_cycle(
         held_symbols=account_state["held_symbols"],
     )
 
-    logger.info("Step 3/5 | Fetching live data (FRED + Market + News)...")
+    logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market fresh | News cached 30min)...")
     macro_data, market_data, news_data = await asyncio.gather(
-        fetch_macro_data(lookback_days=lookback_days_macro),
+        fred_cache.get_or_fetch(fetch_macro_data, lookback_days=lookback_days_macro),
         fetch_market_data(period=market_period),
-        fetch_news(lookback_days=news_lookback_days),
+        news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
     )
 
     macro_ok  = sum(1 for v in macro_data.values() if v.get("value") is not None)

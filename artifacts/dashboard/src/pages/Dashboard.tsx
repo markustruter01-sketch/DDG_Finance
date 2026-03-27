@@ -21,7 +21,7 @@ import {
 
 // ── System Status Banner ───────────────────────────────────────────────────────
 
-const EXPECTED_JOBS = 3;
+const EXPECTED_JOBS = 2;
 
 function SystemStatusBanner() {
   const { data, isError } = usePlatformStatus();
@@ -45,9 +45,12 @@ function SystemStatusBanner() {
       reason = `Last run failed (${errorCount} total error${errorCount !== 1 ? "s" : ""})`;
     } else {
       sysStatus = "online";
-      reason = lastStatus === "never_run"
-        ? "Scheduler running — no analysis run yet today"
-        : "All systems operational";
+      const runCount = data.last_run.run_count;
+      if (lastStatus === "never_run") {
+        reason = "Scheduler running (15-min cycles) — no analysis run yet today";
+      } else {
+        reason = `All systems operational — cycle #${runCount} complete`;
+      }
     }
   }
 

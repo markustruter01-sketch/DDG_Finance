@@ -50,8 +50,9 @@ from analysis.trade_journal import (
     init_db,
 )
 from core.market_clock import is_market_open, get_next_open
+from data.cache import get_cache_stats
 
-EXPECTED_JOB_COUNT = 3
+EXPECTED_JOB_COUNT = 2
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -102,7 +103,7 @@ app = FastAPI(
         "Groq LLM (Llama 3.3 70B) → Kelly-sized 10-slot allocation → "
         "Alpaca paper trading execution."
     ),
-    version="1.1.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -154,7 +155,7 @@ async def health() -> dict:
 
     return {
         "status": "ok",
-        "version": "1.1.0",
+        "version": "2.0.0",
         "system_status": system_status,
         "status_reason": status_reason,
         "scheduler_job_count": job_count,
@@ -167,18 +168,21 @@ async def health() -> dict:
 async def status() -> dict:
     """
     Full platform status snapshot:
-    market clock, kill switch, scheduler jobs, last pipeline run.
+    market clock, kill switch, scheduler jobs, last pipeline run, cache stats.
     """
     market_open = is_market_open()
+    last_run = get_last_run()
     return {
         "market": {
             "is_open":   market_open,
             "next_open": get_next_open() if not market_open else None,
         },
-        "kill_switch":   ks_get_state(),
+        "kill_switch":    ks_get_state(),
         "scheduler_jobs": get_job_status(),
-        "last_run":      get_last_run(),
-        "auto_trading":  is_auto_trading_enabled(),
+        "last_run":       last_run,
+        "auto_trading":   is_auto_trading_enabled(),
+        "cycle_interval": last_run.get("cycle_interval", "15min"),
+        "data_cache":     get_cache_stats(),
     }
 
 

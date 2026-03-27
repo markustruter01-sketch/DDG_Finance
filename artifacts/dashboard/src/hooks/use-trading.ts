@@ -28,8 +28,11 @@ export interface PlatformStatus {
     error_count: number;
     last_allocation: any[] | null;
     last_exec_result: any;
+    cycle_interval: string;
   };
   auto_trading: boolean;
+  cycle_interval: string;
+  data_cache: Array<{ name: string; ttl_seconds: number; cached: boolean; age_seconds: number; hits: number; misses: number }>;
 }
 
 export interface PortfolioData {

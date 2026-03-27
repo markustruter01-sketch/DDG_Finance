@@ -34,7 +34,11 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
   - `portfolio/allocator.py` — Conviction threshold enforcement + SGOV replacement + Kelly recalculation
   - `analysis/analyzer.py` — Full daily cycle: RAG → data fetch → Groq → validate → output
   - Auto-retry: on Pydantic failure, exact error is injected into next Groq call (self-correcting)
-- **Phase 4 — Execution/Alpaca**: Not started
+- **Phase 4 — Execution & Risk**: COMPLETE
+  - `core/market_clock.py` — Alpaca clock API; is_market_open(), market_open_today(), get_next_open()
+  - `execution/broker.py` — Full Alpaca wrapper: place_order, close_position, get_account/positions/orders, cancel/close all
+  - `execution/kill_switch.py` — Daily drawdown guard: reset(), check(), is_tripped(); auto-liquidates at 5% drawdown
+  - `execution/executor.py` — Allocation → orders: close stale, size by Kelly×equity, skip SGOV/zero, log to journal
 - **Phase 5 — Scheduler/Kill Switch**: Not started
 
 ### Run

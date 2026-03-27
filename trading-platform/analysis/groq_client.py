@@ -87,12 +87,29 @@ def build_user_prompt(
     macro_data: dict,
     market_data: dict,
     news_headlines: list[str],
+    account_state: dict | None = None,
 ) -> str:
     """
-    Assemble the user-facing prompt from the three Phase 1 data sources.
-    Formats data compactly to stay within the 8k token context window.
+    Assemble the user-facing prompt from the Phase 1 data sources plus live
+    account state (buying power + held symbols).
     """
-    lines = ["=== MACROECONOMIC INDICATORS (FRED) ==="]
+    lines = []
+
+    if account_state and account_state.get("buying_power") is not None:
+        lines.append("=== LIVE ACCOUNT STATE (from Alpaca) ===")
+        lines.append(f"  Equity:       ${account_state['equity']:,.2f}")
+        lines.append(f"  Cash:         ${account_state['cash']:,.2f}")
+        lines.append(f"  Buying Power: ${account_state['buying_power']:,.2f}")
+        held = account_state.get("held_symbols", [])
+        if held:
+            lines.append(f"  Held Symbols: {', '.join(held)}")
+            for sym, val in account_state.get("held_values", {}).items():
+                lines.append(f"    {sym}: ${val:,.2f}")
+        else:
+            lines.append("  Held Symbols: NONE (fully in cash)")
+        lines.append("")
+
+    lines.append("=== MACROECONOMIC INDICATORS (FRED) ===")
     for sid, v in macro_data.items():
         if v.get("value") is not None:
             lines.append(f"  {v['name']}: {v['value']} (as of {v['date']})")

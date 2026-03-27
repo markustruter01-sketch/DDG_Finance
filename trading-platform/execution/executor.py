@@ -9,6 +9,8 @@ Takes the validated AnalysisOutput from Phase 3 and executes each slot:
   4. Skip SGOV slots and slots that are already held at correct size.
   5. Place market buy orders for new/changed positions.
   6. Log every new trade to the SQLite journal for the RAG loop.
+  7. Capture intended_price (pre-order) and actual_fill_price (post-fill)
+     for slippage tracking.
 
 Design decisions:
   - SGOV slots are never traded (they represent "do nothing" cash).
@@ -18,32 +20,26 @@ Design decisions:
   - All orders are DAY market orders (filled same session or cancelled).
 """
 
+import time
+
 from loguru import logger
 
 from analysis.schemas import AnalysisOutput, AllocationSlot
-from analysis.trade_journal import log_trade
+from analysis.trade_journal import log_trade, update_trade_fill_price
 from execution.broker import (
     close_position,
     get_account,
+    get_latest_price,
+    get_order,
     get_positions,
     place_order,
 )
 
-MIN_NOTIONAL_USD = 100.0   # Minimum dollar size per trade slot
+MIN_NOTIONAL_USD = 100.0
 CASH_TICKER      = "SGOV"
 
 
 def execute_allocations(output: AnalysisOutput, dry_run: bool = False) -> dict:
-    """
-    Execute the 10-slot allocation plan against Alpaca paper trading.
-
-    Args:
-        output:  Validated AnalysisOutput from the analysis cycle.
-        dry_run: If True, compute all sizes but don't place real orders.
-
-    Returns:
-        Execution summary dict with placed, skipped, closed, errors.
-    """
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
     logger.info("=" * 60)
@@ -95,9 +91,6 @@ def _close_stale_positions(
     results: dict,
     dry_run: bool,
 ) -> dict:
-    """
-    Close positions that are no longer in today's allocation plan.
-    """
     stale = [sym for sym in current_positions if sym not in active_tickers and sym != CASH_TICKER]
 
     if not stale:
@@ -131,9 +124,6 @@ def _execute_slot(
     results: dict,
     dry_run: bool,
 ) -> dict:
-    """
-    Execute a single allocation slot.
-    """
     ticker = slot.ticker
 
     if ticker == CASH_TICKER or slot.kelly_fraction == 0.0:
@@ -176,34 +166,52 @@ def _execute_slot(
         f"conv={slot.conviction_score:.0%}"
     )
 
+    intended_price = get_latest_price(ticker)
+    if intended_price:
+        logger.info(f"  → Intended price (pre-order snapshot): ${intended_price:.4f}")
+
     if dry_run:
         results["placed"].append({
-            "slot":         slot.slot,
-            "ticker":       ticker,
-            "notional_usd": notional_usd,
-            "kelly":        slot.kelly_fraction,
-            "conviction":   slot.conviction_score,
-            "dry_run":      True,
+            "slot":            slot.slot,
+            "ticker":          ticker,
+            "notional_usd":    notional_usd,
+            "kelly":           slot.kelly_fraction,
+            "conviction":      slot.conviction_score,
+            "intended_price":  intended_price,
+            "dry_run":         True,
         })
         return results
 
     try:
         order = place_order(ticker=ticker, notional_usd=notional_usd)
-        results["placed"].append({
-            "slot":         slot.slot,
-            "ticker":       ticker,
-            "notional_usd": notional_usd,
-            "order_id":     order["id"],
-            "order_status": order["status"],
-        })
+        order_id = order["id"]
+
         log_trade(
-            trade_id=order["id"],
+            trade_id=order_id,
             ticker=ticker,
             asset_class=slot.asset_class,
             conviction_score=slot.conviction_score,
             original_thesis=slot.thesis,
+            intended_price=intended_price,
         )
-        logger.info(f"  → Logged to journal: trade_id={order['id']}")
+        logger.info(f"  → Logged to journal: trade_id={order_id}")
+
+        actual_fill_price = _poll_fill_price(order_id, ticker)
+        slippage_info = ""
+        if actual_fill_price and intended_price:
+            slippage_pct = (actual_fill_price - intended_price) / intended_price * 100
+            slippage_info = f" | slippage={slippage_pct:+.4f}%"
+
+        results["placed"].append({
+            "slot":              slot.slot,
+            "ticker":            ticker,
+            "notional_usd":      notional_usd,
+            "order_id":          order_id,
+            "order_status":      order["status"],
+            "intended_price":    intended_price,
+            "actual_fill_price": actual_fill_price,
+        })
+        logger.info(f"  → Fill price: ${actual_fill_price or 'pending'}{slippage_info}")
 
     except Exception as exc:
         logger.error(f"Slot {slot.slot}: order failed for {ticker}: {exc}")
@@ -214,3 +222,29 @@ def _execute_slot(
         })
 
     return results
+
+
+def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float | None:
+    """
+    Poll Alpaca for a filled order to capture actual_fill_price.
+    Market orders on paper trading typically fill within 1-2 seconds.
+    """
+    start = time.time()
+    poll_interval = 0.5
+
+    while (time.time() - start) < max_wait:
+        try:
+            order_data = get_order(order_id)
+            fill_price = order_data.get("filled_avg_price")
+            if fill_price is not None:
+                update_trade_fill_price(order_id, fill_price)
+                return fill_price
+            if order_data.get("status") in ("canceled", "expired", "rejected"):
+                logger.warning(f"Order {order_id} ({ticker}) ended with status={order_data['status']}")
+                return None
+        except Exception as exc:
+            logger.warning(f"Poll fill price error for {ticker}: {exc}")
+        time.sleep(poll_interval)
+
+    logger.warning(f"Fill price not available within {max_wait}s for {ticker} (order_id={order_id})")
+    return None

@@ -8,8 +8,9 @@ Logic:
   1. Pull all FILLED orders from the Alpaca paper account.
   2. For each filled order that has a corresponding 'Active' journal entry,
      compute the realised P&L vs the journal's entry price.
-  3. Call update_trade_outcome() to stamp the trade Closed_Win / Closed_Loss.
-  4. Fetch current account equity and save a performance_snapshots row.
+  3. Calculate slippage between intended_price and actual_fill_price.
+  4. Call update_trade_outcome() to stamp the trade Closed_Win / Closed_Loss.
+  5. Fetch current account equity and save a performance_snapshots row.
 """
 
 import asyncio
@@ -21,6 +22,7 @@ from loguru import logger
 from analysis.trade_journal import (
     get_all_active_trades,
     update_trade_outcome,
+    update_trade_fill_price,
     get_journal_summary,
     save_performance_snapshot,
     get_performance_snapshots,
@@ -29,7 +31,6 @@ from config.settings import settings
 
 
 def _get_trading_client():
-    """Lazy import so the module can be loaded without Alpaca keys during testing."""
     from alpaca.trading.client import TradingClient
     return TradingClient(
         api_key=settings.alpaca_api_key,
@@ -39,7 +40,6 @@ def _get_trading_client():
 
 
 async def _fetch_closed_orders() -> list[dict[str, Any]]:
-    """Fetch all closed (filled) orders from Alpaca paper account."""
     from alpaca.trading.requests import GetOrdersRequest
     from alpaca.trading.enums import QueryOrderStatus
 
@@ -67,7 +67,6 @@ async def _fetch_closed_orders() -> list[dict[str, Any]]:
 
 
 async def _fetch_current_equity() -> float | None:
-    """Fetch current Alpaca account equity for the performance snapshot."""
     def _blocking_fetch() -> float | None:
         try:
             client = _get_trading_client()
@@ -86,10 +85,8 @@ async def run_post_mortem() -> dict[str, Any]:
     Daily post-mortem reconciliation.
 
     Matches Alpaca closed orders against active journal entries, computes
-    realised P&L, updates journal status, then saves a performance snapshot.
-
-    Returns:
-        Summary dict with counts of wins, losses, skipped, and snapshot info.
+    realised P&L and slippage, updates journal status, then saves a
+    performance snapshot.
     """
     logger.info("Post-mortem | Starting daily reconciliation...")
 
@@ -111,6 +108,8 @@ async def run_post_mortem() -> dict[str, Any]:
     logger.info(f"Post-mortem | {len(closed_orders)} closed Alpaca orders fetched")
 
     wins = losses = skipped = 0
+    total_slippage_pct = 0.0
+    slippage_count = 0
 
     for order in closed_orders:
         order_id = order["order_id"]
@@ -120,7 +119,14 @@ async def run_post_mortem() -> dict[str, Any]:
         journal_entry = active_by_id[order_id]
         exit_price = order["exit_price"]
 
-        entry_price: float | None = journal_entry.get("entry_price")
+        if journal_entry.get("actual_fill_price") is None:
+            update_trade_fill_price(order_id, exit_price)
+
+        actual_fill = journal_entry.get("actual_fill_price")
+        intended_price: float | None = journal_entry.get("intended_price")
+
+        entry_price: float | None = actual_fill or intended_price or journal_entry.get("entry_price")
+
         if not entry_price:
             logger.warning(
                 f"Post-mortem | {order['ticker']}: no entry_price in journal — skipping"
@@ -129,27 +135,47 @@ async def run_post_mortem() -> dict[str, Any]:
             continue
 
         pnl_pct = (exit_price - entry_price) / entry_price * 100
+
+        slippage_pct = None
+        if intended_price and intended_price > 0 and actual_fill and actual_fill > 0:
+            slippage_pct = (actual_fill - intended_price) / intended_price * 100
+            total_slippage_pct += abs(slippage_pct)
+            slippage_count += 1
+
         update_trade_outcome(order_id, pnl_pct)
+
+        slip_str = f" | slippage={slippage_pct:+.4f}%" if slippage_pct is not None else ""
 
         if pnl_pct >= 0:
             wins += 1
             logger.info(
                 f"Post-mortem | WIN  {order['ticker']:8s}: "
                 f"entry={entry_price:.4f} exit={exit_price:.4f} "
-                f"pnl={pnl_pct:+.2f}%"
+                f"pnl={pnl_pct:+.2f}%{slip_str}"
             )
         else:
             losses += 1
             logger.warning(
                 f"Post-mortem | LOSS {order['ticker']:8s}: "
                 f"entry={entry_price:.4f} exit={exit_price:.4f} "
-                f"pnl={pnl_pct:+.2f}%"
+                f"pnl={pnl_pct:+.2f}%{slip_str}"
             )
 
-    summary = {"wins": wins, "losses": losses, "skipped": skipped}
+    avg_slippage = total_slippage_pct / slippage_count if slippage_count > 0 else 0.0
+
+    summary = {
+        "wins": wins,
+        "losses": losses,
+        "skipped": skipped,
+        "slippage_stats": {
+            "trades_with_slippage": slippage_count,
+            "avg_abs_slippage_pct": round(avg_slippage, 4),
+        },
+    }
     logger.info(
         f"Post-mortem | Complete — "
-        f"Wins: {wins} | Losses: {losses} | Skipped: {skipped}"
+        f"Wins: {wins} | Losses: {losses} | Skipped: {skipped} | "
+        f"Avg slippage: {avg_slippage:.4f}%"
     )
 
     snapshot_info = await _save_snapshot(wins=wins, losses=losses)
@@ -158,10 +184,6 @@ async def run_post_mortem() -> dict[str, Any]:
 
 
 async def _save_snapshot(wins: int, losses: int) -> dict[str, Any]:
-    """
-    Save a performance snapshot row after post-mortem reconciliation.
-    Computes daily P&L %, cumulative P&L %, and win rate from the full journal.
-    """
     today = date.today().isoformat()
     equity = await _fetch_current_equity()
     if equity is None:

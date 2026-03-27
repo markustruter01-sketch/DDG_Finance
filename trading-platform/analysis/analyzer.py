@@ -3,14 +3,13 @@ Daily Analysis Cycle — Main Orchestrator
 -----------------------------------------
 This is the brain of the platform. Called once per trading day, it:
 
-  1. Runs the RAG feedback injection (queries recent Closed_Loss trades).
-  2. Fetches live data concurrently: FRED macro + Alpaca market prices + NewsAPI.
-  3. Assembles the system prompt (with loss feedback) + user prompt (live data).
-  4. Calls Groq (llama-3.3-70b-versatile) for structured JSON allocation.
-  5. Validates and post-processes output via Pydantic + Kelly Criterion.
-  6. Returns the final 10-slot AnalysisOutput.
-
-The market clock check (US ET hours) lives in core/market_clock.py (Phase 4).
+  1. Queries Alpaca for exact buying_power and held symbols (State Awareness).
+  2. Runs the RAG feedback injection (queries recent wins, losses, slippage).
+  3. Fetches live data concurrently: FRED macro + Alpaca market prices + NewsAPI.
+  4. Assembles the system prompt (with feedback + buying power) + user prompt.
+  5. Calls Groq (llama-3.3-70b-versatile) for structured JSON allocation.
+  6. Validates and post-processes output via Pydantic + Kelly Criterion.
+  7. Returns the final 10-slot AnalysisOutput.
 """
 
 import asyncio
@@ -28,6 +27,30 @@ from data.yfinance_client import fetch_market_data
 from portfolio.allocator import process_llm_output
 
 
+def _fetch_account_state() -> dict[str, Any]:
+    """
+    Query Alpaca for the exact buying_power and list of currently held symbols.
+    This data is injected into the LLM prompt so it cannot exceed available capital.
+    """
+    from execution.broker import get_account, get_positions
+    acct = get_account()
+    positions = get_positions()
+    held_symbols = [p["symbol"] for p in positions]
+    state = {
+        "buying_power": acct["buying_power"],
+        "equity":       acct["equity"],
+        "cash":         acct["cash"],
+        "held_symbols": held_symbols,
+        "held_values":  {p["symbol"]: p["market_value"] for p in positions},
+    }
+    logger.info(
+        f"Account state | equity=${state['equity']:,.2f} "
+        f"buying_power=${state['buying_power']:,.2f} "
+        f"held={held_symbols or 'none'}"
+    )
+    return state
+
+
 async def run_analysis_cycle(
     lookback_days_macro: int = 90,
     market_period: str = "3mo",
@@ -35,27 +58,26 @@ async def run_analysis_cycle(
     n_loss_feedback: int = 5,
     dry_run: bool = False,
 ) -> AnalysisOutput:
-    """
-    Execute the complete daily analysis cycle.
-
-    Args:
-        lookback_days_macro:  FRED lookback window in days (default 90).
-        market_period:        yfinance/Alpaca period string (default '3mo').
-        news_lookback_days:   Days of news to fetch (default 3).
-        n_loss_feedback:      Number of recent losses to inject into prompt.
-        dry_run:              If True, skip the Groq API call and return mock output.
-
-    Returns:
-        Validated AnalysisOutput with 10 allocation slots.
-    """
     logger.info("=" * 60)
     logger.info("ANALYSIS CYCLE STARTING")
     logger.info("=" * 60)
 
-    logger.info("Step 1/4 | Building RAG-enhanced system prompt...")
-    system_prompt = build_system_prompt_with_feedback(n_losses=n_loss_feedback)
+    logger.info("Step 1/5 | Querying Alpaca for account state (buying power + positions)...")
+    loop = asyncio.get_event_loop()
+    try:
+        account_state = await loop.run_in_executor(None, _fetch_account_state)
+    except Exception as exc:
+        logger.error(f"ABORTING analysis — cannot fetch account state: {exc}")
+        raise RuntimeError(f"Account state unavailable, analysis aborted: {exc}") from exc
 
-    logger.info("Step 2/4 | Fetching live data (FRED + Market + News)...")
+    logger.info("Step 2/5 | Building RAG-enhanced system prompt...")
+    system_prompt = build_system_prompt_with_feedback(
+        n_losses=n_loss_feedback,
+        buying_power=account_state["buying_power"],
+        held_symbols=account_state["held_symbols"],
+    )
+
+    logger.info("Step 3/5 | Fetching live data (FRED + Market + News)...")
     macro_data, market_data, news_data = await asyncio.gather(
         fetch_macro_data(lookback_days=lookback_days_macro),
         fetch_market_data(period=market_period),
@@ -71,8 +93,13 @@ async def run_analysis_cycle(
         f"News={news_ok} headlines"
     )
 
-    logger.info("Step 3/4 | Calling Groq LLM (llama-3.3-70b-versatile)...")
-    user_prompt = build_user_prompt(macro_data, market_data, news_data["all_headlines"])
+    logger.info("Step 4/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
+    user_prompt = build_user_prompt(
+        macro_data,
+        market_data,
+        news_data["all_headlines"],
+        account_state=account_state,
+    )
 
     if dry_run:
         logger.warning("DRY RUN: skipping actual Groq API call, returning mock output")
@@ -95,26 +122,11 @@ MAX_LLM_RETRIES = 3
 
 
 def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
-    """
-    Call Groq and validate the response. On validation failure, inject the
-    exact Pydantic error message back into a follow-up prompt so the LLM
-    can self-correct. Retries up to MAX_LLM_RETRIES times.
-
-    Args:
-        system_prompt: RAG-enhanced system context.
-        user_prompt:   Live macro + market + news data.
-
-    Returns:
-        Validated AnalysisOutput.
-
-    Raises:
-        RuntimeError: If all retries are exhausted without a valid response.
-    """
     last_error: Exception | None = None
     current_user_prompt = user_prompt
 
     for attempt in range(1, MAX_LLM_RETRIES + 1):
-        logger.info(f"Step 4/{4} | LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+        logger.info(f"Step 5/{5} | LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
         try:
             raw_json = call_groq(
                 system_prompt=system_prompt,
@@ -147,6 +159,7 @@ def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
                     f"  - At least 1 wildcard slot (QQQ, SPY, TLT, HYG, EEM)\n"
                     f"  - Low conviction slots will be replaced with SGOV automatically\n"
                     f"  - All tickers must match their declared asset_class\n"
+                    f"  - Total kelly_fractions must not exceed buying power\n"
                 )
 
     raise RuntimeError(
@@ -156,10 +169,6 @@ def _call_with_retry(system_prompt: str, user_prompt: str) -> AnalysisOutput:
 
 
 def _mock_llm_response() -> str:
-    """
-    A hard-coded valid response used for dry_run / integration testing.
-    Represents a realistic allocation across all four categories.
-    """
     return json.dumps({
         "market_regime": (
             "Risk-off environment: elevated VIX (25+), inverted yield curve normalising, "

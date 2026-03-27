@@ -13,7 +13,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **Framework**: FastAPI + Uvicorn
 - **Brokerage**: Alpaca API (Paper Trading)
 - **Data Sources**: FRED API, Alpaca Market Data, NewsAPI
-- **LLM**: Claude (Anthropic) / DeepSeek
+- **LLM**: Groq (Llama 3.3 70B Versatile)
 - **Validation**: Pydantic v2
 
 ### Phase Status
@@ -24,21 +24,21 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
   - `config/settings.py` — Pydantic BaseSettings with all API key config
   - `main.py` — FastAPI stub with `/data/snapshot` test endpoint
 - **Phase 2 — Trade Journal & RAG Loop**: COMPLETE
-  - `analysis/trade_journal.py` — SQLite journal (log, update, query losses)
-  - `analysis/post_mortem.py` — Daily Alpaca reconciliation → auto-close W/L
-  - `analysis/groq_client.py` — Groq API (llama-3.3-70b-versatile, free)
-  - `analysis/feedback_injection.py` — RAG: injects 5 recent losses into system prompt
+  - `analysis/trade_journal.py` — SQLite journal with slippage tracking (intended_price, actual_fill_price columns)
+  - `analysis/post_mortem.py` — Daily Alpaca reconciliation → auto-close W/L + slippage calculation
+  - `analysis/groq_client.py` — Groq API (llama-3.3-70b-versatile, free); user prompt includes live account state
+  - `analysis/feedback_injection.py` — Bidirectional RAG: 5 losses + 3 wins + slippage stats + buying power + held symbols injected into system prompt
 - **Phase 3 — LLM Analysis Cycle**: COMPLETE
   - `analysis/schemas.py` — Pydantic models: AllocationSlot, AnalysisOutput (full validation)
   - `portfolio/kelly.py` — Kelly Criterion: compute, batch-apply, normalise (half-Kelly + 20% cap)
   - `portfolio/allocator.py` — Conviction threshold enforcement + SGOV replacement + Kelly recalculation
-  - `analysis/analyzer.py` — Full daily cycle: RAG → data fetch → Groq → validate → output
+  - `analysis/analyzer.py` — Full daily cycle: account state query → RAG → data fetch → Groq → validate → output
   - Auto-retry: on Pydantic failure, exact error is injected into next Groq call (self-correcting)
 - **Phase 4 — Execution & Risk**: COMPLETE
   - `core/market_clock.py` — Alpaca clock API; is_market_open(), market_open_today(), get_next_open()
   - `execution/broker.py` — Full Alpaca wrapper: place_order, close_position, get_account/positions/orders, cancel/close all
   - `execution/kill_switch.py` — Daily drawdown guard: reset(), check(), is_tripped(); auto-liquidates at 5% drawdown
-  - `execution/executor.py` — Allocation → orders: close stale, size by Kelly×equity, skip SGOV/zero, log to journal
+  - `execution/executor.py` — Allocation → orders: close stale, size by Kelly×equity, skip SGOV/zero, log to journal with intended_price + actual_fill_price (polled from Alpaca)
 - **Phase 5 — Scheduler & API**: COMPLETE
   - `core/pipeline.py` — End-to-end pipeline: kill switch guard → market guard → analysis → execution → post-mortem
   - `core/scheduler.py` — APScheduler: 09:31 ET analysis, 30-min intraday kill switch check, 16:10 ET post-mortem

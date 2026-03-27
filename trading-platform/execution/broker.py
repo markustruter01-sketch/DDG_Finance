@@ -159,6 +159,29 @@ def place_order(
         raise RuntimeError(f"Order placement failed for {ticker}: {exc}") from exc
 
 
+def get_latest_price(ticker: str) -> float | None:
+    """
+    Fetch the latest trade price for a ticker from Alpaca Data API.
+    Used to record intended_price before order placement for slippage tracking.
+    """
+    try:
+        from alpaca.data.historical import StockHistoricalDataClient
+        from alpaca.data.requests import StockLatestTradeRequest
+        data_client = StockHistoricalDataClient(
+            api_key=settings.alpaca_api_key,
+            secret_key=settings.alpaca_secret_key,
+        )
+        req = StockLatestTradeRequest(symbol_or_symbols=ticker)
+        trades = data_client.get_stock_latest_trade(req)
+        if ticker in trades:
+            price = float(trades[ticker].price)
+            logger.debug(f"Broker | Latest price {ticker}: ${price:.4f}")
+            return price
+    except Exception as exc:
+        logger.warning(f"Broker | Could not fetch latest price for {ticker}: {exc}")
+    return None
+
+
 def close_position(ticker: str) -> dict:
     """
     Close an entire open position in a ticker.

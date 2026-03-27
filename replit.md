@@ -66,6 +66,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `GET /ai/commentary` — Latest LLM analysis commentary
 - `GET /auditor/report` — Latest HITL audit report (JSON)
 - `POST /auditor/run` — Trigger manual audit cycle
+- `POST /rebalance` — Force close sellable positions + run fresh pipeline (respects market hours for stocks, crypto closes 24/7, JEPQ protected)
 - `POST /run` — Trigger analysis cycle
 - `POST /run/postmortem` — Trigger post-mortem
 - `POST /kill` — Trip kill switch

@@ -19,6 +19,7 @@ Endpoints:
   POST /kill/reset          — Reset the kill switch for a new day
   GET  /auditor/report      — Latest HITL audit report (JSON)
   POST /auditor/run         — Manually trigger a full audit cycle
+  POST /rebalance           — Force close sellable positions + run fresh pipeline
   GET  /docs                — Auto-generated Swagger UI (FastAPI default)
 """
 
@@ -35,7 +36,7 @@ from loguru import logger
 from config.settings import settings
 from core.pipeline import get_last_run, run_pipeline, run_postmortem
 from core.scheduler import get_job_status, get_scheduler, is_auto_trading_enabled, set_auto_trading
-from execution.broker import get_account, get_positions, get_open_orders
+from execution.broker import get_account, get_positions, get_open_orders, close_position, cancel_all_orders
 from execution.kill_switch import (
     get_state as ks_get_state,
     is_tripped,
@@ -54,6 +55,8 @@ from analysis.trade_journal import (
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
 from analysis.auditor import run_full_audit, get_last_audit
+from analysis.schemas import is_crypto_pair
+from execution.ratchet_stop import delete_stop
 
 EXPECTED_JOB_COUNT = 4
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
@@ -336,6 +339,68 @@ async def manual_postmortem() -> dict:
     """Manually trigger the post-mortem P&L reconciliation."""
     logger.info("Manual post-mortem requested")
     return await run_postmortem()
+
+
+VAULT_TICKER = "JEPQ"
+KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD"}
+
+@router.post("/rebalance", tags=["Control"])
+async def force_rebalance() -> dict:
+    """
+    Force-close all sellable positions then trigger a fresh pipeline run.
+
+    Rules:
+      - Crypto positions (BTCUSD, ETHUSD) can always be closed (24/7 market).
+      - Stock/ETF positions can only be closed when the stock market is open.
+        If the market is closed, those positions are HELD until next market open.
+      - JEPQ (vault) is never closed — it is protected.
+      - After closing what it can, the system runs a fresh analysis + execution
+        pipeline to open new trades based on current learnings.
+    """
+    market_open = is_market_open()
+    positions = get_positions()
+    cancel_all_orders()
+
+    closed = []
+    held = []
+    errors = []
+
+    for pos in positions:
+        sym = pos["symbol"]
+        if sym == VAULT_TICKER:
+            held.append({"symbol": sym, "reason": "vault_protected"})
+            continue
+        is_crypto = sym in KNOWN_CRYPTO_SYMBOLS
+        if not is_crypto and not market_open:
+            held.append({"symbol": sym, "reason": "market_closed"})
+            continue
+        try:
+            order = close_position(sym)
+            closed.append({"symbol": sym, "order": order})
+            try:
+                delete_stop(sym)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error(f"Rebalance | Failed to close {sym}: {exc}")
+            errors.append({"symbol": sym, "error": str(exc)})
+
+    logger.info(
+        f"Rebalance | Closed {len(closed)} positions, "
+        f"held {len(held)}, errors {len(errors)}"
+    )
+
+    crypto_only = not market_open
+    pipeline_result = await run_pipeline(force=True, dry_run=False, crypto_only=crypto_only)
+
+    return {
+        "status": "ok",
+        "closed": closed,
+        "held": held,
+        "errors": errors,
+        "market_open": market_open,
+        "pipeline": pipeline_result,
+    }
 
 
 @router.post("/kill", tags=["Risk"])

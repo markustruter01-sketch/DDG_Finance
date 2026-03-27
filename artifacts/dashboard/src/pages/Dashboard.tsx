@@ -4,6 +4,7 @@ import {
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
+  useForceRebalance,
   type AllocationPlan, type AuditFinding,
 } from "@/hooks/use-trading";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
@@ -906,8 +907,7 @@ function AIBrainSection() {
         {showInsights && <BrainInsightsModal open={showInsights} onClose={() => setShowInsights(false)} />}
       </AnimatePresence>
 
-      <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden">
-        {/* Background glow */}
+      <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden flex-1 flex flex-col">
         <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-500/4 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
 
@@ -916,7 +916,6 @@ function AIBrainSection() {
           <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
             Learning Intelligence
           </span>
-          {/* Live auto-refresh indicator */}
           <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
             <motion.span
               className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
@@ -927,17 +926,15 @@ function AIBrainSection() {
           </span>
         </div>
 
-        <div className="relative flex items-start gap-5">
-          {/* Brain SVG — clickable to open insights */}
+        <div className="relative flex items-start gap-5 flex-1">
           <motion.div
-            className="flex-shrink-0 w-52 h-44 cursor-pointer relative group"
+            className="flex-shrink-0 w-44 h-44 cursor-pointer relative group"
             animate={{ y: [0, -6, 0, 4, 0], x: [0, 3, 0, -3, 0] }}
             transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
             onClick={() => setShowInsights(true)}
             title="Click to view AI strategy & learnings"
           >
             <BrainSVG thinking={thinking} />
-            {/* Hover hint */}
             <div className="absolute inset-0 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
               <span className="text-[9px] font-semibold text-indigo-300/80 bg-slate-950/80 rounded-full px-2 py-0.5 border border-indigo-500/20 backdrop-blur-sm">
                 tap to inspect
@@ -945,7 +942,6 @@ function AIBrainSection() {
             </div>
           </motion.div>
 
-          {/* Speech bubble */}
           <SpeechBubble
             commentary={data?.commentary}
             generatedAt={data?.generated_at}
@@ -957,7 +953,6 @@ function AIBrainSection() {
           />
         </div>
 
-        {/* Regime + allocation breakdown */}
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
       </div>
     </>
@@ -1306,7 +1301,7 @@ function AuditorAgentSection() {
         {showInsights && <AuditorInsightsModal open={showInsights} onClose={() => setShowInsights(false)} />}
       </AnimatePresence>
 
-      <div className="relative rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/90 to-amber-950/15 p-5 shadow-[0_0_60px_rgba(234,179,8,0.06)] overflow-hidden">
+      <div className="relative rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/90 to-amber-950/15 p-5 shadow-[0_0_60px_rgba(234,179,8,0.06)] overflow-hidden flex-1 flex flex-col">
         <div className="absolute top-0 left-0 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-yellow-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
 
@@ -1567,7 +1562,9 @@ function ThesisModal({ ticker, thesis, onClose }: {
 
 function LivePositionsSection() {
   const { data, isLoading } = useLivePositions();
+  const { mutate: rebalance, isPending: isRebalancing } = useForceRebalance();
   const [thesisModal, setThesisModal] = useState<{ ticker: string; thesis: string | null } | null>(null);
+  const [confirmRebalance, setConfirmRebalance] = useState(false);
 
   const totalUnrealized = useMemo(() => {
     if (!data?.positions) return 0;
@@ -1586,10 +1583,46 @@ function LivePositionsSection() {
             </Badge>
           )}
           {data && data.count > 0 && (
-            <span className={cn("ml-auto text-xs font-mono font-semibold", totalUnrealized >= 0 ? "text-green-400 text-glow-success" : "text-red-400 text-glow-danger")}>
+            <span className={cn("text-xs font-mono font-semibold", totalUnrealized >= 0 ? "text-green-400 text-glow-success" : "text-red-400 text-glow-danger")}>
               {totalUnrealized >= 0 ? "+" : ""}{formatCurrency(totalUnrealized)}
             </span>
           )}
+          <div className="ml-auto flex items-center gap-2">
+            {!confirmRebalance ? (
+              <button
+                onClick={() => setConfirmRebalance(true)}
+                disabled={isRebalancing || !data || data.count === 0}
+                className={cn(
+                  "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide px-3 py-1.5 rounded-lg border transition-all duration-200",
+                  isRebalancing
+                    ? "border-orange-500/30 bg-orange-500/10 text-orange-400 cursor-wait"
+                    : "border-orange-500/20 bg-orange-500/5 text-orange-400/70 hover:bg-orange-500/15 hover:text-orange-400 hover:border-orange-500/40"
+                )}
+              >
+                {isRebalancing ? (
+                  <><RefreshCw className="h-3 w-3 animate-spin" /> Rebalancing...</>
+                ) : (
+                  <><RefreshCw className="h-3 w-3" /> Force Rebalance</>
+                )}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-orange-400/80">Close all sellable positions &amp; re-enter?</span>
+                <button
+                  onClick={() => { rebalance(); setConfirmRebalance(false); }}
+                  className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors"
+                >
+                  Confirm
+                </button>
+                <button
+                  onClick={() => setConfirmRebalance(false)}
+                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-800 text-muted-foreground border border-white/10 hover:bg-slate-700 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
       <div className="overflow-x-auto">
@@ -2442,12 +2475,12 @@ export default function Dashboard() {
           <BestTradeHero />
         </motion.div>
 
-        {/* AI AGENTS: Trading Brain + Auditor side-by-side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+        {/* AI AGENTS: Trading Brain + Auditor side-by-side, equal height */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }} className="flex flex-col">
             <AIBrainSection />
           </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }} className="flex flex-col">
             <AuditorAgentSection />
           </motion.div>
         </div>

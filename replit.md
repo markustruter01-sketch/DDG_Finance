@@ -2,7 +2,9 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+pnpm workspace monorepo with two main products:
+1. **AI Quantitative Trading Platform** (Python/FastAPI) — autonomous trading system
+2. **Trading Dashboard** (React/Vite) — dark terminal-themed monitoring UI
 
 ## Trading Platform (Python/FastAPI)
 
@@ -14,137 +16,116 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **Brokerage**: Alpaca API (Paper Trading)
 - **Data Sources**: FRED API, Alpaca Market Data, NewsAPI
 - **LLM**: Groq (Llama 3.3 70B Versatile)
+- **Database**: SQLite trade journal with RAG feedback loop
 - **Validation**: Pydantic v2
+- **Scheduling**: APScheduler (3 jobs: morning analysis, intraday kill switch, evening post-mortem)
 
-### Phase Status
-- **Phase 1 — Data Ingestion**: COMPLETE
-  - `data/fred_client.py` — 10/10 FRED macro series (async, exponential backoff)
-  - `data/yfinance_client.py` — 22/22 tickers via Alpaca Market Data API (async)
-  - `data/news_client.py` — 5 category news feed via NewsAPI (async)
-  - `config/settings.py` — Pydantic BaseSettings with all API key config
-  - `main.py` — FastAPI stub with `/data/snapshot` test endpoint
-- **Phase 2 — Trade Journal & RAG Loop**: COMPLETE
-  - `analysis/trade_journal.py` — SQLite journal with slippage tracking (intended_price, actual_fill_price columns)
-  - `analysis/post_mortem.py` — Daily Alpaca reconciliation → auto-close W/L + slippage calculation
-  - `analysis/groq_client.py` — Groq API (llama-3.3-70b-versatile, free); user prompt includes live account state
-  - `analysis/feedback_injection.py` — Bidirectional RAG: 5 losses + 3 wins + slippage stats + buying power + held symbols injected into system prompt
-- **Phase 3 — LLM Analysis Cycle**: COMPLETE
-  - `analysis/schemas.py` — Pydantic models: AllocationSlot, AnalysisOutput (full validation)
-  - `portfolio/kelly.py` — Kelly Criterion: compute, batch-apply, normalise (half-Kelly + 20% cap)
-  - `portfolio/allocator.py` — Conviction threshold enforcement + SGOV replacement + Kelly recalculation
-  - `analysis/analyzer.py` — Full daily cycle: account state query → RAG → data fetch → Groq → validate → output
-  - Auto-retry: on Pydantic failure, exact error is injected into next Groq call (self-correcting)
-- **Phase 4 — Execution & Risk**: COMPLETE
-  - `core/market_clock.py` — Alpaca clock API; is_market_open(), market_open_today(), get_next_open()
-  - `execution/broker.py` — Full Alpaca wrapper: place_order, close_position, get_account/positions/orders, cancel/close all
-  - `execution/kill_switch.py` — Daily drawdown guard: reset(), check(), is_tripped(); auto-liquidates at 5% drawdown
-  - `execution/executor.py` — Allocation → orders: close stale, size by Kelly×equity, skip SGOV/zero, log to journal with intended_price + actual_fill_price (polled from Alpaca)
-- **Phase 5 — Scheduler & API**: COMPLETE
-  - `core/pipeline.py` — End-to-end pipeline: kill switch guard → market guard → analysis → execution → post-mortem
-  - `core/scheduler.py` — APScheduler: 09:31 ET analysis, 30-min intraday kill switch check, 16:10 ET post-mortem
-  - `main.py` — Full FastAPI: /health /status /portfolio /journal /journal/losses /run /run/postmortem /kill /kill/reset /allocation/latest
-  - Workflow: "Trading Platform API" on port 8000 (uvicorn --reload)
+### Architecture
+- `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
+- `config/settings.py` — Pydantic BaseSettings
+- `data/` — FRED, Alpaca Market Data, NewsAPI async clients
+- `analysis/` — Trade journal (SQLite), post-mortem reconciliation, Groq LLM client, RAG feedback injection, analyzer pipeline
+- `portfolio/` — Kelly Criterion sizing, allocation logic
+- `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
+- `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
 
-### Run
-```bash
-cd trading-platform && uvicorn main:app --reload
-```
+### Key Features
+- **10 Kelly-Criterion-sized slots** across Crypto, Commodity ETFs, Currency ETFs, Wildcard categories
+- **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt
+- **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails
+- **Slippage tracking** — `intended_price` + `actual_fill_price` columns; post-mortem uses actual fill price as entry
+- **Auto-trading toggle** — scheduler jobs start PAUSED; toggle resumes/pauses all 3 jobs; state tracked in module var
+- **Kill switch** — 5% daily drawdown auto-liquidation
 
-### Required Secrets
+### API Endpoints (all prefixed with API_PREFIX)
+- `GET /health` — System health
+- `GET /status` — Full system status with scheduler info
+- `GET /portfolio` — Alpaca account summary
+- `GET /positions/live` — Live open positions from Alpaca
+- `GET /allocation/latest` — Most recent LLM allocation
+- `GET /performance` — Equity curve data
+- `GET /performance/summary` — P&L summary stats
+- `GET /journal` — All trade journal entries
+- `GET /journal/wins` — Top N winning trades
+- `GET /journal/losses` — Top N losing trades
+- `GET /ai/commentary` — Latest LLM analysis commentary
+- `POST /run` — Trigger analysis cycle
+- `POST /run/postmortem` — Trigger post-mortem
+- `POST /kill` — Trip kill switch
+- `POST /kill/reset` — Reset kill switch
+- `GET /auto-trading` — Get auto-trading state
+- `POST /auto-trading` — Toggle auto-trading
+
+## Dashboard (React/Vite)
+
+Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
+
+### Stack
+- **Framework**: React 19 + Vite
+- **Styling**: Tailwind CSS v4
+- **State**: TanStack React Query
+- **Charts**: Recharts
+
+### Key Components
+- `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle (power button with green glow + pulsing dot)
+- `StatusBar.tsx` — ONLINE/OFFLINE status, market state, kill switch state
+- `PortfolioCards.tsx` — Equity, cash, buying power
+- `AIBrainSection.tsx` — LLM thoughts/commentary display
+- `LivePositionsTable.tsx` — Real-time positions with unrealised P&L
+- Performance analytics, journal tables, slippage display
+
+### API Communication
+- **Dev**: Replit router sends `/trading-api/*` to port 8000 (artifact multi-service routing)
+- **Production**: Same path-based routing via artifact.toml services config
+- `API_PREFIX=/trading-api` set in artifact.toml `[services.env]` for both dev and prod
+
+## Artifact Configuration
+
+The dashboard artifact (`artifacts/dashboard/.replit-artifact/artifact.toml`) defines two services:
+1. **web** — Vite dev server (port 23183), serves the React dashboard at `/`
+2. **trading-api** — Python uvicorn (port 8000), serves the FastAPI API at `/trading-api`
+
+Production config:
+- Web: static build from `artifacts/dashboard/dist/public` with SPA rewrite `/* → /index.html`
+- API: uvicorn with 1 worker, `API_PREFIX=/trading-api`, health check at `/trading-api/health`
+
+**IMPORTANT**: Deployment target must be `vm` (Reserved VM) for 24/7 scheduler operation. The scheduler, kill switch state, and SQLite DB require a persistent process.
+
+## Required Secrets
 - `FRED_API_KEY` — fred.stlouisfed.org
 - `NEWS_API_KEY` — newsapi.org
 - `ALPACA_API_KEY` — Alpaca paper trading key ID
 - `ALPACA_SECRET_KEY` — Alpaca paper trading secret
 - `GROQ_API_KEY` — Groq free API (llama-3.3-70b-versatile)
-- `ANTHROPIC_API_KEY` — Claude API (optional, future use)
 
-## Stack
+## Monorepo Structure
+
+```text
+├── trading-platform/          # Python FastAPI trading API
+│   ├── main.py                # FastAPI app + router
+│   ├── config/                # Settings
+│   ├── data/                  # FRED, Alpaca, News clients
+│   ├── analysis/              # Journal, post-mortem, Groq, RAG, analyzer
+│   ├── portfolio/             # Kelly criterion, allocator
+│   ├── execution/             # Broker, kill switch, executor
+│   └── core/                  # Scheduler, pipeline, market clock
+├── artifacts/
+│   ├── dashboard/             # React dashboard (Vite)
+│   │   ├── src/
+│   │   │   ├── components/    # UI components
+│   │   │   ├── hooks/         # React Query hooks (use-trading.ts)
+│   │   │   └── lib/           # Utils, API client
+│   │   └── .replit-artifact/  # artifact.toml (2 services)
+│   ├── api-server/            # Express API (unused, legacy)
+│   └── mockup-sandbox/        # Canvas preview server
+├── lib/                       # Shared TS libraries
+├── pnpm-workspace.yaml
+└── .replit
+```
+
+## Stack (Monorepo)
 
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-
-## Structure
-
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
-```
-
-## TypeScript & Composite Projects
-
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
-
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
-
-## Root Scripts
-
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
-
-## Packages
-
-### `artifacts/api-server` (`@workspace/api-server`)
-
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
-
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.

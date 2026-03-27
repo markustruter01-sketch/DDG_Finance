@@ -66,13 +66,6 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-    proxy: {
-      "/trading-api": {
-        target: "http://localhost:8000",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/trading-api/, ""),
-      },
-    },
   },
   preview: {
     port,

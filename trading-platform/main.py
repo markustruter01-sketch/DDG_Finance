@@ -21,11 +21,12 @@ Endpoints:
 """
 
 import asyncio
+import os
 import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter
 from pydantic import BaseModel
 from loguru import logger
 
@@ -91,6 +92,8 @@ async def lifespan(app: FastAPI):
 
 # ── App ────────────────────────────────────────────────────────────────────────
 
+API_PREFIX = os.getenv("API_PREFIX", "")
+
 app = FastAPI(
     title="AI Quantitative Trading Platform",
     description=(
@@ -102,6 +105,8 @@ app = FastAPI(
     version="1.1.0",
     lifespan=lifespan,
 )
+
+router = APIRouter(prefix=API_PREFIX)
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
@@ -117,7 +122,7 @@ class KillResetRequest(BaseModel):
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@app.get("/health", tags=["System"])
+@router.get("/health", tags=["System"])
 async def health() -> dict:
     """
     Liveness probe + structured system health.
@@ -158,7 +163,7 @@ async def health() -> dict:
     }
 
 
-@app.get("/status", tags=["System"])
+@router.get("/status", tags=["System"])
 async def status() -> dict:
     """
     Full platform status snapshot:
@@ -177,7 +182,7 @@ async def status() -> dict:
     }
 
 
-@app.get("/portfolio", tags=["Portfolio"])
+@router.get("/portfolio", tags=["Portfolio"])
 async def portfolio() -> dict:
     """Live Alpaca paper account — equity, cash, all open positions and orders."""
     try:
@@ -193,7 +198,7 @@ async def portfolio() -> dict:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
 
 
-@app.get("/positions/live", tags=["Portfolio"])
+@router.get("/positions/live", tags=["Portfolio"])
 async def live_positions() -> dict:
     """
     Live Alpaca positions enriched with allocation plan entry conditions.
@@ -240,7 +245,7 @@ async def live_positions() -> dict:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
 
 
-@app.get("/journal", tags=["Journal"])
+@router.get("/journal", tags=["Journal"])
 async def journal() -> dict:
     """Trade journal summary + full trade history."""
     summary = get_journal_summary()
@@ -248,7 +253,7 @@ async def journal() -> dict:
     return {"summary": summary, "trades": trades}
 
 
-@app.get("/journal/losses", tags=["Journal"])
+@router.get("/journal/losses", tags=["Journal"])
 async def journal_losses(n: int = 5) -> dict:
     """
     The N most recent losing trades — what the RAG loop feeds into the
@@ -258,7 +263,7 @@ async def journal_losses(n: int = 5) -> dict:
     return {"count": len(losses), "losses": losses}
 
 
-@app.get("/journal/wins", tags=["Journal"])
+@router.get("/journal/wins", tags=["Journal"])
 async def journal_wins(n: int = 5) -> dict:
     """
     The N most recent winning trades — what the RAG loop feeds into the
@@ -268,7 +273,7 @@ async def journal_wins(n: int = 5) -> dict:
     return {"count": len(wins), "wins": wins}
 
 
-@app.get("/performance", tags=["Performance"])
+@router.get("/performance", tags=["Performance"])
 async def performance_history(limit: int = 90) -> dict:
     """
     Full daily performance snapshot history (up to 90 days by default).
@@ -278,7 +283,7 @@ async def performance_history(limit: int = 90) -> dict:
     return {"count": len(snapshots), "snapshots": snapshots}
 
 
-@app.get("/performance/summary", tags=["Performance"])
+@router.get("/performance/summary", tags=["Performance"])
 async def performance_summary_endpoint() -> dict:
     """
     Aggregate performance statistics across all recorded snapshots.
@@ -288,7 +293,7 @@ async def performance_summary_endpoint() -> dict:
     return summary
 
 
-@app.post("/run", tags=["Control"])
+@router.post("/run", tags=["Control"])
 async def manual_run(request: RunRequest, background_tasks: BackgroundTasks) -> dict:
     """
     Manually trigger a full analysis + execution pipeline cycle.
@@ -307,14 +312,14 @@ async def manual_run(request: RunRequest, background_tasks: BackgroundTasks) -> 
     return result
 
 
-@app.post("/run/postmortem", tags=["Control"])
+@router.post("/run/postmortem", tags=["Control"])
 async def manual_postmortem() -> dict:
     """Manually trigger the post-mortem P&L reconciliation."""
     logger.info("Manual post-mortem requested")
     return await run_postmortem()
 
 
-@app.post("/kill", tags=["Risk"])
+@router.post("/kill", tags=["Risk"])
 async def trip_kill_switch() -> dict:
     """
     Manually trip the kill switch — immediately liquidates all positions
@@ -325,7 +330,7 @@ async def trip_kill_switch() -> dict:
     return {"status": "tripped", "kill_switch": ks_get_state()}
 
 
-@app.post("/kill/reset", tags=["Risk"])
+@router.post("/kill/reset", tags=["Risk"])
 async def reset_kill_switch(request: KillResetRequest) -> dict:
     """
     Reset the kill switch for a new trading day.
@@ -340,7 +345,7 @@ class AutoTradingRequest(BaseModel):
     enabled: bool
 
 
-@app.get("/auto-trading", tags=["Control"])
+@router.get("/auto-trading", tags=["Control"])
 async def auto_trading_status() -> dict:
     """Return whether the automatic trading system is currently enabled."""
     return {
@@ -349,7 +354,7 @@ async def auto_trading_status() -> dict:
     }
 
 
-@app.post("/auto-trading", tags=["Control"])
+@router.post("/auto-trading", tags=["Control"])
 async def toggle_auto_trading(request: AutoTradingRequest) -> dict:
     """Enable or disable the automatic trading scheduler."""
     logger.info(f"Auto-trading toggle requested: enabled={request.enabled}")
@@ -357,7 +362,7 @@ async def toggle_auto_trading(request: AutoTradingRequest) -> dict:
     return result
 
 
-@app.get("/allocation/latest", tags=["Portfolio"])
+@router.get("/allocation/latest", tags=["Portfolio"])
 async def latest_allocation() -> dict:
     """Return the most recent LLM allocation plan (from last pipeline run)."""
     last = get_last_run()
@@ -373,7 +378,7 @@ async def latest_allocation() -> dict:
 
 # ── AI Brain Commentary ────────────────────────────────────────────────────────
 
-@app.get("/ai/commentary", tags=["AI"])
+@router.get("/ai/commentary", tags=["AI"])
 async def ai_commentary(force: bool = False) -> dict:
     """
     Generate a natural-language 'AI brain' commentary summarising:
@@ -486,7 +491,7 @@ Current open positions:
 
 # ── Phase 1 compatibility endpoint ────────────────────────────────────────────
 
-@app.get("/data/snapshot", tags=["Debug"])
+@router.get("/data/snapshot", tags=["Debug"])
 async def data_snapshot() -> dict:
     """
     Debug endpoint: fetches macro, market, and news data concurrently.
@@ -514,3 +519,6 @@ async def data_snapshot() -> dict:
         "news_headlines_count": len(news_data["all_headlines"]),
         "news_sample": news_data["all_headlines"][:5],
     }
+
+
+app.include_router(router)

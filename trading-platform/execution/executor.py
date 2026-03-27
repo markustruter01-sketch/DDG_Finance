@@ -446,6 +446,16 @@ def _execute_slot(
             f"remaining cash: ${remaining_cash:,.2f}"
         )
 
+        try:
+            from notifications.discord import notify_trade_placed
+            notify_trade_placed(
+                ticker=ticker, side="buy", notional=notional_usd,
+                conviction=slot.conviction_score, thesis=slot.thesis,
+                overheated=overheated,
+            )
+        except Exception:
+            pass
+
         if overheated and actual_fill_price and actual_fill_price > 0:
             _place_ratchet_stop(ticker, notional_usd, actual_fill_price, results, dry_run)
 

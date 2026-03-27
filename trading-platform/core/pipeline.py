@@ -109,6 +109,25 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
+    try:
+        from data.economic_calendar import is_blackout_active
+        blackout = is_blackout_active()
+        if blackout.get("active") and not force:
+            msg = f"Economic blackout active: {blackout.get('event', 'unknown')} — pipeline skipped"
+            logger.warning(msg)
+            result["status"] = "blackout_active"
+            result["errors"].append(msg)
+            result["blackout"] = blackout
+            _update_state(result, started)
+            try:
+                from notifications.discord import notify_blackout_active
+                notify_blackout_active(blackout.get("event", ""), blackout.get("window_minutes", 30))
+            except Exception:
+                pass
+            return result
+    except Exception as exc:
+        logger.warning(f"Pipeline | Blackout check failed: {exc} — continuing")
+
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
     try:
         logger.info("Pipeline | Step 1: Running analysis cycle...")

@@ -237,6 +237,42 @@ def _get_stop_sqlite(symbol: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def load_all_stops() -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if is_pg_available():
+            with get_conn() as conn:
+                _ensure_table_pg(conn)
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT symbol, stop_price, fill_price, atr, last_updated "
+                        "FROM ratchet_stops"
+                    )
+                    for row in cur.fetchall():
+                        result[row[0]] = {
+                            "symbol": row[0], "stop_price": row[1],
+                            "fill_price": row[2], "atr": row[3],
+                            "last_updated": str(row[4]),
+                        }
+            return result
+    except Exception as exc:
+        logger.warning(f"Ratchet | PG load_all failed: {exc}")
+    try:
+        import sqlite3
+        from pathlib import Path
+        db_path = Path(__file__).parent.parent / "trade_journal.db"
+        if db_path.exists():
+            _ensure_table_sqlite(db_path)
+            with sqlite3.connect(db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                for row in conn.execute("SELECT symbol, stop_price, fill_price, atr, last_updated FROM ratchet_stops"):
+                    result[row["symbol"]] = dict(row)
+    except Exception:
+        pass
+    return result
+
+
 def delete_stop(symbol: str) -> None:
     """Remove ratchet stop when a position is closed."""
     try:

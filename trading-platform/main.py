@@ -57,6 +57,11 @@ from data.cache import get_cache_stats
 from analysis.auditor import run_full_audit, get_last_audit
 from analysis.schemas import is_crypto_pair
 from execution.ratchet_stop import delete_stop
+from data.sentiment import get_sentiment, get_sentiment_prompt_block
+from data.onchain import get_onchain_data, get_onchain_prompt_block
+from data.economic_calendar import is_blackout_active, get_upcoming_events
+from analysis.attribution import compute_attribution
+from analysis.backtester import run_backtest
 
 EXPECTED_JOB_COUNT = 4
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
@@ -198,6 +203,7 @@ async def status() -> dict:
         "cycle_interval": last_run.get("cycle_interval", "15min"),
         "trading_mode":   trading_mode,
         "data_cache":     get_cache_stats(),
+        "blackout":       is_blackout_active(),
     }
 
 
@@ -215,6 +221,77 @@ async def portfolio() -> dict:
         }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
+
+
+def _compute_position_health(
+    pos: dict, alloc: dict, by_ticker_data: dict, saved_stops: dict,
+) -> dict:
+    symbol = pos.get("symbol", "")
+    entry_price = pos.get("avg_entry_price", 0) or 0
+    current_price = pos.get("current_price", 0) or 0
+    pnl_pct = pos.get("unrealized_plpc", 0) or 0
+
+    score = 50.0
+
+    ticker_data = by_ticker_data.get(symbol, by_ticker_data.get(symbol.replace("USD", "/USD"), {}))
+    mom_3 = ticker_data.get("momentum_3mo", "insufficient_data")
+    mom_6 = ticker_data.get("momentum_6mo", "insufficient_data")
+    if mom_3 == "positive":
+        score += 12
+    elif mom_3 == "negative":
+        score -= 12
+    if mom_6 == "positive":
+        score += 8
+    elif mom_6 == "negative":
+        score -= 8
+
+    conviction = alloc.get("conviction_score")
+    if conviction is not None:
+        if conviction >= 0.90:
+            score += 10
+        elif conviction >= 0.80:
+            score += 5
+        elif conviction < 0.75:
+            score -= 5
+
+    if pnl_pct > 0.05:
+        score += 10
+    elif pnl_pct > 0.02:
+        score += 5
+    elif pnl_pct < -0.05:
+        score -= 15
+    elif pnl_pct < -0.02:
+        score -= 8
+
+    stop_data = saved_stops.get(symbol)
+    if stop_data and current_price > 0:
+        stop_price = stop_data.get("stop_price", 0)
+        distance_pct = (current_price - stop_price) / current_price if current_price > 0 else 0
+        if distance_pct > 0.10:
+            score += 5
+        elif distance_pct < 0.02:
+            score -= 10
+
+    score = max(0, min(100, score))
+    value = int(score)
+
+    if value >= 80:
+        label = "Excellent"
+        color = "green"
+    elif value >= 60:
+        label = "Good"
+        color = "emerald"
+    elif value >= 40:
+        label = "Fair"
+        color = "amber"
+    elif value >= 20:
+        label = "Poor"
+        color = "orange"
+    else:
+        label = "Critical"
+        color = "red"
+
+    return {"score": value, "label": label, "color": color}
 
 
 @router.get("/positions/live", tags=["Portfolio"])
@@ -240,6 +317,12 @@ async def live_positions() -> dict:
                 if normalized != ticker:
                     alloc_by_ticker[normalized] = slot
 
+        from data.yfinance_client import get_cached_market_data
+        from execution.ratchet_stop import load_all_stops
+        market_data = get_cached_market_data()
+        by_ticker_data = market_data.get("by_ticker", {}) if market_data else {}
+        saved_stops = load_all_stops()
+
         enriched = []
         for pos in positions:
             symbol = pos.get("symbol", "")
@@ -247,6 +330,10 @@ async def live_positions() -> dict:
             entry_price = pos.get("avg_entry_price", 0) or 0
             stop_loss_pct   = alloc.get("stop_loss_pct")
             take_profit_pct = alloc.get("take_profit_pct")
+
+            health_score = _compute_position_health(
+                pos, alloc, by_ticker_data, saved_stops
+            )
 
             enriched.append({
                 **pos,
@@ -260,6 +347,7 @@ async def live_positions() -> dict:
                 "take_profit_price": round(entry_price * (1 + take_profit_pct), 4)
                                      if entry_price and take_profit_pct is not None else None,
                 "original_thesis":  alloc.get("thesis"),
+                "health_score":     health_score,
             })
 
         return {"count": len(enriched), "positions": enriched}
@@ -647,6 +735,176 @@ async def trigger_audit(background_tasks: BackgroundTasks) -> dict:
         "status": "audit_started",
         "message": "Audit running in background — check GET /auditor/report in ~30 seconds",
     }
+
+
+@router.get("/correlation", tags=["Analytics"])
+async def correlation_matrix() -> dict:
+    from data.yfinance_client import get_cached_market_data
+    market_data = get_cached_market_data()
+    if not market_data:
+        return {"error": "No market data cached yet", "matrix": {}, "tickers": []}
+
+    by_ticker = market_data.get("by_ticker", {})
+    positions = []
+    try:
+        positions = get_positions()
+    except Exception:
+        pass
+
+    held_symbols = [p["symbol"] for p in positions] if positions else []
+    tickers_to_compare = held_symbols if len(held_symbols) >= 2 else list(by_ticker.keys())[:10]
+
+    returns_map: dict[str, list[float]] = {}
+    for ticker in tickers_to_compare:
+        lookup = ticker.replace("/", "")
+        data = by_ticker.get(ticker, by_ticker.get(lookup, {}))
+        closes = data.get("closes")
+        if closes and len(closes) >= 20:
+            rets = [(closes[i] / closes[i-1] - 1) for i in range(1, len(closes))]
+            returns_map[ticker] = rets[-30:]
+
+    valid_tickers = list(returns_map.keys())
+    if len(valid_tickers) < 2:
+        return {"error": "Need at least 2 tickers with data", "matrix": {}, "tickers": valid_tickers}
+
+    min_len = min(len(returns_map[t]) for t in valid_tickers)
+    trimmed = {t: returns_map[t][-min_len:] for t in valid_tickers}
+
+    import numpy as np
+    matrix: dict[str, dict[str, float]] = {}
+    warnings_list: list[dict] = []
+    for i, t1 in enumerate(valid_tickers):
+        matrix[t1] = {}
+        for j, t2 in enumerate(valid_tickers):
+            if i == j:
+                matrix[t1][t2] = 1.0
+            else:
+                corr = float(np.corrcoef(trimmed[t1], trimmed[t2])[0, 1])
+                matrix[t1][t2] = round(corr, 3)
+                if abs(corr) > 0.85 and i < j:
+                    warnings_list.append({
+                        "pair": [t1, t2],
+                        "correlation": round(corr, 3),
+                        "risk": "HIGH" if abs(corr) > 0.95 else "ELEVATED",
+                    })
+
+    return {
+        "tickers": valid_tickers,
+        "matrix": matrix,
+        "warnings": warnings_list,
+        "held_positions": held_symbols,
+    }
+
+
+@router.get("/calendar", tags=["Analytics"])
+async def economic_calendar(days_ahead: int = 7) -> dict:
+    blackout = is_blackout_active()
+    upcoming = get_upcoming_events(days_ahead=days_ahead)
+    return {
+        "blackout": blackout,
+        "upcoming_events": upcoming,
+        "event_count": len(upcoming),
+    }
+
+
+@router.get("/sentiment", tags=["Analytics"])
+async def sentiment_endpoint(force: bool = False) -> dict:
+    return get_sentiment(force=force)
+
+
+@router.get("/onchain", tags=["Analytics"])
+async def onchain_endpoint(force: bool = False) -> dict:
+    return get_onchain_data(force=force)
+
+
+@router.get("/performance/attribution", tags=["Performance"])
+async def performance_attribution() -> dict:
+    return compute_attribution()
+
+
+@router.get("/performance/risk-metrics", tags=["Performance"])
+async def risk_metrics() -> dict:
+    snapshots = get_performance_snapshots(limit=90)
+    if not snapshots:
+        return {
+            "sharpe_ratio": None,
+            "sortino_ratio": None,
+            "max_drawdown_pct": None,
+            "calmar_ratio": None,
+            "volatility_annual_pct": None,
+            "data_points": 0,
+        }
+
+    import numpy as np
+    daily_returns = [s["daily_pnl_pct"] / 100.0 for s in snapshots if s.get("daily_pnl_pct") is not None]
+
+    if len(daily_returns) < 2:
+        return {
+            "sharpe_ratio": None, "sortino_ratio": None,
+            "max_drawdown_pct": None, "calmar_ratio": None,
+            "volatility_annual_pct": None, "data_points": len(daily_returns),
+        }
+
+    arr = np.array(daily_returns)
+    mean_ret = float(np.mean(arr))
+    std_ret = float(np.std(arr, ddof=1))
+    rf_daily = 0.05 / 252
+
+    sharpe = float((mean_ret - rf_daily) / std_ret * np.sqrt(252)) if std_ret > 0 else None
+
+    downside = arr[arr < 0]
+    downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
+    sortino = float((mean_ret - rf_daily) / downside_std * np.sqrt(252)) if downside_std and downside_std > 0 else None
+
+    equities = [s["equity"] for s in snapshots if s.get("equity")]
+    max_dd = 0.0
+    peak = equities[0] if equities else 0
+    for eq in equities:
+        if eq > peak:
+            peak = eq
+        dd = (peak - eq) / peak * 100 if peak > 0 else 0
+        if dd > max_dd:
+            max_dd = dd
+
+    ann_return = mean_ret * 252 * 100
+    calmar = round(ann_return / max_dd, 3) if max_dd > 0 else None
+    vol_annual = round(std_ret * np.sqrt(252) * 100, 2)
+
+    return {
+        "sharpe_ratio": round(sharpe, 3) if sharpe is not None else None,
+        "sortino_ratio": round(sortino, 3) if sortino is not None else None,
+        "max_drawdown_pct": round(max_dd, 2),
+        "calmar_ratio": calmar,
+        "volatility_annual_pct": vol_annual,
+        "annualised_return_pct": round(ann_return, 2),
+        "data_points": len(daily_returns),
+        "period_days": len(snapshots),
+    }
+
+
+@router.post("/backtest", tags=["Analytics"])
+async def run_backtest_endpoint(lookback_days: int = 90) -> dict:
+    from data.yfinance_client import get_cached_market_data
+    market_data = get_cached_market_data()
+    if not market_data:
+        raise HTTPException(status_code=503, detail="No market data cached yet — run a pipeline cycle first")
+
+    bars_by_ticker: dict[str, list[dict]] = {}
+    for ticker, data in market_data.get("by_ticker", {}).items():
+        if "bars" in data:
+            bars_by_ticker[ticker] = data["bars"]
+
+    try:
+        acct = get_account()
+        initial_eq = acct["equity"]
+    except Exception:
+        initial_eq = 100000.0
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, lambda: run_backtest(bars_by_ticker, initial_equity=initial_eq, lookback_days=lookback_days)
+    )
+    return result
 
 
 @router.get("/data/snapshot", tags=["Debug"])

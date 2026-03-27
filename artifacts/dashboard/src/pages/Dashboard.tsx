@@ -7,6 +7,12 @@ import {
   useForceRebalance,
   type AllocationPlan, type AuditFinding,
 } from "@/hooks/use-trading";
+import { CorrelationMatrix } from "@/components/CorrelationMatrix";
+import { SentimentGauges } from "@/components/SentimentGauges";
+import { BlackoutBanner, EconomicCalendarPanel } from "@/components/EconomicCalendarBanner";
+import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
+import { AttributionPanel } from "@/components/AttributionPanel";
+import { BacktesterPanel } from "@/components/BacktesterPanel";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
@@ -1638,12 +1644,13 @@ function LivePositionsSection() {
               <th className="px-5 py-3 font-semibold text-right">Stop Loss</th>
               <th className="px-5 py-3 font-semibold text-right">Take Profit</th>
               <th className="px-5 py-3 font-semibold text-center">Conv.</th>
+              <th className="px-5 py-3 font-semibold text-center">Health</th>
               <th className="px-5 py-3 font-semibold max-w-[180px]">Thesis</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {isLoading && (
-              <tr><td colSpan={10} className="px-5 py-6 text-center text-muted-foreground italic text-xs">Loading positions...</td></tr>
+              <tr><td colSpan={11} className="px-5 py-6 text-center text-muted-foreground italic text-xs">Loading positions...</td></tr>
             )}
             {!isLoading && data?.positions.map((pos, i) => {
               const isUp = pos.unrealized_pl >= 0;
@@ -1700,6 +1707,22 @@ function LivePositionsSection() {
                       </span>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
+                  <td className="px-5 py-3.5 text-center">
+                    {pos.health_score ? (() => {
+                      const colorMap: Record<string, string> = { green: "#22c55e", emerald: "#10b981", amber: "#f59e0b", orange: "#f97316", red: "#ef4444" };
+                      const cssColor = colorMap[pos.health_score.color] || pos.health_score.color;
+                      return (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-xs font-mono font-bold" style={{ color: cssColor }}>
+                            {pos.health_score.score}
+                          </span>
+                          <span className="text-[9px]" style={{ color: cssColor }}>
+                            {pos.health_score.label}
+                          </span>
+                        </div>
+                      );
+                    })() : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
                   <td
                     className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate cursor-pointer hover:text-indigo-400 transition-colors"
                     title="Click to view full thesis"
@@ -1715,7 +1738,7 @@ function LivePositionsSection() {
             })}
             {!isLoading && (!data || data.positions.length === 0) && (
               <tr>
-                <td colSpan={10} className="px-5 py-8 text-center">
+                <td colSpan={11} className="px-5 py-8 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <motion.div
                       animate={{ opacity: [0.3, 0.6, 0.3] }}
@@ -2453,6 +2476,9 @@ export default function Dashboard() {
       <EquityEcho />
       <Header />
       <SystemStatusBanner />
+      <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+        <BlackoutBanner />
+      </div>
       <ActivityTicker />
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -2493,6 +2519,32 @@ export default function Dashboard() {
         {/* PERFORMANCE */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
           <PerformanceSection />
+        </motion.div>
+
+        {/* RISK METRICS + SENTIMENT */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+            <RiskMetricsPanel />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
+            <SentimentGauges />
+          </motion.div>
+        </div>
+
+        {/* ATTRIBUTION + CORRELATION */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
+            <AttributionPanel />
+          </motion.div>
+          <motion.div className="space-y-6" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+            <CorrelationMatrix />
+            <EconomicCalendarPanel />
+          </motion.div>
+        </div>
+
+        {/* BACKTESTER */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <BacktesterPanel />
         </motion.div>
 
         {/* ALLOCATION + JOURNAL | LEARNING + CONTROLS */}

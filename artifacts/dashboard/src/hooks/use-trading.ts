@@ -50,6 +50,12 @@ export interface PortfolioData {
   open_orders: Array<any>;
 }
 
+export interface PositionHealth {
+  score: number;
+  label: string;
+  color: string;
+}
+
 export interface LivePosition {
   symbol: string;
   qty: number;
@@ -66,6 +72,7 @@ export interface LivePosition {
   stop_loss_price: number | null;
   take_profit_price: number | null;
   original_thesis: string | null;
+  health_score: PositionHealth | null;
 }
 
 export interface LivePositionsData {
@@ -381,5 +388,207 @@ export function useForceRebalance() {
   return useMutation({
     mutationFn: async () => (await api.post("/rebalance")).data,
     onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+// --- Correlation Matrix ---
+
+export interface CorrelationData {
+  tickers: string[];
+  matrix: Record<string, Record<string, number>>;
+  warnings: Array<{ pair: string[]; correlation: number; risk: string }>;
+  held_positions: string[];
+  error?: string;
+}
+
+export function useCorrelation() {
+  return useQuery<CorrelationData>({
+    queryKey: ["/correlation"],
+    queryFn: async () => (await api.get("/correlation")).data,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// --- Sentiment ---
+
+export interface SentimentIndex {
+  value: number | null;
+  label: string;
+  source?: string;
+  error?: string;
+  components?: Record<string, any>;
+}
+
+export interface SentimentData {
+  crypto_fear_greed: SentimentIndex;
+  market_fear_greed: SentimentIndex;
+  cached: boolean;
+  cache_age_seconds: number;
+}
+
+export function useSentiment() {
+  return useQuery<SentimentData>({
+    queryKey: ["/sentiment"],
+    queryFn: async () => (await api.get("/sentiment")).data,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+// --- Economic Calendar ---
+
+export interface BlackoutState {
+  active: boolean;
+  event?: string;
+  event_time_et?: string;
+  window_minutes?: number;
+  message?: string;
+}
+
+export interface CalendarEvent {
+  name: string;
+  date: string;
+  time_et: string;
+  days_away: number;
+}
+
+export interface CalendarData {
+  blackout: BlackoutState;
+  upcoming_events: CalendarEvent[];
+  event_count: number;
+}
+
+export function useEconomicCalendar() {
+  return useQuery<CalendarData>({
+    queryKey: ["/calendar"],
+    queryFn: async () => (await api.get("/calendar")).data,
+    refetchInterval: 60000,
+  });
+}
+
+// --- Performance Attribution ---
+
+export interface AttributionBucket {
+  count: number;
+  total_pnl_pct: number;
+  avg_pnl_pct: number;
+  win_rate: number;
+}
+
+export interface AttributionData {
+  total_trades: number;
+  closed_trades: number;
+  regime_attribution: Record<string, AttributionBucket>;
+  asset_class_attribution: Record<string, AttributionBucket>;
+  conviction_attribution: Record<string, AttributionBucket>;
+  timing_quality: {
+    trades_with_fill_data: number;
+    avg_slippage_pct: number | null;
+    max_slippage_pct: number | null;
+    worst_fills: Array<{ ticker: string; slippage_pct: number; date: string }>;
+  };
+  stop_quality: {
+    stop_triggered_count: number;
+    stop_avg_pnl_pct: number | null;
+    avg_loss_when_stopped: number | null;
+  };
+  overall: {
+    total_pnl_pct: number;
+    avg_pnl_pct: number;
+    win_rate: number;
+    wins: number;
+    losses: number;
+  };
+}
+
+export function useAttribution() {
+  return useQuery<AttributionData>({
+    queryKey: ["/performance/attribution"],
+    queryFn: async () => (await api.get("/performance/attribution")).data,
+    refetchInterval: 120000,
+  });
+}
+
+// --- Risk Metrics ---
+
+export interface RiskMetrics {
+  sharpe_ratio: number | null;
+  sortino_ratio: number | null;
+  max_drawdown_pct: number | null;
+  calmar_ratio: number | null;
+  volatility_annual_pct: number | null;
+  annualised_return_pct: number | null;
+  data_points: number;
+  period_days: number;
+}
+
+export function useRiskMetrics() {
+  return useQuery<RiskMetrics>({
+    queryKey: ["/performance/risk-metrics"],
+    queryFn: async () => (await api.get("/performance/risk-metrics")).data,
+    refetchInterval: 120000,
+  });
+}
+
+// --- Backtest ---
+
+export interface BacktestResult {
+  initial_equity: number;
+  final_equity: number;
+  total_return_pct: number;
+  max_drawdown_pct: number;
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  avg_win_pct: number;
+  avg_loss_pct: number;
+  equity_curve: Array<{ date: string; equity: number; positions_held: number }>;
+  trades: Array<{
+    ticker: string;
+    entry_date: string;
+    exit_date: string;
+    entry_price: number;
+    exit_price: number;
+    pnl_pct: number;
+    reason: string;
+  }>;
+  error?: string;
+}
+
+export function useRunBacktest() {
+  return useMutation<BacktestResult, Error, number>({
+    mutationFn: async (lookback_days: number = 90) =>
+      (await api.post(`/backtest?lookback_days=${lookback_days}`)).data,
+  });
+}
+
+// --- On-Chain Data ---
+
+export interface OnChainData {
+  hashrate: { hashrate_gh_s: number } | null;
+  mempool: { mempool_tx_count: number; mempool_vsize_bytes: number } | null;
+  fee_estimates: {
+    fastest_fee_sat_vb: number;
+    half_hour_fee_sat_vb: number;
+    hour_fee_sat_vb: number;
+    economy_fee_sat_vb: number;
+  } | null;
+  supply: {
+    total_btc_mined: number;
+    supply_mined_pct: number;
+    remaining_btc: number;
+  } | null;
+  cached: boolean;
+  cache_age_seconds: number;
+}
+
+export function useOnChainData() {
+  return useQuery<OnChainData>({
+    queryKey: ["/onchain"],
+    queryFn: async () => (await api.get("/onchain")).data,
+    refetchInterval: 120000,
+    retry: 1,
   });
 }

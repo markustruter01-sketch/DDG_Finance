@@ -1131,6 +1131,13 @@ def run_full_audit() -> dict[str, Any]:
 
     _last_audit.update(result)
     logger.success(f"Auditor | Full audit complete — {overall} ({len(failed)}/{len(findings)} failed)")
+
+    try:
+        from notifications.discord import notify_audit_complete
+        notify_audit_complete(overall, len(failed), len(alerts), recommendations)
+    except Exception:
+        pass
+
     return result
 
 

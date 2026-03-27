@@ -23,8 +23,9 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 ### Architecture
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
-- `data/` — FRED, Alpaca Market Data, NewsAPI async clients
-- `analysis/` — Trade journal, post-mortem reconciliation, Groq LLM client, RAG feedback injection, analyzer pipeline, **auditor agent** (HITL supervisor)
+- `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **auditor agent** (HITL), attribution breakdown, backtester
+- `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
 - `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
@@ -54,19 +55,26 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 
 ### API Endpoints (all prefixed with API_PREFIX)
 - `GET /health` — System health
-- `GET /status` — Full system status with scheduler info
+- `GET /status` — Full system status with scheduler info + blackout state
 - `GET /portfolio` — Alpaca account summary
-- `GET /positions/live` — Live open positions from Alpaca
+- `GET /positions/live` — Live open positions from Alpaca (includes composite health_score per position)
 - `GET /allocation/latest` — Most recent LLM allocation
 - `GET /performance` — Equity curve data
 - `GET /performance/summary` — P&L summary stats
+- `GET /performance/attribution` — P&L attribution by regime, asset class, conviction, timing quality
+- `GET /performance/risk-metrics` — Sharpe, Sortino, Max Drawdown, Calmar, Volatility, Annualised Return
+- `GET /correlation` — Pearson correlation matrix across held positions (30-day closes)
+- `GET /calendar` — Economic calendar with upcoming events + blackout window state
+- `GET /sentiment` — Crypto + Market Fear & Greed indices
+- `GET /onchain` — Bitcoin on-chain data (hashrate, mempool, fees, supply)
+- `POST /backtest` — Momentum strategy backtester simulation (lookback_days param)
 - `GET /journal` — All trade journal entries
 - `GET /journal/wins` — Top N winning trades
 - `GET /journal/losses` — Top N losing trades
 - `GET /ai/commentary` — Latest LLM analysis commentary
 - `GET /auditor/report` — Latest HITL audit report (JSON)
 - `POST /auditor/run` — Trigger manual audit cycle
-- `POST /rebalance` — Force close sellable positions + run fresh pipeline (respects market hours for stocks, crypto closes 24/7, JEPQ protected)
+- `POST /rebalance` — Force close sellable positions + run fresh pipeline
 - `POST /run` — Trigger analysis cycle
 - `POST /run/postmortem` — Trigger post-mortem
 - `POST /kill` — Trip kill switch
@@ -85,12 +93,15 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - **Charts**: Recharts
 
 ### Key Components
-- `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle (power button with green glow + pulsing dot)
-- `StatusBar.tsx` — ONLINE/OFFLINE status, market state, kill switch state
-- `PortfolioCards.tsx` — Equity, cash, buying power
-- `AIBrainSection.tsx` — LLM thoughts/commentary display
-- `LivePositionsTable.tsx` — Real-time positions with unrealised P&L
-- Performance analytics, journal tables, slippage display
+- `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle
+- `Dashboard.tsx` — Main dashboard page with all sections
+- `CorrelationMatrix.tsx` — Pearson correlation heatmap with high-correlation warnings
+- `SentimentGauges.tsx` — Dual SVG ring gauges for Crypto + Market Fear & Greed
+- `EconomicCalendarBanner.tsx` — Blackout banner (red alert) + upcoming events list
+- `RiskMetricsPanel.tsx` — Sharpe/Sortino/MaxDD/Calmar/Volatility/Return cards
+- `AttributionPanel.tsx` — P&L breakdown by regime, asset class, conviction with win-rate bars
+- `BacktesterPanel.tsx` — Momentum strategy backtester with equity curve chart and trade log
+- `ControlPanel.tsx` — Mission Control buttons (kill switch, analysis, post-mortem)
 
 ### API Communication
 - **Dev**: Replit router sends `/trading-api/*` to port 8000 (artifact multi-service routing)

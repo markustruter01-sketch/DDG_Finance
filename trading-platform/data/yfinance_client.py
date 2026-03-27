@@ -179,6 +179,7 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         "return_20d_pct":               ret_20d,
         "return_60d_pct":               ret_60d,
         "annualized_volatility_20d_pct": volatility_20d,
+        "volatility_20d_annualised_pct": volatility_20d,
         "ma_3mo":                       round(ma_3mo, 4) if ma_3mo else None,
         "ma_6mo":                       round(ma_6mo, 4) if ma_6mo else None,
         "momentum_3mo":                 momentum_3mo,
@@ -187,6 +188,8 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         "rsi_14d":                      rsi_14d,
         "is_overheated":                is_overheated,
         "data_points":                  len(closes),
+        "closes":                       closes,
+        "bars":                         bars,
     }
 
 

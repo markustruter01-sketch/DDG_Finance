@@ -295,4 +295,23 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
     if not losses and not wins:
         logger.info("Feedback injection | No trading history — using clean prompt")
 
+    try:
+        from data.sentiment import get_sentiment_prompt_block
+        sentiment_block = get_sentiment_prompt_block(crypto_only=crypto_only)
+        if sentiment_block.strip():
+            full_prompt += sentiment_block
+            logger.info("Feedback injection | Sentiment intelligence injected")
+    except Exception as exc:
+        logger.warning(f"Feedback injection | Sentiment injection failed: {exc}")
+
+    if crypto_only:
+        try:
+            from data.onchain import get_onchain_prompt_block
+            onchain_block = get_onchain_prompt_block()
+            if onchain_block.strip():
+                full_prompt += onchain_block
+                logger.info("Feedback injection | On-chain BTC intelligence injected")
+        except Exception as exc:
+            logger.warning(f"Feedback injection | On-chain injection failed: {exc}")
+
     return full_prompt

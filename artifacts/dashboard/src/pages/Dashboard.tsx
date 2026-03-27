@@ -1,8 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
-  usePerformanceSummary,
+  usePerformanceSummary, useAICommentary, useRefreshCommentary,
 } from "@/hooks/use-trading";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
@@ -11,6 +11,7 @@ import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
   LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
+  RefreshCw, Sparkles, Brain,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -177,6 +178,285 @@ function PortfolioMetrics() {
           <div className="text-xs text-muted-foreground mt-1">With margin included</div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ── AI Brain Section ──────────────────────────────────────────────────────────
+
+const NODES = [
+  { id: 0, cx: 52,  cy: 46 },
+  { id: 1, cx: 78,  cy: 35 },
+  { id: 2, cx: 104, cy: 46 },
+  { id: 3, cx: 38,  cy: 66 },
+  { id: 4, cx: 62,  cy: 61 },
+  { id: 5, cx: 98,  cy: 61 },
+  { id: 6, cx: 122, cy: 66 },
+  { id: 7, cx: 52,  cy: 83 },
+  { id: 8, cx: 108, cy: 83 },
+  { id: 9, cx: 80,  cy: 102 },
+];
+
+const EDGES: [number, number][] = [
+  [0,1],[1,2],[0,3],[0,4],[1,4],[1,5],[2,5],[2,6],
+  [3,4],[4,5],[5,6],[4,7],[5,8],[7,9],[8,9],[3,7],
+];
+
+const PULSE_DELAYS = [0, 0.3, 0.6, 0.9, 0.4, 0.7, 0.2, 0.8, 0.5, 1.0];
+
+function BrainSVG({ thinking }: { thinking: boolean }) {
+  const ringRadii = [78, 68, 58];
+  return (
+    <svg viewBox="0 0 160 130" className="w-full h-full drop-shadow-[0_0_24px_rgba(99,102,241,0.6)]">
+      <defs>
+        <radialGradient id="brainGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="rgba(129,140,248,0.18)" />
+          <stop offset="100%" stopColor="rgba(79,70,229,0.04)" />
+        </radialGradient>
+        <filter id="nodeGlow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="lineGlow">
+          <feGaussianBlur stdDeviation="1.2" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      {/* Outer energy rings — opacity only, no r animation */}
+      {ringRadii.map((r, i) => (
+        <motion.circle key={r} cx={80} cy={65} r={r}
+          fill="none" stroke="rgba(99,102,241,0.22)" strokeWidth={i === 0 ? 1.5 : 1}
+          animate={{ opacity: [0.15, 0.5, 0.15] }}
+          transition={{ duration: 2.4 + i * 0.4, repeat: Infinity, delay: i * 0.5, ease: "easeInOut" }}
+        />
+      ))}
+
+      {/* Brain outline — right hemisphere */}
+      <motion.path
+        d="M80 28 C88 22, 108 24, 120 40 C132 56, 130 74, 120 86 C112 96, 96 100, 84 98 L80 96"
+        fill="url(#brainGrad)" stroke="rgba(129,140,248,0.55)" strokeWidth="1.5"
+        animate={{ opacity: thinking ? [0.6, 1, 0.6] : [0.55, 0.85, 0.55] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Brain outline — left hemisphere */}
+      <motion.path
+        d="M80 28 C72 22, 52 24, 40 40 C28 56, 30 74, 40 86 C48 96, 64 100, 76 98 L80 96"
+        fill="url(#brainGrad)" stroke="rgba(129,140,248,0.55)" strokeWidth="1.5"
+        animate={{ opacity: thinking ? [0.6, 1, 0.6] : [0.55, 0.85, 0.55] }}
+        transition={{ duration: 2, repeat: Infinity, delay: 0.5, ease: "easeInOut" }}
+      />
+
+      {/* Cerebellum */}
+      <motion.path
+        d="M68 97 Q80 110, 92 97 Q88 118, 80 121 Q72 118, 68 97 Z"
+        fill="url(#brainGrad)" stroke="rgba(129,140,248,0.45)" strokeWidth="1.2"
+        animate={{ opacity: [0.4, 0.75, 0.4] }}
+        transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Central fissure */}
+      <motion.line x1={80} y1={28} x2={80} y2={96}
+        stroke="rgba(99,102,241,0.3)" strokeWidth="1"
+        animate={{ opacity: [0.2, 0.5, 0.2] }}
+        transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Synaptic connections */}
+      {EDGES.map(([a, b], i) => {
+        const na = NODES[a]; const nb = NODES[b];
+        return (
+          <motion.line key={`e${i}`}
+            x1={na.cx} y1={na.cy} x2={nb.cx} y2={nb.cy}
+            stroke="rgba(129,140,248,0.4)" strokeWidth="0.8"
+            filter="url(#lineGlow)"
+            animate={{ opacity: thinking ? [0.15, 0.8, 0.15] : [0.1, 0.5, 0.1] }}
+            transition={{ duration: 1.6 + (i % 4) * 0.3, repeat: Infinity,
+              delay: (i * 0.12) % 1.5, ease: "easeInOut" }}
+          />
+        );
+      })}
+
+      {/* Neural nodes — halo: animate only opacity, core fixed r */}
+      {NODES.map((n, i) => (
+        <g key={n.id}>
+          <circle cx={n.cx} cy={n.cy} r={5}
+            fill="rgba(129,140,248,0.12)" stroke="rgba(129,140,248,0.25)" strokeWidth="1"
+          />
+          <motion.circle cx={n.cx} cy={n.cy} r={5}
+            fill="rgba(129,140,248,0.08)" stroke="rgba(129,140,248,0.3)" strokeWidth="1"
+            animate={{ opacity: [0.3, thinking ? 1 : 0.7, 0.3] }}
+            transition={{ duration: 1.4 + (i % 3) * 0.3, repeat: Infinity,
+              delay: PULSE_DELAYS[i], ease: "easeInOut" }}
+          />
+          <motion.circle cx={n.cx} cy={n.cy} r={2.5}
+            fill="rgba(167,139,250,0.95)" filter="url(#nodeGlow)"
+            animate={{ opacity: [0.6, 1, 0.6] }}
+            transition={{ duration: 1.2 + (i % 3) * 0.25, repeat: Infinity,
+              delay: PULSE_DELAYS[i], ease: "easeInOut" }}
+          />
+        </g>
+      ))}
+
+      {/* Central core — brightest node */}
+      <circle cx={80} cy={65} r={4} fill="rgba(167,139,250,0.85)" filter="url(#nodeGlow)" />
+      <motion.circle cx={80} cy={65} r={4}
+        fill="rgba(167,139,250,0.9)" filter="url(#nodeGlow)"
+        animate={{ opacity: [0.7, 1, 0.7] }}
+        transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Thinking mode: extra glow ring around center */}
+      {thinking && (
+        <motion.circle cx={80} cy={65} r={12}
+          fill="none" stroke="rgba(167,139,250,0.4)" strokeWidth="1.5"
+          animate={{ opacity: [0.2, 0.8, 0.2] }}
+          transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+    </svg>
+  );
+}
+
+function SpeechBubble({
+  commentary, generatedAt, cached, cacheAge, thinking, onRefresh, isRefreshing,
+}: {
+  commentary: string | undefined;
+  generatedAt: string | null | undefined;
+  cached: boolean | undefined;
+  cacheAge: number | undefined;
+  thinking: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
+  const ageMin = cacheAge != null ? Math.round(cacheAge / 60) : null;
+
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (!thinking && textRef.current) {
+      textRef.current.style.animation = "none";
+      void textRef.current.offsetHeight;
+      textRef.current.style.animation = "";
+    }
+  }, [commentary, thinking]);
+
+  return (
+    <div className="relative flex-1 min-w-0">
+      {/* Arrow pointing left toward the brain */}
+      <div className="absolute left-0 top-1/2 -translate-x-3 -translate-y-1/2 w-3 h-4 overflow-hidden">
+        <div className="absolute inset-0 border-r border-b border-indigo-500/40 bg-slate-900 rotate-[135deg] origin-top-right scale-75" />
+      </div>
+
+      <div className="relative rounded-2xl border border-indigo-500/30 bg-slate-900/80 backdrop-blur-sm shadow-[0_0_30px_rgba(99,102,241,0.08)] overflow-hidden">
+        {/* Top accent line */}
+        <div className="h-px bg-gradient-to-r from-indigo-500/60 via-violet-400/40 to-transparent" />
+
+        <div className="px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <motion.div
+              animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+            </motion.div>
+            <span className="text-[10px] uppercase font-semibold tracking-wider text-violet-400">
+              AI Brain Thoughts
+            </span>
+            {cached && ageMin != null && (
+              <span className="ml-auto text-[9px] text-muted-foreground/50">
+                cached · {ageMin === 0 ? "just now" : `${ageMin}m ago`}
+              </span>
+            )}
+          </div>
+
+          {/* Commentary text */}
+          <div className="min-h-[64px] flex items-start">
+            {thinking ? (
+              <div className="flex items-center gap-2 mt-1">
+                {[0, 1, 2].map(i => (
+                  <motion.div key={i}
+                    className="w-1.5 h-1.5 rounded-full bg-indigo-400"
+                    animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
+                  />
+                ))}
+                <span className="text-xs text-muted-foreground ml-1">Thinking…</span>
+              </div>
+            ) : commentary ? (
+              <p ref={textRef} className="text-sm leading-relaxed text-slate-300 font-light">
+                {commentary}
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground/50 italic">
+                Click refresh to generate AI commentary on current performance and learnings.
+              </p>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="mt-3 flex items-center justify-between">
+            {generatedAt && !thinking ? (
+              <span className="text-[9px] text-muted-foreground/40">
+                Generated {new Date(generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            ) : <span />}
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing || thinking}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all",
+                "border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-400/50",
+                "disabled:opacity-40 disabled:cursor-not-allowed"
+              )}
+            >
+              <RefreshCw className={cn("h-3 w-3", (isRefreshing || thinking) && "animate-spin")} />
+              {isRefreshing ? "Regenerating…" : "Refresh"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AIBrainSection() {
+  const { data, isLoading } = useAICommentary();
+  const { mutate: refresh, isPending: isRefreshing } = useRefreshCommentary();
+
+  const thinking = isLoading || isRefreshing;
+
+  return (
+    <div className="relative rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-slate-950/90 to-indigo-950/20 p-5 shadow-[0_0_60px_rgba(99,102,241,0.06)] overflow-hidden">
+      {/* Background glow */}
+      <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-500/4 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+
+      <div className="relative flex items-center gap-2 mb-4">
+        <Brain className="h-3.5 w-3.5 text-indigo-400" />
+        <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
+          Learning Intelligence
+        </span>
+      </div>
+
+      <div className="relative flex items-center gap-5">
+        {/* Brain SVG — fixed width */}
+        <div className="flex-shrink-0 w-36 h-28">
+          <BrainSVG thinking={thinking} />
+        </div>
+
+        {/* Speech bubble */}
+        <SpeechBubble
+          commentary={data?.commentary}
+          generatedAt={data?.generated_at}
+          cached={data?.cached}
+          cacheAge={data?.cache_age_seconds}
+          thinking={thinking}
+          onRefresh={() => refresh()}
+          isRefreshing={isRefreshing}
+        />
+      </div>
     </div>
   );
 }
@@ -701,6 +981,11 @@ export default function Dashboard() {
         {/* PORTFOLIO METRICS */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <PortfolioMetrics />
+        </motion.div>
+
+        {/* AI BRAIN */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.13 }}>
+          <AIBrainSection />
         </motion.div>
 
         {/* LIVE POSITIONS */}

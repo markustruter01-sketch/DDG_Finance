@@ -222,6 +222,33 @@ export function usePerformanceSummary() {
   });
 }
 
+export interface AICommentary {
+  commentary: string;
+  generated_at: string | null;
+  cached: boolean;
+  cache_age_seconds: number;
+  error?: string;
+}
+
+export function useAICommentary() {
+  return useQuery<AICommentary>({
+    queryKey: ["/ai/commentary"],
+    queryFn: async () => (await api.get("/ai/commentary")).data,
+    staleTime: 1000 * 60 * 25,
+    retry: 1,
+  });
+}
+
+export function useRefreshCommentary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.get("/ai/commentary?force=true")).data as AICommentary,
+    onSuccess: (data) => {
+      qc.setQueryData(["/ai/commentary"], data);
+    },
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {

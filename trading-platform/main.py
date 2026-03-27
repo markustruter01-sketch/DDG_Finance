@@ -21,6 +21,7 @@ Endpoints:
 """
 
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -50,6 +51,9 @@ from analysis.trade_journal import (
 from core.market_clock import is_market_open, get_next_open
 
 EXPECTED_JOB_COUNT = 3
+COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
+
+_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -342,6 +346,119 @@ async def latest_allocation() -> dict:
         "run_utc": last.get("last_run_utc"),
         "allocation": allocation,
     }
+
+
+# ── AI Brain Commentary ────────────────────────────────────────────────────────
+
+@app.get("/ai/commentary", tags=["AI"])
+async def ai_commentary(force: bool = False) -> dict:
+    """
+    Generate a natural-language 'AI brain' commentary summarising:
+      - What the system learned from recent wins/losses
+      - How it plans to adjust strategy going forward
+      - Its take on current open positions
+
+    Results are cached for 30 minutes. Pass ?force=true to regenerate immediately.
+    """
+    global _commentary_cache
+
+    now = time.time()
+    cache_age = now - _commentary_cache["ts"]
+
+    if not force and _commentary_cache["text"] and cache_age < COMMENTARY_TTL_SECONDS:
+        return {
+            "commentary": _commentary_cache["text"],
+            "generated_at": _commentary_cache["generated_at"],
+            "cached": True,
+            "cache_age_seconds": int(cache_age),
+        }
+
+    wins    = get_recent_wins(limit=3)
+    losses  = get_recent_losses(limit=5)
+    summary = get_journal_summary()
+
+    try:
+        positions = get_positions()
+    except Exception:
+        positions = []
+
+    wins_text = "\n".join(
+        f"  WIN: {w['ticker']} +{w['pnl_percentage']:.1f}% — {w['original_thesis'][:80]}"
+        for w in wins
+    ) or "  (none recorded yet)"
+
+    losses_text = "\n".join(
+        f"  LOSS: {l['ticker']} {l['pnl_percentage']:.1f}% — {l['original_thesis'][:80]}"
+        for l in losses
+    ) or "  (none recorded yet)"
+
+    pos_lines = []
+    for p in positions:
+        pnl_pct = p.get("unrealized_plpc", 0)
+        pnl_dollar = p.get("unrealized_pl", 0)
+        emoji = "📈" if pnl_pct >= 0 else "📉"
+        pos_lines.append(
+            f"  {emoji} {p['symbol']}: {pnl_pct*100:+.1f}% (${pnl_dollar:+.0f})"
+        )
+    positions_text = "\n".join(pos_lines) or "  (no open positions — fully in cash)"
+
+    user_prompt = f"""
+Recent Wins (reinforcing behaviour):
+{wins_text}
+
+Recent Losses (behavioural corrections needed):
+{losses_text}
+
+Journal summary: {summary.get('wins', 0)} wins / {summary.get('losses', 0)} losses total, avg P&L {summary.get('avg_pnl') or 0:.2f}%
+
+Current open positions:
+{positions_text}
+"""
+
+    system_prompt = (
+        "You are an AI quantitative trading assistant with a distinct, confident personality. "
+        "In 3–4 short, punchy sentences maximum, share: "
+        "(1) the single most important thing you have learned from your recent wins and losses "
+        "and exactly how you are adjusting your strategy; "
+        "(2) a candid one-line take on how the current open positions are looking right now. "
+        "Be direct, specific, and avoid generic statements. "
+        "Write in first person, casual but intelligent. No bullet points. Plain paragraph only."
+    )
+
+    def _blocking_call() -> str:
+        from groq import Groq
+        from config.settings import settings as _settings
+        client = Groq(api_key=_settings.groq_api_key)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.72,
+            max_tokens=220,
+        )
+        return resp.choices[0].message.content.strip()
+
+    try:
+        loop = asyncio.get_event_loop()
+        commentary = await loop.run_in_executor(None, _blocking_call)
+        from datetime import datetime, timezone
+        generated_at = datetime.now(timezone.utc).isoformat()
+        _commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        logger.info("AI commentary regenerated successfully")
+        return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
+    except Exception as exc:
+        logger.error(f"AI commentary generation failed: {exc}")
+        if _commentary_cache["text"]:
+            return {
+                "commentary": _commentary_cache["text"],
+                "generated_at": _commentary_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "error": str(exc),
+            }
+        raise HTTPException(status_code=503, detail=f"AI commentary unavailable: {exc}")
 
 
 # ── Phase 1 compatibility endpoint ────────────────────────────────────────────

@@ -4,6 +4,42 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## Trading Platform (Python/FastAPI)
+
+Located in `trading-platform/`. A private, automated AI-driven quantitative trading system.
+
+### Stack
+- **Runtime**: Python 3.11
+- **Framework**: FastAPI + Uvicorn
+- **Brokerage**: Alpaca API (Paper Trading)
+- **Data Sources**: FRED API, Alpaca Market Data, NewsAPI
+- **LLM**: Claude (Anthropic) / DeepSeek
+- **Validation**: Pydantic v2
+
+### Phase Status
+- **Phase 1 — Data Ingestion**: COMPLETE
+  - `data/fred_client.py` — 10/10 FRED macro series (async, exponential backoff)
+  - `data/yfinance_client.py` — 22/22 tickers via Alpaca Market Data API (async)
+  - `data/news_client.py` — 5 category news feed via NewsAPI (async)
+  - `config/settings.py` — Pydantic BaseSettings with all API key config
+  - `main.py` — FastAPI stub with `/data/snapshot` test endpoint
+- **Phase 2 — LLM Analysis**: Not started
+- **Phase 3 — Portfolio/Kelly**: Not started
+- **Phase 4 — Execution/Alpaca**: Not started
+- **Phase 5 — Scheduler/Kill Switch**: Not started
+
+### Run
+```bash
+cd trading-platform && uvicorn main:app --reload
+```
+
+### Required Secrets
+- `FRED_API_KEY` — fred.stlouisfed.org
+- `NEWS_API_KEY` — newsapi.org
+- `ALPACA_API_KEY` — Alpaca paper trading key ID
+- `ALPACA_SECRET_KEY` — Alpaca paper trading secret
+- `ANTHROPIC_API_KEY` — Claude API (Phase 2+)
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

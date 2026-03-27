@@ -205,6 +205,7 @@ function AnimatedCurrency({ value, className }: { value: number; className?: str
 function PortfolioMetrics() {
   const { data } = usePortfolio();
   const { data: vault } = useVault();
+  const { data: positions } = useLivePositions();
 
   if (!data) return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -221,6 +222,11 @@ function PortfolioMetrics() {
   const hwm            = vault?.hwm ?? 0;
   const totalSweeps    = vault?.total_sweeps ?? 0;
   const isVaultInit    = vault?.initialised ?? false;
+
+  // Find live JEPQ position for true market value and P&L
+  const vaultPos = positions?.positions?.find(p => p.symbol === vaultSymbol);
+  const vaultMarketValue = vaultPos?.market_value ?? totalVaulted;
+  const vaultPnl         = vaultPos?.unrealized_pl ?? 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -289,9 +295,9 @@ function PortfolioMetrics() {
             <>
               <div className={cn(
                 "text-2xl font-mono font-bold tracking-tight",
-                totalVaulted > 0 ? "text-amber-400" : "text-amber-400/40"
+                vaultMarketValue > 0 ? "text-amber-400" : "text-amber-400/40"
               )}>
-                {totalVaulted > 0 ? formatCurrency(totalVaulted) : "$0.00"}
+                {vaultMarketValue > 0 ? formatCurrency(vaultMarketValue) : "$0.00"}
               </div>
               <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
                 <ArrowUpRight className="h-3 w-3 text-amber-400/50" />
@@ -315,23 +321,25 @@ function PortfolioMetrics() {
             <Coins className="h-3 w-3 text-green-400/70" />
             Total Yield
           </div>
-          {isVaultInit ? (
+          {isVaultInit && vaultPos ? (
             <>
               <div className={cn(
                 "text-2xl font-mono font-bold tracking-tight",
-                totalVaulted > 0 ? "text-green-400 text-glow-success" : "text-muted-foreground/60"
+                vaultPnl > 0 ? "text-green-400 text-glow-success" : vaultPnl < 0 ? "text-red-400" : "text-muted-foreground/60"
               )}>
-                {totalVaulted > 0 ? `+${formatCurrency(totalVaulted)}` : "$0.00"}
+                {vaultPnl >= 0 ? "+" : ""}{formatCurrency(vaultPnl)}
               </div>
               <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
                 <GrowthIcon className="h-3 w-3 text-green-400/50" />
-                Swept to {vaultSymbol}
+                Unrealised on {vaultSymbol} position
               </div>
             </>
           ) : (
             <>
-              <div className="text-2xl font-mono font-bold text-green-400/40 tracking-tight">$0.00</div>
-              <div className="text-[10px] text-muted-foreground/50 mt-1.5">Awaiting first sweep</div>
+              <div className="text-2xl font-mono font-bold text-muted-foreground/40 tracking-tight">$0.00</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-1.5">
+                {isVaultInit ? `No ${vaultSymbol} position yet` : "Awaiting first sweep"}
+              </div>
             </>
           )}
         </CardContent>

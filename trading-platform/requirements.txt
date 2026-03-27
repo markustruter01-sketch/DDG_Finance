@@ -8,6 +8,7 @@ fredapi==0.5.2
 yfinance==0.2.50
 newsapi-python==0.2.7
 alpaca-py==0.35.0
+groq==0.11.0
 anthropic==0.40.0
 openai==1.58.1
 apscheduler==3.10.4

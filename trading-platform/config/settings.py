@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---
-    anthropic_api_key: str = Field(default="", description="Claude API key (primary LLM)")
-    deepseek_api_key: str = Field(default="", description="DeepSeek API key (fallback LLM)")
+    groq_api_key: str = Field(..., description="Groq API key (free, llama3-70b-8192)")
+    anthropic_api_key: str = Field(default="", description="Claude API key (optional future use)")
+    deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 
     # --- Trading Constraints ---
     conviction_threshold: float = Field(
@@ -65,7 +66,7 @@ class Settings(BaseSettings):
     @field_validator(
         "fred_api_key", "news_api_key",
         "alpaca_api_key", "alpaca_secret_key",
-        "anthropic_api_key", "deepseek_api_key",
+        "groq_api_key", "anthropic_api_key", "deepseek_api_key",
         mode="before",
     )
     @classmethod

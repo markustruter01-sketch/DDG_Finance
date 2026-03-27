@@ -12,6 +12,10 @@ Wraps the Alpaca Trading API for all order operations used by this platform:
   - close_all_positions():Liquidate everything (used by kill switch)
   - get_order():          Fetch a single order by ID
 
+Supports both ETF/stock orders (TimeInForce.DAY) and crypto spot orders
+(TimeInForce.GTC). Crypto pairs are detected by the "/" in the ticker
+(e.g. BTC/USD, ETH/USD).
+
 All functions raise on Alpaca API errors — callers must handle exceptions.
 Paper trading only — paper=True is hardcoded.
 """
@@ -25,6 +29,7 @@ from alpaca.trading.models import Order, Position, TradeAccount
 from loguru import logger
 
 from config.settings import settings
+from analysis.schemas import is_crypto_pair
 
 
 def _client() -> TradingClient:
@@ -36,12 +41,6 @@ def _client() -> TradingClient:
 
 
 def get_account() -> dict:
-    """
-    Return a simplified dict of account metrics.
-
-    Returns:
-        {equity, cash, buying_power, trading_blocked, pattern_day_trader}
-    """
     acct: TradeAccount = _client().get_account()
     return {
         "equity":             float(acct.equity),
@@ -53,9 +52,6 @@ def get_account() -> dict:
 
 
 def get_positions() -> list[dict]:
-    """
-    Return all open positions as simplified dicts.
-    """
     positions: list[Position] = _client().get_all_positions()
     return [
         {
@@ -72,7 +68,6 @@ def get_positions() -> list[dict]:
 
 
 def get_open_orders() -> list[dict]:
-    """Return all open/pending orders."""
     from alpaca.trading.requests import GetOrdersRequest
     from alpaca.trading.enums import QueryOrderStatus
     req = GetOrdersRequest(status=QueryOrderStatus.OPEN)
@@ -92,7 +87,6 @@ def get_open_orders() -> list[dict]:
 
 
 def get_order(order_id: str) -> dict:
-    """Fetch a single order by its Alpaca order UUID."""
     order: Order = _client().get_order_by_id(order_id)
     return {
         "id":              str(order.id),
@@ -113,34 +107,26 @@ def place_order(
     notional_usd: float,
     side: str = "buy",
 ) -> dict:
-    """
-    Place a fractional market order by notional dollar amount.
-
-    Args:
-        ticker:       Stock/ETF symbol.
-        notional_usd: Dollar amount to deploy (e.g. 1500.00).
-        side:         "buy" or "sell" (default "buy").
-
-    Returns:
-        Dict with order id, symbol, notional, status.
-
-    Raises:
-        ValueError:  If notional_usd < $1.
-        RuntimeError: On Alpaca API error.
-    """
     if notional_usd < 1.0:
         raise ValueError(f"Cannot place order for ${notional_usd:.2f} — below $1 minimum")
 
     order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
 
+    is_crypto = is_crypto_pair(ticker)
+    tif = TimeInForce.GTC if is_crypto else TimeInForce.DAY
+    symbol = ticker.replace("/", "") if is_crypto else ticker
+
     req = MarketOrderRequest(
-        symbol=ticker,
+        symbol=symbol,
         notional=round(notional_usd, 2),
         side=order_side,
-        time_in_force=TimeInForce.DAY,
+        time_in_force=tif,
     )
 
-    logger.info(f"Broker | Placing {side.upper()} {ticker} ${notional_usd:,.2f} (notional, market order)")
+    logger.info(
+        f"Broker | Placing {side.upper()} {ticker} ${notional_usd:,.2f} "
+        f"(notional, market, TIF={tif.value})"
+    )
 
     try:
         order: Order = _client().submit_order(req)
@@ -160,41 +146,53 @@ def place_order(
 
 
 def get_latest_price(ticker: str) -> float | None:
-    """
-    Fetch the latest trade price for a ticker from Alpaca Data API.
-    Used to record intended_price before order placement for slippage tracking.
-    """
     try:
-        from alpaca.data.historical import StockHistoricalDataClient
-        from alpaca.data.requests import StockLatestTradeRequest
-        data_client = StockHistoricalDataClient(
-            api_key=settings.alpaca_api_key,
-            secret_key=settings.alpaca_secret_key,
-        )
-        req = StockLatestTradeRequest(symbol_or_symbols=ticker)
-        trades = data_client.get_stock_latest_trade(req)
-        if ticker in trades:
-            price = float(trades[ticker].price)
-            logger.debug(f"Broker | Latest price {ticker}: ${price:.4f}")
-            return price
+        if is_crypto_pair(ticker):
+            return _get_latest_crypto_price(ticker)
+        return _get_latest_stock_price(ticker)
     except Exception as exc:
         logger.warning(f"Broker | Could not fetch latest price for {ticker}: {exc}")
     return None
 
 
+def _get_latest_stock_price(ticker: str) -> float | None:
+    from alpaca.data.historical import StockHistoricalDataClient
+    from alpaca.data.requests import StockLatestTradeRequest
+    data_client = StockHistoricalDataClient(
+        api_key=settings.alpaca_api_key,
+        secret_key=settings.alpaca_secret_key,
+    )
+    req = StockLatestTradeRequest(symbol_or_symbols=ticker)
+    trades = data_client.get_stock_latest_trade(req)
+    if ticker in trades:
+        price = float(trades[ticker].price)
+        logger.debug(f"Broker | Latest price {ticker}: ${price:.4f}")
+        return price
+    return None
+
+
+def _get_latest_crypto_price(ticker: str) -> float | None:
+    from alpaca.data.historical import CryptoHistoricalDataClient
+    from alpaca.data.requests import CryptoLatestTradeRequest
+    data_client = CryptoHistoricalDataClient(
+        api_key=settings.alpaca_api_key,
+        secret_key=settings.alpaca_secret_key,
+    )
+    symbol = ticker.replace("/", "")
+    req = CryptoLatestTradeRequest(symbol_or_symbols=symbol)
+    trades = data_client.get_crypto_latest_trade(req)
+    if symbol in trades:
+        price = float(trades[symbol].price)
+        logger.debug(f"Broker | Latest crypto price {ticker}: ${price:.4f}")
+        return price
+    return None
+
+
 def close_position(ticker: str) -> dict:
-    """
-    Close an entire open position in a ticker.
-
-    Args:
-        ticker: Symbol to liquidate.
-
-    Returns:
-        Dict with order details from the close.
-    """
-    logger.warning(f"Broker | Closing position: {ticker}")
+    symbol = ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+    logger.warning(f"Broker | Closing position: {ticker} (symbol={symbol})")
     try:
-        order: Order = _client().close_position(ticker)
+        order: Order = _client().close_position(symbol)
         return {
             "id":     str(order.id),
             "symbol": order.symbol,
@@ -207,10 +205,6 @@ def close_position(ticker: str) -> dict:
 
 
 def cancel_all_orders() -> int:
-    """
-    Cancel all open orders. Returns number of orders cancelled.
-    Used by the kill switch.
-    """
     logger.warning("Broker | Cancelling ALL open orders")
     cancelled = _client().cancel_orders()
     n = len(cancelled) if cancelled else 0
@@ -219,10 +213,6 @@ def cancel_all_orders() -> int:
 
 
 def close_all_positions() -> int:
-    """
-    Liquidate all open positions. Returns number of positions closed.
-    Used by the kill switch.
-    """
     logger.warning("Broker | Closing ALL positions (kill switch)")
     closed = _client().close_all_positions(cancel_orders=True)
     n = len(closed) if closed else 0

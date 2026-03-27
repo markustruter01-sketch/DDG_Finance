@@ -19,7 +19,7 @@ from typing import Any
 from loguru import logger
 from pydantic import ValidationError
 
-from analysis.schemas import AllocationSlot, AnalysisOutput
+from analysis.schemas import AllocationSlot, AnalysisOutput, CryptoAllocationSlot, CryptoAnalysisOutput
 from config.settings import settings
 from portfolio.kelly import compute_kelly_for_slots, normalise_kelly_fractions
 
@@ -102,6 +102,41 @@ def process_llm_output(raw_json: str) -> AnalysisOutput:
     total_kelly = sum(a.kelly_fraction for a in output.allocations if a.ticker != "SGOV")
     logger.info(
         f"Allocator | Final allocation — total deployed Kelly: {total_kelly:.1%} | "
+        f"cash slots: {sum(1 for a in output.allocations if a.ticker == 'SGOV')}"
+    )
+
+    return output
+
+
+def process_crypto_llm_output(raw_json: str) -> CryptoAnalysisOutput:
+    try:
+        data: dict[str, Any] = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"LLM output is not valid JSON: {exc}") from exc
+
+    allocations: list[dict] = data.get("allocations", [])
+
+    if len(allocations) != 6:
+        raise ValueError(f"Expected 6 crypto allocation slots, LLM returned {len(allocations)}")
+
+    logger.info(f"Allocator | Processing {len(allocations)} crypto slots from LLM output")
+
+    allocations = _enforce_conviction_threshold(allocations)
+
+    allocations = compute_kelly_for_slots(allocations)
+    allocations = normalise_kelly_fractions(allocations)
+
+    data["allocations"] = allocations
+
+    try:
+        output = CryptoAnalysisOutput.model_validate(data)
+    except ValidationError as exc:
+        logger.error(f"Allocator | Crypto Pydantic validation failed:\n{exc}")
+        raise
+
+    total_kelly = sum(a.kelly_fraction for a in output.allocations if a.ticker != "SGOV")
+    logger.info(
+        f"Allocator | Final crypto allocation — total deployed Kelly: {total_kelly:.1%} | "
         f"cash slots: {sum(1 for a in output.allocations if a.ticker == 'SGOV')}"
     )
 

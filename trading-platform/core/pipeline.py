@@ -1,14 +1,20 @@
 """
-Intraday Trading Pipeline — 15-Minute Cycle
-----------------------------------------------
+Trading Pipeline — 15-Minute Cycle (Full Market + Crypto-Only)
+----------------------------------------------------------------
 Orchestrates a complete analysis + execution cycle every 15 minutes:
 
-  1. Execution lock    — skip if a previous cycle is still running.
-  2. Kill switch guard — abort if already tripped today.
-  3. Market clock guard — abort if market is closed.
-  4. Analysis cycle    — RAG → data fetch (cached FRED/News) → Groq → Kelly.
-  5. Execution cycle   — close stale → size → place orders → journal.
-  6. Post-mortem       — reconcile closed orders (separate evening job).
+  Full Market mode (stock market hours):
+    1. Execution lock    — skip if a previous cycle is still running.
+    2. Kill switch guard — abort if already tripped today.
+    3. Market clock guard — abort if market is closed (unless forced).
+    4. Analysis cycle    — RAG → data fetch (cached FRED/News) → Groq → Kelly.
+    5. Execution cycle   — close stale → size → place orders → journal.
+
+  Crypto-Only mode (off-hours, 24/7):
+    1. Execution lock    — skip if a previous cycle is still running.
+    2. Kill switch guard — abort if already tripped today.
+    3. Analysis cycle    — RAG → crypto data + news → Groq → Kelly (6 slots).
+    4. Execution cycle   — close stale crypto → size → place orders → journal.
 
 This module is called by the APScheduler jobs AND by the manual
 POST /run API endpoint.  All results are stored in _last_run so the
@@ -17,12 +23,12 @@ GET /status endpoint can expose them without re-running.
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Union
 
 from loguru import logger
 
 from analysis.analyzer import run_analysis_cycle
-from analysis.schemas import AnalysisOutput
+from analysis.schemas import AnalysisOutput, CryptoAnalysisOutput
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
 from execution.kill_switch import check as ks_check, is_tripped, reset as ks_reset
@@ -39,11 +45,11 @@ _state: dict[str, Any] = {
     "run_count":        0,
     "error_count":      0,
     "cycle_interval":   "15min",
+    "trading_mode":     "idle",
 }
 
 
 def get_last_run() -> dict:
-    """Return the in-memory state of the most recent pipeline run."""
     return dict(_state)
 
 
@@ -51,17 +57,8 @@ async def run_pipeline(
     *,
     force: bool = False,
     dry_run: bool = False,
+    crypto_only: bool = False,
 ) -> dict[str, Any]:
-    """
-    Execute a complete analysis + execution cycle.
-
-    Args:
-        force:   Skip the market-closed guard (for manual/testing runs).
-        dry_run: Run analysis but don't place real orders.
-
-    Returns:
-        Dict with status, allocation summary, execution summary, errors.
-    """
     if _pipeline_lock.locked():
         logger.warning("Pipeline lock held — skipping this cycle (previous still running)")
         return {
@@ -71,38 +68,39 @@ async def run_pipeline(
         }
 
     async with _pipeline_lock:
-        return await _run_pipeline_inner(force=force, dry_run=dry_run)
+        return await _run_pipeline_inner(force=force, dry_run=dry_run, crypto_only=crypto_only)
 
 
 async def _run_pipeline_inner(
     *,
     force: bool = False,
     dry_run: bool = False,
+    crypto_only: bool = False,
 ) -> dict[str, Any]:
     started = datetime.now(timezone.utc)
     cycle_num = _state["run_count"] + 1
+    mode_label = "CRYPTO-ONLY" if crypto_only else "FULL MARKET"
     logger.info("=" * 60)
-    logger.info(f"PIPELINE CYCLE #{cycle_num} | force={force} dry_run={dry_run}")
+    logger.info(f"PIPELINE CYCLE #{cycle_num} | mode={mode_label} force={force} dry_run={dry_run}")
     logger.info("=" * 60)
 
     result: dict[str, Any] = {
         "started_utc": started.isoformat(),
         "dry_run":     dry_run,
+        "crypto_only": crypto_only,
         "status":      "ok",
         "errors":      [],
     }
 
-    # ── Guard 1: Kill switch ─────────────────────────────────────────────────
     if is_tripped():
         msg = "Kill switch is tripped — pipeline aborted for today"
         logger.warning(msg)
         result["status"] = "kill_switch_tripped"
         result["errors"].append(msg)
-        _update_state(result, started)
+        _update_state(result, started, trading_mode="kill_switch")
         return result
 
-    # ── Guard 2: Market open ─────────────────────────────────────────────────
-    if not force and not is_market_open():
+    if not crypto_only and not force and not is_market_open():
         msg = "Market is closed — pipeline skipped (use force=True to override)"
         logger.info(msg)
         result["status"] = "market_closed"
@@ -110,11 +108,10 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
-    # ── Step 1: Analysis cycle ────────────────────────────────────────────────
-    allocation: AnalysisOutput | None = None
+    allocation: Union[AnalysisOutput, CryptoAnalysisOutput, None] = None
     try:
         logger.info("Pipeline | Step 1: Running analysis cycle...")
-        allocation = await run_analysis_cycle(dry_run=dry_run)
+        allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)
         result["market_regime"] = allocation.market_regime
         result["allocation_summary"] = [
             {
@@ -133,19 +130,17 @@ async def _run_pipeline_inner(
         logger.error(f"Pipeline | Analysis cycle FAILED: {exc}")
         result["status"] = "analysis_failed"
         result["errors"].append(f"Analysis failed: {exc}")
-        _update_state(result, started)
+        _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
         return result
 
-    # ── Step 2: Kill switch check (post-analysis, pre-execution) ─────────────
     if ks_check():
         msg = "Kill switch tripped mid-pipeline — execution aborted"
         logger.warning(msg)
         result["status"] = "kill_switch_tripped"
         result["errors"].append(msg)
-        _update_state(result, started)
+        _update_state(result, started, trading_mode="kill_switch")
         return result
 
-    # ── Step 3: Execution cycle ───────────────────────────────────────────────
     try:
         logger.info("Pipeline | Step 2: Executing allocations...")
         exec_result = execute_allocations(allocation, dry_run=dry_run)
@@ -165,25 +160,18 @@ async def _run_pipeline_inner(
         logger.error(f"Pipeline | Execution FAILED: {exc}")
         result["status"] = "execution_failed"
         result["errors"].append(f"Execution failed: {exc}")
-        _update_state(result, started)
+        _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
         return result
 
     result["status"] = "ok" if not result["errors"] else "ok_with_errors"
-    _update_state(result, started, allocation)
+    _update_state(result, started, allocation, trading_mode=mode_label.lower().replace(" ", "_"))
 
     elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-    logger.info(f"PIPELINE COMPLETE in {elapsed:.1f}s | status={result['status']}")
+    logger.info(f"PIPELINE COMPLETE in {elapsed:.1f}s | status={result['status']} mode={mode_label}")
     return result
 
 
 async def run_postmortem() -> dict:
-    """
-    Nightly post-mortem: reconcile Alpaca closed orders with the trade journal.
-    Called at 4:10 PM ET by the scheduler.
-
-    Returns:
-        Dict with updated_count and any errors.
-    """
     logger.info("Pipeline | Running post-mortem reconciliation...")
     try:
         summary = await run_post_mortem()
@@ -196,11 +184,18 @@ async def run_postmortem() -> dict:
         return {"status": "error", "error": str(exc), "updated_count": 0}
 
 
-def _update_state(result: dict, started: datetime, allocation: AnalysisOutput | None = None) -> None:
+def _update_state(
+    result: dict,
+    started: datetime,
+    allocation: Union[AnalysisOutput, CryptoAnalysisOutput, None] = None,
+    trading_mode: str | None = None,
+) -> None:
     _state["last_run_utc"]    = started.isoformat()
     _state["last_run_status"] = result["status"]
     _state["last_exec_result"] = result.get("execution")
     _state["run_count"]       += 1
+    if trading_mode:
+        _state["trading_mode"] = trading_mode
     if result["status"] not in ("ok", "ok_with_errors"):
         _state["error_count"] += 1
     if allocation:

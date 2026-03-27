@@ -52,7 +52,7 @@ from analysis.trade_journal import (
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
 
-EXPECTED_JOB_COUNT = 2
+EXPECTED_JOB_COUNT = 3
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
         job.pause()
     logger.info(f"Scheduler started — {len(scheduler.get_jobs())} jobs registered (paused — auto-trading OFF)")
     logger.info("Enable auto-trading via dashboard toggle or POST /auto-trading")
+    logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
 
     yield
 
@@ -103,7 +104,7 @@ app = FastAPI(
         "Groq LLM (Llama 3.3 70B) → Kelly-sized 10-slot allocation → "
         "Alpaca paper trading execution."
     ),
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -143,7 +144,7 @@ async def health() -> dict:
     if job_count < EXPECTED_JOB_COUNT:
         system_status = "degraded"
         status_reason = f"Only {job_count}/{EXPECTED_JOB_COUNT} scheduler jobs registered"
-    elif last_status == "error":
+    elif last_status in ("error", "analysis_failed", "execution_failed", "kill_switch_tripped"):
         system_status = "degraded"
         status_reason = f"Last run failed ({error_count} total errors)"
     elif last_status in ("never", "never_run"):
@@ -155,7 +156,7 @@ async def health() -> dict:
 
     return {
         "status": "ok",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "system_status": system_status,
         "status_reason": status_reason,
         "scheduler_job_count": job_count,
@@ -172,6 +173,12 @@ async def status() -> dict:
     """
     market_open = is_market_open()
     last_run = get_last_run()
+    if not is_auto_trading_enabled():
+        trading_mode = "idle"
+    elif market_open:
+        trading_mode = "full_market"
+    else:
+        trading_mode = "crypto_only"
     return {
         "market": {
             "is_open":   market_open,
@@ -182,6 +189,7 @@ async def status() -> dict:
         "last_run":       last_run,
         "auto_trading":   is_auto_trading_enabled(),
         "cycle_interval": last_run.get("cycle_interval", "15min"),
+        "trading_mode":   trading_mode,
         "data_cache":     get_cache_stats(),
     }
 
@@ -221,6 +229,9 @@ async def live_positions() -> dict:
             ticker = slot.get("ticker", "")
             if ticker and ticker not in alloc_by_ticker:
                 alloc_by_ticker[ticker] = slot
+                normalized = ticker.replace("/", "")
+                if normalized != ticker:
+                    alloc_by_ticker[normalized] = slot
 
         enriched = []
         for pos in positions:

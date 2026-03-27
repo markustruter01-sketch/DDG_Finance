@@ -88,11 +88,8 @@ def build_user_prompt(
     market_data: dict,
     news_headlines: list[str],
     account_state: dict | None = None,
+    crypto_only: bool = False,
 ) -> str:
-    """
-    Assemble the user-facing prompt from the Phase 1 data sources plus live
-    account state (buying power + held symbols).
-    """
     lines = []
 
     if account_state and account_state.get("buying_power") is not None:
@@ -109,12 +106,17 @@ def build_user_prompt(
             lines.append("  Held Symbols: NONE (fully in cash)")
         lines.append("")
 
-    lines.append("=== MACROECONOMIC INDICATORS (FRED) ===")
-    for sid, v in macro_data.items():
-        if v.get("value") is not None:
-            lines.append(f"  {v['name']}: {v['value']} (as of {v['date']})")
+    if not crypto_only:
+        lines.append("=== MACROECONOMIC INDICATORS (FRED) ===")
+        for sid, v in macro_data.items():
+            if v.get("value") is not None:
+                lines.append(f"  {v['name']}: {v['value']} (as of {v['date']})")
 
-    lines.append("\n=== MARKET PRICES & MOMENTUM ===")
+    if crypto_only:
+        lines.append("=== CRYPTO MARKET PRICES & MOMENTUM (24/7) ===")
+    else:
+        lines.append("\n=== MARKET PRICES & MOMENTUM ===")
+
     for cat, tickers in market_data.get("by_category", {}).items():
         lines.append(f"  [{cat.upper()}]")
         for ticker, d in tickers.items():
@@ -129,5 +131,8 @@ def build_user_prompt(
     lines.append("\n=== RECENT NEWS HEADLINES ===")
     for headline in news_headlines[:15]:
         lines.append(f"  • {headline}")
+
+    if crypto_only:
+        lines.append("\nMODE: CRYPTO-ONLY (stock market closed). Allocate 6 slots using crypto pairs only.")
 
     return "\n".join(lines)

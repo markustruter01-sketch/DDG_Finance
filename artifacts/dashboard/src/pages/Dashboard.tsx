@@ -21,13 +21,30 @@ import {
 
 // ── System Status Banner ───────────────────────────────────────────────────────
 
-const EXPECTED_JOBS = 2;
+const EXPECTED_JOBS = 3;
+
+function tradingModeLabel(mode: string | undefined): string {
+  switch (mode) {
+    case "full_market": return "FULL MARKET";
+    case "crypto_only": return "CRYPTO ONLY";
+    default: return "IDLE";
+  }
+}
+
+function tradingModeColor(mode: string | undefined): string {
+  switch (mode) {
+    case "full_market": return "text-green-400";
+    case "crypto_only": return "text-purple-400";
+    default: return "text-zinc-500";
+  }
+}
 
 function SystemStatusBanner() {
   const { data, isError } = usePlatformStatus();
 
   let sysStatus: "online" | "degraded" | "offline";
   let reason: string;
+  let tradingMode: string | undefined;
 
   if (isError || !data) {
     sysStatus = "offline";
@@ -36,20 +53,22 @@ function SystemStatusBanner() {
     const jobCount = data.scheduler_jobs.length;
     const lastStatus = data.last_run.last_run_status;
     const errorCount = data.last_run.error_count;
+    tradingMode = data.trading_mode;
 
     if (jobCount < EXPECTED_JOBS) {
       sysStatus = "degraded";
       reason = `Only ${jobCount}/${EXPECTED_JOBS} scheduler jobs registered`;
-    } else if (lastStatus === "error") {
+    } else if (["error", "analysis_failed", "execution_failed", "kill_switch_tripped"].includes(lastStatus)) {
       sysStatus = "degraded";
       reason = `Last run failed (${errorCount} total error${errorCount !== 1 ? "s" : ""})`;
     } else {
       sysStatus = "online";
       const runCount = data.last_run.run_count;
+      const modeTag = tradingModeLabel(tradingMode);
       if (lastStatus === "never_run") {
-        reason = "Scheduler running (15-min cycles) — no analysis run yet today";
+        reason = `24/7 scheduler ready (15-min cycles) — ${modeTag} mode`;
       } else {
-        reason = `All systems operational — cycle #${runCount} complete`;
+        reason = `All systems operational — cycle #${runCount} — ${modeTag} mode`;
       }
     }
   }
@@ -64,6 +83,11 @@ function SystemStatusBanner() {
           </span>
           <span className="text-xs text-green-400 font-medium">ONLINE</span>
           <span className="text-xs text-green-500/60">— {reason}</span>
+          {tradingMode && (
+            <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
+              {tradingModeLabel(tradingMode)}
+            </span>
+          )}
         </div>
       </div>
     );

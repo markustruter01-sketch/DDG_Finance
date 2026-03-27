@@ -1,7 +1,8 @@
 """
 Trade Executor — Converts Allocations → Alpaca Orders
 --------------------------------------------------------
-Takes the validated AnalysisOutput from Phase 3 and executes each slot:
+Takes the validated AnalysisOutput (or CryptoAnalysisOutput) from the analysis
+phase and executes each slot:
 
   1. Fetch current account equity.
   2. Liquidate positions no longer in today's plan (exits).
@@ -12,19 +13,22 @@ Takes the validated AnalysisOutput from Phase 3 and executes each slot:
   7. Capture intended_price (pre-order) and actual_fill_price (post-fill)
      for slippage tracking.
 
+Supports both ETF orders (TimeInForce.DAY) and crypto spot orders
+(TimeInForce.GTC). Crypto pairs (BTC/USD, ETH/USD, etc.) use the "/" symbol
+format; Alpaca API symbols strip the "/" (e.g. BTCUSD).
+
 Design decisions:
   - SGOV slots are never traded (they represent "do nothing" cash).
   - We close stale positions BEFORE opening new ones (free capital first).
-  - A per-slot min notional of $100 is enforced (Alpaca min is $1, but
-    fractional ETF slippage on tiny notionals is not worth it).
-  - All orders are DAY market orders (filled same session or cancelled).
+  - A per-slot min notional of $100 is enforced for ETFs; $25 for crypto.
+  - ETF orders are DAY market orders; crypto orders are GTC market orders.
 """
 
 import time
 
 from loguru import logger
 
-from analysis.schemas import AnalysisOutput, AllocationSlot
+from analysis.schemas import AnalysisOutput, AllocationSlot, CryptoAnalysisOutput, CryptoAllocationSlot, is_crypto_pair
 from analysis.trade_journal import log_trade, update_trade_fill_price
 from execution.broker import (
     close_position,
@@ -36,10 +40,15 @@ from execution.broker import (
 )
 
 MIN_NOTIONAL_USD = 100.0
+MIN_NOTIONAL_CRYPTO = 25.0
 CASH_TICKER      = "SGOV"
 
 
-def execute_allocations(output: AnalysisOutput, dry_run: bool = False) -> dict:
+def _normalize_symbol(ticker: str) -> str:
+    return ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+
+
+def execute_allocations(output: AnalysisOutput | CryptoAnalysisOutput, dry_run: bool = False) -> dict:
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
     logger.info("=" * 60)
@@ -51,23 +60,32 @@ def execute_allocations(output: AnalysisOutput, dry_run: bool = False) -> dict:
     current_positions = {p["symbol"]: p for p in get_positions()}
     logger.info(f"Current open positions: {list(current_positions.keys()) or 'none'}")
 
-    active_tickers = {
+    is_crypto_only = isinstance(output, CryptoAnalysisOutput)
+
+    active_tickers_raw = {
         a.ticker for a in output.allocations
         if a.ticker != CASH_TICKER and a.kelly_fraction > 0
     }
+    active_symbols = {_normalize_symbol(t) for t in active_tickers_raw}
 
     results = {
         "equity":          equity,
         "dry_run":         dry_run,
+        "crypto_only":     is_crypto_only,
         "placed":          [],
         "skipped":         [],
         "closed":          [],
         "errors":          [],
     }
 
-    results = _close_stale_positions(
-        current_positions, active_tickers, results, dry_run
-    )
+    if is_crypto_only:
+        results = _close_stale_positions(
+            current_positions, active_symbols, results, dry_run, crypto_only=True
+        )
+    else:
+        results = _close_stale_positions(
+            current_positions, active_symbols, results, dry_run, crypto_only=False
+        )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         results = _execute_slot(slot, equity, current_positions, results, dry_run)
@@ -87,11 +105,21 @@ def execute_allocations(output: AnalysisOutput, dry_run: bool = False) -> dict:
 
 def _close_stale_positions(
     current_positions: dict,
-    active_tickers: set,
+    active_symbols: set,
     results: dict,
     dry_run: bool,
+    crypto_only: bool = False,
 ) -> dict:
-    stale = [sym for sym in current_positions if sym not in active_tickers and sym != CASH_TICKER]
+    stale = []
+    for sym in current_positions:
+        if sym in active_symbols or sym == CASH_TICKER:
+            continue
+        if crypto_only:
+            is_crypto_sym = sym.endswith("USD") and not sym.startswith("U") and len(sym) > 4
+            known_crypto_syms = {"BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "AVAXUSD", "LINKUSD"}
+            if sym not in known_crypto_syms:
+                continue
+        stale.append(sym)
 
     if not stale:
         logger.info("No stale positions to close")
@@ -118,24 +146,27 @@ def _close_stale_positions(
 
 
 def _execute_slot(
-    slot: AllocationSlot,
+    slot: AllocationSlot | CryptoAllocationSlot,
     equity: float,
     current_positions: dict,
     results: dict,
     dry_run: bool,
 ) -> dict:
     ticker = slot.ticker
+    symbol = _normalize_symbol(ticker)
+    is_crypto = is_crypto_pair(ticker)
 
     if ticker == CASH_TICKER or slot.kelly_fraction == 0.0:
-        logger.info(f"Slot {slot.slot:2d}: {ticker:6s} → CASH/SKIP (kelly=0)")
+        logger.info(f"Slot {slot.slot:2d}: {ticker:8s} → CASH/SKIP (kelly=0)")
         results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "cash_or_zero_kelly"})
         return results
 
     notional_usd = equity * slot.kelly_fraction
+    min_notional = MIN_NOTIONAL_CRYPTO if is_crypto else MIN_NOTIONAL_USD
 
-    if notional_usd < MIN_NOTIONAL_USD:
+    if notional_usd < min_notional:
         logger.info(
-            f"Slot {slot.slot:2d}: {ticker:6s} → SKIP (${notional_usd:.2f} < ${MIN_NOTIONAL_USD} min)"
+            f"Slot {slot.slot:2d}: {ticker:8s} → SKIP (${notional_usd:.2f} < ${min_notional} min)"
         )
         results["skipped"].append({
             "slot": slot.slot, "ticker": ticker,
@@ -143,14 +174,14 @@ def _execute_slot(
         })
         return results
 
-    if ticker in current_positions:
-        existing_value = current_positions[ticker]["market_value"]
+    if symbol in current_positions:
+        existing_value = current_positions[symbol]["market_value"]
         target_value   = notional_usd
         diff_pct = abs(target_value - existing_value) / existing_value if existing_value > 0 else 1.0
 
         if diff_pct < 0.10:
             logger.info(
-                f"Slot {slot.slot:2d}: {ticker:6s} → HOLD "
+                f"Slot {slot.slot:2d}: {ticker:8s} → HOLD "
                 f"(existing=${existing_value:,.2f}, target=${target_value:,.2f}, diff={diff_pct:.1%})"
             )
             results["skipped"].append({
@@ -160,7 +191,7 @@ def _execute_slot(
             return results
 
     logger.info(
-        f"Slot {slot.slot:2d}: {ticker:6s} | "
+        f"Slot {slot.slot:2d}: {ticker:8s} | "
         f"kelly={slot.kelly_fraction:.1%} | "
         f"notional=${notional_usd:,.2f} | "
         f"conv={slot.conviction_score:.0%}"
@@ -225,10 +256,6 @@ def _execute_slot(
 
 
 def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float | None:
-    """
-    Poll Alpaca for a filled order to capture actual_fill_price.
-    Market orders on paper trading typically fill within 1-2 seconds.
-    """
     start = time.time()
     poll_interval = 0.5
 

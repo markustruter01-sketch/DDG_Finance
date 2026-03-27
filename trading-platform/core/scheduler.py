@@ -1,18 +1,19 @@
 """
-APScheduler — Intraday Job Definitions
------------------------------------------
-Two recurring jobs run every trading day:
+APScheduler — 24/7 Job Definitions
+-------------------------------------
+Three recurring jobs:
 
-  Job 1 | Every 15 min ET (09:31–15:45) — Full analysis + execution cycle
-  Job 2 | 16:10 ET daily               — Post-mortem P&L reconciliation
+  Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Full analysis + execution cycle
+  Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
+  Job 3 | Every 15 min (24/7)                   — Crypto-only cycle (only fires
+          when stock market is CLOSED)
 
-The first cycle of each day (09:31) also resets the kill switch and
-captures opening equity. Subsequent cycles reuse cached FRED (1hr TTL)
-and NewsAPI (30min TTL) data while fetching fresh market prices.
+During market hours, Job 1 handles the full universe (ETFs + crypto).
+Outside market hours (nights, weekends, holidays), Job 3 handles crypto-only
+trading using raw crypto pairs (BTC/USD, ETH/USD, etc.) via Alpaca.
 
-We use APScheduler's AsyncIOScheduler (non-blocking, compatible with FastAPI)
-with the US/Eastern timezone. Jobs only run on weekdays — the market clock
-guard inside run_pipeline() handles holidays.
+The first cycle of each day (market-hours or crypto) resets the kill switch
+and captures opening equity.
 
 The scheduler is started inside FastAPI's lifespan context manager in main.py
 so it is torn down cleanly on shutdown.
@@ -23,6 +24,7 @@ from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
 from config.settings import settings
@@ -77,6 +79,16 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: evening_postmortem (Mon–Fri 16:10 ET)")
 
+    scheduler.add_job(
+        func=_crypto_cycle,
+        trigger=IntervalTrigger(minutes=15),
+        id="crypto_cycle",
+        name="Crypto-Only 24/7 Cycle",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Scheduler | Registered: crypto_cycle (every 15 min, 24/7, fires when market closed)")
+
 
 async def _intraday_cycle() -> None:
     global _last_reset_date
@@ -102,6 +114,32 @@ async def _intraday_cycle() -> None:
         logger.info(f"Scheduler | intraday_cycle complete: status={result['status']}")
     except Exception as exc:
         logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")
+
+
+async def _crypto_cycle() -> None:
+    global _last_reset_date
+
+    if is_market_open():
+        logger.debug("Scheduler | Market open — skipping crypto-only cycle (intraday handles it)")
+        return
+
+    logger.info("Scheduler | JOB STARTING: crypto_cycle (market closed, crypto-only mode)")
+
+    today = date.today()
+    if _last_reset_date != today:
+        try:
+            acct = get_account()
+            ks_reset(opening_equity=acct["equity"])
+            _last_reset_date = today
+            logger.info(f"Scheduler | Crypto cycle reset kill switch for {today} — equity: ${acct['equity']:,.2f}")
+        except Exception as exc:
+            logger.error(f"Scheduler | Failed to reset kill switch (crypto): {exc}")
+
+    try:
+        result = await run_pipeline(force=True, dry_run=False, crypto_only=True)
+        logger.info(f"Scheduler | crypto_cycle complete: status={result['status']}")
+    except Exception as exc:
+        logger.error(f"Scheduler | crypto_cycle CRASHED: {exc}")
 
 
 async def _evening_postmortem() -> None:
@@ -140,7 +178,7 @@ def set_auto_trading(enabled: bool) -> dict:
         for job in scheduler.get_jobs():
             job.resume()
         _auto_trading_enabled = True
-        logger.info("AUTO-TRADING ENABLED — all scheduler jobs resumed")
+        logger.info("AUTO-TRADING ENABLED — all scheduler jobs resumed (24/7 crypto + market hours ETFs)")
     else:
         for job in scheduler.get_jobs():
             job.pause()

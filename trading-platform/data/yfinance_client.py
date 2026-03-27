@@ -13,6 +13,7 @@ Why Alpaca instead of yfinance in production:
 
 Universe:
   Crypto ETFs   : BITO, IBIT, GBTC, ETHA
+  Crypto Spot   : BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD
   Commodity ETFs: GLD, SLV, USO, DBA, PDBC, CPER
   Currency ETFs : UUP, FXE, FXY, FXB, EUO, YCS
   Wildcard      : QQQ, SPY, TLT, HYG, EEM
@@ -38,20 +39,25 @@ import logging
 from config.settings import settings
 
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets/v2"
+ALPACA_CRYPTO_BASE_URL = "https://data.alpaca.markets/v1beta3/crypto/us"
 
 UNIVERSE: dict[str, list[str]] = {
     "crypto": ["BITO", "IBIT", "GBTC", "ETHA"],
+    "crypto_spot": ["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "AVAX/USD", "LINK/USD"],
     "commodity": ["GLD", "SLV", "USO", "DBA", "PDBC", "CPER"],
     "currency": ["UUP", "FXE", "FXY", "FXB", "EUO", "YCS"],
     "wildcard": ["QQQ", "SPY", "TLT", "HYG", "EEM"],
     "cash_equivalent": ["SGOV"],
 }
 
+ETF_CATEGORIES = ["crypto", "commodity", "currency", "wildcard", "cash_equivalent"]
+
 ALL_TICKERS: list[str] = [t for tickers in UNIVERSE.values() for t in tickers]
+ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
+CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]
 
 
 def _is_retryable_http_error(exc: BaseException) -> bool:
-    """Only retry on 429 (rate limit) or 5xx (server errors), not 401/403/404."""
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code in (429, 500, 502, 503, 504)
     return isinstance(exc, httpx.RequestError)
@@ -72,10 +78,6 @@ def _make_retry_decorator():
 
 
 def _alpaca_headers() -> dict[str, str]:
-    """
-    Alpaca API headers. Uses paper trading keys (same keys work for market data).
-    If no Alpaca keys are configured, uses unauthenticated access (limited rate).
-    """
     if settings.alpaca_api_key and settings.alpaca_api_key != "dummy":
         return {
             "APCA-API-KEY-ID": settings.alpaca_api_key,
@@ -84,46 +86,8 @@ def _alpaca_headers() -> dict[str, str]:
     return {}
 
 
-async def _fetch_bars_alpaca(
-    client: httpx.AsyncClient,
-    ticker: str,
-    start_date: str,
-    end_date: str,
-) -> dict[str, Any]:
-    """
-    Fetch daily bars for a single ticker from Alpaca Market Data API.
-    Returns computed metrics or an error dict.
-    """
-
-    @_make_retry_decorator()
-    async def _request() -> list[dict]:
-        url = f"{ALPACA_DATA_BASE_URL}/stocks/{ticker}/bars"
-        params = {
-            "timeframe": "1Day",
-            "start": start_date,
-            "end": end_date,
-            "limit": 200,
-            "feed": "iex",
-            "adjustment": "all",
-        }
-        response = await client.get(
-            url,
-            params=params,
-            headers=_alpaca_headers(),
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data.get("bars", [])
-
-    try:
-        bars = await _request()
-    except Exception as exc:
-        logger.warning(f"Alpaca Market Data | {ticker}: {exc}")
-        return {"ticker": ticker, "error": str(exc)}
-
+def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
     if not bars:
-        logger.warning(f"Alpaca Market Data | No bars returned for {ticker}")
         return {"ticker": ticker, "error": "no data"}
 
     closes = [float(b["c"]) for b in bars]
@@ -163,51 +127,125 @@ async def _fetch_bars_alpaca(
     }
 
 
-async def fetch_market_data(period: str = "3mo") -> dict[str, Any]:
-    """
-    Asynchronously fetch price data for the full trading universe via Alpaca Market Data.
+async def _fetch_bars_alpaca(
+    client: httpx.AsyncClient,
+    ticker: str,
+    start_date: str,
+    end_date: str,
+) -> dict[str, Any]:
+    @_make_retry_decorator()
+    async def _request() -> list[dict]:
+        url = f"{ALPACA_DATA_BASE_URL}/stocks/{ticker}/bars"
+        params = {
+            "timeframe": "1Day",
+            "start": start_date,
+            "end": end_date,
+            "limit": 200,
+            "feed": "iex",
+            "adjustment": "all",
+        }
+        response = await client.get(
+            url,
+            params=params,
+            headers=_alpaca_headers(),
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("bars", [])
 
-    Args:
-        period: Lookback period string — '1mo', '3mo', '6mo', '1y'.
+    try:
+        bars = await _request()
+    except Exception as exc:
+        logger.warning(f"Alpaca Market Data | {ticker}: {exc}")
+        return {"ticker": ticker, "error": str(exc)}
 
-    Returns:
-        Dict with 'by_ticker' (flat lookup) and 'by_category' (grouped).
-    """
+    return _compute_metrics(ticker, bars)
+
+
+async def _fetch_bars_crypto(
+    client: httpx.AsyncClient,
+    ticker: str,
+    start_date: str,
+    end_date: str,
+) -> dict[str, Any]:
+    @_make_retry_decorator()
+    async def _request() -> list[dict]:
+        symbol = ticker.replace("/", "")
+        url = f"{ALPACA_CRYPTO_BASE_URL}/bars"
+        params = {
+            "symbols": symbol,
+            "timeframe": "1Day",
+            "start": start_date,
+            "end": end_date,
+            "limit": 200,
+        }
+        response = await client.get(
+            url,
+            params=params,
+            headers=_alpaca_headers(),
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("bars", {}).get(symbol, [])
+
+    try:
+        bars = await _request()
+    except Exception as exc:
+        logger.warning(f"Alpaca Crypto Data | {ticker}: {exc}")
+        return {"ticker": ticker, "error": str(exc)}
+
+    return _compute_metrics(ticker, bars)
+
+
+async def fetch_market_data(period: str = "3mo", crypto_only: bool = False) -> dict[str, Any]:
     period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 90)
     end_date = date.today().isoformat()
     start_date = (date.today() - timedelta(days=period_days)).isoformat()
 
+    if crypto_only:
+        tickers_to_fetch = CRYPTO_SPOT_TICKERS
+        categories = {"crypto_spot": CRYPTO_SPOT_TICKERS}
+    else:
+        tickers_to_fetch = ALL_TICKERS
+        categories = UNIVERSE
+
     logger.info(
-        f"Market Data | Fetching {len(ALL_TICKERS)} tickers via Alpaca "
+        f"Market Data | Fetching {len(tickers_to_fetch)} tickers via Alpaca "
+        f"({'crypto-only' if crypto_only else 'full universe'}) "
         f"({start_date} → {end_date})"
     )
 
     async with httpx.AsyncClient() as client:
-        tasks = [
-            _fetch_bars_alpaca(client, ticker, start_date, end_date)
-            for ticker in ALL_TICKERS
-        ]
+        tasks = []
+        for ticker in tickers_to_fetch:
+            if "/" in ticker:
+                tasks.append(_fetch_bars_crypto(client, ticker, start_date, end_date))
+            else:
+                tasks.append(_fetch_bars_alpaca(client, ticker, start_date, end_date))
         results_list = await asyncio.gather(*tasks)
 
     by_ticker: dict[str, Any] = {r["ticker"]: r for r in results_list}
     by_category: dict[str, dict[str, Any]] = {
         cat: {t: by_ticker.get(t, {"ticker": t, "error": "missing"}) for t in tickers}
-        for cat, tickers in UNIVERSE.items()
+        for cat, tickers in categories.items()
     }
 
     fetched = sum(1 for v in by_ticker.values() if "error" not in v)
     logger.info(
-        f"Market Data | Complete — {fetched}/{len(ALL_TICKERS)} tickers fetched successfully"
+        f"Market Data | Complete — {fetched}/{len(tickers_to_fetch)} tickers fetched successfully"
     )
 
     return {"by_ticker": by_ticker, "by_category": by_category}
 
 
 async def fetch_single_ticker(ticker: str, period: str = "3mo") -> dict[str, Any]:
-    """Fetch data for a single ticker. Useful for runtime lookups."""
     period_days = {"1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}.get(period, 90)
     end_date = date.today().isoformat()
     start_date = (date.today() - timedelta(days=period_days)).isoformat()
     logger.info(f"Market Data | Fetching single ticker: {ticker}")
     async with httpx.AsyncClient() as client:
+        if "/" in ticker:
+            return await _fetch_bars_crypto(client, ticker, start_date, end_date)
         return await _fetch_bars_alpaca(client, ticker, start_date, end_date)

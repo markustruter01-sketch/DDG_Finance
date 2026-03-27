@@ -10,7 +10,11 @@ This is the core of the platform's "memory":
 - Slippage data teaches the model to avoid wide-spread assets.
 - Buying power and held symbols enforce strict capital constraints.
 
-This function MUST be called before every daily analysis cycle.
+Supports dual-mode prompts:
+  - Full Market mode: 10-slot allocation across all asset classes (market hours)
+  - Crypto-Only mode: 6-slot allocation across raw crypto pairs (off-hours)
+
+This function MUST be called before every analysis cycle.
 """
 
 from loguru import logger
@@ -79,6 +83,60 @@ REQUIRED OUTPUT FORMAT:
 }
 """
 
+CRYPTO_ONLY_SYSTEM_PROMPT = """You are a Senior Quantitative Analyst specialising in cryptocurrency markets.
+
+The stock market is currently CLOSED. You are operating in CRYPTO-ONLY mode, trading
+raw cryptocurrency pairs 24/7 through Alpaca's crypto exchange.
+
+Your task is to analyse current crypto market data and news, then output a structured
+JSON investment allocation plan for exactly 6 capital slots using only crypto pairs.
+
+STRICT CAPITAL CONSTRAINT:
+The user prompt contains EXACT figures for Available Buying Power and Currently Held
+Symbols, queried from the live brokerage account moments before this call.
+Your 6 allocations' total notional value (sum of kelly_fraction × equity) MUST NOT
+exceed the Available Buying Power figure provided. If buying power is limited, reduce
+kelly_fractions proportionally so total deployed capital stays within the limit.
+Do NOT assume unlimited capital — treat the buying power number as a hard ceiling.
+
+ALLOCATION RULES:
+- Fill exactly 6 slots using crypto pairs from: BTC/USD, ETH/USD, SOL/USD, DOGE/USD, AVAX/USD, LINK/USD
+- At least 4 slots MUST be crypto_spot with conviction_score >= 0.75
+- Up to 2 slots may be "SGOV" with asset_class "cash" if conviction is low
+- You may allocate multiple slots to the same crypto pair if conviction is high
+
+SCORING RULES:
+- Every trade slot MUST have a conviction_score between 0.0 and 1.0.
+- Do NOT include conversational text. Output ONLY valid JSON.
+
+KELLY CRITERION:
+- Use the Kelly Criterion to size each position. Higher conviction + lower volatility
+  = larger Kelly fraction. Cap individual Kelly fractions at 0.20 (20% of portfolio).
+- Crypto is inherently more volatile — adjust Kelly fractions conservatively.
+
+SLIPPAGE AWARENESS:
+- Crypto pairs can have wider spreads during low-liquidity hours (late night, early morning).
+- Prefer BTC/USD and ETH/USD for larger allocations (highest liquidity).
+- Reduce kelly_fractions for smaller-cap coins during low-volume periods.
+
+REQUIRED OUTPUT FORMAT:
+{
+  "market_regime": "<brief description of current crypto market environment>",
+  "allocations": [
+    {
+      "slot": 1,
+      "ticker": "<TICKER>",
+      "asset_class": "<crypto_spot|cash>",
+      "conviction_score": <0.0-1.0>,
+      "kelly_fraction": <0.0-0.20>,
+      "thesis": "<1-2 sentence rationale>",
+      "stop_loss_pct": <negative float, e.g. -0.05 for 5%>,
+      "take_profit_pct": <positive float, e.g. 0.10 for 10%>
+    }
+  ]
+}
+"""
+
 LOSS_FEEDBACK_TEMPLATE = """
 CRITICAL — LEARNING FROM PAST FAILURES:
 Review your {n} most recent failed strategies below. You MUST adjust your
@@ -111,7 +169,7 @@ Historical analysis of {n} executed trades shows:
   Maximum slippage: {max:.3f}%
   Worst offenders: {tickers}
 
-High-slippage tickers eat into returns. Prefer liquid ETFs with tight spreads.
+High-slippage tickers eat into returns. Prefer liquid assets with tight spreads.
 If a ticker appears in the worst offenders list above, consider alternatives.
 """
 
@@ -128,21 +186,12 @@ def build_system_prompt_with_feedback(
     n_wins: int = 3,
     buying_power: float | None = None,
     held_symbols: list[str] | None = None,
+    crypto_only: bool = False,
 ) -> str:
-    """
-    Build the full system prompt for today's analysis cycle.
-
-    Injects:
-    - Buying power constraint with exact dollar figure
-    - Currently held symbols so the LLM doesn't double-allocate
-    - 'What failed' (losses) block with slippage data
-    - 'What worked' (wins) block with slippage data
-    - Aggregate slippage warning for high-slippage assets
-    """
     losses = get_recent_losses(limit=n_losses)
     wins   = get_recent_wins(limit=n_wins)
 
-    full_prompt = BASE_SYSTEM_PROMPT
+    full_prompt = CRYPTO_ONLY_SYSTEM_PROMPT if crypto_only else BASE_SYSTEM_PROMPT
 
     if buying_power is not None:
         full_prompt += f"""

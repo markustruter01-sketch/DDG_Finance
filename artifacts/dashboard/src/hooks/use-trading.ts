@@ -32,6 +32,7 @@ export interface PlatformStatus {
   };
   auto_trading: boolean;
   cycle_interval: string;
+  trading_mode: string;
   data_cache: Array<{ name: string; ttl_seconds: number; cached: boolean; age_seconds: number; hits: number; misses: number }>;
 }
 

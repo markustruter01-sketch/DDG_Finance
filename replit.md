@@ -28,8 +28,12 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
   - `analysis/post_mortem.py` — Daily Alpaca reconciliation → auto-close W/L
   - `analysis/groq_client.py` — Groq API (llama-3.3-70b-versatile, free)
   - `analysis/feedback_injection.py` — RAG: injects 5 recent losses into system prompt
-- **Phase 3 — LLM Analysis Cycle**: Not started
-- **Phase 3 — Portfolio/Kelly**: Not started
+- **Phase 3 — LLM Analysis Cycle**: COMPLETE
+  - `analysis/schemas.py` — Pydantic models: AllocationSlot, AnalysisOutput (full validation)
+  - `portfolio/kelly.py` — Kelly Criterion: compute, batch-apply, normalise (half-Kelly + 20% cap)
+  - `portfolio/allocator.py` — Conviction threshold enforcement + SGOV replacement + Kelly recalculation
+  - `analysis/analyzer.py` — Full daily cycle: RAG → data fetch → Groq → validate → output
+  - Auto-retry: on Pydantic failure, exact error is injected into next Groq call (self-correcting)
 - **Phase 4 — Execution/Alpaca**: Not started
 - **Phase 5 — Scheduler/Kill Switch**: Not started
 

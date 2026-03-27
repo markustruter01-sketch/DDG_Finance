@@ -22,15 +22,23 @@ Your task is to analyse current global macroeconomic data, asset prices, and new
 then output a structured JSON investment allocation plan for exactly 10 capital slots.
 
 ALLOCATION RULES:
-- Crypto ETFs:    2 to 4 slots  (BITO, IBIT, GBTC, ETHA)
-- Commodity ETFs: 2 to 6 slots  (GLD, SLV, USO, DBA, PDBC, CPER)
-- Currency ETFs:  1+ slots      (UUP, FXE, FXY, FXB, EUO, YCS)
-- Wildcard:       1+ slots      (QQQ, SPY, TLT, HYG, EEM)
-- Cash Equivalent (SGOV): Fill any slot where conviction < 0.75
+You MUST fill the following slots with tickers that have conviction_score >= 0.75.
+If you cannot find a qualifying ticker for a required slot, use the LEAST BAD option
+in that category — do NOT fall back to SGOV for these required slots.
+
+REQUIRED (conviction >= 0.75 for each):
+- Crypto ETFs:    exactly 2 slots  → pick 2 from: BITO, IBIT, GBTC, ETHA
+- Commodity ETFs: exactly 3 slots  → pick 3 from: GLD, SLV, USO, DBA, PDBC, CPER
+- Currency ETFs:  exactly 1 slot   → pick 1 from: UUP, FXE, FXY, FXB, EUO, YCS
+- Wildcard:       exactly 1 slot   → pick 1 from: QQQ, SPY, TLT, HYG, EEM
+
+OPTIONAL (remaining 3 slots — use conviction to decide):
+- Allocate remaining 3 slots to any approved category.
+- Use ticker "SGOV" with asset_class "cash" only for slots where
+  conviction_score < 0.75 AND they are not in the required count above.
 
 SCORING RULES:
 - Every trade slot MUST have a conviction_score between 0.0 and 1.0.
-- Any slot with conviction_score < 0.75 MUST use ticker "SGOV" (cash equivalent).
 - Do NOT include conversational text. Output ONLY valid JSON.
 
 KELLY CRITERION:

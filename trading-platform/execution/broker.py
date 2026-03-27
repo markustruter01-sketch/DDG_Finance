@@ -53,6 +53,7 @@ def get_account() -> dict:
     acct: TradeAccount = _client().get_account()
     return {
         "equity":             float(acct.equity),
+        "last_equity":        float(acct.last_equity),
         "cash":               float(acct.cash),
         "buying_power":       float(acct.buying_power),
         "trading_blocked":    acct.trading_blocked,

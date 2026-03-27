@@ -603,6 +603,88 @@ async def ai_commentary(force: bool = False) -> dict:
         )
     positions_text = "\n".join(pos_lines) or "  (no open positions — fully in cash)"
 
+    extra_context_parts = []
+
+    try:
+        from data.sentiment import get_sentiment
+        sentiment = get_sentiment()
+        cfg = sentiment.get("crypto_fear_greed", {})
+        mfg = sentiment.get("market_fear_greed", {})
+        extra_context_parts.append(
+            f"Sentiment: Crypto Fear&Greed={cfg.get('value', '?')} ({cfg.get('label', '?')}), "
+            f"Market Fear&Greed={mfg.get('value', '?')} ({mfg.get('label', '?')})"
+        )
+    except Exception:
+        pass
+
+    try:
+        from data.economic_calendar import get_blackout_state, get_upcoming_events
+        blackout = get_blackout_state()
+        if blackout.get("active"):
+            extra_context_parts.append(
+                f"BLACKOUT ACTIVE: {blackout.get('event', 'economic release')} — trading paused"
+            )
+        upcoming = get_upcoming_events(days_ahead=3)
+        if upcoming:
+            evts = ", ".join(f"{e['name']} in {e['days_away']}d" for e in upcoming[:3])
+            extra_context_parts.append(f"Upcoming events: {evts}")
+    except Exception:
+        pass
+
+    try:
+        from analysis.attribution import compute_attribution
+        attr = compute_attribution()
+        if attr.get("closed_trades", 0) > 0:
+            ov = attr["overall"]
+            best_regime = max(attr.get("regime_attribution", {}).items(), key=lambda x: x[1]["total_pnl_pct"], default=None)
+            regime_note = f", best regime: {best_regime[0]} ({best_regime[1]['total_pnl_pct']:+.1f}%)" if best_regime else ""
+            extra_context_parts.append(
+                f"Attribution: {ov['wins']}W/{ov['losses']}L, win rate {ov['win_rate']:.0f}%, "
+                f"avg P&L {ov['avg_pnl_pct']:+.2f}%{regime_note}"
+            )
+    except Exception:
+        pass
+
+    try:
+        snapshots = get_performance_snapshots(limit=30)
+        if snapshots and len(snapshots) >= 2:
+            import numpy as np
+            daily_rets = [s["daily_pnl_pct"] / 100.0 for s in snapshots if s.get("daily_pnl_pct") is not None]
+            if len(daily_rets) >= 2:
+                arr = np.array(daily_rets)
+                std_r = float(np.std(arr, ddof=1))
+                if std_r > 0:
+                    sharpe = float((np.mean(arr) - 0.05/252) / std_r * np.sqrt(252))
+                    extra_context_parts.append(f"Risk: Sharpe={sharpe:.2f}, Volatility={std_r*np.sqrt(252)*100:.1f}%")
+    except Exception:
+        pass
+
+    try:
+        from data.yfinance_client import get_cached_data
+        cached = get_cached_data()
+        if cached:
+            tickers_with_closes = [t for t, d in cached.items() if d.get("closes") and len(d["closes"]) >= 20]
+            if len(tickers_with_closes) >= 2:
+                import numpy as np
+                close_arrays = {}
+                min_len = min(len(cached[t]["closes"]) for t in tickers_with_closes)
+                for t in tickers_with_closes:
+                    close_arrays[t] = cached[t]["closes"][-min_len:]
+                high_corr = []
+                for i, t1 in enumerate(tickers_with_closes):
+                    for t2 in tickers_with_closes[i+1:]:
+                        corr = float(np.corrcoef(close_arrays[t1], close_arrays[t2])[0, 1])
+                        if abs(corr) > 0.85:
+                            high_corr.append(f"{t1}/{t2} r={corr:.2f}")
+                if high_corr:
+                    extra_context_parts.append(f"Correlation warnings: {', '.join(high_corr[:3])}")
+    except Exception:
+        pass
+
+    extra_context_text = ""
+    if extra_context_parts:
+        extra_context_text = "\n\nMarket intelligence:\n" + "\n".join(f"  {p}" for p in extra_context_parts)
+
     user_prompt = f"""
 Recent Wins (reinforcing behaviour):
 {wins_text}
@@ -614,16 +696,18 @@ Journal summary: {summary.get('wins', 0)} wins / {summary.get('losses', 0)} loss
 
 Current open positions:
 {positions_text}
+{extra_context_text}
 """
 
     system_prompt = (
-        "You are an AI quantitative trading assistant with a distinct, confident personality. "
-        "In 3–4 short, punchy sentences maximum, share: "
-        "(1) the single most important thing you have learned from your recent wins and losses "
-        "and exactly how you are adjusting your strategy; "
-        "(2) a candid one-line take on how the current open positions are looking right now. "
-        "Be direct, specific, and avoid generic statements. "
-        "Write in first person, casual but intelligent. No bullet points. Plain paragraph only."
+        "You are 'The Degen Oracle' — an AI quantitative trading brain with swagger, sharp wit, "
+        "and deep market intuition. You speak in first person with confident, slightly irreverent energy. "
+        "In 4–6 punchy sentences, share: "
+        "(1) the key lessons from recent wins and losses and how you are adjusting strategy; "
+        "(2) your read on the current sentiment/macro environment and how it affects your positioning; "
+        "(3) a candid take on how current open positions are looking. "
+        "Reference specific tickers, sentiment data, correlation risks, or economic events when available. "
+        "Be direct, specific, and never generic. Plain paragraph only, no bullet points."
     )
 
     def _blocking_call() -> str:
@@ -637,7 +721,7 @@ Current open positions:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.72,
-            max_tokens=220,
+            max_tokens=400,
         )
         return resp.choices[0].message.content.strip()
 
@@ -826,13 +910,36 @@ async def performance_attribution() -> dict:
 async def risk_metrics() -> dict:
     snapshots = get_performance_snapshots(limit=90)
     if not snapshots:
+        try:
+            account = get_account()
+            equity = float(account["equity"])
+            last_equity = float(account.get("last_equity", account["equity"]))
+            if last_equity > 0:
+                daily_pnl = (equity - last_equity) / last_equity * 100
+                dd = max(0, (last_equity - equity) / last_equity * 100)
+                return {
+                    "sharpe_ratio": None,
+                    "sortino_ratio": None,
+                    "max_drawdown_pct": round(dd, 2),
+                    "calmar_ratio": None,
+                    "volatility_annual_pct": None,
+                    "annualised_return_pct": None,
+                    "data_points": 1,
+                    "period_days": 1,
+                    "message": "Awaiting post-mortem snapshots — run a post-mortem to populate full risk metrics",
+                }
+        except Exception:
+            pass
         return {
             "sharpe_ratio": None,
             "sortino_ratio": None,
             "max_drawdown_pct": None,
             "calmar_ratio": None,
             "volatility_annual_pct": None,
+            "annualised_return_pct": None,
             "data_points": 0,
+            "period_days": 0,
+            "message": "No performance data yet — run a post-mortem cycle to start tracking",
         }
 
     import numpy as np

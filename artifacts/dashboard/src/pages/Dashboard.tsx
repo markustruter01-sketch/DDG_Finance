@@ -573,7 +573,7 @@ function SpeechBubble({
               <Sparkles className="h-3.5 w-3.5 text-violet-400" />
             </motion.div>
             <span className="text-[10px] uppercase font-semibold tracking-wider text-violet-400">
-              AI Brain Thoughts
+              Oracle Dispatch
             </span>
             {cached && ageMin != null && (
               <span className="ml-auto text-[9px] text-muted-foreground/50">
@@ -596,7 +596,7 @@ function SpeechBubble({
                 <span className="text-[11px] text-muted-foreground ml-1">Thinking…</span>
               </div>
             ) : commentary ? (
-              <p ref={textRef} className="text-[11px] leading-relaxed text-slate-300 font-light line-clamp-5">
+              <p ref={textRef} className="text-[11px] leading-relaxed text-slate-300 font-light">
                 {commentary}
               </p>
             ) : (
@@ -762,7 +762,7 @@ function BrainInsightsModal({ open, onClose }: { open: boolean; onClose: () => v
         <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Brain className="h-4 w-4 text-indigo-400 flex-shrink-0" />
-            <span className="text-sm font-semibold text-white">AI Brain — Strategy Intelligence</span>
+            <span className="text-sm font-semibold text-white">The Degen Oracle — Strategy Intelligence</span>
             {regimeMeta && regime && (
               <span className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded border ml-1", regimeMeta.color, regimeMeta.bg, regimeMeta.border)}>
                 {regimeMeta.label}
@@ -920,7 +920,7 @@ function AIBrainSection() {
         <div className="relative flex items-center gap-2 mb-4">
           <Brain className="h-3.5 w-3.5 text-indigo-400" />
           <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
-            Learning Intelligence
+            The Degen Oracle
           </span>
           <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
             <motion.span
@@ -1109,7 +1109,7 @@ function AuditorDialogueBubble({
               <Eye className="h-3.5 w-3.5 text-amber-400" />
             </motion.div>
             <span className="text-[10px] uppercase font-semibold tracking-wider text-amber-400">
-              Audit Findings
+              Inspection Report
             </span>
             <span className="ml-auto text-[9px] text-muted-foreground/50">
               daily 4:30PM ET
@@ -1205,7 +1205,7 @@ function AuditorInsightsModal({ open, onClose }: { open: boolean; onClose: () =>
         <div className="flex items-center gap-3 px-6 py-4 border-b border-white/5">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Shield className="h-4 w-4 text-amber-400 flex-shrink-0" />
-            <span className="text-sm font-semibold text-white">Auditor Agent — HITL Supervisor</span>
+            <span className="text-sm font-semibold text-white">Inspector Rekt — HITL Supervisor</span>
             <span className={cn("text-[10px] font-mono font-bold px-2 py-0.5 rounded border ml-1", overallMeta.color, overallMeta.bg, overallMeta.border)}>
               {overallMeta.label}
             </span>
@@ -1314,7 +1314,7 @@ function AuditorAgentSection() {
         <div className="relative flex items-center gap-2 mb-4">
           <Shield className="h-3.5 w-3.5 text-amber-400" />
           <span className="text-[10px] uppercase font-semibold tracking-wider text-amber-400/80">
-            HITL Auditor
+            Inspector Rekt
           </span>
           <motion.span
             key={overall}

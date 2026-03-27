@@ -24,7 +24,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
-- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **auditor agent** (HITL), attribution breakdown, backtester
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
@@ -94,7 +94,7 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 
 ### Key Components
 - `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle
-- `Dashboard.tsx` — Main dashboard page with all sections
+- `Dashboard.tsx` — Main dashboard page with all sections; AI brain = "The Degen Oracle", auditor = "Inspector Rekt"
 - `CorrelationMatrix.tsx` — Pearson correlation heatmap with high-correlation warnings
 - `SentimentGauges.tsx` — Dual SVG ring gauges for Crypto + Market Fear & Greed
 - `EconomicCalendarBanner.tsx` — Blackout banner (red alert) + upcoming events list

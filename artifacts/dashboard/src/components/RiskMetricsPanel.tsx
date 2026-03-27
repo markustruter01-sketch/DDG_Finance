@@ -53,16 +53,23 @@ export function RiskMetricsPanel() {
         {isLoading ? (
           <div className="text-xs text-muted-foreground italic">Loading risk metrics...</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {metrics.map((m) => (
-              <div key={m.label} className="bg-slate-900/70 rounded-xl p-3 border border-white/5">
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{m.label}</div>
-                <div className={cn("text-xl font-mono font-bold", metricColor(m.label, m.value ?? null))}>
-                  {m.value != null ? `${m.fmt(m.value)}${m.suffix}` : "—"}
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {metrics.map((m) => (
+                <div key={m.label} className="bg-slate-900/70 rounded-xl p-3 border border-white/5">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{m.label}</div>
+                  <div className={cn("text-xl font-mono font-bold", metricColor(m.label, m.value ?? null))}>
+                    {m.value != null ? `${m.fmt(m.value)}${m.suffix}` : "—"}
+                  </div>
                 </div>
+              ))}
+            </div>
+            {data?.message && (
+              <div className="mt-3 text-[10px] text-muted-foreground/60 italic border-t border-white/5 pt-2">
+                {data.message}
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

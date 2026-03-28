@@ -491,8 +491,8 @@ function CombinedPortfolioSummary() {
         </div>
       </div>
 
-      {/* Two-panel split */}
-      <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-4">
+      {/* Two-panel split — Alpaca (5 cards) on left, Kraken (3 cards) on right */}
+      <div className="grid grid-cols-1 xl:grid-cols-[5fr_3fr] gap-4">
 
         {/* ── LEFT: Alpaca US Equities ───────────────────────────────────────── */}
         <div className="space-y-2">
@@ -634,19 +634,23 @@ function CombinedPortfolioSummary() {
               </span>
             )}
             <div className="h-px flex-1 bg-cyan-500/10" />
-            {!krakenReady && (
-              <span className="text-[9px] text-muted-foreground/40 font-mono">Bot not running</span>
-            )}
+            <span className={cn(
+              "text-[9px] font-mono",
+              krakenReady ? "text-cyan-400/50" : "text-muted-foreground/30"
+            )}>
+              {krakenReady ? `cycle #${kraken?.cycle_count ?? 0}` : "not running"}
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-3">
 
-            {/* Kraken Bot Equity */}
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/20 transition-all duration-500 relative overflow-hidden col-span-2">
+          {/* 3 cards in a single row — matches Alpaca section height */}
+          <div className="grid grid-cols-3 gap-3">
+
+            {/* Paper / Live Equity */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/20 transition-all duration-500 relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
               <CardContent className="p-4">
                 <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
                   {krakenPaper ? "Paper Equity" : "Live Equity"}
-                  {krakenPaper && <span className="text-[9px] text-yellow-400/70">simulated</span>}
                 </div>
                 {krakenReady ? (
                   <>
@@ -656,9 +660,9 @@ function CombinedPortfolioSummary() {
                     />
                     <div className={cn("text-xs mt-1.5 flex items-center gap-1 font-medium", krakenPnl >= 0 ? "text-cyan-400/70" : "text-red-400/70")}>
                       {krakenPnl >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      {krakenPnl >= 0 ? "+" : ""}{formatCurrency(krakenPnl)} all-time
+                      {krakenPnl >= 0 ? "+" : ""}{formatCurrency(krakenPnl)}
                       {krakenPnlPct !== 0 && (
-                        <span className={cn("text-[9px] font-mono px-1 py-0.5 rounded ml-1", krakenPnl >= 0 ? "bg-cyan-500/10 text-cyan-400" : "bg-red-500/10 text-red-400")}>
+                        <span className={cn("text-[9px] font-mono px-1 py-0.5 rounded", krakenPnl >= 0 ? "bg-cyan-500/10 text-cyan-400" : "bg-red-500/10 text-red-400")}>
                           {krakenPnlPct >= 0 ? "+" : ""}{krakenPnlPct.toFixed(2)}%
                         </span>
                       )}
@@ -667,7 +671,7 @@ function CombinedPortfolioSummary() {
                 ) : (
                   <>
                     <div className="fluid-metric font-mono font-bold text-muted-foreground/30 tracking-tight">—</div>
-                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">Start the bot to begin tracking</div>
+                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">Start bot to track</div>
                   </>
                 )}
               </CardContent>
@@ -680,19 +684,23 @@ function CombinedPortfolioSummary() {
                 {krakenReady ? (
                   <>
                     <div className="fluid-metric font-mono font-bold text-white tracking-tight">
-                      {krakenDeployed.toFixed(0)}<span className="text-xs text-muted-foreground">%</span>
+                      {krakenDeployed.toFixed(0)}<span className="text-xs text-muted-foreground font-normal">%</span>
                     </div>
-                    <div className="mt-1.5 h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className="mt-2 h-1 rounded-full bg-white/5 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-cyan-500/50 transition-all duration-700"
                         style={{ width: `${Math.min(krakenDeployed, 100)}%` }}
                       />
                     </div>
+                    <div className="text-[9px] text-muted-foreground/50 mt-1">
+                      {kraken?.position_count ?? 0}/{kraken?.max_positions ?? 3} positions
+                    </div>
                   </>
                 ) : (
                   <>
                     <div className="fluid-metric font-mono font-bold text-muted-foreground/30">—</div>
-                    <div className="mt-1.5 h-1 rounded-full bg-white/5" />
+                    <div className="mt-2 h-1 rounded-full bg-white/5" />
+                    <div className="text-[9px] text-muted-foreground/30 mt-1">0/3 positions</div>
                   </>
                 )}
               </CardContent>
@@ -708,10 +716,10 @@ function CombinedPortfolioSummary() {
                 {krakenReady && krakenWinRate !== null ? (
                   <>
                     <div className="fluid-metric font-mono font-bold text-white tracking-tight">
-                      {krakenWinRate.toFixed(0)}<span className="text-xs text-muted-foreground">%</span>
+                      {krakenWinRate.toFixed(0)}<span className="text-xs text-muted-foreground font-normal">%</span>
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-1.5">
-                      {krakenWins}W / {krakenTrades - krakenWins}L · {krakenTrades} trades
+                      {krakenWins}W · {krakenTrades - krakenWins}L · {krakenTrades} total
                     </div>
                   </>
                 ) : (

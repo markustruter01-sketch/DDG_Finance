@@ -1278,4 +1278,111 @@ async def kraken_status() -> dict:
         raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
 
 
+
+# ── Kraken Bot — Performance Metrics ──────────────────────────────────────────
+# Separate from the Alpaca performance endpoints (/performance/history,
+# /performance/summary). This reads exclusively from kraken-bot/status.json
+# which is written only by kraken-bot/main.py.
+# The Alpaca trading system never touches this file.
+
+@router.get("/kraken/performance", tags=["Kraken Bot"])
+async def kraken_performance() -> dict:
+    """
+    Derive performance statistics from the Kraken bot's status.json.
+
+    DATA SOURCE: kraken-bot/status.json (Kraken exchange, separate capital pool)
+    NOT RELATED TO: /performance/history or /performance/summary (Alpaca data)
+
+    Returns computed metrics over the recent_trades history:
+      - trade count, win rate, total/best/worst/avg P&L
+      - per-symbol breakdown
+      - the full recent trade list
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    status_file = _Path("kraken-bot/status.json")
+
+    # Empty state — bot hasn't run yet
+    empty: dict = {
+        "data_source":     "kraken-bot/status.json",
+        "exchange":        "Kraken (crypto, independent from Alpaca)",
+        "has_data":        False,
+        "total_trades":    0,
+        "win_count":       0,
+        "loss_count":      0,
+        "win_rate_pct":    None,
+        "total_pnl_pct":   None,
+        "total_pnl_usd":   None,
+        "best_trade_pct":  None,
+        "worst_trade_pct": None,
+        "avg_trade_pct":   None,
+        "by_symbol":       {},
+        "recent_trades":   [],
+        "current_equity":  0,
+        "cycle_count":     0,
+        "bot_status":      "not_started",
+    }
+
+    if not status_file.exists():
+        return empty
+
+    try:
+        status = _json.loads(status_file.read_text())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
+
+    trades: list[dict] = status.get("recent_trades", [])
+
+    if not trades:
+        empty["bot_status"]    = status.get("status", "not_started")
+        empty["current_equity"] = status.get("total_equity_usd", 0)
+        empty["cycle_count"]   = status.get("cycle_count", 0)
+        return empty
+
+    pnl_list   = [t["pnl_pct"] for t in trades]
+    pnl_usd    = [t["pnl_usd"] for t in trades]
+    wins       = [p for p in pnl_list if p > 0]
+    losses     = [p for p in pnl_list if p <= 0]
+    win_rate   = (len(wins) / len(trades)) * 100 if trades else 0
+
+    # Per-symbol aggregation
+    by_symbol: dict[str, dict] = {}
+    for t in trades:
+        sym = t.get("symbol", "UNKNOWN")
+        if sym not in by_symbol:
+            by_symbol[sym] = {"trades": 0, "wins": 0, "total_pnl_pct": 0.0, "total_pnl_usd": 0.0}
+        by_symbol[sym]["trades"]        += 1
+        by_symbol[sym]["total_pnl_pct"] += t["pnl_pct"]
+        by_symbol[sym]["total_pnl_usd"] += t["pnl_usd"]
+        if t["pnl_pct"] > 0:
+            by_symbol[sym]["wins"] += 1
+
+    for sym in by_symbol:
+        n = by_symbol[sym]["trades"]
+        by_symbol[sym]["win_rate_pct"]  = round((by_symbol[sym]["wins"] / n) * 100, 1) if n else 0
+        by_symbol[sym]["total_pnl_pct"] = round(by_symbol[sym]["total_pnl_pct"], 2)
+        by_symbol[sym]["total_pnl_usd"] = round(by_symbol[sym]["total_pnl_usd"], 2)
+
+    return {
+        "data_source":     "kraken-bot/status.json",
+        "exchange":        "Kraken (crypto, independent from Alpaca)",
+        "has_data":        True,
+        "total_trades":    len(trades),
+        "win_count":       len(wins),
+        "loss_count":      len(losses),
+        "win_rate_pct":    round(win_rate, 1),
+        "total_pnl_pct":   round(sum(pnl_list), 2),
+        "total_pnl_usd":   round(sum(pnl_usd), 2),
+        "best_trade_pct":  round(max(pnl_list), 2),
+        "worst_trade_pct": round(min(pnl_list), 2),
+        "avg_trade_pct":   round(sum(pnl_list) / len(pnl_list), 2),
+        "by_symbol":       by_symbol,
+        "recent_trades":   trades,
+        "current_equity":  status.get("total_equity_usd", 0),
+        "cycle_count":     status.get("cycle_count", 0),
+        "bot_status":      status.get("status", "unknown"),
+    }
+
+
 app.include_router(router)

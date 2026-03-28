@@ -6,8 +6,9 @@ import {
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
-  useForceRebalance, useCloseAndReallocate, useKrakenStatus,
-  type AllocationPlan, type AuditFinding, type LivePosition, type KrakenStatus,
+  useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
+  type AllocationPlan, type AuditFinding, type LivePosition,
+  type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
 import { SentimentGauges } from "@/components/SentimentGauges";
@@ -2236,7 +2237,9 @@ function PerformanceSection() {
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
         <CardTitle className="flex items-center gap-2 fluid-heading">
-          <BarChart3 className="h-4 w-4 text-primary" /> System Performance
+          <BarChart3 className="h-4 w-4 text-primary" />
+          <span>Alpaca — Stock Trading Performance</span>
+          <span className="ml-1 text-[9px] font-normal text-blue-400/60 border border-blue-400/20 bg-blue-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">US Equities · Alpaca</span>
         </CardTitle>
         {summary?.latest_date && (
           <span className="text-[10px] text-muted-foreground terminal-text">
@@ -2362,6 +2365,180 @@ function PerformanceSection() {
                   />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Kraken Crypto Performance Section ────────────────────────────────────────
+// DATA SOURCE: kraken-bot/status.json  (Kraken exchange)
+// INDEPENDENT FROM: Alpaca stock trading system — separate exchange, separate capital
+
+function KrakenPerformanceSection() {
+  const { data, isLoading } = useKrakenPerformance();
+
+  const pnlColor = (v: number | null) =>
+    v == null ? "text-muted-foreground" : v >= 0 ? "text-green-400" : "text-red-400";
+
+  const fmt = (v: number | null, prefix = "", suffix = "") =>
+    v == null ? "—" : `${prefix}${v >= 0 ? "+" : ""}${v.toFixed(2)}${suffix}`;
+
+  const stats = [
+    {
+      label: "Total P&L",
+      value: data?.total_pnl_pct != null
+        ? `${data.total_pnl_pct >= 0 ? "+" : ""}${data.total_pnl_pct.toFixed(2)}%`
+        : "—",
+      sub: data?.total_pnl_usd != null
+        ? `${data.total_pnl_usd >= 0 ? "+" : ""}$${Math.abs(data.total_pnl_usd).toFixed(2)}`
+        : undefined,
+      color: pnlColor(data?.total_pnl_pct ?? null),
+    },
+    {
+      label: "Win Rate",
+      value: data?.win_rate_pct != null ? `${data.win_rate_pct.toFixed(1)}%` : "—",
+      sub: data?.has_data ? `${data.win_count}W / ${data.loss_count}L` : undefined,
+      color: data?.win_rate_pct != null
+        ? data.win_rate_pct >= 50 ? "text-green-400" : "text-amber-400"
+        : "text-muted-foreground",
+    },
+    {
+      label: "Best Trade",
+      value: fmt(data?.best_trade_pct ?? null, "", "%"),
+      color: "text-green-400",
+    },
+    {
+      label: "Worst Trade",
+      value: fmt(data?.worst_trade_pct ?? null, "", "%"),
+      color: "text-red-400",
+    },
+    {
+      label: "Avg Trade",
+      value: fmt(data?.avg_trade_pct ?? null, "", "%"),
+      color: pnlColor(data?.avg_trade_pct ?? null),
+    },
+    {
+      label: "Total Trades",
+      value: data?.total_trades != null ? String(data.total_trades) : "—",
+      sub: data?.cycle_count ? `${data.cycle_count} cycles` : undefined,
+      color: "text-white",
+    },
+  ];
+
+  return (
+    <Card className="border-cyan-500/10 overflow-hidden">
+      <CardHeader className="bg-cyan-950/20 border-b border-cyan-500/10 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
+          <span className="text-cyan-500/80">⚓</span>
+          <span>Davy Jones — Kraken Crypto Performance</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Crypto · Kraken</span>
+        </CardTitle>
+        <div className="flex items-center gap-3">
+          {data?.current_equity != null && data.current_equity > 0 && (
+            <span className="text-[10px] text-muted-foreground terminal-text">
+              Equity: ${data.current_equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </span>
+          )}
+          <span className="text-[9px] text-cyan-500/50 border border-cyan-500/10 bg-cyan-500/5 px-2 py-0.5 rounded-full">
+            kraken-bot/status.json
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent className="p-5">
+
+        {/* Firewall notice */}
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-cyan-500/10 bg-cyan-950/20 px-3 py-2.5 text-[10px] text-cyan-400/60">
+          <span className="mt-0.5 shrink-0">🔒</span>
+          <span>
+            <span className="font-semibold text-cyan-400/80">Data firewall:</span> all metrics below
+            are sourced exclusively from <code className="bg-cyan-950/40 px-1 rounded">kraken-bot/status.json</code>,
+            written by the Kraken bot. Alpaca trading data is stored separately in the PostgreSQL journal
+            and never mingles with crypto performance.
+          </span>
+        </div>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          {stats.map((stat) => (
+            <div key={stat.label} className="bg-slate-900/70 rounded-xl p-3 border border-cyan-500/8">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{stat.label}</div>
+              <div className={cn("text-xl font-mono font-bold", stat.color)}>{stat.value}</div>
+              {stat.sub && <div className="text-[9px] text-muted-foreground/60 mt-0.5 font-mono">{stat.sub}</div>}
+            </div>
+          ))}
+        </div>
+
+        {!data?.has_data ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <span className="text-4xl mb-3 opacity-20">⚓</span>
+            <p className="text-sm text-muted-foreground">
+              {data?.bot_status === "not_started"
+                ? "No trade history yet — start the Kraken bot to begin collecting data"
+                : "Waiting for the first completed trade..."}
+            </p>
+            <p className="text-xs text-muted-foreground/60 mt-1">
+              Add KRAKEN_API_KEY + KRAKEN_SECRET_KEY to secrets, then start the kraken-bot workflow
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            {/* Per-symbol breakdown */}
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">By Symbol</div>
+              <div className="space-y-2">
+                {Object.entries(data.by_symbol).map(([sym, s]: [string, KrakenSymbolStats]) => (
+                  <div key={sym} className="flex items-center gap-3 rounded-xl border border-white/5 bg-slate-900/50 px-3 py-2.5">
+                    <div className="w-20 shrink-0">
+                      <div className="text-xs font-mono font-bold text-white">{sym.replace("/USD", "")}</div>
+                      <div className="text-[9px] text-muted-foreground">{s.trades} trades</div>
+                    </div>
+                    {/* Win rate bar */}
+                    <div className="flex-1 min-w-0">
+                      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn("h-full rounded-full", s.win_rate_pct >= 50 ? "bg-green-400" : "bg-amber-400")}
+                          style={{ width: `${s.win_rate_pct}%` }}
+                        />
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-0.5">{s.win_rate_pct}% win rate</div>
+                    </div>
+                    <div className={cn("text-xs font-mono font-bold shrink-0", s.total_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {s.total_pnl_pct >= 0 ? "+" : ""}{s.total_pnl_pct.toFixed(2)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent trades */}
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Recent Trades</div>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {[...data.recent_trades].reverse().map((t, i) => (
+                  <div key={i} className={cn(
+                    "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[10px]",
+                    t.pnl_pct >= 0 ? "border-green-500/15 bg-green-500/5" : "border-red-500/15 bg-red-500/5"
+                  )}>
+                    <span className={cn(
+                      "w-10 shrink-0 text-center rounded font-bold py-0.5",
+                      t.side === "long" ? "bg-blue-500/15 text-blue-400" : "bg-purple-500/15 text-purple-400"
+                    )}>
+                      {t.side === "long" ? "LONG" : "SHORT"}
+                    </span>
+                    <span className="font-mono font-bold text-white/80 flex-1">
+                      {t.symbol.replace("/USD", "")}
+                    </span>
+                    <span className="text-muted-foreground/60 flex-1 truncate">{t.reason}</span>
+                    <span className={cn("font-mono font-bold shrink-0", t.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -3006,16 +3183,34 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* PERFORMANCE + ATTRIBUTION — how the system is doing */}
+        {/* ALPACA PERFORMANCE + ATTRIBUTION — stock trading system only */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <SafeSection label="Performance">
+            <SafeSection label="Alpaca Stock Performance">
               <PerformanceSection />
             </SafeSection>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <SafeSection label="P&L Attribution">
               <AttributionPanel />
+            </SafeSection>
+          </motion.div>
+        </div>
+
+        {/* ═══ KRAKEN CRYPTO SYSTEM — isolated from Alpaca data above ═══ */}
+        <div className="relative">
+          {/* Visual divider with label */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/30 text-[10px] text-cyan-400/70 font-semibold uppercase tracking-widest">
+              <span>⚓</span>
+              <span>Kraken Crypto Bot — Separate Exchange · Separate Capital</span>
+            </div>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+          </div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
+            <SafeSection label="Kraken Crypto Performance">
+              <KrakenPerformanceSection />
             </SafeSection>
           </motion.div>
         </div>

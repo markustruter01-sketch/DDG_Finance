@@ -683,6 +683,47 @@ export function useKrakenStatus() {
   });
 }
 
+// ── Kraken Performance Metrics ────────────────────────────────────────────────
+// DATA SOURCE: kraken-bot/status.json  (Kraken exchange, separate capital pool)
+// NOT RELATED TO: usePerformanceSummary / usePerformanceHistory (Alpaca data)
+
+export interface KrakenSymbolStats {
+  trades: number;
+  wins: number;
+  total_pnl_pct: number;
+  total_pnl_usd: number;
+  win_rate_pct: number;
+}
+
+export interface KrakenPerformance {
+  data_source: string;
+  exchange: string;
+  has_data: boolean;
+  total_trades: number;
+  win_count: number;
+  loss_count: number;
+  win_rate_pct: number | null;
+  total_pnl_pct: number | null;
+  total_pnl_usd: number | null;
+  best_trade_pct: number | null;
+  worst_trade_pct: number | null;
+  avg_trade_pct: number | null;
+  by_symbol: Record<string, KrakenSymbolStats>;
+  recent_trades: KrakenStatus["recent_trades"];
+  current_equity: number;
+  cycle_count: number;
+  bot_status: string;
+}
+
+export function useKrakenPerformance() {
+  return useQuery<KrakenPerformance>({
+    queryKey: ["/kraken/performance"],
+    queryFn: async () => (await api.get("/kraken/performance")).data,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+}
+
 export function useSystemRestart() {
   const qc = useQueryClient();
   return useMutation<SystemRestartResult, Error, void>({

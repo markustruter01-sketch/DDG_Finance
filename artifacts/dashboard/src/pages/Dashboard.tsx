@@ -425,6 +425,312 @@ function PortfolioMetrics() {
   );
 }
 
+// ── Combined Portfolio Summary ─────────────────────────────────────────────────
+// Shows Alpaca (US Equities) and Kraken (Crypto Bot) side-by-side in one row.
+// Alpaca data source: Alpaca brokerage API.  Kraken source: kraken-bot/status.json.
+// These are SEPARATE capital pools — the combined total is informational only.
+
+function CombinedPortfolioSummary() {
+  const { data: portfolio } = usePortfolio();
+  const { data: vault }     = useVault();
+  const { data: positions } = useLivePositions();
+  const { data: kraken }    = useKrakenStatus();
+
+  // ── Alpaca values ────────────────────────────────────────────────────────────
+  const alpacaEquity  = portfolio?.account.equity       ?? 0;
+  const alpacaCash    = portfolio?.account.cash         ?? 0;
+  const alpacaBuying  = portfolio?.account.buying_power ?? 0;
+  const alpacaStart   = 100_000;
+  const alpacaPnl     = alpacaEquity - alpacaStart;
+  const alpacaPnlPct  = (alpacaPnl / alpacaStart) * 100;
+  const alpacaProfit  = alpacaPnl >= 0;
+
+  const vaultSymbol  = vault?.vault_symbol    ?? "JEPQ";
+  const totalVaulted = vault?.total_vaulted_usd ?? 0;
+  const vaultPos     = positions?.positions?.find(p => p.symbol === vaultSymbol);
+  const vaultValue   = vaultPos?.market_value ?? totalVaulted;
+  const vaultPnl     = vaultPos?.unrealized_pl ?? 0;
+
+  // ── Kraken values ─────────────────────────────────────────────────────────────
+  const krakenReady       = !!kraken && kraken.status !== "not_started";
+  const krakenEquity      = kraken?.total_equity_usd ?? 0;
+  const krakenDeployed    = kraken?.deployed_pct ?? 0;
+  const krakenPaper       = kraken?.paper_trading ?? true;
+  const krakenPaperSumm   = kraken?.paper_summary;
+  const krakenPnl         = krakenPaperSumm?.all_time_pnl_usd ?? 0;
+  const krakenTrades      = krakenPaperSumm?.total_trades ?? 0;
+  const krakenWins        = krakenPaperSumm?.win_count ?? 0;
+  const krakenStart       = krakenPaperSumm?.starting_balance_usd ?? 100_000;
+  const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
+  const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
+
+  // ── Grand total (informational only — two separate capital pools) ─────────────
+  const grandTotal = alpacaEquity + (krakenReady ? krakenEquity : 0);
+
+  return (
+    <div className="space-y-3">
+      {/* Grand total ribbon */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Total Portfolio
+          </span>
+          <span className="text-[9px] font-mono text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded">
+            2 exchanges
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {portfolio && (
+            <span className={cn(
+              "text-sm font-mono font-bold tracking-tight",
+              alpacaProfit ? "text-green-400" : "text-red-400"
+            )}>
+              {formatCurrency(grandTotal)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Two-panel split */}
+      <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-4">
+
+        {/* ── LEFT: Alpaca US Equities ───────────────────────────────────────── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] uppercase tracking-widest text-blue-400/60 font-semibold">Alpaca · US Equities</span>
+            <div className="h-px flex-1 bg-blue-500/10" />
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+
+            {/* Total Equity */}
+            <Card className={cn(
+              "col-span-2 sm:col-span-3 lg:col-span-1 bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 relative overflow-hidden transition-all duration-500",
+              alpacaProfit ? "hover:border-green-500/30" : "hover:border-red-500/30"
+            )}>
+              {alpacaProfit
+                ? <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/50 to-transparent" />
+                : <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />
+              }
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  Total Equity
+                  {Math.abs(alpacaPnlPct) > 1 && (
+                    <motion.span
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className={cn("text-[9px] font-mono px-1 py-0.5 rounded", alpacaProfit ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}
+                    >
+                      {alpacaPnl >= 0 ? "+" : ""}{alpacaPnlPct.toFixed(2)}%
+                    </motion.span>
+                  )}
+                </div>
+                {portfolio
+                  ? <RollingCurrency value={alpacaEquity} className={cn("fluid-equity font-mono font-bold tracking-tight", alpacaProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+                  : <div className="h-7 w-28 bg-white/5 rounded animate-pulse" />
+                }
+                <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", alpacaProfit ? "text-green-400/70" : "text-red-400/70")}>
+                  {alpacaProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {portfolio ? (alpacaPnl >= 0 ? `+${formatCurrency(alpacaPnl)}` : formatCurrency(alpacaPnl)) : "—"}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Available Cash */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-blue-500/20 transition-all duration-500">
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5">Available Cash</div>
+                {portfolio
+                  ? <AnimatedCurrency value={alpacaCash} className="fluid-metric font-mono font-bold text-white tracking-tight" />
+                  : <div className="h-6 w-20 bg-white/5 rounded animate-pulse" />
+                }
+                <div className="text-xs text-muted-foreground mt-1.5">
+                  <span className="text-[9px] font-mono text-blue-400/60">
+                    {portfolio ? `${((alpacaCash / alpacaEquity) * 100).toFixed(0)}% liquid` : "—"}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Buying Power */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-purple-500/20 transition-all duration-500">
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                  Buying Power
+                  <Zap className="h-3 w-3 text-purple-400/60" />
+                </div>
+                {portfolio
+                  ? <AnimatedCurrency value={alpacaBuying} className="fluid-metric font-mono font-bold text-white tracking-tight" />
+                  : <div className="h-6 w-20 bg-white/5 rounded animate-pulse" />
+                }
+                <div className="text-xs text-muted-foreground mt-1.5">With margin</div>
+              </CardContent>
+            </Card>
+
+            {/* Growth Vault */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-amber-500/25 transition-all duration-500 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Vault className="h-3 w-3 text-amber-400/70" />
+                  Growth Vault
+                  <span className="text-[9px] font-mono text-amber-400/60 bg-amber-500/10 px-1 rounded">{vaultSymbol}</span>
+                </div>
+                {vault?.initialised ? (
+                  <>
+                    <div className={cn("fluid-metric font-mono font-bold tracking-tight", vaultValue > 0 ? "text-amber-400" : "text-amber-400/40")}>
+                      {vaultValue > 0 ? formatCurrency(vaultValue) : "$0.00"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <ArrowUpRight className="h-3 w-3 text-amber-400/50" />
+                      {vault.total_sweeps} sweep{vault.total_sweeps !== 1 ? "s" : ""} · HWM ${(vault.hwm ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-amber-400/40 tracking-tight">$0.00</div>
+                    <div className="text-[10px] text-muted-foreground/50 mt-1.5">Awaiting first profit sweep</div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Total Yield */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-green-500/20 transition-all duration-500 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-green-500/30 to-transparent" />
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Coins className="h-3 w-3 text-green-400/70" />
+                  Total Yield
+                </div>
+                {vault?.initialised && vaultPos ? (
+                  <>
+                    <div className={cn("fluid-metric font-mono font-bold tracking-tight", vaultPnl > 0 ? "text-green-400 text-glow-success" : vaultPnl < 0 ? "text-red-400" : "text-muted-foreground/60")}>
+                      {vaultPnl >= 0 ? "+" : ""}{formatCurrency(vaultPnl)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <GrowthIcon className="h-3 w-3 text-green-400/50" />
+                      Unrealised on {vaultSymbol}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-muted-foreground/40 tracking-tight">$0.00</div>
+                    <div className="text-[10px] text-muted-foreground/50 mt-1.5">{vault?.initialised ? `No ${vaultSymbol} position yet` : "Awaiting first sweep"}</div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
+        </div>
+
+        {/* ── RIGHT: Kraken Crypto Bot ─────────────────────────────────────── */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] uppercase tracking-widest text-cyan-400/60 font-semibold">⚓ Kraken · Crypto Bot</span>
+            {krakenPaper && (
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide">
+                Paper
+              </span>
+            )}
+            <div className="h-px flex-1 bg-cyan-500/10" />
+            {!krakenReady && (
+              <span className="text-[9px] text-muted-foreground/40 font-mono">Bot not running</span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+
+            {/* Kraken Bot Equity */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/20 transition-all duration-500 relative overflow-hidden col-span-2">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  {krakenPaper ? "Paper Equity" : "Live Equity"}
+                  {krakenPaper && <span className="text-[9px] text-yellow-400/70">simulated</span>}
+                </div>
+                {krakenReady ? (
+                  <>
+                    <AnimatedCurrency
+                      value={krakenEquity}
+                      className={cn("fluid-metric font-mono font-bold tracking-tight", krakenPnl >= 0 ? "text-cyan-400" : "text-red-400")}
+                    />
+                    <div className={cn("text-xs mt-1.5 flex items-center gap-1 font-medium", krakenPnl >= 0 ? "text-cyan-400/70" : "text-red-400/70")}>
+                      {krakenPnl >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {krakenPnl >= 0 ? "+" : ""}{formatCurrency(krakenPnl)} all-time
+                      {krakenPnlPct !== 0 && (
+                        <span className={cn("text-[9px] font-mono px-1 py-0.5 rounded ml-1", krakenPnl >= 0 ? "bg-cyan-500/10 text-cyan-400" : "bg-red-500/10 text-red-400")}>
+                          {krakenPnlPct >= 0 ? "+" : ""}{krakenPnlPct.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-muted-foreground/30 tracking-tight">—</div>
+                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">Start the bot to begin tracking</div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Deployed Capital */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/15 transition-all duration-500">
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5">Deployed</div>
+                {krakenReady ? (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-white tracking-tight">
+                      {krakenDeployed.toFixed(0)}<span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                    <div className="mt-1.5 h-1 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-cyan-500/50 transition-all duration-700"
+                        style={{ width: `${Math.min(krakenDeployed, 100)}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-muted-foreground/30">—</div>
+                    <div className="mt-1.5 h-1 rounded-full bg-white/5" />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Win Rate */}
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/15 transition-all duration-500">
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
+                  Win Rate
+                  <Trophy className="h-3 w-3 text-yellow-400/50" />
+                </div>
+                {krakenReady && krakenWinRate !== null ? (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-white tracking-tight">
+                      {krakenWinRate.toFixed(0)}<span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1.5">
+                      {krakenWins}W / {krakenTrades - krakenWins}L · {krakenTrades} trades
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-muted-foreground/30">—</div>
+                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">No trades yet</div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── AI Brain Section ──────────────────────────────────────────────────────────
 
 const NODES = [
@@ -3125,7 +3431,7 @@ export default function Dashboard() {
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
           <SafeSection label="Portfolio Metrics">
-            <PortfolioMetrics />
+            <CombinedPortfolioSummary />
           </SafeSection>
         </motion.div>
 

@@ -649,6 +649,7 @@ export interface KrakenPosition {
 
 export interface KrakenStatus {
   bot_name: string;
+  paper_trading: boolean;
   status: "running" | "paused_circuit_breaker" | "not_started" | "error";
   last_updated: string | null;
   cycle_count: number;
@@ -671,6 +672,13 @@ export interface KrakenStatus {
     reason: string;
     closed_at: string;
   }>;
+  paper_summary: {
+    starting_balance_usd: number;
+    cash_usd: number;
+    total_trades: number;
+    win_count: number;
+    all_time_pnl_usd: number;
+  } | null;
   error: string | null;
 }
 

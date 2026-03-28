@@ -57,21 +57,21 @@ export function CorrelationMatrix() {
           )}
         </CardTitle>
       </CardHeader>
-      <CardContent className="p-5">
+      <CardContent className="p-3 md:p-5">
         <div className="overflow-x-auto">
-          <table className="w-full text-[11px] font-mono">
+          <table className="w-full text-[9px] md:text-[11px] font-mono">
             <thead>
               <tr>
-                <th className="px-2 py-1 text-left text-muted-foreground" />
+                <th className="px-1 md:px-2 py-0.5 md:py-1 text-left text-muted-foreground" />
                 {data.tickers.map((t) => (
-                  <th key={t} className="px-2 py-1 text-center text-muted-foreground font-normal truncate max-w-[60px]">{t}</th>
+                  <th key={t} className="px-1 md:px-2 py-0.5 md:py-1 text-center text-muted-foreground font-normal truncate max-w-[40px] md:max-w-[60px]">{t}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {data.tickers.map((row) => (
                 <tr key={row}>
-                  <td className="px-2 py-1 text-muted-foreground font-normal truncate max-w-[60px]">{row}</td>
+                  <td className="px-1 md:px-2 py-0.5 md:py-1 text-muted-foreground font-normal truncate max-w-[40px] md:max-w-[60px]">{row}</td>
                   {data.tickers.map((col) => {
                     const val = data.matrix[row]?.[col] ?? 0;
                     const isDiag = row === col;
@@ -79,7 +79,7 @@ export function CorrelationMatrix() {
                       <td
                         key={col}
                         className={cn(
-                          "px-2 py-1 text-center rounded-sm",
+                          "px-1 md:px-2 py-0.5 md:py-1 text-center rounded-sm",
                           isDiag ? "bg-primary/20 text-primary font-bold" : corrColor(val)
                         )}
                         title={`${row} / ${col}: ${val.toFixed(3)}`}

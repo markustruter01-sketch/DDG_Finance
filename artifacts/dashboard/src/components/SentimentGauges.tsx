@@ -27,9 +27,9 @@ function GaugeRing({ value, label, sublabel }: { value: number | null; label: st
   const strokeDashoffset = circumference - (pct / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative w-24 h-24">
-        <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+    <div className="flex flex-col items-center gap-1.5 md:gap-2">
+      <div className="relative w-16 h-16 md:w-24 md:h-24">
+        <svg className="w-16 h-16 md:w-24 md:h-24 -rotate-90" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="6" className="text-slate-800" />
           <circle
             cx="50" cy="50" r="40" fill="none"
@@ -45,7 +45,7 @@ function GaugeRing({ value, label, sublabel }: { value: number | null; label: st
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={cn("text-xl font-mono font-bold", gaugeColor(value))}>
+          <span className={cn("text-sm md:text-xl font-mono font-bold", gaugeColor(value))}>
             {value != null ? value : "—"}
           </span>
         </div>

@@ -49,7 +49,7 @@ function ConfirmModal({
           transition={{ duration: 0.18 }}
           className={cn(
             "relative z-10 w-full bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden",
-            isMobile ? "rounded-t-2xl min-h-[50vh] max-h-full pb-[env(safe-area-inset-bottom)]" : "max-w-md mx-4 rounded-xl"
+            isMobile ? "rounded-t-2xl h-[100dvh] pb-[env(safe-area-inset-bottom)] overflow-y-auto" : "max-w-md mx-4 rounded-xl"
           )}
         >
           {/* Header stripe */}

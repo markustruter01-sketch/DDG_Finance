@@ -177,9 +177,9 @@ function Header() {
         <div className="flex items-center gap-2 sm:gap-3">
           <EmergencyHeaderButtons />
 
-          <div className="h-6 w-px bg-white/8 hidden sm:block" />
+          <div className="h-6 w-px bg-white/8 hidden md:block" />
 
-          <div className="hidden sm:flex items-center gap-5">
+          <div className="hidden md:flex items-center gap-5">
             <div className="flex flex-col items-end">
               <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Market</span>
               {status?.market.is_open ? (

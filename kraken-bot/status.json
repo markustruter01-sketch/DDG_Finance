@@ -1,0 +1,28 @@
+{
+  "bot_name": "Davy Jones' Portfolio",
+  "paper_trading": true,
+  "status": "running",
+  "last_updated": "2026-03-28T21:10:10.648258+00:00",
+  "cycle_count": 1,
+  "total_equity_usd": 100000.0,
+  "deployed_usd": 0,
+  "deployed_pct": 0.0,
+  "deployable_ceiling_pct": 80.0,
+  "cash_reserve_pct": 20.0,
+  "open_positions": [],
+  "position_count": 0,
+  "max_positions": 3,
+  "circuit_breaker": {
+    "active": false,
+    "paused_until": null
+  },
+  "recent_trades": [],
+  "paper_summary": {
+    "starting_balance_usd": 100000.0,
+    "cash_usd": 100000.0,
+    "total_trades": 0,
+    "win_count": 0,
+    "all_time_pnl_usd": 0
+  },
+  "error": null
+}

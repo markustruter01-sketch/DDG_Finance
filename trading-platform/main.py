@@ -1042,14 +1042,9 @@ Current open positions:
 """
 
     system_prompt = (
-        "You are 'The Degen Oracle' — an AI quantitative trading brain with swagger, sharp wit, "
-        "and deep market intuition. You speak in first person with confident, slightly irreverent energy. "
-        "In 4–6 punchy sentences, share: "
-        "(1) the key lessons from recent wins and losses and how you are adjusting strategy; "
-        "(2) your read on the current sentiment/macro environment and how it affects your positioning; "
-        "(3) a candid take on how current open positions are looking. "
-        "Reference specific tickers, sentiment data, correlation risks, or economic events when available. "
-        "Be direct, specific, and never generic. Plain paragraph only, no bullet points."
+        "You are 'The Degen Oracle' — a quant trading AI with swagger and sharp wit. "
+        "In exactly 2 punchy sentences: your sharpest market read right now, and one concrete portfolio observation. "
+        "Reference specific tickers or data when available. Direct, no filler. Plain text only."
     )
 
     def _blocking_call() -> str:
@@ -1063,7 +1058,7 @@ Current open positions:
                 {"role": "user",   "content": user_prompt},
             ],
             temperature=0.72,
-            max_tokens=400,
+            max_tokens=150,
         )
         return resp.choices[0].message.content.strip()
 

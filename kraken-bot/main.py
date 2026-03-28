@@ -684,23 +684,19 @@ def run_cycle() -> None:
 
     if new_longs or new_shorts:
         entered = new_longs + new_shorts
-        parts   = [f"ENTERING {'LONG' if e['signal_type']=='long_entered' else 'SHORT'} on {e['symbol']} — RSI {e['rsi']}, Z={e['z_score']:+.2f}" for e in entered]
-        thinking_text = "⚡ " + ". ".join(parts) + ". Mean-reversion signal confirmed; deploying capital."
+        parts   = [f"{'LONG' if e['signal_type']=='long_entered' else 'SHORT'} {e['symbol'].replace('/USD','')} (RSI {e['rsi']}, Z={e['z_score']:+.2f})" for e in entered]
+        thinking_text = "⚡ Entering: " + ", ".join(parts) + "."
     elif active_holds:
-        hold_parts = []
-        for h in active_holds:
-            pnl_str = f"{h.get('pnl_pct', 0):+.2f}%"
-            hold_parts.append(f"{h['side'].upper()} {h['symbol']} ({pnl_str} P&L, Z={h['z_score']:+.2f} — awaiting reversion to mean)")
-        thinking_text = "⚓ Holding: " + "; ".join(hold_parts) + f". Will exit when |Z| < {ZSCORE_EXIT}."
+        hold_parts = [f"{h['side'].upper()} {h['symbol'].replace('/USD','')} {h.get('pnl_pct', 0):+.2f}% · Z={h['z_score']:+.2f}" for h in active_holds]
+        thinking_text = "⚓ " + " · ".join(hold_parts)
     elif oversold_near:
         sym_list = ", ".join(s["symbol"].replace("/USD", "") for s in oversold_near)
-        thinking_text = f"👀 Watching {sym_list} — RSI and Z-score approaching oversold thresholds. No entry yet; need RSI < {RSI_OVERSOLD} and Z < -{ZSCORE_ENTRY}."
+        thinking_text = f"👀 {sym_list} approaching oversold — watching for entry."
     elif overbought_near:
         sym_list = ", ".join(s["symbol"].replace("/USD", "") for s in overbought_near)
-        thinking_text = f"👀 {sym_list} drifting overbought — RSI climbing toward {RSI_OVERBOUGHT}. Watching for short setup."
+        thinking_text = f"👀 {sym_list} drifting overbought — watching for short."
     else:
-        rsi_lines = ", ".join(f"{s['symbol'].replace('/USD','')} RSI {s['rsi']}" for s in watching)
-        thinking_text = f"🔍 Markets neutral — no setups. Scanning: {rsi_lines}. Thresholds: RSI {RSI_OVERSOLD}/{RSI_OVERBOUGHT}, Z ±{ZSCORE_ENTRY}."
+        thinking_text = "🔍 No setups — markets neutral."
 
     # ── Step 5: Write status for the dashboard ────────────────────────────────
     write_status()

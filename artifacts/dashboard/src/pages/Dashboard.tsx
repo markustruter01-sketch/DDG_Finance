@@ -953,7 +953,7 @@ function SpeechBubble({
               </p>
             ) : (
               <p className="text-[11px] text-muted-foreground/50 italic">
-                Auto-refreshing every 90s — click Refresh to generate now.
+                Updates when positions change — click Refresh to generate now.
               </p>
             )}
           </div>
@@ -1245,19 +1245,30 @@ function AIBrainSection() {
   const { data, isLoading } = useAICommentary();
   const { mutate: refresh, isPending: isRefreshing } = useRefreshCommentary();
   const { data: alloc } = useLatestAllocation();
+  const { data: posData } = useLivePositions();
   const [showInsights, setShowInsights] = useState(false);
 
   const thinking = isLoading || isRefreshing;
 
-  // Auto-refresh commentary every 90 seconds when not already thinking
+  // Refresh only when position count changes or 10 minutes have passed — not blindly every 90s
+  const prevPosCount = useRef<number>(-1);
+  const lastRefreshTs = useRef<number>(0);
+
   useEffect(() => {
     const id = setInterval(() => {
-      if (!isRefreshing && !isLoading) {
+      if (isRefreshing || isLoading) return;
+      const now = Date.now();
+      const posCount = posData?.count ?? 0;
+      const posChanged = prevPosCount.current !== -1 && posCount !== prevPosCount.current;
+      const tenMinPassed = now - lastRefreshTs.current > 600_000;
+      if (posChanged || tenMinPassed || lastRefreshTs.current === 0) {
+        lastRefreshTs.current = now;
+        prevPosCount.current = posCount;
         refresh();
       }
-    }, 90_000);
+    }, 60_000);
     return () => clearInterval(id);
-  }, [isRefreshing, isLoading, refresh]);
+  }, [isRefreshing, isLoading, refresh, posData?.count]);
 
   return (
     <>
@@ -1280,7 +1291,7 @@ function AIBrainSection() {
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
             />
-            auto-refresh 90s
+            updates on new activity
           </span>
         </div>
 
@@ -1560,16 +1571,34 @@ function DavyJonesBotSection() {
   const maxDeployPct = data?.deployable_ceiling_pct ?? 80;
   const signals: any[] = data?.signals ?? [];
 
-  // Prefer live thinking_text from bot; fall back to static message
   const fallbackText = notStarted
-    ? "I await the Kraken keys... Add KRAKEN_API_KEY and KRAKEN_SECRET_KEY to secrets, then start the kraken-bot workflow."
+    ? "Awaiting Kraken keys — add KRAKEN_API_KEY and KRAKEN_SECRET_KEY, then start the bot."
     : isCB
-    ? "The seas rage! A flash crash triggered the circuit breaker. All trading paused — I shall resurface when the storm passes."
+    ? "Circuit breaker tripped — all trading paused until volatility clears."
     : isError
-    ? `The depths are troubled: ${data?.error ?? "unknown error"}. I'm regrouping...`
-    : "Scanning the seven seas for mean-reversion opportunities. RSI and z-score filters are armed.";
+    ? `Error: ${data?.error ?? "unknown"}. Regrouping...`
+    : "Scanning for mean-reversion setups.";
 
-  const dialogueText = data?.thinking_text ?? fallbackText;
+  // Latch dialogue — only update when position count or held-signal types change
+  const [displayedText, setDisplayedText] = useState<string | null>(null);
+  const prevPosCount   = useRef<number>(-1);
+  const prevSignalKey  = useRef<string>("");
+  const signalKey = signals
+    .filter((s: any) => s.signal_type === "hold" || s.signal_type.includes("entered"))
+    .map((s: any) => `${s.symbol}:${s.signal_type}`)
+    .join("|");
+
+  useEffect(() => {
+    const posChanged = posCount !== prevPosCount.current;
+    const sigChanged = signalKey !== prevSignalKey.current;
+    if (!displayedText || posChanged || sigChanged) {
+      setDisplayedText(data?.thinking_text ?? fallbackText);
+      prevPosCount.current  = posCount;
+      prevSignalKey.current = signalKey;
+    }
+  }, [posCount, signalKey, data?.thinking_text]);
+
+  const dialogueText = displayedText ?? fallbackText;
 
   return (
     <>
@@ -1931,31 +1960,42 @@ function AuditorDialogueBubble({
                 ))}
                 <span className="text-[11px] text-muted-foreground ml-1">Running audit…</span>
               </div>
-            ) : report && report.length > 0 ? (
-              <div className="space-y-1.5">
-                {report.map((f, i) => {
-                  const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.INFO;
-                  const Icon = cfg.icon;
-                  return (
-                    <motion.div key={f.check}
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.06 }}
-                      className="flex items-start gap-2"
-                    >
-                      <Icon className={cn("h-3 w-3 mt-0.5 flex-shrink-0", cfg.color)} />
-                      <span className="text-[10px] leading-snug text-slate-300">
-                        <span className="font-semibold">{f.check.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}:</span>{" "}
-                        {f.passed ? "Pass" : f.message.length > 60 ? f.message.slice(0, 60) + "…" : f.message}
-                      </span>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground/50 italic">
-                No audit run yet — click Run Audit to generate the first report.
-              </p>
+            ) : report && report.length > 0 ? (() => {
+              const failed = report.filter(f => !f.passed);
+              const passCount = report.length - failed.length;
+              return (
+                <div className="space-y-1.5">
+                  {failed.length === 0 ? (
+                    <p className="text-[11px] text-green-400/70 italic">All {passCount} checks passed.</p>
+                  ) : (
+                    <>
+                      {failed.slice(0, 4).map((f, i) => {
+                        const cfg = SEVERITY_CONFIG[f.severity] || SEVERITY_CONFIG.INFO;
+                        const Icon = cfg.icon;
+                        return (
+                          <motion.div key={f.check}
+                            initial={{ opacity: 0, x: -4 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.06 }}
+                            className="flex items-start gap-2"
+                          >
+                            <Icon className={cn("h-3 w-3 mt-0.5 flex-shrink-0", cfg.color)} />
+                            <span className="text-[10px] leading-snug text-slate-300">
+                              <span className="font-semibold">{f.check.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}:</span>{" "}
+                              {f.message.length > 50 ? f.message.slice(0, 50) + "…" : f.message}
+                            </span>
+                          </motion.div>
+                        );
+                      })}
+                      {passCount > 0 && (
+                        <p className="text-[9px] text-muted-foreground/40">{passCount}/{report.length} checks passed · tap for full report</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })() : (
+              <p className="text-[11px] text-muted-foreground/50 italic">No audit run yet.</p>
             )}
           </div>
 

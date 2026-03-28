@@ -104,17 +104,20 @@ SYMBOLS = [
 RSI_PERIOD       = 14     # Number of candles used to calculate RSI.
                           # 14 is the industry-standard default.
 
-RSI_OVERSOLD     = 35     # If RSI drops below this level, the asset is
+RSI_OVERSOLD     = 45     # If RSI drops below this level, the asset is
                           # considered "oversold" — a potential buy signal.
+                          # (Widened from 35 → 45 for more active signal generation)
 
-RSI_OVERBOUGHT   = 65     # If RSI rises above this level, the asset is
+RSI_OVERBOUGHT   = 55     # If RSI rises above this level, the asset is
                           # considered "overbought" — a potential sell/short signal.
+                          # (Narrowed from 65 → 55 for more active signal generation)
 
 ZSCORE_WINDOW    = 20     # How many hourly candles to use when calculating
                           # the rolling mean and standard deviation for z-score.
 
-ZSCORE_ENTRY     = 1.8    # Enter a trade when price is 1.8 standard deviations
+ZSCORE_ENTRY     = 0.60   # Enter a trade when price is 0.60 standard deviations
                           # away from the rolling mean.
+                          # (Tightened from 1.8 → 0.60 for signal demonstration)
 
 ZSCORE_EXIT      = 0.3    # Close a mean-reversion trade when price has returned
                           # to within 0.3 standard deviations of the mean

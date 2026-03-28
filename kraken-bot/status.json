@@ -3,15 +3,24 @@
   "paper_trading": true,
   "bot_paused": false,
   "status": "running",
-  "last_updated": "2026-03-28T21:38:25.842507+00:00",
-  "cycle_count": 13,
+  "last_updated": "2026-03-28T21:45:46.585134+00:00",
+  "cycle_count": 3,
   "total_equity_usd": 100000.0,
-  "deployed_usd": 0,
-  "deployed_pct": 0.0,
+  "deployed_usd": 30000.0,
+  "deployed_pct": 37.5,
   "deployable_ceiling_pct": 80.0,
   "cash_reserve_pct": 20.0,
-  "open_positions": [],
-  "position_count": 0,
+  "open_positions": [
+    {
+      "symbol": "SOL/USD",
+      "side": "long",
+      "entry_price": 82.83,
+      "size_usd": 30000.0,
+      "entry_time": "2026-03-28T21:43:41.546057+00:00",
+      "best_price": 82.88
+    }
+  ],
+  "position_count": 1,
   "max_positions": 3,
   "circuit_breaker": {
     "active": false,
@@ -20,7 +29,7 @@
   "recent_trades": [],
   "paper_summary": {
     "starting_balance_usd": 100000.0,
-    "cash_usd": 100000.0,
+    "cash_usd": 69922.0,
     "total_trades": 0,
     "win_count": 0,
     "all_time_pnl_usd": 0

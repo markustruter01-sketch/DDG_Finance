@@ -1399,7 +1399,7 @@ async def kraken_status() -> dict:
     import json as _json
     from pathlib import Path as _Path
 
-    status_file = _Path("kraken-bot/status.json")
+    status_file = _Path("../kraken-bot/status.json")  # server cwd = trading-platform/
     if not status_file.exists():
         return {
             "bot_name":         "Davy Jones' Portfolio",
@@ -1436,7 +1436,7 @@ async def kraken_auto_trading_status() -> dict:
     """Return the current Kraken bot pause state from control.json."""
     import json as _json
     from pathlib import Path as _Path
-    ctrl = _Path("kraken-bot/control.json")
+    ctrl = _Path("../kraken-bot/control.json")  # server cwd = trading-platform/
     if not ctrl.exists():
         return {"bot_paused": False}
     try:
@@ -1458,7 +1458,7 @@ async def kraken_toggle_auto_trading(request: KrakenControlRequest) -> dict:
     """
     import json as _json
     from pathlib import Path as _Path
-    ctrl = _Path("kraken-bot/control.json")
+    ctrl = _Path("../kraken-bot/control.json")  # server cwd = trading-platform/
     ctrl.write_text(_json.dumps({"bot_paused": request.bot_paused}, indent=2))
     logger.info(f"Kraken bot {'PAUSED' if request.bot_paused else 'RESUMED'} via dashboard toggle")
     return {"bot_paused": request.bot_paused, "message": "Kraken bot paused" if request.bot_paused else "Kraken bot resumed"}
@@ -1480,7 +1480,7 @@ async def kraken_performance() -> dict:
     import json as _json
     from pathlib import Path as _Path
 
-    status_file = _Path("kraken-bot/status.json")
+    status_file = _Path("../kraken-bot/status.json")  # server cwd = trading-platform/
 
     # Empty state — bot hasn't run yet
     empty: dict = {

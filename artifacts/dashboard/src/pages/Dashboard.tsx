@@ -2556,6 +2556,16 @@ export default function Dashboard() {
           <LivePositionsSection />
         </motion.div>
 
+        {/* ORACLE + AUDITOR — AI intelligence immediately after positions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col">
+            <AIBrainSection />
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }} className="flex flex-col">
+            <AuditorAgentSection />
+          </motion.div>
+        </div>
+
         {/* ECONOMIC CALENDAR — blackout events can halt trading */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <EconomicCalendarPanel />
@@ -2586,17 +2596,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* ═══ TIER 3: AI INTELLIGENCE ═══ */}
-
-        {/* ORACLE + AUDITOR — side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="flex flex-col">
-            <AIBrainSection />
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }} className="flex flex-col">
-            <AuditorAgentSection />
-          </motion.div>
-        </div>
+        {/* ═══ TIER 3: BEST TRADE + TOOLS ═══ */}
 
         {/* BEST/WORST TRADE — motivational, not urgent */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>

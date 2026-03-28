@@ -85,6 +85,110 @@ DEV_USER: dict = {
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@saas_router.get("/insights")
+async def saas_insights() -> dict:
+    """
+    Live insight data for the public SaaS dashboard.
+
+    Reads from kraken-bot/paper_portfolio.json (always-fresh, written every cycle)
+    and the shared sentiment cache. All data is public — no trading-private info.
+
+    Returns:
+      portfolio   — equity, cash, deployed %, position count
+      symbols     — 10-symbol universe with held/watching status + entry data
+      sentiment   — crypto + market Fear & Greed index
+      cycle_count — how many bot cycles have run (data freshness proxy)
+    """
+    import json as _json
+    import os as _os
+
+    # ── Paper portfolio ───────────────────────────────────────────────────────
+    _pp_path = _os.path.join(
+        _os.path.dirname(__file__), "..", "kraken-bot", "paper_portfolio.json"
+    )
+    try:
+        with open(_pp_path) as _f:
+            pp = _json.load(_f)
+    except Exception:
+        pp = {"cash_usd": 0.0, "positions": {}, "all_trades": [], "starting_balance_usd": 100_000}
+
+    positions: dict = pp.get("positions", {})
+    cash: float     = pp.get("cash_usd", 0.0)
+    start_bal: float = pp.get("starting_balance_usd", 100_000)
+    deployed: float  = sum(p.get("size_usd", 0) for p in positions.values())
+    equity: float    = cash + deployed
+    cycle_count: int = len(pp.get("all_trades", [])) // max(len(positions) or 1, 1)
+
+    # ── Symbol universe ───────────────────────────────────────────────────────
+    _UNIVERSE = [
+        ("BTC/USD", "Bitcoin"),   ("ETH/USD", "Ethereum"),
+        ("SOL/USD", "Solana"),    ("XRP/USD", "Ripple"),
+        ("ADA/USD", "Cardano"),   ("AVAX/USD", "Avalanche"),
+        ("LINK/USD", "Chainlink"),("DOT/USD", "Polkadot"),
+        ("ATOM/USD", "Cosmos"),   ("LTC/USD", "Litecoin"),
+    ]
+    symbol_rows = []
+    for sym, label in _UNIVERSE:
+        if sym in positions:
+            p = positions[sym]
+            symbol_rows.append({
+                "symbol":    sym,
+                "base":      sym.split("/")[0],
+                "label":     label,
+                "status":    "held",
+                "side":      p.get("side", "long"),
+                "entry_price": p.get("entry_price"),
+                "size_usd":  p.get("size_usd"),
+                "entry_time": p.get("entry_time"),
+            })
+        else:
+            symbol_rows.append({
+                "symbol":    sym,
+                "base":      sym.split("/")[0],
+                "label":     label,
+                "status":    "watching",
+                "side":      None,
+                "entry_price": None,
+                "size_usd":  None,
+                "entry_time": None,
+            })
+
+    # ── Sentiment (uses shared cache — very cheap) ────────────────────────────
+    try:
+        from data.sentiment import get_sentiment as _get_sent
+        sent = _get_sent()
+        cfg = sent.get("crypto_fear_greed", {})
+        mfg = sent.get("market_fear_greed", {})
+        crypto_val   = cfg.get("value", 50)
+        crypto_label = cfg.get("label", "Neutral")
+        market_val   = mfg.get("value", 50)
+        market_label = mfg.get("label", "Neutral")
+    except Exception:
+        crypto_val, crypto_label = 50, "Neutral"
+        market_val, market_label = 50, "Neutral"
+
+    total_pnl_pct = round((equity - start_bal) / start_bal * 100, 2) if start_bal else 0
+
+    return {
+        "portfolio": {
+            "equity":          round(equity, 2),
+            "cash":            round(cash, 2),
+            "deployed":        round(deployed, 2),
+            "positions_count": len(positions),
+            "deployed_pct":    round(deployed / equity * 100, 1) if equity > 0 else 0,
+            "total_pnl_pct":   total_pnl_pct,
+            "starting_balance": start_bal,
+        },
+        "symbols":  symbol_rows,
+        "sentiment": {
+            "crypto": {"value": crypto_val, "label": crypto_label},
+            "market": {"value": market_val, "label": market_label},
+        },
+        "cycle_count":  cycle_count,
+        "last_updated": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
 @saas_router.get("/auth/me", response_model=SaasUserResponse)
 async def auth_me() -> dict:
     """

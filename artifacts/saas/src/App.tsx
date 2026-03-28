@@ -9,9 +9,9 @@
  *   Routes               — page content
  *
  * Route map:
- *   /saas/           → Home (Stage 4 content)
- *   /saas/dashboard  → Insight Dashboard (Stage 4 content)
- *   /saas/settings   → Connect Your Exchange (Stage 4 content)
+ *   /saas/           → Home  (landing page)
+ *   /saas/dashboard  → Dashboard (live insight data)
+ *   /saas/settings   → Settings (exchange API key management)
  */
 
 import { Switch, Route, Router as WouterRouter } from "wouter";
@@ -19,6 +19,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BASE_URL } from "@/lib/config";
 import { AuthProvider } from "@/context/AuthContext";
 import Shell from "@/components/layout/Shell";
+import Home from "@/pages/Home";
+import Dashboard from "@/pages/Dashboard";
+import Settings from "@/pages/Settings";
 import Placeholder from "@/pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -33,18 +36,9 @@ const queryClient = new QueryClient({
 function Routes() {
   return (
     <Switch>
-      <Route path="/">
-        <Placeholder stage={4} name="AlgoEdge — Home" />
-      </Route>
-
-      <Route path="/dashboard">
-        <Placeholder stage={4} name="Insight Dashboard" />
-      </Route>
-
-      <Route path="/settings">
-        <Placeholder stage={4} name="Connect Your Exchange" />
-      </Route>
-
+      <Route path="/" component={Home} />
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/settings" component={Settings} />
       <Route>
         <Placeholder stage={0} name="Page not found" />
       </Route>

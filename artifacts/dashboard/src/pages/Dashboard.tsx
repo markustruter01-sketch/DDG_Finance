@@ -18,6 +18,7 @@ import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
+import { EmergencyControls } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
@@ -2521,6 +2522,39 @@ function EquityEcho() {
   );
 }
 
+// ── System Overrides Panel ────────────────────────────────────────────────────
+
+function SystemOverridesPanel() {
+  return (
+    <div className="space-y-4">
+      {/* Warning header */}
+      <div className="flex items-start gap-2.5 p-3 rounded-lg bg-red-950/30 border border-red-900/40">
+        <ShieldAlert className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-xs font-semibold text-red-400 leading-tight">Danger Zone</p>
+          <p className="text-xs text-red-500/70 mt-0.5 leading-relaxed">
+            These controls trigger immediate irreversible broker actions. Use only in emergencies.
+          </p>
+        </div>
+      </div>
+      {/* Buttons */}
+      <EmergencyControls />
+      {/* Legend */}
+      <div className="space-y-1">
+        <p className="text-xs text-zinc-600">
+          <span className="text-red-500 font-medium">Liquidate All</span>
+          {" "}— Market-close all positions (JEPQ protected) + halt trading.
+        </p>
+        <p className="text-xs text-zinc-600">
+          <span className="text-amber-500 font-medium">Restart System</span>
+          {" "}— Clear DEGRADED error state + refresh data cache.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+
 // ── Dashboard Root ────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -2657,6 +2691,9 @@ export default function Dashboard() {
             </SafeSection>
             <SafeSection label="Controls">
               <ControlPanel />
+            </SafeSection>
+            <SafeSection label="System Overrides">
+              <SystemOverridesPanel />
             </SafeSection>
           </motion.div>
         </div>

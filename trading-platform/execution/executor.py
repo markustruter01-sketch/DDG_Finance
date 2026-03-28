@@ -77,7 +77,7 @@ VAULT_TICKER        = "JEPQ"
 
 KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD"}
 
-MAX_POSITION_PCT    = 0.10   # 10 % hard cap per position
+MAX_POSITION_PCT    = 0.15   # 15 % hard cap per individual position (v4.4)
 MAX_LEVERAGED_PCT   = 0.20   # 20 % combined cap for leveraged_risk group
 
 OVERHEATED_Z_THRESHOLD  = 2.0

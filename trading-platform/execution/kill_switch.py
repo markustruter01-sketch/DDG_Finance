@@ -104,6 +104,23 @@ def check(current_equity: float | None = None) -> bool:
         return False
 
 
+def manual_trip(reason: str = "manual_emergency") -> None:
+    """
+    Manually trip the kill switch without a drawdown check.
+    Used by the emergency liquidate endpoint to halt all new trading.
+    Does NOT automatically liquidate positions — the caller is responsible.
+    """
+    logger.critical(
+        f"Kill switch MANUALLY TRIPPED | reason={reason} | Trading halted immediately."
+    )
+    _state["tripped"] = True
+    try:
+        from notifications.discord import notify_kill_switch
+        notify_kill_switch(0.0, None, reason=reason)
+    except Exception:
+        pass
+
+
 def get_state() -> dict:
     """Return current kill switch state for logging/API exposure."""
     return {

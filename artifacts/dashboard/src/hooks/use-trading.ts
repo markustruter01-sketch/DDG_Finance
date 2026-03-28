@@ -601,3 +601,45 @@ export function useOnChainData() {
     retry: 1,
   });
 }
+
+// --- Emergency Controls ---
+
+export interface LiquidateResult {
+  status: string;
+  positions_closed: Array<{ symbol: string; order_id: string | null }>;
+  positions_held: Array<{ symbol: string; reason: string }>;
+  errors: Array<{ symbol: string; error: string }>;
+  kill_switch: string;
+  message: string;
+}
+
+export function useLiquidateAll() {
+  const qc = useQueryClient();
+  return useMutation<LiquidateResult, Error, void>({
+    mutationFn: async () => (await api.post("/emergency/liquidate")).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/portfolio"] });
+      qc.invalidateQueries({ queryKey: ["/positions/live"] });
+      qc.invalidateQueries({ queryKey: ["/status"] });
+    },
+  });
+}
+
+export interface SystemRestartResult {
+  status: string;
+  pipeline_state: Record<string, any>;
+  scheduler_jobs: number;
+  kill_switch: Record<string, any>;
+  message: string;
+}
+
+export function useSystemRestart() {
+  const qc = useQueryClient();
+  return useMutation<SystemRestartResult, Error, void>({
+    mutationFn: async () => (await api.post("/system/restart")).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/status"] });
+      qc.invalidateQueries({ queryKey: ["/health"] });
+    },
+  });
+}

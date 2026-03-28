@@ -1,0 +1,256 @@
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { AlertTriangle, RefreshCw, X, Zap, ShieldOff } from "lucide-react";
+import { useLiquidateAll, useSystemRestart } from "@/hooks/use-trading";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  confirmClass: string;
+  requiresTyped?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isLoading?: boolean;
+}
+
+function ConfirmModal({
+  open, title, description, confirmLabel, confirmClass,
+  requiresTyped, onConfirm, onCancel, isLoading,
+}: ConfirmModalProps) {
+  const [typed, setTyped] = useState("");
+  const canConfirm = requiresTyped ? typed.trim().toUpperCase() === requiresTyped.toUpperCase() : true;
+
+  if (!open) return null;
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          onClick={onCancel}
+        />
+        {/* Dialog */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 8 }}
+          transition={{ duration: 0.18 }}
+          className="relative z-10 w-full max-w-md mx-4 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
+        >
+          {/* Header stripe */}
+          <div className={cn(
+            "h-1 w-full",
+            confirmClass.includes("red") ? "bg-red-600" : "bg-amber-500"
+          )} />
+
+          <div className="p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className={cn(
+                "p-2 rounded-lg flex-shrink-0",
+                confirmClass.includes("red") ? "bg-red-500/10" : "bg-amber-500/10"
+              )}>
+                <AlertTriangle className={cn(
+                  "h-5 w-5",
+                  confirmClass.includes("red") ? "text-red-400" : "text-amber-400"
+                )} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-white mb-1">{title}</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">{description}</p>
+              </div>
+            </div>
+
+            {requiresTyped && (
+              <div className="mb-4">
+                <label className="block text-xs text-zinc-500 mb-1.5">
+                  Type <span className="font-mono text-red-400 font-bold">{requiresTyped}</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  value={typed}
+                  onChange={e => setTyped(e.target.value)}
+                  placeholder={requiresTyped}
+                  autoFocus
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm font-mono text-white placeholder:text-zinc-600 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500/30 transition"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={onCancel}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 text-xs font-medium text-zinc-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { if (canConfirm && !isLoading) onConfirm(); }}
+                disabled={!canConfirm || isLoading}
+                className={cn(
+                  "flex-1 px-4 py-2 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5",
+                  confirmClass,
+                  (!canConfirm || isLoading) && "opacity-40 cursor-not-allowed"
+                )}
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                {isLoading ? "Processing…" : confirmLabel}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+// ── Emergency Controls Panel ──────────────────────────────────────────────────
+
+export function EmergencyControls() {
+  const { toast } = useToast();
+
+  const liquidate = useLiquidateAll();
+  const restart   = useSystemRestart();
+
+  const [showLiquidateModal, setShowLiquidateModal] = useState(false);
+  const [showRestartModal,   setShowRestartModal]   = useState(false);
+
+  // ── Liquidate handler ─────────────────────────────────────────────────────
+  function handleLiquidateConfirm() {
+    liquidate.mutate(undefined, {
+      onSuccess: (data) => {
+        setShowLiquidateModal(false);
+        const closedCount = data.positions_closed?.length ?? 0;
+        toast({
+          title: "Emergency Liquidation Complete",
+          description: `${closedCount} position(s) closed. Kill switch is active — use Kill/Reset to resume trading.`,
+          variant: "destructive",
+        });
+      },
+      onError: (err) => {
+        setShowLiquidateModal(false);
+        toast({
+          title: "Liquidation Failed",
+          description: err.message || "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      },
+    });
+  }
+
+  // ── Restart handler ───────────────────────────────────────────────────────
+  function handleRestartConfirm() {
+    restart.mutate(undefined, {
+      onSuccess: () => {
+        setShowRestartModal(false);
+        toast({
+          title: "System Restarted",
+          description: "Error state cleared and cache refreshed. System will resume on the next cycle.",
+        });
+      },
+      onError: (err) => {
+        setShowRestartModal(false);
+        toast({
+          title: "Restart Failed",
+          description: err.message || "An unexpected error occurred.",
+          variant: "destructive",
+        });
+      },
+    });
+  }
+
+  return (
+    <>
+      {/* Modals */}
+      <ConfirmModal
+        open={showLiquidateModal}
+        title="Confirm Emergency Liquidation"
+        description={
+          "This will immediately market-close ALL open positions (except the JEPQ vault) and " +
+          "trip the kill switch to halt further trading. This action cannot be undone without " +
+          "a manual Kill Switch Reset."
+        }
+        confirmLabel="Liquidate All Positions"
+        confirmClass="bg-red-600 hover:bg-red-500 text-white border border-red-500"
+        requiresTyped="LIQUIDATE"
+        onConfirm={handleLiquidateConfirm}
+        onCancel={() => setShowLiquidateModal(false)}
+        isLoading={liquidate.isPending}
+      />
+
+      <ConfirmModal
+        open={showRestartModal}
+        title="Restart Trading System?"
+        description={
+          "This will clear the current error state and invalidate all data caches, " +
+          "forcing a fresh data fetch on the next cycle. The kill switch state is preserved. " +
+          "Use this to recover from a DEGRADED status without a full reboot."
+        }
+        confirmLabel="Restart System"
+        confirmClass="bg-amber-600 hover:bg-amber-500 text-white border border-amber-500"
+        onConfirm={handleRestartConfirm}
+        onCancel={() => setShowRestartModal(false)}
+        isLoading={restart.isPending}
+      />
+
+      {/* Control Row */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        {/* Liquidate All */}
+        <button
+          onClick={() => setShowLiquidateModal(true)}
+          disabled={liquidate.isPending}
+          className={cn(
+            "group relative flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg",
+            "text-xs font-bold tracking-wider uppercase",
+            "bg-red-950/50 border border-red-700/60 text-red-400",
+            "hover:bg-red-600 hover:border-red-500 hover:text-white",
+            "transition-all duration-150",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "ring-0 hover:ring-2 hover:ring-red-500/40 hover:shadow-lg hover:shadow-red-900/30"
+          )}
+        >
+          {/* Pulsing indicator */}
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+          </span>
+          <ShieldOff className="h-3.5 w-3.5" />
+          Liquidate All
+        </button>
+
+        {/* Restart System */}
+        <button
+          onClick={() => setShowRestartModal(true)}
+          disabled={restart.isPending}
+          className={cn(
+            "flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg",
+            "text-xs font-semibold tracking-wide",
+            "bg-zinc-800 border border-zinc-700 text-zinc-300",
+            "hover:bg-amber-900/30 hover:border-amber-600/50 hover:text-amber-300",
+            "transition-all duration-150",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "ring-0 hover:ring-1 hover:ring-amber-500/30"
+          )}
+        >
+          {restart.isPending
+            ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            : <Zap className="h-3.5 w-3.5" />
+          }
+          Restart System
+        </button>
+      </div>
+    </>
+  );
+}

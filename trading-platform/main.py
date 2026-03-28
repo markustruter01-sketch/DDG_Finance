@@ -34,7 +34,7 @@ from pydantic import BaseModel
 from loguru import logger
 
 from config.settings import settings
-from core.pipeline import get_last_run, run_pipeline, run_postmortem
+from core.pipeline import get_last_run, run_pipeline, run_postmortem, reset_error_state
 from core.scheduler import get_job_status, get_scheduler, is_auto_trading_enabled, set_auto_trading
 from execution.broker import get_account, get_positions, get_open_orders, close_position, cancel_all_orders
 from execution.kill_switch import (
@@ -42,6 +42,7 @@ from execution.kill_switch import (
     is_tripped,
     reset as ks_reset,
     check as ks_check,
+    manual_trip as ks_manual_trip,
 )
 from analysis.trade_journal import (
     get_journal_summary,
@@ -560,6 +561,124 @@ async def reset_kill_switch(request: KillResetRequest) -> dict:
     logger.info(f"Kill switch reset via API | opening_equity={request.opening_equity}")
     ks_reset(opening_equity=request.opening_equity)
     return {"status": "reset", "kill_switch": ks_get_state()}
+
+
+# ── Emergency Controls ────────────────────────────────────────────────────────
+
+VAULT_TICKER_PROTECTED = {"JEPQ"}
+
+
+@router.post("/emergency/liquidate", tags=["Emergency"])
+async def emergency_liquidate() -> dict:
+    """
+    Emergency liquidation:
+      1. Cancel all open orders immediately.
+      2. Market-close every open position EXCEPT the JEPQ vault.
+      3. Trip the kill switch so no new trades are placed until manually reset.
+
+    This action is irreversible without a /kill/reset call.
+    """
+    logger.critical("EMERGENCY LIQUIDATE triggered via API — closing all positions")
+
+    # 1. Cancel pending orders first
+    try:
+        cancel_all_orders()
+        logger.info("Emergency | All open orders cancelled")
+    except Exception as exc:
+        logger.error(f"Emergency | cancel_all_orders failed: {exc}")
+
+    # 2. Close every non-vault position regardless of market hours
+    positions = []
+    try:
+        positions = get_positions()
+    except Exception as exc:
+        logger.error(f"Emergency | Could not fetch positions: {exc}")
+
+    closed: list[dict] = []
+    held: list[dict] = []
+    errors: list[dict] = []
+
+    for pos in positions:
+        sym = pos["symbol"]
+        if sym in VAULT_TICKER_PROTECTED:
+            held.append({"symbol": sym, "reason": "vault_protected"})
+            continue
+        try:
+            order = close_position(sym)
+            closed.append({"symbol": sym, "order_id": order.get("id")})
+            # Remove any ratchet stop record
+            try:
+                from execution.ratchet_stop import delete_stop
+                delete_stop(sym)
+            except Exception:
+                pass
+        except Exception as exc:
+            logger.error(f"Emergency | Failed to close {sym}: {exc}")
+            errors.append({"symbol": sym, "error": str(exc)})
+
+    # 3. Trip the kill switch — blocks all new position opens
+    ks_manual_trip(reason="emergency_liquidate_api")
+
+    logger.critical(
+        f"Emergency | Liquidation complete: "
+        f"closed={len(closed)}, held={len(held)}, errors={len(errors)} — "
+        f"kill switch tripped"
+    )
+
+    return {
+        "status": "liquidated",
+        "positions_closed": closed,
+        "positions_held": held,
+        "errors": errors,
+        "kill_switch": "tripped",
+        "message": (
+            "All non-vault positions have been market-ordered closed and the kill switch "
+            "is now active. Use POST /kill/reset to resume trading."
+        ),
+    }
+
+
+@router.post("/system/restart", tags=["Emergency"])
+async def system_restart() -> dict:
+    """
+    System restart / error-state clear:
+      1. Reset pipeline error state (last_run_status → 'restarted', error_count → 0).
+      2. Invalidate the market-data cache so the next cycle fetches fresh data.
+      3. The kill switch is NOT reset here — use POST /kill/reset for that.
+
+    After calling this, the system status will show 'online' and the next
+    scheduled cycle will run normally (or trigger POST /run to force immediately).
+    """
+    logger.info("SYSTEM RESTART triggered via API — clearing error state and cache")
+
+    # 1. Reset pipeline error state
+    new_state = reset_error_state()
+
+    # 2. Clear market-data cache
+    try:
+        import data.yfinance_client as _yf
+        _yf._cached_market_data = None
+        logger.info("System restart | Market-data cache cleared")
+    except Exception as exc:
+        logger.warning(f"System restart | Could not clear market-data cache: {exc}")
+
+    # 3. Clear AI commentary cache
+    _commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
+
+    jobs = get_job_status()
+    logger.info(f"System restart | Complete — scheduler has {len(jobs)} job(s)")
+
+    return {
+        "status": "restarted",
+        "pipeline_state": new_state,
+        "scheduler_jobs": len(jobs),
+        "kill_switch": ks_get_state(),
+        "message": (
+            "Error state cleared and cache invalidated. "
+            "System will resume on next scheduled cycle. "
+            "NOTE: Kill switch state is unchanged — use POST /kill/reset if it was tripped."
+        ),
+    }
 
 
 class AutoTradingRequest(BaseModel):

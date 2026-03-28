@@ -54,6 +54,19 @@ def get_last_run() -> dict:
     return dict(_state)
 
 
+def reset_error_state() -> dict:
+    """
+    Clear the error/degraded state so the system reports 'online' again.
+    Called by POST /system/restart.  Does NOT reset the kill switch.
+    """
+    from datetime import datetime, timezone
+    _state["last_run_status"] = "restarted"
+    _state["error_count"] = 0
+    _state["last_run_utc"] = datetime.now(timezone.utc).isoformat()
+    logger.info("Pipeline | Error state reset by operator — system resuming as 'online'")
+    return dict(_state)
+
+
 async def run_pipeline(
     *,
     force: bool = False,

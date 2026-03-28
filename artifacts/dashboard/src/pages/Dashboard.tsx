@@ -7,7 +7,7 @@ import {
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
   useForceRebalance, useCloseAndReallocate,
-  type AllocationPlan, type AuditFinding,
+  type AllocationPlan, type AuditFinding, type LivePosition,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
 import { SentimentGauges } from "@/components/SentimentGauges";
@@ -223,9 +223,9 @@ function Header() {
               <span className="inline-flex rounded-full h-2 w-2 bg-slate-600" title="Market Closed" />
             )}
             {status?.kill_switch.tripped ? (
-              <ShieldAlert className="h-3.5 w-3.5 text-red-400" title="Kill Switch Tripped" />
+              <span title="Kill Switch Tripped"><ShieldAlert className="h-3.5 w-3.5 text-red-400" /></span>
             ) : (
-              <ShieldAlert className="h-3.5 w-3.5 text-green-400/60" title="Kill Switch Armed" />
+              <span title="Kill Switch Armed"><ShieldAlert className="h-3.5 w-3.5 text-green-400/60" /></span>
             )}
           </div>
         </div>
@@ -327,7 +327,7 @@ function PortfolioMetrics() {
               </motion.span>
             )}
           </div>
-          <RollingCurrency value={data.account.equity} className={cn("text-2xl font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+          <RollingCurrency value={data.account.equity} className={cn("fluid-equity font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
           <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", isProfit ? "text-green-400/70" : "text-red-400/70")}>
             {isProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {isProfit ? `+${formatCurrency(pnl)}` : `${formatCurrency(pnl)}`}
@@ -339,7 +339,7 @@ function PortfolioMetrics() {
       <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-blue-500/20 transition-all duration-500">
         <CardContent className="p-4">
           <div className="text-xs font-medium text-muted-foreground mb-1.5">Available Cash</div>
-          <AnimatedCurrency value={data.account.cash} className="text-2xl font-mono font-bold text-white tracking-tight" />
+          <AnimatedCurrency value={data.account.cash} className="fluid-metric font-mono font-bold text-white tracking-tight" />
           <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
             <span className="text-[9px] font-mono text-blue-400/60">{((data.account.cash / data.account.equity) * 100).toFixed(0)}% liquid</span>
           </div>
@@ -353,7 +353,7 @@ function PortfolioMetrics() {
             Buying Power
             <Zap className="h-3 w-3 text-purple-400/60" />
           </div>
-          <AnimatedCurrency value={data.account.buying_power} className="text-2xl font-mono font-bold text-white tracking-tight" />
+          <AnimatedCurrency value={data.account.buying_power} className="fluid-metric font-mono font-bold text-white tracking-tight" />
           <div className="text-xs text-muted-foreground mt-1.5">With margin</div>
         </CardContent>
       </Card>
@@ -370,7 +370,7 @@ function PortfolioMetrics() {
           {isVaultInit ? (
             <>
               <div className={cn(
-                "text-2xl font-mono font-bold tracking-tight",
+                "fluid-metric font-mono font-bold tracking-tight",
                 vaultMarketValue > 0 ? "text-amber-400" : "text-amber-400/40"
               )}>
                 {vaultMarketValue > 0 ? formatCurrency(vaultMarketValue) : "$0.00"}
@@ -382,7 +382,7 @@ function PortfolioMetrics() {
             </>
           ) : (
             <>
-              <div className="text-2xl font-mono font-bold text-amber-400/40 tracking-tight">$0.00</div>
+              <div className="fluid-metric font-mono font-bold text-amber-400/40 tracking-tight">$0.00</div>
               <div className="text-[10px] text-muted-foreground/50 mt-1.5">Awaiting first profit sweep</div>
             </>
           )}
@@ -400,7 +400,7 @@ function PortfolioMetrics() {
           {isVaultInit && vaultPos ? (
             <>
               <div className={cn(
-                "text-2xl font-mono font-bold tracking-tight",
+                "fluid-metric font-mono font-bold tracking-tight",
                 vaultPnl > 0 ? "text-green-400 text-glow-success" : vaultPnl < 0 ? "text-red-400" : "text-muted-foreground/60"
               )}>
                 {vaultPnl >= 0 ? "+" : ""}{formatCurrency(vaultPnl)}
@@ -412,7 +412,7 @@ function PortfolioMetrics() {
             </>
           ) : (
             <>
-              <div className="text-2xl font-mono font-bold text-muted-foreground/40 tracking-tight">$0.00</div>
+              <div className="fluid-metric font-mono font-bold text-muted-foreground/40 tracking-tight">$0.00</div>
               <div className="text-[10px] text-muted-foreground/50 mt-1.5">
                 {isVaultInit ? `No ${vaultSymbol} position yet` : "Awaiting first sweep"}
               </div>
@@ -1598,7 +1598,7 @@ function ThesisModal({ ticker, thesis, onClose }: {
 }
 
 function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConfirmClose, isClosing, isRebalancing, closingSymbol }: {
-  pos: any;
+  pos: LivePosition;
   onThesisClick: (ticker: string, thesis: string | null) => void;
   onEject: (symbol: string) => void;
   confirmClose: string | null;
@@ -1608,9 +1608,8 @@ function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConf
   closingSymbol: string | null;
 }) {
   const isUp = pos.unrealized_pl >= 0;
-  const healthColor = pos.health_score ? ({
-    green: "#22c55e", emerald: "#10b981", amber: "#f59e0b", orange: "#f97316", red: "#ef4444",
-  }[pos.health_score.color] || pos.health_score.color) : null;
+  const colorMap: Record<string, string> = { green: "#22c55e", emerald: "#10b981", amber: "#f59e0b", orange: "#f97316", red: "#ef4444" };
+  const healthColor = pos.health_score ? (colorMap[pos.health_score.color] || pos.health_score.color) : null;
 
   return (
     <motion.div

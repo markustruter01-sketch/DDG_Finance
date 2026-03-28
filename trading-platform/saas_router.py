@@ -62,7 +62,44 @@ class SaasConfigResponse(BaseModel):
     risk_model: str
 
 
+class SaasUserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+    role: str          # "developer" | "user" | "admin"
+    dev_mode: bool     # flag so the frontend knows this is a mock session
+
+
+# ── Mock dev user ──────────────────────────────────────────────────────────────
+# Used when DEV_MODE=True so the frontend has a fully-populated user object
+# without implementing real auth. Stage 4/5 will add real login + sessions.
+
+DEV_USER: dict = {
+    "id":       "dev-local-001",
+    "name":     "Dev User",
+    "email":    "dev@local",
+    "role":     "developer",
+    "dev_mode": True,
+}
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@saas_router.get("/auth/me", response_model=SaasUserResponse)
+async def auth_me() -> dict:
+    """
+    Returns the current authenticated user.
+
+    DEV_MODE=True  → returns the mock Dev User (200) — auth bypass active.
+    DEV_MODE=False → raises 401; frontend renders the LoginGate.
+
+    Stage 4 replaces this with real session/JWT validation.
+    """
+    from fastapi import HTTPException
+    if DEV_MODE:
+        return DEV_USER
+    raise HTTPException(status_code=401, detail="Not authenticated. Enable dev mode or sign in.")
+
 
 @saas_router.post("/dev-mode/toggle", response_model=SaasConfigResponse)
 async def toggle_dev_mode() -> dict:

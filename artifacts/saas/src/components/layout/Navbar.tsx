@@ -2,14 +2,15 @@
  * Navbar.tsx — AlgoEdge top navigation bar
  *
  * Structure:
- *   LEFT  — AlgoEdge logo mark + wordmark
+ *   LEFT   — AlgoEdge logo mark + wordmark
  *   CENTER — nav links (Home, Dashboard, Settings) with active highlighting
- *   RIGHT  — API status dot + version chip + DEV MODE badge
+ *   RIGHT  — API status dot · version chip · user chip · DEV badge
  */
 
 import { Link, useLocation } from "wouter";
-import { Activity } from "lucide-react";
+import { Activity, Terminal } from "lucide-react";
 import { useSaasConfig } from "@/hooks/use-saas-config";
+import { useAuth } from "@/context/AuthContext";
 
 const NAV_LINKS = [
   { label: "Home",      href: "/" },
@@ -20,6 +21,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const [location] = useLocation();
   const { data: config, isSuccess } = useSaasConfig();
+  const { user } = useAuth();
 
   return (
     <nav className="h-14 w-full border-b border-zinc-800 bg-zinc-950 flex items-center px-6 gap-6 shrink-0">
@@ -68,17 +70,41 @@ export default function Navbar() {
               isSuccess ? "bg-emerald-400" : "bg-zinc-600",
             ].join(" ")}
           />
-          <span className="text-zinc-500 text-xs hidden sm:block">
+          <span className="text-zinc-500 text-xs hidden md:block">
             {isSuccess ? "API online" : "connecting…"}
           </span>
         </div>
 
         {/* Version chip */}
         {config && (
-          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-500 text-xs">
+          <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-500 text-xs">
             <Activity className="w-3 h-3" />
             v{config.version}
           </span>
+        )}
+
+        {/* User chip */}
+        {user && (
+          <div className="flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-900 pl-1.5 pr-3 py-1">
+            {/* Avatar — initials or Terminal icon for dev user */}
+            <span
+              className={[
+                "inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold shrink-0",
+                user.dev_mode
+                  ? "bg-amber-400/20 text-amber-400"
+                  : "bg-indigo-600/30 text-indigo-400",
+              ].join(" ")}
+            >
+              {user.dev_mode ? (
+                <Terminal className="w-3 h-3" />
+              ) : (
+                user.name.charAt(0).toUpperCase()
+              )}
+            </span>
+            <span className="text-zinc-300 text-xs font-medium leading-none hidden sm:block">
+              {user.name}
+            </span>
+          </div>
         )}
 
         {/* DEV MODE badge */}

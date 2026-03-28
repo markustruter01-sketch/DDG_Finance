@@ -4,7 +4,7 @@ import {
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
-  useForceRebalance,
+  useForceRebalance, useCloseAndReallocate,
   type AllocationPlan, type AuditFinding,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
@@ -14,6 +14,7 @@ import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
 import { AttributionPanel } from "@/components/AttributionPanel";
 import { BacktesterPanel } from "@/components/BacktesterPanel";
 import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
@@ -23,7 +24,7 @@ import {
   RefreshCw, Sparkles, Brain, Trophy, Flame, Zap, X,
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
-  Lightbulb, Play,
+  Lightbulb, Play, LogOut,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1569,8 +1570,21 @@ function ThesisModal({ ticker, thesis, onClose }: {
 function LivePositionsSection() {
   const { data, isLoading } = useLivePositions();
   const { mutate: rebalance, isPending: isRebalancing } = useForceRebalance();
+  const { mutate: closeAndReallocate, isPending: isClosing, variables: closingVar } = useCloseAndReallocate();
+  const { toast } = useToast();
   const [thesisModal, setThesisModal] = useState<{ ticker: string; thesis: string | null } | null>(null);
   const [confirmRebalance, setConfirmRebalance] = useState(false);
+  const [confirmClose, setConfirmClose] = useState<string | null>(null);
+
+  const closingSymbol = isClosing ? (closingVar as string) : null;
+
+  const handleCloseAndReallocate = (symbol: string) => {
+    setConfirmClose(null);
+    closeAndReallocate(symbol, {
+      onSuccess: () => toast({ title: `${symbol} Closed`, description: "Capital freed — fresh pipeline running to reallocate." }),
+      onError: (err: any) => toast({ variant: "destructive", title: `Failed to close ${symbol}`, description: err?.response?.data?.detail ?? err.message }),
+    });
+  };
 
   const totalUnrealized = useMemo(() => {
     if (!data?.positions) return 0;
@@ -1646,11 +1660,12 @@ function LivePositionsSection() {
               <th className="px-5 py-3 font-semibold text-center">Conv.</th>
               <th className="px-5 py-3 font-semibold text-center">Health</th>
               <th className="px-5 py-3 font-semibold max-w-[180px]">Thesis</th>
+              <th className="px-4 py-3 font-semibold text-center">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {isLoading && (
-              <tr><td colSpan={11} className="px-5 py-6 text-center text-muted-foreground italic text-xs">Loading positions...</td></tr>
+              <tr><td colSpan={12} className="px-5 py-6 text-center text-muted-foreground italic text-xs">Loading positions...</td></tr>
             )}
             {!isLoading && data?.positions.map((pos, i) => {
               const isUp = pos.unrealized_pl >= 0;
@@ -1733,12 +1748,51 @@ function LivePositionsSection() {
                       : <span className="text-muted-foreground/40 italic text-[10px]">legacy — click to view</span>
                     }
                   </td>
+                  <td className="px-4 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                    {closingSymbol === pos.symbol ? (
+                      <div className="flex items-center justify-center gap-1.5 text-[10px] text-orange-400/70">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Closing…</span>
+                      </div>
+                    ) : confirmClose === pos.symbol ? (
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className="text-[9px] text-orange-300/80 whitespace-nowrap">Close &amp; re-enter?</span>
+                        <button
+                          onClick={() => handleCloseAndReallocate(pos.symbol)}
+                          className="text-[9px] font-bold px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/35 transition-colors"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          onClick={() => setConfirmClose(null)}
+                          className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-muted-foreground border border-white/10 hover:bg-slate-700 transition-colors"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmClose(pos.symbol)}
+                        disabled={isClosing || isRebalancing}
+                        title="Force-close this position and reallocate capital"
+                        className={cn(
+                          "flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-2.5 py-1.5 rounded-lg border transition-all duration-200 mx-auto",
+                          isClosing || isRebalancing
+                            ? "opacity-40 cursor-not-allowed border-white/10 text-muted-foreground"
+                            : "border-orange-500/20 bg-orange-500/5 text-orange-400/60 hover:bg-orange-500/15 hover:text-orange-400 hover:border-orange-500/40"
+                        )}
+                      >
+                        <LogOut className="h-2.5 w-2.5" />
+                        <span>Eject</span>
+                      </button>
+                    )}
+                  </td>
                 </motion.tr>
               );
             })}
             {!isLoading && (!data || data.positions.length === 0) && (
               <tr>
-                <td colSpan={11} className="px-5 py-8 text-center">
+                <td colSpan={12} className="px-5 py-8 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <motion.div
                       animate={{ opacity: [0.3, 0.6, 0.3] }}

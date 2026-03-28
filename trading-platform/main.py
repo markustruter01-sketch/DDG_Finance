@@ -491,6 +491,55 @@ async def force_rebalance() -> dict:
     }
 
 
+@router.post("/rebalance/{symbol}", tags=["Control"])
+async def force_close_single(symbol: str) -> dict:
+    """
+    Force-close a single position by symbol, then trigger a fresh pipeline run
+    so the freed capital is immediately reallocated using the latest learning data.
+
+    Rules (same as full rebalance):
+      - JEPQ (vault) is never closeable.
+      - Crypto symbols (BTCUSD, ETHUSD) can be closed 24/7.
+      - Stock/ETF positions require market to be open.
+    """
+    sym = symbol.upper()
+
+    if sym == VAULT_TICKER:
+        raise HTTPException(status_code=400, detail="JEPQ vault position is protected and cannot be force-closed.")
+
+    market_open = is_market_open()
+    is_crypto = sym in KNOWN_CRYPTO_SYMBOLS
+
+    if not is_crypto and not market_open:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{sym} is a stock/ETF position. Market is currently closed — cannot close until next session.",
+        )
+
+    try:
+        order = close_position(sym)
+    except Exception as exc:
+        logger.error(f"Force-close {sym} | Failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to close {sym}: {str(exc)}")
+
+    try:
+        delete_stop(sym)
+    except Exception:
+        pass
+
+    logger.info(f"Force-close {sym} | Closed. Running fresh pipeline to reallocate capital.")
+
+    crypto_only = not market_open
+    pipeline_result = await run_pipeline(force=True, dry_run=False, crypto_only=crypto_only)
+
+    return {
+        "status": "ok",
+        "closed": sym,
+        "order": order,
+        "pipeline": pipeline_result,
+    }
+
+
 @router.post("/kill", tags=["Risk"])
 async def trip_kill_switch() -> dict:
     """

@@ -391,6 +391,14 @@ export function useForceRebalance() {
   });
 }
 
+export function useCloseAndReallocate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (symbol: string) => (await api.post(`/rebalance/${encodeURIComponent(symbol)}`)).data,
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
 // --- Correlation Matrix ---
 
 export interface CorrelationData {

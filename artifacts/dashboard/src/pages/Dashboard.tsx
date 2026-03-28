@@ -1502,12 +1502,13 @@ function KrakenBrainModal({ open, onClose }: { open: boolean; onClose: () => voi
           <div className="text-[9px] uppercase font-semibold text-muted-foreground mb-2">Strategy Parameters</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] font-mono">
             <span className="text-muted-foreground">RSI Period</span><span className="text-white">14 candles</span>
-            <span className="text-muted-foreground">RSI Oversold / Overbought</span><span className="text-white">&lt;45 / &gt;55</span>
-            <span className="text-muted-foreground">Z-Score Entry Threshold</span><span className="text-white">±0.60σ</span>
+            <span className="text-muted-foreground">RSI Oversold / Overbought</span><span className="text-white">&lt;40 / &gt;60</span>
+            <span className="text-muted-foreground">Z-Score Entry Threshold</span><span className="text-white">±1.0σ</span>
             <span className="text-muted-foreground">Z-Score Exit Threshold</span><span className="text-white">±0.30σ (mean-revert)</span>
             <span className="text-muted-foreground">Stop Loss</span><span className="text-white">2% from entry</span>
             <span className="text-muted-foreground">Trailing Take Profit</span><span className="text-white">5% from best price</span>
-            <span className="text-muted-foreground">Max Positions</span><span className="text-white">3 simultaneous</span>
+            <span className="text-muted-foreground">Max Positions</span><span className="text-white">10 simultaneous</span>
+            <span className="text-muted-foreground">Max Per Position</span><span className="text-white">10% of equity</span>
             <span className="text-muted-foreground">Cash Reserve</span><span className="text-white">20% always held</span>
           </div>
         </div>

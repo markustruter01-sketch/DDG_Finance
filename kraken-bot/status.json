@@ -3,11 +3,11 @@
   "paper_trading": true,
   "bot_paused": false,
   "status": "running",
-  "last_updated": "2026-03-28T22:35:07.701940+00:00",
-  "cycle_count": 32,
+  "last_updated": "2026-03-28T22:36:37.710553+00:00",
+  "cycle_count": 1,
   "total_equity_usd": 99922.0,
-  "deployed_usd": 30000.0,
-  "deployed_pct": 37.5,
+  "deployed_usd": 39992.2,
+  "deployed_pct": 50.0,
   "deployable_ceiling_pct": 80.0,
   "cash_reserve_pct": 20.0,
   "open_positions": [
@@ -16,18 +16,32 @@
       "side": "long",
       "qty": 362.187613,
       "entry_price": 82.83,
-      "current_price": 82.71,
+      "current_price": 82.7,
       "size_usd": 30000.0,
-      "unrealized_pnl_usd": -43.46,
-      "unrealized_pnl_pct": -0.1449,
+      "unrealized_pnl_usd": -47.08,
+      "unrealized_pnl_pct": -0.1569,
       "stop_loss_price": 81.1734,
       "take_profit_price": 78.6885,
       "entry_time": "2026-03-28T21:43:41.546057+00:00",
       "best_price": 82.83
+    },
+    {
+      "symbol": "DOT/USD",
+      "side": "long",
+      "qty": 7897.72368,
+      "entry_price": 1.2652,
+      "current_price": 1.2652,
+      "size_usd": 9992.2,
+      "unrealized_pnl_usd": 0.0,
+      "unrealized_pnl_pct": 0.0,
+      "stop_loss_price": 1.2399,
+      "take_profit_price": 1.2019,
+      "entry_time": "2026-03-28T22:36:35.330027+00:00",
+      "best_price": 1.2652
     }
   ],
-  "position_count": 1,
-  "max_positions": 3,
+  "position_count": 2,
+  "max_positions": 10,
   "circuit_breaker": {
     "active": false,
     "paused_until": null
@@ -35,7 +49,7 @@
   "recent_trades": [],
   "paper_summary": {
     "starting_balance_usd": 100000.0,
-    "cash_usd": 69922.0,
+    "cash_usd": 59903.82,
     "total_trades": 0,
     "win_count": 0,
     "all_time_pnl_usd": 0
@@ -43,31 +57,88 @@
   "signals": [
     {
       "symbol": "BTC/USD",
-      "rsi": 50.3,
-      "z_score": 0.579,
-      "price": 66714.9,
+      "rsi": 50.0,
+      "z_score": 0.538,
+      "price": 66702.9,
       "signal_type": "watching",
       "has_position": false
     },
     {
       "symbol": "ETH/USD",
       "rsi": 48.4,
-      "z_score": 0.117,
-      "price": 2009.3,
+      "z_score": 0.113,
+      "price": 2009.25,
       "signal_type": "watching",
       "has_position": false
     },
     {
       "symbol": "SOL/USD",
-      "rsi": 41.5,
-      "z_score": -1.018,
-      "price": 82.71,
+      "rsi": 41.3,
+      "z_score": -1.043,
+      "price": 82.7,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": -0.14,
+      "pnl_pct": -0.16,
       "side": "long"
+    },
+    {
+      "symbol": "XRP/USD",
+      "rsi": 49.6,
+      "z_score": 0.052,
+      "price": 1.341,
+      "signal_type": "watching",
+      "has_position": false
+    },
+    {
+      "symbol": "ADA/USD",
+      "rsi": 46.9,
+      "z_score": -0.004,
+      "price": 0.2484,
+      "signal_type": "watching",
+      "has_position": false
+    },
+    {
+      "symbol": "AVAX/USD",
+      "rsi": 48.5,
+      "z_score": 0.194,
+      "price": 8.84,
+      "signal_type": "watching",
+      "has_position": false
+    },
+    {
+      "symbol": "LINK/USD",
+      "rsi": 45.7,
+      "z_score": -0.036,
+      "price": 8.5675,
+      "signal_type": "watching",
+      "has_position": false
+    },
+    {
+      "symbol": "DOT/USD",
+      "rsi": 35.6,
+      "z_score": -2.431,
+      "price": 1.2652,
+      "signal_type": "long_entered",
+      "has_position": true,
+      "size_usd": 9992.2
+    },
+    {
+      "symbol": "ATOM/USD",
+      "rsi": 46.5,
+      "z_score": -0.374,
+      "price": 1.678,
+      "signal_type": "watching",
+      "has_position": false
+    },
+    {
+      "symbol": "LTC/USD",
+      "rsi": 47.5,
+      "z_score": -0.091,
+      "price": 54.0,
+      "signal_type": "watching",
+      "has_position": false
     }
   ],
-  "thinking_text": "\u2693 LONG SOL -0.14% \u00b7 Z=-1.02",
+  "thinking_text": "\u26a1 Entering: LONG DOT (RSI 35.6, Z=-2.43).",
   "error": null
 }

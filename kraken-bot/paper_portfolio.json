@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 69922.0,
+  "cash_usd": 59903.82028,
   "positions": {
     "SOL/USD": {
       "side": "long",
@@ -11,6 +11,16 @@
       "best_price": 82.83,
       "entry_fee": 78.0,
       "order_id": "PAPER-SOLUSD-1774734221"
+    },
+    "DOT/USD": {
+      "side": "long",
+      "entry_price": 1.2652,
+      "size_usd": 9992.2,
+      "size_units": 7897.723680050585,
+      "entry_time": "2026-03-28T22:36:35.330027+00:00",
+      "best_price": 1.2652,
+      "entry_fee": 25.9797,
+      "order_id": "PAPER-DOTUSD-1774737395"
     }
   },
   "all_trades": []

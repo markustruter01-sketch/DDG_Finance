@@ -95,6 +95,13 @@ SYMBOLS = [
     "BTC/USD",
     "ETH/USD",
     "SOL/USD",
+    "XRP/USD",
+    "ADA/USD",
+    "AVAX/USD",
+    "LINK/USD",
+    "DOT/USD",
+    "ATOM/USD",
+    "LTC/USD",
 ]
 
 
@@ -104,20 +111,20 @@ SYMBOLS = [
 RSI_PERIOD       = 14     # Number of candles used to calculate RSI.
                           # 14 is the industry-standard default.
 
-RSI_OVERSOLD     = 45     # If RSI drops below this level, the asset is
+RSI_OVERSOLD     = 40     # If RSI drops below this level, the asset is
                           # considered "oversold" — a potential buy signal.
-                          # (Widened from 35 → 45 for more active signal generation)
+                          # (Production value — enough symbols to find real setups)
 
-RSI_OVERBOUGHT   = 55     # If RSI rises above this level, the asset is
+RSI_OVERBOUGHT   = 60     # If RSI rises above this level, the asset is
                           # considered "overbought" — a potential sell/short signal.
-                          # (Narrowed from 65 → 55 for more active signal generation)
+                          # (Production value — enough symbols to find real setups)
 
 ZSCORE_WINDOW    = 20     # How many hourly candles to use when calculating
                           # the rolling mean and standard deviation for z-score.
 
-ZSCORE_ENTRY     = 0.60   # Enter a trade when price is 0.60 standard deviations
+ZSCORE_ENTRY     = 1.0    # Enter a trade when price is 1.0 standard deviations
                           # away from the rolling mean.
-                          # (Tightened from 1.8 → 0.60 for signal demonstration)
+                          # (Production quality — 10 symbols give enough scan coverage)
 
 ZSCORE_EXIT      = 0.3    # Close a mean-reversion trade when price has returned
                           # to within 0.3 standard deviations of the mean
@@ -132,8 +139,10 @@ OHLCV_LIMIT      = 100    # How many recent candles to fetch each cycle.
 # These are the guardrails that protect the account from large losses.
 
 CASH_RESERVE          = 0.20   # Always keep at least 20% of total equity as cash.
-MAX_POSITION_FRACTION = 0.30   # No single position can exceed 30% of total equity.
-MAX_POSITIONS         = 3      # Maximum number of positions open simultaneously.
+MAX_POSITION_FRACTION = 0.10   # No single position can exceed 10% of total equity.
+                               # (Down from 30% — with 10 slots, 10×10% = 100% of
+                               #  the 80% deployable ceiling, so cash reserve holds.)
+MAX_POSITIONS         = 10     # Maximum number of positions open simultaneously.
 RISK_FRACTION         = 0.01   # Risk 1% of total equity per trade.
 STOP_LOSS_PCT         = 0.02   # Hard stop loss at 2% against us.
 TRAIL_PCT             = 0.05   # Trailing take-profit kicks in after 5% gain.

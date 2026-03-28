@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, RefreshCw, X, Zap, ShieldOff } from "lucide-react";
 import { useLiquidateAll, useSystemRestart } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 // ── Confirmation Modal ────────────────────────────────────────────────────────
@@ -24,13 +25,14 @@ function ConfirmModal({
   requiresTyped, onConfirm, onCancel, isLoading,
 }: ConfirmModalProps) {
   const [typed, setTyped] = useState("");
+  const isMobile = useIsMobile();
   const canConfirm = requiresTyped ? typed.trim().toUpperCase() === requiresTyped.toUpperCase() : true;
 
   if (!open) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className={cn("fixed inset-0 z-50", isMobile ? "flex items-end" : "flex items-center justify-center")}>
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -41,11 +43,14 @@ function ConfirmModal({
         />
         {/* Dialog */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 8 }}
+          initial={isMobile ? { opacity: 0, y: 100 } : { opacity: 0, scale: 0.9, y: 8 }}
+          animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+          exit={isMobile ? { opacity: 0, y: 100 } : { opacity: 0, scale: 0.9, y: 8 }}
           transition={{ duration: 0.18 }}
-          className="relative z-10 w-full max-w-md mx-4 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
+          className={cn(
+            "relative z-10 w-full bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden",
+            isMobile ? "rounded-t-2xl max-h-[85vh]" : "max-w-md mx-4 rounded-xl"
+          )}
         >
           {/* Header stripe */}
           <div className={cn(
@@ -212,48 +217,48 @@ export function EmergencyHeaderButtons() {
       />
 
       <div className="flex items-center gap-1.5">
-        {/* Liquidate All — compact header version */}
         <button
           onClick={() => setShowLiquidateModal(true)}
           disabled={liquidate.isPending}
           title="Emergency Liquidate All"
           className={cn(
-            "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md",
+            "group flex items-center justify-center gap-1.5 rounded-md",
             "text-[10px] font-bold tracking-widest uppercase",
             "bg-red-950/60 border border-red-800/60 text-red-400",
             "hover:bg-red-600 hover:border-red-500 hover:text-white",
             "transition-all duration-150",
             "disabled:opacity-40 disabled:cursor-not-allowed",
-            "ring-0 hover:ring-1 hover:ring-red-400/40"
+            "ring-0 hover:ring-1 hover:ring-red-400/40",
+            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
           )}
         >
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-70" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
           </span>
-          <ShieldOff className="h-3 w-3" />
-          Liquidate All
+          <ShieldOff className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+          <span className="hidden sm:inline">Liquidate All</span>
         </button>
 
-        {/* Restart System — compact header version */}
         <button
           onClick={() => setShowRestartModal(true)}
           disabled={restart.isPending}
           title="Restart System"
           className={cn(
-            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md",
+            "flex items-center justify-center gap-1.5 rounded-md",
             "text-[10px] font-semibold tracking-wide",
             "bg-zinc-800/80 border border-zinc-700/60 text-zinc-400",
             "hover:bg-amber-900/40 hover:border-amber-600/50 hover:text-amber-300",
             "transition-all duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
+            "disabled:opacity-40 disabled:cursor-not-allowed",
+            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
           )}
         >
           {restart.isPending
-            ? <RefreshCw className="h-3 w-3 animate-spin" />
-            : <Zap className="h-3 w-3" />
+            ? <RefreshCw className="h-3.5 w-3.5 sm:h-3 sm:w-3 animate-spin" />
+            : <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
           }
-          Restart
+          <span className="hidden sm:inline">Restart</span>
         </button>
       </div>
     </>

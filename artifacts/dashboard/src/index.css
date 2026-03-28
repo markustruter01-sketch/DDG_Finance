@@ -170,6 +170,13 @@
     animation: particle-burst 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
+  /* ── Mobile performance optimizations ── */
+  @media (max-width: 639px) {
+    .crt-scanline {
+      display: none !important;
+    }
+  }
+
   /* Custom scrollbar for terminal vibe */
   ::-webkit-scrollbar {
     width: 8px;

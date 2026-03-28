@@ -92,6 +92,15 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - **State**: TanStack React Query
 - **Charts**: Recharts
 
+### Mobile Responsive Design
+- **Breakpoint**: `useIsMobile()` hook at 640px (aligned with Tailwind `sm:` breakpoint)
+- **Header**: "Quant Terminal" → "QT" on mobile; emergency buttons are icon-only; Market/Kill Switch shown as compact colored dots
+- **Portfolio Metrics**: Total Equity card spans full width on mobile; 2-col grid vs 5-col desktop
+- **Positions**: `MobilePositionCard` component renders stacked cards on mobile; full 12-column table on desktop
+- **AI Sections**: Brain/Shield SVGs scale down (w-24 h-24); CRT overlay and EquityEcho disabled on mobile for performance
+- **Modals**: ConfirmModal slides up as bottom sheet on mobile instead of centered dialog
+- **Touch Targets**: All interactive buttons have min-h-[44px] on mobile
+
 ### Key Components
 - `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle
 - `Dashboard.tsx` — Main dashboard page with all sections; AI brain = "The Degen Oracle", auditor = "Inspector Rekt"

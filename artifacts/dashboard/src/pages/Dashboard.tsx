@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
@@ -162,21 +163,23 @@ function Header() {
 
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-950/90 backdrop-blur-md border-b border-white/5">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center flex-shrink-0">
             <Activity className="h-4 w-4 text-primary" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight text-white">Quant Terminal</h1>
+          <h1 className="text-sm sm:text-lg font-bold tracking-tight text-white">
+            <span className="sm:hidden">QT</span>
+            <span className="hidden sm:inline">Quant Terminal</span>
+          </h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Emergency action buttons — always visible */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <EmergencyHeaderButtons />
 
-          <div className="h-6 w-px bg-white/8" />
+          <div className="h-6 w-px bg-white/8 hidden sm:block" />
 
-          <div className="flex items-center gap-5">
+          <div className="hidden sm:flex items-center gap-5">
             <div className="flex flex-col items-end">
               <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Market</span>
               {status?.market.is_open ? (
@@ -207,6 +210,23 @@ function Header() {
                 </span>
               )}
             </div>
+          </div>
+
+          {/* Mobile: compact market + kill switch indicators */}
+          <div className="flex sm:hidden items-center gap-1.5">
+            {status?.market.is_open ? (
+              <span className="relative flex h-2 w-2" title="Market Open">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full h-2 w-2 bg-slate-600" title="Market Closed" />
+            )}
+            {status?.kill_switch.tripped ? (
+              <ShieldAlert className="h-3.5 w-3.5 text-red-400" title="Kill Switch Tripped" />
+            ) : (
+              <ShieldAlert className="h-3.5 w-3.5 text-green-400/60" title="Kill Switch Armed" />
+            )}
           </div>
         </div>
       </div>
@@ -263,8 +283,8 @@ function PortfolioMetrics() {
   const { data: positions } = useLivePositions();
 
   if (!data) return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      {[0, 1, 2, 3, 4].map(i => <div key={i} className="h-24 rounded-xl bg-card/40 animate-pulse border border-border" />)}
+    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      {[0, 1, 2, 3, 4].map(i => <div key={i} className={cn("h-24 rounded-xl bg-card/40 animate-pulse border border-border", i === 0 && "col-span-2 sm:col-span-2 lg:col-span-1")} />)}
     </div>
   );
 
@@ -284,9 +304,10 @@ function PortfolioMetrics() {
   const vaultPnl         = vaultPos?.unrealized_pl ?? 0;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
       {/* Total Equity */}
       <Card className={cn(
+        "col-span-2 sm:col-span-2 lg:col-span-1",
         "bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 relative overflow-hidden transition-all duration-500",
         isProfit && "hover:border-green-500/30",
         !isProfit && "hover:border-red-500/30"
@@ -942,9 +963,9 @@ function AIBrainSection() {
           </span>
         </div>
 
-        <div className="relative flex items-start gap-5 flex-1">
+        <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5 flex-1">
           <motion.div
-            className="flex-shrink-0 w-44 h-44 cursor-pointer relative group"
+            className="flex-shrink-0 w-24 h-24 sm:w-44 sm:h-44 cursor-pointer relative group"
             animate={{ y: [0, -6, 0, 4, 0], x: [0, 3, 0, -3, 0] }}
             transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
             onClick={() => setShowInsights(true)}
@@ -1344,9 +1365,9 @@ function AuditorAgentSection() {
           </span>
         </div>
 
-        <div className="relative flex items-start gap-5">
+        <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
           <motion.div
-            className="flex-shrink-0 w-44 h-44 cursor-pointer relative group"
+            className="flex-shrink-0 w-24 h-24 sm:w-44 sm:h-44 cursor-pointer relative group"
             animate={{ y: [0, -4, 0, 3, 0], x: [0, 2, 0, -2, 0] }}
             transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
             onClick={() => setShowInsights(true)}
@@ -1428,7 +1449,7 @@ function ActivityTicker() {
   const doubled = [...items, ...items];
 
   return (
-    <div className="w-full overflow-hidden bg-slate-950/60 border-b border-white/5 h-7 flex items-center relative">
+    <div className="w-full overflow-hidden bg-slate-950/60 border-b border-white/5 h-6 sm:h-7 flex items-center relative">
       <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
       <div className="ticker-animate flex items-center gap-6 whitespace-nowrap">
@@ -1576,7 +1597,128 @@ function ThesisModal({ ticker, thesis, onClose }: {
   );
 }
 
+function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConfirmClose, isClosing, isRebalancing, closingSymbol }: {
+  pos: any;
+  onThesisClick: (ticker: string, thesis: string | null) => void;
+  onEject: (symbol: string) => void;
+  confirmClose: string | null;
+  setConfirmClose: (s: string | null) => void;
+  isClosing: boolean;
+  isRebalancing: boolean;
+  closingSymbol: string | null;
+}) {
+  const isUp = pos.unrealized_pl >= 0;
+  const healthColor = pos.health_score ? ({
+    green: "#22c55e", emerald: "#10b981", amber: "#f59e0b", orange: "#f97316", red: "#ef4444",
+  }[pos.health_score.color] || pos.health_score.color) : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "rounded-xl border p-3.5 space-y-2.5 transition-all duration-300",
+        isUp
+          ? "border-l-2 border-l-green-500/40 border-white/5 hover:bg-green-500/[0.03]"
+          : "border-l-2 border-l-red-500/40 border-white/5 hover:bg-red-500/[0.03]"
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-white text-sm">{pos.symbol}</span>
+          <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase border-white/10">{pos.asset_class}</Badge>
+          {pos.conviction_score != null && (
+            <span className={cn("text-[10px] font-mono", pos.conviction_score >= 0.8 ? "text-green-400" : pos.conviction_score >= 0.75 ? "text-primary" : "text-amber-400")}>
+              {Math.round(pos.conviction_score * 100)}%
+            </span>
+          )}
+        </div>
+        {pos.health_score && healthColor && (
+          <span className="text-[10px] font-mono font-bold" style={{ color: healthColor }}>
+            {pos.health_score.score} {pos.health_score.label}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Qty</span>
+          <span className="font-mono text-white">{pos.qty.toFixed(4)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Notional</span>
+          <span className="font-mono text-white">{formatCurrency(pos.market_value)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Entry</span>
+          <span className="font-mono text-muted-foreground">{formatCurrency(pos.avg_entry_price)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Current</span>
+          <span className="font-mono text-white">{formatCurrency(pos.current_price)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">P&L</span>
+          <div className="flex items-center gap-1.5">
+            <PnlValue value={pos.unrealized_pl} />
+            <span className="text-[10px] opacity-70"><PnlText value={pos.unrealized_plpc * 100} /></span>
+          </div>
+        </div>
+        {(pos.stop_loss_price != null || pos.take_profit_price != null) && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">SL/TP</span>
+            <span className="font-mono text-[10px]">
+              {pos.stop_loss_price != null && <span className="text-red-400">{formatCurrency(pos.stop_loss_price)}</span>}
+              {pos.stop_loss_price != null && pos.take_profit_price != null && <span className="text-muted-foreground mx-0.5">/</span>}
+              {pos.take_profit_price != null && <span className="text-green-400">{formatCurrency(pos.take_profit_price)}</span>}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {pos.original_thesis && (
+        <p
+          className="text-[10px] text-muted-foreground/70 italic truncate cursor-pointer hover:text-indigo-400 border-b border-dashed border-indigo-500/20 pb-0.5"
+          onClick={() => onThesisClick(pos.symbol, pos.original_thesis)}
+        >
+          "{pos.original_thesis}"
+        </p>
+      )}
+
+      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+        {closingSymbol === pos.symbol ? (
+          <div className="flex items-center gap-1.5 text-[10px] text-orange-400/70">
+            <RefreshCw className="h-3 w-3 animate-spin" />
+            <span>Closing…</span>
+          </div>
+        ) : confirmClose === pos.symbol ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-orange-300/80">Close & re-enter?</span>
+            <button onClick={() => onEject(pos.symbol)} className="text-[9px] font-bold px-3 py-1.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 min-h-[44px]">Yes</button>
+            <button onClick={() => setConfirmClose(null)} className="text-[9px] font-bold px-2.5 py-1.5 rounded bg-slate-800 text-muted-foreground border border-white/10 min-h-[44px]">No</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmClose(pos.symbol)}
+            disabled={isClosing || isRebalancing}
+            className={cn(
+              "flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-3 py-2 rounded-lg border transition-all min-h-[44px]",
+              isClosing || isRebalancing
+                ? "opacity-40 cursor-not-allowed border-white/10 text-muted-foreground"
+                : "border-orange-500/20 bg-orange-500/5 text-orange-400/60 hover:bg-orange-500/15 hover:text-orange-400"
+            )}
+          >
+            <LogOut className="h-2.5 w-2.5" />
+            <span>Eject</span>
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 function LivePositionsSection() {
+  const isMobile = useIsMobile();
   const { data, isLoading } = useLivePositions();
   const { mutate: rebalance, isPending: isRebalancing } = useForceRebalance();
   const { mutate: closeAndReallocate, isPending: isClosing, variables: closingVar } = useCloseAndReallocate();
@@ -1602,12 +1744,13 @@ function LivePositionsSection() {
 
   return (
     <Card className="border-white/5 overflow-hidden">
-      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4">
-        <CardTitle className="flex items-center gap-2 text-sm">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-primary" />
-          Live Open Positions
+          <span className="hidden sm:inline">Live Open Positions</span>
+          <span className="sm:hidden">Positions</span>
           {data && (
-            <Badge variant={data.count > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0 ml-1">
+            <Badge variant={data.count > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0">
               {data.count}
             </Badge>
           )}
@@ -1622,30 +1765,30 @@ function LivePositionsSection() {
                 onClick={() => setConfirmRebalance(true)}
                 disabled={isRebalancing || !data || data.count === 0}
                 className={cn(
-                  "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide px-3 py-1.5 rounded-lg border transition-all duration-200",
+                  "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all duration-200 min-h-[44px]",
                   isRebalancing
                     ? "border-orange-500/30 bg-orange-500/10 text-orange-400 cursor-wait"
                     : "border-orange-500/20 bg-orange-500/5 text-orange-400/70 hover:bg-orange-500/15 hover:text-orange-400 hover:border-orange-500/40"
                 )}
               >
                 {isRebalancing ? (
-                  <><RefreshCw className="h-3 w-3 animate-spin" /> Rebalancing...</>
+                  <><RefreshCw className="h-3 w-3 animate-spin" /> <span className="hidden sm:inline">Rebalancing...</span></>
                 ) : (
-                  <><RefreshCw className="h-3 w-3" /> Force Rebalance</>
+                  <><RefreshCw className="h-3 w-3" /> <span className="hidden sm:inline">Force</span> Rebalance</>
                 )}
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-orange-400/80">Close all sellable positions &amp; re-enter?</span>
+                <span className="text-[10px] text-orange-400/80 hidden sm:inline">Close all sellable positions &amp; re-enter?</span>
                 <button
                   onClick={() => { rebalance(); setConfirmRebalance(false); }}
-                  className="text-[10px] font-bold px-2.5 py-1 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors"
+                  className="text-[10px] font-bold px-2.5 py-1.5 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors min-h-[44px]"
                 >
                   Confirm
                 </button>
                 <button
                   onClick={() => setConfirmRebalance(false)}
-                  className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-800 text-muted-foreground border border-white/10 hover:bg-slate-700 transition-colors"
+                  className="text-[10px] font-bold px-2 py-1.5 rounded-md bg-slate-800 text-muted-foreground border border-white/10 hover:bg-slate-700 transition-colors min-h-[44px]"
                 >
                   Cancel
                 </button>
@@ -1654,6 +1797,32 @@ function LivePositionsSection() {
           </div>
         </CardTitle>
       </CardHeader>
+      {isMobile ? (
+        <div className="p-3 space-y-3">
+          {isLoading && <div className="py-6 text-center text-muted-foreground italic text-xs">Loading positions...</div>}
+          {!isLoading && data?.positions.map((pos) => (
+            <MobilePositionCard
+              key={pos.symbol}
+              pos={pos}
+              onThesisClick={(t, th) => setThesisModal({ ticker: t, thesis: th })}
+              onEject={handleCloseAndReallocate}
+              confirmClose={confirmClose}
+              setConfirmClose={setConfirmClose}
+              isClosing={isClosing}
+              isRebalancing={isRebalancing}
+              closingSymbol={closingSymbol}
+            />
+          ))}
+          {!isLoading && (!data || data.positions.length === 0) && (
+            <div className="flex flex-col items-center gap-2 py-8">
+              <motion.div animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
+                <Target className="h-8 w-8 text-muted-foreground/20" />
+              </motion.div>
+              <p className="text-muted-foreground/50 italic text-xs">No open positions — system is in cash</p>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left min-w-[900px]">
           <thead className="text-[10px] uppercase bg-slate-950/60 text-muted-foreground">
@@ -1818,6 +1987,7 @@ function LivePositionsSection() {
           </tbody>
         </table>
       </div>
+      )}
       {thesisModal && (
         <ThesisModal
           ticker={thesisModal.ticker}
@@ -2037,9 +2207,9 @@ function AllocationSection() {
 
   return (
     <Card className="border-white/5 overflow-hidden">
-      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <LayoutList className="h-4 w-4 text-primary" /> Target Allocation ({slotCount} Slots)
+          <LayoutList className="h-4 w-4 text-primary" /> <span className="hidden sm:inline">Target Allocation</span><span className="sm:hidden">Allocation</span> ({slotCount} Slots)
           <span className={cn("text-[9px] font-mono ml-1 px-1.5 py-0.5 rounded-full border", avgConviction >= 0.8 ? "text-green-400 border-green-500/30 bg-green-500/10" : avgConviction >= 0.75 ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
             avg {Math.round(avgConviction * 100)}%
           </span>
@@ -2163,7 +2333,7 @@ function JournalSection() {
         </AnimatePresence>
       </div>
 
-      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
         <CardTitle className="flex items-center gap-2 text-sm">
           <History className="h-4 w-4 text-primary" /> Trade Journal
           {winRate && (
@@ -2172,10 +2342,10 @@ function JournalSection() {
             </span>
           )}
         </CardTitle>
-        <div className="flex gap-3 terminal-text text-[10px]">
+        <div className="flex gap-2 sm:gap-3 terminal-text text-[10px]">
           <span className="text-muted-foreground">Total: {data.summary.total}</span>
-          <span className="text-green-400">Wins: {data.summary.wins ?? 0}</span>
-          <span className="text-red-400">Losses: {data.summary.losses ?? 0}</span>
+          <span className="text-green-400">W: {data.summary.wins ?? 0}</span>
+          <span className="text-red-400">L: {data.summary.losses ?? 0}</span>
           <span>Avg: <PnlText value={data.summary.avg_pnl} /></span>
         </div>
       </CardHeader>
@@ -2457,8 +2627,10 @@ function VaultPanel() {
 
 // ── Ambient Visual Overlays ──────────────────────────────────────────────────
 
-/** CRT scanline — a single translucent beam that slowly sweeps top→bottom */
 function CRTOverlay() {
+  const isMobile = useIsMobile();
+  if (isMobile) return null;
+
   return (
     <div className="fixed inset-0 pointer-events-none z-[9998] overflow-hidden">
       <div
@@ -2468,7 +2640,6 @@ function CRTOverlay() {
           boxShadow: "0 0 10px rgba(99,102,241,0.07)",
         }}
       />
-      {/* Subtle edge vignette */}
       <div
         className="absolute inset-0"
         style={{
@@ -2504,10 +2675,10 @@ function RegimeGlow() {
   );
 }
 
-/** Ambient bottom glow — warm amber on drawdown, cool blue when profitable */
 function EquityEcho() {
+  const isMobile = useIsMobile();
   const { data } = usePortfolio();
-  if (!data) return null;
+  if (isMobile || !data) return null;
 
   const isProfit = data.account.equity >= 100000;
   const magnitude = Math.min(Math.abs(data.account.equity - 100000) / 20000, 1);
@@ -2577,14 +2748,14 @@ export default function Dashboard() {
       </div>
       <ActivityTicker />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
 
         {/* ═══ TIER 1: WHAT'S HAPPENING RIGHT NOW ═══ */}
 
         {/* AUTO-TRADING + PORTFOLIO METRICS */}
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <SafeSection label="Trade Controls">
-            <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-7 py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
+            <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-4 sm:px-7 py-4 sm:py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
               <div className="absolute top-0 left-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
               <TradeWorkflowBar />
             </div>

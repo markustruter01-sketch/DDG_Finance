@@ -9,15 +9,18 @@ Exchange : Kraken Pro (via ccxt)
 Runtime  : Continuous while True loop — restarts automatically on errors
 
 Architecture:
-  config.py  → All tunable parameters and exchange connection
-  logic.py   → All math: RSI, z-score, position sizing, circuit breaker, stops
-  main.py    → This file: the execution loop that ties everything together
+  config.py       → All tunable parameters, exchange connection, and the
+                    PAPER_TRADING master switch
+  paper_engine.py → Simulated $100K portfolio (used when PAPER_TRADING=True)
+  logic.py        → All math: RSI, z-score, position sizing, circuit breaker
+  main.py         → This file: the execution loop that ties everything together
 
-Required secrets (add in Replit → padlock icon → Secrets):
-  KRAKEN_API_KEY    — Kraken Pro API key
-  KRAKEN_SECRET_KEY — Kraken Pro secret key
+How to run:
+  Paper mode (default, no keys needed):
+    python3 kraken-bot/main.py
 
-Run with:  python3 kraken-bot/main.py
+  Live mode (real money, requires Kraken API keys in Replit Secrets):
+    Set PAPER_TRADING = False in kraken-bot/config.py, add your keys, restart.
 """
 
 from __future__ import annotations
@@ -30,9 +33,12 @@ from typing import Any
 
 from loguru import logger
 
-# Import our configuration (also validates API keys at import time)
+# Import our configuration — also handles the PAPER_TRADING startup message
+# and validates/creates the exchange connection.
 from config import (
     exchange,
+    PAPER_TRADING,
+    PAPER_STARTING_BALANCE,
     SYMBOLS,
     RSI_PERIOD,
     RSI_OVERSOLD,
@@ -57,7 +63,7 @@ from config import (
     STATUS_FILE,
 )
 
-# Import our trading logic functions
+# Import our trading logic functions (identical in both paper and live mode)
 from logic import (
     calculate_rsi,
     calculate_zscore,
@@ -66,13 +72,29 @@ from logic import (
     check_stops,
 )
 
+# Import the paper trading engine (only actively used when PAPER_TRADING=True,
+# but always imported so the module is ready to switch modes).
+from paper_engine import (
+    get_paper_equity,
+    get_paper_positions,
+    get_paper_portfolio_summary,
+    paper_open_position,
+    paper_close_position,
+)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STARTUP BANNER
 # ══════════════════════════════════════════════════════════════════════════════
 
 logger.info("=" * 65)
-logger.info("  DAVY JONES' PORTFOLIO  —  Kraken Mean-Reversion Bot")
+if PAPER_TRADING:
+    logger.info("  DAVY JONES' PORTFOLIO  —  *** PAPER TRADING MODE ***")
+    logger.info(f"  Simulated balance : ${PAPER_STARTING_BALANCE:,.0f} USD (fake money)")
+    logger.info("  No real orders will be placed on Kraken.")
+else:
+    logger.info("  DAVY JONES' PORTFOLIO  —  *** LIVE TRADING MODE ***")
+    logger.info("  REAL MONEY — Real orders on Kraken Pro.")
 logger.info("=" * 65)
 logger.info(f"  Symbols        : {', '.join(SYMBOLS)}")
 logger.info(f"  Timeframe      : {OHLCV_TIMEFRAME}")
@@ -91,70 +113,58 @@ logger.info("=" * 65)
 # All of the bot's in-memory state lives here at module level. When the bot
 # restarts after an error, this state resets — by design. The status.json file
 # is re-written each cycle so the dashboard always sees the latest state.
+# In paper mode, the portfolio itself is persisted in paper_portfolio.json.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Dict of currently open positions, keyed by symbol.
-# Structure: {
-#   "BTC/USD": {
-#       "side":         "long" | "short",
-#       "entry_price":  float,
-#       "size_usd":     float,
-#       "size_units":   float,
-#       "entry_time":   str (ISO UTC),
-#       "best_price":   float,  # highest seen for long, lowest for short
-#       "order_id":     str,
-#   }
-# }
+# In paper mode: populated from paper_engine's persistent state on startup.
+# In live mode:  populated as orders fill.
 open_positions: dict[str, dict] = {}
 
-# A deque (double-ended queue with max length) that stores recent price
-# observations for each symbol, used by the circuit breaker.
-# Structure: {symbol: deque([(datetime, price), ...])}
+# A deque that stores recent price observations for the circuit breaker.
 price_history: dict[str, deque] = {
     sym: deque(maxlen=100) for sym in SYMBOLS
 }
 
-# The total account equity in USD — refreshed every 60 minutes
+# Total account equity in USD — refreshed every EQUITY_REFRESH_INTERVAL seconds.
 total_equity: float = 0.0
 
-# When we last refreshed the equity figure (Unix timestamp)
+# When we last refreshed the equity figure (Unix timestamp).
 last_equity_refresh: float = 0.0
 
-# Circuit breaker state — when this is set to a future datetime, all
-# trading is paused until that time passes.
+# Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
 
-# Recent trade history for the status file (last 10 trades)
+# Recent trade history for the status file (last 20 trades shown on dashboard).
 recent_trades: list[dict] = []
 
-# How many full trading cycles have completed since startup
+# How many full trading cycles have completed since startup.
 cycle_count: int = 0
+
+# Cache of the latest prices seen in this cycle (used for paper equity calc).
+latest_prices: dict[str, float] = {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STATUS FILE WRITER
 # After every cycle, we write a JSON snapshot of the bot's current state.
-# The FastAPI server reads this file to power the "Davy Jones" dashboard card.
+# The FastAPI server reads this file to power the dashboard card.
 # ══════════════════════════════════════════════════════════════════════════════
 
 def write_status(error: str | None = None) -> None:
     """
     Serialise the bot's current state to STATUS_FILE (kraken-bot/status.json).
-    This is how the dashboard knows what the bot is doing without coupling
-    the bot process to the FastAPI server.
+    The 'paper_trading' field lets the dashboard show a clear PAPER badge.
     """
     global total_equity, open_positions, circuit_breaker_until, recent_trades, cycle_count
 
-    # Calculate how much capital is currently deployed
-    deployed_usd = sum(p["size_usd"] for p in open_positions.values())
-    deployable   = total_equity * (1.0 - CASH_RESERVE)
-    deployed_pct = (deployed_usd / deployable * 100) if deployable > 0 else 0.0
+    deployed_usd  = sum(p["size_usd"] for p in open_positions.values())
+    deployable    = total_equity * (1.0 - CASH_RESERVE)
+    deployed_pct  = (deployed_usd / deployable * 100) if deployable > 0 else 0.0
 
-    # Is the circuit breaker active right now?
-    cb_active  = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
-    cb_until   = circuit_breaker_until.isoformat() if cb_active else None
+    cb_active = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
+    cb_until  = circuit_breaker_until.isoformat() if cb_active else None
 
-    # Build a clean list of open positions for the status
     positions_list = []
     for sym, pos in open_positions.items():
         positions_list.append({
@@ -166,8 +176,12 @@ def write_status(error: str | None = None) -> None:
             "best_price":  pos["best_price"],
         })
 
+    # Paper-mode extra fields for the dashboard
+    paper_summary = get_paper_portfolio_summary() if PAPER_TRADING else None
+
     state = {
         "bot_name":         "Davy Jones' Portfolio",
+        "paper_trading":    PAPER_TRADING,       # ← dashboard reads this for the PAPER badge
         "status":           "paused_circuit_breaker" if cb_active else ("running" if not error else "error"),
         "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
         "cycle_count":      cycle_count,
@@ -179,11 +193,9 @@ def write_status(error: str | None = None) -> None:
         "open_positions":   positions_list,
         "position_count":   len(open_positions),
         "max_positions":    MAX_POSITIONS,
-        "circuit_breaker":  {
-            "active":       cb_active,
-            "paused_until": cb_until,
-        },
-        "recent_trades":    recent_trades[-10:],  # Last 10 trades only
+        "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
+        "recent_trades":    recent_trades[-20:],  # last 20 trades
+        "paper_summary":    paper_summary,        # None in live mode
         "error":            error,
     }
 
@@ -200,24 +212,30 @@ def write_status(error: str | None = None) -> None:
 
 def refresh_equity() -> None:
     """
-    Fetch the current total account balance from Kraken and store it
-    in the module-level 'total_equity' variable.
+    Update the total_equity figure.
 
-    We do this every 60 minutes (EQUITY_REFRESH_INTERVAL) because crypto
-    moves fast — a position opened with stale equity numbers could easily
-    over- or under-size a trade.
+    PAPER mode  → compute from simulated cash + open position values at
+                  the latest known prices (no API call needed).
+    LIVE mode   → fetch the real USD balance from the Kraken API.
     """
     global total_equity, last_equity_refresh
 
-    try:
-        balance       = exchange.fetch_balance()
-        # Kraken returns total equity as the USD balance
-        usd_total     = balance.get("total", {}).get("USD", 0.0)
-        total_equity  = float(usd_total)
+    if PAPER_TRADING:
+        # ── Paper trading: compute from simulated portfolio ───────────────────
+        total_equity        = get_paper_equity(current_prices=latest_prices)
         last_equity_refresh = time.time()
-        logger.info(f"Equity | Refreshed → ${total_equity:,.2f} USD total")
-    except Exception as exc:
-        logger.warning(f"Equity | Failed to refresh: {exc} — using last known: ${total_equity:,.2f}")
+        logger.info(f"Equity | Paper account → ${total_equity:,.2f} (simulated)")
+
+    else:
+        # ── Live trading: fetch real balance from Kraken ──────────────────────
+        try:
+            balance           = exchange.fetch_balance()
+            usd_total         = balance.get("total", {}).get("USD", 0.0)
+            total_equity      = float(usd_total)
+            last_equity_refresh = time.time()
+            logger.info(f"Equity | Live account → ${total_equity:,.2f} USD")
+        except Exception as exc:
+            logger.warning(f"Equity | Failed to refresh: {exc} — using last known: ${total_equity:,.2f}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -226,56 +244,63 @@ def refresh_equity() -> None:
 
 def open_position(symbol: str, side: str, size_usd: float, current_price: float) -> bool:
     """
-    Place a market order to open a new position.
+    Open a position — simulated (paper mode) or real (live mode).
 
-    For a LONG:  we BUY 'size_usd / current_price' units of the symbol.
-    For a SHORT: we SELL 'size_usd / current_price' units (margin trade).
-
-    Returns True if the order was successfully placed, False otherwise.
+    PAPER mode → calls paper_engine.paper_open_position()
+    LIVE mode  → places a real market order via ccxt
     """
-    global open_positions, recent_trades
+    global open_positions
 
-    try:
-        size_units = size_usd / current_price
-        order_side = "buy" if side == "long" else "sell"
+    if PAPER_TRADING:
+        # ── Paper: simulate the fill at current price ─────────────────────────
+        success = paper_open_position(symbol, side, size_usd, current_price)
+        if success:
+            # Sync in-memory state from the paper engine's persisted state
+            open_positions = get_paper_positions()
+        return success
 
-        logger.info(
-            f"Order | {side.upper()} {symbol} | "
-            f"Size: ${size_usd:,.2f} ({size_units:.6f} units) @ ~${current_price:,.2f}"
-        )
+    else:
+        # ── Live: place a real market order on Kraken ─────────────────────────
+        try:
+            size_units = size_usd / current_price
+            order_side = "buy" if side == "long" else "sell"
 
-        order = exchange.create_market_order(
-            symbol=symbol,
-            side=order_side,
-            amount=size_units,
-        )
+            logger.info(
+                f"Order | {side.upper()} {symbol} | "
+                f"Size: ${size_usd:,.2f} ({size_units:.6f} units) @ ~${current_price:,.2f}"
+            )
 
-        # Record the position in our state
-        fill_price = float(order.get("average") or order.get("price") or current_price)
-        open_positions[symbol] = {
-            "side":        side,
-            "entry_price": fill_price,
-            "size_usd":    size_usd,
-            "size_units":  size_units,
-            "entry_time":  datetime.now(tz=timezone.utc).isoformat(),
-            "best_price":  fill_price,
-            "order_id":    str(order.get("id", "")),
-        }
+            order = exchange.create_market_order(
+                symbol=symbol,
+                side=order_side,
+                amount=size_units,
+            )
 
-        logger.success(f"Order | Opened {side.upper()} {symbol} @ ${fill_price:,.2f}")
-        return True
+            fill_price = float(order.get("average") or order.get("price") or current_price)
+            open_positions[symbol] = {
+                "side":        side,
+                "entry_price": fill_price,
+                "size_usd":    size_usd,
+                "size_units":  size_units,
+                "entry_time":  datetime.now(tz=timezone.utc).isoformat(),
+                "best_price":  fill_price,
+                "order_id":    str(order.get("id", "")),
+            }
 
-    except Exception as exc:
-        logger.error(f"Order | Failed to open {side.upper()} {symbol}: {exc}")
-        return False
+            logger.success(f"Order | Opened {side.upper()} {symbol} @ ${fill_price:,.2f}")
+            return True
+
+        except Exception as exc:
+            logger.error(f"Order | Failed to open {side.upper()} {symbol}: {exc}")
+            return False
 
 
 def close_position(symbol: str, reason: str) -> None:
     """
-    Place a market order to close an open position and record the trade result.
+    Close an open position — simulated (paper mode) or real (live mode).
 
-    For a LONG:  we SELL our units back to the market.
-    For a SHORT: we BUY to cover (close) the short.
+    PAPER mode → calls paper_engine.paper_close_position()
+    LIVE mode  → places a real market order via ccxt
     """
     global open_positions, recent_trades
 
@@ -284,46 +309,55 @@ def close_position(symbol: str, reason: str) -> None:
 
     pos = open_positions[symbol]
 
-    try:
-        close_side = "sell" if pos["side"] == "long" else "buy"
+    if PAPER_TRADING:
+        # ── Paper: simulate the fill at the last seen price ───────────────────
+        current_price = latest_prices.get(symbol, pos["entry_price"])
+        trade_record  = paper_close_position(symbol, current_price, reason)
+        if trade_record:
+            recent_trades.append(trade_record)
+        # Sync in-memory state from the paper engine
+        open_positions = get_paper_positions()
 
-        order = exchange.create_market_order(
-            symbol=symbol,
-            side=close_side,
-            amount=pos["size_units"],
-        )
+    else:
+        # ── Live: place a real close order on Kraken ──────────────────────────
+        try:
+            close_side = "sell" if pos["side"] == "long" else "buy"
+            order      = exchange.create_market_order(
+                symbol=symbol,
+                side=close_side,
+                amount=pos["size_units"],
+            )
 
-        fill_price = float(order.get("average") or order.get("price") or pos["entry_price"])
+            fill_price = float(order.get("average") or order.get("price") or pos["entry_price"])
 
-        # Calculate P&L
-        if pos["side"] == "long":
-            pnl_pct = ((fill_price - pos["entry_price"]) / pos["entry_price"]) * 100
-        else:
-            pnl_pct = ((pos["entry_price"] - fill_price) / pos["entry_price"]) * 100
+            if pos["side"] == "long":
+                pnl_pct = ((fill_price - pos["entry_price"]) / pos["entry_price"]) * 100
+            else:
+                pnl_pct = ((pos["entry_price"] - fill_price) / pos["entry_price"]) * 100
 
-        pnl_usd = pos["size_usd"] * (pnl_pct / 100)
+            pnl_usd = pos["size_usd"] * (pnl_pct / 100)
 
-        logger.info(
-            f"Close | {pos['side'].upper()} {symbol} | "
-            f"Reason: {reason} | P&L: {pnl_pct:+.2f}% (${pnl_usd:+,.2f})"
-        )
+            logger.info(
+                f"Close | {pos['side'].upper()} {symbol} | "
+                f"Reason: {reason} | P&L: {pnl_pct:+.2f}% (${pnl_usd:+,.2f})"
+            )
 
-        # Record in recent trades list (for status.json / dashboard)
-        recent_trades.append({
-            "symbol":      symbol,
-            "side":        pos["side"],
-            "entry_price": pos["entry_price"],
-            "exit_price":  fill_price,
-            "pnl_pct":     round(pnl_pct, 2),
-            "pnl_usd":     round(pnl_usd, 2),
-            "reason":      reason,
-            "closed_at":   datetime.now(tz=timezone.utc).isoformat(),
-        })
+            recent_trades.append({
+                "symbol":      symbol,
+                "side":        pos["side"],
+                "entry_price": pos["entry_price"],
+                "exit_price":  fill_price,
+                "pnl_pct":     round(pnl_pct, 2),
+                "pnl_usd":     round(pnl_usd, 2),
+                "reason":      reason,
+                "closed_at":   datetime.now(tz=timezone.utc).isoformat(),
+                "paper":       False,
+            })
 
-        del open_positions[symbol]
+            del open_positions[symbol]
 
-    except Exception as exc:
-        logger.error(f"Close | Failed to close {symbol}: {exc}")
+        except Exception as exc:
+            logger.error(f"Close | Failed to close {symbol}: {exc}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -336,17 +370,14 @@ def run_cycle() -> None:
       1. Refresh equity if needed (every 60 min)
       2. Check circuit breaker — if active, skip all trading
       3. For each symbol:
-         a. Fetch latest OHLCV candles
+         a. Fetch latest OHLCV candles (real live data in both modes)
          b. Record price in history (for circuit breaker)
-         c. Check if circuit breaker should fire for this symbol
-         d. If we have an open position → check stops and trail
-         e. If we don't have a position and slots are free → evaluate signals
-            - Compute RSI + z-score
-            - Open a LONG if oversold + z-score < -entry_threshold
-            - Open a SHORT if overbought + z-score > +entry_threshold
-      4. Write status.json
+         c. Check if circuit breaker should fire
+         d. If we have an open position → check stops and trailing profit
+         e. If no position and slots are free → evaluate RSI + z-score signals
+      4. Write status.json for the dashboard
     """
-    global total_equity, circuit_breaker_until, cycle_count
+    global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
 
     cycle_count += 1
 
@@ -357,8 +388,13 @@ def run_cycle() -> None:
     # If we still have no equity figure, something is wrong — skip this cycle
     if total_equity <= 0:
         logger.warning("Cycle | Total equity is zero or unavailable — skipping cycle")
-        write_status(error="Could not fetch account balance")
+        write_status(error="Could not determine account balance")
         return
+
+    # In paper mode, resync positions from the persistent paper state each cycle
+    # so that positions survive a bot restart.
+    if PAPER_TRADING:
+        open_positions = get_paper_positions()
 
     # ── Step 2: Check if circuit breaker is still active ─────────────────────
     now_utc = datetime.now(tz=timezone.utc)
@@ -373,7 +409,8 @@ def run_cycle() -> None:
 
     for symbol in SYMBOLS:
         try:
-            # ── 3a. Fetch candles ─────────────────────────────────────────────
+            # ── 3a. Fetch candles — real live data in both paper and live mode ─
+            # Paper trading uses Kraken's public OHLCV endpoint (no auth needed).
             candles = exchange.fetch_ohlcv(
                 symbol=symbol,
                 timeframe=OHLCV_TIMEFRAME,
@@ -383,8 +420,11 @@ def run_cycle() -> None:
                 logger.debug(f"Signal | {symbol}: Not enough candle data, skipping")
                 continue
 
-            closes        = [c[4] for c in candles]  # Index 4 = close price
+            closes        = [c[4] for c in candles]
             current_price = closes[-1]
+
+            # Cache the latest price (used by paper equity calculation)
+            latest_prices[symbol] = current_price
 
             # ── 3b. Record price for circuit breaker ──────────────────────────
             price_history[symbol].append((now_utc, current_price))
@@ -402,19 +442,19 @@ def run_cycle() -> None:
                     f"in {CB_WINDOW_MINUTES}min — ALL trading paused until {pause_until.strftime('%H:%M UTC')}"
                 )
                 write_status()
-                return  # Stop processing all symbols immediately
+                return
 
             # ── 3d. Manage existing position (if we have one) ─────────────────
             if symbol in open_positions:
                 pos = open_positions[symbol]
 
-                # Update the "best price" seen (high-water for long, low-water for short)
+                # Update the best price seen (high-water for long, low-water for short)
                 if pos["side"] == "long":
                     pos["best_price"] = max(pos["best_price"], current_price)
                 else:
                     pos["best_price"] = min(pos["best_price"], current_price)
 
-                # Check if we should exit (stop loss or trailing take-profit)
+                # Check if we should exit via stop-loss or trailing take-profit
                 exit_reason = check_stops(
                     side=pos["side"],
                     entry_price=pos["entry_price"],
@@ -447,18 +487,16 @@ def run_cycle() -> None:
 
                 continue  # Don't try to open a new position in the same symbol
 
-            # ── 3e. Evaluate entry signals (no position in this symbol) ───────
+            # ── 3e. Evaluate entry signals (no position in this symbol) ────────
 
-            # Respect the maximum concurrent position limit
             if len(open_positions) >= MAX_POSITIONS:
                 logger.debug(f"Signal | {symbol}: Max positions ({MAX_POSITIONS}) reached — skip")
                 continue
 
-            # Compute the two signals
             rsi     = calculate_rsi(closes, period=RSI_PERIOD)
             z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
 
-            # ── LONG signal: price is unusually low + RSI is oversold ─────────
+            # LONG signal: price is unusually low + RSI is oversold
             if z_score < -ZSCORE_ENTRY and rsi < RSI_OVERSOLD:
                 size_usd = get_position_size(
                     total_equity=total_equity,
@@ -469,7 +507,7 @@ def run_cycle() -> None:
                     max_position_fraction=MAX_POSITION_FRACTION,
                     cash_reserve=CASH_RESERVE,
                 )
-                if size_usd >= 10.0:  # Minimum trade size ($10 to avoid dust orders)
+                if size_usd >= 10.0:
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
                         f"Z={z_score:.2f} (dip>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
@@ -477,9 +515,9 @@ def run_cycle() -> None:
                     if open_position(symbol, "long", size_usd, current_price):
                         deployed_usd += size_usd
                 else:
-                    logger.debug(f"Signal | {symbol}: LONG signal but position size ${size_usd:.2f} too small")
+                    logger.debug(f"Signal | {symbol}: LONG signal but size ${size_usd:.2f} too small")
 
-            # ── SHORT signal: price is unusually high + RSI is overbought ─────
+            # SHORT signal: price is unusually high + RSI is overbought
             elif z_score > ZSCORE_ENTRY and rsi > RSI_OVERBOUGHT:
                 size_usd = get_position_size(
                     total_equity=total_equity,
@@ -498,7 +536,7 @@ def run_cycle() -> None:
                     if open_position(symbol, "short", size_usd, current_price):
                         deployed_usd += size_usd
                 else:
-                    logger.debug(f"Signal | {symbol}: SHORT signal but position size ${size_usd:.2f} too small")
+                    logger.debug(f"Signal | {symbol}: SHORT signal but size ${size_usd:.2f} too small")
 
             else:
                 logger.debug(
@@ -507,7 +545,6 @@ def run_cycle() -> None:
                 )
 
         except Exception as exc:
-            # One symbol failing should never stop the bot — log and continue
             logger.error(f"Cycle | Error processing {symbol}: {exc}")
             continue
 
@@ -515,6 +552,8 @@ def run_cycle() -> None:
     write_status()
     logger.debug(
         f"Cycle #{cycle_count} complete | "
+        f"{'PAPER' if PAPER_TRADING else 'LIVE'} | "
+        f"Equity: ${total_equity:,.2f} | "
         f"Positions: {len(open_positions)}/{MAX_POSITIONS} | "
         f"Deployed: ${sum(p['size_usd'] for p in open_positions.values()):,.2f}"
     )
@@ -528,18 +567,12 @@ def main() -> None:
     """
     The outer execution loop. This is what runs 24/7.
 
-    Structure:
-      OUTER loop (try/except) — catches fatal errors, sleeps 30s, then restarts
-        INNER loop (while True) — runs trading cycles every 60 seconds
-          ├── refresh_equity() if 60min has passed
-          ├── check circuit breaker
-          ├── for each symbol: evaluate signals / manage positions
-          └── write_status()
-
-    The outer try/except is the "auto-restart" mechanism. If the Kraken API
-    drops, the internet hiccups, or anything unexpected happens, the bot
-    pauses for 30 seconds and then starts the inner loop again — no manual
-    intervention needed.
+    OUTER loop (try/except) — catches fatal errors, sleeps 30s, then restarts
+      INNER loop (while True) — runs trading cycles every 60 seconds
+        ├── refresh_equity()
+        ├── check circuit breaker
+        ├── for each symbol: evaluate signals / manage positions
+        └── write_status()
     """
     global total_equity
 
@@ -549,25 +582,22 @@ def main() -> None:
     # ── Outer restart loop ────────────────────────────────────────────────────
     while True:
         try:
-            logger.info("Bot | Starting trading loop ...")
+            logger.info(
+                f"Bot | Starting {'PAPER' if PAPER_TRADING else 'LIVE'} trading loop ..."
+            )
 
             # ── Inner trading loop ────────────────────────────────────────────
             while True:
                 run_cycle()
-
-                # Sleep until the next cycle
                 logger.debug(f"Bot | Sleeping {LOOP_SLEEP_SECONDS}s until next cycle ...")
                 time.sleep(LOOP_SLEEP_SECONDS)
 
         except KeyboardInterrupt:
-            # User pressed Ctrl+C — exit cleanly
             logger.info("Bot | Keyboard interrupt — shutting down gracefully.")
             write_status(error="Manually stopped")
             break
 
         except Exception as exc:
-            # Something unexpected happened — log it, write error status,
-            # then wait before restarting the inner loop
             logger.error(f"Bot | Unexpected error: {exc} — restarting in {RESTART_SLEEP_SECONDS}s")
             write_status(error=str(exc))
             time.sleep(RESTART_SLEEP_SECONDS)

@@ -49,7 +49,7 @@ function ConfirmModal({
           transition={{ duration: 0.18 }}
           className={cn(
             "relative z-10 w-full bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden",
-            isMobile ? "rounded-t-2xl max-h-[85vh]" : "max-w-md mx-4 rounded-xl"
+            isMobile ? "rounded-t-2xl h-auto max-h-full" : "max-w-md mx-4 rounded-xl"
           )}
         >
           {/* Header stripe */}
@@ -237,7 +237,7 @@ export function EmergencyHeaderButtons() {
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
           </span>
           <ShieldOff className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
-          <span className="hidden sm:inline">Liquidate All</span>
+          <span className="hidden md:inline">Liquidate All</span>
         </button>
 
         <button
@@ -258,7 +258,7 @@ export function EmergencyHeaderButtons() {
             ? <RefreshCw className="h-3.5 w-3.5 sm:h-3 sm:w-3 animate-spin" />
             : <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
           }
-          <span className="hidden sm:inline">Restart</span>
+          <span className="hidden md:inline">Restart</span>
         </button>
       </div>
     </>

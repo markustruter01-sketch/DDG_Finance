@@ -116,13 +116,13 @@ function SystemStatusBanner() {
   if (sysStatus === "online") {
     return (
       <div className="sticky top-14 z-30 w-full bg-green-500/8 border-b border-green-500/15 backdrop-blur-md">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
-          <span className="relative flex h-1.5 w-1.5">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 min-h-[2rem] py-1.5 md:py-0 md:h-8 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
           </span>
           <span className="text-xs text-green-400 font-medium">ONLINE</span>
-          <span className="text-xs text-green-500/60">— {reason}</span>
+          <span className="text-xs text-green-500/60 break-words">— {reason}</span>
           {tradingMode && (
             <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
               {tradingModeLabel(tradingMode)}
@@ -136,10 +136,10 @@ function SystemStatusBanner() {
   if (sysStatus === "degraded") {
     return (
       <div className="sticky top-14 z-30 w-full bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-md">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 min-h-[2rem] py-1.5 md:py-0 md:h-8 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
           <span className="text-xs text-amber-400 font-medium">DEGRADED</span>
-          <span className="text-xs text-amber-500/70">— {reason}</span>
+          <span className="text-xs text-amber-500/70 break-words">— {reason}</span>
         </div>
       </div>
     );
@@ -147,10 +147,10 @@ function SystemStatusBanner() {
 
   return (
     <div className="sticky top-14 z-30 w-full bg-red-500/10 border-b border-red-500/20 backdrop-blur-md">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-8 flex items-center gap-2">
-        <WifiOff className="h-3.5 w-3.5 text-red-400" />
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 min-h-[2rem] py-1.5 md:py-0 md:h-8 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <WifiOff className="h-3.5 w-3.5 text-red-400 flex-shrink-0" />
         <span className="text-xs text-red-400 font-medium">OFFLINE</span>
-        <span className="text-xs text-red-500/70">— {reason}</span>
+        <span className="text-xs text-red-500/70 break-words">— {reason}</span>
       </div>
     </div>
   );
@@ -169,8 +169,8 @@ function Header() {
             <Activity className="h-4 w-4 text-primary" />
           </div>
           <h1 className="text-sm sm:text-lg font-bold tracking-tight text-white">
-            <span className="sm:hidden">QT</span>
-            <span className="hidden sm:inline">Quant Terminal</span>
+            <span className="md:hidden">QT</span>
+            <span className="hidden md:inline">Quant Terminal</span>
           </h1>
         </div>
 
@@ -213,7 +213,7 @@ function Header() {
           </div>
 
           {/* Mobile: compact market + kill switch indicators */}
-          <div className="flex sm:hidden items-center gap-1.5">
+          <div className="flex md:hidden items-center gap-1.5">
             {status?.market.is_open ? (
               <span className="relative flex h-2 w-2" title="Market Open">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -1449,7 +1449,7 @@ function ActivityTicker() {
   const doubled = [...items, ...items];
 
   return (
-    <div className="w-full overflow-hidden bg-slate-950/60 border-b border-white/5 h-6 sm:h-7 flex items-center relative">
+    <div className="w-full overflow-hidden bg-slate-950/60 border-b border-white/5 h-5 md:h-7 flex items-center relative">
       <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-slate-950 to-transparent z-10 pointer-events-none" />
       <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-slate-950 to-transparent z-10 pointer-events-none" />
       <div className="ticker-animate flex items-center gap-6 whitespace-nowrap">
@@ -1746,8 +1746,8 @@ function LivePositionsSection() {
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-primary" />
-          <span className="hidden sm:inline">Live Open Positions</span>
-          <span className="sm:hidden">Positions</span>
+          <span className="hidden md:inline">Live Open Positions</span>
+          <span className="md:hidden">Positions</span>
           {data && (
             <Badge variant={data.count > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0">
               {data.count}
@@ -1771,14 +1771,14 @@ function LivePositionsSection() {
                 )}
               >
                 {isRebalancing ? (
-                  <><RefreshCw className="h-3 w-3 animate-spin" /> <span className="hidden sm:inline">Rebalancing...</span></>
+                  <><RefreshCw className="h-3 w-3 animate-spin" /> <span className="hidden md:inline">Rebalancing...</span></>
                 ) : (
-                  <><RefreshCw className="h-3 w-3" /> <span className="hidden sm:inline">Force</span> Rebalance</>
+                  <><RefreshCw className="h-3 w-3" /> <span className="hidden md:inline">Force</span> Rebalance</>
                 )}
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-orange-400/80 hidden sm:inline">Close all sellable positions &amp; re-enter?</span>
+                <span className="text-[10px] text-orange-400/80 hidden md:inline">Close all sellable positions &amp; re-enter?</span>
                 <button
                   onClick={() => { rebalance(); setConfirmRebalance(false); }}
                   className="text-[10px] font-bold px-2.5 py-1.5 rounded-md bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-colors min-h-[44px]"
@@ -2208,7 +2208,7 @@ function AllocationSection() {
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
         <CardTitle className="flex items-center gap-2 text-sm">
-          <LayoutList className="h-4 w-4 text-primary" /> <span className="hidden sm:inline">Target Allocation</span><span className="sm:hidden">Allocation</span> ({slotCount} Slots)
+          <LayoutList className="h-4 w-4 text-primary" /> <span className="hidden md:inline">Target Allocation</span><span className="md:hidden">Allocation</span> ({slotCount} Slots)
           <span className={cn("text-[9px] font-mono ml-1 px-1.5 py-0.5 rounded-full border", avgConviction >= 0.8 ? "text-green-400 border-green-500/30 bg-green-500/10" : avgConviction >= 0.75 ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
             avg {Math.round(avgConviction * 100)}%
           </span>

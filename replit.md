@@ -93,7 +93,7 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - **Charts**: Recharts
 
 ### Mobile Responsive Design
-- **Breakpoint**: `useIsMobile()` hook at 640px (aligned with Tailwind `sm:` breakpoint)
+- **Breakpoint**: `useIsMobile()` hook at 768px (aligned with Tailwind `md:` breakpoint)
 - **Header**: "Quant Terminal" → "QT" on mobile; emergency buttons are icon-only; Market/Kill Switch shown as compact colored dots
 - **Portfolio Metrics**: Total Equity card spans full width on mobile; 2-col grid vs 5-col desktop
 - **Positions**: `MobilePositionCard` component renders stacked cards on mobile; full 12-column table on desktop

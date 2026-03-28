@@ -181,6 +181,11 @@
     font-size: clamp(0.75rem, 2vw, 0.875rem);
   }
 
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
   /* ── Mobile performance optimizations ── */
   @media (max-width: 767px) {
     .crt-scanline {

@@ -95,7 +95,7 @@ function ConfirmModal({
               <button
                 onClick={onCancel}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2 text-xs font-medium text-zinc-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition disabled:opacity-50"
+                className="flex-1 px-4 py-2 text-xs font-medium text-zinc-400 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg transition disabled:opacity-50 tap-target"
               >
                 Cancel
               </button>
@@ -103,7 +103,7 @@ function ConfirmModal({
                 onClick={() => { if (canConfirm && !isLoading) onConfirm(); }}
                 disabled={!canConfirm || isLoading}
                 className={cn(
-                  "flex-1 px-4 py-2 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5",
+                  "flex-1 px-4 py-2 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5 tap-target",
                   confirmClass,
                   (!canConfirm || isLoading) && "opacity-40 cursor-not-allowed"
                 )}

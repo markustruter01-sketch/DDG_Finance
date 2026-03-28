@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Activity, Wifi, Server, Shield, Database, Anchor } from "lucide-react";
+import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,7 @@ interface Overrides {
   [key: string]: Partial<NodeHealth>;
 }
 
-const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; wire: string; text: string; bg: string }> = {
+const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; wire: string; text: string; bg: string; border: string }> = {
   green: {
     fill: "rgba(34,197,94,0.08)",
     stroke: "rgba(34,197,94,0.6)",
@@ -39,6 +39,7 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
     wire: "#22c55e",
     text: "text-green-400",
     bg: "bg-green-500/10",
+    border: "border-green-500/20",
   },
   yellow: {
     fill: "rgba(234,179,8,0.08)",
@@ -47,6 +48,7 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
     wire: "#eab308",
     text: "text-yellow-400",
     bg: "bg-yellow-500/10",
+    border: "border-yellow-500/20",
   },
   red: {
     fill: "rgba(239,68,68,0.08)",
@@ -55,6 +57,7 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
     wire: "#ef4444",
     text: "text-red-400",
     bg: "bg-red-500/10",
+    border: "border-red-500/25",
   },
 };
 
@@ -73,6 +76,53 @@ const WIRES: [string, string][] = [
   ["equity_manager", "alpaca_api"],
   ["data_pipeline", "kraken_api"],
 ];
+
+function buildExplanation(key: string, node: NodeHealth): string {
+  const { level, latency_ms, data_age_s, detail } = node;
+
+  if (level === "green") return "All checks passing.";
+
+  if (latency_ms != null && latency_ms > 1000)
+    return `Round-trip to ${node.label.split("(")[0].trim()} took ${latency_ms}ms — well above the 1,000ms critical threshold. Check network or API availability.`;
+  if (latency_ms != null && latency_ms > 200)
+    return `Latency is ${latency_ms}ms — above the 200ms optimal threshold. The API is reachable but responding slowly.`;
+
+  if (data_age_s != null && data_age_s > 300)
+    return `Feed data is ${data_age_s.toFixed(0)}s old — critical threshold is 300s. The data pipeline may be stalled or the bot has stopped writing updates.`;
+  if (data_age_s != null && data_age_s > 60)
+    return `Feed data is ${data_age_s.toFixed(0)}s old — past the 60s freshness threshold. Normal if a cycle just completed; watch if it continues rising.`;
+
+  if (key === "equity_manager") {
+    if (level === "red") return `A single position exceeds 15% of total equity — the hard risk limit. The enforcer should trigger a rebalance. Detail: ${detail}`;
+    if (level === "yellow") return `A single position is approaching the 15% limit (currently 12–15%). No breach yet, but worth monitoring. Detail: ${detail}`;
+  }
+
+  if (key === "platform_core") {
+    if (detail.includes("0 jobs")) return "The APScheduler crashed or lost all registered jobs. Restart the trading API server to recover.";
+    if (detail.includes("error") || detail.includes("failed")) return `The last analysis cycle ended in an error state. Check server logs for the root cause. Detail: ${detail}`;
+    if (detail.includes("never_run")) return "No analysis cycle has run yet since the server started. This clears automatically once the first cycle fires.";
+  }
+
+  if (key === "data_pipeline") {
+    if (detail.includes("No data cached")) return "No market data feeds have been cached yet. This resolves after the first analysis cycle runs (scheduler must be enabled and market must be in session or crypto cycle must fire).";
+    return `Only some data feeds are cached. Detail: ${detail}`;
+  }
+
+  if (key === "kraken_api") {
+    if (detail.includes("Bot not started")) return "The Kraken bot process hasn't written a status file yet. Start the 'Davy Jones' Portfolio' workflow to resolve.";
+    if (detail.includes("paused")) return "The Kraken bot is paused — either manually via the dashboard toggle or by the circuit breaker (>10% price drop). Resume from the toolbar.";
+    if (detail.includes("503") || detail.includes("timeout")) return "The Kraken exchange API returned a server error. This is usually transient — the bot will retry on the next cycle.";
+  }
+
+  if (key === "alpaca_api") {
+    if (detail.includes("429")) return "Alpaca rate limit hit. The platform made too many API calls in a short window. This resolves automatically within a minute.";
+    if (detail.includes("401") || detail.includes("403")) return "Alpaca authentication failed. Verify ALPACA_API_KEY and ALPACA_SECRET_KEY are set correctly in Secrets.";
+    if (detail.includes("404")) return "Alpaca returned 404 — the requested resource (account, order, position) was not found. May indicate a stale reference.";
+    if (detail.includes("503") || detail.includes("timeout")) return "Alpaca API is unreachable or timing out. Could be a temporary outage — check status.alpaca.markets.";
+  }
+
+  return detail || "Status flagged — check the server logs for more detail.";
+}
 
 function GlowingWire({ x1, y1, x2, y2, level, id }: { x1: number; y1: number; x2: number; y2: number; level: Level; id: string }) {
   const colors = LEVEL_COLORS[level];
@@ -174,6 +224,117 @@ function ArchitectureNode({
   );
 }
 
+/* ── Active Alerts Digest ───────────────────────────────────────────────── */
+function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
+  const alerts = useMemo(() => {
+    return Object.entries(nodes)
+      .filter(([, n]) => n.level !== "green")
+      .sort(([, a], [, b]) => (a.level === "red" ? -1 : b.level === "red" ? 1 : 0));
+  }, [nodes]);
+
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  if (alerts.length === 0) {
+    return (
+      <div className="flex items-center gap-2.5 px-5 py-3 border-t border-white/5 bg-green-500/5">
+        <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+        <span className="text-[11px] font-mono text-green-400">All systems nominal — no active alerts.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-white/8 bg-slate-950/80 shrink-0">
+      {/* digest header */}
+      <div className="flex items-center gap-2 px-5 py-2 border-b border-white/5">
+        <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
+        <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/60 font-semibold">
+          Active Alerts
+        </span>
+        <span className="ml-auto text-[9px] font-mono text-muted-foreground/40">
+          {alerts.filter(([, n]) => n.level === "red").length} critical · {alerts.filter(([, n]) => n.level === "yellow").length} degraded
+        </span>
+      </div>
+
+      {/* alert rows */}
+      <div className="max-h-48 overflow-y-auto divide-y divide-white/[0.04]">
+        {alerts.map(([key, node]) => {
+          const colors = LEVEL_COLORS[node.level];
+          const explanation = buildExplanation(key, node);
+          const isOpen = expanded === key;
+          const Icon = node.level === "red" ? XCircle : AlertTriangle;
+
+          return (
+            <button
+              key={key}
+              onClick={() => setExpanded(isOpen ? null : key)}
+              className={cn(
+                "w-full text-left px-5 py-2.5 transition-colors hover:bg-white/[0.03] group",
+                isOpen && "bg-white/[0.03]"
+              )}
+            >
+              <div className="flex items-start gap-3">
+                {/* level icon */}
+                <Icon
+                  className={cn("h-3.5 w-3.5 mt-0.5 shrink-0", colors.text, node.level === "red" && "animate-pulse")}
+                />
+
+                {/* left: label + short detail */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("text-[10px] font-semibold font-mono", colors.text)}>
+                      {node.label.split("(")[0].trim()}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider",
+                        colors.bg, colors.text, colors.border
+                      )}
+                    >
+                      {node.level === "green" ? "OK" : node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                    </span>
+                    {node.latency_ms != null && (
+                      <span className="text-[8px] font-mono text-muted-foreground/50">{node.latency_ms}ms</span>
+                    )}
+                    {node.data_age_s != null && node.latency_ms == null && (
+                      <span className="text-[8px] font-mono text-muted-foreground/50">{node.data_age_s.toFixed(0)}s old</span>
+                    )}
+                  </div>
+
+                  {/* short detail line always visible */}
+                  <div className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 truncate">{node.detail}</div>
+
+                  {/* expanded plain-English explanation */}
+                  {isOpen && (
+                    <div
+                      className={cn(
+                        "mt-2 text-[10px] leading-relaxed rounded-lg px-3 py-2 border",
+                        colors.bg, colors.border,
+                        colors.text
+                      )}
+                    >
+                      <div className="flex gap-1.5">
+                        <Info className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
+                        <span>{explanation}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* chevron */}
+                <span className="text-[8px] text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors mt-0.5 font-mono">
+                  {isOpen ? "▲" : "▼"}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Test Control Panel ─────────────────────────────────────────────────── */
 function TestControlPanel({
   overrides,
   setOverrides,
@@ -268,7 +429,7 @@ function TestControlPanel({
         </div>
       </div>
 
-      {/* ── Scenario Presets ── */}
+      {/* Scenario Presets */}
       <div className="mb-3 pb-3 border-b border-white/5">
         <div className="text-[8px] font-mono text-muted-foreground/50 uppercase tracking-wider mb-1.5">Scenario Presets</div>
         <div className="grid grid-cols-2 gap-1">
@@ -293,7 +454,7 @@ function TestControlPanel({
         </div>
       </div>
 
-      {/* ── Per-Node Controls ── */}
+      {/* Per-Node Overrides */}
       <div className="text-[8px] font-mono text-muted-foreground/50 uppercase tracking-wider mb-1.5">Per-Node Overrides</div>
       <div className="space-y-3">
         {Object.entries(NODE_POSITIONS).map(([key]) => (
@@ -352,6 +513,7 @@ function TestControlPanel({
   );
 }
 
+/* ── Main Modal ─────────────────────────────────────────────────────────── */
 export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
@@ -400,7 +562,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
         className="relative w-[90vw] h-[85vh] max-w-5xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-3">
             <div className="relative">
@@ -428,8 +590,8 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 relative overflow-hidden">
+        {/* ── Body (diagram) ── */}
+        <div className="flex-1 relative overflow-hidden min-h-0">
           {isLoading || !mergedNodes ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-muted-foreground text-sm font-mono animate-pulse">Scanning subsystems...</div>
@@ -508,7 +670,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 ))}
               </svg>
 
-              {/* Selected node detail panel */}
+              {/* Selected node hover detail */}
               {selectedHealth && (
                 <div className="absolute top-4 right-4 w-64 bg-slate-900/95 border border-white/10 rounded-xl p-4 backdrop-blur-lg z-10">
                   <div className="flex items-center gap-2 mb-3">
@@ -520,6 +682,12 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                       })}
                     />
                     <span className="text-xs font-semibold text-white">{selectedHealth.label}</span>
+                    <button
+                      onClick={() => setSelectedNode(null)}
+                      className="ml-auto text-muted-foreground/40 hover:text-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-[10px]">
@@ -547,20 +715,23 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
 
-              {/* Threshold reference */}
+              {/* Threshold reference — bottom left */}
               <div className="absolute bottom-4 left-6 z-10">
-                <div className="text-[8px] font-mono text-muted-foreground/30 space-y-0.5">
+                <div className="text-[8px] font-mono text-muted-foreground/25 space-y-0.5">
                   <div>GREEN: latency &lt;200ms · data &lt;60s old · allocation ≤15%</div>
                   <div>YELLOW: latency 200–1000ms · data 60–300s old · rate limited</div>
                   <div>RED: latency &gt;1000ms · HTTP 4xx/5xx · data &gt;300s · alloc &gt;15%</div>
                 </div>
               </div>
+
+              {/* Test control panel */}
+              <TestControlPanel overrides={overrides} setOverrides={setOverrides} resetOverrides={resetOverrides} />
             </>
           )}
-
-          {/* Test control panel */}
-          <TestControlPanel overrides={overrides} setOverrides={setOverrides} resetOverrides={resetOverrides} />
         </div>
+
+        {/* ── Active Alerts Digest — pinned bottom ── */}
+        {mergedNodes && <AlertsDigest nodes={mergedNodes} />}
       </div>
     </div>
   );

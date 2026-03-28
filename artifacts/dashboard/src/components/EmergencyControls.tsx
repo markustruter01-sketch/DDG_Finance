@@ -131,9 +131,16 @@ function useEmergencyActions() {
       onSuccess: (data) => {
         setShowLiquidateModal(false);
         const closedCount = data.positions_closed?.length ?? 0;
+        const marketOpen = data.market_open;
         toast({
-          title: "Emergency Liquidation Complete",
-          description: `${closedCount} position(s) closed. Kill switch active — use Kill/Reset to resume.`,
+          title: marketOpen
+            ? `Liquidation Complete — ${closedCount} position(s) closing`
+            : `Orders Queued — ${closedCount} position(s) scheduled to close`,
+          description: data.fill_note || (
+            marketOpen
+              ? "Market is open — orders will fill shortly. Kill switch is active."
+              : "Market is closed. Orders are queued with the broker and will fill automatically at next market open. Kill switch is active."
+          ),
           variant: "destructive",
         });
       },

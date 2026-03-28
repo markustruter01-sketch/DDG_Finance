@@ -619,10 +619,25 @@ async def emergency_liquidate() -> dict:
     # 3. Trip the kill switch — blocks all new position opens
     ks_manual_trip(reason="emergency_liquidate_api")
 
+    market_open = is_market_open()
+
+    if market_open:
+        fill_note = (
+            f"Market is OPEN — {len(closed)} market order(s) submitted and will fill shortly."
+        )
+    else:
+        from core.market_clock import get_next_open
+        next_open = get_next_open() or "next market session"
+        fill_note = (
+            f"Market is CLOSED — {len(closed)} close order(s) queued with Alpaca. "
+            f"Orders will fill automatically at next market open ({next_open} ET). "
+            f"Positions will disappear from the dashboard at that time."
+        )
+
     logger.critical(
         f"Emergency | Liquidation complete: "
-        f"closed={len(closed)}, held={len(held)}, errors={len(errors)} — "
-        f"kill switch tripped"
+        f"closed={len(closed)}, held={len(held)}, errors={len(errors)} | "
+        f"market_open={market_open} — kill switch tripped"
     )
 
     return {
@@ -631,10 +646,9 @@ async def emergency_liquidate() -> dict:
         "positions_held": held,
         "errors": errors,
         "kill_switch": "tripped",
-        "message": (
-            "All non-vault positions have been market-ordered closed and the kill switch "
-            "is now active. Use POST /kill/reset to resume trading."
-        ),
+        "market_open": market_open,
+        "fill_note": fill_note,
+        "message": fill_note + " Use POST /kill/reset to resume trading after positions clear.",
     }
 
 

@@ -186,6 +186,10 @@
     .crt-scanline {
       display: none !important;
     }
+    .backdrop-blur-md {
+      backdrop-filter: blur(4px) !important;
+      -webkit-backdrop-filter: blur(4px) !important;
+    }
   }
 
   /* Custom scrollbar for terminal vibe */

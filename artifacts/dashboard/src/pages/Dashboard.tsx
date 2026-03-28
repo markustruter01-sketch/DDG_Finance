@@ -1744,7 +1744,7 @@ function LivePositionsSection() {
   return (
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
-        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+        <CardTitle className="flex flex-wrap items-center gap-2 fluid-heading">
           <Target className="h-4 w-4 text-primary" />
           <span className="hidden md:inline">Live Open Positions</span>
           <span className="md:hidden">Positions</span>
@@ -2049,8 +2049,8 @@ function PerformanceSection() {
 
   return (
     <Card className="border-white/5 overflow-hidden">
-      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-4 flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2 text-sm">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
           <BarChart3 className="h-4 w-4 text-primary" /> System Performance
         </CardTitle>
         {summary?.latest_date && (
@@ -2207,7 +2207,7 @@ function AllocationSection() {
   return (
     <Card className="border-white/5 overflow-hidden">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
-        <CardTitle className="flex items-center gap-2 text-sm">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
           <LayoutList className="h-4 w-4 text-primary" /> <span className="hidden md:inline">Target Allocation</span><span className="md:hidden">Allocation</span> ({slotCount} Slots)
           <span className={cn("text-[9px] font-mono ml-1 px-1.5 py-0.5 rounded-full border", avgConviction >= 0.8 ? "text-green-400 border-green-500/30 bg-green-500/10" : avgConviction >= 0.75 ? "text-blue-400 border-blue-500/30 bg-blue-500/10" : "text-amber-400 border-amber-500/30 bg-amber-500/10")}>
             avg {Math.round(avgConviction * 100)}%
@@ -2333,7 +2333,7 @@ function JournalSection() {
       </div>
 
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-0">
-        <CardTitle className="flex items-center gap-2 text-sm">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
           <History className="h-4 w-4 text-primary" /> Trade Journal
           {winRate && (
             <span className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded-full border", Number(winRate) >= 50 ? "text-green-400 border-green-500/30 bg-green-500/10" : "text-red-400 border-red-500/30 bg-red-500/10")}>

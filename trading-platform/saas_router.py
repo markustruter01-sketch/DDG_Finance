@@ -259,3 +259,289 @@ async def saas_config() -> dict:
         "supported_exchanges": ["kraken", "alpaca"],
         "risk_model":          "15_pct_equity_per_signal",
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Stage 5 — 1-Click Execution Middleware
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Two execution modes:
+#   PAPER — writes to saas_paper_portfolio.json (no real money, default)
+#   LIVE  — executes on the user's real Kraken account via ccxt
+#
+# API key handling:
+#   Keys are sent in the request body (HTTPS transport only).
+#   Never stored server-side in the current build; Stage 6+ adds encrypted
+#   per-user key vaults in PostgreSQL.
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+import json as _json_trade
+import os as _os_trade
+import asyncio as _asyncio
+
+_SAAS_PAPER_PATH = _os_trade.path.join(
+    _os_trade.path.dirname(__file__), "..", "kraken-bot", "saas_paper_portfolio.json"
+)
+_SAAS_STARTING_BALANCE = 10_000.0   # $10K demo paper capital
+
+
+# ── Paper portfolio helpers ────────────────────────────────────────────────────
+
+def _load_saas_paper() -> dict:
+    try:
+        with open(_SAAS_PAPER_PATH) as f:
+            return _json_trade.load(f)
+    except Exception:
+        return {
+            "cash_usd":            _SAAS_STARTING_BALANCE,
+            "starting_balance_usd": _SAAS_STARTING_BALANCE,
+            "positions":           {},
+            "trades":              [],
+        }
+
+
+def _save_saas_paper(portfolio: dict) -> None:
+    with open(_SAAS_PAPER_PATH, "w") as f:
+        _json_trade.dump(portfolio, f, indent=2, default=str)
+
+
+def _fetch_price(symbol: str) -> float:
+    """Fetch last price from Kraken public REST (no auth needed)."""
+    import ccxt
+    ex = ccxt.kraken()
+    ticker = ex.fetch_ticker(symbol)
+    return float(ticker["last"])
+
+
+# ── Pydantic request models ────────────────────────────────────────────────────
+
+class TradeExecuteRequest(BaseModel):
+    symbol:     str             # e.g. "BTC/USD"
+    side:       str             # "long" or "short"
+    size_pct:   float = 10.0   # % of SaaS paper equity to deploy
+    use_live:   bool  = False   # when True + keys provided → real Kraken trade
+    api_key:    str | None = None
+    api_secret: str | None = None
+
+
+class TradeCloseRequest(BaseModel):
+    symbol:     str
+    use_live:   bool  = False
+    api_key:    str | None = None
+    api_secret: str | None = None
+
+
+# ── Paper execution helpers ────────────────────────────────────────────────────
+
+def _paper_execute(req: TradeExecuteRequest) -> dict:
+    try:
+        price = _fetch_price(req.symbol)
+    except Exception as e:
+        return {"status": "error", "message": f"Price fetch failed: {e}"}
+
+    pp       = _load_saas_paper()
+    cash     = float(pp.get("cash_usd", 0))
+    positions: dict = pp.get("positions", {})
+    deployed = sum(float(p.get("size_usd", 0)) for p in positions.values())
+    equity   = cash + deployed
+
+    if req.symbol in positions:
+        return {"status": "error", "message": f"Position already open for {req.symbol}. Close it first."}
+
+    size_usd = equity * (min(max(req.size_pct, 1), 25) / 100)
+    if size_usd > cash:
+        size_usd = cash          # use all available cash
+    if size_usd < 5:
+        return {"status": "error", "message": "Insufficient cash. Minimum position is $5."}
+
+    fee         = round(size_usd * 0.0026, 4)   # Kraken taker ~0.26%
+    size_units  = size_usd / price
+
+    positions[req.symbol] = {
+        "side":        req.side,
+        "entry_price": round(price, 6),
+        "size_usd":    round(size_usd, 2),
+        "size_units":  round(size_units, 8),
+        "entry_time":  datetime.now(tz=timezone.utc).isoformat(),
+        "entry_fee":   fee,
+    }
+    pp["cash_usd"]  = round(cash - size_usd - fee, 2)
+    pp["positions"] = positions
+    pp.setdefault("trades", []).append({
+        "action":   "open",
+        "symbol":   req.symbol,
+        "side":     req.side,
+        "size_usd": round(size_usd, 2),
+        "price":    round(price, 6),
+        "fee":      fee,
+        "time":     datetime.now(tz=timezone.utc).isoformat(),
+    })
+    _save_saas_paper(pp)
+
+    return {
+        "status":         "executed",
+        "mode":           "paper",
+        "symbol":         req.symbol,
+        "side":           req.side,
+        "size_usd":       round(size_usd, 2),
+        "fill_price":     round(price, 6),
+        "fee":            fee,
+        "cash_remaining": pp["cash_usd"],
+    }
+
+
+def _paper_close(req: TradeCloseRequest) -> dict:
+    try:
+        price = _fetch_price(req.symbol)
+    except Exception as e:
+        return {"status": "error", "message": f"Price fetch failed: {e}"}
+
+    pp        = _load_saas_paper()
+    positions: dict = pp.get("positions", {})
+
+    if req.symbol not in positions:
+        return {"status": "error", "message": f"No open position for {req.symbol}."}
+
+    pos        = positions[req.symbol]
+    entry_p    = float(pos["entry_price"])
+    size_units = float(pos["size_units"])
+    orig_usd   = float(pos["size_usd"])
+    side       = pos.get("side", "long")
+
+    close_val = size_units * price
+    fee       = round(close_val * 0.0026, 4)
+
+    if side == "long":
+        pnl = round((price - entry_p) / entry_p * orig_usd, 2)
+    else:
+        pnl = round((entry_p - price) / entry_p * orig_usd, 2)
+
+    del positions[req.symbol]
+    pp["cash_usd"]  = round(float(pp.get("cash_usd", 0)) + close_val - fee, 2)
+    pp["positions"] = positions
+    pp.setdefault("trades", []).append({
+        "action":     "close",
+        "symbol":     req.symbol,
+        "pnl":        pnl,
+        "exit_price": round(price, 6),
+        "fee":        fee,
+        "time":       datetime.now(tz=timezone.utc).isoformat(),
+    })
+    _save_saas_paper(pp)
+
+    return {
+        "status":     "closed",
+        "mode":       "paper",
+        "symbol":     req.symbol,
+        "pnl":        pnl,
+        "fill_price": round(price, 6),
+        "fee":        fee,
+        "cash_now":   pp["cash_usd"],
+    }
+
+
+# ── Live execution helpers (user's own Kraken account) ────────────────────────
+
+async def _live_execute(req: TradeExecuteRequest) -> dict:
+    def _run() -> dict:
+        import ccxt
+        try:
+            ex       = ccxt.kraken({"apiKey": req.api_key, "secret": req.api_secret})
+            balance  = ex.fetch_balance()
+            usd_free = float(balance.get("USD", {}).get("free", 0))
+            ticker   = ex.fetch_ticker(req.symbol)
+            price    = float(ticker["last"])
+            size_usd = min(usd_free * (min(max(req.size_pct, 1), 25) / 100), usd_free)
+            amount   = size_usd / price
+
+            if req.side == "long":
+                order = ex.create_market_buy_order(req.symbol, amount)
+            else:
+                order = ex.create_market_sell_order(req.symbol, amount, params={"leverage": 2})
+
+            return {
+                "status":     "executed",
+                "mode":       "live",
+                "symbol":     req.symbol,
+                "side":       req.side,
+                "order_id":   order.get("id"),
+                "fill_price": order.get("average") or round(price, 6),
+                "size_usd":   round(size_usd, 2),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    return await _asyncio.to_thread(_run)
+
+
+async def _live_close(req: TradeCloseRequest) -> dict:
+    def _run() -> dict:
+        import ccxt
+        try:
+            ex   = ccxt.kraken({"apiKey": req.api_key, "secret": req.api_secret})
+            base = req.symbol.split("/")[0]
+            bal  = ex.fetch_balance()
+            amt  = float(bal.get(base, {}).get("free", 0))
+            if amt <= 0:
+                return {"status": "error", "message": f"No {base} balance to close."}
+            order = ex.create_market_sell_order(req.symbol, amt)
+            return {
+                "status":     "closed",
+                "mode":       "live",
+                "symbol":     req.symbol,
+                "order_id":   order.get("id"),
+                "fill_price": order.get("average"),
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    return await _asyncio.to_thread(_run)
+
+
+# ── Trade endpoints ────────────────────────────────────────────────────────────
+
+@saas_router.get("/trade/portfolio")
+async def saas_trade_portfolio() -> dict:
+    """Returns the user's SaaS paper portfolio (separate from the bot's portfolio)."""
+    pp        = _load_saas_paper()
+    positions: dict = pp.get("positions", {})
+    cash      = float(pp.get("cash_usd", 0))
+    start     = float(pp.get("starting_balance_usd", _SAAS_STARTING_BALANCE))
+    deployed  = sum(float(p.get("size_usd", 0)) for p in positions.values())
+    equity    = cash + deployed
+    pnl_pct   = round((equity - start) / start * 100, 2) if start else 0
+
+    return {
+        "equity":           round(equity, 2),
+        "cash":             round(cash, 2),
+        "deployed":         round(deployed, 2),
+        "starting_balance": start,
+        "pnl_pct":          pnl_pct,
+        "positions":        positions,
+        "positions_count":  len(positions),
+        "recent_trades":    list(reversed(pp.get("trades", [])))[:10],
+    }
+
+
+@saas_router.post("/trade/execute")
+async def saas_trade_execute(req: TradeExecuteRequest) -> dict:
+    """
+    1-Click trade execution.
+
+    use_live=False (default) → paper trade against SaaS demo portfolio ($10K).
+    use_live=True + api_key + api_secret → real Kraken trade on user's account.
+    """
+    if req.side not in ("long", "short"):
+        return {"status": "error", "message": "side must be 'long' or 'short'."}
+    if req.use_live and req.api_key and req.api_secret:
+        return await _live_execute(req)
+    return await _asyncio.to_thread(_paper_execute, req)
+
+
+@saas_router.post("/trade/close")
+async def saas_trade_close(req: TradeCloseRequest) -> dict:
+    """Close an open position (paper or live)."""
+    if req.use_live and req.api_key and req.api_secret:
+        return await _live_close(req)
+    return await _asyncio.to_thread(_paper_close, req)

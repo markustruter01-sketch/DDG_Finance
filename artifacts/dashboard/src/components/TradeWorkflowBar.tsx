@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Loader2, Power, FileText, X, Anchor } from "lucide-react";
+import { Loader2, Power, FileText, X, Anchor, Activity } from "lucide-react";
 import {
   useLatestAllocation, usePlatformStatus, useToggleAutoTrading,
   useKrakenAutoTrading, useToggleKrakenAutoTrading,
@@ -7,6 +7,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { WhitepaperContent } from "@/components/WhitepaperContent";
+import { SystemHealthModal } from "@/components/SystemHealthModal";
 
 function ConvictionRing({ value }: { value: number }) {
   const pct = Math.round(value * 100);
@@ -55,6 +56,7 @@ export function TradeWorkflowBar() {
 
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
   const [whitepaperOpen, setWhitepaperOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
 
   const closeWhitepaper = useCallback(() => setWhitepaperOpen(false), []);
 
@@ -215,6 +217,16 @@ export function TradeWorkflowBar() {
           <FileText className="h-4 w-4" />
           <span>Whitepaper</span>
         </button>
+
+        <button
+          onClick={() => setHealthOpen(true)}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] border bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50"
+        >
+          <Activity className="h-4 w-4" />
+          <span>System Health</span>
+        </button>
+
+        {healthOpen && <SystemHealthModal onClose={() => setHealthOpen(false)} />}
 
         {whitepaperOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={closeWhitepaper}>

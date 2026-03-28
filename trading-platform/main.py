@@ -210,6 +210,150 @@ async def status() -> dict:
     }
 
 
+@router.get("/system/health-architecture", tags=["System"])
+async def system_health_architecture() -> dict:
+    """
+    Real-time health metrics for all platform subsystems.
+    Powers the System Health Architecture diagram on the dashboard.
+
+    Checks: platform core, Alpaca API, Kraken bot, data pipeline, equity manager.
+    """
+    import json as _json, time as _time
+    from pathlib import Path as _Path
+
+    now = _time.time()
+    nodes: dict[str, dict] = {}
+
+    # ── 1. Platform Core ────────────────────────────────────────────────
+    try:
+        jobs = get_job_status()
+        last = get_last_run()
+        job_count = len(jobs)
+        last_status = last.get("last_run_status", "never")
+        last_ts = last.get("last_run_timestamp")
+        age_s = (now - last_ts) if last_ts else None
+        latency_ms = 0
+        if job_count < EXPECTED_JOB_COUNT:
+            level = "yellow"
+        elif last_status in ("error", "analysis_failed", "execution_failed"):
+            level = "red"
+        else:
+            level = "green"
+        nodes["platform_core"] = {
+            "label": "Main Platform Core",
+            "level": level,
+            "latency_ms": latency_ms,
+            "data_age_s": round(age_s, 1) if age_s else None,
+            "detail": f"{job_count} jobs · last: {last_status}",
+        }
+    except Exception as exc:
+        nodes["platform_core"] = {"label": "Main Platform Core", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)}
+
+    # ── 2. Alpaca API ───────────────────────────────────────────────────
+    try:
+        t0 = _time.time()
+        acct = get_account()
+        latency = round((_time.time() - t0) * 1000)
+        if latency > 1000:
+            level = "red"
+        elif latency > 200:
+            level = "yellow"
+        else:
+            level = "green"
+        nodes["alpaca_api"] = {
+            "label": "Alpaca API (US Equities)",
+            "level": level,
+            "latency_ms": latency,
+            "data_age_s": 0,
+            "detail": f"Equity ${float(acct.equity):,.2f}",
+        }
+    except Exception as exc:
+        nodes["alpaca_api"] = {"label": "Alpaca API (US Equities)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    # ── 3. Kraken Bot ───────────────────────────────────────────────────
+    try:
+        sf = _Path("kraken-bot/status.json")
+        if sf.exists():
+            kst = _json.loads(sf.read_text())
+            last_upd = kst.get("last_updated")
+            if last_upd:
+                from datetime import datetime as _dt, timezone as _tz
+                kage = now - _dt.fromisoformat(last_upd).timestamp()
+            else:
+                kage = None
+            kstatus = kst.get("status", "unknown")
+            if kstatus in ("error",) or (kage and kage > 300):
+                level = "red"
+            elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 60):
+                level = "yellow"
+            else:
+                level = "green"
+            nodes["kraken_api"] = {
+                "label": "Kraken API (Crypto Bot)",
+                "level": level,
+                "latency_ms": None,
+                "data_age_s": round(kage, 1) if kage else None,
+                "detail": f"Status: {kstatus} · Cycle #{kst.get('cycle_count', 0)}",
+            }
+        else:
+            nodes["kraken_api"] = {"label": "Kraken API (Crypto Bot)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": "Bot not started"}
+    except Exception as exc:
+        nodes["kraken_api"] = {"label": "Kraken API (Crypto Bot)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    # ── 4. Data Pipeline ────────────────────────────────────────────────
+    try:
+        caches = get_cache_stats()
+        cached_count = sum(1 for c in caches if c.get("cached"))
+        ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
+        oldest = max(ages) if ages else None
+        if oldest is not None and oldest > 300:
+            level = "red"
+        elif oldest is not None and oldest > 60:
+            level = "yellow"
+        elif cached_count == 0:
+            level = "yellow"
+        else:
+            level = "green"
+        nodes["data_pipeline"] = {
+            "label": "Data Pipeline (fetch_data)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": round(oldest, 1) if oldest else None,
+            "detail": f"{cached_count}/{len(caches)} feeds cached" if cached_count else "No data cached yet",
+        }
+    except Exception as exc:
+        nodes["data_pipeline"] = {"label": "Data Pipeline (fetch_data)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    # ── 5. Equity Manager ───────────────────────────────────────────────
+    try:
+        positions = get_positions()
+        acct_obj = get_account()
+        equity_val = float(acct_obj.equity)
+        total_market = sum(float(p.market_value) for p in positions) if positions else 0
+        max_single = max((float(p.market_value) for p in positions), default=0)
+        max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
+        if max_pct > 15.0:
+            level = "red"
+        elif max_pct > 12.0:
+            level = "yellow"
+        else:
+            level = "green"
+        nodes["equity_manager"] = {
+            "label": "Equity Manager (15% Enforcer)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": 0,
+            "detail": f"Max position: {max_pct:.1f}% · {len(positions)} holdings",
+        }
+    except Exception as exc:
+        nodes["equity_manager"] = {"label": "Equity Manager (15% Enforcer)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    return {
+        "timestamp": now,
+        "nodes": nodes,
+    }
+
+
 @router.get("/portfolio", tags=["Portfolio"])
 async def portfolio() -> dict:
     """Live Alpaca paper account — equity, cash, all open positions and orders."""

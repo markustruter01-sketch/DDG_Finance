@@ -81,6 +81,9 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `POST /kill/reset` — Reset kill switch
 - `GET /auto-trading` — Get auto-trading state
 - `POST /auto-trading` — Toggle auto-trading
+- `GET /system/health-architecture` — Real-time health metrics for all subsystems (platform core, Alpaca, Kraken, data pipeline, equity manager)
+- `GET /kraken/auto-trading` — Kraken bot pause state
+- `POST /kraken/auto-trading` — Pause/resume Kraken bot (writes control.json)
 
 ## Dashboard (React/Vite)
 
@@ -102,7 +105,7 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - **Touch Targets**: All interactive buttons have min-h-[44px] on mobile
 
 ### Key Components
-- `TradeWorkflowBar.tsx` — Start Analysis + Auto-Trading toggle
+- `TradeWorkflowBar.tsx` — Alpaca auto-trading toggle, Kraken bot toggle, Whitepaper, System Health Architecture button
 - `Dashboard.tsx` — Main dashboard page with all sections; AI brain = "The Degen Oracle", auditor = "Inspector Rekt"
 - `CorrelationMatrix.tsx` — Pearson correlation heatmap with high-correlation warnings
 - `SentimentGauges.tsx` — Dual SVG ring gauges for Crypto + Market Fear & Greed
@@ -111,6 +114,7 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - `AttributionPanel.tsx` — P&L breakdown by regime, asset class, conviction with win-rate bars
 - `BacktesterPanel.tsx` — Momentum strategy backtester with equity curve chart and trade log
 - `ControlPanel.tsx` — Mission Control buttons (kill switch, analysis, post-mortem)
+- `SystemHealthModal.tsx` — Live architecture diagram with SVG nodes, animated glowing wires, health levels (green/yellow/red), and test control panel with scenario presets (simulate 404, 500, rate limits, stale data, allocation breach, total failure)
 
 ### API Communication
 - **Dev**: Replit router sends `/trading-api/*` to port 8000 (artifact multi-service routing)

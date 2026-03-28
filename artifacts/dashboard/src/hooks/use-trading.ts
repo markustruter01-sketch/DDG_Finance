@@ -636,6 +636,53 @@ export interface SystemRestartResult {
   message: string;
 }
 
+// ── Kraken Bot (Davy Jones' Portfolio) ───────────────────────────────────────
+
+export interface KrakenPosition {
+  symbol: string;
+  side: "long" | "short";
+  entry_price: number;
+  size_usd: number;
+  entry_time: string;
+  best_price: number;
+}
+
+export interface KrakenStatus {
+  bot_name: string;
+  status: "running" | "paused_circuit_breaker" | "not_started" | "error";
+  last_updated: string | null;
+  cycle_count: number;
+  total_equity_usd: number;
+  deployed_usd: number;
+  deployed_pct: number;
+  deployable_ceiling_pct: number;
+  cash_reserve_pct: number;
+  open_positions: KrakenPosition[];
+  position_count: number;
+  max_positions: number;
+  circuit_breaker: { active: boolean; paused_until: string | null };
+  recent_trades: Array<{
+    symbol: string;
+    side: string;
+    entry_price: number;
+    exit_price: number;
+    pnl_pct: number;
+    pnl_usd: number;
+    reason: string;
+    closed_at: string;
+  }>;
+  error: string | null;
+}
+
+export function useKrakenStatus() {
+  return useQuery<KrakenStatus>({
+    queryKey: ["/kraken/status"],
+    queryFn: async () => (await api.get("/kraken/status")).data,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+}
+
 export function useSystemRestart() {
   const qc = useQueryClient();
   return useMutation<SystemRestartResult, Error, void>({

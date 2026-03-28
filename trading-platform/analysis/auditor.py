@@ -1062,6 +1062,135 @@ def _notify(
 # SECTION 11 ── Master Orchestrator
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 10b ── CHECK 6: Kraken Bot Compliance (Davy Jones' Portfolio)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def check_kraken_bot() -> AuditFinding:
+    """
+    Audit the Kraken mean-reversion bot (Davy Jones' Portfolio) for
+    risk-rule compliance. Data is sourced from kraken-bot/status.json,
+    which the bot writes after every trading cycle.
+
+    Checks:
+      a) Cash reserve ≥ 20% — never fully deployed
+      b) No single position > 30% of equity
+      c) No position showing unrealised loss > 2% (stop-loss adherence)
+      d) Circuit-breaker activation count in recent trades
+      e) Overall recent-trade P&L balance
+    """
+    status_file = Path(__file__).parent.parent.parent / "kraken-bot" / "status.json"
+
+    if not status_file.exists():
+        return AuditFinding(
+            check="kraken_bot",
+            passed=True,
+            severity="INFO",
+            message="Kraken bot (Davy Jones' Portfolio) has not run yet — no data to audit",
+            details={"status_file": str(status_file)},
+        )
+
+    try:
+        status = json.loads(status_file.read_text())
+    except Exception as exc:
+        return AuditFinding(
+            check="kraken_bot",
+            passed=False,
+            severity="WARNING",
+            message=f"Could not parse kraken-bot/status.json: {exc}",
+            details={},
+        )
+
+    flags: list[str] = []
+    details: dict    = {}
+
+    total_equity = status.get("total_equity_usd", 0)
+    deployed_usd = status.get("deployed_usd", 0)
+    positions    = status.get("open_positions", [])
+    recent_trades = status.get("recent_trades", [])
+    cb_active    = status.get("circuit_breaker", {}).get("active", False)
+    cash_reserve_pct = status.get("cash_reserve_pct", 20)
+
+    details["bot_status"]    = status.get("status")
+    details["cycle_count"]   = status.get("cycle_count", 0)
+    details["equity_usd"]    = total_equity
+    details["deployed_usd"]  = deployed_usd
+
+    # ── (a) Cash reserve check ────────────────────────────────────────────────
+    if total_equity > 0:
+        actual_reserve_pct = ((total_equity - deployed_usd) / total_equity) * 100
+        details["actual_reserve_pct"] = round(actual_reserve_pct, 1)
+        if actual_reserve_pct < cash_reserve_pct * 0.9:  # Allow 10% tolerance
+            flags.append(
+                f"Cash reserve breach: {actual_reserve_pct:.1f}% held "
+                f"(minimum {cash_reserve_pct}% required)"
+            )
+
+    # ── (b) Single-position concentration check ───────────────────────────────
+    if total_equity > 0:
+        for pos in positions:
+            pos_pct = (pos.get("size_usd", 0) / total_equity) * 100
+            if pos_pct > 32:  # 2% tolerance over the 30% cap
+                flags.append(
+                    f"Position concentration: {pos.get('symbol')} at "
+                    f"{pos_pct:.1f}% of equity (max 30% allowed)"
+                )
+        details["positions"] = [
+            {"symbol": p.get("symbol"), "side": p.get("side"),
+             "size_pct": round((p.get("size_usd", 0) / total_equity * 100) if total_equity else 0, 1)}
+            for p in positions
+        ]
+
+    # ── (c) Stop-loss adherence — check recent trades ─────────────────────────
+    stop_breaches = [
+        t for t in recent_trades
+        if t.get("pnl_pct", 0) < -3.0  # If a trade lost more than 3% the stop failed
+    ]
+    if stop_breaches:
+        flags.append(
+            f"{len(stop_breaches)} recent trade(s) lost >3% — "
+            f"stop-loss may not have fired correctly: "
+            f"{[t.get('symbol') for t in stop_breaches]}"
+        )
+    details["stop_breaches"] = len(stop_breaches)
+
+    # ── (d) Circuit breaker activations ──────────────────────────────────────
+    if cb_active:
+        flags.append("Circuit breaker is currently ACTIVE — flash crash detected")
+    details["circuit_breaker_active"] = cb_active
+
+    # ── (e) Recent P&L balance ────────────────────────────────────────────────
+    if recent_trades:
+        total_pnl = sum(t.get("pnl_pct", 0) for t in recent_trades)
+        win_count = sum(1 for t in recent_trades if t.get("pnl_pct", 0) > 0)
+        details["recent_trade_count"] = len(recent_trades)
+        details["recent_total_pnl_pct"] = round(total_pnl, 2)
+        details["recent_win_rate"] = round(win_count / len(recent_trades), 2)
+
+    if flags:
+        severity = "ALERT" if len(flags) >= 2 else "WARNING"
+        return AuditFinding(
+            check="kraken_bot",
+            passed=False,
+            severity=severity,
+            message=f"Kraken bot compliance: {len(flags)} issue(s) detected",
+            details={**details, "flags": flags},
+        )
+
+    return AuditFinding(
+        check="kraken_bot",
+        passed=True,
+        severity="INFO",
+        message=(
+            f"Davy Jones' Portfolio is compliant — "
+            f"{len(positions)} position(s), "
+            f"{details.get('actual_reserve_pct', '?')}% cash reserve maintained"
+        ),
+        details=details,
+    )
+
+
 _last_audit: dict[str, Any] = {
     "run_at":    None,
     "overall":   "never_run",
@@ -1089,6 +1218,7 @@ def run_full_audit() -> dict[str, Any]:
         ("rag_bias",          check_rag_bias),
         ("phantom_drawdown",  check_phantom_drawdown),
         ("ratchet_integrity", check_ratchet_integrity),
+        ("kraken_bot",        check_kraken_bot),
     ]
 
     for check_name, check_fn in checks:

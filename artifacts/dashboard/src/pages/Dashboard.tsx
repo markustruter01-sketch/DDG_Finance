@@ -6,8 +6,8 @@ import {
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
-  useForceRebalance, useCloseAndReallocate,
-  type AllocationPlan, type AuditFinding, type LivePosition,
+  useForceRebalance, useCloseAndReallocate, useKrakenStatus,
+  type AllocationPlan, type AuditFinding, type LivePosition, type KrakenStatus,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
 import { SentimentGauges } from "@/components/SentimentGauges";
@@ -993,6 +993,189 @@ function AIBrainSection() {
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
       </div>
     </>
+  );
+}
+
+// ── Davy Jones' Portfolio — Kraken Bot Section ───────────────────────────────
+
+function AnchorSVG({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+      {/* Glow halo */}
+      <circle cx="60" cy="60" r="52" fill={active ? "rgba(6,182,212,0.06)" : "rgba(100,116,139,0.04)"} />
+      <circle cx="60" cy="60" r="42" fill={active ? "rgba(6,182,212,0.08)" : "rgba(100,116,139,0.06)"} stroke={active ? "rgba(6,182,212,0.25)" : "rgba(100,116,139,0.15)"} strokeWidth="1" />
+      {/* Anchor ring at top */}
+      <circle cx="60" cy="28" r="9" stroke={active ? "#22d3ee" : "#64748b"} strokeWidth="3" fill="none" />
+      {/* Vertical shaft */}
+      <line x1="60" y1="37" x2="60" y2="88" stroke={active ? "#22d3ee" : "#64748b"} strokeWidth="3" strokeLinecap="round" />
+      {/* Horizontal crossbar */}
+      <line x1="38" y1="52" x2="82" y2="52" stroke={active ? "#22d3ee" : "#64748b"} strokeWidth="3" strokeLinecap="round" />
+      {/* Left fluke */}
+      <path d="M60 88 Q42 96 36 90 Q34 80 44 78" stroke={active ? "#22d3ee" : "#64748b"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      {/* Right fluke */}
+      <path d="M60 88 Q78 96 84 90 Q86 80 76 78" stroke={active ? "#22d3ee" : "#64748b"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      {/* Chain wrapping around shaft (circuit-breaker = red) */}
+      {active ? (
+        <>
+          <circle cx="52" cy="65" r="3" fill="rgba(34,211,238,0.5)" />
+          <circle cx="68" cy="70" r="3" fill="rgba(34,211,238,0.5)" />
+          <circle cx="52" cy="75" r="3" fill="rgba(34,211,238,0.5)" />
+        </>
+      ) : (
+        <>
+          <circle cx="52" cy="65" r="3" fill="rgba(100,116,139,0.4)" />
+          <circle cx="68" cy="70" r="3" fill="rgba(100,116,139,0.4)" />
+          <circle cx="52" cy="75" r="3" fill="rgba(100,116,139,0.4)" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function DavyJonesBotSection() {
+  const { data } = useKrakenStatus();
+
+  const isRunning = data?.status === "running";
+  const isCB      = data?.status === "paused_circuit_breaker";
+  const isError   = data?.status === "error";
+  const notStarted = !data || data.status === "not_started";
+
+  const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
+  const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
+  const statusDot   = isCB ? "bg-red-400" : isRunning ? "bg-cyan-400" : isError ? "bg-amber-400" : "bg-slate-600";
+
+  const lastTrade = data?.recent_trades?.at(-1);
+  const posCount  = data?.position_count ?? 0;
+  const deployedPct = data?.deployed_pct ?? 0;
+  const maxDeployPct = data?.deployable_ceiling_pct ?? 80;
+
+  const dialogueText = notStarted
+    ? "I await the Kraken keys... Add KRAKEN_API_KEY and KRAKEN_SECRET_KEY to secrets, then start the kraken-bot workflow."
+    : isCB
+    ? "The seas rage! A flash crash triggered the circuit breaker. All trading paused — I shall resurface when the storm passes."
+    : isError
+    ? `The depths are troubled: ${data?.error ?? "unknown error"}. I'm regrouping...`
+    : posCount > 0
+    ? `${posCount} vessel${posCount > 1 ? "s" : ""} deployed into the deep — monitoring mean reversion on ${data?.open_positions.map(p => p.symbol.replace("/USD","")).join(", ")}.`
+    : "Scanning the seven seas for mean-reversion opportunities. RSI and z-score filters are armed.";
+
+  return (
+    <div className="relative rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
+      {/* Ambient glow */}
+      <div className="absolute top-0 left-0 w-48 h-48 bg-cyan-500/4 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+
+      {/* Header row */}
+      <div className="relative flex items-center gap-2 mb-4">
+        <span className="text-cyan-500/70">⚓</span>
+        <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
+          Davy Jones' Portfolio
+        </span>
+        <span className="ml-auto flex items-center gap-1.5">
+          {isCB && (
+            <motion.span
+              className="text-[9px] font-bold text-red-400 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded-full"
+              animate={{ opacity: [1, 0.4, 1] }}
+              transition={{ duration: 1, repeat: Infinity }}
+            >
+              CIRCUIT BREAKER
+            </motion.span>
+          )}
+          <span className={cn("text-[9px] font-mono font-semibold", statusColor)}>
+            <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 mb-[1px]", statusDot, isRunning && "animate-pulse")} />
+            {statusLabel}
+          </span>
+        </span>
+      </div>
+
+      {/* Body */}
+      <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5 flex-1">
+        {/* Anchor SVG */}
+        <motion.div
+          className="flex-shrink-0 w-20 h-20 sm:w-32 sm:h-32"
+          animate={isRunning ? { y: [0, -5, 0, 4, 0], rotate: [0, 1, 0, -1, 0] } : { rotate: [0, 2, 0, -2, 0] }}
+          transition={{ duration: isRunning ? 6 : 10, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <AnchorSVG active={isRunning} />
+        </motion.div>
+
+        {/* Dialogue bubble */}
+        <div className="flex-1 min-w-0">
+          <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/15 bg-slate-900/60 p-3.5 text-xs text-white/75 leading-relaxed backdrop-blur-sm">
+            <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/15 bg-slate-900/60 rotate-[-45deg]" />
+            {dialogueText}
+          </div>
+
+          {/* Stats row */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {/* Deployed capital */}
+            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+              <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
+                  {deployedPct.toFixed(0)}%
+                </span>
+                <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
+              </div>
+              {/* Progress bar */}
+              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
+                  style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Positions */}
+            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+              <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Open Positions</div>
+              <div className="flex items-end gap-1 mb-1">
+                <span className="text-lg font-bold font-mono leading-none text-white">{posCount}</span>
+                <span className="text-[9px] text-muted-foreground mb-0.5">/ {data?.max_positions ?? 3} max</span>
+              </div>
+              {/* Slot dots */}
+              <div className="flex gap-1">
+                {Array.from({ length: data?.max_positions ?? 3 }).map((_, i) => (
+                  <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Last trade */}
+          {lastTrade && (
+            <div className={cn(
+              "mt-2 rounded-xl border px-3 py-2 text-[10px] flex items-center justify-between",
+              lastTrade.pnl_pct >= 0
+                ? "border-green-500/20 bg-green-500/5"
+                : "border-red-500/20 bg-red-500/5",
+            )}>
+              <span className="font-mono text-white/80">
+                Last: <span className="font-bold">{lastTrade.symbol}</span> {lastTrade.side.toUpperCase()}
+              </span>
+              <span className={cn("font-mono font-bold", lastTrade.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                {lastTrade.pnl_pct >= 0 ? "+" : ""}{lastTrade.pnl_pct.toFixed(2)}%
+              </span>
+            </div>
+          )}
+
+          {/* Cycle count + cash reserve footer */}
+          {data && data.status !== "not_started" && (
+            <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/60 font-mono">
+              <span>Cycle #{data.cycle_count}</span>
+              <span>·</span>
+              <span>{data.cash_reserve_pct}% reserve held</span>
+              {data.total_equity_usd > 0 && (
+                <>
+                  <span>·</span>
+                  <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} equity</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2776,8 +2959,8 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
-        {/* ORACLE + AUDITOR — AI intelligence immediately after positions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        {/* ORACLE + AUDITOR + DAVY JONES — AI agents row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex flex-col">
             <SafeSection label="The Degen Oracle">
               <AIBrainSection />
@@ -2786,6 +2969,11 @@ export default function Dashboard() {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }} className="flex flex-col">
             <SafeSection label="Inspector Rekt">
               <AuditorAgentSection />
+            </SafeSection>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }} className="flex flex-col">
+            <SafeSection label="Davy Jones' Portfolio">
+              <DavyJonesBotSection />
             </SafeSection>
           </motion.div>
         </div>

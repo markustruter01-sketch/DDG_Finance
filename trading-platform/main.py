@@ -1240,4 +1240,42 @@ async def data_snapshot() -> dict:
     }
 
 
+
+# ── Kraken Bot Status ─────────────────────────────────────────────────────────
+
+@router.get("/kraken/status", tags=["Kraken Bot"])
+async def kraken_status() -> dict:
+    """
+    Read and return the Kraken bot's status.json file.
+    Written by kraken-bot/main.py after every trading cycle.
+    Returns a safe empty-state if the bot hasn't run yet.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    status_file = _Path("kraken-bot/status.json")
+    if not status_file.exists():
+        return {
+            "bot_name":         "Davy Jones' Portfolio",
+            "status":           "not_started",
+            "last_updated":     None,
+            "cycle_count":      0,
+            "total_equity_usd": 0,
+            "deployed_usd":     0,
+            "deployed_pct":     0,
+            "deployable_ceiling_pct": 80,
+            "cash_reserve_pct": 20,
+            "open_positions":   [],
+            "position_count":   0,
+            "max_positions":    3,
+            "circuit_breaker":  {"active": False, "paused_until": None},
+            "recent_trades":    [],
+            "error":            None,
+        }
+    try:
+        return _json.loads(status_file.read_text())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
+
+
 app.include_router(router)

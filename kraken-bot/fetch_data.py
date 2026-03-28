@@ -11,6 +11,21 @@ available without authentication.
 
 Run with:  python3 kraken-bot/fetch_data.py
 Output  :  kraken_training_data.csv  (created in the project root)
+
+IMPORTANT — Kraken API depth limitation
+----------------------------------------
+Kraken's public OHLCV endpoint has a hard cap: regardless of the `since`
+parameter you pass, it returns at most ~720 candles per symbol/timeframe
+combination across the entire rolling window currently stored on their servers.
+For the 1h timeframe this means you will typically get ~720 rows (~30 days),
+not the full 365 days described in the task specification.
+
+This is an upstream API constraint — the script itself is correct and will
+fetch everything Kraken makes available. If true 365-day hourly history is
+required, use a paid Kraken historical-data endpoint, or switch to an
+alternative data vendor (e.g. CryptoCompare, Kaiko, or a Binance mirror) while
+keeping the same six-column CSV contract (timestamp, open, high, low, close,
+volume) so the rest of the codebase does not need to change.
 """
 
 import time

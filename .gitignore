@@ -47,3 +47,6 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Generated market-data snapshots (re-generate with python3 kraken-bot/fetch_data.py)
+kraken_training_data.csv

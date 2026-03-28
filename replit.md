@@ -2,9 +2,10 @@
 
 ## Overview
 
-pnpm workspace monorepo with two main products:
+pnpm workspace monorepo with three main products:
 1. **AI Quantitative Trading Platform** (Python/FastAPI) — autonomous trading system
-2. **Trading Dashboard** (React/Vite) — dark terminal-themed monitoring UI
+2. **Trading Dashboard** (React/Vite) — dark terminal-themed private monitoring UI at `/`
+3. **AlgoEdge SaaS Platform** (React/Vite) — public-facing SaaS platform at `/saas/` (5-stage build in progress)
 
 ## Trading Platform (Python/FastAPI)
 
@@ -157,7 +158,13 @@ Production config:
 │   │   │   ├── components/    # UI components
 │   │   │   ├── hooks/         # React Query hooks (use-trading.ts)
 │   │   │   └── lib/           # Utils, API client
-│   │   └── .replit-artifact/  # artifact.toml (2 services)
+│   │   └── .replit-artifact/  # artifact.toml (2 services: web + trading-api)
+│   ├── saas/                  # AlgoEdge public SaaS platform (React/Vite)
+│   │   ├── src/
+│   │   │   ├── lib/config.ts  # BASE_URL + SAAS_API_BASE constants
+│   │   │   ├── pages/         # Placeholder.tsx (Stage 4 replaces content)
+│   │   │   └── App.tsx        # Wouter router: /, /dashboard, /settings
+│   │   └── .replit-artifact/  # artifact.toml (2 services: web + saas-api)
 │   ├── api-server/            # Express API (unused, legacy)
 │   └── mockup-sandbox/        # Canvas preview server
 ├── lib/                       # Shared TS libraries

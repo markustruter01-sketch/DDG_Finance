@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 59903.82028,
+  "cash_usd": 19854.56224,
   "positions": {
     "SOL/USD": {
       "side": "long",
@@ -21,6 +21,46 @@
       "best_price": 1.2652,
       "entry_fee": 25.9797,
       "order_id": "PAPER-DOTUSD-1774737395"
+    },
+    "ADA/USD": {
+      "side": "long",
+      "entry_price": 0.246234,
+      "size_usd": 9992.2,
+      "size_units": 40580.09860539162,
+      "entry_time": "2026-03-28T23:09:39.366225+00:00",
+      "best_price": 0.246234,
+      "entry_fee": 25.9797,
+      "order_id": "PAPER-ADAUSD-1774739379"
+    },
+    "LINK/USD": {
+      "side": "long",
+      "entry_price": 8.52001,
+      "size_usd": 9992.2,
+      "size_units": 1172.7920507135557,
+      "entry_time": "2026-03-28T23:09:41.742360+00:00",
+      "best_price": 8.52001,
+      "entry_fee": 25.9797,
+      "order_id": "PAPER-LINKUSD-1774739381"
+    },
+    "AVAX/USD": {
+      "side": "long",
+      "entry_price": 8.76,
+      "size_usd": 9992.2,
+      "size_units": 1140.6621004566211,
+      "entry_time": "2026-03-28T23:10:51.529197+00:00",
+      "best_price": 8.76,
+      "entry_fee": 25.9797,
+      "order_id": "PAPER-AVAXUSD-1774739451"
+    },
+    "BTC/USD": {
+      "side": "long",
+      "entry_price": 66250.2,
+      "size_usd": 9968.8,
+      "size_units": 0.15047199857509863,
+      "entry_time": "2026-03-28T23:11:56.524595+00:00",
+      "best_price": 66250.2,
+      "entry_fee": 25.9189,
+      "order_id": "PAPER-BTCUSD-1774739516"
     }
   },
   "all_trades": []

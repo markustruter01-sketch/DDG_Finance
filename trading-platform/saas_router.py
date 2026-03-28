@@ -1,0 +1,96 @@
+"""
+saas_router.py  —  Public SaaS Platform API
+=============================================
+This is the dedicated backend router for System B: the public-facing SaaS
+platform (AlgoEdge). All routes here are served under the /saas-api prefix.
+
+This is completely isolated from the private trading dashboard routes which
+live under /trading-api in main.py. They share the same FastAPI process
+(and therefore the same trading logic engine) but have fully separate
+route namespaces and, eventually, separate authentication middleware.
+
+Route map (current — Stage 1 skeleton):
+  GET  /saas-api/health          — Liveness probe
+  GET  /saas-api/config          — Returns public runtime config (DEV_MODE flag, version)
+
+Future stages will add:
+  POST /saas-api/auth/signup     — User registration
+  POST /saas-api/auth/login      — User login / session
+  GET  /saas-api/insights        — Factual Insight Cards (RSI math, probability data)
+  POST /saas-api/trade/execute   — 1-click trade execution (Stage 5)
+  GET/POST /saas-api/settings/keys — User API key management
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+
+# Stage 3 will build full auth. For now this flag bypasses it entirely
+# so development is frictionless. Set to False before going to production.
+DEV_MODE: bool = True
+
+SAAS_VERSION: str = "0.1.0"
+SAAS_API_PREFIX: str = "/saas-api"
+
+
+# ── Router ────────────────────────────────────────────────────────────────────
+
+saas_router = APIRouter(prefix=SAAS_API_PREFIX, tags=["SaaS Platform"])
+
+
+# ── Response models ───────────────────────────────────────────────────────────
+
+class SaasHealthResponse(BaseModel):
+    status: str
+    version: str
+    timestamp: str
+    dev_mode: bool
+
+
+class SaasConfigResponse(BaseModel):
+    version: str
+    dev_mode: bool
+    auth_required: bool
+    supported_exchanges: list[str]
+    risk_model: str
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@saas_router.get("/health", response_model=SaasHealthResponse)
+async def saas_health() -> dict:
+    """
+    Liveness probe for the public SaaS API.
+    Also exposes the DEV_MODE flag so the frontend can adjust its behaviour.
+    """
+    return {
+        "status":    "online",
+        "version":   SAAS_VERSION,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        "dev_mode":  DEV_MODE,
+    }
+
+
+@saas_router.get("/config", response_model=SaasConfigResponse)
+async def saas_config() -> dict:
+    """
+    Public runtime configuration consumed by the SaaS frontend on startup.
+
+    dev_mode:           True  → auth is bypassed; mock 'Dev User' session active
+    auth_required:      Inverse of dev_mode — when True, login/signup gates access
+    supported_exchanges: Exchanges users can connect their API keys for
+    risk_model:         The equity-allocation rule applied to all 1-click trades
+    """
+    return {
+        "version":             SAAS_VERSION,
+        "dev_mode":            DEV_MODE,
+        "auth_required":       not DEV_MODE,
+        "supported_exchanges": ["kraken", "alpaca"],
+        "risk_model":          "15_pct_equity_per_signal",
+    }

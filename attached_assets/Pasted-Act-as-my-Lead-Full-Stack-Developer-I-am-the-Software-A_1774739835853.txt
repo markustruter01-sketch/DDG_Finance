@@ -1,0 +1,41 @@
+Act as my Lead Full-Stack Developer. I am the Software Architect overseeing the project. We are expanding our current trading application to include a parallel, public-facing SaaS platform (System B) alongside my private trading dashboard (System A).
+
+To ensure clean architecture and avoid bugs, we are going to build this in 5 strict stages.
+
+CRITICAL INSTRUCTION: You must only execute one stage at a time. After completing a stage, output a brief summary of what you did, and ask me 'Ready for the next stage?' Do not proceed until I reply 'Yes'.
+
+Stage 1: Clean File Structure & Routing setup
+
+Create a clean, separate directory structure for the public SaaS app (e.g., /public_app) so it doesn't mix with my private bot's files.
+
+Set up the routing so both the private dashboard and the public dashboard can be served from the same backend framework without conflicting.
+
+Stage 2: The Master Toggle & UI Shell
+
+Build a persistent top navigation bar that exists globally across the app.
+
+Include a clear, sleek 'Toggle' switch or tab system at the top.
+
+Clicking it once must route me to the Private Trading Bot view. Clicking it again must instantly route me to the Public SaaS Dashboard view.
+
+Stage 3: 'Dev Mode' Authentication Bypass
+
+We need to build the structure for user accounts (Sign Up / Log In / Licensing Tier selection), but since we are in active development, I do not want to log in every time the server restarts.
+
+Implement a 'Dev Mode' flag in the config. When DEV_MODE = True, permanently bypass the authentication middleware and hardcode a mock logged-in 'Dev User' session so I have instant access to the public dashboard.
+
+Stage 4: The Minimalist Public UI (12-Year-Old Simplicity)
+
+Build the frontend for the Public SaaS view using a clean CSS framework (like Tailwind). It must be dead simple.
+
+Create the 'Plug-In' settings page where users will eventually paste their Kraken/Alpaca API keys, including a placeholder for an instructional GIF.
+
+Create the main dashboard featuring the 'Factual Insight Cards' we discussed (e.g., displaying RSI math and historical probability). Do not include complex charts or order books.
+
+Stage 5: The 1-Click Execution Middleware
+
+Add the large, friendly 'Execute Trade' button to the bottom of the Insight Cards.
+
+Write the backend middleware function that securely catches this button click, pulls the active user's saved API keys, and routes the trade to the exchange using the 15% equity allocation rule derived from our core logic engine.
+
+Acknowledge these instructions and begin Stage 1."

@@ -1560,3 +1560,8 @@ async def kraken_performance() -> dict:
 
 
 app.include_router(router)
+
+# ── System B: Public SaaS Platform routes ─────────────────────────────────────
+# Registered separately under /saas-api — no overlap with /trading-api above.
+from saas_router import saas_router  # noqa: E402
+app.include_router(saas_router)

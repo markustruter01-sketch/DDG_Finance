@@ -145,6 +145,13 @@ cycle_count: int = 0
 # Cache of the latest prices seen in this cycle (used for paper equity calc).
 latest_prices: dict[str, float] = {}
 
+# Signal snapshot written each cycle — consumed by the dashboard thinking panel.
+# Each entry: {symbol, rsi, z_score, price, signal_type, has_position}
+latest_signals: list[dict] = []
+
+# Plain-English "what the bot is thinking" written each cycle for the dashboard.
+thinking_text: str = "Initialising — fetching market data..."
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONTROL FILE — pause/resume the bot from the dashboard
@@ -171,8 +178,10 @@ def write_status(error: str | None = None) -> None:
     """
     Serialise the bot's current state to STATUS_FILE (kraken-bot/status.json).
     The 'paper_trading' field lets the dashboard show a clear PAPER badge.
+    Positions are enriched with live P&L, stop/TP prices, and qty for the dashboard table.
     """
     global total_equity, open_positions, circuit_breaker_until, recent_trades, cycle_count
+    global latest_signals, thinking_text
 
     deployed_usd  = sum(p["size_usd"] for p in open_positions.values())
     deployable    = total_equity * (1.0 - CASH_RESERVE)
@@ -183,13 +192,38 @@ def write_status(error: str | None = None) -> None:
 
     positions_list = []
     for sym, pos in open_positions.items():
+        current_price = latest_prices.get(sym, pos["entry_price"])
+        entry         = pos["entry_price"]
+        best          = pos["best_price"]
+        size          = pos["size_usd"]
+        side          = pos["side"]
+
+        # Compute unrealised P&L
+        if side == "long":
+            pnl_usd        = (current_price - entry) / entry * size
+            stop_loss_px   = round(entry * (1.0 - STOP_LOSS_PCT), 4)
+            take_profit_px = round(best  * (1.0 - TRAIL_PCT),     4)  # trailing stop
+        else:
+            pnl_usd        = (entry - current_price) / entry * size
+            stop_loss_px   = round(entry * (1.0 + STOP_LOSS_PCT), 4)
+            take_profit_px = round(best  * (1.0 + TRAIL_PCT),     4)
+
+        pnl_pct = (pnl_usd / size * 100) if size > 0 else 0.0
+        qty     = size / entry if entry > 0 else 0.0
+
         positions_list.append({
-            "symbol":      sym,
-            "side":        pos["side"],
-            "entry_price": pos["entry_price"],
-            "size_usd":    pos["size_usd"],
-            "entry_time":  pos["entry_time"],
-            "best_price":  pos["best_price"],
+            "symbol":              sym,
+            "side":                side,
+            "qty":                 round(qty, 6),
+            "entry_price":         round(entry, 4),
+            "current_price":       round(current_price, 4),
+            "size_usd":            round(size, 2),
+            "unrealized_pnl_usd":  round(pnl_usd, 2),
+            "unrealized_pnl_pct":  round(pnl_pct, 4),
+            "stop_loss_price":     stop_loss_px,
+            "take_profit_price":   take_profit_px,
+            "entry_time":          pos["entry_time"],
+            "best_price":          round(best, 4),
         })
 
     # Paper-mode extra fields for the dashboard
@@ -214,6 +248,8 @@ def write_status(error: str | None = None) -> None:
         "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
         "recent_trades":    recent_trades[-20:],  # last 20 trades
         "paper_summary":    paper_summary,        # None in live mode
+        "signals":          latest_signals,       # per-symbol RSI / z-score scan
+        "thinking_text":    thinking_text,        # plain-English reasoning for dashboard
         "error":            error,
     }
 
@@ -396,6 +432,9 @@ def run_cycle() -> None:
       4. Write status.json for the dashboard
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
+    global latest_signals, thinking_text
+
+    cycle_signals: list[dict] = []  # built up during this cycle, written at end
 
     cycle_count += 1
 
@@ -450,6 +489,10 @@ def run_cycle() -> None:
             # Cache the latest price (used by paper equity calculation)
             latest_prices[symbol] = current_price
 
+            # Pre-compute indicators once — used in both position mgmt and entry signals
+            sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
+            sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
+
             # ── 3b. Record price for circuit breaker ──────────────────────────
             price_history[symbol].append((now_utc, current_price))
 
@@ -491,13 +534,21 @@ def run_cycle() -> None:
                 if exit_reason:
                     close_position(symbol, reason=exit_reason)
                     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
-
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": f"exit_{exit_reason}",
+                        "has_position": False,
+                    })
                 # Check for mean-reversion exit (z-score returned to mean)
                 elif symbol in open_positions:
-                    z = calculate_zscore(closes, window=ZSCORE_WINDOW)
-                    if abs(z) < ZSCORE_EXIT:
+                    if abs(sym_z_score) < ZSCORE_EXIT:
                         close_position(symbol, reason="mean_reversion_complete")
                         deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "exit_mean_reversion",
+                            "has_position": False,
+                        })
                     else:
                         pnl_pct = (
                             (current_price - pos["entry_price"]) / pos["entry_price"] * 100
@@ -506,8 +557,20 @@ def run_cycle() -> None:
                         )
                         logger.debug(
                             f"Hold   | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.2f} | "
-                            f"Now: ${current_price:,.2f} | P&L: {pnl_pct:+.2f}% | Z: {z:+.2f}"
+                            f"Now: ${current_price:,.2f} | P&L: {pnl_pct:+.2f}% | Z: {sym_z_score:+.2f}"
                         )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "hold",
+                            "has_position": True, "pnl_pct": round(pnl_pct, 2),
+                            "side": pos["side"],
+                        })
+                else:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "exit_stop",
+                        "has_position": False,
+                    })
 
                 continue  # Don't try to open a new position in the same symbol
 
@@ -515,13 +578,14 @@ def run_cycle() -> None:
 
             if len(open_positions) >= MAX_POSITIONS:
                 logger.debug(f"Signal | {symbol}: Max positions ({MAX_POSITIONS}) reached — skip")
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "slots_full", "has_position": False,
+                })
                 continue
 
-            rsi     = calculate_rsi(closes, period=RSI_PERIOD)
-            z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
-
             # LONG signal: price is unusually low + RSI is oversold
-            if z_score < -ZSCORE_ENTRY and rsi < RSI_OVERSOLD:
+            if sym_z_score < -ZSCORE_ENTRY and sym_rsi < RSI_OVERSOLD:
                 size_usd = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
@@ -533,16 +597,32 @@ def run_cycle() -> None:
                 )
                 if size_usd >= 10.0:
                     logger.info(
-                        f"Signal | LONG  {symbol} | RSI={rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
-                        f"Z={z_score:.2f} (dip>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
+                        f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
+                        f"Z={sym_z_score:.2f} (dip>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
                     )
                     if open_position(symbol, "long", size_usd, current_price):
                         deployed_usd += size_usd
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "long_entered",
+                            "has_position": True, "size_usd": round(size_usd, 2),
+                        })
+                    else:
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "long_signal",
+                            "has_position": False,
+                        })
                 else:
                     logger.debug(f"Signal | {symbol}: LONG signal but size ${size_usd:.2f} too small")
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "long_signal_small",
+                        "has_position": False,
+                    })
 
             # SHORT signal: price is unusually high + RSI is overbought
-            elif z_score > ZSCORE_ENTRY and rsi > RSI_OVERBOUGHT:
+            elif sym_z_score > ZSCORE_ENTRY and sym_rsi > RSI_OVERBOUGHT:
                 size_usd = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
@@ -554,25 +634,75 @@ def run_cycle() -> None:
                 )
                 if size_usd >= 10.0:
                     logger.info(
-                        f"Signal | SHORT {symbol} | RSI={rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
-                        f"Z={z_score:.2f} (peak>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
+                        f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
+                        f"Z={sym_z_score:.2f} (peak>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
                     )
                     if open_position(symbol, "short", size_usd, current_price):
                         deployed_usd += size_usd
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "short_entered",
+                            "has_position": True, "size_usd": round(size_usd, 2),
+                        })
+                    else:
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "short_signal",
+                            "has_position": False,
+                        })
                 else:
                     logger.debug(f"Signal | {symbol}: SHORT signal but size ${size_usd:.2f} too small")
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "short_signal_small",
+                        "has_position": False,
+                    })
 
             else:
                 logger.debug(
-                    f"Signal | {symbol} | No signal | RSI={rsi:.1f} Z={z_score:+.2f} | "
+                    f"Signal | {symbol} | No signal | RSI={sym_rsi:.1f} Z={sym_z_score:+.2f} | "
                     f"Price: ${current_price:,.2f}"
                 )
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "watching", "has_position": False,
+                })
 
         except Exception as exc:
             logger.error(f"Cycle | Error processing {symbol}: {exc}")
             continue
 
-    # ── Step 4: Write status for the dashboard ────────────────────────────────
+    # ── Step 4: Summarise signals + generate thinking text ────────────────────
+    latest_signals = cycle_signals
+
+    active_holds   = [s for s in cycle_signals if s["signal_type"] == "hold"]
+    new_longs      = [s for s in cycle_signals if s["signal_type"] == "long_entered"]
+    new_shorts     = [s for s in cycle_signals if s["signal_type"] == "short_entered"]
+    watching       = [s for s in cycle_signals if s["signal_type"] == "watching"]
+    oversold_near  = [s for s in watching if s["rsi"] < RSI_OVERSOLD + 10 and s["z_score"] < 0]
+    overbought_near= [s for s in watching if s["rsi"] > RSI_OVERBOUGHT - 10 and s["z_score"] > 0]
+
+    if new_longs or new_shorts:
+        entered = new_longs + new_shorts
+        parts   = [f"ENTERING {'LONG' if e['signal_type']=='long_entered' else 'SHORT'} on {e['symbol']} — RSI {e['rsi']}, Z={e['z_score']:+.2f}" for e in entered]
+        thinking_text = "⚡ " + ". ".join(parts) + ". Mean-reversion signal confirmed; deploying capital."
+    elif active_holds:
+        hold_parts = []
+        for h in active_holds:
+            pnl_str = f"{h.get('pnl_pct', 0):+.2f}%"
+            hold_parts.append(f"{h['side'].upper()} {h['symbol']} ({pnl_str} P&L, Z={h['z_score']:+.2f} — awaiting reversion to mean)")
+        thinking_text = "⚓ Holding: " + "; ".join(hold_parts) + f". Will exit when |Z| < {ZSCORE_EXIT}."
+    elif oversold_near:
+        sym_list = ", ".join(s["symbol"].replace("/USD", "") for s in oversold_near)
+        thinking_text = f"👀 Watching {sym_list} — RSI and Z-score approaching oversold thresholds. No entry yet; need RSI < {RSI_OVERSOLD} and Z < -{ZSCORE_ENTRY}."
+    elif overbought_near:
+        sym_list = ", ".join(s["symbol"].replace("/USD", "") for s in overbought_near)
+        thinking_text = f"👀 {sym_list} drifting overbought — RSI climbing toward {RSI_OVERBOUGHT}. Watching for short setup."
+    else:
+        rsi_lines = ", ".join(f"{s['symbol'].replace('/USD','')} RSI {s['rsi']}" for s in watching)
+        thinking_text = f"🔍 Markets neutral — no setups. Scanning: {rsi_lines}. Thresholds: RSI {RSI_OVERSOLD}/{RSI_OVERBOUGHT}, Z ±{ZSCORE_ENTRY}."
+
+    # ── Step 5: Write status for the dashboard ────────────────────────────────
     write_status()
     logger.debug(
         f"Cycle #{cycle_count} complete | "

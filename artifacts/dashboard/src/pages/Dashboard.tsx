@@ -1317,6 +1317,194 @@ function AIBrainSection() {
   );
 }
 
+// ── Davy Jones' Portfolio — Kraken Brain Modal ───────────────────────────────
+
+function KrakenBrainModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { data } = useKrakenStatus();
+  if (!open) return null;
+
+  const signals: any[] = data?.signals ?? [];
+  const trades: any[]  = data?.recent_trades ?? [];
+  const wins  = trades.filter(t => t.pnl_pct > 0);
+  const losses = trades.filter(t => t.pnl_pct <= 0);
+  const bestTrade  = trades.reduce((b, t) => (b == null || t.pnl_pct > b.pnl_pct ? t : b), null as any);
+  const worstTrade = trades.reduce((w, t) => (w == null || t.pnl_pct < w.pnl_pct ? t : w), null as any);
+  const winRate    = trades.length > 0 ? (wins.length / trades.length * 100) : null;
+
+  const signalTypeLabel: Record<string, string> = {
+    hold: "HOLDING", watching: "WATCHING", slots_full: "SLOTS FULL",
+    long_entered: "LONG ENTERED", short_entered: "SHORT ENTERED",
+    long_signal: "LONG SIGNAL", short_signal: "SHORT SIGNAL",
+    exit_mean_reversion: "EXITED (REVERT)", exit_stop_loss: "EXITED (STOP)",
+    exit_trailing_stop: "EXITED (TRAIL)",
+  };
+  const signalTypeColor: Record<string, string> = {
+    hold: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30",
+    watching: "text-slate-400 bg-slate-500/10 border-slate-500/20",
+    slots_full: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    long_entered: "text-green-400 bg-green-500/10 border-green-500/30",
+    short_entered: "text-red-400 bg-red-500/10 border-red-500/20",
+    long_signal: "text-green-400 bg-green-500/10 border-green-500/30",
+    short_signal: "text-red-400 bg-red-500/10 border-red-500/20",
+  };
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-950 to-cyan-950/30 shadow-[0_0_80px_rgba(6,182,212,0.15)] p-6"
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }} onClick={e => e.stopPropagation()}
+      >
+        <button onClick={onClose} className="absolute top-4 right-4 text-muted-foreground hover:text-white transition-colors text-xl">✕</button>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <span className="text-2xl">⚓</span>
+          <div>
+            <h2 className="text-sm font-bold text-cyan-400 uppercase tracking-wider">Davy Jones' Strategy Debrief</h2>
+            <p className="text-[10px] text-muted-foreground">Mean-Reversion · RSI + Z-Score · 1h candles · Kraken Exchange</p>
+          </div>
+        </div>
+
+        {/* Thinking text */}
+        {data?.thinking_text && (
+          <div className="mb-5 rounded-xl border border-cyan-500/15 bg-slate-900/60 p-3.5 text-xs text-white/80 leading-relaxed">
+            {data.thinking_text}
+          </div>
+        )}
+
+        {/* Signal Scanner */}
+        <div className="mb-5">
+          <h3 className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground mb-3">Live Signal Scanner</h3>
+          {signals.length === 0 ? (
+            <p className="text-xs text-muted-foreground/50 italic">No signals yet — waiting for first cycle</p>
+          ) : (
+            <div className="space-y-3">
+              {signals.map((sig: any) => {
+                const rsiPct = Math.min(sig.rsi, 100);
+                const rsiColor = sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                const zAbs = Math.min(Math.abs(sig.z_score), 3);
+                const zColor = sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                const stLabel = signalTypeLabel[sig.signal_type] ?? sig.signal_type.toUpperCase();
+                const stColor = signalTypeColor[sig.signal_type] ?? "text-slate-400 bg-slate-500/10 border-slate-500/20";
+                return (
+                  <div key={sig.symbol} className="rounded-xl border border-white/5 bg-slate-900/50 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-white text-sm">{sig.symbol}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">${sig.price?.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                        <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full border", stColor)}>{stLabel}</span>
+                      </div>
+                    </div>
+                    {/* RSI gauge */}
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] text-muted-foreground w-8">RSI</span>
+                      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
+                        <div className="absolute left-[35%] w-px h-full bg-orange-500/40" />
+                        <div className="absolute left-[45%] w-px h-full bg-slate-600" />
+                        <div className="absolute left-[55%] w-px h-full bg-slate-600" />
+                        <div className="absolute left-[65%] w-px h-full bg-cyan-500/40" />
+                        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${rsiPct}%`, backgroundColor: rsiColor }} />
+                      </div>
+                      <span className="text-[10px] font-mono w-8 text-right" style={{ color: rsiColor }}>{sig.rsi}</span>
+                    </div>
+                    {/* Z-score bar */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground w-8">Z</span>
+                      <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
+                        <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                        {sig.z_score < 0 ? (
+                          <div className="absolute right-1/2 h-full rounded-l-full transition-all" style={{ width: `${(zAbs / 3) * 50}%`, backgroundColor: "#f97316" }} />
+                        ) : (
+                          <div className="absolute left-1/2 h-full rounded-r-full transition-all" style={{ width: `${(zAbs / 3) * 50}%`, backgroundColor: "#22d3ee" }} />
+                        )}
+                      </div>
+                      <span className="text-[10px] font-mono w-12 text-right" style={{ color: zColor }}>{sig.z_score >= 0 ? "+" : ""}{sig.z_score}</span>
+                    </div>
+                    {sig.pnl_pct != null && (
+                      <div className="mt-1.5 text-[9px] font-mono" style={{ color: sig.pnl_pct >= 0 ? "#22c55e" : "#ef4444" }}>
+                        P&L: {sig.pnl_pct >= 0 ? "+" : ""}{sig.pnl_pct}%
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* What I'm Learning */}
+        <div className="mb-5">
+          <h3 className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground mb-3">What I'm Learning</h3>
+          {trades.length === 0 ? (
+            <p className="text-xs text-muted-foreground/50 italic">No completed trades yet — learning begins after first exit</p>
+          ) : (
+            <div className="space-y-2">
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-white/5 bg-slate-900/50 p-2.5 text-center">
+                  <div className="text-[9px] text-muted-foreground mb-1">Win Rate</div>
+                  <div className={cn("text-base font-bold font-mono", (winRate ?? 0) >= 50 ? "text-green-400" : "text-amber-400")}>
+                    {winRate?.toFixed(0) ?? "—"}%
+                  </div>
+                  <div className="text-[9px] text-muted-foreground">{wins.length}W · {losses.length}L</div>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-slate-900/50 p-2.5 text-center">
+                  <div className="text-[9px] text-muted-foreground mb-1">Best Trade</div>
+                  <div className="text-base font-bold font-mono text-green-400">
+                    {bestTrade ? `+${bestTrade.pnl_pct.toFixed(2)}%` : "—"}
+                  </div>
+                  <div className="text-[9px] text-muted-foreground">{bestTrade?.symbol ?? ""}</div>
+                </div>
+                <div className="rounded-xl border border-white/5 bg-slate-900/50 p-2.5 text-center">
+                  <div className="text-[9px] text-muted-foreground mb-1">Worst Trade</div>
+                  <div className="text-base font-bold font-mono text-red-400">
+                    {worstTrade ? `${worstTrade.pnl_pct.toFixed(2)}%` : "—"}
+                  </div>
+                  <div className="text-[9px] text-muted-foreground">{worstTrade?.symbol ?? ""}</div>
+                </div>
+              </div>
+              {/* Recent trades */}
+              <div className="rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+                <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground border-b border-white/5">Recent Trades</div>
+                {trades.slice(-8).reverse().map((t: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-2 border-b border-white/[0.03] last:border-0">
+                    <span className="text-xs font-mono text-white">{t.symbol}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">{t.side}</span>
+                    <span className="text-[10px] text-muted-foreground">{t.exit_reason?.replace(/_/g, " ")}</span>
+                    <span className={cn("text-xs font-mono font-bold", t.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                      {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Strategy config */}
+        <div className="rounded-xl border border-white/5 bg-slate-900/30 p-3">
+          <div className="text-[9px] uppercase font-semibold text-muted-foreground mb-2">Strategy Parameters</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] font-mono">
+            <span className="text-muted-foreground">RSI Period</span><span className="text-white">14 candles</span>
+            <span className="text-muted-foreground">RSI Oversold / Overbought</span><span className="text-white">&lt;45 / &gt;55</span>
+            <span className="text-muted-foreground">Z-Score Entry Threshold</span><span className="text-white">±0.60σ</span>
+            <span className="text-muted-foreground">Z-Score Exit Threshold</span><span className="text-white">±0.30σ (mean-revert)</span>
+            <span className="text-muted-foreground">Stop Loss</span><span className="text-white">2% from entry</span>
+            <span className="text-muted-foreground">Trailing Take Profit</span><span className="text-white">5% from best price</span>
+            <span className="text-muted-foreground">Max Positions</span><span className="text-white">3 simultaneous</span>
+            <span className="text-muted-foreground">Cash Reserve</span><span className="text-white">20% always held</span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ── Davy Jones' Portfolio — Kraken Bot Section ───────────────────────────────
 
 function AnchorSVG({ active }: { active: boolean }) {
@@ -1355,148 +1543,228 @@ function AnchorSVG({ active }: { active: boolean }) {
 
 function DavyJonesBotSection() {
   const { data } = useKrakenStatus();
+  const [showModal, setShowModal] = useState(false);
 
-  const isRunning = data?.status === "running";
-  const isCB      = data?.status === "paused_circuit_breaker";
-  const isError   = data?.status === "error";
+  const isRunning  = data?.status === "running";
+  const isCB       = data?.status === "paused_circuit_breaker";
+  const isError    = data?.status === "error";
   const notStarted = !data || data.status === "not_started";
 
   const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
   const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
   const statusDot   = isCB ? "bg-red-400" : isRunning ? "bg-cyan-400" : isError ? "bg-amber-400" : "bg-slate-600";
 
-  const lastTrade = data?.recent_trades?.at(-1);
-  const posCount  = data?.position_count ?? 0;
-  const deployedPct = data?.deployed_pct ?? 0;
+  const lastTrade    = data?.recent_trades?.at(-1);
+  const posCount     = data?.position_count ?? 0;
+  const deployedPct  = data?.deployed_pct ?? 0;
   const maxDeployPct = data?.deployable_ceiling_pct ?? 80;
+  const signals: any[] = data?.signals ?? [];
 
-  const dialogueText = notStarted
+  // Prefer live thinking_text from bot; fall back to static message
+  const fallbackText = notStarted
     ? "I await the Kraken keys... Add KRAKEN_API_KEY and KRAKEN_SECRET_KEY to secrets, then start the kraken-bot workflow."
     : isCB
     ? "The seas rage! A flash crash triggered the circuit breaker. All trading paused — I shall resurface when the storm passes."
     : isError
     ? `The depths are troubled: ${data?.error ?? "unknown error"}. I'm regrouping...`
-    : posCount > 0
-    ? `${posCount} vessel${posCount > 1 ? "s" : ""} deployed into the deep — monitoring mean reversion on ${data?.open_positions.map(p => p.symbol.replace("/USD","")).join(", ")}.`
     : "Scanning the seven seas for mean-reversion opportunities. RSI and z-score filters are armed.";
 
+  const dialogueText = data?.thinking_text ?? fallbackText;
+
   return (
-    <div className="relative rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
-      {/* Ambient glow */}
-      <div className="absolute top-0 left-0 w-48 h-48 bg-cyan-500/4 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+    <>
+      <AnimatePresence>
+        {showModal && <KrakenBrainModal open={showModal} onClose={() => setShowModal(false)} />}
+      </AnimatePresence>
 
-      {/* Header row */}
-      <div className="relative flex items-center gap-2 mb-4">
-        <span className="text-cyan-500/70">⚓</span>
-        <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
-          Davy Jones' Portfolio
-        </span>
-        <span className="ml-auto flex items-center gap-1.5">
-          {isCB && (
-            <motion.span
-              className="text-[9px] font-bold text-red-400 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded-full"
-              animate={{ opacity: [1, 0.4, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
-              CIRCUIT BREAKER
-            </motion.span>
-          )}
-          <span className={cn("text-[9px] font-mono font-semibold", statusColor)}>
-            <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 mb-[1px]", statusDot, isRunning && "animate-pulse")} />
-            {statusLabel}
+      <div className="relative rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
+        {/* Ambient glow */}
+        <div className="absolute top-0 left-0 w-48 h-48 bg-cyan-500/4 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+
+        {/* Header row */}
+        <div className="relative flex items-center gap-2 mb-4">
+          <span className="text-cyan-500/70">⚓</span>
+          <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
+            Davy Jones' Portfolio
           </span>
-        </span>
-      </div>
+          <span className="ml-auto flex items-center gap-1.5">
+            {isRunning && (
+              <motion.span
+                className="flex items-center gap-1 text-[9px] text-cyan-400/40"
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />
+                live signals
+              </motion.span>
+            )}
+            {isCB && (
+              <motion.span
+                className="text-[9px] font-bold text-red-400 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded-full"
+                animate={{ opacity: [1, 0.4, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                CIRCUIT BREAKER
+              </motion.span>
+            )}
+            <span className={cn("text-[9px] font-mono font-semibold", statusColor)}>
+              <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 mb-[1px]", statusDot, isRunning && "animate-pulse")} />
+              {statusLabel}
+            </span>
+          </span>
+        </div>
 
-      {/* Body */}
-      <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5 flex-1">
-        {/* Anchor SVG */}
-        <motion.div
-          className="flex-shrink-0 w-20 h-20 sm:w-32 sm:h-32"
-          animate={isRunning ? { y: [0, -5, 0, 4, 0], rotate: [0, 1, 0, -1, 0] } : { rotate: [0, 2, 0, -2, 0] }}
-          transition={{ duration: isRunning ? 6 : 10, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <AnchorSVG active={isRunning} />
-        </motion.div>
+        {/* Body */}
+        <div className="relative flex flex-col sm:flex-row items-start gap-3 sm:gap-5 flex-1">
+          {/* Anchor SVG — clickable to open full modal */}
+          <motion.div
+            className="flex-shrink-0 w-20 h-20 sm:w-32 sm:h-32 cursor-pointer relative group"
+            animate={isRunning ? { y: [0, -5, 0, 4, 0], rotate: [0, 1, 0, -1, 0] } : { rotate: [0, 2, 0, -2, 0] }}
+            transition={{ duration: isRunning ? 6 : 10, repeat: Infinity, ease: "easeInOut" }}
+            onClick={() => setShowModal(true)}
+            title="Click to view full strategy analysis"
+          >
+            <AnchorSVG active={isRunning} />
+            <div className="absolute inset-0 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <span className="text-[9px] font-semibold text-cyan-300/80 bg-slate-950/80 rounded-full px-2 py-0.5 border border-cyan-500/20 backdrop-blur-sm">
+                tap to inspect
+              </span>
+            </div>
+          </motion.div>
 
-        {/* Dialogue bubble */}
-        <div className="flex-1 min-w-0">
-          <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/15 bg-slate-900/60 p-3.5 text-xs text-white/75 leading-relaxed backdrop-blur-sm">
-            <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/15 bg-slate-900/60 rotate-[-45deg]" />
-            {dialogueText}
-          </div>
+          {/* Dialogue + signal scanner + stats */}
+          <div className="flex-1 min-w-0">
+            {/* Thinking dialogue */}
+            <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/15 bg-slate-900/60 p-3.5 text-xs text-white/75 leading-relaxed backdrop-blur-sm">
+              <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/15 bg-slate-900/60 rotate-[-45deg]" />
+              {dialogueText}
+            </div>
 
-          {/* Stats row */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {/* Deployed capital */}
-            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
-              <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
-              <div className="flex items-end gap-1 mb-1">
-                <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
-                  {deployedPct.toFixed(0)}%
+            {/* Live Signal Scanner */}
+            {isRunning && signals.length > 0 && (
+              <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+                <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
+                  <span>Signal Scanner</span>
+                  <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">full analysis →</button>
+                </div>
+                <div className="divide-y divide-white/[0.03]">
+                  {signals.map((sig: any) => {
+                    const rsiColor = sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                    const zColor = sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                    const isPosHeld = sig.has_position && sig.signal_type === "hold";
+                    return (
+                      <div key={sig.symbol} className="px-3 py-2 flex items-center gap-3">
+                        <span className="text-xs font-bold text-white w-16 shrink-0">{sig.symbol.replace("/USD","")}</span>
+                        {/* RSI mini bar */}
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />
+                          </div>
+                          <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{sig.rsi}</span>
+                        </div>
+                        {/* Z-score */}
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
+                            <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                            {sig.z_score < 0 ? (
+                              <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
+                            ) : (
+                              <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>{sig.z_score >= 0 ? "+" : ""}{sig.z_score}</span>
+                        </div>
+                        {/* Status pill */}
+                        <span className={cn(
+                          "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+                          isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
+                          sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
+                          sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                          "text-slate-500 bg-slate-800/50 border-slate-700/40"
+                        )}>
+                          {isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
+                           sig.signal_type === "watching" ? "WATCH" :
+                           sig.signal_type.includes("entered") ? "IN" :
+                           sig.signal_type === "slots_full" ? "FULL" : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Stats row */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+                <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
+                <div className="flex items-end gap-1 mb-1">
+                  <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
+                    {deployedPct.toFixed(0)}%
+                  </span>
+                  <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
+                </div>
+                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
+                    style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+                <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Open Positions</div>
+                <div className="flex items-end gap-1 mb-1">
+                  <span className="text-lg font-bold font-mono leading-none text-white">{posCount}</span>
+                  <span className="text-[9px] text-muted-foreground mb-0.5">/ {data?.max_positions ?? 3} max</span>
+                </div>
+                <div className="flex gap-1">
+                  {Array.from({ length: data?.max_positions ?? 3 }).map((_, i) => (
+                    <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Last trade */}
+            {lastTrade && (
+              <div className={cn(
+                "mt-2 rounded-xl border px-3 py-2 text-[10px] flex items-center justify-between",
+                lastTrade.pnl_pct >= 0 ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5",
+              )}>
+                <span className="font-mono text-white/80">
+                  Last: <span className="font-bold">{lastTrade.symbol}</span> {lastTrade.side.toUpperCase()}
                 </span>
-                <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
+                <span className={cn("font-mono font-bold", lastTrade.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                  {lastTrade.pnl_pct >= 0 ? "+" : ""}{lastTrade.pnl_pct.toFixed(2)}%
+                </span>
               </div>
-              {/* Progress bar */}
-              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
-                  style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
+            )}
 
-            {/* Positions */}
-            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
-              <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Open Positions</div>
-              <div className="flex items-end gap-1 mb-1">
-                <span className="text-lg font-bold font-mono leading-none text-white">{posCount}</span>
-                <span className="text-[9px] text-muted-foreground mb-0.5">/ {data?.max_positions ?? 3} max</span>
+            {/* Footer */}
+            {data && data.status !== "not_started" && (
+              <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/60 font-mono">
+                <span>Cycle #{data.cycle_count}</span>
+                <span>·</span>
+                <span>{data.cash_reserve_pct}% reserve held</span>
+                {data.total_equity_usd > 0 && (
+                  <>
+                    <span>·</span>
+                    <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} equity</span>
+                  </>
+                )}
+                <button onClick={() => setShowModal(true)} className="ml-auto text-cyan-400/50 hover:text-cyan-400 transition-colors">
+                  full debrief →
+                </button>
               </div>
-              {/* Slot dots */}
-              <div className="flex gap-1">
-                {Array.from({ length: data?.max_positions ?? 3 }).map((_, i) => (
-                  <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
-                ))}
-              </div>
-            </div>
+            )}
           </div>
-
-          {/* Last trade */}
-          {lastTrade && (
-            <div className={cn(
-              "mt-2 rounded-xl border px-3 py-2 text-[10px] flex items-center justify-between",
-              lastTrade.pnl_pct >= 0
-                ? "border-green-500/20 bg-green-500/5"
-                : "border-red-500/20 bg-red-500/5",
-            )}>
-              <span className="font-mono text-white/80">
-                Last: <span className="font-bold">{lastTrade.symbol}</span> {lastTrade.side.toUpperCase()}
-              </span>
-              <span className={cn("font-mono font-bold", lastTrade.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                {lastTrade.pnl_pct >= 0 ? "+" : ""}{lastTrade.pnl_pct.toFixed(2)}%
-              </span>
-            </div>
-          )}
-
-          {/* Cycle count + cash reserve footer */}
-          {data && data.status !== "not_started" && (
-            <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/60 font-mono">
-              <span>Cycle #{data.cycle_count}</span>
-              <span>·</span>
-              <span>{data.cash_reserve_pct}% reserve held</span>
-              {data.total_equity_usd > 0 && (
-                <>
-                  <span>·</span>
-                  <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} equity</span>
-                </>
-              )}
-            </div>
-          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -2223,6 +2491,7 @@ function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConf
 function LivePositionsSection() {
   const isMobile = useIsMobile();
   const { data, isLoading } = useLivePositions();
+  const { data: krakenStatus } = useKrakenStatus();
   const { mutate: rebalance, isPending: isRebalancing } = useForceRebalance();
   const { mutate: closeAndReallocate, isPending: isClosing, variables: closingVar } = useCloseAndReallocate();
   const { toast } = useToast();
@@ -2231,6 +2500,7 @@ function LivePositionsSection() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
 
   const closingSymbol = isClosing ? (closingVar as string) : null;
+  const krakenPositions = krakenStatus?.open_positions ?? [];
 
   const handleCloseAndReallocate = (symbol: string) => {
     setConfirmClose(null);
@@ -2241,9 +2511,12 @@ function LivePositionsSection() {
   };
 
   const totalUnrealized = useMemo(() => {
-    if (!data?.positions) return 0;
-    return data.positions.reduce((sum, p) => sum + p.unrealized_pl, 0);
-  }, [data]);
+    const alpacaPnl = data?.positions?.reduce((sum, p) => sum + p.unrealized_pl, 0) ?? 0;
+    const krakenPnl = krakenPositions.reduce((sum, p) => sum + (p.unrealized_pnl_usd ?? 0), 0);
+    return alpacaPnl + krakenPnl;
+  }, [data, krakenPositions]);
+
+  const totalCount = (data?.count ?? 0) + krakenPositions.length;
 
   return (
     <Card className="border-white/5 overflow-hidden">
@@ -2252,12 +2525,12 @@ function LivePositionsSection() {
           <Target className="h-4 w-4 text-primary" />
           <span className="hidden md:inline">Live Open Positions</span>
           <span className="md:hidden">Positions</span>
-          {data && (
-            <Badge variant={data.count > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0">
-              {data.count}
+          {(data || krakenPositions.length > 0) && (
+            <Badge variant={totalCount > 0 ? "default" : "outline"} className="text-[10px] px-1.5 py-0">
+              {totalCount}
             </Badge>
           )}
-          {data && data.count > 0 && (
+          {totalCount > 0 && (
             <span className={cn("text-xs font-mono font-semibold", totalUnrealized >= 0 ? "text-green-400 text-glow-success" : "text-red-400 text-glow-danger")}>
               {totalUnrealized >= 0 ? "+" : ""}{formatCurrency(totalUnrealized)}
             </span>
@@ -2471,7 +2744,97 @@ function LivePositionsSection() {
                 </motion.tr>
               );
             })}
-            {!isLoading && (!data || data.positions.length === 0) && (
+            {/* ── Kraken / Davy Jones' Portfolio positions ── */}
+            {krakenPositions.map((kpos, i) => {
+              const isUp = (kpos.unrealized_pnl_usd ?? 0) >= 0;
+              const pnlPct = kpos.unrealized_pnl_pct ?? 0;
+              return (
+                <motion.tr
+                  key={`kraken-${kpos.symbol}`}
+                  custom={i + (data?.positions?.length ?? 0)}
+                  initial="hidden"
+                  animate="visible"
+                  variants={positionRowVariants}
+                  className={cn(
+                    "transition-all duration-300 cursor-default",
+                    isUp
+                      ? "border-l-2 border-l-cyan-500/40 hover:bg-cyan-500/[0.04]"
+                      : "border-l-2 border-l-red-500/30 hover:bg-red-500/[0.04]"
+                  )}
+                >
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{kpos.symbol}</span>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase border-cyan-500/30 text-cyan-400 bg-cyan-500/10">KRAKEN</Badge>
+                      {krakenStatus?.paper_trading && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/30 text-amber-400/70">PAPER</Badge>
+                      )}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono capitalize">{kpos.side}</div>
+                  </td>
+                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">
+                    {kpos.qty != null ? kpos.qty.toFixed(4) : ((kpos.size_usd / kpos.entry_price) || 0).toFixed(4)}
+                  </td>
+                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">{formatCurrency(kpos.size_usd)}</td>
+                  <td className="px-5 py-3.5 text-right font-mono text-xs text-muted-foreground">{formatCurrency(kpos.entry_price)}</td>
+                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">
+                    {kpos.current_price != null ? formatCurrency(kpos.current_price) : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {kpos.unrealized_pnl_usd != null ? (
+                      <div className="flex flex-col items-end">
+                        <PnlValue value={kpos.unrealized_pnl_usd} />
+                        <span className="text-[10px] opacity-70"><PnlText value={pnlPct} /></span>
+                      </div>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {kpos.stop_loss_price != null ? (
+                      <span className="text-xs font-mono text-red-400">{formatCurrency(kpos.stop_loss_price)}</span>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {kpos.take_profit_price != null ? (
+                      <span className="text-xs font-mono text-green-400">{formatCurrency(kpos.take_profit_price)}</span>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  {/* Conviction — mean-reversion Z-score strength */}
+                  <td className="px-5 py-3.5 text-center">
+                    {krakenStatus?.signals?.find((s: any) => s.symbol === kpos.symbol) ? (() => {
+                      const sig = krakenStatus.signals.find((s: any) => s.symbol === kpos.symbol);
+                      const strength = Math.min(Math.abs(sig.z_score) / 2, 1);
+                      return (
+                        <span className={cn("text-xs font-mono font-semibold", strength > 0.7 ? "text-cyan-400" : strength > 0.4 ? "text-primary" : "text-amber-400")}>
+                          {Math.round(strength * 100)}%
+                        </span>
+                      );
+                    })() : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  {/* Health — time in trade proxy */}
+                  <td className="px-5 py-3.5 text-center">
+                    {kpos.entry_time ? (() => {
+                      const hoursIn = (Date.now() - new Date(kpos.entry_time).getTime()) / 3_600_000;
+                      const label = hoursIn < 2 ? "Fresh" : hoursIn < 12 ? "Active" : hoursIn < 48 ? "Aging" : "Stale";
+                      const color = hoursIn < 2 ? "#22c55e" : hoursIn < 12 ? "#22d3ee" : hoursIn < 48 ? "#f59e0b" : "#ef4444";
+                      return (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-xs font-mono font-bold" style={{ color }}>{hoursIn.toFixed(0)}h</span>
+                          <span className="text-[9px]" style={{ color }}>{label}</span>
+                        </div>
+                      );
+                    })() : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate">
+                    <span className="text-[10px] text-cyan-400/50 italic">Mean-reversion · auto-managed</span>
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className="text-[9px] text-muted-foreground/40 italic">Bot-managed</span>
+                  </td>
+                </motion.tr>
+              );
+            })}
+
+            {!isLoading && (!data || data.positions.length === 0) && krakenPositions.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-5 py-8 text-center">
                   <div className="flex flex-col items-center gap-2">

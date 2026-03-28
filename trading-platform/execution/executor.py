@@ -1,7 +1,7 @@
 """
 Trade Executor — Converts Allocations → Alpaca Orders
 --------------------------------------------------------
-v4.2 — 10% Hard Cap + Margin Block + Expanded Universe
+v4.3 — Leveraged Risk Satellite + SPY EMA Anchor
 
 Takes the validated RegimeAnalysisOutput (or CryptoAnalysisOutput) from the
 analysis phase and executes each slot:
@@ -9,36 +9,39 @@ analysis phase and executes each slot:
   1. Fetch current account equity + cash balance.
   2. Liquidate positions no longer in today's plan (exits).
   3. For each active slot, compute notional USD from kelly_fraction × equity.
-  4. ── POSITION SIZING CAP (NEW) ──────────────────────────────────────────
+  4. ── POSITION SIZING CAP ────────────────────────────────────────────────
      Hard cap: max notional per position = equity × 10%.
      If LLM requests more, cap at the 10% limit and leave remainder in cash.
      ──────────────────────────────────────────────────────────────────────
-  5. ── MARGIN BLOCK (NEW) ─────────────────────────────────────────────────
+  5. ── MARGIN BLOCK ───────────────────────────────────────────────────────
      Track remaining cash across slot executions.
      If remaining_cash ≤ 0: BLOCK trade (no margin allowed).
      If notional > remaining_cash: cap notional to remaining_cash.
      ──────────────────────────────────────────────────────────────────────
-  6. Skip SGOV slots and slots already held at correct size (within 10%).
-  7. ── RISK OVERLAY (Module 3) ──────────────────────────────────────────
+  6. Skip zero-kelly slots.  SGOV slots with non-zero kelly (injected by
+     the leveraged risk fence sweep) ARE executed to buy SGOV explicitly.
+  7. ── RISK OVERLAY ───────────────────────────────────────────────────────
      IF Z-Score > 2.0 OR RSI(14) > 75 → asset is OVERHEATED:
        • Cut notional by 50%.  Reroute 50% to SGOV.
-       • After fill: place GTC stop-sell at 2% below fill price.
+       • After fill: place ATR ratchet stop (2.0× std / 1.5× for LETFs).
      ──────────────────────────────────────────────────────────────────────
   8. Place market buy orders.
   9. Log every new trade to the SQLite journal for the RAG loop.
   10. Capture intended_price and actual_fill_price for slippage tracking.
-  11. ── HIGH-YIELD VAULT (Module 1) ──────────────────────────────────────
+  11. ── HIGH-YIELD VAULT ────────────────────────────────────────────────
      After all orders complete, run the profit sweep → JEPQ.
      Vault shares are never liquidated by this executor.
      ──────────────────────────────────────────────────────────────────────
 
-Universe (v4.2):
-  Equities:    SPY, QQQ, XLK, XLF, XLV, XLE, IWM  (DAY orders, min $100)
-  Safe Havens: TLT, IEF, GLD, SLV                  (DAY orders, min $100)
-  Commodities: USO, PDBC                            (DAY orders, min $100)
-  Crypto Spot: BTC/USD, ETH/USD                     (GTC orders, min $25)
-  Cash:        SGOV              (never actively bought except reroutes)
-  Vault:       JEPQ              (profit sweep only, LLM cannot sell)
+Universe (v4.3):
+  Equities:       SPY, QQQ, XLK, XLF, XLV, XLE, IWM   (DAY orders, min $100)
+  Safe Havens:    TLT, IEF, GLD, SLV                    (DAY orders, min $100)
+  Commodities:    USO, PDBC                              (DAY orders, min $100)
+  Crypto Spot:    BTC/USD, ETH/USD                       (GTC orders, min $25)
+  Leveraged Risk: TQQQ, SOXL, UPRO  ← NEW               (DAY orders, min $100,
+                  Bull-only, 20% total cap, 1.5× ATR stop)
+  Cash:           SGOV  (zero-kelly slots skipped; non-zero kelly slots bought)
+  Vault:          JEPQ  (profit sweep only, LLM cannot sell)
 """
 
 import time
@@ -49,6 +52,7 @@ from analysis.schemas import (
     RegimeAnalysisOutput, RegimeAllocationSlot,
     CryptoAnalysisOutput, CryptoAllocationSlot,
     is_crypto_pair,
+    LEVERAGED_RISK_TICKERS,
 )
 from analysis.trade_journal import log_trade, update_trade_fill_price
 from execution.broker import (
@@ -73,7 +77,8 @@ VAULT_TICKER        = "JEPQ"
 
 KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD"}
 
-MAX_POSITION_PCT        = 0.10   # 10 % hard cap per position (Step 2)
+MAX_POSITION_PCT    = 0.10   # 10 % hard cap per position
+MAX_LEVERAGED_PCT   = 0.20   # 20 % combined cap for leveraged_risk group
 
 OVERHEATED_Z_THRESHOLD  = 2.0
 OVERHEATED_RSI_THRESHOLD = 75.0
@@ -260,9 +265,59 @@ def _execute_slot(
     symbol = _normalize_symbol(ticker)
     is_crypto = is_crypto_pair(ticker)
 
-    if ticker == CASH_TICKER or slot.kelly_fraction == 0.0:
-        logger.info(f"Slot {slot.slot}: {ticker:10s} → CASH/SKIP (kelly=0)")
-        results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "cash_or_zero_kelly"})
+    # Zero-kelly slots are always skipped (SGOV placeholders from conviction threshold)
+    if slot.kelly_fraction == 0.0:
+        logger.info(f"Slot {slot.slot}: {ticker:10s} → SKIP (zero kelly)")
+        results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "zero_kelly"})
+        return results, remaining_cash
+
+    # ── SGOV with non-zero kelly: Leveraged Fence Sweep ─────────────────────
+    # These slots are injected by the allocator when the leveraged_risk group
+    # exceeds the 20% cap. Buy SGOV directly — no heat/wash-sale checks needed.
+    if ticker == CASH_TICKER:
+        notional_usd = min(equity * slot.kelly_fraction, max(remaining_cash, 0.0))
+        if notional_usd >= MIN_NOTIONAL_USD:
+            logger.info(
+                f"Slot {slot.slot}: {CASH_TICKER:10s} → SGOV SWEEP "
+                f"(leveraged fence excess kelly={slot.kelly_fraction:.1%}, ${notional_usd:,.2f})"
+            )
+            if not dry_run:
+                try:
+                    order = place_order(ticker=CASH_TICKER, notional_usd=notional_usd)
+                    log_trade(
+                        trade_id=order["id"],
+                        ticker=CASH_TICKER,
+                        asset_class="cash",
+                        conviction_score=1.0,
+                        original_thesis=slot.thesis,
+                    )
+                    results["placed"].append({
+                        "slot":         slot.slot,
+                        "ticker":       CASH_TICKER,
+                        "notional_usd": notional_usd,
+                        "order_id":     order["id"],
+                        "reason":       "leveraged_fence_sweep",
+                    })
+                    remaining_cash -= notional_usd
+                except Exception as exc:
+                    logger.warning(f"SGOV fence sweep failed for slot {slot.slot}: {exc}")
+                    results["errors"].append({
+                        "slot": slot.slot, "ticker": CASH_TICKER, "error": str(exc),
+                    })
+            else:
+                results["placed"].append({
+                    "slot":         slot.slot,
+                    "ticker":       CASH_TICKER,
+                    "notional_usd": notional_usd,
+                    "reason":       "leveraged_fence_sweep",
+                    "dry_run":      True,
+                })
+                remaining_cash -= notional_usd
+        else:
+            results["skipped"].append({
+                "slot": slot.slot, "ticker": CASH_TICKER,
+                "reason": f"sgov_sweep_below_min (${notional_usd:.2f})",
+            })
         return results, remaining_cash
 
     notional_usd = equity * slot.kelly_fraction
@@ -482,14 +537,17 @@ def _place_ratchet_stop(
 ) -> None:
     """
     ATR Ratchet Stop — replaces the static 2% stop.
-    Sets an initial stop at fill_price - 2×ATR(14).
+    Leveraged ETFs (TQQQ/SOXL/UPRO) use 1.5×ATR (auto-detected in ratchet_stop module).
+    Standard tickers use 2.0×ATR(14).
     The stop is persisted and can only be ratcheted UP on future cycles.
     Falls back to a 2% static stop if ATR is unavailable.
     """
-    qty = notional_usd / fill_price
+    qty     = notional_usd / fill_price
+    is_letf = ticker in LEVERAGED_RISK_TICKERS
+    mult_label = "1.5×ATR [LETF tighter stop]" if is_letf else "2.0×ATR"
     logger.warning(
         f"⚠ Risk Overlay | Initialising ATR ratchet stop for {ticker}: "
-        f"fill=${fill_price:.4f} qty={qty:.6f}"
+        f"fill=${fill_price:.4f} qty={qty:.6f} | multiplier={mult_label}"
     )
     try:
         stop_result = initialise_ratchet_stop(

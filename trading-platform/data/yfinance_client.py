@@ -1,21 +1,28 @@
 """
 Market Data Client — Regime-Switching Architecture
 ----------------------------------------------------
-Fetches OHLCV price data, trailing returns, moving averages, and momentum
-signals for the FIXED asset universe.
+v4.3 — Leveraged Risk Satellite + SPY 20-Day EMA Anchor
 
-Fixed universe (16 instruments + SGOV):
-  Equities (Sectors): SPY, QQQ, XLK, XLF, XLV, XLE, IWM
-  Safe Havens/Bonds : TLT, IEF, GLD, SLV
-  Commodities       : USO, PDBC
-  Crypto Spot       : BTC/USD, ETH/USD
-  Cash Equiv        : SGOV
+Fetches OHLCV price data, trailing returns, moving averages, momentum signals,
+and EMA-20 for the FIXED asset universe.
+
+Fixed universe (19 instruments + SGOV):
+  Equities (Sectors)  : SPY, QQQ, XLK, XLF, XLV, XLE, IWM
+  Safe Havens/Bonds   : TLT, IEF, GLD, SLV
+  Commodities         : USO, PDBC
+  Crypto Spot         : BTC/USD, ETH/USD
+  Leveraged Risk      : TQQQ, SOXL, UPRO  ← NEW
+  Cash Equiv          : SGOV
+
+SPY 20-Day EMA Anchor (NEW):
+  - Computed for SPY on every full fetch cycle.
+  - Exposed as top-level keys: spy_ema_20d, spy_price, spy_above_ema_20.
+  - The allocator uses spy_above_ema_20 as a hard gate for Bull regime confirmation.
 
 Momentum signals (key for regime-switching allocation):
   - 3-month MA (≈63 trading days): price vs MA → "positive" / "negative"
   - 6-month MA (≈126 trading days): price vs MA → "positive" / "negative"
-  - These are passed to the LLM to enforce trend-following (Bull/Bear)
-    or mean-reversion (Sideways) rules.
+  - EMA-20: computed for all tickers; critical for SPY regime anchor.
 
 PRIMARY: Alpaca Market Data API (free tier, no IP restrictions)
 FALLBACK: graceful error handling with partial data allowed
@@ -43,22 +50,24 @@ ALPACA_DATA_BASE_URL = "https://data.alpaca.markets/v2"
 ALPACA_CRYPTO_BASE_URL = "https://data.alpaca.markets/v1beta3/crypto/us"
 
 UNIVERSE: dict[str, list[str]] = {
-    "equity":      ["SPY", "QQQ", "XLK", "XLF", "XLV", "XLE", "IWM"],
-    "safe_haven":  ["TLT", "IEF", "GLD", "SLV"],
-    "commodity":   ["USO", "PDBC"],
-    "crypto_spot": ["BTC/USD", "ETH/USD"],
-    "cash":        ["SGOV"],
+    "equity":         ["SPY", "QQQ", "XLK", "XLF", "XLV", "XLE", "IWM"],
+    "safe_haven":     ["TLT", "IEF", "GLD", "SLV"],
+    "commodity":      ["USO", "PDBC"],
+    "crypto_spot":    ["BTC/USD", "ETH/USD"],
+    "leveraged_risk": ["TQQQ", "SOXL", "UPRO"],
+    "cash":           ["SGOV"],
 }
 
-ETF_CATEGORIES = ["equity", "safe_haven", "commodity", "cash"]
+ETF_CATEGORIES = ["equity", "safe_haven", "commodity", "leveraged_risk", "cash"]
 ALL_TICKERS: list[str] = [t for tickers in UNIVERSE.values() for t in tickers]
 ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
 CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]
 
-MA_3MO_BARS  = 63
-MA_6MO_BARS  = 126
-MA_200D_BARS = 200
-RSI_PERIOD   = 14
+EMA_20_PERIOD   = 20
+MA_3MO_BARS     = 63
+MA_6MO_BARS     = 126
+MA_200D_BARS    = 200
+RSI_PERIOD      = 14
 
 _cached_market_data: dict | None = None
 
@@ -66,6 +75,45 @@ _cached_market_data: dict | None = None
 def get_cached_market_data() -> dict | None:
     """Return the most-recently fetched market data (or None on first boot)."""
     return _cached_market_data
+
+
+def get_spy_ema_anchor() -> dict:
+    """
+    Convenience helper — returns the SPY EMA-20 anchor data from cache.
+
+    Returns a dict with keys:
+        spy_price        : float | None
+        spy_ema_20d      : float | None
+        spy_above_ema_20 : bool | None   (None = insufficient data)
+    """
+    if _cached_market_data is None:
+        return {"spy_price": None, "spy_ema_20d": None, "spy_above_ema_20": None}
+    return {
+        "spy_price":        _cached_market_data.get("spy_price"),
+        "spy_ema_20d":      _cached_market_data.get("spy_ema_20d"),
+        "spy_above_ema_20": _cached_market_data.get("spy_above_ema_20"),
+    }
+
+
+def _compute_ema(closes: list[float], period: int) -> float | None:
+    """
+    Compute Exponential Moving Average (EMA) for *period* using SMA seed.
+
+    Seeded with the SMA of the first *period* closes, then iteratively
+    applies the EMA smoothing factor for the remaining bars.  This is the
+    standard approach used by most charting platforms (TradingView, Bloomberg).
+
+    Returns None if fewer than *period* bars are available.
+    """
+    if len(closes) < period:
+        return None
+    k = 2.0 / (period + 1)
+    # Seed with SMA of first *period* closes
+    ema = sum(closes[:period]) / period
+    # Apply EMA for all subsequent bars
+    for price in closes[period:]:
+        ema = price * k + ema * (1.0 - k)
+    return round(ema, 4)
 
 
 def _compute_rsi(closes: list[float], period: int = RSI_PERIOD) -> float | None:
@@ -141,6 +189,7 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
     else:
         volatility_20d = None
 
+    # ── Moving Averages ─────────────────────────────────────────────────────
     ma_3mo: float | None = None
     ma_6mo: float | None = None
     momentum_3mo: str = "insufficient_data"
@@ -161,6 +210,9 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         std_200  = float(np.std(window_200, ddof=0))
         z_score_200d = round((latest_price - sma_200) / std_200, 3) if std_200 > 0 else 0.0
 
+    # ── EMA-20 (SPY Regime Anchor + general signal) ──────────────────────────
+    ema_20d: float | None = _compute_ema(closes, EMA_20_PERIOD)
+
     rsi_14d: float | None = _compute_rsi(closes)
     if rsi_14d is not None:
         rsi_14d = round(rsi_14d, 2)
@@ -171,25 +223,26 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
     )
 
     return {
-        "ticker":                       ticker,
-        "latest_price":                 latest_price,
-        "latest_date":                  latest_date_str,
-        "return_1d_pct":                ret_1d,
-        "return_5d_pct":                ret_5d,
-        "return_20d_pct":               ret_20d,
-        "return_60d_pct":               ret_60d,
+        "ticker":                        ticker,
+        "latest_price":                  latest_price,
+        "latest_date":                   latest_date_str,
+        "return_1d_pct":                 ret_1d,
+        "return_5d_pct":                 ret_5d,
+        "return_20d_pct":                ret_20d,
+        "return_60d_pct":                ret_60d,
         "annualized_volatility_20d_pct": volatility_20d,
         "volatility_20d_annualised_pct": volatility_20d,
-        "ma_3mo":                       round(ma_3mo, 4) if ma_3mo else None,
-        "ma_6mo":                       round(ma_6mo, 4) if ma_6mo else None,
-        "momentum_3mo":                 momentum_3mo,
-        "momentum_6mo":                 momentum_6mo,
-        "z_score_200d":                 z_score_200d,
-        "rsi_14d":                      rsi_14d,
-        "is_overheated":                is_overheated,
-        "data_points":                  len(closes),
-        "closes":                       closes,
-        "bars":                         bars,
+        "ma_3mo":                        round(ma_3mo, 4) if ma_3mo else None,
+        "ma_6mo":                        round(ma_6mo, 4) if ma_6mo else None,
+        "ema_20d":                       ema_20d,
+        "momentum_3mo":                  momentum_3mo,
+        "momentum_6mo":                  momentum_6mo,
+        "z_score_200d":                  z_score_200d,
+        "rsi_14d":                       rsi_14d,
+        "is_overheated":                 is_overheated,
+        "data_points":                   len(closes),
+        "closes":                        closes,
+        "bars":                          bars,
     }
 
 
@@ -277,7 +330,7 @@ async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> d
 
     logger.info(
         f"Market Data | Fetching {len(tickers_to_fetch)} tickers via Alpaca "
-        f"({'crypto-only' if crypto_only else 'full universe'}) "
+        f"({'crypto-only' if crypto_only else 'full universe incl. LETF'}) "
         f"({start_date} → {end_date})"
     )
 
@@ -301,7 +354,31 @@ async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> d
         f"Market Data | Complete — {fetched}/{len(tickers_to_fetch)} tickers fetched successfully"
     )
 
-    result = {"by_ticker": by_ticker, "by_category": by_category}
+    # ── SPY 20-Day EMA Anchor (top-level cache keys) ─────────────────────────
+    spy_data    = by_ticker.get("SPY", {})
+    spy_price   = spy_data.get("latest_price")
+    spy_ema_20d = spy_data.get("ema_20d")
+
+    if spy_price is not None and spy_ema_20d is not None:
+        spy_above_ema_20: bool | None = spy_price > spy_ema_20d
+        direction = "ABOVE" if spy_above_ema_20 else "BELOW"
+        logger.info(
+            f"SPY EMA Anchor | price=${spy_price:.2f} | EMA-20=${spy_ema_20d:.2f} | "
+            f"SPY is {direction} its 20-Day EMA — "
+            f"{'Bull regime permitted' if spy_above_ema_20 else 'Bull regime BLOCKED'}"
+        )
+    else:
+        spy_above_ema_20 = None
+        logger.warning("SPY EMA Anchor | Insufficient SPY data to compute EMA-20 — anchor unavailable")
+
+    result = {
+        "by_ticker":        by_ticker,
+        "by_category":      by_category,
+        # SPY Regime Anchor (consumed by allocator)
+        "spy_price":        spy_price,
+        "spy_ema_20d":      spy_ema_20d,
+        "spy_above_ema_20": spy_above_ema_20,
+    }
 
     global _cached_market_data
     _cached_market_data = result

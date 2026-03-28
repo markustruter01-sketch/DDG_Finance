@@ -250,9 +250,10 @@ async def system_health_architecture() -> dict:
         nodes["platform_core"] = {"label": "Main Platform Core", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)}
 
     # ── 2. Alpaca API ───────────────────────────────────────────────────
+    _acct_cache: dict | None = None
     try:
         t0 = _time.time()
-        acct = get_account()
+        _acct_cache = get_account()  # returns dict: {"equity": float, "cash": float, ...}
         latency = round((_time.time() - t0) * 1000)
         if latency > 1000:
             level = "red"
@@ -265,14 +266,14 @@ async def system_health_architecture() -> dict:
             "level": level,
             "latency_ms": latency,
             "data_age_s": 0,
-            "detail": f"Equity ${float(acct.equity):,.2f}",
+            "detail": f"Equity ${_acct_cache['equity']:,.2f}",
         }
     except Exception as exc:
         nodes["alpaca_api"] = {"label": "Alpaca API (US Equities)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     # ── 3. Kraken Bot ───────────────────────────────────────────────────
     try:
-        sf = _Path("kraken-bot/status.json")
+        sf = _Path("../kraken-bot/status.json")  # server cwd = trading-platform/
         if sf.exists():
             kst = _json.loads(sf.read_text())
             last_upd = kst.get("last_updated")
@@ -326,11 +327,12 @@ async def system_health_architecture() -> dict:
 
     # ── 5. Equity Manager ───────────────────────────────────────────────
     try:
-        positions = get_positions()
-        acct_obj = get_account()
-        equity_val = float(acct_obj.equity)
-        total_market = sum(float(p.market_value) for p in positions) if positions else 0
-        max_single = max((float(p.market_value) for p in positions), default=0)
+        positions = get_positions()  # list of dicts
+        # reuse cached account from the Alpaca check to avoid a second round-trip
+        acct_dict = _acct_cache if _acct_cache is not None else get_account()
+        equity_val = float(acct_dict["equity"])
+        total_market = sum(float(p["market_value"]) for p in positions) if positions else 0
+        max_single = max((float(p["market_value"]) for p in positions), default=0)
         max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
         if max_pct > 15.0:
             level = "red"

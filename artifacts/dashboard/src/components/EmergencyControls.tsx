@@ -116,18 +116,16 @@ function ConfirmModal({
   );
 }
 
-// ── Emergency Controls Panel ──────────────────────────────────────────────────
+// ── Shared action logic ───────────────────────────────────────────────────────
 
-export function EmergencyControls() {
+function useEmergencyActions() {
   const { toast } = useToast();
-
   const liquidate = useLiquidateAll();
   const restart   = useSystemRestart();
 
   const [showLiquidateModal, setShowLiquidateModal] = useState(false);
   const [showRestartModal,   setShowRestartModal]   = useState(false);
 
-  // ── Liquidate handler ─────────────────────────────────────────────────────
   function handleLiquidateConfirm() {
     liquidate.mutate(undefined, {
       onSuccess: (data) => {
@@ -135,52 +133,57 @@ export function EmergencyControls() {
         const closedCount = data.positions_closed?.length ?? 0;
         toast({
           title: "Emergency Liquidation Complete",
-          description: `${closedCount} position(s) closed. Kill switch is active — use Kill/Reset to resume trading.`,
+          description: `${closedCount} position(s) closed. Kill switch active — use Kill/Reset to resume.`,
           variant: "destructive",
         });
       },
       onError: (err) => {
         setShowLiquidateModal(false);
-        toast({
-          title: "Liquidation Failed",
-          description: err.message || "An unexpected error occurred.",
-          variant: "destructive",
-        });
+        toast({ title: "Liquidation Failed", description: err.message || "Unexpected error.", variant: "destructive" });
       },
     });
   }
 
-  // ── Restart handler ───────────────────────────────────────────────────────
   function handleRestartConfirm() {
     restart.mutate(undefined, {
       onSuccess: () => {
         setShowRestartModal(false);
-        toast({
-          title: "System Restarted",
-          description: "Error state cleared and cache refreshed. System will resume on the next cycle.",
-        });
+        toast({ title: "System Restarted", description: "Error state cleared. Resuming on next cycle." });
       },
       onError: (err) => {
         setShowRestartModal(false);
-        toast({
-          title: "Restart Failed",
-          description: err.message || "An unexpected error occurred.",
-          variant: "destructive",
-        });
+        toast({ title: "Restart Failed", description: err.message || "Unexpected error.", variant: "destructive" });
       },
     });
   }
 
+  return {
+    liquidate, restart,
+    showLiquidateModal, setShowLiquidateModal,
+    showRestartModal, setShowRestartModal,
+    handleLiquidateConfirm, handleRestartConfirm,
+  };
+}
+
+
+// ── Compact Header Buttons (always visible in sticky nav) ─────────────────────
+
+export function EmergencyHeaderButtons() {
+  const {
+    liquidate, restart,
+    showLiquidateModal, setShowLiquidateModal,
+    showRestartModal,   setShowRestartModal,
+    handleLiquidateConfirm, handleRestartConfirm,
+  } = useEmergencyActions();
+
   return (
     <>
-      {/* Modals */}
       <ConfirmModal
         open={showLiquidateModal}
         title="Confirm Emergency Liquidation"
         description={
-          "This will immediately market-close ALL open positions (except the JEPQ vault) and " +
-          "trip the kill switch to halt further trading. This action cannot be undone without " +
-          "a manual Kill Switch Reset."
+          "Market-close ALL open positions (JEPQ protected) and trip the kill switch. " +
+          "Cannot be undone without a Kill Switch Reset."
         }
         confirmLabel="Liquidate All Positions"
         confirmClass="bg-red-600 hover:bg-red-500 text-white border border-red-500"
@@ -189,14 +192,99 @@ export function EmergencyControls() {
         onCancel={() => setShowLiquidateModal(false)}
         isLoading={liquidate.isPending}
       />
+      <ConfirmModal
+        open={showRestartModal}
+        title="Restart Trading System?"
+        description="Clear error state and invalidate data caches. Kill switch state is preserved."
+        confirmLabel="Restart System"
+        confirmClass="bg-amber-600 hover:bg-amber-500 text-white border border-amber-500"
+        onConfirm={handleRestartConfirm}
+        onCancel={() => setShowRestartModal(false)}
+        isLoading={restart.isPending}
+      />
 
+      <div className="flex items-center gap-1.5">
+        {/* Liquidate All — compact header version */}
+        <button
+          onClick={() => setShowLiquidateModal(true)}
+          disabled={liquidate.isPending}
+          title="Emergency Liquidate All"
+          className={cn(
+            "group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md",
+            "text-[10px] font-bold tracking-widest uppercase",
+            "bg-red-950/60 border border-red-800/60 text-red-400",
+            "hover:bg-red-600 hover:border-red-500 hover:text-white",
+            "transition-all duration-150",
+            "disabled:opacity-40 disabled:cursor-not-allowed",
+            "ring-0 hover:ring-1 hover:ring-red-400/40"
+          )}
+        >
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-70" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+          </span>
+          <ShieldOff className="h-3 w-3" />
+          Liquidate All
+        </button>
+
+        {/* Restart System — compact header version */}
+        <button
+          onClick={() => setShowRestartModal(true)}
+          disabled={restart.isPending}
+          title="Restart System"
+          className={cn(
+            "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md",
+            "text-[10px] font-semibold tracking-wide",
+            "bg-zinc-800/80 border border-zinc-700/60 text-zinc-400",
+            "hover:bg-amber-900/40 hover:border-amber-600/50 hover:text-amber-300",
+            "transition-all duration-150",
+            "disabled:opacity-40 disabled:cursor-not-allowed"
+          )}
+        >
+          {restart.isPending
+            ? <RefreshCw className="h-3 w-3 animate-spin" />
+            : <Zap className="h-3 w-3" />
+          }
+          Restart
+        </button>
+      </div>
+    </>
+  );
+}
+
+
+// ── Emergency Controls Panel ──────────────────────────────────────────────────
+
+export function EmergencyControls() {
+  const {
+    liquidate, restart,
+    showLiquidateModal, setShowLiquidateModal,
+    showRestartModal,   setShowRestartModal,
+    handleLiquidateConfirm, handleRestartConfirm,
+  } = useEmergencyActions();
+
+  return (
+    <>
+      <ConfirmModal
+        open={showLiquidateModal}
+        title="Confirm Emergency Liquidation"
+        description={
+          "Market-close ALL open positions (JEPQ vault protected) and trip the kill switch. " +
+          "Cannot be undone without a Kill Switch Reset."
+        }
+        confirmLabel="Liquidate All Positions"
+        confirmClass="bg-red-600 hover:bg-red-500 text-white border border-red-500"
+        requiresTyped="LIQUIDATE"
+        onConfirm={handleLiquidateConfirm}
+        onCancel={() => setShowLiquidateModal(false)}
+        isLoading={liquidate.isPending}
+      />
       <ConfirmModal
         open={showRestartModal}
         title="Restart Trading System?"
         description={
-          "This will clear the current error state and invalidate all data caches, " +
-          "forcing a fresh data fetch on the next cycle. The kill switch state is preserved. " +
-          "Use this to recover from a DEGRADED status without a full reboot."
+          "Clear error state and invalidate all data caches so the next cycle fetches fresh data. " +
+          "Kill switch state is preserved."
         }
         confirmLabel="Restart System"
         confirmClass="bg-amber-600 hover:bg-amber-500 text-white border border-amber-500"

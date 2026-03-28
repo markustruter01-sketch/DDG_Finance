@@ -18,7 +18,7 @@ import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
-import { EmergencyControls } from "@/components/EmergencyControls";
+import { EmergencyControls, EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
@@ -170,36 +170,43 @@ function Header() {
           <h1 className="text-lg font-bold tracking-tight text-white">Quant Terminal</h1>
         </div>
 
-        <div className="flex items-center gap-5">
-          <div className="flex flex-col items-end">
-            <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Market</span>
-            {status?.market.is_open ? (
-              <span className="flex items-center gap-1 text-xs font-semibold text-green-400">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-400" />
-                </span>
-                OPEN
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <span className="inline-flex rounded-full h-1.5 w-1.5 bg-slate-600" />
-                CLOSED
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-3">
+          {/* Emergency action buttons — always visible */}
+          <EmergencyHeaderButtons />
+
           <div className="h-6 w-px bg-white/8" />
-          <div className="flex flex-col items-end">
-            <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Kill Switch</span>
-            {status?.kill_switch.tripped ? (
-              <span className="text-xs font-semibold text-red-400 flex items-center gap-1">
-                <ShieldAlert className="h-3 w-3" /> TRIPPED
-              </span>
-            ) : (
-              <span className="text-xs font-medium text-green-400 flex items-center gap-1">
-                <ShieldAlert className="h-3 w-3 opacity-60" /> ARMED
-              </span>
-            )}
+
+          <div className="flex items-center gap-5">
+            <div className="flex flex-col items-end">
+              <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Market</span>
+              {status?.market.is_open ? (
+                <span className="flex items-center gap-1 text-xs font-semibold text-green-400">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-400" />
+                  </span>
+                  OPEN
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                  <span className="inline-flex rounded-full h-1.5 w-1.5 bg-slate-600" />
+                  CLOSED
+                </span>
+              )}
+            </div>
+            <div className="h-6 w-px bg-white/8" />
+            <div className="flex flex-col items-end">
+              <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Kill Switch</span>
+              {status?.kill_switch.tripped ? (
+                <span className="text-xs font-semibold text-red-400 flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3" /> TRIPPED
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-green-400 flex items-center gap-1">
+                  <ShieldAlert className="h-3 w-3 opacity-60" /> ARMED
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -611,6 +611,7 @@ export interface LiquidateResult {
   errors: Array<{ symbol: string; error: string }>;
   kill_switch: string;
   market_open: boolean;
+  pending_liquidation: boolean;
   fill_note: string;
   message: string;
 }

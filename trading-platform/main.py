@@ -36,13 +36,15 @@ from loguru import logger
 from config.settings import settings
 from core.pipeline import get_last_run, run_pipeline, run_postmortem, reset_error_state
 from core.scheduler import get_job_status, get_scheduler, is_auto_trading_enabled, set_auto_trading
-from execution.broker import get_account, get_positions, get_open_orders, close_position, cancel_all_orders
+from execution.broker import get_account, get_positions, get_open_orders, close_position, close_position_gtc, cancel_all_orders
 from execution.kill_switch import (
     get_state as ks_get_state,
     is_tripped,
     reset as ks_reset,
     check as ks_check,
     manual_trip as ks_manual_trip,
+    set_pending_liquidation,
+    is_pending_liquidation,
 )
 from analysis.trade_journal import (
     get_journal_summary,
@@ -604,7 +606,7 @@ async def emergency_liquidate() -> dict:
             held.append({"symbol": sym, "reason": "vault_protected"})
             continue
         try:
-            order = close_position(sym)
+            order = close_position(sym)   # DAY market order — fills immediately if market open
             closed.append({"symbol": sym, "order_id": order.get("id")})
             # Remove any ratchet stop record
             try:
@@ -620,35 +622,47 @@ async def emergency_liquidate() -> dict:
     ks_manual_trip(reason="emergency_liquidate_api")
 
     market_open = is_market_open()
+    next_open   = get_next_open() or "next market session"
 
-    if market_open:
+    # 4. Set pending_liquidation if market is closed or any close order failed.
+    #    The pipeline will force-close remaining positions at the next market open.
+    needs_deferred = (not market_open) or bool(errors)
+    set_pending_liquidation(needs_deferred)
+
+    if market_open and not errors:
         fill_note = (
             f"Market is OPEN — {len(closed)} market order(s) submitted and will fill shortly."
         )
-    else:
-        from core.market_clock import get_next_open
-        next_open = get_next_open() or "next market session"
+    elif market_open and errors:
         fill_note = (
-            f"Market is CLOSED — {len(closed)} close order(s) queued with Alpaca. "
-            f"Orders will fill automatically at next market open ({next_open} ET). "
-            f"Positions will disappear from the dashboard at that time."
+            f"Market is OPEN — {len(closed)} order(s) submitted; {len(errors)} failed. "
+            f"Failed positions will be force-closed at next pipeline run. "
+            f"Pending liquidation flag is SET."
+        )
+    else:
+        fill_note = (
+            f"Market is CLOSED — close orders cannot execute until market opens. "
+            f"A pending liquidation flag is now SET: positions will be force-closed "
+            f"automatically the moment the market opens ({next_open} ET). "
+            f"No action required — the system handles this automatically."
         )
 
     logger.critical(
         f"Emergency | Liquidation complete: "
         f"closed={len(closed)}, held={len(held)}, errors={len(errors)} | "
-        f"market_open={market_open} — kill switch tripped"
+        f"market_open={market_open} | pending_liquidation={needs_deferred} — kill switch tripped"
     )
 
     return {
-        "status": "liquidated",
-        "positions_closed": closed,
-        "positions_held": held,
-        "errors": errors,
-        "kill_switch": "tripped",
-        "market_open": market_open,
-        "fill_note": fill_note,
-        "message": fill_note + " Use POST /kill/reset to resume trading after positions clear.",
+        "status":            "liquidated",
+        "positions_closed":  closed,
+        "positions_held":    held,
+        "errors":            errors,
+        "kill_switch":       "tripped",
+        "market_open":       market_open,
+        "pending_liquidation": needs_deferred,
+        "fill_note":         fill_note,
+        "message":           fill_note + " Use POST /kill/reset to resume trading after positions clear.",
     }
 
 

@@ -246,8 +246,12 @@ def _get_latest_crypto_price(ticker: str) -> float | None:
 
 @alpaca_retry
 def close_position(ticker: str) -> dict:
+    """Close a position using Alpaca's close_position shortcut (TIF=day, equities only).
+    NOTE: day orders submitted when the market is closed are auto-cancelled by Alpaca.
+    Use close_position_gtc() for emergency / after-hours closures.
+    """
     symbol = ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
-    logger.warning(f"Broker | Closing position: {ticker} (symbol={symbol})")
+    logger.warning(f"Broker | Closing position (day): {ticker} (symbol={symbol})")
     try:
         order: Order = _client().close_position(symbol)
         return {
@@ -259,6 +263,49 @@ def close_position(ticker: str) -> dict:
     except Exception as exc:
         logger.error(f"Broker | Failed to close {ticker}: {exc}")
         raise RuntimeError(f"Failed to close position {ticker}: {exc}") from exc
+
+
+@alpaca_retry
+def close_position_gtc(ticker: str) -> dict:
+    """
+    Emergency close: place an explicit GTC market sell order for the full qty.
+
+    Unlike close_position() which uses Alpaca's shortcut (TIF=day and gets
+    auto-cancelled on weekends), this submits a qty-based GTC sell that persists
+    until the market opens and fills it.
+    Crypto positions are already GTC by default; equity positions get forced GTC.
+    """
+    is_crypto = is_crypto_pair(ticker)
+    symbol    = ticker.replace("/", "") if is_crypto else ticker
+
+    # Fetch current qty from Alpaca so we can close the exact fractional amount
+    position: Position = _client().get_open_position(symbol)
+    qty = abs(float(position.qty))
+
+    tif = TimeInForce.GTC  # persists over weekends / after-hours
+    req = MarketOrderRequest(
+        symbol=symbol,
+        qty=round(qty, 8),
+        side=OrderSide.SELL,
+        time_in_force=tif,
+    )
+
+    logger.warning(
+        f"Broker | Emergency close GTC: {ticker} qty={qty:.6f} TIF={tif.value}"
+    )
+    try:
+        order: Order = _client().submit_order(req)
+        return {
+            "id":     str(order.id),
+            "symbol": order.symbol,
+            "side":   order.side.value,
+            "qty":    qty,
+            "status": order.status.value,
+            "tif":    tif.value,
+        }
+    except Exception as exc:
+        logger.error(f"Broker | GTC close failed for {ticker}: {exc}")
+        raise RuntimeError(f"GTC close failed for {ticker}: {exc}") from exc
 
 
 @alpaca_retry

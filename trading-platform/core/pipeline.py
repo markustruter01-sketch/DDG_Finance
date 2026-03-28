@@ -31,7 +31,13 @@ from analysis.analyzer import run_analysis_cycle
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
-from execution.kill_switch import check as ks_check, is_tripped, reset as ks_reset
+from execution.kill_switch import (
+    check as ks_check,
+    is_tripped,
+    reset as ks_reset,
+    is_pending_liquidation,
+    set_pending_liquidation,
+)
 from core.market_clock import is_market_open
 
 
@@ -105,6 +111,37 @@ async def _run_pipeline_inner(
         "status":      "ok",
         "errors":      [],
     }
+
+    # ── Deferred emergency liquidation (set when market was closed at click-time) ──
+    if is_pending_liquidation() and is_market_open():
+        logger.critical(
+            "Pipeline | PENDING LIQUIDATION detected — market is now open. "
+            "Force-closing all non-vault positions before normal cycle."
+        )
+        try:
+            from execution.broker import get_positions, close_position
+            from config.settings import settings as _s
+            VAULT = set(getattr(_s, "vault_tickers_protected", ["JEPQ"]))
+            _positions = get_positions()
+            _n_closed = 0
+            for _pos in _positions:
+                _sym = _pos["symbol"]
+                if _sym in VAULT:
+                    logger.info(f"Pipeline | Deferred liquidation: skipping vault {_sym}")
+                    continue
+                try:
+                    close_position(_sym)
+                    _n_closed += 1
+                    logger.critical(f"Pipeline | Deferred liquidation: closed {_sym}")
+                except Exception as _exc:
+                    logger.error(f"Pipeline | Deferred liquidation: failed {_sym}: {_exc}")
+            set_pending_liquidation(False)
+            logger.critical(
+                f"Pipeline | Deferred liquidation complete — {_n_closed} position(s) closed, "
+                f"flag cleared."
+            )
+        except Exception as exc:
+            logger.error(f"Pipeline | Deferred liquidation failed: {exc}")
 
     if is_tripped():
         msg = "Kill switch is tripped — pipeline aborted for today"

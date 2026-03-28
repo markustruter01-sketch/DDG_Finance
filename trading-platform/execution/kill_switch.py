@@ -20,9 +20,10 @@ from config.settings import settings
 from execution.broker import close_all_positions, get_account
 
 _state: dict = {
-    "opening_equity": None,
-    "tripped": False,
-    "drawdown_pct": 0.0,
+    "opening_equity":      None,
+    "tripped":             False,
+    "drawdown_pct":        0.0,
+    "pending_liquidation": False,   # set when emergency close couldn't execute (market closed)
 }
 
 
@@ -121,11 +122,29 @@ def manual_trip(reason: str = "manual_emergency") -> None:
         pass
 
 
+def set_pending_liquidation(value: bool = True) -> None:
+    """
+    Mark that an emergency liquidation is pending (orders failed because market was
+    closed). The pipeline checks this at each run and force-closes all non-vault
+    positions as the very first action when the market is open.
+    """
+    _state["pending_liquidation"] = value
+    logger.critical(
+        f"Kill switch | pending_liquidation={'SET' if value else 'CLEARED'}"
+    )
+
+
+def is_pending_liquidation() -> bool:
+    """Return True if a deferred emergency close is waiting to execute."""
+    return bool(_state["pending_liquidation"])
+
+
 def get_state() -> dict:
     """Return current kill switch state for logging/API exposure."""
     return {
-        "tripped":         _state["tripped"],
-        "drawdown_pct":    round(_state["drawdown_pct"] * 100, 3),
-        "opening_equity":  _state["opening_equity"],
-        "threshold_pct":   settings.kill_switch_drawdown_pct * 100,
+        "tripped":              _state["tripped"],
+        "drawdown_pct":         round(_state["drawdown_pct"] * 100, 3),
+        "opening_equity":       _state["opening_equity"],
+        "threshold_pct":        settings.kill_switch_drawdown_pct * 100,
+        "pending_liquidation":  _state["pending_liquidation"],
     }

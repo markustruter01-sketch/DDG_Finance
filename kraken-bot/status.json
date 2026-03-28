@@ -1,9 +1,10 @@
 {
   "bot_name": "Davy Jones' Portfolio",
   "paper_trading": true,
+  "bot_paused": false,
   "status": "running",
-  "last_updated": "2026-03-28T21:13:18.408651+00:00",
-  "cycle_count": 4,
+  "last_updated": "2026-03-28T21:19:53.151617+00:00",
+  "cycle_count": 1,
   "total_equity_usd": 100000.0,
   "deployed_usd": 0,
   "deployed_pct": 0.0,

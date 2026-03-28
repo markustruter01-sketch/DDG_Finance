@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Loader2, Power, FileText, X } from "lucide-react";
-import { useLatestAllocation, usePlatformStatus, useToggleAutoTrading } from "@/hooks/use-trading";
+import { Loader2, Power, FileText, X, Anchor } from "lucide-react";
+import {
+  useLatestAllocation, usePlatformStatus, useToggleAutoTrading,
+  useKrakenAutoTrading, useToggleKrakenAutoTrading,
+} from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { WhitepaperContent } from "@/components/WhitepaperContent";
@@ -40,13 +43,17 @@ function ConvictionRing({ value }: { value: number }) {
   );
 }
 
+type ConfirmKind = "alpaca-enable" | "alpaca-disable" | "kraken-pause" | "kraken-resume" | null;
+
 export function TradeWorkflowBar() {
   const { toast } = useToast();
   const { data: allocation } = useLatestAllocation();
   const { data: status } = usePlatformStatus();
   const toggleAutoTrading = useToggleAutoTrading();
+  const { data: krakenControl } = useKrakenAutoTrading();
+  const toggleKrakenBot = useToggleKrakenAutoTrading();
 
-  const [autoTradingConfirm, setAutoTradingConfirm] = useState<"enable" | "disable" | null>(null);
+  const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
   const [whitepaperOpen, setWhitepaperOpen] = useState(false);
 
   const closeWhitepaper = useCallback(() => setWhitepaperOpen(false), []);
@@ -59,6 +66,7 @@ export function TradeWorkflowBar() {
   }, [whitepaperOpen, closeWhitepaper]);
 
   const autoTradingEnabled = status?.auto_trading ?? false;
+  const krakenPaused = krakenControl?.bot_paused ?? false;
 
   const avgConviction = useMemo(() => {
     if (!allocation?.allocation) return null;
@@ -67,66 +75,101 @@ export function TradeWorkflowBar() {
     return nonCash.reduce((sum: number, s: any) => sum + s.conviction_score, 0) / nonCash.length;
   }, [allocation]);
 
-  const handleAutoTradingToggle = async () => {
-    const enabling = autoTradingConfirm === "enable";
-    setAutoTradingConfirm(null);
+  const handleConfirm = async () => {
+    const kind = confirmKind;
+    setConfirmKind(null);
     try {
-      await toggleAutoTrading.mutateAsync(enabling);
-      toast({
-        title: enabling ? "Auto Trading Enabled" : "Auto Trading Disabled",
-        description: enabling
-          ? "The autonomous system is now active — runs every 15 min during market hours."
-          : "All scheduled trading paused. Manual operations still available.",
-      });
+      if (kind === "alpaca-enable" || kind === "alpaca-disable") {
+        const enabling = kind === "alpaca-enable";
+        await toggleAutoTrading.mutateAsync(enabling);
+        toast({
+          title: enabling ? "Auto Trading Enabled" : "Auto Trading Disabled",
+          description: enabling
+            ? "The autonomous system is now active — runs every 15 min during market hours."
+            : "All scheduled trading paused. Manual operations still available.",
+        });
+      } else if (kind === "kraken-pause" || kind === "kraken-resume") {
+        const pausing = kind === "kraken-pause";
+        await toggleKrakenBot.mutateAsync(pausing);
+        toast({
+          title: pausing ? "Kraken Bot Paused" : "Kraken Bot Resumed",
+          description: pausing
+            ? "Davy Jones' Portfolio will skip signal processing each cycle. The workflow stays running."
+            : "Davy Jones' Portfolio is active and will evaluate signals each cycle.",
+        });
+      }
     } catch (err: any) {
       toast({ variant: "destructive", title: "Toggle Failed", description: err.message });
     }
   };
 
+  const confirmMeta: Record<NonNullable<ConfirmKind>, { title: string; body: string; btnLabel: string; danger: boolean }> = {
+    "alpaca-enable": {
+      title: "Enable Auto Trading?",
+      body: "This activates autonomous trading — the AI will run analysis and execute real paper trades every 15 minutes during market hours, plus 24/7 crypto cycles when the market is closed.",
+      btnLabel: "Yes, Enable",
+      danger: false,
+    },
+    "alpaca-disable": {
+      title: "Disable Auto Trading?",
+      body: "This pauses all automated trading. No scheduled analysis or executions will run until you re-enable it. Kill switch and manual controls remain active.",
+      btnLabel: "Yes, Disable",
+      danger: true,
+    },
+    "kraken-pause": {
+      title: "Pause Davy Jones' Portfolio?",
+      body: "The Kraken bot workflow stays running but will skip signal processing each cycle. Open positions remain open and are still tracked. Resume at any time.",
+      btnLabel: "Yes, Pause",
+      danger: true,
+    },
+    "kraken-resume": {
+      title: "Resume Davy Jones' Portfolio?",
+      body: "The Kraken bot will resume evaluating mean-reversion + RSI signals every cycle. It will trade according to its configured strategy.",
+      btnLabel: "Yes, Resume",
+      danger: false,
+    },
+  };
+
+  const meta = confirmKind ? confirmMeta[confirmKind] : null;
+
   return (
     <div className="w-full">
       {/* Confirm overlay */}
-      {autoTradingConfirm && (
+      {confirmKind && meta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-white mb-2">
-              {autoTradingConfirm === "enable" ? "Enable Auto Trading?" : "Disable Auto Trading?"}
-            </h3>
-            <p className="text-muted-foreground text-sm mb-6">
-              {autoTradingConfirm === "enable"
-                ? "This activates autonomous trading — the AI will run analysis and execute real paper trades every 15 minutes during market hours, plus 24/7 crypto cycles when the market is closed."
-                : "This pauses all automated trading. No scheduled analysis or executions will run until you re-enable it. Kill switch and manual controls remain active."}
-            </p>
+            <h3 className="text-lg font-bold text-white mb-2">{meta.title}</h3>
+            <p className="text-muted-foreground text-sm mb-6">{meta.body}</p>
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setAutoTradingConfirm(null)}
+                onClick={() => setConfirmKind(null)}
                 className="px-4 py-2 rounded-lg text-sm text-muted-foreground hover:text-white border border-white/10 hover:border-white/20 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleAutoTradingToggle}
+                onClick={handleConfirm}
                 className={cn(
                   "px-6 py-2 rounded-lg text-sm font-semibold text-white transition-colors shadow-lg",
-                  autoTradingConfirm === "enable"
-                    ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30"
-                    : "bg-red-600 hover:bg-red-500 shadow-red-900/30"
+                  meta.danger
+                    ? "bg-red-600 hover:bg-red-500 shadow-red-900/30"
+                    : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30"
                 )}
               >
-                {autoTradingConfirm === "enable" ? "Yes, Enable" : "Yes, Disable"}
+                {meta.btnLabel}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-4">
-        {/* AUTO TRADING TOGGLE — the primary action */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* ── Alpaca Auto Trading toggle ── */}
         <button
-          onClick={() => setAutoTradingConfirm(autoTradingEnabled ? "disable" : "enable")}
+          onClick={() => setConfirmKind(autoTradingEnabled ? "alpaca-disable" : "alpaca-enable")}
           disabled={toggleAutoTrading.isPending}
           className={cn(
-            "relative group flex items-center gap-2.5 px-6 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] overflow-hidden border",
+            "relative group flex items-center gap-2.5 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] overflow-hidden border",
             autoTradingEnabled
               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50"
               : "bg-slate-800/60 border-white/10 text-muted-foreground hover:text-white hover:border-white/20"
@@ -137,18 +180,40 @@ export function TradeWorkflowBar() {
           ) : (
             <Power className={cn("h-4 w-4", autoTradingEnabled && "drop-shadow-[0_0_6px_rgba(16,185,129,0.6)]")} />
           )}
-          <span>{autoTradingEnabled ? "Auto Trading ON" : "Auto Trading OFF"}</span>
+          <span>{autoTradingEnabled ? "Alpaca ON" : "Alpaca OFF"}</span>
           {autoTradingEnabled && (
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           )}
         </button>
 
+        {/* ── Kraken Bot toggle ── */}
+        <button
+          onClick={() => setConfirmKind(krakenPaused ? "kraken-resume" : "kraken-pause")}
+          disabled={toggleKrakenBot.isPending}
+          className={cn(
+            "relative group flex items-center gap-2.5 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] overflow-hidden border",
+            !krakenPaused
+              ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/50"
+              : "bg-slate-800/60 border-white/10 text-muted-foreground hover:text-white hover:border-white/20"
+          )}
+        >
+          {toggleKrakenBot.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Anchor className={cn("h-4 w-4", !krakenPaused && "drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]")} />
+          )}
+          <span>{krakenPaused ? "Kraken OFF" : "Kraken ON"}</span>
+          {!krakenPaused && (
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
+          )}
+        </button>
+
         <button
           onClick={() => setWhitepaperOpen(true)}
-          className="flex items-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] border bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/50"
+          className="flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] border bg-indigo-500/10 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/50"
         >
           <FileText className="h-4 w-4" />
-          <span>Platform Whitepaper</span>
+          <span>Whitepaper</span>
         </button>
 
         {whitepaperOpen && (

@@ -650,7 +650,8 @@ export interface KrakenPosition {
 export interface KrakenStatus {
   bot_name: string;
   paper_trading: boolean;
-  status: "running" | "paused_circuit_breaker" | "not_started" | "error";
+  bot_paused: boolean;
+  status: "running" | "paused_circuit_breaker" | "paused_dashboard" | "not_started" | "error";
   last_updated: string | null;
   cycle_count: number;
   total_equity_usd: number;
@@ -729,6 +730,31 @@ export function useKrakenPerformance() {
     queryFn: async () => (await api.get("/kraken/performance")).data,
     refetchInterval: 60_000,
     retry: false,
+  });
+}
+
+// ── Kraken Bot Auto-Trading Toggle ────────────────────────────────────────────
+// Reads/writes kraken-bot/control.json via FastAPI.
+// The bot checks this file at the start of each cycle.
+
+export function useKrakenAutoTrading() {
+  return useQuery<{ bot_paused: boolean }>({
+    queryKey: ["/kraken/auto-trading"],
+    queryFn: async () => (await api.get("/kraken/auto-trading")).data,
+    refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
+export function useToggleKrakenAutoTrading() {
+  const qc = useQueryClient();
+  return useMutation<{ bot_paused: boolean }, Error, boolean>({
+    mutationFn: async (bot_paused: boolean) =>
+      (await api.post("/kraken/auto-trading", { bot_paused })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/kraken/auto-trading"] });
+      qc.invalidateQueries({ queryKey: ["/kraken/status"] });
+    },
   });
 }
 

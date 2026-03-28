@@ -453,6 +453,7 @@ function CombinedPortfolioSummary() {
 
   // ── Kraken values ─────────────────────────────────────────────────────────────
   const krakenReady       = !!kraken && kraken.status !== "not_started";
+  const krakenBotPaused   = kraken?.bot_paused ?? false;
   const krakenEquity      = kraken?.total_equity_usd ?? 0;
   const krakenDeployed    = kraken?.deployed_pct ?? 0;
   const krakenPaper       = kraken?.paper_trading ?? true;
@@ -634,9 +635,14 @@ function CombinedPortfolioSummary() {
               </span>
             )}
             <div className="h-px flex-1 bg-cyan-500/10" />
+            {krakenBotPaused && (
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-500/20 uppercase tracking-wide">
+                Paused
+              </span>
+            )}
             <span className={cn(
               "text-[9px] font-mono",
-              krakenReady ? "text-cyan-400/50" : "text-muted-foreground/30"
+              krakenReady && !krakenBotPaused ? "text-cyan-400/50" : "text-muted-foreground/30"
             )}>
               {krakenReady ? `cycle #${kraken?.cycle_count ?? 0}` : "not running"}
             </span>

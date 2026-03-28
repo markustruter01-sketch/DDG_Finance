@@ -159,3 +159,4 @@ CB_PAUSE_HOURS    = 2
 
 STATUS_FILE           = "kraken-bot/status.json"
 PAPER_PORTFOLIO_FILE  = "kraken-bot/paper_portfolio.json"
+CONTROL_FILE          = "kraken-bot/control.json"

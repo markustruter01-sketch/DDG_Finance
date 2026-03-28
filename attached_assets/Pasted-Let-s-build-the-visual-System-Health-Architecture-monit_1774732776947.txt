@@ -1,0 +1,32 @@
+Let's build the visual System Health Architecture monitor and integrate it into our front-end. I need a new Python/JavaScript module (using D3.js or similar) that creates an interactive, live diagram, and I need the HTML/UI code to access it.
+
+1. UI Placement & Pop-Up Behavior:
+Locate the existing 'platform white paper' button in our front-end template. Create a new button directly next to it labeled 'System Health Architecture'. When clicked, this must open a large, dark-themed modal overlay (pop-up) in the center of the screen, without navigating away from the current page.
+
+2. Architecture Nodes to Map:
+Inside the modal, render a diagram with nodes for:
+
+Main Platform Core
+
+Equity Manager (The 15% Enforcer)
+
+Alpaca API (Legacy Stocks)
+
+Kraken API (24/7 Crypto Bot)
+
+Data Pipeline (fetch_data.py)
+
+3. Visuals & Mathematical Thresholds:
+Connect these nodes with 'glowing wire' animations showing data flow. The wires and nodes must change color based on these strict mathematical rules:
+
+Green (Optimal): API latency is < 200ms AND data feeds are < 60 seconds old AND Equity Allocation is <= 15.00%.
+
+Yellow (Degraded - Warning): API latency is between 200ms and 1000ms OR data feeds are between 60 seconds and 300 seconds old OR we are receiving API Rate Limit warnings.
+
+Red Blink (Critical Failure): API latency is > 1000ms (or timeout) OR HTTP status codes are 4xx/5xx OR data is > 300 seconds old OR the Equity Manager detects an attempted allocation > 15.00%.
+
+4. Testing Control Panel:
+Include a small control panel inside the modal. Since we are in development, build sliders and toggle buttons that let me manually simulate these mathematical metrics (e.g., a slider to manually push API latency to 500ms, or a button to simulate a 404 error) so I can watch the diagram react in real-time.
+
+Execution Instructions:
+Please write the complete HTML, CSS, JavaScript, and Python routing required for this. Tell me exactly which files to create or update, and where to paste each block of code, as I am overseeing the architecture and not writing the syntax.

@@ -1285,6 +1285,39 @@ async def kraken_status() -> dict:
 # which is written only by kraken-bot/main.py.
 # The Alpaca trading system never touches this file.
 
+@router.get("/kraken/auto-trading", tags=["Kraken Bot"])
+async def kraken_auto_trading_status() -> dict:
+    """Return the current Kraken bot pause state from control.json."""
+    import json as _json
+    from pathlib import Path as _Path
+    ctrl = _Path("kraken-bot/control.json")
+    if not ctrl.exists():
+        return {"bot_paused": False}
+    try:
+        return {"bot_paused": bool(_json.loads(ctrl.read_text()).get("bot_paused", False))}
+    except Exception:
+        return {"bot_paused": False}
+
+
+class KrakenControlRequest(BaseModel):
+    bot_paused: bool
+
+
+@router.post("/kraken/auto-trading", tags=["Kraken Bot"])
+async def kraken_toggle_auto_trading(request: KrakenControlRequest) -> dict:
+    """
+    Pause or resume the Kraken bot by writing control.json.
+    The bot reads this file at the start of each cycle.
+    The workflow keeps running — only signal processing is paused.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    ctrl = _Path("kraken-bot/control.json")
+    ctrl.write_text(_json.dumps({"bot_paused": request.bot_paused}, indent=2))
+    logger.info(f"Kraken bot {'PAUSED' if request.bot_paused else 'RESUMED'} via dashboard toggle")
+    return {"bot_paused": request.bot_paused, "message": "Kraken bot paused" if request.bot_paused else "Kraken bot resumed"}
+
+
 @router.get("/kraken/performance", tags=["Kraken Bot"])
 async def kraken_performance() -> dict:
     """

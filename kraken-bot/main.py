@@ -61,6 +61,7 @@ from config import (
     CB_WINDOW_MINUTES,
     CB_PAUSE_HOURS,
     STATUS_FILE,
+    CONTROL_FILE,
 )
 
 # Import our trading logic functions (identical in both paper and live mode)
@@ -146,6 +147,21 @@ latest_prices: dict[str, float] = {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# CONTROL FILE — pause/resume the bot from the dashboard
+# ══════════════════════════════════════════════════════════════════════════════
+
+def is_bot_paused() -> bool:
+    """Return True if the dashboard has set bot_paused=true in control.json."""
+    import json as _json, pathlib as _pl
+    ctrl = _pl.Path(CONTROL_FILE)
+    if not ctrl.exists():
+        return False
+    try:
+        return bool(_json.loads(ctrl.read_text()).get("bot_paused", False))
+    except Exception:
+        return False
+
+
 # STATUS FILE WRITER
 # After every cycle, we write a JSON snapshot of the bot's current state.
 # The FastAPI server reads this file to power the dashboard card.
@@ -179,10 +195,12 @@ def write_status(error: str | None = None) -> None:
     # Paper-mode extra fields for the dashboard
     paper_summary = get_paper_portfolio_summary() if PAPER_TRADING else None
 
+    paused = is_bot_paused()
     state = {
         "bot_name":         "Davy Jones' Portfolio",
         "paper_trading":    PAPER_TRADING,       # ← dashboard reads this for the PAPER badge
-        "status":           "paused_circuit_breaker" if cb_active else ("running" if not error else "error"),
+        "bot_paused":       paused,              # ← dashboard toggle writes control.json
+        "status":           "paused_dashboard" if paused else ("paused_circuit_breaker" if cb_active else ("running" if not error else "error")),
         "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
         "cycle_count":      cycle_count,
         "total_equity_usd": round(total_equity, 2),
@@ -380,6 +398,12 @@ def run_cycle() -> None:
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
 
     cycle_count += 1
+
+    # ── Pause check — dashboard can pause the bot without stopping the workflow ─
+    if is_bot_paused():
+        logger.info("Cycle | Bot is PAUSED by dashboard — skipping signal processing")
+        write_status()
+        return
 
     # ── Step 1: Refresh equity if it's been more than 60 minutes ─────────────
     if time.time() - last_equity_refresh >= EQUITY_REFRESH_INTERVAL:

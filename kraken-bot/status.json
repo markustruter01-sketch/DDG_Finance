@@ -3,8 +3,8 @@
   "paper_trading": true,
   "bot_paused": false,
   "status": "running",
-  "last_updated": "2026-03-28T22:02:47.782744+00:00",
-  "cycle_count": 1,
+  "last_updated": "2026-03-28T22:03:50.372044+00:00",
+  "cycle_count": 2,
   "total_equity_usd": 99922.0,
   "deployed_usd": 30000.0,
   "deployed_pct": 37.5,
@@ -16,10 +16,10 @@
       "side": "long",
       "qty": 362.187613,
       "entry_price": 82.83,
-      "current_price": 82.58,
+      "current_price": 82.63,
       "size_usd": 30000.0,
-      "unrealized_pnl_usd": -90.55,
-      "unrealized_pnl_pct": -0.3018,
+      "unrealized_pnl_usd": -72.44,
+      "unrealized_pnl_pct": -0.2415,
       "stop_loss_price": 81.1734,
       "take_profit_price": 78.6885,
       "entry_time": "2026-03-28T21:43:41.546057+00:00",
@@ -43,31 +43,31 @@
   "signals": [
     {
       "symbol": "BTC/USD",
-      "rsi": 47.0,
-      "z_score": 0.142,
-      "price": 66589.4,
+      "rsi": 47.8,
+      "z_score": 0.252,
+      "price": 66620.7,
       "signal_type": "watching",
       "has_position": false
     },
     {
       "symbol": "ETH/USD",
-      "rsi": 47.0,
-      "z_score": -0.041,
-      "price": 2007.18,
+      "rsi": 48.5,
+      "z_score": 0.127,
+      "price": 2009.44,
       "signal_type": "watching",
       "has_position": false
     },
     {
       "symbol": "SOL/USD",
-      "rsi": 39.9,
-      "z_score": -1.332,
-      "price": 82.58,
+      "rsi": 40.4,
+      "z_score": -1.214,
+      "price": 82.63,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": -0.3,
+      "pnl_pct": -0.24,
       "side": "long"
     }
   ],
-  "thinking_text": "\u2693 LONG SOL -0.30% \u00b7 Z=-1.33",
+  "thinking_text": "\u2693 LONG SOL -0.24% \u00b7 Z=-1.21",
   "error": null
 }

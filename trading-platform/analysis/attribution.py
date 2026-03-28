@@ -24,10 +24,13 @@ def compute_attribution() -> dict[str, Any]:
     if not trades:
         return {
             "total_trades": 0,
+            "closed_trades": 0,
             "regime_attribution": {},
             "asset_class_attribution": {},
-            "timing_quality": {},
-            "overall": {"total_pnl_pct": 0, "avg_pnl_pct": 0, "win_rate": 0},
+            "conviction_attribution": {},
+            "timing_quality": {"trades_with_fill_data": 0, "avg_slippage_pct": None, "max_slippage_pct": None, "worst_fills": []},
+            "stop_quality": {"stop_triggered_count": 0, "stop_avg_pnl_pct": None, "avg_loss_when_stopped": None},
+            "overall": {"total_pnl_pct": 0, "avg_pnl_pct": 0, "win_rate": 0, "wins": 0, "losses": 0},
         }
 
     closed_trades = [t for t in trades if t.get("status", "").startswith("Closed")]
@@ -38,8 +41,10 @@ def compute_attribution() -> dict[str, Any]:
             "closed_trades": 0,
             "regime_attribution": {},
             "asset_class_attribution": {},
-            "timing_quality": {},
-            "overall": {"total_pnl_pct": 0, "avg_pnl_pct": 0, "win_rate": 0},
+            "conviction_attribution": {},
+            "timing_quality": {"trades_with_fill_data": 0, "avg_slippage_pct": None, "max_slippage_pct": None, "worst_fills": []},
+            "stop_quality": {"stop_triggered_count": 0, "stop_avg_pnl_pct": None, "avg_loss_when_stopped": None},
+            "overall": {"total_pnl_pct": 0, "avg_pnl_pct": 0, "win_rate": 0, "wins": 0, "losses": 0},
         }
 
     regime_buckets: dict[str, list[float]] = {}

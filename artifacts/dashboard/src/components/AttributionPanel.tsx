@@ -21,7 +21,8 @@ function WinRateBar({ rate, count }: { rate: number; count: number }) {
   );
 }
 
-function BucketTable({ title, buckets }: { title: string; buckets: Record<string, { count: number; total_pnl_pct: number; avg_pnl_pct: number; win_rate: number }> }) {
+function BucketTable({ title, buckets }: { title: string; buckets: Record<string, { count: number; total_pnl_pct: number; avg_pnl_pct: number; win_rate: number }> | null | undefined }) {
+  if (!buckets) return null;
   const entries = Object.entries(buckets).sort((a, b) => b[1].total_pnl_pct - a[1].total_pnl_pct);
   if (!entries.length) return null;
 
@@ -70,7 +71,7 @@ export function AttributionPanel() {
       <CardContent className="p-5 space-y-5">
         {isLoading ? (
           <div className="text-xs text-muted-foreground italic">Loading attribution...</div>
-        ) : !data || data.closed_trades === 0 ? (
+        ) : !data || !data.closed_trades ? (
           <div className="text-xs text-muted-foreground italic">No closed trades for attribution analysis</div>
         ) : (
           <>

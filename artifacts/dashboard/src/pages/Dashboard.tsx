@@ -2031,9 +2031,11 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 };
 
 function PerformanceSection() {
+  const isMobile = useIsMobile();
   const { data: history } = usePerformanceHistory();
   const { data: summary } = usePerformanceSummary();
 
+  const chartHeight = isMobile ? 140 : 180;
   const hasData = history && history.count > 0;
 
   const chartData = useMemo(() => {
@@ -2125,7 +2127,7 @@ function PerformanceSection() {
             {/* Equity Curve */}
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Equity Curve</div>
-              <ResponsiveContainer width="100%" height={180}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
                 <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
@@ -2154,7 +2156,7 @@ function PerformanceSection() {
             {/* Daily Win Rate */}
             <div>
               <div className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wide">Daily Win Rate (%)</div>
-              <ResponsiveContainer width="100%" height={180}>
+              <ResponsiveContainer width="100%" height={chartHeight}>
                 <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />

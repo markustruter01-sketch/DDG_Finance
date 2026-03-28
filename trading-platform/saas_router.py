@@ -9,16 +9,17 @@ live under /trading-api in main.py. They share the same FastAPI process
 (and therefore the same trading logic engine) but have fully separate
 route namespaces and, eventually, separate authentication middleware.
 
-Route map (current — Stage 1 skeleton):
-  GET  /saas-api/health          — Liveness probe
-  GET  /saas-api/config          — Returns public runtime config (DEV_MODE flag, version)
+Route map (Stage 2):
+  GET  /saas-api/health             — Liveness probe
+  GET  /saas-api/config             — Public runtime config (DEV_MODE flag, version)
+  POST /saas-api/dev-mode/toggle    — Flip DEV_MODE at runtime (dev convenience only)
 
 Future stages will add:
-  POST /saas-api/auth/signup     — User registration
-  POST /saas-api/auth/login      — User login / session
-  GET  /saas-api/insights        — Factual Insight Cards (RSI math, probability data)
-  POST /saas-api/trade/execute   — 1-click trade execution (Stage 5)
-  GET/POST /saas-api/settings/keys — User API key management
+  POST /saas-api/auth/signup        — User registration
+  POST /saas-api/auth/login         — User login / session
+  GET  /saas-api/insights           — Factual Insight Cards (RSI math, probability data)
+  POST /saas-api/trade/execute      — 1-click trade execution (Stage 5)
+  GET/POST /saas-api/settings/keys  — User API key management
 """
 
 from __future__ import annotations
@@ -62,6 +63,29 @@ class SaasConfigResponse(BaseModel):
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+@saas_router.post("/dev-mode/toggle", response_model=SaasConfigResponse)
+async def toggle_dev_mode() -> dict:
+    """
+    Toggle DEV_MODE at runtime.
+
+    Intended for developer use only — allows switching between 'auth bypassed'
+    and 'auth required' states without restarting the server.
+
+    NOTE: This mutates module-level state. In a multi-worker production deploy
+    the toggle only affects the worker that handles the request. This is fine
+    since DEV_MODE should always be False in production (set at startup).
+    """
+    global DEV_MODE
+    DEV_MODE = not DEV_MODE
+    return {
+        "version":             SAAS_VERSION,
+        "dev_mode":            DEV_MODE,
+        "auth_required":       not DEV_MODE,
+        "supported_exchanges": ["kraken", "alpaca"],
+        "risk_model":          "15_pct_equity_per_signal",
+    }
+
 
 @saas_router.get("/health", response_model=SaasHealthResponse)
 async def saas_health() -> dict:

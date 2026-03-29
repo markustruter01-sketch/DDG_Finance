@@ -1710,7 +1710,7 @@ Current open positions:
     try:
         loop = asyncio.get_event_loop()
         commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
-        _groq_budget.consume(tokens_used)
+        _groq_budget.consume(tokens_used, call_type="commentary")
         if not force:
             _groq_budget.record_commentary_call("alpaca")
         from datetime import datetime, timezone
@@ -1895,6 +1895,36 @@ async def seed_learning_from_snapshot() -> dict:
     """
     from analysis.learning_snapshot import seed_from_snapshot
     return seed_from_snapshot()
+
+
+@router.get("/admin/token-usage", tags=["Admin"])
+async def get_token_usage() -> dict:
+    """
+    Per-call-type Groq token usage breakdown for today.
+
+    Returns:
+      - tokens_used_today: total tokens consumed since midnight UTC
+      - tokens_remaining: tokens left in the daily budget
+      - pct_used: % of budget consumed
+      - by_call_type: tokens broken down by regime / crypto / commentary / unknown
+      - cache_stats: LLM response cache hit/miss rates and live entries
+    """
+    from analysis.groq_budget import budget as _gb
+    from analysis.llm_response_cache import llm_cache as _lc
+    breakdown = _gb.token_usage_breakdown()
+    breakdown["cache_stats"] = _lc.stats()
+    return breakdown
+
+
+@router.post("/admin/llm-cache/invalidate", tags=["Admin"])
+async def invalidate_llm_cache() -> dict:
+    """
+    Manually clear the LLM response cache (forces a fresh Groq call on the next cycle).
+    Useful after major market events or when you want to guarantee fresh analysis.
+    """
+    from analysis.llm_response_cache import llm_cache as _lc
+    _lc.invalidate()
+    return {"status": "cleared", "message": "LLM response cache invalidated — next cycle will call Groq API"}
 
 
 @router.get("/correlation", tags=["Analytics"])
@@ -2342,7 +2372,7 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
     try:
         loop = asyncio.get_event_loop()
         commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
-        _groq_budget.consume(tokens_used)
+        _groq_budget.consume(tokens_used, call_type="commentary")
         if not force:
             _groq_budget.record_commentary_call("kraken")
         from datetime import datetime, timezone

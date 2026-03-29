@@ -25,7 +25,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
-- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence)
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence), **input_sanitizer** (strips news descriptions + deduplicates headlines before LLM injection), **hardcoded_exits** (per-asset-class SL/TP table applied post-parse), **llm_response_cache** (MD5-keyed 90-min response cache, prevents redundant Groq calls when signals unchanged)
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
@@ -86,6 +86,8 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `GET /system/health-architecture` — Real-time health metrics for all subsystems (platform core, Alpaca, Kraken, data pipeline, equity manager)
 - `GET /kraken/auto-trading` — Kraken bot pause state
 - `POST /kraken/auto-trading` — Pause/resume Kraken bot (writes control.json)
+- `GET /admin/token-usage` — Per-call-type Groq token breakdown (regime/crypto/commentary/unknown) + LLM cache hit/miss stats
+- `POST /admin/llm-cache/invalidate` — Clear the LLM response cache (forces fresh Groq call next cycle)
 
 ## Dashboard (React/Vite)
 

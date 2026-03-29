@@ -97,10 +97,9 @@ Your allocation kelly_fractions × equity MUST NOT exceed the Available Buying P
 Account for existing positions — do not re-buy symbols already held within 10% of target size.
 
 === STOP LOSS & TAKE PROFIT ===
-  Equities / Sectors: SL = -5% to -8%, TP = +10% to +20%
-  Safe Havens / Bonds: SL = -4% to -6%, TP = +8% to +15%
-  Commodities: SL = -6% to -10%, TP = +10% to +25%
-  Crypto Spot: SL = -8% to -15%, TP = +15% to +40%
+Use placeholder values only — the execution engine applies calibrated asset-class defaults:
+  stop_loss_pct:   always output -0.07
+  take_profit_pct: always output 0.15
 
 === REQUIRED OUTPUT FORMAT ===
 Output ONLY valid JSON. Do NOT include any explanation outside the JSON.
@@ -115,8 +114,8 @@ Output ONLY valid JSON. Do NOT include any explanation outside the JSON.
       "conviction_score": <0.0–1.0>,
       "kelly_fraction": <0.0–1.0>,
       "thesis": "<1–2 sentence rationale including momentum signal reference>",
-      "stop_loss_pct": <negative float, e.g. -0.07 for 7%>,
-      "take_profit_pct": <positive float, e.g. 0.15 for 15%>
+      "stop_loss_pct": -0.07,
+      "take_profit_pct": 0.15
     }
   ]
 }
@@ -152,8 +151,9 @@ If a crypto pair has negative momentum, skip it and preserve capital in SGOV.
 - kelly_fraction sum (excluding SGOV) must not exceed 1.0.
 
 === STOP LOSS & TAKE PROFIT ===
-  Crypto Spot: SL = -8% to -15%, TP = +15% to +40%
-  Crypto is highly volatile — use tighter stops during low-volume off-hours.
+Use placeholder values only — the execution engine applies calibrated defaults:
+  stop_loss_pct:   always output -0.07
+  take_profit_pct: always output 0.15
 
 === CAPITAL CONSTRAINTS ===
 Buying Power and currently held symbols are in the user prompt. Do not exceed buying power.
@@ -169,8 +169,8 @@ Buying Power and currently held symbols are in the user prompt. Do not exceed bu
       "conviction_score": <0.0–1.0>,
       "kelly_fraction": <0.0–1.0>,
       "thesis": "<1–2 sentence rationale>",
-      "stop_loss_pct": <negative float>,
-      "take_profit_pct": <positive float>
+      "stop_loss_pct": -0.07,
+      "take_profit_pct": 0.15
     }
   ]
 }

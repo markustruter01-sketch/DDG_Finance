@@ -12,6 +12,7 @@ from loguru import logger
 
 from config.settings import settings
 from analysis.groq_budget import budget as _budget
+from analysis.input_sanitizer import sanitize_news_payload
 
 MODEL = "llama-3.3-70b-versatile"
 
@@ -30,9 +31,10 @@ def call_groq(
     user_prompt: str,
     temperature: float = 0.2,
     max_tokens: int = 4096,
+    call_type: str = "unknown",
 ) -> str:
     client = _get_client()
-    logger.info(f"Groq | Sending request to {MODEL} (temp={temperature})")
+    logger.info(f"Groq | Sending request to {MODEL} (temp={temperature}, type={call_type})")
 
     try:
         response = client.chat.completions.create(
@@ -48,12 +50,12 @@ def call_groq(
         content = response.choices[0].message.content
         usage = response.usage
         logger.info(
-            f"Groq | Response received — "
+            f"Groq | Response received [{call_type}] — "
             f"prompt_tokens={usage.prompt_tokens} "
             f"completion_tokens={usage.completion_tokens} "
             f"total={usage.total_tokens}"
         )
-        _budget.consume(usage.total_tokens)
+        _budget.consume(usage.total_tokens, call_type=call_type)
         return content
 
     except Exception as exc:
@@ -147,8 +149,9 @@ def build_user_prompt(
         lines.append("   → The execution engine will automatically cut any overheated allocation by 50% as a hard guard.")
         lines.append("")
 
+    clean_headlines = sanitize_news_payload(news_headlines, cap=15)
     lines.append("=== RECENT NEWS HEADLINES ===")
-    for headline in news_headlines[:15]:
+    for headline in clean_headlines:
         lines.append(f"  • {headline}")
     lines.append("")
 

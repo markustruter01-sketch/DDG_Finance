@@ -409,6 +409,10 @@ def process_regime_llm_output(raw_json: str) -> RegimeAnalysisOutput:
     # Step 6: Normalise so non-SGOV total ≤ 1.0
     allocations = normalise_kelly_fractions(allocations)
 
+    # Step 7: Apply hardcoded per-asset-class SL/TP (overrides LLM placeholder values)
+    from analysis.hardcoded_exits import apply_hardcoded_exits
+    allocations = apply_hardcoded_exits(allocations)
+
     data["allocations"] = allocations
     data["regime"] = regime
 
@@ -453,6 +457,10 @@ def process_crypto_llm_output(raw_json: str) -> CryptoAnalysisOutput:
     allocations = _enforce_conviction_threshold(allocations)
     allocations = _apply_volatility_adjusted_weight(allocations)
     allocations = normalise_kelly_fractions(allocations)
+
+    # Apply hardcoded per-asset-class SL/TP (overrides LLM placeholder values)
+    from analysis.hardcoded_exits import apply_hardcoded_exits
+    allocations = apply_hardcoded_exits(allocations)
 
     data["allocations"] = allocations
 

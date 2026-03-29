@@ -39,6 +39,8 @@ class GroqBudget:
         self._crypto_calls: int = 0
         self._last_regime_call_at: float = 0.0
         self._commentary_calls: dict[str, int] = {}
+        # Per-call-type token tracking: {"regime": 0, "crypto": 0, "commentary": 0, ...}
+        self._tokens_by_type: dict[str, int] = {}
         # Track which endpoints have already received a budget-exhausted warning
         # today — prevents log spam under repeated polling.
         self._budget_warned: set[str] = set()
@@ -56,6 +58,7 @@ class GroqBudget:
             self._regime_calls = 0
             self._crypto_calls = 0
             self._commentary_calls = {}
+            self._tokens_by_type = {}
             self._last_regime_call_at = 0.0
             self._budget_warned = set()  # clear one-shot warning state on day roll
             logger.info(
@@ -63,17 +66,20 @@ class GroqBudget:
                 f"{old_day} → {today})"
             )
 
-    def consume(self, tokens: int) -> None:
+    def consume(self, tokens: int, call_type: str = "unknown") -> None:
         with self._lock:
             self._maybe_reset()
             self._tokens_used += tokens
+            self._tokens_by_type[call_type] = (
+                self._tokens_by_type.get(call_type, 0) + tokens
+            )
             remaining = max(0, settings.groq_daily_token_budget - self._tokens_used)
             pct = (
                 self._tokens_used / settings.groq_daily_token_budget * 100
                 if settings.groq_daily_token_budget > 0 else 0.0
             )
             logger.debug(
-                f"Groq budget | +{tokens} tokens consumed — "
+                f"Groq budget | +{tokens} tokens [{call_type}] — "
                 f"used={self._tokens_used}/{settings.groq_daily_token_budget} "
                 f"({pct:.1f}%) remaining={remaining}"
             )
@@ -207,6 +213,38 @@ class GroqBudget:
 
             return True
 
+    def token_usage_breakdown(self) -> dict:
+        """
+        Return per-call-type token breakdown for the admin token-usage endpoint.
+        Includes daily totals broken down by: regime, crypto, commentary, unknown.
+        """
+        with self._lock:
+            self._maybe_reset()
+            used = self._tokens_used
+            total = settings.groq_daily_token_budget
+            remaining = max(0, total - used)
+            pct = round(used / total * 100, 1) if total > 0 else 0.0
+            breakdown = dict(self._tokens_by_type)
+            commentary_total = breakdown.pop("commentary", 0)
+            for ep_key in [k for k in breakdown if k.startswith("commentary/")]:
+                commentary_total += breakdown.pop(ep_key)
+            return {
+                "tokens_used_today":    used,
+                "tokens_remaining":     remaining,
+                "token_budget_total":   total,
+                "pct_used":             pct,
+                "by_call_type":         {
+                    "regime":      breakdown.get("regime", 0),
+                    "crypto":      breakdown.get("crypto", 0),
+                    "commentary":  commentary_total,
+                    "unknown":     breakdown.get("unknown", 0),
+                    **{k: v for k, v in breakdown.items()
+                       if k not in ("regime", "crypto", "unknown")},
+                },
+                "regime_calls_today":   self._regime_calls,
+                "crypto_calls_today":   self._crypto_calls,
+            }
+
     def budget_exhausted(self) -> bool:
         """Return True when the daily token budget is at zero."""
         with self._lock:
@@ -257,6 +295,7 @@ class GroqBudget:
                 or settings.groq_min_regime_interval_minutes <= 0
                 or elapsed >= interval_s
             ) and (used < total)
+            by_type = dict(self._tokens_by_type)
             return {
                 "tokens_used_today":       used,
                 "tokens_remaining":        remaining,
@@ -266,6 +305,12 @@ class GroqBudget:
                 "crypto_calls_today":      self._crypto_calls,
                 "analysis_calls_today":    self._regime_calls + self._crypto_calls,
                 "commentary_calls_today":  dict(self._commentary_calls),
+                "tokens_by_call_type":     {
+                    "regime":     by_type.get("regime", 0),
+                    "crypto":     by_type.get("crypto", 0),
+                    "commentary": by_type.get("commentary", 0),
+                    "unknown":    by_type.get("unknown", 0),
+                },
                 "regime_interval_min":     settings.groq_min_regime_interval_minutes,
                 "commentary_daily_cap":    settings.groq_commentary_daily_cap,
                 "next_regime_eligible_at": self.next_regime_eligible_at_iso(),

@@ -271,6 +271,8 @@ async def run_analysis_cycle(
     else:
         from analysis.groq_budget import budget as _budget
 
+        from analysis.llm_response_cache import llm_cache as _llm_cache
+
         if crypto_only:
             if not _budget.can_call_crypto():
                 cached_crypto = get_crypto_fallback()
@@ -287,7 +289,10 @@ async def run_analysis_cycle(
                     "Groq budget | Crypto call throttled but no cache available — "
                     "proceeding with LLM call to avoid empty allocation"
                 )
-            output = _call_crypto_with_retry(system_prompt, user_prompt)
+            cache_key = _llm_cache.make_key("crypto", market_data, news_data["all_headlines"])
+            output = _call_crypto_with_retry(
+                system_prompt, user_prompt, cache_key=cache_key
+            )
             _budget.record_crypto_call()
         else:
             if not _budget.can_call_regime():
@@ -302,7 +307,10 @@ async def run_analysis_cycle(
                     "Groq budget | Full-regime call throttled but no cache available — "
                     "proceeding with LLM call to avoid empty allocation"
                 )
-            output = _call_regime_with_retry(system_prompt, user_prompt)
+            cache_key = _llm_cache.make_key("regime", market_data, news_data["all_headlines"])
+            output = _call_regime_with_retry(
+                system_prompt, user_prompt, cache_key=cache_key
+            )
             _budget.record_regime_call()
 
     logger.info("=" * 60)
@@ -316,7 +324,23 @@ async def run_analysis_cycle(
 MAX_LLM_RETRIES = 3
 
 
-def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnalysisOutput:
+def _call_regime_with_retry(
+    system_prompt: str,
+    user_prompt: str,
+    cache_key: str | None = None,
+) -> RegimeAnalysisOutput:
+    from analysis.llm_response_cache import llm_cache as _llm_cache
+
+    if cache_key:
+        cached_raw = _llm_cache.get(cache_key)
+        if cached_raw is not None:
+            try:
+                output = process_regime_llm_output(cached_raw)
+                logger.info("LLMResponseCache | Regime output served from cache — Groq call skipped")
+                return output
+            except Exception as _ce:
+                logger.warning(f"LLMResponseCache | Regime cached entry invalid, re-fetching: {_ce}")
+
     last_error: Exception | None = None
     current_user_prompt = user_prompt
 
@@ -328,6 +352,7 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
                 user_prompt=current_user_prompt,
                 temperature=0.2,
                 max_tokens=2048,
+                call_type="regime",
             )
             output = process_regime_llm_output(raw_json)
             if attempt > 1:
@@ -335,6 +360,8 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
             # Persist the successful regime so the pipeline can use it as a fallback
             # if Groq is rate-limited on a future call.
             _save_regime_cache(output)
+            if cache_key:
+                _llm_cache.put(cache_key, raw_json)
             try:
                 from analysis.learning_journal import record_cycle_learnings
                 record_cycle_learnings(output)
@@ -370,6 +397,7 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
                     f"      cash→SGOV\n"
                     f"  - Each position is capped at 10% of equity by the executor. "
                     f"Plan allocations with this in mind: use 10 slots at 10% each to deploy 100%.\n"
+                    f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
                 )
 
     raise RuntimeError(
@@ -377,7 +405,23 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
     )
 
 
-def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnalysisOutput:
+def _call_crypto_with_retry(
+    system_prompt: str,
+    user_prompt: str,
+    cache_key: str | None = None,
+) -> CryptoAnalysisOutput:
+    from analysis.llm_response_cache import llm_cache as _llm_cache
+
+    if cache_key:
+        cached_raw = _llm_cache.get(cache_key)
+        if cached_raw is not None:
+            try:
+                output = process_crypto_llm_output(cached_raw)
+                logger.info("LLMResponseCache | Crypto output served from cache — Groq call skipped")
+                return output
+            except Exception as _ce:
+                logger.warning(f"LLMResponseCache | Crypto cached entry invalid, re-fetching: {_ce}")
+
     last_error: Exception | None = None
     current_user_prompt = user_prompt
 
@@ -389,11 +433,14 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
                 user_prompt=current_user_prompt,
                 temperature=0.2,
                 max_tokens=2048,
+                call_type="crypto",
             )
             output = process_crypto_llm_output(raw_json)
             if attempt > 1:
                 logger.info(f"  LLM self-corrected on attempt {attempt}")
             _save_crypto_cache(output)
+            if cache_key:
+                _llm_cache.put(cache_key, raw_json)
             try:
                 from analysis.learning_journal import record_cycle_learnings
                 record_cycle_learnings(output)
@@ -418,6 +465,7 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
                     f"  - 1 to 2 slots, numbered sequentially from 1\n"
                     f"  - kelly_fraction sum (excluding SGOV) <= 1.0\n"
                     f"  - Only allocate to crypto with POSITIVE momentum. Default SGOV if uncertain.\n"
+                    f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
                 )
 
     raise RuntimeError(

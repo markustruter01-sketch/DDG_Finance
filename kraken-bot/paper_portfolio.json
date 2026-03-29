@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 18141.866171436894,
+  "cash_usd": 28177.909667190957,
   "positions": {
     "BTC/USD": {
       "side": "long",
@@ -51,16 +51,6 @@
       "best_price": 8.27443,
       "entry_fee": 25.6573,
       "order_id": "PAPER-LINKUSD-1774824450"
-    },
-    "DOT/USD": {
-      "side": "long",
-      "entry_price": 1.2361,
-      "size_usd": 9868.21,
-      "size_units": 7983.342771620419,
-      "entry_time": "2026-03-29T22:47:31.429504+00:00",
-      "best_price": 1.2361,
-      "entry_fee": 25.6573,
-      "order_id": "PAPER-DOTUSD-1774824451"
     },
     "ATOM/USD": {
       "side": "long",
@@ -272,6 +262,18 @@
       "fees_usd": 51.7523,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-29T23:21:45.389981+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "DOT/USD",
+      "side": "long",
+      "entry_price": 1.2361,
+      "exit_price": 1.2604,
+      "pnl_pct": 1.97,
+      "pnl_usd": 142.18,
+      "fees_usd": 51.819,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-29T23:49:03.088067+00:00",
       "paper": true
     }
   ]

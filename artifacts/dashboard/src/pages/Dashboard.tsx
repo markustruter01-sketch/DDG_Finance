@@ -6,6 +6,7 @@ import {
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
+  useAuditorPerformance, useTriggerPerformanceAnalysis,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal,
@@ -447,6 +448,266 @@ function KrakenPositionsPanel({
             <div className="px-3 pb-3 space-y-1.5">
               {positions.map((kpos) => (
                 <KrakenPositionCard key={kpos.symbol} kpos={kpos} signals={signals} isPaper={isPaper} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Health score colour map (shared by table + card) ─────────────────────────
+const HEALTH_COLOR_MAP: Record<string, string> = {
+  green: "#22c55e", emerald: "#10b981", amber: "#f59e0b", orange: "#f97316", red: "#ef4444",
+};
+
+// ── AlpacaPositionCard — collapsible row for one Alpaca equity position ────────
+// Mirrors KrakenPositionCard layout so both sections look consistent.
+function AlpacaPositionCard({
+  pos,
+  onThesisClick,
+  onEject,
+  confirmClose,
+  setConfirmClose,
+  isClosing,
+  isRebalancing,
+  closingSymbol,
+  compact = false,
+}: {
+  pos: LivePosition;
+  onThesisClick: (ticker: string, thesis: string | null) => void;
+  onEject: (symbol: string) => void;
+  confirmClose: string | null;
+  setConfirmClose: (s: string | null) => void;
+  isClosing: boolean;
+  isRebalancing: boolean;
+  closingSymbol: string | null;
+  compact?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isUp  = pos.unrealized_pl >= 0;
+  const pnlPct = (pos.unrealized_plpc ?? 0) * 100;
+
+  return (
+    <div
+      onClick={() => setExpanded(v => !v)}
+      className={cn(
+        "rounded-lg border cursor-pointer select-none transition-all duration-200",
+        isUp
+          ? "border-green-500/20 bg-green-950/[0.07] hover:bg-green-950/20"
+          : "border-red-500/15 bg-red-950/[0.07] hover:bg-red-950/20"
+      )}
+    >
+      {/* ── Collapsed header ── */}
+      <div className={cn("flex items-center gap-2 px-3 overflow-hidden", compact ? "py-1.5" : "py-2")}>
+        <span className={cn("w-0.5 h-4 rounded-full shrink-0", isUp ? "bg-green-500/70" : "bg-red-400/60")} />
+        <span className="font-bold font-mono text-white text-[11px] w-12 shrink-0">{pos.symbol}</span>
+        <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full border text-orange-400 border-orange-500/30 bg-orange-500/10 shrink-0">
+          DEGEN
+        </span>
+        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-green-400 border-green-500/30 bg-green-500/10 shrink-0">
+          LONG
+        </span>
+        {/* P&L */}
+        <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
+          {isUp ? "+" : ""}{formatCurrency(pos.unrealized_pl)}
+          <span className="text-[8px] opacity-60 ml-1">({isUp ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+        </span>
+        {/* Conviction */}
+        {pos.conviction_score != null && (
+          <span className={cn(
+            "text-[9px] font-mono shrink-0 hidden sm:inline",
+            pos.conviction_score >= 0.8 ? "text-green-400/60" : pos.conviction_score >= 0.75 ? "text-primary/60" : "text-amber-400/60"
+          )}>
+            {Math.round(pos.conviction_score * 100)}%
+          </span>
+        )}
+        {/* Health label */}
+        {pos.health_score && (() => {
+          const c = HEALTH_COLOR_MAP[pos.health_score.color] || pos.health_score.color;
+          return (
+            <span
+              className="text-[8px] px-1.5 py-0.5 rounded-full border shrink-0 hidden sm:inline"
+              style={{ color: c, borderColor: c + "30", backgroundColor: c + "15" }}
+            >
+              {pos.health_score.label}
+            </span>
+          );
+        })()}
+        {/* Stop loss */}
+        {pos.stop_loss_price != null && (
+          <span className="text-[9px] font-mono text-red-400/55 shrink-0 hidden sm:inline">
+            SL {formatCurrency(pos.stop_loss_price)}
+          </span>
+        )}
+        <span className={cn("text-muted-foreground/30 text-[10px] transition-transform duration-200 shrink-0", expanded && "rotate-180")}>▾</span>
+      </div>
+
+      {/* ── Expanded detail grid ── */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-4 pb-3 pt-2 border-t border-white/[0.04]">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-5 gap-y-2.5">
+                {([
+                  ["Entry",   formatCurrency(pos.avg_entry_price)],
+                  ["Current", formatCurrency(pos.current_price)],
+                  ["Notional", formatCurrency(pos.market_value)],
+                  ["Qty",     pos.qty.toFixed(4)],
+                  pos.stop_loss_price  != null ? ["Stop loss",     formatCurrency(pos.stop_loss_price)]  : null,
+                  pos.take_profit_price != null ? ["Trail trigger", formatCurrency(pos.take_profit_price)] : null,
+                  pos.conviction_score != null
+                    ? ["Conviction", `${Math.round(pos.conviction_score * 100)}%`]
+                    : null,
+                  pos.health_score
+                    ? ["Health", `${pos.health_score.score} · ${pos.health_score.label}`]
+                    : null,
+                ] as ([string, string] | null)[])
+                  .filter((x): x is [string, string] => x !== null)
+                  .map(([label, value]) => (
+                    <div key={label}>
+                      <div className="text-[8px] text-muted-foreground/40 uppercase tracking-wide">{label}</div>
+                      <div className="text-[10px] font-mono text-white/80 font-semibold mt-0.5">{value}</div>
+                    </div>
+                  ))}
+              </div>
+
+              {/* Thesis */}
+              {pos.original_thesis && (
+                <div
+                  className="mt-3 cursor-pointer"
+                  onClick={() => onThesisClick(pos.symbol, pos.original_thesis)}
+                >
+                  <div className="text-[8px] text-muted-foreground/40 uppercase tracking-wide mb-0.5">Thesis</div>
+                  <p className="text-[10px] text-indigo-300/70 line-clamp-2 border-b border-dashed border-indigo-500/20 hover:text-indigo-300 transition-colors leading-snug">
+                    {pos.original_thesis}
+                  </p>
+                </div>
+              )}
+
+              {/* Eject */}
+              <div className="mt-3 flex justify-end">
+                {closingSymbol === pos.symbol ? (
+                  <div className="flex items-center gap-1 text-[10px] text-orange-400/70">
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    <span>Closing…</span>
+                  </div>
+                ) : confirmClose === pos.symbol ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-orange-300/80">Close &amp; re-enter?</span>
+                    <button
+                      onClick={() => onEject(pos.symbol)}
+                      className="text-[9px] font-bold px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/35 transition-colors"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      onClick={() => setConfirmClose(null)}
+                      className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-muted-foreground border border-white/10 hover:bg-slate-700 transition-colors"
+                    >
+                      No
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmClose(pos.symbol)}
+                    disabled={isClosing || isRebalancing}
+                    className={cn(
+                      "flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide px-2.5 py-1.5 rounded-lg border transition-all duration-200",
+                      isClosing || isRebalancing
+                        ? "opacity-40 cursor-not-allowed border-white/10 text-muted-foreground"
+                        : "border-orange-500/20 bg-orange-500/5 text-orange-400/60 hover:bg-orange-500/15 hover:text-orange-400 hover:border-orange-500/40"
+                    )}
+                  >
+                    <LogOut className="h-2.5 w-2.5" />
+                    <span>Eject</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-1 text-[9px] text-green-400/30 italic">AI conviction · managed by Degen Oracle</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── AlpacaPositionsPanel — collapsible section for all Alpaca open positions ───
+function AlpacaPositionsPanel({
+  positions,
+  onThesisClick,
+  onEject,
+  confirmClose,
+  setConfirmClose,
+  isClosing,
+  isRebalancing,
+  closingSymbol,
+}: {
+  positions: LivePosition[];
+  onThesisClick: (ticker: string, thesis: string | null) => void;
+  onEject: (symbol: string) => void;
+  confirmClose: string | null;
+  setConfirmClose: (s: string | null) => void;
+  isClosing: boolean;
+  isRebalancing: boolean;
+  closingSymbol: string | null;
+}) {
+  const [open, setOpen] = useState(true);
+  if (positions.length === 0) return null;
+
+  const totalPnl = positions.reduce((sum, p) => sum + p.unrealized_pl, 0);
+  const isPnlUp  = totalPnl >= 0;
+
+  return (
+    <div className="bg-orange-950/[0.02]">
+      {/* Section header */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-orange-500/[0.04] transition-colors"
+      >
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-orange-400/60">⚡ Degen Oracle</span>
+        <Badge variant="outline" className="text-[8px] px-1 py-0 border-orange-500/20 text-orange-400/50">
+          {positions.length}
+        </Badge>
+        <span className="text-[9px] text-muted-foreground/30 ml-1">equity positions</span>
+        <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", isPnlUp ? "text-green-400" : "text-red-400")}>
+          {isPnlUp ? "+" : ""}{formatCurrency(totalPnl)}
+        </span>
+        <span className={cn("text-muted-foreground/30 text-[10px] transition-transform duration-200 ml-2", open && "rotate-180")}>▾</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 space-y-1.5">
+              {positions.map((pos) => (
+                <AlpacaPositionCard
+                  key={pos.symbol}
+                  pos={pos}
+                  onThesisClick={onThesisClick}
+                  onEject={onEject}
+                  confirmClose={confirmClose}
+                  setConfirmClose={setConfirmClose}
+                  isClosing={isClosing}
+                  isRebalancing={isRebalancing}
+                  closingSymbol={closingSymbol}
+                />
               ))}
             </div>
           </motion.div>
@@ -2914,7 +3175,10 @@ function AuditorInsightsModal({ open, onClose }: { open: boolean; onClose: () =>
 function AuditorAgentSection() {
   const { data: auditorData } = useAuditorReport();
   const { mutate: triggerAudit, isPending: isTriggering } = useTriggerAudit();
+  const { data: perfData, isLoading: isPerfLoading } = useAuditorPerformance();
+  const { mutate: runPerf, isPending: isRunningPerf } = useTriggerPerformanceAnalysis();
   const [showInsights, setShowInsights] = useState(false);
+  const [showPerf, setShowPerf] = useState(false);
 
   const report  = auditorData?.report;
   const overall = report?.overall ?? "never_run";
@@ -2996,6 +3260,137 @@ function AuditorAgentSection() {
             </div>
           </div>
         )}
+
+        {/* ── Performance Analysis ─────────────────────────────────────────── */}
+        <div className="relative mt-4 pt-4 border-t border-white/5">
+          <button
+            onClick={() => setShowPerf(v => !v)}
+            className="w-full flex items-center gap-2 text-left group"
+          >
+            <TrendingUp className="h-3 w-3 text-cyan-400/70" />
+            <span className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground/70 group-hover:text-cyan-400/80 transition-colors">
+              Performance Analysis
+            </span>
+            {perfData?.run_at && (
+              <span className="text-[8px] text-muted-foreground/30 font-mono ml-1">
+                {new Date(perfData.run_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <span className={cn("ml-auto text-muted-foreground/30 text-[10px] transition-transform duration-200", showPerf && "rotate-180")}>▾</span>
+          </button>
+
+          <AnimatePresence>
+            {showPerf && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-3 space-y-3">
+                  {/* Stats grid */}
+                  {(perfData?.alpaca || perfData?.kraken) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {perfData.alpaca && (
+                        <div className="rounded-lg border border-orange-500/15 bg-orange-950/[0.07] p-2.5">
+                          <div className="text-[8px] text-orange-400/50 uppercase font-semibold tracking-wide mb-1.5">⚡ Degen Oracle</div>
+                          <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                            {[
+                              ["Trades", perfData.alpaca.total],
+                              ["Wins",   perfData.alpaca.wins],
+                              ["Losses", perfData.alpaca.losses],
+                              ["Win %",  perfData.alpaca.win_rate != null ? `${(perfData.alpaca.win_rate * 100).toFixed(0)}%` : "—"],
+                              ["Avg P&L", perfData.alpaca.avg_pnl != null ? `${perfData.alpaca.avg_pnl >= 0 ? "+" : ""}${perfData.alpaca.avg_pnl.toFixed(1)}%` : "—", 2],
+                            ].map(([label, value, span]) => (
+                              <div key={String(label)} className={cn(span === 2 ? "col-span-2" : "")}>
+                                <div className="text-[7px] text-muted-foreground/40 uppercase">{label}</div>
+                                <div className={cn("text-[10px] font-mono font-semibold mt-0.5", String(value).startsWith("+") ? "text-green-400" : String(value).startsWith("-") ? "text-red-400" : "text-white/70")}>
+                                  {String(value)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {perfData.kraken && (
+                        <div className="rounded-lg border border-cyan-500/15 bg-cyan-950/[0.07] p-2.5">
+                          <div className="text-[8px] text-cyan-400/50 uppercase font-semibold tracking-wide mb-1.5">🐙 Davy Jones</div>
+                          <div className="grid grid-cols-3 gap-x-3 gap-y-1">
+                            {[
+                              ["Trades", perfData.kraken.total],
+                              ["Wins",   perfData.kraken.wins],
+                              ["Losses", perfData.kraken.losses],
+                              ["Win %",  perfData.kraken.win_rate != null ? `${(perfData.kraken.win_rate * 100).toFixed(0)}%` : "—"],
+                              ["Avg P&L", perfData.kraken.avg_pnl != null ? `${perfData.kraken.avg_pnl >= 0 ? "+" : ""}${perfData.kraken.avg_pnl.toFixed(1)}%` : "—", 2],
+                            ].map(([label, value, span]) => (
+                              <div key={String(label)} className={cn(span === 2 ? "col-span-2" : "")}>
+                                <div className="text-[7px] text-muted-foreground/40 uppercase">{label}</div>
+                                <div className={cn("text-[10px] font-mono font-semibold mt-0.5", String(value).startsWith("+") ? "text-green-400" : String(value).startsWith("-") ? "text-red-400" : "text-white/70")}>
+                                  {String(value)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* LLM narrative */}
+                  {perfData?.narrative ? (
+                    <div className="rounded-lg border border-amber-500/10 bg-amber-950/[0.05] p-3">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Brain className="h-3 w-3 text-amber-400/50" />
+                        <span className="text-[8px] text-amber-400/40 uppercase font-semibold tracking-wide">AI Narrative</span>
+                      </div>
+                      <p className="text-[10px] text-slate-300/80 leading-relaxed">
+                        {perfData.narrative}
+                      </p>
+                    </div>
+                  ) : (
+                    !isPerfLoading && (
+                      <p className="text-[10px] text-muted-foreground/40 italic">
+                        {perfData?.status === "no_data" ? "No trade data found for analysis window." : "No analysis run yet — click below to generate."}
+                      </p>
+                    )
+                  )}
+
+                  {isPerfLoading && (
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50 italic">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      <span>Loading performance data…</span>
+                    </div>
+                  )}
+
+                  {/* Run analysis button */}
+                  <button
+                    onClick={() => runPerf(10)}
+                    disabled={isRunningPerf}
+                    className={cn(
+                      "flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide px-3 py-1.5 rounded-lg border transition-all duration-200",
+                      isRunningPerf
+                        ? "opacity-50 cursor-not-allowed border-white/10 text-muted-foreground"
+                        : "border-cyan-500/20 bg-cyan-500/5 text-cyan-400/60 hover:bg-cyan-500/15 hover:text-cyan-400 hover:border-cyan-500/40"
+                    )}
+                  >
+                    {isRunningPerf ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Analysing…</span>
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="h-3 w-3" />
+                        <span>Run 10-day Analysis</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </>
   );
@@ -3388,32 +3783,38 @@ function LivePositionsSection() {
           </div>
         </CardTitle>
       </CardHeader>
-      {isMobile ? (
-        <div className="p-3 space-y-3">
-          {isLoading && <div className="py-6 text-center text-muted-foreground italic text-xs">Loading positions...</div>}
-          {!isLoading && data?.positions.map((pos) => (
-            <MobilePositionCard
-              key={pos.symbol}
-              pos={pos}
-              onThesisClick={(t, th) => setThesisModal({ ticker: t, thesis: th })}
-              onEject={handleCloseAndReallocate}
-              confirmClose={confirmClose}
-              setConfirmClose={setConfirmClose}
-              isClosing={isClosing}
-              isRebalancing={isRebalancing}
-              closingSymbol={closingSymbol}
-            />
-          ))}
-          {!isLoading && (!data || data.positions.length === 0) && (
-            <div className="flex flex-col items-center gap-2 py-8">
-              <motion.div animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
-                <Target className="h-8 w-8 text-muted-foreground/20" />
-              </motion.div>
-              <p className="text-muted-foreground/50 italic text-xs">No open positions — system is in cash</p>
-            </div>
-          )}
+      {/* ── Loading state ── */}
+      {isLoading && (
+        <div className="py-6 text-center text-muted-foreground italic text-xs px-4">Loading positions...</div>
+      )}
+
+      {/* ── Alpaca / Degen Oracle positions — collapsible card list ── */}
+      {!isLoading && (
+        <AlpacaPositionsPanel
+          positions={data?.positions ?? []}
+          onThesisClick={(t, th) => setThesisModal({ ticker: t, thesis: th })}
+          onEject={handleCloseAndReallocate}
+          confirmClose={confirmClose}
+          setConfirmClose={setConfirmClose}
+          isClosing={isClosing}
+          isRebalancing={isRebalancing}
+          closingSymbol={closingSymbol}
+        />
+      )}
+
+      {/* ── Empty state (both bots have no positions) ── */}
+      {!isLoading && (!data || data.positions.length === 0) && krakenPositions.length === 0 && (
+        <div className="flex flex-col items-center gap-2 py-8 px-4">
+          <motion.div animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
+            <Target className="h-8 w-8 text-muted-foreground/20" />
+          </motion.div>
+          <p className="text-muted-foreground/50 italic text-xs">No open positions — system is in cash</p>
+          <p className="text-[9px] text-muted-foreground/30">Awaiting next analysis cycle</p>
         </div>
-      ) : (
+      )}
+
+      {/* dummy block to keep the structure intact — replaced the old table/mobile split */}
+      {false && (
       <div className="overflow-x-auto">
         <table className="w-full text-sm text-left min-w-[900px]">
           <thead className="text-[10px] uppercase bg-slate-950/60 text-muted-foreground">
@@ -3556,7 +3957,7 @@ function LivePositionsSection() {
                 </motion.tr>
               );
             })}
-            {!isLoading && (!data || data.positions.length === 0) && krakenPositions.length === 0 && (
+            {!isLoading && (!data?.positions?.length) && krakenPositions.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-5 py-8 text-center">
                   <div className="flex flex-col items-center gap-2">
@@ -5330,31 +5731,31 @@ function SystemDegradationSection() {
 
 type Tab = 'overview' | 'kraken' | 'alpaca' | 'more';
 
-function MobileTabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
+function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-5 w-5" /> },
-    { id: 'kraken',   label: 'Kraken',   icon: <Anchor className="h-5 w-5" /> },
-    { id: 'alpaca',   label: 'Alpaca',   icon: <TrendingUp className="h-5 w-5" /> },
-    { id: 'more',     label: 'More',     icon: <MoreHorizontal className="h-5 w-5" /> },
+    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
+    { id: 'kraken',   label: 'Kraken',   icon: <Anchor className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
+    { id: 'alpaca',   label: 'Alpaca',   icon: <TrendingUp className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
+    { id: 'more',     label: 'More',     icon: <MoreHorizontal className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
   ];
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-slate-950/95 backdrop-blur-md border-t border-white/8">
-      <div className="flex items-stretch justify-around h-16 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-md border-t border-white/8">
+      <div className="flex items-stretch justify-around h-16 md:h-11 md:max-w-none md:px-4 max-w-lg mx-auto">
         {tabs.map(({ id, label, icon }) => (
           <button
             key={id}
             onClick={() => onTabChange(id)}
             className={cn(
-              "relative flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-all duration-200",
+              "relative flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 flex-1 md:flex-none md:px-5 py-2 transition-all duration-200",
               activeTab === id
                 ? "text-primary"
                 : "text-muted-foreground/60 hover:text-muted-foreground"
             )}
           >
             {icon}
-            <span className="text-[9px] font-semibold tracking-wide uppercase">{label}</span>
+            <span className="text-[9px] md:text-[10px] font-semibold tracking-wide uppercase">{label}</span>
             {activeTab === id && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-t-full bg-primary" />
+              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-8 md:w-full rounded-t-full bg-primary" />
             )}
           </button>
         ))}
@@ -5362,15 +5763,16 @@ function MobileTabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange:
     </nav>
   );
 }
+const MobileTabBar = TabBar;
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-  // Returns 'hidden' when on mobile and the current tab is NOT in the provided list.
-  // On desktop (isMobile === false) always returns '' so nothing is hidden.
+  // Returns 'hidden' when the current tab is NOT in the provided list.
+  // Now universal — applies on all screen sizes since the tab bar is always visible.
   const mobileHide = (tabs: Tab[]) =>
-    isMobile && !tabs.includes(activeTab) ? 'hidden' : '';
+    !tabs.includes(activeTab) ? 'hidden' : '';
 
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -5385,7 +5787,7 @@ export default function Dashboard() {
       </div>
       <ActivityTicker />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20 md:pb-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20">
 
         {/* ═══ ALWAYS VISIBLE: trading controls bar ═══ */}
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>

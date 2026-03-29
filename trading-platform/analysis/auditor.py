@@ -1274,3 +1274,155 @@ def run_full_audit() -> dict[str, Any]:
 def get_last_audit() -> dict[str, Any]:
     """Return the result of the most recent audit (may be from any earlier run)."""
     return dict(_last_audit)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SECTION 8 ── Performance Narrative Analysis
+# ══════════════════════════════════════════════════════════════════════════════
+# Uses Groq to generate a short, plain-English comparison of both bots'
+# recent performance — suitable for display on the dashboard.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_PERFORMANCE_NARRATIVE_PROMPT = """\
+You are a concise quant performance analyst reviewing two automated trading bots.
+Write a SHORT (3-5 sentence) plain-English narrative comparing their recent performance.
+Be specific about win rates and trends. Sound like a senior analyst giving a verbal briefing —
+direct, no fluff, no markdown, no bullet points. Just natural spoken paragraphs."""
+
+_last_performance_report: dict[str, Any] = {"status": "not_run"}
+
+
+def _load_kraken_recent_trades() -> list[dict]:
+    """Read the Kraken bot's recent_trades list from its status file."""
+    try:
+        status_path = Path(__file__).parent.parent.parent / "kraken-bot" / "status.json"
+        if not status_path.exists():
+            return []
+        with open(status_path) as f:
+            data = json.load(f)
+        return data.get("recent_trades", [])
+    except Exception as exc:
+        logger.warning(f"PerfAnalysis | Could not load Kraken status: {exc}")
+        return []
+
+
+def run_performance_analysis(days: int = 10) -> dict[str, Any]:
+    """
+    Analyse both bots' recent performance and generate a plain-English narrative
+    using Groq. Stores the result in _last_performance_report.
+    """
+    global _last_performance_report
+    run_at = datetime.now(tz=timezone.utc)
+
+    # ── Alpaca / Degen Oracle stats ────────────────────────────────────────
+    try:
+        from analysis.trade_journal import get_all_trades
+        cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=days)).date()
+        all_alpaca = get_all_trades(limit=500)
+        recent_alpaca = [
+            t for t in all_alpaca
+            if t.get("date") and str(t["date"])[:10] >= str(cutoff)
+            and t.get("status") in ("Closed_Win", "Closed_Loss")
+        ]
+        alpaca_total  = len(recent_alpaca)
+        alpaca_wins   = sum(1 for t in recent_alpaca if t.get("status") == "Closed_Win")
+        alpaca_losses = alpaca_total - alpaca_wins
+        alpaca_win_rate = (alpaca_wins / alpaca_total * 100) if alpaca_total > 0 else None
+        alpaca_avg_pnl  = (
+            sum(float(t.get("pnl_percentage") or 0) for t in recent_alpaca) / alpaca_total
+            if alpaca_total > 0 else None
+        )
+    except Exception as exc:
+        logger.warning(f"PerfAnalysis | Alpaca stats error: {exc}")
+        alpaca_total = alpaca_wins = alpaca_losses = 0
+        alpaca_win_rate = alpaca_avg_pnl = None
+
+    # ── Kraken / Davy Jones stats ──────────────────────────────────────────
+    try:
+        kraken_trades = _load_kraken_recent_trades()
+        closed_kraken = [t for t in kraken_trades if t.get("pnl_pct") is not None]
+        kraken_total  = len(closed_kraken)
+        kraken_wins   = sum(1 for t in closed_kraken if float(t.get("pnl_pct", 0) or 0) > 0)
+        kraken_losses = kraken_total - kraken_wins
+        kraken_win_rate = (kraken_wins / kraken_total * 100) if kraken_total > 0 else None
+        kraken_avg_pnl  = (
+            sum(float(t.get("pnl_pct", 0) or 0) for t in closed_kraken) / kraken_total
+            if kraken_total > 0 else None
+        )
+    except Exception as exc:
+        logger.warning(f"PerfAnalysis | Kraken stats error: {exc}")
+        kraken_total = kraken_wins = kraken_losses = 0
+        kraken_win_rate = kraken_avg_pnl = None
+
+    def _fmt_wr(wr: float | None) -> str:
+        return f"{wr:.0f}%" if wr is not None else "N/A"
+
+    def _fmt_pnl(pnl: float | None, suffix: str = "%") -> str:
+        if pnl is None:
+            return "N/A"
+        return f"{pnl:+.2f}{suffix}"
+
+    user_prompt = f"""\
+ANALYSIS WINDOW: Last {days} days
+
+DEGEN ORACLE BOT (Alpaca — US Equities, LLM-driven):
+  Closed trades : {alpaca_total}
+  Wins / Losses : {alpaca_wins} / {alpaca_losses}
+  Win rate      : {_fmt_wr(alpaca_win_rate)}
+  Avg P&L       : {_fmt_pnl(alpaca_avg_pnl)} per trade
+
+DAVY JONES BOT (Kraken — 24/7 Crypto, mean-reversion):
+  Closed trades : {kraken_total}
+  Wins / Losses : {kraken_wins} / {kraken_losses}
+  Win rate      : {_fmt_wr(kraken_win_rate)}
+  Avg P&L       : {_fmt_pnl(kraken_avg_pnl)} per trade
+
+Write a 3-5 sentence plain-English performance briefing comparing both bots.
+If trade counts are low (< 3), note that data is limited.
+Be specific about which bot is outperforming and why the numbers suggest that."""
+
+    narrative = "Performance analysis unavailable — Groq call failed."
+    try:
+        from groq import Groq
+        client = Groq(api_key=settings.groq_api_key)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _PERFORMANCE_NARRATIVE_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.5,
+            max_tokens=300,
+        )
+        narrative = response.choices[0].message.content.strip()
+        logger.info(f"PerfAnalysis | Narrative generated ({len(narrative)} chars)")
+    except Exception as exc:
+        logger.error(f"PerfAnalysis | Groq call failed: {exc}")
+
+    _last_performance_report = {
+        "status":       "ok",
+        "run_at":       run_at.isoformat(),
+        "days_analysed": days,
+        "alpaca": {
+            "total":    alpaca_total,
+            "wins":     alpaca_wins,
+            "losses":   alpaca_losses,
+            "win_rate": round(alpaca_win_rate, 1) if alpaca_win_rate is not None else None,
+            "avg_pnl":  round(alpaca_avg_pnl, 2) if alpaca_avg_pnl is not None else None,
+        },
+        "kraken": {
+            "total":    kraken_total,
+            "wins":     kraken_wins,
+            "losses":   kraken_losses,
+            "win_rate": round(kraken_win_rate, 1) if kraken_win_rate is not None else None,
+            "avg_pnl":  round(kraken_avg_pnl, 2) if kraken_avg_pnl is not None else None,
+        },
+        "narrative": narrative,
+    }
+    logger.success("PerfAnalysis | Complete")
+    return dict(_last_performance_report)
+
+
+def get_last_performance_report() -> dict[str, Any]:
+    """Return the most recent performance analysis result."""
+    return dict(_last_performance_report)

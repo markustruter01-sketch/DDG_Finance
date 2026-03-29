@@ -400,6 +400,33 @@ export function useTriggerAudit() {
   });
 }
 
+export function useAuditorPerformance() {
+  return useQuery<{
+    status: string;
+    run_at?: string;
+    days_analysed?: number;
+    alpaca?: { total: number; wins: number; losses: number; win_rate: number | null; avg_pnl: number | null };
+    kraken?: { total: number; wins: number; losses: number; win_rate: number | null; avg_pnl: number | null };
+    narrative?: string;
+  }>({
+    queryKey: ["/auditor/performance"],
+    queryFn: async () => (await api.get("/auditor/performance")).data,
+    refetchInterval: 30000,
+    retry: 1,
+  });
+}
+
+export function useTriggerPerformanceAnalysis() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (days: number = 10) =>
+      (await api.post(`/auditor/performance/run?days=${days}`)).data,
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ["/auditor/performance"] }), 15000);
+    },
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {

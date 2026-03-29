@@ -1,86 +1,96 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 19898.223176823587,
+  "cash_usd": 18141.866171436894,
   "positions": {
-    "DOT/USD": {
+    "BTC/USD": {
       "side": "long",
-      "entry_price": 1.2652,
-      "size_usd": 9992.2,
-      "size_units": 7897.723680050585,
-      "entry_time": "2026-03-28T22:36:35.330027+00:00",
-      "best_price": 1.2652,
-      "entry_fee": 25.9797,
-      "order_id": "PAPER-DOTUSD-1774737395"
-    },
-    "ATOM/USD": {
-      "side": "long",
-      "entry_price": 1.6636,
-      "size_usd": 9864.93,
-      "size_units": 5929.868958884347,
-      "entry_time": "2026-03-29T01:09:15.406125+00:00",
-      "best_price": 1.6636,
-      "entry_fee": 25.6488,
-      "order_id": "PAPER-ATOMUSD-1774746555"
-    },
-    "XRP/USD": {
-      "side": "long",
-      "entry_price": 1.33013,
-      "size_usd": 9974.31,
-      "size_units": 7498.748242652973,
-      "entry_time": "2026-03-29T05:30:49.839412+00:00",
-      "best_price": 1.33013,
-      "entry_fee": 25.9332,
-      "order_id": "PAPER-XRPUSD-1774762249"
+      "entry_price": 65293.3,
+      "size_usd": 9697.46,
+      "size_units": 0.1485215175217059,
+      "entry_time": "2026-03-29T22:46:12.012253+00:00",
+      "best_price": 65293.3,
+      "entry_fee": 25.2134,
+      "order_id": "PAPER-BTCUSD-1774824372"
     },
     "SOL/USD": {
       "side": "long",
-      "entry_price": 82.2,
-      "size_usd": 9971.72,
-      "size_units": 121.31046228710461,
-      "entry_time": "2026-03-29T07:04:22.510734+00:00",
-      "best_price": 82.2,
-      "entry_fee": 25.9265,
-      "order_id": "PAPER-SOLUSD-1774767862"
-    },
-    "LINK/USD": {
-      "side": "long",
-      "entry_price": 8.47786,
-      "size_usd": 9961.77,
-      "size_units": 1175.0335579969474,
-      "entry_time": "2026-03-29T10:07:49.610377+00:00",
-      "best_price": 8.47786,
-      "entry_fee": 25.9006,
-      "order_id": "PAPER-LINKUSD-1774778869"
-    },
-    "ETH/USD": {
-      "side": "long",
-      "entry_price": 1994.47,
-      "size_usd": 9944.85,
-      "size_units": 4.9862118758366885,
-      "entry_time": "2026-03-29T10:08:54.595689+00:00",
-      "best_price": 1994.47,
-      "entry_fee": 25.8566,
-      "order_id": "PAPER-ETHUSD-1774778934"
-    },
-    "LTC/USD": {
-      "side": "long",
-      "entry_price": 53.63,
-      "size_usd": 9848.7,
-      "size_units": 183.64161849710982,
-      "entry_time": "2026-03-29T13:08:56.605768+00:00",
-      "best_price": 53.63,
-      "entry_fee": 25.6066,
-      "order_id": "PAPER-LTCUSD-1774789736"
+      "entry_price": 79.69,
+      "size_usd": 9868.21,
+      "size_units": 123.83247584389508,
+      "entry_time": "2026-03-29T22:47:25.420243+00:00",
+      "best_price": 79.69,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-SOLUSD-1774824445"
     },
     "ADA/USD": {
       "side": "long",
-      "entry_price": 0.240485,
-      "size_usd": 9642.8,
-      "size_units": 40097.303366114305,
-      "entry_time": "2026-03-29T17:18:30.661265+00:00",
-      "best_price": 0.240485,
-      "entry_fee": 25.0713,
-      "order_id": "PAPER-ADAUSD-1774804710"
+      "entry_price": 0.235,
+      "size_usd": 9868.21,
+      "size_units": 41992.382978723406,
+      "entry_time": "2026-03-29T22:47:27.809892+00:00",
+      "best_price": 0.235,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-ADAUSD-1774824447"
+    },
+    "AVAX/USD": {
+      "side": "long",
+      "entry_price": 8.44,
+      "size_usd": 9868.21,
+      "size_units": 1169.2191943127962,
+      "entry_time": "2026-03-29T22:47:28.995997+00:00",
+      "best_price": 8.44,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-AVAXUSD-1774824448"
+    },
+    "LINK/USD": {
+      "side": "long",
+      "entry_price": 8.27443,
+      "size_usd": 9868.21,
+      "size_units": 1192.6150804345434,
+      "entry_time": "2026-03-29T22:47:30.204444+00:00",
+      "best_price": 8.27443,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-LINKUSD-1774824450"
+    },
+    "DOT/USD": {
+      "side": "long",
+      "entry_price": 1.2361,
+      "size_usd": 9868.21,
+      "size_units": 7983.342771620419,
+      "entry_time": "2026-03-29T22:47:31.429504+00:00",
+      "best_price": 1.2361,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-DOTUSD-1774824451"
+    },
+    "ATOM/USD": {
+      "side": "long",
+      "entry_price": 1.618,
+      "size_usd": 9868.21,
+      "size_units": 6099.017305315203,
+      "entry_time": "2026-03-29T22:47:32.593674+00:00",
+      "best_price": 1.618,
+      "entry_fee": 25.6573,
+      "order_id": "PAPER-ATOMUSD-1774824452"
+    },
+    "ETH/USD": {
+      "side": "long",
+      "entry_price": 1950.05,
+      "size_usd": 190.25,
+      "size_units": 0.09756160098459014,
+      "entry_time": "2026-03-29T22:48:35.212265+00:00",
+      "best_price": 1950.05,
+      "entry_fee": 0.4946,
+      "order_id": "PAPER-ETHUSD-1774824515"
+    },
+    "LTC/USD": {
+      "side": "long",
+      "entry_price": 53.19,
+      "size_usd": 9848.7,
+      "size_units": 185.16074450084605,
+      "entry_time": "2026-03-29T23:26:36.615175+00:00",
+      "best_price": 53.19,
+      "entry_fee": 25.6066,
+      "order_id": "PAPER-LTCUSD-1774826796"
     }
   },
   "all_trades": [
@@ -142,6 +152,126 @@
       "fees_usd": 51.4256,
       "reason": "stop",
       "closed_at": "2026-03-29T17:17:20.908999+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "SOL/USD",
+      "side": "long",
+      "entry_price": 82.2,
+      "exit_price": 80.53,
+      "pnl_pct": -2.03,
+      "pnl_usd": -253.91,
+      "fees_usd": 51.3262,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:45:03.406863+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ADA/USD",
+      "side": "long",
+      "entry_price": 0.240485,
+      "exit_price": 0.235487,
+      "pnl_pct": -2.08,
+      "pnl_usd": -250.03,
+      "fees_usd": 49.6215,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:46:16.840257+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "AVAX/USD",
+      "side": "long",
+      "entry_price": 8.62,
+      "exit_price": 8.43,
+      "pnl_pct": -2.2,
+      "pnl_usd": -0.51,
+      "fees_usd": 0.0959,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:46:17.999448+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "LINK/USD",
+      "side": "long",
+      "entry_price": 8.47786,
+      "exit_price": 8.26633,
+      "pnl_pct": -2.5,
+      "pnl_usd": -299.71,
+      "fees_usd": 51.155,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:46:19.055991+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "DOT/USD",
+      "side": "long",
+      "entry_price": 1.2652,
+      "exit_price": 1.2385,
+      "pnl_pct": -2.11,
+      "pnl_usd": -262.28,
+      "fees_usd": 51.4112,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:46:20.259088+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ATOM/USD",
+      "side": "long",
+      "entry_price": 1.6636,
+      "exit_price": 1.6229,
+      "pnl_pct": -2.45,
+      "pnl_usd": -292.02,
+      "fees_usd": 50.6701,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:46:21.629453+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ETH/USD",
+      "side": "long",
+      "entry_price": 1994.47,
+      "exit_price": 1950.44,
+      "pnl_pct": -2.21,
+      "pnl_usd": -270.69,
+      "fees_usd": 51.1424,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:47:24.202949+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "XRP/USD",
+      "side": "long",
+      "entry_price": 1.33013,
+      "exit_price": 1.30098,
+      "pnl_pct": -2.19,
+      "pnl_usd": -269.89,
+      "fees_usd": 51.2981,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:47:26.597302+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "LTC/USD",
+      "side": "long",
+      "entry_price": 53.63,
+      "exit_price": 52.44,
+      "pnl_pct": -2.22,
+      "pnl_usd": -269.18,
+      "fees_usd": 50.645,
+      "reason": "stop",
+      "closed_at": "2026-03-29T22:49:55.832135+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "XRP/USD",
+      "side": "long",
+      "entry_price": 1.30064,
+      "exit_price": 1.32802,
+      "pnl_pct": 2.11,
+      "pnl_usd": 155.57,
+      "fees_usd": 51.7523,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-29T23:21:45.389981+00:00",
       "paper": true
     }
   ]

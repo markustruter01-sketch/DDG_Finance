@@ -58,7 +58,7 @@ from analysis.trade_journal import (
 )
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
-from analysis.auditor import run_full_audit, get_last_audit
+from analysis.auditor import run_full_audit, get_last_audit, run_performance_analysis, get_last_performance_report
 from analysis.schemas import is_crypto_pair
 from execution.ratchet_stop import delete_stop
 from data.sentiment import get_sentiment, get_sentiment_prompt_block
@@ -1781,6 +1781,43 @@ async def trigger_audit(background_tasks: BackgroundTasks) -> dict:
     return {
         "status": "audit_started",
         "message": "Audit running in background — check GET /auditor/report in ~30 seconds",
+    }
+
+
+@router.get("/auditor/performance", tags=["Auditor"])
+async def auditor_performance_report() -> dict:
+    """
+    Return the most recent performance narrative analysis for both bots.
+    Returns status='not_run' if no analysis has been triggered yet.
+    POST /auditor/performance/run to trigger one.
+    """
+    return get_last_performance_report()
+
+
+@router.post("/auditor/performance/run", tags=["Auditor"])
+async def trigger_performance_analysis(
+    background_tasks: BackgroundTasks,
+    days: int = 10,
+) -> dict:
+    """
+    Trigger a performance narrative analysis for the last N days.
+    Uses Groq to generate a plain-English comparison of both bots.
+    Check GET /auditor/performance in ~15 seconds.
+    """
+    logger.info(f"PerfAnalysis | Manual trigger via POST /auditor/performance/run (days={days})")
+
+    async def _bg_perf() -> None:
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: run_performance_analysis(days=days))
+        except Exception as exc:
+            logger.error(f"PerfAnalysis | Background analysis failed: {exc}")
+
+    background_tasks.add_task(_bg_perf)
+    return {
+        "status":  "analysis_started",
+        "message": f"Performance analysis running — check GET /auditor/performance in ~15 seconds",
+        "days":    days,
     }
 
 

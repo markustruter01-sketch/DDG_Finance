@@ -215,8 +215,9 @@ def get_recent_wins(limit: int = 5) -> list[dict]:
 
 def get_recent_trades_combined(limit: int = 20) -> list[dict]:
     """Last N closed trades (wins + losses combined) ordered by date DESC.
-    Used by the /journal/recent endpoint for streak computation."""
-    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status")
+    Used by the /journal/recent endpoint for streak computation and Kill Board."""
+    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status",
+            "original_thesis")
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -229,7 +230,7 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
                     LIMIT  %s
                 """, (limit,))
                 rows = cur.fetchall()
-        return [dict(zip(cols, r)) for r in rows]
+        raw = [dict(zip(cols, r)) for r in rows]
     else:
         with _sqlite_conn() as conn:
             rows = conn.execute(f"""
@@ -237,7 +238,22 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
                 FROM trades WHERE status IN ('Closed_Win', 'Closed_Loss')
                 ORDER BY date DESC LIMIT ?
             """, (limit,)).fetchall()
-        return [dict(r) for r in rows]
+        raw = [dict(r) for r in rows]
+
+    # Normalise to the contract expected by the dashboard:
+    # symbol / pnl_pct / pnl_usd / exit_reason / closed_at
+    result = []
+    for r in raw:
+        result.append({
+            "trade_id":    r["trade_id"],
+            "symbol":      r["ticker"],
+            "pnl_pct":     r["pnl_percentage"],
+            "pnl_usd":     None,          # not stored in Alpaca journal
+            "exit_reason": r.get("original_thesis", ""),
+            "closed_at":   str(r["date"]),
+            "status":      r["status"],
+        })
+    return result
 
 
 def _query_trades(status: str, limit: int) -> list[dict]:

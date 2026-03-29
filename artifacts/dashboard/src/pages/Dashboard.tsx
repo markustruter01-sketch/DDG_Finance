@@ -189,6 +189,7 @@ type KillTradeEntry = {
   ticker?: string;
   pnl_pct?: number;
   pnl_percentage?: number;
+  pnl_usd?: number | null;
   exit_reason?: string;
   reason?: string;
 };
@@ -196,20 +197,24 @@ type KillTradeEntry = {
 function KillBoardPanel({
   trades,
   theme,
-  bigWinPct,
+  bigWinUsd,
   bigWinLabel,
+  panelLabel,
 }: {
   trades: KillTradeEntry[];
   theme: "pirate" | "degen";
-  bigWinPct: number;
+  bigWinUsd: number;
   bigWinLabel: string;
+  panelLabel: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isPirate = theme === "pirate";
 
+  const pnlNum = (t: KillTradeEntry) => t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? 0;
+
   const wins = [...trades]
     .filter(t => (t.pnl_pct ?? t.pnl_percentage ?? 0) > 0)
-    .sort((a, b) => (b.pnl_pct ?? b.pnl_percentage ?? 0) - (a.pnl_pct ?? a.pnl_percentage ?? 0))
+    .sort((a, b) => pnlNum(b) - pnlNum(a))
     .slice(0, 10);
 
   if (wins.length === 0) return null;
@@ -226,7 +231,7 @@ function KillBoardPanel({
         )}
       >
         <span>{isPirate ? "☠️" : "🎯"}</span>
-        <span>{wins.length} Kill{wins.length !== 1 ? "s" : ""}</span>
+        <span>{panelLabel} · {wins.length} Kill{wins.length !== 1 ? "s" : ""}</span>
         <span className={cn("transition-transform duration-200", expanded && "rotate-180")}>▾</span>
       </button>
 
@@ -242,8 +247,9 @@ function KillBoardPanel({
             <div className="mt-2 space-y-1.5">
               {wins.map((trade, i) => {
                 const sym = (trade.symbol ?? trade.ticker ?? "?").replace("/USD", "");
-                const pnl = trade.pnl_pct ?? trade.pnl_percentage ?? 0;
-                const isBig = pnl >= bigWinPct;
+                const pct = trade.pnl_pct ?? trade.pnl_percentage ?? 0;
+                const usd = trade.pnl_usd ?? null;
+                const isBig = usd != null ? usd >= bigWinUsd : false;
                 const reason = trade.exit_reason ?? trade.reason ?? "";
                 return (
                   <motion.div
@@ -259,7 +265,10 @@ function KillBoardPanel({
                     )}
                   >
                     <span className="font-bold text-white font-mono text-[10px] w-10 shrink-0">{sym}</span>
-                    <span className="text-green-400 font-mono font-semibold text-[10px]">+{pnl.toFixed(2)}%</span>
+                    <span className="text-green-400 font-mono font-semibold text-[10px]">+{pct.toFixed(2)}%</span>
+                    {usd != null && (
+                      <span className="text-green-300/70 font-mono text-[9px]">${usd.toFixed(2)}</span>
+                    )}
                     {reason && <span className="text-muted-foreground/40 text-[8px] flex-1 truncate">{reason}</span>}
                     {isBig && (
                       <span className="ml-auto text-[8px] font-bold text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
@@ -1789,10 +1798,11 @@ function AIBrainSection() {
 
         {/* Kill Board — Hit List */}
         <KillBoardPanel
-          trades={(winsData?.wins ?? []).map(w => ({ ticker: w.ticker, pnl_percentage: w.pnl_percentage }))}
+          trades={(winsData?.wins ?? []).map(w => ({ symbol: w.ticker, pnl_pct: w.pnl_percentage, pnl_usd: null }))}
           theme="degen"
-          bigWinPct={5}
+          bigWinUsd={200}
           bigWinLabel="🦍 APE MODE"
+          panelLabel="Hit List"
         />
       </div>
     </>
@@ -2320,8 +2330,9 @@ function DavyJonesBotSection() {
         <KillBoardPanel
           trades={data?.recent_trades ?? []}
           theme="pirate"
-          bigWinPct={3}
+          bigWinUsd={50}
           bigWinLabel="⚓ LEVIATHAN KILL"
+          panelLabel="Trophy Wall"
         />
 
         {/* Last trade + cycle footer */}

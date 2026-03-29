@@ -16,6 +16,18 @@ export function formatCurrency(val: number | null | undefined): string {
   }).format(val);
 }
 
+export function formatCryptoPrice(val: number | null | undefined): string {
+  if (val === null || val === undefined) return "—";
+  const abs = Math.abs(val);
+  const decimals = abs < 0.001 ? 6 : abs < 1 ? 4 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(val);
+}
+
 export function formatPercent(val: number | null | undefined): string {
   if (val === null || val === undefined) return "—";
   return new Intl.NumberFormat("en-US", {

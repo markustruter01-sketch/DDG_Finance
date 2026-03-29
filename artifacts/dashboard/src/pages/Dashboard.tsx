@@ -17,7 +17,7 @@ import { BlackoutBanner, EconomicCalendarPanel } from "@/components/EconomicCale
 import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
 import { AttributionPanel } from "@/components/AttributionPanel";
 import { BacktesterPanel } from "@/components/BacktesterPanel";
-import { cn, formatCurrency, formatPercentAbs, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatCryptoPrice, formatPercentAbs, formatDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } from "@/components/ui";
 import { ControlPanel } from "@/components/ControlPanel";
@@ -1669,7 +1669,7 @@ function KrakenBrainModal({ open, onClose }: { open: boolean; onClose: () => voi
             <span className="text-muted-foreground">Z-Score Entry Threshold</span><span className="text-white">±1.0σ</span>
             <span className="text-muted-foreground">Z-Score Exit Threshold</span><span className="text-white">±0.30σ (mean-revert)</span>
             <span className="text-muted-foreground">Stop Loss</span><span className="text-white">2% from entry</span>
-            <span className="text-muted-foreground">Trailing Take Profit</span><span className="text-white">5% from best price</span>
+            <span className="text-muted-foreground">Trailing Stop</span><span className="text-white">5% below best price (arms once in profit)</span>
             <span className="text-muted-foreground">Max Positions</span><span className="text-white">10 simultaneous</span>
             <span className="text-muted-foreground">Max Per Position</span><span className="text-white">10% of equity</span>
             <span className="text-muted-foreground">Cash Reserve</span><span className="text-white">20% always held</span>
@@ -2637,7 +2637,7 @@ function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConf
         </div>
         {(pos.stop_loss_price != null || pos.take_profit_price != null) && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">SL/TP</span>
+            <span className="text-muted-foreground">SL/Trail</span>
             <span className="font-mono text-[10px]">
               {pos.stop_loss_price != null && <span className="text-red-400">{formatCurrency(pos.stop_loss_price)}</span>}
               {pos.stop_loss_price != null && pos.take_profit_price != null && <span className="text-muted-foreground mx-0.5">/</span>}
@@ -2810,7 +2810,7 @@ function LivePositionsSection() {
               <th className="px-5 py-3 font-semibold text-right">Current</th>
               <th className="px-5 py-3 font-semibold text-right">Unrealised P&L</th>
               <th className="px-5 py-3 font-semibold text-right">Stop Loss</th>
-              <th className="px-5 py-3 font-semibold text-right">Take Profit</th>
+              <th className="px-5 py-3 font-semibold text-right">Trail Stop</th>
               <th className="px-5 py-3 font-semibold text-center">Conv.</th>
               <th className="px-5 py-3 font-semibold text-center">Health</th>
               <th className="px-5 py-3 font-semibold max-w-[180px]">Thesis</th>
@@ -2973,9 +2973,9 @@ function LivePositionsSection() {
                     {kpos.qty != null ? kpos.qty.toFixed(4) : ((kpos.size_usd / kpos.entry_price) || 0).toFixed(4)}
                   </td>
                   <td className="px-5 py-3.5 text-right font-mono text-xs text-white">{formatCurrency(kpos.size_usd)}</td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-muted-foreground">{formatCurrency(kpos.entry_price)}</td>
+                  <td className="px-5 py-3.5 text-right font-mono text-xs text-muted-foreground">{formatCryptoPrice(kpos.entry_price)}</td>
                   <td className="px-5 py-3.5 text-right font-mono text-xs text-white">
-                    {kpos.current_price != null ? formatCurrency(kpos.current_price) : <span className="text-muted-foreground/40">—</span>}
+                    {kpos.current_price != null ? formatCryptoPrice(kpos.current_price) : <span className="text-muted-foreground/40">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {kpos.unrealized_pnl_usd != null
@@ -2984,13 +2984,23 @@ function LivePositionsSection() {
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {kpos.stop_loss_price != null ? (
-                      <span className="text-xs font-mono text-red-400">{formatCurrency(kpos.stop_loss_price)}</span>
+                      <span className="text-xs font-mono text-red-400">{formatCryptoPrice(kpos.stop_loss_price)}</span>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {kpos.take_profit_price != null ? (
-                      <span className="text-xs font-mono text-green-400">{formatCurrency(kpos.take_profit_price)}</span>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                    {kpos.take_profit_price != null ? (() => {
+                      const trailActive = kpos.best_price != null && kpos.best_price > kpos.entry_price;
+                      return (
+                        <div className="flex flex-col items-end gap-0.5">
+                          <span className={cn("text-xs font-mono", trailActive ? "text-cyan-400" : "text-muted-foreground/50")}>
+                            {formatCryptoPrice(kpos.take_profit_price)}
+                          </span>
+                          <span className={cn("text-[9px]", trailActive ? "text-cyan-500/60" : "text-muted-foreground/40")}>
+                            {trailActive ? "trail armed" : "not yet armed"}
+                          </span>
+                        </div>
+                      );
+                    })() : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
                   {/* Conviction — mean-reversion Z-score strength */}
                   <td className="px-5 py-3.5 text-center">

@@ -268,6 +268,8 @@ export interface AICommentary {
   generated_at: string | null;
   cached: boolean;
   cache_age_seconds: number;
+  throttled?: boolean;
+  budget_exhausted?: boolean;
   error?: string;
 }
 
@@ -740,9 +742,11 @@ export function useKrakenStatus() {
 
 export interface KrakenCommentary {
   commentary: string;
-  generated_at: string;
+  generated_at: string | null;
   cached: boolean;
   cache_age_seconds: number;
+  throttled?: boolean;
+  budget_exhausted?: boolean;
   error?: string;
 }
 
@@ -911,5 +915,15 @@ export function useDegradationReport(hours = 24) {
       const res = await api.get(`/system/degradations/report?hours=${hours}`);
       return res.data.report as string;
     },
+  });
+}
+
+export function useDegradationHealth() {
+  return useQuery<{ window_hours: number; total: number; stats: DegradationStats; events: DegradationEvent[] }>({
+    queryKey: ["/system/degradations/health"],
+    queryFn: async () => (await api.get("/system/degradations?hours=168&limit=500")).data,
+    refetchInterval: 120_000,
+    retry: false,
+    staleTime: 60_000,
   });
 }

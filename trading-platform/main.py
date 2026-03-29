@@ -1503,8 +1503,16 @@ async def ai_commentary(force: bool = False) -> dict:
                 "cached": True,
                 "cache_age_seconds": int(cache_age),
                 "throttled": True,
+                "budget_exhausted": _groq_budget.budget_exhausted(),
             }
-        raise HTTPException(status_code=429, detail="Commentary daily limit reached — try again tomorrow or use ?force=true")
+        return {
+            "commentary": "The Oracle is resting — daily AI token limit reached. Commentary will resume tomorrow at midnight UTC.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "throttled": True,
+            "budget_exhausted": True,
+        }
 
     wins    = get_recent_wins(limit=3)
     losses  = get_recent_losses(limit=5)
@@ -1667,6 +1675,8 @@ Current open positions:
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
         logger.error(f"AI commentary generation failed: {exc}")
+        # Back off 5 min so the next auto-refresh does not immediately retry Groq
+        _commentary_cache["ts"] = now - COMMENTARY_TTL_SECONDS + 300
         if _commentary_cache["text"]:
             return {
                 "commentary": _commentary_cache["text"],
@@ -2081,8 +2091,16 @@ async def kraken_commentary(force: bool = False) -> dict:
                 "cached": True,
                 "cache_age_seconds": int(cache_age),
                 "throttled": True,
+                "budget_exhausted": _groq_budget.budget_exhausted(),
             }
-        raise HTTPException(status_code=429, detail="Kraken commentary daily limit reached — try again tomorrow or use ?force=true")
+        return {
+            "commentary": "Davy Jones' AI is resting — daily token limit reached. The commentary will return tomorrow at midnight UTC.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "throttled": True,
+            "budget_exhausted": True,
+        }
 
     status_file = _Path("../kraken-bot/status.json")
     if not status_file.exists():
@@ -2203,6 +2221,8 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
         logger.error(f"Kraken AI commentary generation failed: {exc}")
+        # Back off 5 min so the next auto-refresh does not immediately retry Groq
+        _kraken_commentary_cache["ts"] = now - COMMENTARY_TTL_SECONDS + 300
         if _kraken_commentary_cache["text"]:
             return {
                 "commentary": _kraken_commentary_cache["text"],

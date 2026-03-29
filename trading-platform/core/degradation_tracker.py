@@ -25,9 +25,27 @@ from loguru import logger
 
 
 # ── De-duplication: suppress identical events within a rolling window ───────
-# Stores (component, error_type, message_prefix) → last recorded timestamp
+# Per-component base TTL (seconds).  The first occurrence of a persistent
+# issue is recorded immediately; each subsequent re-occurrence doubles the
+# quiet window (capped at 2 h) so a 9-hour Kraken outage produces ≤4 records
+# instead of 270.
+_COMPONENT_TTL: dict[str, int] = {
+    "kraken_api":    1800,  # 30 min — stale writes fire every 2 min
+    "platform_core": 1800,  # 30 min — scheduler/analysis issues persist for hours
+    "http":           300,  # 5 min  — HTTP 500s need faster re-alerting
+    "data_pipeline":  900,  # 15 min
+    "groq":           900,  # 15 min
+    "alpaca":         900,  # 15 min
+    "database":       900,  # 15 min
+    "scheduler":     1800,  # 30 min
+}
+_DEFAULT_TTL = 900  # 15 min for unrecognised components
+_MAX_TTL     = 7200  # cap escalation at 2 h
+
+# key → last recorded timestamp
 _recent_keys: dict[str, float] = {}
-_DEDUP_WINDOW_SECONDS = 120   # same event within 2 min → skip
+# key → how many times this event has been recorded (drives escalation)
+_escalation_counts: dict[str, int] = {}
 
 
 def _dedup_key(component: str, error_type: str, message: str) -> str:
@@ -40,10 +58,25 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
     key = _dedup_key(component, error_type, message)
     now = time.time()
     last = _recent_keys.get(key, 0)
-    if (now - last) < _DEDUP_WINDOW_SECONDS:
+
+    base_ttl = _COMPONENT_TTL.get(component, _DEFAULT_TTL)
+    count    = _escalation_counts.get(key, 0)
+    # Each prior recording doubles the quiet window (2⁰=1× … 2²=4× etc.)
+    ttl = min(base_ttl * (2 ** count), _MAX_TTL)
+
+    if (now - last) < ttl:
         return False
+
     _recent_keys[key] = now
+    _escalation_counts[key] = count + 1
     return True
+
+
+def reset_dedup_key(component: str, error_type: str, message: str = "") -> None:
+    """Reset escalation state for a component/error_type when it resolves."""
+    key = _dedup_key(component, error_type, message)
+    _recent_keys.pop(key, None)
+    _escalation_counts.pop(key, None)
 
 
 # ── Public API ───────────────────────────────────────────────────────────────

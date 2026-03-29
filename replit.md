@@ -29,7 +29,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking
-- `core/` — Scheduler (APScheduler), pipeline orchestration, market clock
+- `core/` — Scheduler (APScheduler), pipeline orchestration, market clock, `degradation_tracker.py` (PostgreSQL event log with per-component escalating de-dup: kraken_api/platform_core→1800s base TTL, http→300s, others→900s; each repeat doubles the quiet window up to 7200s max)
 
 ### v4.0 — Regime-Switching Architecture
 - **Fixed 8-asset universe** — SPY, QQQ (equity), TLT, GLD (safe_haven), BTC/USD, ETH/USD, ATOM/USD (crypto_spot), SGOV (cash)
@@ -45,7 +45,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **15-minute intraday cycles** — ~26 analysis+execution cycles per market day for maximum learning
 - **24/7 crypto cycles** — BTC/USD, ETH/USD, ATOM/USD via Alpaca native crypto (GTC orders, $25 min notional)
 - **Smart data caching** — FRED macro data (1hr TTL, skipped in crypto-only), NewsAPI (1hr TTL, halved from 30min to reduce Groq token budget pressure), Alpaca market data (always fresh, 6-month lookback)
-- **Groq budget guardrails** — `analysis/groq_budget.py` singleton tracks daily token usage (100K TPD limit), enforces 90-min minimum interval between regime LLM calls (returns cached regime if throttled), caps auto-commentary at 4/day per endpoint (force=true bypasses), all counters reset at midnight UTC
+- **Groq budget guardrails** — `analysis/groq_budget.py` singleton tracks daily token usage (100K TPD limit), enforces 90-min minimum interval between regime LLM calls (returns cached regime if throttled), caps auto-commentary at 4/day per endpoint; `force=True` bypasses call-count cap but NOT zero-budget (budget check runs before force bypass), all counters reset at midnight UTC; commentary endpoints return HTTP 200 graceful fallback (not 429) when budget is exhausted; on Groq API failure the commentary cache `ts` is advanced by (TTL − 300s) so the next retry waits 5 min instead of retrying every request
 - **Variable Kelly slots** — 1–6 slots, even-weight Python override (not LLM arithmetic), normalised to ≤ 100% equity
 - **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt (unified for ETF and crypto trades)
 - **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails
@@ -117,6 +117,7 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 - `BacktesterPanel.tsx` — Momentum strategy backtester with equity curve chart and trade log
 - `ControlPanel.tsx` — Mission Control buttons (kill switch, analysis, post-mortem)
 - `SystemHealthModal.tsx` — Live architecture diagram with SVG nodes, animated glowing wires, health levels (green/yellow/red), and test control panel with scenario presets (simulate 404, 500, rate limits, stale data, allocation breach, total failure)
+- `SystemHealthCard` (in Dashboard.tsx) — Inline bottom-of-page health panel with: 7-day daily event sparkline, 24h event count vs &lt;10/day target, de-duplicated active alerts with **plain-English explanations**, resolution type badge (Clears on its own / Needs attention), and trading impact badge (Trading not affected / May affect next trade / Trading may be paused)
 
 ### API Communication
 - **Dev**: Replit router sends `/trading-api/*` to port 8000 (artifact multi-service routing)

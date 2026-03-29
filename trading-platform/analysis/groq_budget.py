@@ -170,18 +170,24 @@ class GroqBudget:
             )
 
     def can_call_commentary(self, endpoint: str, force: bool = False) -> bool:
-        if force:
-            return True
         with self._lock:
             self._maybe_reset()
 
             remaining = settings.groq_daily_token_budget - self._tokens_used
             if remaining <= 0:
+                # Zero budget blocks even forced refreshes — calling Groq would
+                # just return a 429 and generate an error event.
                 logger.warning(
                     f"Groq budget | Commentary[{endpoint}] blocked — "
-                    "daily token budget exhausted"
+                    "daily token budget exhausted (force={force} ignored)"
                 )
                 return False
+
+            # force=True bypasses the *call-count* cap but not the zero-budget
+            # check above.  This lets the user manually refresh when they still
+            # have tokens remaining, without wasting tokens they no longer have.
+            if force:
+                return True
 
             cap = settings.groq_commentary_daily_cap
             count = self._commentary_calls.get(endpoint, 0)
@@ -193,6 +199,12 @@ class GroqBudget:
                 return False
 
             return True
+
+    def budget_exhausted(self) -> bool:
+        """Return True when the daily token budget is at zero."""
+        with self._lock:
+            self._maybe_reset()
+            return (settings.groq_daily_token_budget - self._tokens_used) <= 0
 
     def record_commentary_call(self, endpoint: str) -> None:
         with self._lock:

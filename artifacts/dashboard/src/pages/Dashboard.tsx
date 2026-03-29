@@ -9,7 +9,7 @@ import {
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal,
-  useDegradationLog, useDegradationReport,
+  useDegradationLog, useDegradationReport, useDegradationHealth,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
   type LearningEntry, type DegradationEvent, type DegradationStats,
@@ -4415,6 +4415,261 @@ function PositionChangeNotifier() {
 
 // ── System Degradation Log ────────────────────────────────────────────────────
 
+// ── Plain-English alert metadata ──────────────────────────────────────────────
+interface AlertMeta {
+  what: string;
+  resolution: "self" | "code";
+  resolutionNote: string;
+  tradingImpact: "none" | "kraken_none" | "alpaca_may" | "paused" | "check";
+  tradingNote: string;
+}
+
+const ALERT_META: Record<string, AlertMeta> = {
+  "kraken_api/stale": {
+    what: "The Kraken bot stopped writing its status log — it's still running and trading independently, but the dashboard can't read what it's doing right now.",
+    resolution: "self",
+    resolutionNote: "Usually clears on its own when the bot finishes its current cycle.",
+    tradingImpact: "kraken_none",
+    tradingNote: "Kraken trading is not affected — the bot makes its own decisions without the dashboard.",
+  },
+  "groq/budget_exhausted": {
+    what: "The AI commentary brain has used up all its daily words. All commentary panels will show a fallback message until tomorrow.",
+    resolution: "self",
+    resolutionNote: "Resets automatically at midnight UTC — nothing to do.",
+    tradingImpact: "none",
+    tradingNote: "Trading is not affected — AI commentary is display-only and never drives trade decisions.",
+  },
+  "groq/rate_limited": {
+    what: "The AI brain hit its daily word limit. Commentary panels will be quiet until the limit resets.",
+    resolution: "self",
+    resolutionNote: "Resets automatically at midnight UTC.",
+    tradingImpact: "none",
+    tradingNote: "Trading is not affected — AI commentary is display-only.",
+  },
+  "groq/api_error": {
+    what: "The AI commentary service returned an unexpected error.",
+    resolution: "self",
+    resolutionNote: "Usually clears on the next auto-refresh cycle.",
+    tradingImpact: "none",
+    tradingNote: "Trading is not affected.",
+  },
+  "data_pipeline/stale": {
+    what: "Market data feeds are running behind — the platform may be working with slightly old prices and indicators.",
+    resolution: "self",
+    resolutionNote: "Usually fixes itself within a few minutes as external data sources respond.",
+    tradingImpact: "alpaca_may",
+    tradingNote: "May affect the next Alpaca trade decision if it fires before the data refreshes.",
+  },
+  "platform_core/analysis_failed": {
+    what: "The last scheduled market analysis cycle failed — the AI could not complete its market review.",
+    resolution: "self",
+    resolutionNote: "Clears when the next scheduled cycle completes successfully (runs every 15 min during market hours).",
+    tradingImpact: "alpaca_may",
+    tradingNote: "The next Alpaca trade decision may use older analysis. Kraken bot is unaffected.",
+  },
+  "platform_core/missing_jobs": {
+    what: "One or more scheduled trading jobs went missing — the system may not fire its next trading cycle.",
+    resolution: "code",
+    resolutionNote: "Needs a server restart or code fix — scheduler jobs did not register correctly.",
+    tradingImpact: "paused",
+    tradingNote: "Alpaca auto-trading may be paused — no new cycles will fire until the scheduler recovers.",
+  },
+  "platform_core/execution_failed": {
+    what: "A trade execution attempt failed — the system tried to place or close a position and hit an error.",
+    resolution: "code",
+    resolutionNote: "Check Alpaca connection and account status. May need manual review.",
+    tradingImpact: "alpaca_may",
+    tradingNote: "The last Alpaca execution attempt failed. Kraken bot is unaffected.",
+  },
+  "http/500": {
+    what: "An internal server error occurred on an API request.",
+    resolution: "code",
+    resolutionNote: "If this keeps appearing for the same endpoint, a code fix is likely needed.",
+    tradingImpact: "check",
+    tradingNote: "Usually not affecting trading — but worth checking the logs if it recurs.",
+  },
+  "http/503": {
+    what: "A service was temporarily unavailable — usually the AI commentary service was rate-limited.",
+    resolution: "self",
+    resolutionNote: "Self-clearing — usually caused by the AI word limit being hit.",
+    tradingImpact: "none",
+    tradingNote: "Trading is not affected — this is a display-only issue.",
+  },
+};
+
+const TRADING_IMPACT_CONFIG = {
+  none:        { label: "Trading not affected",              color: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" },
+  kraken_none: { label: "Kraken trading not affected",       color: "text-sky-400 border-sky-400/30 bg-sky-400/10" },
+  alpaca_may:  { label: "May affect next trade",             color: "text-amber-400 border-amber-400/30 bg-amber-400/10" },
+  paused:      { label: "Trading may be paused",             color: "text-red-400 border-red-400/30 bg-red-400/10" },
+  check:       { label: "Check logs if concerned",           color: "text-slate-400 border-slate-400/30 bg-slate-400/10" },
+};
+
+function AlertMetaCard({ ev }: { ev: DegradationEvent }) {
+  const metaKey = `${ev.component}/${ev.error_type}`;
+  const meta = ALERT_META[metaKey];
+  const sev = SEV_CONFIG[ev.severity] ?? SEV_CONFIG.warning;
+  const impact = meta ? TRADING_IMPACT_CONFIG[meta.tradingImpact] : TRADING_IMPACT_CONFIG.check;
+  const ts = new Date(ev.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const compLabel = COMP_LABELS[ev.component] ?? ev.component;
+
+  return (
+    <div className={`rounded border px-3 py-2.5 ${sev.color} space-y-1.5`}>
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex-shrink-0">{sev.icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold tracking-widest opacity-80">{sev.label}</span>
+            <span className="text-[10px] font-semibold opacity-80">{compLabel}</span>
+            <span className="text-[10px] opacity-50">/{ev.error_type}</span>
+            <span className="ml-auto text-[10px] opacity-50 flex-shrink-0">{ts}</span>
+            {ev.resolved_at && (
+              <span className="text-[10px] text-emerald-400 opacity-80 flex items-center gap-0.5">
+                <CheckCircle2 className="h-2.5 w-2.5" /> resolved
+              </span>
+            )}
+          </div>
+          {meta ? (
+            <p className="text-[11px] mt-1 leading-snug opacity-90">{meta.what}</p>
+          ) : (
+            <p className="text-[11px] mt-1 leading-snug opacity-90 font-mono">{ev.message}</p>
+          )}
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {meta && (
+              <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${meta.resolution === "self" ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" : "text-amber-400 border-amber-400/30 bg-amber-400/10"}`}>
+                {meta.resolution === "self" ? "Clears on its own" : "Needs attention"}
+              </span>
+            )}
+            <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${impact.color}`}>
+              {impact.label}
+            </span>
+          </div>
+          {meta && (
+            <p className="text-[10px] mt-1 opacity-55 italic">{meta.resolutionNote} · {meta.tradingNote}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SystemHealthCard() {
+  const { data: health, isLoading: healthLoading } = useDegradationHealth();
+  const { data: log24h }                           = useDegradationLog(24);
+
+  const sevenDayEvents = health?.events ?? [];
+  const count24h       = log24h?.total ?? 0;
+  const TARGET_PER_DAY = 10;
+
+  const health24hGood = count24h < TARGET_PER_DAY;
+  const statusColor   = count24h === 0
+    ? "text-emerald-400"
+    : count24h < TARGET_PER_DAY
+      ? "text-yellow-300"
+      : "text-red-400";
+
+  // Group events by day (last 7) for the sparkline
+  const dailyCounts = useMemo(() => {
+    const buckets: Record<string, number> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      buckets[d.toISOString().slice(0, 10)] = 0;
+    }
+    for (const ev of sevenDayEvents) {
+      const day = ev.ts.slice(0, 10);
+      if (day in buckets) buckets[day]++;
+    }
+    return Object.entries(buckets).map(([day, count]) => ({ day, count }));
+  }, [sevenDayEvents]);
+
+  const maxDay = Math.max(...dailyCounts.map(d => d.count), 1);
+
+  // Deduplicated 24h alerts for the "current issues" panel
+  const recentAlerts = useMemo(() => {
+    const seen = new Set<string>();
+    const out: DegradationEvent[] = [];
+    for (const ev of (log24h?.events ?? [])) {
+      const key = `${ev.component}/${ev.error_type}`;
+      if (!seen.has(key)) { seen.add(key); out.push(ev); }
+      if (out.length >= 5) break;
+    }
+    return out;
+  }, [log24h]);
+
+  return (
+    <Card className="bg-card/60 border-border/40 backdrop-blur-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Activity className={`h-4 w-4 ${statusColor}`} />
+          <CardTitle className="text-sm font-semibold tracking-wide uppercase">System Health</CardTitle>
+          <span className={`text-[10px] font-bold ${statusColor}`}>
+            {count24h === 0
+              ? "Clean — no issues in 24h"
+              : `${count24h} event${count24h !== 1 ? "s" : ""} in 24h`}
+          </span>
+          <span className={`ml-auto text-[10px] font-mono ${health24hGood ? "text-muted-foreground" : "text-amber-400"}`}>
+            Target: &lt;{TARGET_PER_DAY}/day
+          </span>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* ── 7-day sparkline ─────────────────────────────────────────────── */}
+        <div>
+          <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">Events per day — last 7 days</p>
+          <div className="flex items-end gap-1 h-10">
+            {dailyCounts.map(({ day, count }) => {
+              const today = new Date().toISOString().slice(0, 10);
+              const isToday = day === today;
+              const barH = Math.max((count / maxDay) * 40, count > 0 ? 4 : 1);
+              const barColor = count === 0
+                ? "bg-emerald-400/30"
+                : count < TARGET_PER_DAY
+                  ? "bg-amber-400/60"
+                  : "bg-red-400/70";
+              return (
+                <div key={day} className="flex-1 flex flex-col items-center gap-0.5">
+                  <div
+                    className={`w-full rounded-sm ${barColor} transition-all`}
+                    style={{ height: `${barH}px` }}
+                    title={`${day}: ${count} event${count !== 1 ? "s" : ""}`}
+                  />
+                  <span className={`text-[8px] ${isToday ? "text-primary font-bold" : "text-muted-foreground opacity-50"}`}>
+                    {isToday ? "today" : new Date(day + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" })}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Current issues ───────────────────────────────────────────────── */}
+        {healthLoading ? (
+          <div className="text-center text-muted-foreground text-xs py-4">Loading health status…</div>
+        ) : recentAlerts.length === 0 ? (
+          <div className="flex items-center gap-2 text-emerald-400 text-xs py-2">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>All systems normal — no issues recorded in the last 24 hours.</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Active issues (24h, de-duplicated)</p>
+            {recentAlerts.map(ev => (
+              <AlertMetaCard key={ev.id} ev={ev} />
+            ))}
+            {(log24h?.events?.length ?? 0) > 5 && (
+              <p className="text-[10px] text-muted-foreground text-center opacity-60">
+                Showing 5 of {log24h!.total} events — see the Degradation Log below for full history
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const SEV_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   critical: { label: "CRITICAL", color: "text-red-400 border-red-400/30 bg-red-400/10", icon: <XCircle className="h-3 w-3" /> },
   error:    { label: "ERROR",    color: "text-amber-400 border-amber-400/30 bg-amber-400/10", icon: <AlertTriangle className="h-3 w-3" /> },
@@ -4777,6 +5032,12 @@ export default function Dashboard() {
         </motion.div>
 
         {/* SYSTEM DEGRADATION LOG — full width */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.36 }}>
+          <SafeSection label="System Health">
+            <SystemHealthCard />
+          </SafeSection>
+        </motion.div>
+
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}>
           <SafeSection label="System Degradation Log">
             <SystemDegradationSection />

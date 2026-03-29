@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 59901.57975118822,
+  "cash_usd": 49901.33654518822,
   "positions": {
     "DOT/USD": {
       "side": "long",
@@ -41,6 +41,16 @@
       "best_price": 1.6636,
       "entry_fee": 25.6488,
       "order_id": "PAPER-ATOMUSD-1774746555"
+    },
+    "XRP/USD": {
+      "side": "long",
+      "entry_price": 1.33013,
+      "size_usd": 9974.31,
+      "size_units": 7498.748242652973,
+      "entry_time": "2026-03-29T05:30:49.839412+00:00",
+      "best_price": 1.33013,
+      "entry_fee": 25.9332,
+      "order_id": "PAPER-XRPUSD-1774762249"
     }
   },
   "all_trades": [

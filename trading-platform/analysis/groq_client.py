@@ -11,6 +11,7 @@ from groq import Groq
 from loguru import logger
 
 from config.settings import settings
+from analysis.groq_budget import budget as _budget
 
 MODEL = "llama-3.3-70b-versatile"
 
@@ -52,6 +53,7 @@ def call_groq(
             f"completion_tokens={usage.completion_tokens} "
             f"total={usage.total_tokens}"
         )
+        _budget.consume(usage.total_tokens)
         return content
 
     except Exception as exc:

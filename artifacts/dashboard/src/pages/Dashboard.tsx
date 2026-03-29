@@ -177,6 +177,19 @@ function SystemStatusBanner() {
   let reason: string;
   let tradingMode: string | undefined;
 
+  const groqPct = data?.groq?.pct_used ?? 0;
+  const groqUsed = data?.groq?.tokens_used_today ?? 0;
+  const groqTotal = data?.groq?.token_budget_total ?? 100000;
+  const groqBudgetColor =
+    groqPct >= 90 ? "text-red-400" :
+    groqPct >= 70 ? "text-amber-400" :
+    "text-zinc-500";
+  const groqBarColor =
+    groqPct >= 90 ? "bg-red-500" :
+    groqPct >= 70 ? "bg-amber-400" :
+    "bg-emerald-500";
+  const showBudgetMeter = data?.groq != null;
+
   if (isError || !data) {
     sysStatus = "offline";
     reason = "Cannot reach trading API — check that the server is running";
@@ -212,6 +225,23 @@ function SystemStatusBanner() {
     }
   }
 
+  const BudgetMeter = showBudgetMeter ? (
+    <span
+      className="ml-auto flex items-center gap-1.5 flex-shrink-0"
+      title={`Groq daily tokens: ${groqUsed.toLocaleString()} / ${groqTotal.toLocaleString()} (${groqPct}%)`}
+    >
+      <span className={cn("text-xs font-mono tabular-nums", groqBudgetColor)}>
+        LLM {groqPct}%
+      </span>
+      <span className="w-16 h-1.5 bg-zinc-700 rounded-full overflow-hidden flex-shrink-0">
+        <span
+          className={cn("h-full rounded-full transition-all duration-700", groqBarColor)}
+          style={{ width: `${Math.min(groqPct, 100)}%` }}
+        />
+      </span>
+    </span>
+  ) : null;
+
   if (sysStatus === "online") {
     return (
       <div className="sticky top-14 z-30 w-full bg-green-500/8 border-b border-green-500/15 backdrop-blur-md">
@@ -222,11 +252,17 @@ function SystemStatusBanner() {
           </span>
           <span className="text-xs text-green-400 font-medium">ONLINE</span>
           <span className="text-xs text-green-500/60 break-words">— {reason}</span>
-          {tradingMode && (
+          {tradingMode && !showBudgetMeter && (
             <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
               {tradingModeLabel(tradingMode)}
             </span>
           )}
+          {tradingMode && showBudgetMeter && (
+            <span className={cn("text-xs font-mono", tradingModeColor(tradingMode))}>
+              {tradingModeLabel(tradingMode)}
+            </span>
+          )}
+          {BudgetMeter}
         </div>
       </div>
     );
@@ -240,10 +276,11 @@ function SystemStatusBanner() {
           <span className="text-xs text-amber-400 font-medium">AI DEGRADED</span>
           <span className="text-xs text-amber-500/70 break-words">— {reason}</span>
           {tradingMode && (
-            <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
+            <span className={cn("text-xs font-mono", tradingModeColor(tradingMode))}>
               {tradingModeLabel(tradingMode)}
             </span>
           )}
+          {BudgetMeter}
         </div>
       </div>
     );
@@ -256,6 +293,7 @@ function SystemStatusBanner() {
           <AlertTriangle className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
           <span className="text-xs text-amber-400 font-medium">DEGRADED</span>
           <span className="text-xs text-amber-500/70 break-words">— {reason}</span>
+          {BudgetMeter}
         </div>
       </div>
     );

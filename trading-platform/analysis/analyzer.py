@@ -239,10 +239,25 @@ async def run_analysis_cycle(
             raw_json = _mock_regime_llm_response()
             output = process_regime_llm_output(raw_json)
     else:
+        from analysis.groq_budget import budget as _budget
+        if not _budget.can_call_regime():
+            cached = get_regime_fallback()
+            if cached is not None:
+                logger.info(
+                    "Groq budget | Regime call throttled — returning cached regime "
+                    f"(age={round((time.time() - _last_regime_cache.get('saved_at', 0)) / 60)}min)"
+                )
+                return cached
+            logger.warning(
+                "Groq budget | Regime call throttled but no cache available — "
+                "proceeding with LLM call to avoid empty allocation"
+            )
+
         if crypto_only:
             output = _call_crypto_with_retry(system_prompt, user_prompt)
         else:
             output = _call_regime_with_retry(system_prompt, user_prompt)
+        _budget.record_regime_call()
 
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE COMPLETE ({mode_label})")

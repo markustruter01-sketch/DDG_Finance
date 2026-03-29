@@ -44,7 +44,8 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **Dual-mode 24/7 trading** — Full regime-switching (market hours), crypto-only/BTC+ETH+ATOM (off-hours)
 - **15-minute intraday cycles** — ~26 analysis+execution cycles per market day for maximum learning
 - **24/7 crypto cycles** — BTC/USD, ETH/USD, ATOM/USD via Alpaca native crypto (GTC orders, $25 min notional)
-- **Smart data caching** — FRED macro data (1hr TTL, skipped in crypto-only), NewsAPI (30min TTL), Alpaca market data (always fresh, 6-month lookback)
+- **Smart data caching** — FRED macro data (1hr TTL, skipped in crypto-only), NewsAPI (1hr TTL, halved from 30min to reduce Groq token budget pressure), Alpaca market data (always fresh, 6-month lookback)
+- **Groq budget guardrails** — `analysis/groq_budget.py` singleton tracks daily token usage (100K TPD limit), enforces 90-min minimum interval between regime LLM calls (returns cached regime if throttled), caps auto-commentary at 4/day per endpoint (force=true bypasses), all counters reset at midnight UTC
 - **Variable Kelly slots** — 1–6 slots, even-weight Python override (not LLM arithmetic), normalised to ≤ 100% equity
 - **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt (unified for ETF and crypto trades)
 - **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails

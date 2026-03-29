@@ -64,7 +64,7 @@ class TTLCache:
 
 
 fred_cache = TTLCache("fred_macro", ttl_seconds=3600)
-news_cache = TTLCache("newsapi", ttl_seconds=1800)
+news_cache = TTLCache("newsapi", ttl_seconds=3600)
 
 
 def get_cache_stats() -> list[dict]:

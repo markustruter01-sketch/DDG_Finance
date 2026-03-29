@@ -51,6 +51,20 @@ class Settings(BaseSettings):
         description="How many hours a cached regime analysis remains valid for pipeline fallback when Groq is rate-limited",
     )
 
+    # --- Groq Budget Guardrails ---
+    groq_daily_token_budget: int = Field(
+        default=100000,
+        description="Daily token budget for Groq API (free tier = 100,000 TPD). Resets at midnight UTC.",
+    )
+    groq_min_regime_interval_minutes: int = Field(
+        default=90,
+        description="Minimum minutes between regime/crypto LLM calls. Enforces proactive budget pacing. 0 = disabled.",
+    )
+    groq_commentary_daily_cap: int = Field(
+        default=4,
+        description="Max auto-triggered commentary refreshes per endpoint per day (Alpaca + Kraken counted separately). Force=true bypasses cap.",
+    )
+
     # --- Throttling ---
     max_retries: int = Field(
         default=5,

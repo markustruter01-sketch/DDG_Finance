@@ -275,6 +275,7 @@ async def status() -> dict:
     and Groq regime cache status.
     """
     from analysis.analyzer import get_groq_status as _get_groq_status
+    from analysis.groq_budget import budget as _groq_budget
     market_open = is_market_open()
     last_run = get_last_run()
     if not is_auto_trading_enabled():
@@ -285,6 +286,7 @@ async def status() -> dict:
         trading_mode = "crypto_only"
     groq_status = _get_groq_status()
     groq_status["using_fallback"] = last_run.get("groq_using_fallback", False)
+    groq_status.update(_groq_budget.budget_status())
     return {
         "market": {
             "is_open":   market_open,
@@ -1344,6 +1346,18 @@ async def ai_commentary(force: bool = False) -> dict:
             "cache_age_seconds": int(cache_age),
         }
 
+    from analysis.groq_budget import budget as _groq_budget
+    if not _groq_budget.can_call_commentary("alpaca", force=force):
+        if _commentary_cache["text"]:
+            return {
+                "commentary": _commentary_cache["text"],
+                "generated_at": _commentary_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "throttled": True,
+            }
+        raise HTTPException(status_code=429, detail="Commentary daily limit reached — try again tomorrow or use ?force=true")
+
     wins    = get_recent_wins(limit=3)
     losses  = get_recent_losses(limit=5)
     summary = get_journal_summary()
@@ -1475,7 +1489,7 @@ Current open positions:
         "Reference specific tickers or data when available. Direct, no filler. Plain text only."
     )
 
-    def _blocking_call() -> str:
+    def _blocking_call() -> tuple[str, int]:
         from groq import Groq
         from config.settings import settings as _settings
         client = Groq(api_key=_settings.groq_api_key)
@@ -1488,11 +1502,14 @@ Current open positions:
             temperature=0.72,
             max_tokens=150,
         )
-        return resp.choices[0].message.content.strip()
+        tokens = resp.usage.total_tokens if resp.usage else 0
+        return resp.choices[0].message.content.strip(), tokens
 
     try:
         loop = asyncio.get_event_loop()
-        commentary = await loop.run_in_executor(None, _blocking_call)
+        commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
+        _groq_budget.consume(tokens_used)
+        _groq_budget.record_commentary_call("alpaca")
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
@@ -1882,6 +1899,18 @@ async def kraken_commentary(force: bool = False) -> dict:
             "cache_age_seconds": int(cache_age),
         }
 
+    from analysis.groq_budget import budget as _groq_budget
+    if not _groq_budget.can_call_commentary("kraken", force=force):
+        if _kraken_commentary_cache["text"]:
+            return {
+                "commentary": _kraken_commentary_cache["text"],
+                "generated_at": _kraken_commentary_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "throttled": True,
+            }
+        raise HTTPException(status_code=429, detail="Kraken commentary daily limit reached — try again tomorrow or use ?force=true")
+
     status_file = _Path("../kraken-bot/status.json")
     if not status_file.exists():
         raise HTTPException(status_code=503, detail="Kraken bot has not run yet — no status file")
@@ -1957,7 +1986,7 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         "Direct, confident, nautical flair optional. Plain text only, no markdown."
     )
 
-    def _blocking_call() -> str:
+    def _blocking_call() -> tuple[str, int]:
         from groq import Groq
         from config.settings import settings as _settings
         client = Groq(api_key=_settings.groq_api_key)
@@ -1970,11 +1999,14 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
             temperature=0.72,
             max_tokens=180,
         )
-        return resp.choices[0].message.content.strip()
+        tokens = resp.usage.total_tokens if resp.usage else 0
+        return resp.choices[0].message.content.strip(), tokens
 
     try:
         loop = asyncio.get_event_loop()
-        commentary = await loop.run_in_executor(None, _blocking_call)
+        commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
+        _groq_budget.consume(tokens_used)
+        _groq_budget.record_commentary_call("kraken")
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _kraken_commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}

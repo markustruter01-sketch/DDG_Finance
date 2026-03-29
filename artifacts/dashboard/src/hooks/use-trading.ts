@@ -41,6 +41,16 @@ export interface PlatformStatus {
     cache_valid: boolean;
     regime: string | null;
     using_fallback: boolean;
+    tokens_used_today: number;
+    tokens_remaining: number;
+    token_budget_total: number;
+    pct_used: number;
+    regime_calls_today: number;
+    commentary_calls_today: Record<string, number>;
+    regime_interval_min: number;
+    commentary_daily_cap: number;
+    next_regime_eligible_at: string | null;
+    regime_call_eligible: boolean;
   };
 }
 

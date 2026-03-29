@@ -251,9 +251,11 @@ export function useRagWins() {
 
 export interface RecentTradeItem {
   trade_id: string;
-  date: string;
-  ticker: string;
-  pnl_percentage: number;
+  symbol: string;
+  pnl_pct: number;
+  pnl_usd: number | null;
+  exit_reason: string | null;
+  closed_at: string;
   status: "Closed_Win" | "Closed_Loss";
 }
 

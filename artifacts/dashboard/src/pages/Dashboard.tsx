@@ -198,12 +198,14 @@ function KillBoardPanel({
   trades,
   theme,
   bigWinUsd,
+  bigWinPctFallback,
   bigWinLabel,
   panelLabel,
 }: {
   trades: KillTradeEntry[];
   theme: "pirate" | "degen";
   bigWinUsd: number;
+  bigWinPctFallback?: number;
   bigWinLabel: string;
   panelLabel: string;
 }) {
@@ -249,7 +251,9 @@ function KillBoardPanel({
                 const sym = (trade.symbol ?? trade.ticker ?? "?").replace("/USD", "");
                 const pct = trade.pnl_pct ?? trade.pnl_percentage ?? 0;
                 const usd = trade.pnl_usd ?? null;
-                const isBig = usd != null ? usd >= bigWinUsd : false;
+                const isBig = usd != null
+                  ? usd >= bigWinUsd
+                  : (bigWinPctFallback != null ? pct >= bigWinPctFallback : false);
                 const reason = trade.exit_reason ?? trade.reason ?? "";
                 return (
                   <motion.div
@@ -1801,6 +1805,7 @@ function AIBrainSection() {
           trades={(winsData?.wins ?? []).map(w => ({ symbol: w.ticker, pnl_pct: w.pnl_percentage, pnl_usd: null }))}
           theme="degen"
           bigWinUsd={200}
+          bigWinPctFallback={5}
           bigWinLabel="🦍 APE MODE"
           panelLabel="Hit List"
         />

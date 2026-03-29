@@ -66,6 +66,8 @@ from config import (
     CONTROL_FILE,
 )
 
+import adaptive_params as _adaptive
+
 # Import our trading logic functions (identical in both paper and live mode)
 from logic import (
     calculate_rsi,
@@ -110,6 +112,9 @@ logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
 logger.info("=" * 65)
+
+_adaptive.initialise()
+logger.info("Adaptive params initialised — self-tuning layer active (evaluates every 6h)")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -201,15 +206,16 @@ def write_status(error: str | None = None) -> None:
         size          = pos["size_usd"]
         side          = pos["side"]
 
-        # Compute unrealised P&L
+        # Compute unrealised P&L (use live adaptive params for stop/TP prices)
+        _ap = _adaptive.get_active_params()
         if side == "long":
             pnl_usd        = (current_price - entry) / entry * size
-            stop_loss_px   = round(entry * (1.0 - STOP_LOSS_PCT), 4)
-            take_profit_px = round(best  * (1.0 - TRAIL_PCT),     4)  # trailing stop
+            stop_loss_px   = round(entry * (1.0 - _ap["STOP_LOSS_PCT"]), 4)
+            take_profit_px = round(best  * (1.0 - _ap["TRAIL_PCT"]),     4)
         else:
             pnl_usd        = (entry - current_price) / entry * size
-            stop_loss_px   = round(entry * (1.0 + STOP_LOSS_PCT), 4)
-            take_profit_px = round(best  * (1.0 + TRAIL_PCT),     4)
+            stop_loss_px   = round(entry * (1.0 + _ap["STOP_LOSS_PCT"]), 4)
+            take_profit_px = round(best  * (1.0 + _ap["TRAIL_PCT"]),     4)
 
         pnl_pct = (pnl_usd / size * 100) if size > 0 else 0.0
         qty     = size / entry if entry > 0 else 0.0
@@ -253,6 +259,7 @@ def write_status(error: str | None = None) -> None:
         "paper_summary":    paper_summary,        # None in live mode
         "signals":          latest_signals,       # per-symbol RSI / z-score scan
         "thinking_text":    thinking_text,        # plain-English reasoning for dashboard
+        "adaptive_params":  _adaptive.status_snapshot(),
         "error":            error,
     }
 
@@ -482,6 +489,16 @@ def run_cycle() -> None:
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
 
+    # ── Pull current adaptive parameters (self-tuning layer) ─────────────────
+    # maybe_adapt() only does real work every 6 hours; otherwise returns fast.
+    _adaptive.maybe_adapt()
+    _ap = _adaptive.get_active_params()
+    _zscore_entry       = _ap["ZSCORE_ENTRY"]
+    _zscore_exit        = _ap["ZSCORE_EXIT"]
+    _stop_loss_pct      = _ap["STOP_LOSS_PCT"]
+    _trail_pct          = _ap["TRAIL_PCT"]
+    _min_net_profit_pct = _ap["MIN_NET_PROFIT_PCT"]
+
     for symbol in SYMBOLS:
         try:
             # ── 3a. Fetch candles — real live data in both paper and live mode ─
@@ -539,8 +556,8 @@ def run_cycle() -> None:
                     entry_price=pos["entry_price"],
                     current_price=current_price,
                     best_price=pos["best_price"],
-                    stop_loss_pct=STOP_LOSS_PCT,
-                    trail_pct=TRAIL_PCT,
+                    stop_loss_pct=_stop_loss_pct,
+                    trail_pct=_trail_pct,
                 )
 
                 if exit_reason:
@@ -568,8 +585,8 @@ def run_cycle() -> None:
                         else (pos["entry_price"] - current_price) / pos["entry_price"]
                     )
 
-                    if abs(sym_z_score) < ZSCORE_EXIT:
-                        if unrealised_pnl_pct >= MIN_NET_PROFIT_PCT:
+                    if abs(sym_z_score) < _zscore_exit:
+                        if unrealised_pnl_pct >= _min_net_profit_pct:
                             # Both conditions met — take the mean-reversion exit
                             close_position(symbol, reason="mean_reversion_complete")
                             deployed_usd = sum(p["size_usd"] for p in open_positions.values())
@@ -581,17 +598,17 @@ def run_cycle() -> None:
                         else:
                             # Z returned to mean but P&L is below the fee threshold —
                             # hold and wait for the trailing stop or more profit.
-                            needed_pct = (MIN_NET_PROFIT_PCT - unrealised_pnl_pct) * 100
+                            needed_pct = (_min_net_profit_pct - unrealised_pnl_pct) * 100
                             logger.info(
                                 f"Hold   | {pos['side'].upper()} {symbol} | "
                                 f"Z reverted ({sym_z_score:+.2f}) but P&L {unrealised_pnl_pct*100:+.2f}% "
-                                f"below min-profit threshold ({MIN_NET_PROFIT_PCT*100:.1f}%) — "
+                                f"below min-profit threshold ({_min_net_profit_pct*100:.1f}%) — "
                                 f"need +{needed_pct:.2f}% more before mean-reversion exit allowed"
                             )
                             thinking_text = (
                                 f"{symbol}: Z-score reverted to {sym_z_score:+.2f} but "
                                 f"P&L {unrealised_pnl_pct*100:+.2f}% is below the "
-                                f"{MIN_NET_PROFIT_PCT*100:.1f}% min-profit gate (covers 0.52% fees). "
+                                f"{_min_net_profit_pct*100:.1f}% min-profit gate (covers 0.52% fees). "
                                 f"Holding — awaiting min profit threshold."
                             )
                             cycle_signals.append({
@@ -632,20 +649,20 @@ def run_cycle() -> None:
                 continue
 
             # LONG signal: price is unusually low + RSI is oversold
-            if sym_z_score < -ZSCORE_ENTRY and sym_rsi < RSI_OVERSOLD:
+            if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
                 size_usd = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
-                    stop_loss_pct=STOP_LOSS_PCT,
+                    stop_loss_pct=_stop_loss_pct,
                     max_position_fraction=MAX_POSITION_FRACTION,
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
-                        f"Z={sym_z_score:.2f} (dip>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
+                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | Size: ${size_usd:,.2f}"
                     )
                     if open_position(symbol, "long", size_usd, current_price):
                         deployed_usd += size_usd
@@ -669,20 +686,20 @@ def run_cycle() -> None:
                     })
 
             # SHORT signal: price is unusually high + RSI is overbought
-            elif sym_z_score > ZSCORE_ENTRY and sym_rsi > RSI_OVERBOUGHT:
+            elif sym_z_score > _zscore_entry and sym_rsi > RSI_OVERBOUGHT:
                 size_usd = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
-                    stop_loss_pct=STOP_LOSS_PCT,
+                    stop_loss_pct=_stop_loss_pct,
                     max_position_fraction=MAX_POSITION_FRACTION,
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
                     logger.info(
                         f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
-                        f"Z={sym_z_score:.2f} (peak>{ZSCORE_ENTRY}) | Size: ${size_usd:,.2f}"
+                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | Size: ${size_usd:,.2f}"
                     )
                     if open_position(symbol, "short", size_usd, current_price):
                         deployed_usd += size_usd
@@ -739,7 +756,7 @@ def run_cycle() -> None:
         # This is the most actionable state — surface it prominently.
         parts = [
             f"{h['side'].upper()} {h['symbol'].replace('/USD','')} "
-            f"{h.get('pnl_pct', 0):+.2f}% (need {MIN_NET_PROFIT_PCT*100:.1f}%) "
+            f"{h.get('pnl_pct', 0):+.2f}% (need {_min_net_profit_pct*100:.1f}%) "
             f"· Z={h['z_score']:+.2f}"
             for h in min_profit_holds
         ]

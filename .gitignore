@@ -57,3 +57,4 @@ kraken-bot/paper_portfolio.json
 trading-platform/data/commentary_cache.json
 trading-platform/data/last_regime_cache.json
 trading-platform/data/kraken_imported_trades.json
+kraken-bot/adaptive_params.json

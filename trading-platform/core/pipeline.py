@@ -187,23 +187,46 @@ async def _run_pipeline_inner(
         allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)
     except Exception as exc:
         logger.error(f"Pipeline | Analysis cycle FAILED: {exc}")
-        # ── Groq fallback: use last-good regime cache if available and fresh ──
-        # This keeps the pipeline alive when Groq hits its 100k token/day limit.
-        fallback = get_regime_fallback() if not crypto_only else None
-        if fallback is not None:
-            using_fallback = True
-            logger.warning(
-                f"Pipeline | Groq failed — using CACHED regime '{fallback.regime}' as fallback. "
-                f"Execution will proceed with stale allocation. Groq error: {exc}"
-            )
-            allocation = fallback
-            result["errors"].append(
-                f"Groq unavailable ({exc.__class__.__name__}) — using cached regime '{fallback.regime}'"
-            )
+        # ── Groq-specific fallback: only activate when the LLM retries themselves
+        # exhausted (Groq rate-limited / 503 / token-limit).  Other failures such
+        # as account-state unavailability, bad market data, or prompt-assembly
+        # errors abort immediately as before — we must NOT trade on stale
+        # allocations when the root cause is something other than Groq.
+        #
+        # Detection: _call_regime_with_retry raises:
+        #   RuntimeError("Regime LLM failed after N attempts. Last error: ...")
+        # Account-fetch raises:
+        #   RuntimeError("Account state unavailable, analysis aborted: ...")
+        # All other non-LLM failures use different messages / types.
+        exc_msg = str(exc)
+        is_llm_failure = (
+            "Regime LLM failed after" in exc_msg
+            or "Crypto LLM failed after" in exc_msg
+        )
+        if is_llm_failure and not crypto_only:
+            # Attempt Groq regime fallback
+            fallback = get_regime_fallback()
+            if fallback is not None:
+                using_fallback = True
+                logger.warning(
+                    f"Pipeline | Groq LLM exhausted — using CACHED regime '{fallback.regime}' as fallback. "
+                    f"Execution will proceed with stale allocation. LLM error: {exc}"
+                )
+                allocation = fallback
+                result["errors"].append(
+                    f"Groq rate-limited ({exc.__class__.__name__}) — using cached regime '{fallback.regime}'"
+                )
+            else:
+                # LLM failed AND no usable cache — abort
+                result["status"] = "analysis_failed"
+                result["errors"].append(f"Groq LLM failed, no fallback cache available: {exc}")
+                _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
+                return result
         else:
-            # No usable cache — abort as before
+            # Non-LLM failure (account fetch, data fetch, etc.) — abort as before.
+            # Do NOT silently trade on stale data when the root cause is unknown.
             result["status"] = "analysis_failed"
-            result["errors"].append(f"Analysis failed (no fallback available): {exc}")
+            result["errors"].append(f"Analysis failed: {exc}")
             _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
             return result
 

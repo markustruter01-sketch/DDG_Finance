@@ -8,7 +8,7 @@
  */
 
 import { Link, useLocation } from "wouter";
-import { Activity, Terminal } from "lucide-react";
+import { Activity, Terminal, LayoutDashboard } from "lucide-react";
 import { useSaasConfig } from "@/hooks/use-saas-config";
 import { useAuth } from "@/context/AuthContext";
 
@@ -60,6 +60,16 @@ export default function Navbar() {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* My Dashboard switcher */}
+      <a
+        href="/"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-300 text-xs font-semibold hover:bg-zinc-800 hover:border-zinc-600 hover:text-zinc-100 transition-all select-none mr-1"
+        title="Switch to Quant Terminal (personal dashboard)"
+      >
+        <LayoutDashboard className="h-3.5 w-3.5 opacity-80" />
+        <span className="hidden sm:inline">My Dashboard</span>
+      </a>
 
       {/* Right-side status chips */}
       <div className="flex items-center gap-3">

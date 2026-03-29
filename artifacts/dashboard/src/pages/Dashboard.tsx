@@ -28,7 +28,7 @@ import {
   RefreshCw, Sparkles, Brain, Trophy, Flame, Zap, X,
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
-  Lightbulb, Play, LogOut,
+  Lightbulb, Play, LogOut, ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -176,6 +176,17 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* AlgoEdge SaaS switcher */}
+          <a
+            href="/saas/"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 text-xs font-semibold hover:bg-indigo-500/20 hover:border-indigo-500/60 transition-all select-none"
+            title="Switch to AlgoEdge SaaS Platform"
+          >
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-indigo-600 text-white text-[9px] font-black">AE</span>
+            <span className="hidden sm:inline">AlgoEdge</span>
+            <ExternalLink className="h-3 w-3 opacity-70" />
+          </a>
+
           <EmergencyHeaderButtons />
 
           <div className="h-6 w-px bg-white/8 hidden md:block" />

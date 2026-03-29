@@ -25,29 +25,18 @@ from loguru import logger
 
 
 # ── De-duplication: suppress identical events within a rolling window ───────
-# Per-component base TTL (seconds).  The first occurrence of a persistent
-# issue is recorded immediately; each subsequent re-occurrence doubles the
-# quiet window (capped at 4 h) so a 9-hour Kraken outage produces ≤4 records
-# instead of 270.
-# Escalation profile validation (9-hour persistent incident):
-#   kraken_api base=3600s, cap=14400s →
-#     rec 1 @ t=0s  (count 0→1, next window=3600s)
-#     rec 2 @ t=3600s (count 1→2, next window=7200s)
-#     rec 3 @ t=10800s/3h (count 2→3, next window=14400s/cap)
-#     rec 4 @ t=25200s/7h (count 3→4, next window=14400s/cap)
-#   = 4 records in 9 h ✓
-_COMPONENT_TTL: dict[str, int] = {
-    "kraken_api":    3600,  # 1 h base — stale writes fire every 2 min; doubles to cap
-    "platform_core": 3600,  # 1 h base — persistent scheduler/analysis issues
-    "http":           300,  # 5 min  — HTTP 500s need faster re-alerting
-    "data_pipeline":  900,  # 15 min
-    "groq":           900,  # 15 min
-    "alpaca":         900,  # 15 min
-    "database":       900,  # 15 min
-    "scheduler":     3600,  # 1 h base
+# Per-(component, error_type) base TTL in seconds.
+# Stale-type events on persistent services: 30 min (first alert + 3 escalations = ~4 records/9h).
+# HTTP error events need fast re-alerting: 5 min.
+# Everything else defaults to 15 min.
+_EVENT_TTL: dict[tuple[str, str], int] = {
+    ("kraken_api",    "stale"):  1800,  # 30 min — stale data fires every 2 min when bot is unhealthy
+    ("platform_core", "stale"):  1800,  # 30 min — scheduler stall persists for hours
+    ("http",          "500"):     300,  # 5 min  — server errors may be transient; re-alert quickly
+    ("http",          "503"):     300,  # 5 min  — service-unavailable (e.g. AI rate-limit)
 }
-_DEFAULT_TTL = 900   # 15 min for unrecognised components
-_MAX_TTL     = 14400  # cap escalation at 4 h (yields ≤4 records per 9-hour outage)
+_DEFAULT_TTL = 900   # 15 min for all other (component, error_type) pairs
+_MAX_TTL     = 14400  # cap escalation at 4 h
 
 # key → last recorded timestamp
 _recent_keys: dict[str, float] = {}
@@ -66,7 +55,7 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
     now = time.time()
     last = _recent_keys.get(key, 0)
 
-    base_ttl = _COMPONENT_TTL.get(component, _DEFAULT_TTL)
+    base_ttl = _EVENT_TTL.get((component, error_type), _DEFAULT_TTL)
     count    = _escalation_counts.get(key, 0)
     # Each prior recording doubles the quiet window (2⁰=1× … 2²=4× etc.)
     ttl = min(base_ttl * (2 ** count), _MAX_TTL)

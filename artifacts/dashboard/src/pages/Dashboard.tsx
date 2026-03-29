@@ -4539,11 +4539,11 @@ function AlertMetaCard({ ev }: { ev: DegradationEvent }) {
           <div className="flex flex-wrap gap-1.5 mt-1.5">
             {meta ? (
               <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${meta.resolution === "self" ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" : "text-amber-400 border-amber-400/30 bg-amber-400/10"}`}>
-                {meta.resolution === "self" ? "Clears on its own" : "Needs attention"}
+                {meta.resolution === "self" ? "Clears on its own" : meta.resolution === "code" ? "Needs a code fix" : "Needs attention"}
               </span>
             ) : (
               <span className="text-[9px] px-1.5 py-0.5 rounded border font-semibold text-slate-400 border-slate-400/30 bg-slate-400/10">
-                Unknown — check manually
+                Check required
               </span>
             )}
             <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${impact.color}`}>

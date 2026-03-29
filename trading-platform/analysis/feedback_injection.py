@@ -314,4 +314,25 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
         except Exception as exc:
             logger.warning(f"Feedback injection | On-chain injection failed: {exc}")
 
+    try:
+        from analysis.learning_journal import get_top_learnings_for_prompt
+        learnings = get_top_learnings_for_prompt(limit=10, crypto_only=crypto_only)
+        if learnings:
+            full_prompt += "\n\n## ESTABLISHED LEARNINGS\n"
+            full_prompt += (
+                "The following patterns have been confirmed across multiple independent analysis cycles. "
+                "Build on these established conclusions — do not re-derive what is already known. "
+                "If current data contradicts an established learning, note it explicitly in your rationale.\n\n"
+            )
+            for i, entry in enumerate(learnings, 1):
+                conf_pct = int(entry["confidence_score"] * 100)
+                full_prompt += (
+                    f"{i}. [{entry['regime']} / {entry['category']}] "
+                    f"{entry['insight_text']} "
+                    f"(confirmed {entry['confirmed_count']}x, confidence {conf_pct}%)\n"
+                )
+            logger.info(f"Feedback injection | {len(learnings)} established learning(s) injected into prompt")
+    except Exception as exc:
+        logger.warning(f"Feedback injection | Learning journal injection failed: {exc}")
+
     return full_prompt

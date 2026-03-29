@@ -8,8 +8,10 @@ import {
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
+  useLearningJournal,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
+  type LearningEntry,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
 import { SentimentGauges } from "@/components/SentimentGauges";
@@ -3849,6 +3851,176 @@ function JournalSection() {
   );
 }
 
+// ── LLM Learning Journal ──────────────────────────────────────────────────────
+
+function LLMJournalSection() {
+  const [regimeFilter, setRegimeFilter] = useState<string | undefined>(undefined);
+  const [catFilter, setCatFilter] = useState<string | undefined>(undefined);
+  const { data, isLoading } = useLearningJournal(regimeFilter, catFilter, 50);
+
+  const REGIMES = ["Bull", "Bear", "Sideways", "Crypto"];
+  const CATEGORIES = ["macro", "momentum", "risk", "position", "crypto"];
+
+  const regimeColor = (r: string) => {
+    if (r === "Bull")     return "text-green-400 border-green-500/30 bg-green-500/10";
+    if (r === "Bear")     return "text-red-400 border-red-500/30 bg-red-500/10";
+    if (r === "Sideways") return "text-yellow-400 border-yellow-500/30 bg-yellow-500/10";
+    if (r === "Crypto")   return "text-purple-400 border-purple-500/30 bg-purple-500/10";
+    return "text-muted-foreground border-white/10 bg-white/5";
+  };
+
+  const catColor = (c: string) => {
+    if (c === "macro")     return "text-blue-400 border-blue-500/30";
+    if (c === "momentum")  return "text-cyan-400 border-cyan-500/30";
+    if (c === "risk")      return "text-orange-400 border-orange-500/30";
+    if (c === "position")  return "text-indigo-400 border-indigo-500/30";
+    if (c === "crypto")    return "text-purple-400 border-purple-500/30";
+    return "text-muted-foreground border-white/10";
+  };
+
+  const confidenceBar = (score: number) => {
+    const pct = Math.round(score * 100);
+    const barColor = score >= 0.7 ? "bg-green-500" : score >= 0.5 ? "bg-yellow-500" : "bg-blue-500";
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+          <div className={cn("h-full rounded-full", barColor)} style={{ width: `${pct}%` }} />
+        </div>
+        <span className="text-[9px] font-mono text-muted-foreground">{pct}%</span>
+      </div>
+    );
+  };
+
+  return (
+    <Card className="border-white/5">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 fluid-heading">
+            <Brain className="h-4 w-4 text-purple-400" />
+            LLM Learning Journal
+            {data && (
+              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full border text-purple-400 border-purple-500/30 bg-purple-500/10">
+                {data.count} insight{data.count !== 1 ? "s" : ""}
+              </span>
+            )}
+          </CardTitle>
+          <p className="text-[10px] text-muted-foreground/60 font-mono hidden sm:block">
+            Patterns confirmed across multiple independent analysis cycles
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <button
+            onClick={() => setRegimeFilter(undefined)}
+            className={cn(
+              "text-[9px] font-mono px-2 py-0.5 rounded-full border transition-all",
+              !regimeFilter ? "text-white border-white/30 bg-white/10" : "text-muted-foreground border-white/10 hover:border-white/20"
+            )}
+          >
+            All Regimes
+          </button>
+          {REGIMES.map(r => (
+            <button
+              key={r}
+              onClick={() => setRegimeFilter(regimeFilter === r ? undefined : r)}
+              className={cn(
+                "text-[9px] font-mono px-2 py-0.5 rounded-full border transition-all",
+                regimeFilter === r ? regimeColor(r) : "text-muted-foreground border-white/10 hover:border-white/20"
+              )}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 mt-1.5">
+          <button
+            onClick={() => setCatFilter(undefined)}
+            className={cn(
+              "text-[9px] font-mono px-2 py-0.5 rounded-full border transition-all",
+              !catFilter ? "text-white border-white/30 bg-white/10" : "text-muted-foreground border-white/10 hover:border-white/20"
+            )}
+          >
+            All Topics
+          </button>
+          {CATEGORIES.map(c => (
+            <button
+              key={c}
+              onClick={() => setCatFilter(catFilter === c ? undefined : c)}
+              className={cn(
+                "text-[9px] font-mono px-2 py-0.5 rounded-full border transition-all capitalize",
+                catFilter === c ? catColor(c) : "text-muted-foreground border-white/10 hover:border-white/20"
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+
+      <div className="p-4 space-y-2 max-h-[520px] overflow-y-auto">
+        {isLoading && (
+          <div className="text-center py-8 text-muted-foreground text-xs animate-pulse">
+            Loading journal entries...
+          </div>
+        )}
+
+        {!isLoading && (!data || data.count === 0) && (
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <Brain className="h-8 w-8 text-purple-400/25" />
+            <div>
+              <p className="text-sm text-muted-foreground">No learnings recorded yet.</p>
+              <p className="text-[11px] text-muted-foreground/50 mt-1 max-w-xs mx-auto">
+                The journal populates automatically after the first LLM analysis cycle completes. Check back after the next trading cycle.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {data?.entries.map((entry: LearningEntry, idx: number) => (
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ delay: Math.min(idx * 0.025, 0.5) }}
+              className="rounded-lg border border-white/5 bg-slate-900/50 p-3 hover:border-white/10 hover:bg-slate-800/50 transition-all duration-200"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-white/85 leading-relaxed flex-1">{entry.insight_text}</p>
+                <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                  <span className={cn("text-[8px] font-mono px-1.5 py-0.5 rounded-full border whitespace-nowrap", regimeColor(entry.regime))}>
+                    {entry.regime}
+                  </span>
+                  <span className={cn("text-[8px] font-mono px-1.5 py-0.5 rounded-full border capitalize whitespace-nowrap", catColor(entry.category))}>
+                    {entry.category}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2 gap-2 flex-wrap">
+                {confidenceBar(entry.confidence_score)}
+                <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground/60 flex-wrap">
+                  <span className="flex items-center gap-0.5">
+                    <CheckCircle2 className="h-2.5 w-2.5 text-green-500/70" />
+                    {entry.confirmed_count}× confirmed
+                  </span>
+                  {entry.first_seen && (
+                    <span>First: {entry.first_seen.slice(0, 10)}</span>
+                  )}
+                  {entry.last_seen && entry.last_seen !== entry.first_seen && (
+                    <span>Last: {entry.last_seen.slice(0, 10)}</span>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </Card>
+  );
+}
+
 // ── Learning Context (bidirectional RAG) ─────────────────────────────────────
 
 function LearningContextSection() {
@@ -4411,6 +4583,13 @@ export default function Dashboard() {
             </SafeSection>
           </motion.div>
         </div>
+
+        {/* LLM LEARNING JOURNAL — full width */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}>
+          <SafeSection label="LLM Learning Journal">
+            <LLMJournalSection />
+          </SafeSection>
+        </motion.div>
 
       </main>
     </div>

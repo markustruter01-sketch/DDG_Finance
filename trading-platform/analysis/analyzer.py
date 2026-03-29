@@ -335,6 +335,11 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
             # Persist the successful regime so the pipeline can use it as a fallback
             # if Groq is rate-limited on a future call.
             _save_regime_cache(output)
+            try:
+                from analysis.learning_journal import record_cycle_learnings
+                record_cycle_learnings(output)
+            except Exception as _lj_exc:
+                logger.warning(f"Learning journal | Regime record failed (non-fatal): {_lj_exc}")
             return output
 
         except Exception as exc:
@@ -389,6 +394,11 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
             if attempt > 1:
                 logger.info(f"  LLM self-corrected on attempt {attempt}")
             _save_crypto_cache(output)
+            try:
+                from analysis.learning_journal import record_cycle_learnings
+                record_cycle_learnings(output)
+            except Exception as _lj_exc:
+                logger.warning(f"Learning journal | Crypto record failed (non-fatal): {_lj_exc}")
             return output
 
         except Exception as exc:

@@ -803,6 +803,23 @@ async def journal_wins(n: int = 5) -> dict:
     return {"count": len(wins), "wins": wins}
 
 
+@router.get("/learning-journal", tags=["Journal"])
+async def learning_journal_endpoint(
+    regime: str | None = None,
+    category: str | None = None,
+    limit: int = 50,
+) -> dict:
+    """
+    LLM Learning Journal — consolidated insights extracted from every Groq analysis cycle.
+    Entries with higher confirmed_count have been observed across multiple independent cycles.
+    Sorted by confidence_score DESC.
+    Optional filters: regime (Bull|Bear|Sideways|Crypto), category (macro|momentum|risk|position|crypto).
+    """
+    from analysis.learning_journal import get_journal_entries
+    entries = get_journal_entries(regime=regime, category=category, limit=limit)
+    return {"count": len(entries), "entries": entries}
+
+
 @router.get("/performance", tags=["Performance"])
 async def performance_history(limit: int = 90) -> dict:
     """

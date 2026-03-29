@@ -852,3 +852,28 @@ export function useEquityCurve(limit = 500) {
     staleTime: 30_000,
   });
 }
+
+export interface LearningEntry {
+  id: number;
+  insight_text: string;
+  regime: "Bull" | "Bear" | "Sideways" | "Crypto" | string;
+  category: "macro" | "momentum" | "risk" | "position" | "crypto" | string;
+  first_seen: string | null;
+  last_seen: string | null;
+  confirmed_count: number;
+  confidence_score: number;
+}
+
+export function useLearningJournal(regime?: string, category?: string, limit = 50) {
+  const params = new URLSearchParams();
+  if (regime) params.set("regime", regime);
+  if (category) params.set("category", category);
+  params.set("limit", String(limit));
+  return useQuery<{ count: number; entries: LearningEntry[] }>({
+    queryKey: ["/learning-journal", regime, category, limit],
+    queryFn: async () => (await api.get(`/learning-journal?${params.toString()}`)).data,
+    refetchInterval: 120_000,
+    retry: false,
+    staleTime: 60_000,
+  });
+}

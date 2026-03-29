@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 49901.33654518822,
+  "cash_usd": 39903.69007318822,
   "positions": {
     "DOT/USD": {
       "side": "long",
@@ -51,6 +51,16 @@
       "best_price": 1.33013,
       "entry_fee": 25.9332,
       "order_id": "PAPER-XRPUSD-1774762249"
+    },
+    "SOL/USD": {
+      "side": "long",
+      "entry_price": 82.2,
+      "size_usd": 9971.72,
+      "size_units": 121.31046228710461,
+      "entry_time": "2026-03-29T07:04:22.510734+00:00",
+      "best_price": 82.2,
+      "entry_fee": 25.9265,
+      "order_id": "PAPER-SOLUSD-1774767862"
     }
   },
   "all_trades": [

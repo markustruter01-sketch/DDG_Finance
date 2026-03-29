@@ -189,6 +189,23 @@ CREATE TABLE IF NOT EXISTS saas_users (
 CREATE INDEX IF NOT EXISTS idx_saas_users_email       ON saas_users (email);
 CREATE INDEX IF NOT EXISTS idx_saas_users_stripe_cust ON saas_users (stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_saas_users_tier        ON saas_users (active_license_tier);
+
+-- ── LLM Learning Journal ───────────────────────────────────────────────────
+-- Consolidated insights extracted from every LLM analysis output.
+-- Similar insights are merged (Jaccard ≥ 0.4); confirmed_count grows each time.
+-- Top entries by confidence_score are injected back into future LLM prompts.
+CREATE TABLE IF NOT EXISTS llm_learnings (
+    id               BIGSERIAL PRIMARY KEY,
+    insight_text     TEXT NOT NULL,
+    regime           TEXT NOT NULL,          -- Bull / Bear / Sideways / Crypto
+    category         TEXT NOT NULL,          -- macro / momentum / risk / position / crypto
+    first_seen       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    confirmed_count  INTEGER NOT NULL DEFAULT 1,
+    confidence_score DOUBLE PRECISION NOT NULL DEFAULT 0.33
+);
+CREATE INDEX IF NOT EXISTS idx_llm_learnings_confidence ON llm_learnings (confidence_score DESC);
+CREATE INDEX IF NOT EXISTS idx_llm_learnings_regime     ON llm_learnings (regime);
 """
 
 

@@ -25,7 +25,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
-- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger)
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking

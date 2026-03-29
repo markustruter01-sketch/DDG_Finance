@@ -70,6 +70,7 @@ EXPECTED_JOB_COUNT = 4
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
+_kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -1418,6 +1419,139 @@ async def kraken_status() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
 
+
+# ── Kraken Bot — AI Narrative Commentary ──────────────────────────────────────
+
+@router.get("/kraken/commentary", tags=["Kraken Bot"])
+async def kraken_commentary(force: bool = False) -> dict:
+    """
+    Generate Davy Jones' AI narrative: thought process, learnings, and future
+    behavioural adjustments.  Cached for 30 minutes.
+    """
+    global _kraken_commentary_cache
+    import json as _json
+    from pathlib import Path as _Path
+
+    now = time.time()
+    cache_age = now - _kraken_commentary_cache["ts"]
+
+    if not force and _kraken_commentary_cache["text"] and cache_age < COMMENTARY_TTL_SECONDS:
+        return {
+            "commentary": _kraken_commentary_cache["text"],
+            "generated_at": _kraken_commentary_cache["generated_at"],
+            "cached": True,
+            "cache_age_seconds": int(cache_age),
+        }
+
+    status_file = _Path("../kraken-bot/status.json")
+    if not status_file.exists():
+        raise HTTPException(status_code=503, detail="Kraken bot has not run yet — no status file")
+
+    try:
+        kdata = _json.loads(status_file.read_text())
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cannot read kraken status: {exc}")
+
+    positions     = kdata.get("open_positions", [])
+    recent_trades = kdata.get("recent_trades", [])
+    signals       = kdata.get("signals", [])
+    wins          = [t for t in recent_trades if t.get("pnl_pct", 0) > 0]
+    losses        = [t for t in recent_trades if t.get("pnl_pct", 0) <= 0]
+    win_rate      = (len(wins) / len(recent_trades) * 100) if recent_trades else None
+
+    pos_text = "\n".join(
+        f"  {p.get('side','').upper()} {p['symbol']}: "
+        f"entry ${p.get('entry_price', 0):.4f}, now ${p.get('current_price', 0):.4f}, "
+        f"P&L {p.get('pnl_pct', 0):+.2f}%"
+        for p in positions
+    ) or "  (no open positions)"
+
+    wins_text = "\n".join(
+        f"  WIN: {t['symbol']} {t.get('pnl_pct', 0):+.2f}% ({t.get('side', '')})"
+        for t in wins[-3:]
+    ) or "  (none yet)"
+
+    losses_text = "\n".join(
+        f"  LOSS: {t['symbol']} {t.get('pnl_pct', 0):+.2f}% ({t.get('side', '')})"
+        for t in losses[-3:]
+    ) or "  (none yet)"
+
+    signal_text = "\n".join(
+        f"  {s['symbol']}: RSI={s.get('rsi', 0):.1f} Z={s.get('z_score', 0):+.2f} → {s.get('signal_type', 'watching')}"
+        for s in signals[:6]
+    ) or "  (scanning markets)"
+
+    try:
+        from data.sentiment import get_sentiment
+        sent = get_sentiment()
+        cfg  = sent.get("crypto_fear_greed", {})
+        sentiment_line = f"Crypto Fear&Greed: {cfg.get('value','?')} ({cfg.get('label','?')})"
+    except Exception:
+        sentiment_line = ""
+
+    user_prompt = f"""
+Davy Jones' current open positions (Kraken 24/7 mean-reversion crypto bot):
+{pos_text}
+
+Recent wins (reinforcing behaviour):
+{wins_text}
+
+Recent losses (behavioural corrections needed):
+{losses_text}
+
+Signal scanner snapshot:
+{signal_text}
+
+Statistics: {len(recent_trades)} total trades{f', win rate {win_rate:.0f}%' if win_rate is not None else ''}
+Equity: ${kdata.get('total_equity_usd', 0):,.2f} | Deployed: {kdata.get('deployed_pct', 0):.0f}% of {kdata.get('deployable_ceiling_pct', 80)}% ceiling
+Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pct', 20)}%
+{sentiment_line}
+"""
+
+    system_prompt = (
+        "You are 'Davy Jones' — a relentless 24/7 crypto mean-reversion trading AI with the soul of a seasoned "
+        "sailor who reads market currents like ocean tides. In exactly 3 punchy sentences: "
+        "(1) your sharpest read on the current crypto signals and any open positions, "
+        "(2) one concrete learning from your recent wins or losses, "
+        "(3) one specific behavioural adjustment you're making going forward. "
+        "Reference specific coin names, RSI levels, or Z-scores when available. "
+        "Direct, confident, nautical flair optional. Plain text only, no markdown."
+    )
+
+    def _blocking_call() -> str:
+        from groq import Groq
+        from config.settings import settings as _settings
+        client = Groq(api_key=_settings.groq_api_key)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.72,
+            max_tokens=180,
+        )
+        return resp.choices[0].message.content.strip()
+
+    try:
+        loop = asyncio.get_event_loop()
+        commentary = await loop.run_in_executor(None, _blocking_call)
+        from datetime import datetime, timezone
+        generated_at = datetime.now(timezone.utc).isoformat()
+        _kraken_commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        logger.info("Kraken AI commentary regenerated successfully")
+        return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
+    except Exception as exc:
+        logger.error(f"Kraken AI commentary generation failed: {exc}")
+        if _kraken_commentary_cache["text"]:
+            return {
+                "commentary": _kraken_commentary_cache["text"],
+                "generated_at": _kraken_commentary_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "error": str(exc),
+            }
+        raise HTTPException(status_code=503, detail=f"Kraken commentary unavailable: {exc}")
 
 
 # ── Kraken Bot — Performance Metrics ──────────────────────────────────────────

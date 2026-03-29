@@ -692,6 +692,36 @@ export function useKrakenStatus() {
   });
 }
 
+// ── Kraken AI Commentary ──────────────────────────────────────────────────────
+
+export interface KrakenCommentary {
+  commentary: string;
+  generated_at: string;
+  cached: boolean;
+  cache_age_seconds: number;
+  error?: string;
+}
+
+export function useKrakenCommentary() {
+  return useQuery<KrakenCommentary>({
+    queryKey: ["/kraken/commentary"],
+    queryFn: async () => (await api.get("/kraken/commentary")).data,
+    staleTime: 1000 * 60 * 25,
+    retry: 1,
+  });
+}
+
+export function useRefreshKrakenCommentary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      (await api.get("/kraken/commentary?force=true")).data as KrakenCommentary,
+    onSuccess: (data) => {
+      qc.setQueryData(["/kraken/commentary"], data);
+    },
+  });
+}
+
 // ── Kraken Performance Metrics ────────────────────────────────────────────────
 // DATA SOURCE: kraken-bot/status.json  (Kraken exchange, separate capital pool)
 // NOT RELATED TO: usePerformanceSummary / usePerformanceHistory (Alpaca data)

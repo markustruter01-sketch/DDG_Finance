@@ -7,6 +7,7 @@ import {
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
+  useKrakenCommentary, useRefreshKrakenCommentary,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
 } from "@/hooks/use-trading";
@@ -1417,6 +1418,51 @@ function AIBrainSection() {
           />
         </div>
 
+        {/* Equity Signal Scanner — mirrors Kraken's signal scanner format */}
+        {(posData?.positions?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+            <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
+              <span>Equity Scanner</span>
+              <span className="text-[9px] text-indigo-400/50 font-normal normal-case">live positions</span>
+            </div>
+            <div className="divide-y divide-white/[0.03]">
+              {(posData?.positions ?? []).map((pos) => {
+                const pnlPct = (pos.unrealized_plpc ?? 0) * 100;
+                const conv = pos.conviction_score;
+                const convPct = conv !== null ? conv * 100 : null;
+                const convColor = conv !== null ? (conv > 0.7 ? "#22c55e" : conv > 0.4 ? "#22d3ee" : "#f97316") : "#64748b";
+                return (
+                  <div key={pos.symbol} className="px-3 py-2 flex items-center gap-3">
+                    <span className="text-xs font-bold text-white w-14 shrink-0">{pos.symbol}</span>
+                    {/* Conviction bar */}
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="text-[9px] text-muted-foreground/60 w-8">Conv</span>
+                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${convPct ?? 50}%`, backgroundColor: convColor }}
+                        />
+                      </div>
+                      <span className="text-[9px] font-mono w-8 text-right" style={{ color: convColor }}>
+                        {convPct !== null ? `${convPct.toFixed(0)}%` : "—"}
+                      </span>
+                    </div>
+                    {/* P&L status pill */}
+                    <span className={cn(
+                      "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+                      pnlPct >= 0
+                        ? "text-green-400 bg-green-500/10 border-green-500/30"
+                        : "text-red-400 bg-red-500/10 border-red-500/20"
+                    )}>
+                      HOLD {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
       </div>
     </>
@@ -1650,12 +1696,15 @@ function AnchorSVG({ active }: { active: boolean }) {
 
 function DavyJonesBotSection() {
   const { data } = useKrakenStatus();
+  const { data: krakenCommentary, isLoading: commentaryLoading } = useKrakenCommentary();
+  const { mutate: refreshKrakenCommentary, isPending: isRefreshingKraken } = useRefreshKrakenCommentary();
   const [showModal, setShowModal] = useState(false);
 
   const isRunning  = data?.status === "running";
   const isCB       = data?.status === "paused_circuit_breaker";
   const isError    = data?.status === "error";
   const notStarted = !data || data.status === "not_started";
+  const krakenThinking = commentaryLoading || isRefreshingKraken;
 
   const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
   const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
@@ -1760,10 +1809,38 @@ function DavyJonesBotSection() {
 
           {/* Dialogue + signal scanner + stats */}
           <div className="flex-1 min-w-0">
-            {/* Thinking dialogue */}
-            <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/15 bg-slate-900/60 p-3.5 text-xs text-white/75 leading-relaxed backdrop-blur-sm">
-              <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/15 bg-slate-900/60 rotate-[-45deg]" />
-              {dialogueText}
+            {/* AI Commentary bubble — cyan-themed */}
+            <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/20 bg-slate-900/60 p-3.5 backdrop-blur-sm">
+              <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/20 bg-slate-900/60 rotate-[-45deg]" />
+              {krakenThinking ? (
+                <div className="flex items-center gap-2 text-[10px] text-cyan-400/60">
+                  <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
+                    ⚓
+                  </motion.span>
+                  charting the currents...
+                </div>
+              ) : krakenCommentary?.commentary ? (
+                <>
+                  <p className="text-xs text-white/80 leading-relaxed mb-2">{krakenCommentary.commentary}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[9px] text-cyan-400/40 font-mono">
+                      {krakenCommentary.cached
+                        ? `cached · ${Math.round((krakenCommentary.cache_age_seconds ?? 0) / 60)}m ago`
+                        : "just generated"} · Llama 3.3 70B
+                    </span>
+                    <button
+                      className="flex items-center gap-1 text-[9px] text-cyan-400/50 hover:text-cyan-400 transition-colors disabled:opacity-40"
+                      onClick={() => refreshKrakenCommentary()}
+                      disabled={isRefreshingKraken}
+                    >
+                      <RefreshCw className={cn("h-2.5 w-2.5", isRefreshingKraken && "animate-spin")} />
+                      refresh
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-white/60 leading-relaxed">{dialogueText}</div>
+              )}
             </div>
 
             {/* Live Signal Scanner */}

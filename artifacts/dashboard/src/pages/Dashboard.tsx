@@ -4502,14 +4502,16 @@ const TRADING_IMPACT_CONFIG = {
   kraken_none: { label: "Kraken trading not affected",       color: "text-sky-400 border-sky-400/30 bg-sky-400/10" },
   alpaca_may:  { label: "May affect next trade",             color: "text-amber-400 border-amber-400/30 bg-amber-400/10" },
   paused:      { label: "Trading may be paused",             color: "text-red-400 border-red-400/30 bg-red-400/10" },
-  check:       { label: "Check logs if concerned",           color: "text-slate-400 border-slate-400/30 bg-slate-400/10" },
+  check:       { label: "Check required",                    color: "text-slate-400 border-slate-400/30 bg-slate-400/10" },
 };
+
+const IMPACT_UNKNOWN = { label: "Impact unknown",           color: "text-slate-500 border-slate-500/30 bg-slate-500/10" };
 
 function AlertMetaCard({ ev }: { ev: DegradationEvent }) {
   const metaKey = `${ev.component}/${ev.error_type}`;
   const meta = ALERT_META[metaKey];
   const sev = SEV_CONFIG[ev.severity] ?? SEV_CONFIG.warning;
-  const impact = meta ? TRADING_IMPACT_CONFIG[meta.tradingImpact] : TRADING_IMPACT_CONFIG.check;
+  const impact = meta ? TRADING_IMPACT_CONFIG[meta.tradingImpact] : IMPACT_UNKNOWN;
   const ts = new Date(ev.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   const compLabel = COMP_LABELS[ev.component] ?? ev.component;
 
@@ -4643,6 +4645,39 @@ function SystemHealthCard() {
             })}
           </div>
         </div>
+
+        {/* ── Component breakdown row ─────────────────────────────────────── */}
+        {(() => {
+          const stats = log24h?.stats ?? {};
+          const KEY_COMPONENTS = ["kraken_api", "platform_core", "data_pipeline", "http"] as const;
+          const allKeys = [...KEY_COMPONENTS, ...Object.keys(stats).filter(k => !KEY_COMPONENTS.includes(k as never))];
+          return (
+            <div>
+              <p className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider">Component status — 24h</p>
+              <div className="flex flex-wrap gap-1.5">
+                {allKeys.map(comp => {
+                  const s = stats[comp];
+                  const label = COMP_LABELS[comp] ?? comp;
+                  const dominant = s?.critical ? "critical" : s?.error ? "error" : s?.warning ? "warning" : null;
+                  const cfg = dominant ? SEV_CONFIG[dominant] : null;
+                  const total = (s?.critical ?? 0) + (s?.error ?? 0) + (s?.warning ?? 0);
+                  return (
+                    <span
+                      key={comp}
+                      className={`text-[10px] px-2 py-0.5 rounded border font-mono ${
+                        cfg ? cfg.color : "text-emerald-400 border-emerald-400/20 bg-emerald-400/5"
+                      }`}
+                      title={`${label}: ${total} event${total !== 1 ? "s" : ""} in 24h`}
+                    >
+                      {label}
+                      {total > 0 ? `: ${total}` : ": clean"}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Current issues ───────────────────────────────────────────────── */}
         {healthLoading ? (

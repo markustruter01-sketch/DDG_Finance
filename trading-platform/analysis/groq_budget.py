@@ -39,6 +39,9 @@ class GroqBudget:
         self._crypto_calls: int = 0
         self._last_regime_call_at: float = 0.0
         self._commentary_calls: dict[str, int] = {}
+        # Track which endpoints have already received a budget-exhausted warning
+        # today — prevents log spam under repeated polling.
+        self._budget_warned: set[str] = set()
 
     @staticmethod
     def _today_utc() -> int:
@@ -54,6 +57,7 @@ class GroqBudget:
             self._crypto_calls = 0
             self._commentary_calls = {}
             self._last_regime_call_at = 0.0
+            self._budget_warned = set()  # clear one-shot warning state on day roll
             logger.info(
                 f"Groq budget | Daily counters reset (day rolled over "
                 f"{old_day} → {today})"
@@ -177,10 +181,13 @@ class GroqBudget:
             if remaining <= 0:
                 # Zero budget blocks even forced refreshes — calling Groq would
                 # just return a 429 and generate an error event.
-                logger.warning(
-                    f"Groq budget | Commentary[{endpoint}] blocked — "
-                    "daily token budget exhausted (force={force} ignored)"
-                )
+                # Only emit one warning per endpoint per day to avoid log spam.
+                if endpoint not in self._budget_warned:
+                    self._budget_warned.add(endpoint)
+                    logger.warning(
+                        f"Groq budget | Commentary[{endpoint}] budget exhausted — "
+                        "all further calls suppressed until midnight UTC"
+                    )
                 return False
 
             # force=True bypasses the *call-count* cap but not the zero-budget

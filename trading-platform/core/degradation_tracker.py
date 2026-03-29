@@ -139,32 +139,33 @@ def mark_resolved(component: str, error_type: str) -> None:
     Also clears the in-memory escalation state so the next fresh occurrence of
     the same signature starts with the base TTL rather than an elevated window.
     """
+    # DB update: mark the most recent open record as resolved.
+    # Runs only when the database is available; escalation reset always runs.
     try:
         from db.postgres import get_conn, is_pg_available
-        if not is_pg_available():
-            return
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE system_degradations
-                    SET resolved_at = NOW()
-                    WHERE component = %s
-                      AND error_type = %s
-                      AND resolved_at IS NULL
-                      AND ts = (
-                            SELECT MAX(ts) FROM system_degradations
-                            WHERE component = %s AND error_type = %s AND resolved_at IS NULL
-                          )
-                    """,
-                    (component, error_type, component, error_type),
-                )
+        if is_pg_available():
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE system_degradations
+                        SET resolved_at = NOW()
+                        WHERE component = %s
+                          AND error_type = %s
+                          AND resolved_at IS NULL
+                          AND ts = (
+                                SELECT MAX(ts) FROM system_degradations
+                                WHERE component = %s AND error_type = %s AND resolved_at IS NULL
+                              )
+                        """,
+                        (component, error_type, component, error_type),
+                    )
     except Exception as exc:
-        logger.debug(f"[DEGRADATION] mark_resolved failed: {exc}")
+        logger.debug(f"[DEGRADATION] mark_resolved DB update failed: {exc}")
 
-    # Reset in-memory escalation so a later independent incident is not
-    # suppressed by the elevated TTL carried over from the resolved one.
-    # Key is stable (component::error_type only), so a direct pop is sufficient.
+    # Always reset in-memory escalation, even when DB is unavailable.
+    # This ensures a later independent incident starts at the base TTL
+    # rather than an elevated window from the now-resolved incident.
     key = _dedup_key(component, error_type)
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)

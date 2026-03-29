@@ -1505,13 +1505,18 @@ async def ai_commentary(force: bool = False) -> dict:
                 "throttled": True,
                 "budget_exhausted": _groq_budget.budget_exhausted(),
             }
+        _exhausted = _groq_budget.budget_exhausted()
         return {
-            "commentary": "The Oracle is resting — daily AI token limit reached. Commentary will resume tomorrow at midnight UTC.",
+            "commentary": (
+                "The Oracle is resting — daily AI token budget exhausted. Commentary will resume tomorrow at midnight UTC."
+                if _exhausted else
+                "The Oracle is resting — daily call limit reached. Commentary will resume tomorrow at midnight UTC."
+            ),
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,
             "throttled": True,
-            "budget_exhausted": True,
+            "budget_exhausted": _exhausted,
         }
 
     wins    = get_recent_wins(limit=3)
@@ -2093,13 +2098,18 @@ async def kraken_commentary(force: bool = False) -> dict:
                 "throttled": True,
                 "budget_exhausted": _groq_budget.budget_exhausted(),
             }
+        _exhausted = _groq_budget.budget_exhausted()
         return {
-            "commentary": "Davy Jones' AI is resting — daily token limit reached. The commentary will return tomorrow at midnight UTC.",
+            "commentary": (
+                "Davy Jones' AI is resting — daily token budget exhausted. The commentary will return tomorrow at midnight UTC."
+                if _exhausted else
+                "Davy Jones' AI is resting — daily call limit reached. The commentary will return tomorrow at midnight UTC."
+            ),
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,
             "throttled": True,
-            "budget_exhausted": True,
+            "budget_exhausted": _exhausted,
         }
 
     status_file = _Path("../kraken-bot/status.json")

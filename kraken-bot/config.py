@@ -147,6 +147,13 @@ RISK_FRACTION         = 0.01   # Risk 1% of total equity per trade.
 STOP_LOSS_PCT         = 0.02   # Hard stop loss at 2% against us.
 TRAIL_PCT             = 0.05   # Trailing take-profit kicks in after 5% gain.
 
+MIN_NET_PROFIT_PCT    = 0.008  # Minimum required gross P&L before a mean-reversion
+                               # exit is allowed.  Kraken charges 0.26% per side
+                               # (0.52% round-trip).  0.8% gives a 0.28% buffer above
+                               # break-even so every closed trade has a real net gain.
+                               # The trailing stop and hard stop are unaffected by this
+                               # guard — only the z-score mean-reversion exit checks it.
+
 
 # ── Operational Parameters ────────────────────────────────────────────────────
 

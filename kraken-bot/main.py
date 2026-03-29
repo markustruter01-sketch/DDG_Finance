@@ -54,6 +54,7 @@ from config import (
     RISK_FRACTION,
     STOP_LOSS_PCT,
     TRAIL_PCT,
+    MIN_NET_PROFIT_PCT,
     EQUITY_REFRESH_INTERVAL,
     LOOP_SLEEP_SECONDS,
     RESTART_SLEEP_SECONDS,
@@ -105,6 +106,7 @@ logger.info(f"  Max per trade  : {MAX_POSITION_FRACTION*100:.0f}% of equity")
 logger.info(f"  Risk per trade : {RISK_FRACTION*100:.0f}% of equity")
 logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}%")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
+logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
 logger.info("=" * 65)
 
@@ -427,8 +429,15 @@ def run_cycle() -> None:
          a. Fetch latest OHLCV candles (real live data in both modes)
          b. Record price in history (for circuit breaker)
          c. Check if circuit breaker should fire
-         d. If we have an open position → check stops and trailing profit
-         e. If no position and slots are free → evaluate RSI + z-score signals
+         d. If we have an open position → evaluate exit conditions (priority order):
+              i.  Hard stop loss        — always fires regardless of P&L
+              ii. Trailing take-profit  — always fires regardless of P&L
+              iii.Mean-reversion exit   — fires ONLY when |z-score| < ZSCORE_EXIT
+                                         AND unrealised P&L ≥ MIN_NET_PROFIT_PCT.
+                                         If z reverted but profit is below the fee
+                                         break-even threshold the position is held so
+                                         the fee cost isn't locked in as a loss.
+         e. If no position and slots are free → evaluate RSI + z-score entry signals
       4. Write status.json for the dashboard
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
@@ -540,21 +549,56 @@ def run_cycle() -> None:
                         "has_position": False,
                     })
                 # Check for mean-reversion exit (z-score returned to mean)
+                # ── Exit Conditions (in priority order) ──────────────────────
+                # 1. Hard stop loss (check_stops above) — always fires, no P&L gate.
+                # 2. Trailing take-profit (check_stops above) — always fires, no P&L gate.
+                # 3. Mean-reversion exit — fires only when BOTH:
+                #      a. |z-score| has returned below ZSCORE_EXIT (reversion complete), AND
+                #      b. unrealised P&L ≥ MIN_NET_PROFIT_PCT (covers 0.52% round-trip fee).
+                #    If (a) is true but (b) is not, the position continues to hold
+                #    until the trailing stop, hard stop, or enough profit accumulates.
                 elif symbol in open_positions:
+                    # Compute current unrealised P&L fraction for the fee guard
+                    unrealised_pnl_pct = (
+                        (current_price - pos["entry_price"]) / pos["entry_price"]
+                        if pos["side"] == "long"
+                        else (pos["entry_price"] - current_price) / pos["entry_price"]
+                    )
+
                     if abs(sym_z_score) < ZSCORE_EXIT:
-                        close_position(symbol, reason="mean_reversion_complete")
-                        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
-                        cycle_signals.append({
-                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                            "price": round(current_price, 4), "signal_type": "exit_mean_reversion",
-                            "has_position": False,
-                        })
+                        if unrealised_pnl_pct >= MIN_NET_PROFIT_PCT:
+                            # Both conditions met — take the mean-reversion exit
+                            close_position(symbol, reason="mean_reversion_complete")
+                            deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4), "signal_type": "exit_mean_reversion",
+                                "has_position": False,
+                            })
+                        else:
+                            # Z returned to mean but P&L is below the fee threshold —
+                            # hold and wait for the trailing stop or more profit.
+                            needed_pct = (MIN_NET_PROFIT_PCT - unrealised_pnl_pct) * 100
+                            logger.info(
+                                f"Hold   | {pos['side'].upper()} {symbol} | "
+                                f"Z reverted ({sym_z_score:+.2f}) but P&L {unrealised_pnl_pct*100:+.2f}% "
+                                f"below min-profit threshold ({MIN_NET_PROFIT_PCT*100:.1f}%) — "
+                                f"need +{needed_pct:.2f}% more before mean-reversion exit allowed"
+                            )
+                            thinking_text = (
+                                f"{symbol}: Z-score reverted to {sym_z_score:+.2f} but "
+                                f"P&L {unrealised_pnl_pct*100:+.2f}% is below the "
+                                f"{MIN_NET_PROFIT_PCT*100:.1f}% min-profit gate (covers 0.52% fees). "
+                                f"Holding — awaiting min profit threshold."
+                            )
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4), "signal_type": "hold_min_profit",
+                                "has_position": True, "pnl_pct": round(unrealised_pnl_pct * 100, 2),
+                                "side": pos["side"],
+                            })
                     else:
-                        pnl_pct = (
-                            (current_price - pos["entry_price"]) / pos["entry_price"] * 100
-                            if pos["side"] == "long"
-                            else (pos["entry_price"] - current_price) / pos["entry_price"] * 100
-                        )
+                        pnl_pct = unrealised_pnl_pct * 100
                         logger.debug(
                             f"Hold   | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.2f} | "
                             f"Now: ${current_price:,.2f} | P&L: {pnl_pct:+.2f}% | Z: {sym_z_score:+.2f}"

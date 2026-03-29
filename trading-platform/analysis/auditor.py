@@ -1268,6 +1268,13 @@ def run_full_audit() -> dict[str, Any]:
     except Exception:
         pass
 
+    # ── Auto-export learning snapshot so production gets this knowledge ────────
+    try:
+        from analysis.learning_snapshot import export_snapshot
+        export_snapshot()
+    except Exception as _snap_err:
+        logger.warning(f"Auditor | Learning snapshot export failed (non-fatal): {_snap_err}")
+
     return result
 
 

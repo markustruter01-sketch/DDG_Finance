@@ -427,6 +427,33 @@ export function useTriggerPerformanceAnalysis() {
   });
 }
 
+export function useLearningSnapshotInfo() {
+  return useQuery<{
+    status: string;
+    llm_learnings_count?: number;
+    has_kraken_params?: boolean;
+    kraken_params_n?: number;
+    exported_at?: string;
+    file_size_bytes?: number;
+    message?: string;
+  }>({
+    queryKey: ["/admin/learning-snapshot"],
+    queryFn: async () => (await api.get("/admin/learning-snapshot")).data,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+}
+
+export function useSyncLearningSnapshot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post("/admin/learning-snapshot/export")).data,
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ["/admin/learning-snapshot"] }), 4000);
+    },
+  });
+}
+
 // --- Mutations ---
 
 export function useRunAnalysis() {

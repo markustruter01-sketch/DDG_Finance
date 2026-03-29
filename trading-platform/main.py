@@ -164,6 +164,20 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Trade journal database initialised")
 
+    # ── Seed learning from snapshot if this is a fresh/empty database ─────────
+    try:
+        from analysis.learning_snapshot import seed_from_snapshot
+        seed_result = seed_from_snapshot()
+        if seed_result["seeded"]:
+            logger.success(
+                f"Learning Snapshot | Seeded DB with {seed_result['rows_inserted']} "
+                "llm_learnings rows from committed snapshot"
+            )
+        elif seed_result.get("rows_inserted", 0) == 0:
+            logger.debug(f"Learning Snapshot | Seed skipped: {seed_result.get('reason', 'unknown')}")
+    except Exception as _se:
+        logger.warning(f"Learning Snapshot | Startup seed failed (non-fatal): {_se}")
+
     _load_commentary_caches()
     logger.info("Commentary caches loaded from disk")
 
@@ -186,6 +200,24 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=60,
     )
     logger.info("Auto-heal monitor registered (2-min interval, always active — not paused by auto-trading toggle)")
+
+    # ── Auto-export learning snapshot every 6 hours ───────────────────────────
+    def _scheduled_snapshot_export():
+        try:
+            from analysis.learning_snapshot import export_snapshot
+            export_snapshot()
+        except Exception as _ex:
+            logger.warning(f"Learning Snapshot | Scheduled export failed: {_ex}")
+
+    scheduler.add_job(
+        func=_scheduled_snapshot_export,
+        trigger=_ITrigger(hours=6),
+        id="learning_snapshot_export",
+        name="Learning Snapshot Auto-Export",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Learning snapshot auto-export registered (6-hour interval)")
 
     yield
 
@@ -1819,6 +1851,50 @@ async def trigger_performance_analysis(
         "message": f"Performance analysis running — check GET /auditor/performance in ~15 seconds",
         "days":    days,
     }
+
+
+# ── Learning Snapshot — cross-deploy knowledge persistence ────────────────────
+
+@router.get("/admin/learning-snapshot", tags=["Admin"])
+async def get_learning_snapshot_info() -> dict:
+    """
+    Return metadata about the current learning snapshot file.
+    The snapshot is committed to the repo so it travels to production on every deploy.
+    """
+    from analysis.learning_snapshot import get_snapshot_info
+    return get_snapshot_info()
+
+
+@router.post("/admin/learning-snapshot/export", tags=["Admin"])
+async def export_learning_snapshot(background_tasks: BackgroundTasks) -> dict:
+    """
+    Export all llm_learnings rows + Kraken adaptive_params to
+    data/learning_snapshot.json.  Run this before deploying to ensure
+    production starts with all accumulated knowledge.
+    """
+    async def _bg_export():
+        try:
+            from analysis.learning_snapshot import export_snapshot
+            export_snapshot()
+        except Exception as exc:
+            logger.error(f"Learning Snapshot | Background export failed: {exc}")
+
+    background_tasks.add_task(_bg_export)
+    return {
+        "status":  "export_started",
+        "message": "Snapshot export running — check GET /admin/learning-snapshot in a few seconds",
+    }
+
+
+@router.post("/admin/learning-snapshot/seed", tags=["Admin"])
+async def seed_learning_from_snapshot() -> dict:
+    """
+    Manually seed llm_learnings from the snapshot file.
+    Normally runs automatically at startup on a fresh database.
+    Only inserts if the table is currently empty.
+    """
+    from analysis.learning_snapshot import seed_from_snapshot
+    return seed_from_snapshot()
 
 
 @router.get("/correlation", tags=["Analytics"])

@@ -28,6 +28,84 @@ from pathlib import Path
 
 logger = logging.getLogger("kraken_adaptive")
 
+# ── PostgreSQL helpers (optional — gracefully absent if DB not available) ─────
+
+def _pg_save(payload: dict) -> None:
+    """Write adaptive params to PostgreSQL kraken_adaptive_params table."""
+    try:
+        import psycopg2, psycopg2.extras
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
+                        id          SERIAL PRIMARY KEY,
+                        params      JSONB NOT NULL,
+                        metrics     JSONB,
+                        reasons     JSONB,
+                        adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        lookback_n  INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                cur.execute("DELETE FROM kraken_adaptive_params")
+                cur.execute(
+                    """
+                    INSERT INTO kraken_adaptive_params
+                        (params, metrics, reasons, adapted_at, lookback_n)
+                    VALUES (%s, %s, %s, NOW(), %s)
+                    """,
+                    (
+                        json.dumps(payload.get("params", {})),
+                        json.dumps(payload.get("metrics")),
+                        json.dumps(payload.get("reasons", {})),
+                        payload.get("lookback_n", 0),
+                    ),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.debug(f"Adaptive | pg_save skipped: {exc}")
+
+
+def _pg_load() -> dict | None:
+    """Load adaptive params from PostgreSQL if a row exists with n > 0."""
+    try:
+        import psycopg2, psycopg2.extras
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return None
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT params, metrics, reasons, adapted_at, lookback_n
+                    FROM kraken_adaptive_params
+                    ORDER BY id DESC LIMIT 1
+                    """
+                )
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return None
+        params  = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        metrics = row[1] if isinstance(row[1], dict) else json.loads(row[1] or "{}")
+        n = (metrics or {}).get("n", row[4] or 0)
+        if n == 0:
+            return None
+        logger.info(f"Adaptive | Loaded params from PostgreSQL (n={n})")
+        return params
+    except Exception as exc:
+        logger.debug(f"Adaptive | pg_load skipped: {exc}")
+        return None
+
 # ── Defaults (mirrors config.py) ──────────────────────────────────────────────
 DEFAULTS = {
     "ZSCORE_ENTRY":       1.0,
@@ -236,6 +314,11 @@ def _apply_rules(params: dict, m: dict) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _load_persisted() -> dict | None:
+    # 1. Try PostgreSQL first (survives container restarts and redeploys)
+    pg = _pg_load()
+    if pg:
+        return pg
+    # 2. Fall back to JSON file
     if PARAMS_FILE.exists():
         try:
             data = json.loads(PARAMS_FILE.read_text())
@@ -259,6 +342,8 @@ def _save(params: dict, metrics: dict | None) -> None:
         PARAMS_FILE.write_text(json.dumps(payload, indent=2))
     except Exception as exc:
         logger.warning(f"Adaptive | could not save params file: {exc}")
+    # Also persist to PostgreSQL so redeploys can recover adapted values
+    _pg_save(payload)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

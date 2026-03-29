@@ -1,0 +1,103 @@
+{
+  "exported_at": "2026-03-29T23:38:23.904431+00:00",
+  "llm_learnings": [
+    {
+      "insight_text": "Tech sector momentum has been consistently positive, supporting SPY and QQQ allocation.",
+      "regime": "Bull",
+      "category": "momentum",
+      "first_seen": "2026-03-29T07:32:03.250845+00:00",
+      "last_seen": "2026-03-29T07:32:03.265586+00:00",
+      "confirmed_count": 2,
+      "confidence_score": 0.4333
+    },
+    {
+      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.242208+00:00",
+      "last_seen": "2026-03-29T07:32:03.242208+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "GLD and TLT both show positive momentum on 3-month and 6-month moving averages in this regime.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-03-29T07:32:03.247206+00:00",
+      "last_seen": "2026-03-29T07:32:03.247206+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "BTC and ETH show correlated moves during risk-off macro environments.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-03-29T07:32:03.254626+00:00",
+      "last_seen": "2026-03-29T07:32:03.254626+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Capital preservation in SGOV remains correct when no safe haven has positive momentum.",
+      "regime": "Sideways",
+      "category": "risk",
+      "first_seen": "2026-03-29T07:32:03.258208+00:00",
+      "last_seen": "2026-03-29T07:32:03.258208+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "VIX has remained elevated above 25 indicating a risk-off environment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.262095+00:00",
+      "last_seen": "2026-03-29T07:32:03.262095+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    }
+  ],
+  "kraken_adaptive_params": {
+    "params": {
+      "ZSCORE_ENTRY": 1.0,
+      "ZSCORE_EXIT": 0.3,
+      "STOP_LOSS_PCT": 0.02,
+      "TRAIL_PCT": 0.05,
+      "MIN_NET_PROFIT_PCT": 0.008
+    },
+    "defaults": {
+      "ZSCORE_ENTRY": 1.0,
+      "ZSCORE_EXIT": 0.3,
+      "STOP_LOSS_PCT": 0.02,
+      "TRAIL_PCT": 0.05,
+      "MIN_NET_PROFIT_PCT": 0.008
+    },
+    "bounds": {
+      "ZSCORE_ENTRY": [
+        0.7,
+        1.5
+      ],
+      "ZSCORE_EXIT": [
+        0.1,
+        0.55
+      ],
+      "STOP_LOSS_PCT": [
+        0.01,
+        0.04
+      ],
+      "TRAIL_PCT": [
+        0.03,
+        0.1
+      ],
+      "MIN_NET_PROFIT_PCT": [
+        0.006,
+        0.02
+      ]
+    },
+    "reasons": {},
+    "metrics": {
+      "n": 0
+    },
+    "adapted_at": "2026-03-29T18:27:03.934691+00:00",
+    "lookback_n": 0
+  }
+}

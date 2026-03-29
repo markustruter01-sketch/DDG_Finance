@@ -7,6 +7,7 @@ import {
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
   useAuditorPerformance, useTriggerPerformanceAnalysis,
+  useLearningSnapshotInfo, useSyncLearningSnapshot,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal,
@@ -35,7 +36,7 @@ import {
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
   Lightbulb, Play, LogOut, ExternalLink, Copy, Bug,
-  LayoutDashboard, MoreHorizontal, Anchor,
+  LayoutDashboard, MoreHorizontal, Anchor, Database,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -3177,8 +3178,11 @@ function AuditorAgentSection() {
   const { mutate: triggerAudit, isPending: isTriggering } = useTriggerAudit();
   const { data: perfData, isLoading: isPerfLoading } = useAuditorPerformance();
   const { mutate: runPerf, isPending: isRunningPerf } = useTriggerPerformanceAnalysis();
+  const { data: snapshotInfo } = useLearningSnapshotInfo();
+  const { mutate: syncSnapshot, isPending: isSyncing } = useSyncLearningSnapshot();
   const [showInsights, setShowInsights] = useState(false);
   const [showPerf, setShowPerf] = useState(false);
+  const [showSync, setShowSync] = useState(false);
 
   const report  = auditorData?.report;
   const overall = report?.overall ?? "never_run";
@@ -3260,6 +3264,87 @@ function AuditorAgentSection() {
             </div>
           </div>
         )}
+
+        {/* ── Sync Learning Snapshot ───────────────────────────────────────── */}
+        <div className="relative mt-4 pt-4 border-t border-white/5">
+          <button
+            onClick={() => setShowSync(v => !v)}
+            className="w-full flex items-center gap-2 text-left group"
+          >
+            <Database className="h-3 w-3 text-violet-400/70" />
+            <span className="text-[9px] uppercase font-semibold tracking-wider text-muted-foreground/70 group-hover:text-violet-400/80 transition-colors">
+              Sync Learning
+            </span>
+            {snapshotInfo?.llm_learnings_count != null && (
+              <span className="text-[8px] text-muted-foreground/30 font-mono ml-1">
+                {snapshotInfo.llm_learnings_count} learnings
+              </span>
+            )}
+            <span className={cn("ml-auto text-muted-foreground/30 text-[10px] transition-transform duration-200", showSync && "rotate-180")}>▾</span>
+          </button>
+
+          <AnimatePresence>
+            {showSync && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="pt-3 space-y-3">
+                  <p className="text-[10px] text-slate-400/70 leading-relaxed">
+                    Snapshots bundle all LLM learnings and Kraken adaptive parameters into a file committed with the repo.
+                    Production starts seeded with this data so knowledge survives redeploys.
+                  </p>
+
+                  {snapshotInfo && snapshotInfo.status !== "not_found" && (
+                    <div className="grid grid-cols-2 gap-2 text-[9px] font-mono">
+                      {[
+                        ["LLM Learnings", snapshotInfo.llm_learnings_count ?? "—"],
+                        ["Kraken Params n", snapshotInfo.kraken_params_n ?? "—"],
+                        ["File Size", snapshotInfo.file_size_bytes != null ? `${(snapshotInfo.file_size_bytes / 1024).toFixed(1)} KB` : "—"],
+                        ["Exported", snapshotInfo.exported_at ? new Date(snapshotInfo.exported_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"],
+                      ].map(([label, val]) => (
+                        <div key={String(label)}>
+                          <div className="text-[7px] text-muted-foreground/40 uppercase">{label}</div>
+                          <div className="text-white/70 mt-0.5">{String(val)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {snapshotInfo?.status === "not_found" && (
+                    <p className="text-[10px] text-muted-foreground/40 italic">No snapshot file found — click below to generate one.</p>
+                  )}
+
+                  <button
+                    onClick={() => syncSnapshot()}
+                    disabled={isSyncing}
+                    className={cn(
+                      "flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wide px-3 py-1.5 rounded-lg border transition-all duration-200",
+                      isSyncing
+                        ? "opacity-50 cursor-not-allowed border-white/10 text-muted-foreground"
+                        : "border-violet-500/20 bg-violet-500/5 text-violet-400/60 hover:bg-violet-500/15 hover:text-violet-400 hover:border-violet-500/40"
+                    )}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        <span>Exporting…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-3 w-3" />
+                        <span>Export Snapshot Now</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* ── Performance Analysis ─────────────────────────────────────────── */}
         <div className="relative mt-4 pt-4 border-t border-white/5">

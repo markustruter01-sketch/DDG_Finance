@@ -4486,7 +4486,7 @@ const ALERT_META: Record<string, AlertMeta> = {
     resolution: "code",
     resolutionNote: "If this keeps appearing for the same endpoint, a code fix is likely needed.",
     tradingImpact: "check",
-    tradingNote: "Usually not affecting trading — but worth checking the logs if it recurs.",
+    tradingNote: "Trading is not affected unless this occurred on a trade-execution endpoint — check the error detail if trades are involved.",
   },
   "http/503": {
     what: "A service was temporarily unavailable — usually the AI commentary service was rate-limited.",
@@ -4537,9 +4537,13 @@ function AlertMetaCard({ ev }: { ev: DegradationEvent }) {
             <p className="text-[11px] mt-1 leading-snug opacity-90 font-mono">{ev.message}</p>
           )}
           <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {meta && (
+            {meta ? (
               <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${meta.resolution === "self" ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" : "text-amber-400 border-amber-400/30 bg-amber-400/10"}`}>
                 {meta.resolution === "self" ? "Clears on its own" : "Needs attention"}
+              </span>
+            ) : (
+              <span className="text-[9px] px-1.5 py-0.5 rounded border font-semibold text-slate-400 border-slate-400/30 bg-slate-400/10">
+                Unknown — check manually
               </span>
             )}
             <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${impact.color}`}>

@@ -27,20 +27,27 @@ from loguru import logger
 # ── De-duplication: suppress identical events within a rolling window ───────
 # Per-component base TTL (seconds).  The first occurrence of a persistent
 # issue is recorded immediately; each subsequent re-occurrence doubles the
-# quiet window (capped at 2 h) so a 9-hour Kraken outage produces ≤4 records
+# quiet window (capped at 4 h) so a 9-hour Kraken outage produces ≤4 records
 # instead of 270.
+# Escalation profile validation (9-hour persistent incident):
+#   kraken_api base=3600s, cap=14400s →
+#     rec 1 @ t=0s  (count 0→1, next window=3600s)
+#     rec 2 @ t=3600s (count 1→2, next window=7200s)
+#     rec 3 @ t=10800s/3h (count 2→3, next window=14400s/cap)
+#     rec 4 @ t=25200s/7h (count 3→4, next window=14400s/cap)
+#   = 4 records in 9 h ✓
 _COMPONENT_TTL: dict[str, int] = {
-    "kraken_api":    1800,  # 30 min — stale writes fire every 2 min
-    "platform_core": 1800,  # 30 min — scheduler/analysis issues persist for hours
+    "kraken_api":    3600,  # 1 h base — stale writes fire every 2 min; doubles to cap
+    "platform_core": 3600,  # 1 h base — persistent scheduler/analysis issues
     "http":           300,  # 5 min  — HTTP 500s need faster re-alerting
     "data_pipeline":  900,  # 15 min
     "groq":           900,  # 15 min
     "alpaca":         900,  # 15 min
     "database":       900,  # 15 min
-    "scheduler":     1800,  # 30 min
+    "scheduler":     3600,  # 1 h base
 }
-_DEFAULT_TTL = 900  # 15 min for unrecognised components
-_MAX_TTL     = 7200  # cap escalation at 2 h
+_DEFAULT_TTL = 900   # 15 min for unrecognised components
+_MAX_TTL     = 14400  # cap escalation at 4 h (yields ≤4 records per 9-hour outage)
 
 # key → last recorded timestamp
 _recent_keys: dict[str, float] = {}
@@ -136,6 +143,8 @@ def mark_resolved(component: str, error_type: str) -> None:
     """
     Mark the most recent unresolved event for (component, error_type) as resolved.
     Called from the auto-heal success path.
+    Also clears the in-memory escalation state so the next fresh occurrence of
+    the same signature starts with the base TTL rather than an elevated window.
     """
     try:
         from db.postgres import get_conn, is_pg_available
@@ -159,6 +168,16 @@ def mark_resolved(component: str, error_type: str) -> None:
                 )
     except Exception as exc:
         logger.debug(f"[DEGRADATION] mark_resolved failed: {exc}")
+
+    # Reset in-memory escalation so a later independent incident is not
+    # suppressed by the elevated TTL carried over from the resolved one.
+    # We clear with an empty message prefix since we only have component+type.
+    key_prefix = f"{component}::{error_type}::"
+    for key in list(_recent_keys.keys()):
+        if key.startswith(key_prefix):
+            _recent_keys.pop(key, None)
+            _escalation_counts.pop(key, None)
+    logger.debug(f"[DEGRADATION] Escalation state cleared for {component}/{error_type}")
 
 
 # ── Queries ──────────────────────────────────────────────────────────────────

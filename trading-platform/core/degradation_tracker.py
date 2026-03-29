@@ -44,14 +44,18 @@ _recent_keys: dict[str, float] = {}
 _escalation_counts: dict[str, int] = {}
 
 
-def _dedup_key(component: str, error_type: str, message: str) -> str:
-    prefix = message[:80]
-    return f"{component}::{error_type}::{prefix}"
+def _dedup_key(component: str, error_type: str) -> str:
+    # Key is intentionally stable — it does NOT include message text.
+    # Messages for persistent incidents often contain volatile numeric values
+    # (e.g. "status file is 147s old") that change every poll cycle.  Including
+    # them would create a fresh key each cycle, bypassing TTL/escalation logic
+    # entirely.  Diagnostic context goes into the `detail` DB column instead.
+    return f"{component}::{error_type}"
 
 
 def _should_record(component: str, error_type: str, message: str) -> bool:
     import time
-    key = _dedup_key(component, error_type, message)
+    key = _dedup_key(component, error_type)
     now = time.time()
     last = _recent_keys.get(key, 0)
 
@@ -70,7 +74,7 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
 
 def reset_dedup_key(component: str, error_type: str, message: str = "") -> None:
     """Reset escalation state for a component/error_type when it resolves."""
-    key = _dedup_key(component, error_type, message)
+    key = _dedup_key(component, error_type)
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)
 
@@ -160,12 +164,10 @@ def mark_resolved(component: str, error_type: str) -> None:
 
     # Reset in-memory escalation so a later independent incident is not
     # suppressed by the elevated TTL carried over from the resolved one.
-    # We clear with an empty message prefix since we only have component+type.
-    key_prefix = f"{component}::{error_type}::"
-    for key in list(_recent_keys.keys()):
-        if key.startswith(key_prefix):
-            _recent_keys.pop(key, None)
-            _escalation_counts.pop(key, None)
+    # Key is stable (component::error_type only), so a direct pop is sufficient.
+    key = _dedup_key(component, error_type)
+    _recent_keys.pop(key, None)
+    _escalation_counts.pop(key, None)
     logger.debug(f"[DEGRADATION] Escalation state cleared for {component}/{error_type}")
 
 

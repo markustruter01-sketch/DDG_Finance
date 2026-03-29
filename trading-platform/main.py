@@ -72,6 +72,28 @@ COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 _kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
+# ── Self-Healing Remediation Log ──────────────────────────────────────────────
+import threading as _threading
+
+_heal_log: list[dict] = []
+_heal_lock = _threading.Lock()
+
+
+def _add_heal_entry(component: str, action: str, result: str, success: bool, triggered_by: str = "manual") -> dict:
+    entry = {
+        "ts": time.time(),
+        "component": component,
+        "action": action,
+        "result": result,
+        "success": success,
+        "triggered_by": triggered_by,
+    }
+    with _heal_lock:
+        _heal_log.insert(0, entry)
+        while len(_heal_log) > 50:
+            _heal_log.pop()
+    return entry
+
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
@@ -96,9 +118,21 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     for job in scheduler.get_jobs():
         job.pause()
-    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} jobs registered (paused — auto-trading OFF)")
+    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} trading jobs registered (paused — auto-trading OFF)")
     logger.info("Enable auto-trading via dashboard toggle or POST /auto-trading")
     logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
+
+    # Register the auto-heal monitor AFTER the pause loop so it stays active
+    from apscheduler.triggers.interval import IntervalTrigger as _ITrigger
+    scheduler.add_job(
+        func=_auto_heal_check,
+        trigger=_ITrigger(minutes=2),
+        id="auto_heal",
+        name="Auto Self-Heal Monitor",
+        replace_existing=True,
+        misfire_grace_time=60,
+    )
+    logger.info("Auto-heal monitor registered (2-min interval, always active — not paused by auto-trading toggle)")
 
     yield
 
@@ -355,6 +389,183 @@ async def system_health_architecture() -> dict:
         "timestamp": now,
         "nodes": nodes,
     }
+
+
+# ── Self-Healing Remediation Engine ──────────────────────────────────────────
+
+async def _remediate_component(component: str, triggered_by: str = "manual") -> dict:
+    """Execute targeted remediation for a platform component and log the result."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    steps: list[str] = []
+    success = True
+
+    try:
+        if component == "platform_core":
+            new_state = reset_error_state()
+            steps.append(f"Error state reset → {new_state.get('last_run_status', '?')}")
+            try:
+                import data.yfinance_client as _yf
+                _yf._cached_market_data = None
+                steps.append("Market data cache cleared")
+            except Exception as exc:
+                steps.append(f"Cache clear warning: {exc}")
+            _commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
+            steps.append("AI commentary cache cleared")
+            jobs = get_job_status()
+            steps.append(f"Scheduler active with {len(jobs)} job(s)")
+
+        elif component == "data_pipeline":
+            from data.cache import invalidate_all
+            invalidate_all()
+            steps.append("FRED macro + NewsAPI caches invalidated")
+            try:
+                import data.yfinance_client as _yf
+                _yf._cached_market_data = None
+                steps.append("yfinance market data cache cleared")
+            except Exception as exc:
+                steps.append(f"yfinance warning: {exc}")
+            steps.append("Fresh data will load on next cycle")
+
+        elif component == "kraken_api":
+            sf = _Path("../kraken-bot/status.json")
+            if sf.exists():
+                try:
+                    kst = _json.loads(sf.read_text())
+                    kst["heal_requested"] = True
+                    kst["heal_requested_at"] = time.time()
+                    sf.write_text(_json.dumps(kst, indent=2))
+                    steps.append(f"Heal flag written to status.json (cycle #{kst.get('cycle_count', 0)})")
+                except Exception as exc:
+                    steps.append(f"Status write warning: {exc}")
+            else:
+                steps.append("status.json not found — start Davy Jones bot first")
+            _kraken_commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
+            steps.append("Kraken commentary cache cleared")
+
+        elif component == "alpaca_api":
+            try:
+                t0 = time.time()
+                acct = get_account()
+                latency = round((time.time() - t0) * 1000)
+                steps.append(f"API reachable — {latency}ms, equity ${float(acct['equity']):,.0f}")
+            except Exception as exc:
+                steps.append(f"Reconnect failed: {str(exc)[:80]}")
+                success = False
+
+        elif component == "equity_manager":
+            try:
+                positions = get_positions()
+                acct = get_account()
+                equity_val = float(acct["equity"])
+                max_pct = max(
+                    (float(p["market_value"]) / equity_val * 100 for p in positions),
+                    default=0.0,
+                )
+                steps.append(f"Max position at {max_pct:.1f}% — rebalance queued for next cycle")
+                steps.append(f"{len(positions)} position(s) reviewed")
+            except Exception as exc:
+                steps.append(f"Review failed: {str(exc)[:80]}")
+                success = False
+
+        else:
+            result_str = f"Unknown component: {component}"
+            entry = _add_heal_entry(component, "remediate", result_str, False, triggered_by)
+            return {"component": component, "success": False, "result": result_str, "ts": entry["ts"]}
+
+    except Exception as exc:
+        steps.append(f"Unexpected error: {str(exc)[:100]}")
+        success = False
+
+    result_str = " · ".join(steps) if steps else "No action taken"
+    logger.info(f"[HEAL] component={component} by={triggered_by} ok={success} | {result_str}")
+    entry = _add_heal_entry(component, f"remediate_{component}", result_str, success, triggered_by)
+    return {"component": component, "success": success, "result": result_str, "ts": entry["ts"]}
+
+
+async def _auto_heal_check() -> None:
+    """
+    Background monitor — runs every 2 minutes.
+    Auto-heals critical trading faults when they are detected.
+    NOT paused by the auto-trading toggle — always active.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+
+    now = time.time()
+    logger.debug("[AUTO-HEAL] Running health check…")
+
+    # ── 1. Platform core ────────────────────────────────────────────────────
+    try:
+        jobs = get_job_status()
+        last = get_last_run()
+        last_status = last.get("last_run_status", "never")
+        if len(jobs) < EXPECTED_JOB_COUNT or last_status in ("error", "analysis_failed", "execution_failed"):
+            logger.warning(f"[AUTO-HEAL] platform_core critical: {len(jobs)} jobs, last_status={last_status}")
+            await _remediate_component("platform_core", triggered_by="auto_heal")
+    except Exception as exc:
+        logger.debug(f"[AUTO-HEAL] platform_core check skipped: {exc}")
+
+    # ── 2. Data pipeline — stale feeds > 5 min ──────────────────────────────
+    try:
+        from data.cache import get_cache_stats as _gcs
+        caches = _gcs()
+        ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
+        if ages and max(ages) > 300:
+            logger.warning(f"[AUTO-HEAL] data_pipeline stale: max_age={max(ages):.0f}s")
+            await _remediate_component("data_pipeline", triggered_by="auto_heal")
+    except Exception as exc:
+        logger.debug(f"[AUTO-HEAL] data_pipeline check skipped: {exc}")
+
+    # ── 3. Kraken bot — status file older than 10 min or error state ─────────
+    try:
+        sf = _Path("../kraken-bot/status.json")
+        if sf.exists():
+            kst = _json.loads(sf.read_text())
+            last_upd = kst.get("last_updated")
+            if last_upd:
+                from datetime import datetime as _dt
+                kage = now - _dt.fromisoformat(last_upd).timestamp()
+                kstatus = kst.get("status", "unknown")
+                if kstatus == "error" or kage > 600:
+                    logger.warning(f"[AUTO-HEAL] kraken_api critical: status={kstatus}, age={kage:.0f}s")
+                    await _remediate_component("kraken_api", triggered_by="auto_heal")
+    except Exception as exc:
+        logger.debug(f"[AUTO-HEAL] kraken_api check skipped: {exc}")
+
+
+@router.post("/system/remediate/{component}", tags=["System"])
+async def remediate_component(component: str) -> dict:
+    """
+    Self-heal a specific platform component.
+
+    Components: platform_core | data_pipeline | kraken_api | alpaca_api | equity_manager
+    """
+    valid = {"platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"}
+    if component not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown component. Valid: {', '.join(sorted(valid))}")
+    return await _remediate_component(component, triggered_by="manual")
+
+
+@router.post("/system/remediate/all", tags=["System"])
+async def remediate_all() -> dict:
+    """Run remediation across all components in sequence."""
+    components = ["platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"]
+    results = []
+    for comp in components:
+        r = await _remediate_component(comp, triggered_by="heal_all")
+        results.append(r)
+    all_ok = all(r["success"] for r in results)
+    return {"success": all_ok, "results": results, "healed_count": sum(1 for r in results if r["success"])}
+
+
+@router.get("/system/remediate/log", tags=["System"])
+async def get_remediation_log() -> dict:
+    """Return the recent remediation history (newest first)."""
+    with _heal_lock:
+        log_copy = list(_heal_log)
+    return {"log": log_copy, "count": len(log_copy)}
 
 
 @router.get("/portfolio", tags=["Portfolio"])

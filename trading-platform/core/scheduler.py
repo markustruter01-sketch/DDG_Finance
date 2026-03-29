@@ -226,20 +226,25 @@ def is_auto_trading_enabled() -> bool:
     return _auto_trading_enabled
 
 
+_ALWAYS_ACTIVE_JOBS = {"auto_heal"}  # jobs that must never be paused by auto-trading toggle
+
+
 def set_auto_trading(enabled: bool) -> dict:
     global _auto_trading_enabled
     scheduler = get_scheduler()
 
     if enabled:
         for job in scheduler.get_jobs():
-            job.resume()
+            if job.id not in _ALWAYS_ACTIVE_JOBS:
+                job.resume()
         _auto_trading_enabled = True
-        logger.info("AUTO-TRADING ENABLED — all scheduler jobs resumed (24/7 crypto + market hours ETFs)")
+        logger.info("AUTO-TRADING ENABLED — trading scheduler jobs resumed (24/7 crypto + market hours ETFs)")
     else:
         for job in scheduler.get_jobs():
-            job.pause()
+            if job.id not in _ALWAYS_ACTIVE_JOBS:
+                job.pause()
         _auto_trading_enabled = False
-        logger.warning("AUTO-TRADING DISABLED — all scheduler jobs paused")
+        logger.warning("AUTO-TRADING DISABLED — trading jobs paused (auto-heal monitor remains active)")
 
     return {
         "auto_trading_enabled": _auto_trading_enabled,

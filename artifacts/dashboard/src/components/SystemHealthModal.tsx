@@ -1,12 +1,21 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/trading-api";
 const api = {
   get: async (path: string) => {
     const res = await fetch(`${API_PREFIX}${path}`);
+    if (!res.ok) throw new Error(`${res.status}`);
+    return { data: await res.json() };
+  },
+  post: async (path: string, body?: unknown) => {
+    const res = await fetch(`${API_PREFIX}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
     if (!res.ok) throw new Error(`${res.status}`);
     return { data: await res.json() };
   },
@@ -25,6 +34,15 @@ interface NodeHealth {
 interface HealthData {
   timestamp: number;
   nodes: Record<string, NodeHealth>;
+}
+
+interface HealEntry {
+  ts: number;
+  component: string;
+  action: string;
+  result: string;
+  success: boolean;
+  triggered_by: string;
 }
 
 interface Overrides {
@@ -76,6 +94,14 @@ const WIRES: [string, string][] = [
   ["equity_manager", "alpaca_api"],
   ["data_pipeline", "kraken_api"],
 ];
+
+const COMPONENT_LABELS: Record<string, string> = {
+  platform_core: "Platform Core",
+  data_pipeline: "Data Pipeline",
+  kraken_api: "Kraken Bot",
+  alpaca_api: "Alpaca API",
+  equity_manager: "Equity Manager",
+};
 
 function buildExplanation(key: string, node: NodeHealth): string {
   const { level, latency_ms, data_age_s, detail } = node;
@@ -224,8 +250,22 @@ function ArchitectureNode({
   );
 }
 
-/* ── Active Alerts Digest ───────────────────────────────────────────────── */
-function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
+/* ── Active Alerts Digest + Fix Buttons ─────────────────────────────────── */
+function AlertsDigest({
+  nodes,
+  onFix,
+  fixingComponent,
+  onHealAll,
+  healAllLoading,
+  lastHealResults,
+}: {
+  nodes: Record<string, NodeHealth>;
+  onFix: (component: string) => void;
+  fixingComponent: string | null;
+  onHealAll: () => void;
+  healAllLoading: boolean;
+  lastHealResults: Record<string, { success: boolean; result: string }>;
+}) {
   const alerts = useMemo(() => {
     return Object.entries(nodes)
       .filter(([, n]) => n.level !== "green")
@@ -233,6 +273,8 @@ function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
   }, [nodes]);
 
   const [expanded, setExpanded] = useState<string | null>(null);
+  const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
+  const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
 
   if (alerts.length === 0) {
     return (
@@ -245,88 +287,173 @@ function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
 
   return (
     <div className="border-t border-white/8 bg-slate-950/80 shrink-0">
-      {/* digest header */}
+      {/* digest header with Heal All button */}
       <div className="flex items-center gap-2 px-5 py-2 border-b border-white/5">
         <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
         <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/60 font-semibold">
           Active Alerts
         </span>
-        <span className="ml-auto text-[9px] font-mono text-muted-foreground/40">
-          {alerts.filter(([, n]) => n.level === "red").length} critical · {alerts.filter(([, n]) => n.level === "yellow").length} degraded
+        <span className="ml-1 text-[9px] font-mono text-muted-foreground/40">
+          {criticalCount > 0 && <span className="text-red-400">{criticalCount} critical</span>}
+          {criticalCount > 0 && degradedCount > 0 && <span className="text-muted-foreground/40"> · </span>}
+          {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
         </span>
+        <button
+          onClick={onHealAll}
+          disabled={healAllLoading}
+          className={cn(
+            "ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-mono font-semibold transition-all border",
+            healAllLoading
+              ? "border-violet-500/30 text-violet-400/60 bg-violet-500/5 cursor-not-allowed"
+              : "border-violet-500/40 text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 hover:border-violet-400/60"
+          )}
+        >
+          <Zap className={cn("h-3 w-3", healAllLoading && "animate-pulse")} />
+          {healAllLoading ? "Healing…" : "⚡ Heal All"}
+        </button>
       </div>
 
       {/* alert rows */}
-      <div className="max-h-48 overflow-y-auto divide-y divide-white/[0.04]">
+      <div className="max-h-52 overflow-y-auto divide-y divide-white/[0.04]">
         {alerts.map(([key, node]) => {
           const colors = LEVEL_COLORS[node.level];
           const explanation = buildExplanation(key, node);
           const isOpen = expanded === key;
           const Icon = node.level === "red" ? XCircle : AlertTriangle;
+          const isFixing = fixingComponent === key;
+          const healResult = lastHealResults[key];
 
           return (
-            <button
-              key={key}
-              onClick={() => setExpanded(isOpen ? null : key)}
-              className={cn(
-                "w-full text-left px-5 py-2.5 transition-colors hover:bg-white/[0.03] group",
-                isOpen && "bg-white/[0.03]"
-              )}
-            >
-              <div className="flex items-start gap-3">
+            <div key={key} className={cn("transition-colors", isOpen && "bg-white/[0.02]")}>
+              <div className="flex items-start gap-3 px-5 py-2.5">
                 {/* level icon */}
-                <Icon
-                  className={cn("h-3.5 w-3.5 mt-0.5 shrink-0", colors.text, node.level === "red" && "animate-pulse")}
-                />
+                <button
+                  onClick={() => setExpanded(isOpen ? null : key)}
+                  className="flex-1 text-left flex items-start gap-3 min-w-0"
+                >
+                  <Icon
+                    className={cn("h-3.5 w-3.5 mt-0.5 shrink-0", colors.text, node.level === "red" && "animate-pulse")}
+                  />
 
-                {/* left: label + short detail */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={cn("text-[10px] font-semibold font-mono", colors.text)}>
-                      {node.label.split("(")[0].trim()}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider",
-                        colors.bg, colors.text, colors.border
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn("text-[10px] font-semibold font-mono", colors.text)}>
+                        {node.label.split("(")[0].trim()}
+                      </span>
+                      <span className={cn("text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider", colors.bg, colors.text, colors.border)}>
+                        {node.level === "green" ? "OK" : node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                      </span>
+                      {node.latency_ms != null && (
+                        <span className="text-[8px] font-mono text-muted-foreground/50">{node.latency_ms}ms</span>
                       )}
-                    >
-                      {node.level === "green" ? "OK" : node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
-                    </span>
-                    {node.latency_ms != null && (
-                      <span className="text-[8px] font-mono text-muted-foreground/50">{node.latency_ms}ms</span>
-                    )}
-                    {node.data_age_s != null && node.latency_ms == null && (
-                      <span className="text-[8px] font-mono text-muted-foreground/50">{node.data_age_s.toFixed(0)}s old</span>
+                      {node.data_age_s != null && node.latency_ms == null && (
+                        <span className="text-[8px] font-mono text-muted-foreground/50">{node.data_age_s.toFixed(0)}s old</span>
+                      )}
+                      {/* heal result badge */}
+                      {healResult && (
+                        <span className={cn(
+                          "text-[8px] font-mono px-1.5 py-0.5 rounded-full border flex items-center gap-1",
+                          healResult.success
+                            ? "text-green-400 bg-green-500/10 border-green-500/20"
+                            : "text-red-400 bg-red-500/10 border-red-500/20"
+                        )}>
+                          {healResult.success ? "✓ healed" : "✗ failed"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 truncate">{node.detail}</div>
+
+                    {/* expanded explanation + heal result */}
+                    {isOpen && (
+                      <div className="mt-2 space-y-1.5">
+                        <div className={cn("text-[10px] leading-relaxed rounded-lg px-3 py-2 border", colors.bg, colors.border, colors.text)}>
+                          <div className="flex gap-1.5">
+                            <Info className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
+                            <span>{explanation}</span>
+                          </div>
+                        </div>
+                        {healResult && (
+                          <div className={cn(
+                            "text-[9px] font-mono rounded-lg px-3 py-1.5 border leading-relaxed",
+                            healResult.success
+                              ? "bg-green-500/5 border-green-500/20 text-green-400/80"
+                              : "bg-red-500/5 border-red-500/20 text-red-400/80"
+                          )}>
+                            <span className="font-semibold">{healResult.success ? "✓ Healed: " : "✗ Failed: "}</span>
+                            {healResult.result}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  {/* short detail line always visible */}
-                  <div className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 truncate">{node.detail}</div>
+                  <span className="text-[8px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors mt-0.5 font-mono shrink-0">
+                    {isOpen ? "▲" : "▼"}
+                  </span>
+                </button>
 
-                  {/* expanded plain-English explanation */}
-                  {isOpen && (
-                    <div
-                      className={cn(
-                        "mt-2 text-[10px] leading-relaxed rounded-lg px-3 py-2 border",
-                        colors.bg, colors.border,
-                        colors.text
-                      )}
-                    >
-                      <div className="flex gap-1.5">
-                        <Info className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
-                        <span>{explanation}</span>
-                      </div>
-                    </div>
+                {/* Fix button */}
+                <button
+                  onClick={() => onFix(key)}
+                  disabled={isFixing || healAllLoading}
+                  className={cn(
+                    "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-mono font-semibold transition-all border mt-0.5",
+                    isFixing
+                      ? "border-cyan-500/30 text-cyan-400/60 bg-cyan-500/5 cursor-not-allowed"
+                      : healResult?.success
+                      ? "border-green-500/30 text-green-400 bg-green-500/5 hover:bg-green-500/10"
+                      : "border-cyan-500/30 text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/15 hover:border-cyan-400/50"
                   )}
-                </div>
-
-                {/* chevron */}
-                <span className="text-[8px] text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors mt-0.5 font-mono">
-                  {isOpen ? "▲" : "▼"}
-                </span>
+                >
+                  {isFixing ? (
+                    <><RotateCcw className="h-2.5 w-2.5 animate-spin" /> fixing…</>
+                  ) : healResult?.success ? (
+                    <><CheckCircle2 className="h-2.5 w-2.5" /> fixed</>
+                  ) : (
+                    <>Fix →</>
+                  )}
+                </button>
               </div>
-            </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Remediation Log Panel ───────────────────────────────────────────────── */
+function RemediationLog({ log }: { log: HealEntry[] }) {
+  if (log.length === 0) return null;
+
+  return (
+    <div className="border-t border-white/5 bg-slate-950/60 shrink-0">
+      <div className="flex items-center gap-2 px-5 py-1.5 border-b border-white/5">
+        <Clock className="h-3 w-3 text-muted-foreground/40" />
+        <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/40 font-semibold">Heal Log</span>
+        <span className="text-[8px] font-mono text-muted-foreground/30 ml-auto">{log.length} entr{log.length === 1 ? "y" : "ies"}</span>
+      </div>
+      <div className="max-h-28 overflow-y-auto divide-y divide-white/[0.03]">
+        {log.map((entry, i) => {
+          const label = COMPONENT_LABELS[entry.component] ?? entry.component;
+          const byLabel = entry.triggered_by === "auto_heal" ? "auto" : entry.triggered_by === "heal_all" ? "heal-all" : "manual";
+          const timeStr = new Date(entry.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          return (
+            <div key={i} className="flex items-start gap-3 px-5 py-1.5">
+              <span className={cn("text-[8px] font-mono mt-px shrink-0", entry.success ? "text-green-400" : "text-red-400")}>
+                {entry.success ? "✓" : "✗"}
+              </span>
+              <span className="text-[8px] font-mono text-muted-foreground/50 shrink-0 w-16">{timeStr}</span>
+              <span className={cn("text-[8px] font-mono shrink-0 px-1 py-px rounded text-[7px] border",
+                entry.triggered_by === "auto_heal"
+                  ? "text-violet-400 border-violet-500/20 bg-violet-500/5"
+                  : "text-cyan-400/60 border-cyan-500/15 bg-cyan-500/5"
+              )}>
+                {byLabel}
+              </span>
+              <span className="text-[8px] font-mono text-white/60 shrink-0">{label}</span>
+              <span className="text-[8px] font-mono text-muted-foreground/40 truncate flex-1">{entry.result}</span>
+            </div>
           );
         })}
       </div>
@@ -429,7 +556,6 @@ function TestControlPanel({
         </div>
       </div>
 
-      {/* Scenario Presets */}
       <div className="mb-3 pb-3 border-b border-white/5">
         <div className="text-[8px] font-mono text-muted-foreground/50 uppercase tracking-wider mb-1.5">Scenario Presets</div>
         <div className="grid grid-cols-2 gap-1">
@@ -454,7 +580,6 @@ function TestControlPanel({
         </div>
       </div>
 
-      {/* Per-Node Overrides */}
       <div className="text-[8px] font-mono text-muted-foreground/50 uppercase tracking-wider mb-1.5">Per-Node Overrides</div>
       <div className="space-y-3">
         {Object.entries(NODE_POSITIONS).map(([key]) => (
@@ -479,11 +604,7 @@ function TestControlPanel({
             <div className="flex items-center gap-2">
               <span className="text-[8px] text-muted-foreground/40 w-10">Lat:</span>
               <input
-                type="range"
-                min={0}
-                max={2000}
-                step={50}
-                defaultValue={0}
+                type="range" min={0} max={2000} step={50} defaultValue={0}
                 onChange={(e) => updateNode(key, "latency_ms", parseInt(e.target.value))}
                 className="flex-1 h-1 accent-cyan-500 cursor-pointer"
               />
@@ -494,11 +615,7 @@ function TestControlPanel({
             <div className="flex items-center gap-2">
               <span className="text-[8px] text-muted-foreground/40 w-10">Age:</span>
               <input
-                type="range"
-                min={0}
-                max={600}
-                step={10}
-                defaultValue={0}
+                type="range" min={0} max={600} step={10} defaultValue={0}
                 onChange={(e) => updateNode(key, "data_age_s", parseInt(e.target.value))}
                 className="flex-1 h-1 accent-cyan-500 cursor-pointer"
               />
@@ -515,6 +632,7 @@ function TestControlPanel({
 
 /* ── Main Modal ─────────────────────────────────────────────────────────── */
 export function SystemHealthModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
@@ -522,8 +640,18 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
     retry: false,
   });
 
+  const { data: logData } = useQuery({
+    queryKey: ["/system/remediate/log"],
+    queryFn: async () => (await api.get("/system/remediate/log")).data,
+    refetchInterval: 5_000,
+    retry: false,
+  });
+
   const [overrides, setOverrides] = useState<Overrides>({});
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [fixingComponent, setFixingComponent] = useState<string | null>(null);
+  const [healAllLoading, setHealAllLoading] = useState(false);
+  const [lastHealResults, setLastHealResults] = useState<Record<string, { success: boolean; result: string }>>({});
   const resetOverrides = useCallback(() => setOverrides({}), []);
 
   useEffect(() => {
@@ -556,10 +684,46 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const hasOverrides = Object.keys(overrides).length > 0;
   const selectedHealth = selectedNode && mergedNodes ? mergedNodes[selectedNode] : null;
 
+  const handleFix = useCallback(async (component: string) => {
+    setFixingComponent(component);
+    try {
+      const res = await api.post(`/system/remediate/${component}`);
+      const result = res.data as { success: boolean; result: string };
+      setLastHealResults(prev => ({ ...prev, [component]: { success: result.success, result: result.result } }));
+      queryClient.invalidateQueries({ queryKey: ["/system/remediate/log"] });
+      queryClient.invalidateQueries({ queryKey: ["/system/health-architecture"] });
+    } catch (err) {
+      setLastHealResults(prev => ({ ...prev, [component]: { success: false, result: `Request failed: ${err}` } }));
+    } finally {
+      setFixingComponent(null);
+    }
+  }, [queryClient]);
+
+  const handleHealAll = useCallback(async () => {
+    setHealAllLoading(true);
+    try {
+      const res = await api.post("/system/remediate/all");
+      const result = res.data as { success: boolean; results: Array<{ component: string; success: boolean; result: string }> };
+      const newResults: Record<string, { success: boolean; result: string }> = {};
+      for (const r of result.results) {
+        newResults[r.component] = { success: r.success, result: r.result };
+      }
+      setLastHealResults(prev => ({ ...prev, ...newResults }));
+      queryClient.invalidateQueries({ queryKey: ["/system/remediate/log"] });
+      queryClient.invalidateQueries({ queryKey: ["/system/health-architecture"] });
+    } catch (err) {
+      console.error("Heal all failed:", err);
+    } finally {
+      setHealAllLoading(false);
+    }
+  }, [queryClient]);
+
+  const healLog: HealEntry[] = logData?.log ?? [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-[90vw] h-[85vh] max-w-5xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-[90vw] h-[90vh] max-w-5xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -581,6 +745,12 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 Test Mode
               </span>
             )}
+            {overallLevel !== "green" && (
+              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center gap-1">
+                <Zap className="h-2.5 w-2.5" />
+                self-heal active
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -594,7 +764,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
         <div className="flex-1 relative overflow-hidden min-h-0">
           {isLoading || !mergedNodes ? (
             <div className="flex items-center justify-center h-full">
-              <div className="text-muted-foreground text-sm font-mono animate-pulse">Scanning subsystems...</div>
+              <div className="text-muted-foreground text-sm font-mono animate-pulse">Scanning subsystems…</div>
             </div>
           ) : (
             <>
@@ -602,13 +772,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
               <div className="absolute top-4 left-6 flex items-center gap-4 z-10">
                 {(["green", "yellow", "red"] as Level[]).map((lvl) => (
                   <div key={lvl} className="flex items-center gap-1.5">
-                    <span
-                      className={cn("h-2.5 w-2.5 rounded-full", {
-                        "bg-green-400": lvl === "green",
-                        "bg-yellow-400": lvl === "yellow",
-                        "bg-red-400": lvl === "red",
-                      })}
-                    />
+                    <span className={cn("h-2.5 w-2.5 rounded-full", { "bg-green-400": lvl === "green", "bg-yellow-400": lvl === "yellow", "bg-red-400": lvl === "red" })} />
                     <span className="text-[9px] font-mono text-muted-foreground/60 uppercase">
                       {lvl === "green" ? "Optimal" : lvl === "yellow" ? "Degraded" : "Critical"}
                     </span>
@@ -670,68 +834,40 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 ))}
               </svg>
 
-              {/* Selected node hover detail */}
+              {/* Selected Node Detail */}
               {selectedHealth && (
-                <div className="absolute top-4 right-4 w-64 bg-slate-900/95 border border-white/10 rounded-xl p-4 backdrop-blur-lg z-10">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span
-                      className={cn("h-2.5 w-2.5 rounded-full", {
-                        "bg-green-400": selectedHealth.level === "green",
-                        "bg-yellow-400 animate-pulse": selectedHealth.level === "yellow",
-                        "bg-red-400 animate-pulse": selectedHealth.level === "red",
-                      })}
-                    />
-                    <span className="text-xs font-semibold text-white">{selectedHealth.label}</span>
-                    <button
-                      onClick={() => setSelectedNode(null)}
-                      className="ml-auto text-muted-foreground/40 hover:text-white"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                <div className="absolute bottom-4 left-6 max-w-xs bg-slate-900/95 border border-white/10 rounded-xl p-3 backdrop-blur-lg">
+                  <div className={cn("text-[10px] font-semibold font-mono mb-1", LEVEL_COLORS[selectedHealth.level].text)}>
+                    {selectedHealth.label}
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px]">
-                      <span className="text-muted-foreground">Status</span>
-                      <span className={LEVEL_COLORS[selectedHealth.level].text}>
-                        {selectedHealth.level === "green" ? "Optimal" : selectedHealth.level === "yellow" ? "Degraded" : "CRITICAL"}
-                      </span>
+                  <div className="text-[9px] font-mono text-muted-foreground/70">{selectedHealth.detail}</div>
+                  {selectedHealth.level !== "green" && (
+                    <div className={cn("text-[9px] mt-2 leading-relaxed", LEVEL_COLORS[selectedHealth.level].text, "opacity-80")}>
+                      {buildExplanation(selectedNode!, selectedHealth)}
                     </div>
-                    {selectedHealth.latency_ms != null && (
-                      <div className="flex justify-between text-[10px]">
-                        <span className="text-muted-foreground">Latency</span>
-                        <span className="text-white font-mono">{selectedHealth.latency_ms}ms</span>
-                      </div>
-                    )}
-                    {selectedHealth.data_age_s != null && (
-                      <div className="flex justify-between text-[10px]">
-                        <span className="text-muted-foreground">Data Age</span>
-                        <span className="text-white font-mono">{selectedHealth.data_age_s.toFixed(0)}s</span>
-                      </div>
-                    )}
-                    <div className="pt-1 border-t border-white/5">
-                      <div className="text-[9px] text-muted-foreground/60 font-mono">{selectedHealth.detail}</div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              {/* Threshold reference — bottom left */}
-              <div className="absolute bottom-4 left-6 z-10">
-                <div className="text-[8px] font-mono text-muted-foreground/25 space-y-0.5">
-                  <div>GREEN: latency &lt;200ms · data &lt;60s old · allocation ≤15%</div>
-                  <div>YELLOW: latency 200–1000ms · data 60–300s old · rate limited</div>
-                  <div>RED: latency &gt;1000ms · HTTP 4xx/5xx · data &gt;300s · alloc &gt;15%</div>
-                </div>
-              </div>
-
-              {/* Test control panel */}
               <TestControlPanel overrides={overrides} setOverrides={setOverrides} resetOverrides={resetOverrides} />
             </>
           )}
         </div>
 
-        {/* ── Active Alerts Digest — pinned bottom ── */}
-        {mergedNodes && <AlertsDigest nodes={mergedNodes} />}
+        {/* ── Alerts + Fix Buttons ── */}
+        {mergedNodes && (
+          <AlertsDigest
+            nodes={mergedNodes}
+            onFix={handleFix}
+            fixingComponent={fixingComponent}
+            onHealAll={handleHealAll}
+            healAllLoading={healAllLoading}
+            lastHealResults={lastHealResults}
+          />
+        )}
+
+        {/* ── Remediation Log ── */}
+        <RemediationLog log={healLog} />
       </div>
     </div>
   );

@@ -266,8 +266,17 @@ def write_status(error: str | None = None) -> None:
     try:
         _tmp_status = STATUS_FILE + ".tmp"
         with open(_tmp_status, "w") as f:
-            json.dump(state, f, indent=2)
-        os.replace(_tmp_status, STATUS_FILE)
+            json.dump(state, f, indent=2, default=str)
+        # Validate the written file before atomically replacing the live copy.
+        # If the tmp file is corrupt (e.g. mid-stream failure), we keep the
+        # last-good status.json rather than clobbering it with garbage.
+        try:
+            with open(_tmp_status) as _vf:
+                json.load(_vf)
+        except Exception as _ve:
+            logger.warning(f"Status | Tmp file failed validation — aborting replace: {_ve}")
+        else:
+            os.replace(_tmp_status, STATUS_FILE)
     except Exception as exc:
         logger.warning(f"Status | Could not write {STATUS_FILE}: {exc}")
 

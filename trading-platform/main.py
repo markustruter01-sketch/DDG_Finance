@@ -2022,7 +2022,24 @@ async def kraken_status() -> dict:
     try:
         return _json.loads(status_file.read_text())
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
+        logger.warning(f"[kraken/status] Could not parse status.json ({exc}) — returning empty state")
+        return {
+            "bot_name":         "Davy Jones' Portfolio",
+            "status":           "not_started",
+            "last_updated":     None,
+            "cycle_count":      0,
+            "total_equity_usd": 0,
+            "deployed_usd":     0,
+            "deployed_pct":     0,
+            "deployable_ceiling_pct": 80,
+            "cash_reserve_pct": 20,
+            "open_positions":   [],
+            "position_count":   0,
+            "max_positions":    3,
+            "circuit_breaker":  {"active": False, "paused_until": None},
+            "recent_trades":    [],
+            "error":            f"status.json parse error: {exc}",
+        }
 
 
 # ── Kraken Bot — AI Narrative Commentary ──────────────────────────────────────
@@ -2260,7 +2277,8 @@ async def kraken_performance() -> dict:
     try:
         status = _json.loads(status_file.read_text())
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not parse kraken status: {exc}")
+        logger.warning(f"[kraken/performance] Could not parse status.json ({exc}) — returning empty state")
+        return empty
 
     trades: list[dict] = status.get("recent_trades", [])
 

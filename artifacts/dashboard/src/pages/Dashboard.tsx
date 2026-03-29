@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
@@ -58,6 +58,90 @@ function useCountUp(target: number, duration = 1200, enabled = true) {
   }, [target, duration, enabled]);
 
   return value;
+}
+
+// ── RollingPnl — animated unrealised P&L cell ─────────────────────────────────
+// Smoothly animates between value changes. Pulses with a glow every 10 seconds
+// and slides digits down from above on each tick, giving a live-feed odometer feel.
+function RollingPnl({ value, pct }: { value: number; pct: number }) {
+  const prevRef  = useRef(value);
+  const rafRef   = useRef<number | null>(null);
+  const [displayed, setDisplayed] = useState(value);
+  const [animKey, setAnimKey]     = useState(0);
+  const [glowing, setGlowing]     = useState(false);
+
+  const animateTo = useCallback((from: number, to: number) => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    const duration = 800;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplayed(from + (to - from) * eased);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  const flash = useCallback(() => {
+    setGlowing(true);
+    setTimeout(() => setGlowing(false), 700);
+  }, []);
+
+  // Animate when the external value changes (API refresh)
+  useEffect(() => {
+    if (value !== prevRef.current) {
+      animateTo(prevRef.current, value);
+      prevRef.current = value;
+      setAnimKey(k => k + 1);
+      flash();
+    }
+  }, [value, animateTo, flash]);
+
+  // 10-second heartbeat: nudge digits so the roll is always visible
+  useEffect(() => {
+    const id = setInterval(() => {
+      const nudge = Math.abs(value) > 0.01 ? value * 0.0004 : 0.01;
+      animateTo(value - nudge, value);
+      setAnimKey(k => k + 1);
+      flash();
+    }, 10_000);
+    return () => {
+      clearInterval(id);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [value, animateTo, flash]);
+
+  const isUp   = value >= 0;
+  const sign   = isUp ? "+" : "";
+  const glow   = isUp ? "rgba(34,197,94,0.85)" : "rgba(239,68,68,0.85)";
+  const pctAbs = Math.abs(pct * 100).toFixed(2);
+
+  return (
+    <div
+      className="flex flex-col items-end transition-[filter] duration-300"
+      style={glowing ? { filter: `drop-shadow(0 0 5px ${glow})` } : undefined}
+    >
+      <motion.span
+        key={animKey}
+        initial={{ y: -8, opacity: 0.3 }}
+        animate={{ y: 0,  opacity: 1   }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className={cn(
+          "text-xs font-mono font-semibold tabular-nums tracking-tight",
+          isUp ? "text-green-400" : "text-red-400"
+        )}
+      >
+        {sign}{formatCurrency(displayed)}
+      </motion.span>
+      <span className={cn(
+        "text-[10px] font-mono opacity-70 tabular-nums",
+        isUp ? "text-green-400" : "text-red-400"
+      )}>
+        {isUp ? "+" : "-"}{pctAbs}%
+      </span>
+    </div>
+  );
 }
 
 // ── System Status Banner ───────────────────────────────────────────────────────
@@ -2480,12 +2564,9 @@ function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConf
           <span className="text-muted-foreground">Current</span>
           <span className="font-mono text-white">{formatCurrency(pos.current_price)}</span>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span className="text-muted-foreground">P&L</span>
-          <div className="flex items-center gap-1.5">
-            <PnlValue value={pos.unrealized_pl} />
-            <span className="text-[10px] opacity-70"><PnlText value={pos.unrealized_plpc * 100} /></span>
-          </div>
+          <RollingPnl value={pos.unrealized_pl} pct={pos.unrealized_plpc} />
         </div>
         {(pos.stop_loss_price != null || pos.take_profit_price != null) && (
           <div className="flex justify-between">
@@ -2700,10 +2781,7 @@ function LivePositionsSection() {
                   <td className="px-5 py-3.5 text-right font-mono text-xs text-muted-foreground">{formatCurrency(pos.avg_entry_price)}</td>
                   <td className="px-5 py-3.5 text-right font-mono text-xs text-white">{formatCurrency(pos.current_price)}</td>
                   <td className="px-5 py-3.5 text-right">
-                    <div className="flex flex-col items-end">
-                      <PnlValue value={pos.unrealized_pl} />
-                      <span className="text-[10px] opacity-70"><PnlText value={pos.unrealized_plpc * 100} /></span>
-                    </div>
+                    <RollingPnl value={pos.unrealized_pl} pct={pos.unrealized_plpc} />
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {pos.stop_loss_price != null ? (
@@ -2833,12 +2911,9 @@ function LivePositionsSection() {
                     {kpos.current_price != null ? formatCurrency(kpos.current_price) : <span className="text-muted-foreground/40">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    {kpos.unrealized_pnl_usd != null ? (
-                      <div className="flex flex-col items-end">
-                        <PnlValue value={kpos.unrealized_pnl_usd} />
-                        <span className="text-[10px] opacity-70"><PnlText value={pnlPct} /></span>
-                      </div>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                    {kpos.unrealized_pnl_usd != null
+                      ? <RollingPnl value={kpos.unrealized_pnl_usd} pct={pnlPct / 100} />
+                      : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {kpos.stop_loss_price != null ? (

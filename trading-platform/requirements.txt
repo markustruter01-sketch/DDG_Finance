@@ -18,3 +18,5 @@ loguru==0.7.3
 python-dotenv==1.0.1
 psycopg2-binary==2.9.10
 holidays==0.62
+stripe>=11.0.0
+python-multipart>=0.0.9

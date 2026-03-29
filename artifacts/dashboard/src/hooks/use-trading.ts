@@ -659,10 +659,16 @@ export interface SystemRestartResult {
 export interface KrakenPosition {
   symbol: string;
   side: "long" | "short";
+  qty: number;
   entry_price: number;
+  current_price: number;
   size_usd: number;
+  unrealized_pnl_usd: number;
+  unrealized_pnl_pct: number;
   entry_time: string;
   best_price: number;
+  stop_loss_price: number;
+  take_profit_price: number;
 }
 
 export interface KrakenStatus {
@@ -698,6 +704,16 @@ export interface KrakenStatus {
     win_count: number;
     all_time_pnl_usd: number;
   } | null;
+  signals: Array<{
+    symbol: string;
+    rsi: number | null;
+    z_score: number | null;
+    price: number | null;
+    signal_type: string;
+    has_position: boolean;
+    pnl_pct: number | null;
+  }>;
+  thinking_text: string;
   error: string | null;
 }
 

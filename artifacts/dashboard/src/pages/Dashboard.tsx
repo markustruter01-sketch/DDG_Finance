@@ -3052,15 +3052,16 @@ function LivePositionsSection() {
                   </td>
                   {/* Conviction — mean-reversion Z-score strength */}
                   <td className="px-5 py-3.5 text-center">
-                    {krakenStatus?.signals?.find((s: any) => s.symbol === kpos.symbol) ? (() => {
-                      const sig = krakenStatus.signals.find((s: any) => s.symbol === kpos.symbol);
+                    {(() => {
+                      const sig = krakenStatus?.signals?.find((s: any) => s.symbol === kpos.symbol);
+                      if (!sig || sig.z_score == null) return <span className="text-muted-foreground text-xs">—</span>;
                       const strength = Math.min(Math.abs(sig.z_score) / 2, 1);
                       return (
                         <span className={cn("text-xs font-mono font-semibold", strength > 0.7 ? "text-cyan-400" : strength > 0.4 ? "text-primary" : "text-amber-400")}>
                           {Math.round(strength * 100)}%
                         </span>
                       );
-                    })() : <span className="text-muted-foreground text-xs">—</span>}
+                    })()}
                   </td>
                   {/* Health — time in trade proxy */}
                   <td className="px-5 py-3.5 text-center">
@@ -4158,7 +4159,7 @@ function PositionChangeNotifier() {
     );
     // Build current Kraken position set
     const curKraken = new Set<string>(
-      Object.keys(krakenData?.positions ?? {})
+      (krakenData?.open_positions ?? []).map((p: any) => p.symbol)
     );
 
     if (!initialized.current) {

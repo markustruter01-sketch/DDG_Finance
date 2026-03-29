@@ -36,6 +36,7 @@ class GroqBudget:
         self._reset_day: int = self._today_utc()
         self._tokens_used: int = 0
         self._regime_calls: int = 0
+        self._crypto_calls: int = 0
         self._last_regime_call_at: float = 0.0
         self._commentary_calls: dict[str, int] = {}
 
@@ -50,6 +51,7 @@ class GroqBudget:
             self._reset_day = today
             self._tokens_used = 0
             self._regime_calls = 0
+            self._crypto_calls = 0
             self._commentary_calls = {}
             self._last_regime_call_at = 0.0
             logger.info(
@@ -113,7 +115,54 @@ class GroqBudget:
             self._last_regime_call_at = time.time()
             self._regime_calls += 1
             logger.info(
-                f"Groq budget | Regime call #{self._regime_calls} recorded "
+                f"Groq budget | Full-regime call #{self._regime_calls} recorded "
+                f"(used={self._tokens_used}/{settings.groq_daily_token_budget})"
+            )
+
+    def can_call_crypto(self) -> bool:
+        """
+        True if a crypto-only LLM call is allowed right now:
+          - Daily token budget not exhausted
+          - Minimum interval since last ANY regime/crypto LLM call has elapsed
+        Shares the same `_last_regime_call_at` timer as `can_call_regime()` so
+        that the 90-min pacing applies across the full+crypto call mix.
+        """
+        with self._lock:
+            self._maybe_reset()
+
+            remaining = settings.groq_daily_token_budget - self._tokens_used
+            if remaining <= 0:
+                logger.warning(
+                    "Groq budget | Crypto call blocked — daily token budget exhausted"
+                )
+                return False
+
+            min_interval_min = settings.groq_min_regime_interval_minutes
+            if min_interval_min <= 0:
+                return True
+
+            interval_s = min_interval_min * 60
+            elapsed = time.time() - self._last_regime_call_at
+            if self._last_regime_call_at > 0 and elapsed < interval_s:
+                wait_min = (interval_s - elapsed) / 60
+                logger.info(
+                    f"Groq budget | Crypto call throttled — "
+                    f"{elapsed / 60:.1f}min since last LLM call, "
+                    f"min={min_interval_min}min — "
+                    f"eligible in {wait_min:.1f}min"
+                )
+                return False
+
+            return True
+
+    def record_crypto_call(self) -> None:
+        """Record a successful crypto-only LLM call (updates shared timer + own counter)."""
+        with self._lock:
+            self._maybe_reset()
+            self._last_regime_call_at = time.time()
+            self._crypto_calls += 1
+            logger.info(
+                f"Groq budget | Crypto call #{self._crypto_calls} recorded "
                 f"(used={self._tokens_used}/{settings.groq_daily_token_budget})"
             )
 
@@ -185,6 +234,7 @@ class GroqBudget:
                 "token_budget_total":      total,
                 "pct_used":                pct_used,
                 "regime_calls_today":      self._regime_calls,
+                "crypto_calls_today":      self._crypto_calls,
                 "commentary_calls_today":  dict(self._commentary_calls),
                 "regime_interval_min":     settings.groq_min_regime_interval_minutes,
                 "commentary_daily_cap":    settings.groq_commentary_daily_cap,

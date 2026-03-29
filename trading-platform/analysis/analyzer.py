@@ -53,6 +53,7 @@ REGIME_FALLBACK_MAX_AGE_SECONDS = int(_settings.regime_fallback_max_age_hours * 
 
 # In-memory cache dict: {"regime": str, "saved_at": float, "output": {...}}
 _last_regime_cache: dict | None = None
+_last_crypto_cache: dict | None = None
 
 
 def _load_regime_cache() -> None:
@@ -69,6 +70,35 @@ def _load_regime_cache() -> None:
             )
         except Exception as exc:
             logger.warning(f"Regime cache | Failed to load from disk: {exc}")
+
+
+def _save_crypto_cache(output: "CryptoAnalysisOutput") -> None:
+    """Save the last successful crypto LLM output in-memory for budget throttle fallback."""
+    global _last_crypto_cache
+    _last_crypto_cache = {
+        "saved_at": time.time(),
+        "output": output.model_dump(),
+    }
+    logger.info("Crypto cache | Updated in-memory (budget throttle fallback)")
+
+
+def get_crypto_fallback() -> "CryptoAnalysisOutput | None":
+    """Return the cached CryptoAnalysisOutput if available and not stale."""
+    if _last_crypto_cache is None:
+        return None
+    age = time.time() - _last_crypto_cache.get("saved_at", 0)
+    if age > REGIME_FALLBACK_MAX_AGE_SECONDS:
+        logger.warning(
+            f"Crypto cache | Too stale ({age / 3600:.1f}h > "
+            f"{_settings.regime_fallback_max_age_hours}h) — will not use as fallback"
+        )
+        return None
+    try:
+        from analysis.models import CryptoAnalysisOutput
+        return CryptoAnalysisOutput.model_validate(_last_crypto_cache["output"])
+    except Exception as exc:
+        logger.warning(f"Crypto cache | Failed to deserialise: {exc}")
+        return None
 
 
 def _save_regime_cache(output: RegimeAnalysisOutput) -> None:
@@ -241,24 +271,39 @@ async def run_analysis_cycle(
     else:
         from analysis.groq_budget import budget as _budget
 
-        if not crypto_only and not _budget.can_call_regime():
-            cached = get_regime_fallback()
-            if cached is not None:
-                logger.info(
-                    "Groq budget | Full-regime call throttled — returning cached regime "
-                    f"(age={round((time.time() - _last_regime_cache.get('saved_at', 0)) / 60)}min)"
-                )
-                return cached
-            logger.warning(
-                "Groq budget | Full-regime call throttled but no cache available — "
-                "proceeding with LLM call to avoid empty allocation"
-            )
-
         if crypto_only:
+            if not _budget.can_call_crypto():
+                cached_crypto = get_crypto_fallback()
+                if cached_crypto is not None:
+                    age_min = round(
+                        (time.time() - (_last_crypto_cache or {}).get("saved_at", 0)) / 60
+                    )
+                    logger.info(
+                        f"Groq budget | Crypto call throttled — returning cached "
+                        f"CryptoAnalysisOutput ({age_min}min old)"
+                    )
+                    return cached_crypto
+                logger.warning(
+                    "Groq budget | Crypto call throttled but no cache available — "
+                    "proceeding with LLM call to avoid empty allocation"
+                )
             output = _call_crypto_with_retry(system_prompt, user_prompt)
+            _budget.record_crypto_call()
         else:
+            if not _budget.can_call_regime():
+                cached_regime = get_regime_fallback()
+                if cached_regime is not None:
+                    logger.info(
+                        "Groq budget | Full-regime call throttled — returning cached regime "
+                        f"(age={round((time.time() - (_last_regime_cache or {}).get('saved_at', 0)) / 60)}min)"
+                    )
+                    return cached_regime
+                logger.warning(
+                    "Groq budget | Full-regime call throttled but no cache available — "
+                    "proceeding with LLM call to avoid empty allocation"
+                )
             output = _call_regime_with_retry(system_prompt, user_prompt)
-        _budget.record_regime_call()
+            _budget.record_regime_call()
 
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE COMPLETE ({mode_label})")
@@ -343,6 +388,7 @@ def _call_crypto_with_retry(system_prompt: str, user_prompt: str) -> CryptoAnaly
             output = process_crypto_llm_output(raw_json)
             if attempt > 1:
                 logger.info(f"  LLM self-corrected on attempt {attempt}")
+            _save_crypto_cache(output)
             return output
 
         except Exception as exc:

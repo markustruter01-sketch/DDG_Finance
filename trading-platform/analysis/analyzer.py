@@ -331,15 +331,24 @@ def _call_regime_with_retry(
 ) -> RegimeAnalysisOutput:
     from analysis.llm_response_cache import llm_cache as _llm_cache
 
+    def _do_regime_llm_call() -> str:
+        return call_groq(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=2048,
+            call_type="regime",
+        )
+
     if cache_key:
-        cached_raw = _llm_cache.get(cache_key)
-        if cached_raw is not None:
-            try:
+        try:
+            cached_raw = _llm_cache.get(cache_key)
+            if cached_raw is not None:
                 output = process_regime_llm_output(cached_raw)
                 logger.info("LLMResponseCache | Regime output served from cache — Groq call skipped")
                 return output
-            except Exception as _ce:
-                logger.warning(f"LLMResponseCache | Regime cached entry invalid, re-fetching: {_ce}")
+        except Exception as _ce:
+            logger.warning(f"LLMResponseCache | Regime cached entry invalid, re-fetching: {_ce}")
 
     last_error: Exception | None = None
     current_user_prompt = user_prompt

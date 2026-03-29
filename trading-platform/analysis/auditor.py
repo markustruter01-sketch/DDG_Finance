@@ -178,10 +178,16 @@ Flag any mismatch between the claimed regime and the heuristics above."""
             response_format={"type": "json_object"},
         )
         usage = response.usage
+        total_tokens = usage.total_tokens if usage else 0
         logger.info(
             f"Auditor LLM | Regime critique complete — "
             f"tokens: prompt={usage.prompt_tokens} completion={usage.completion_tokens}"
         )
+        try:
+            from analysis.groq_budget import budget as _budget
+            _budget.consume(total_tokens, call_type="audit")
+        except Exception:
+            pass
         return json.loads(response.choices[0].message.content)
     except Exception as exc:
         logger.warning(f"Auditor LLM | Critique failed: {exc} — returning neutral verdict")
@@ -1401,8 +1407,14 @@ Be specific about which bot is outperforming and why the numbers suggest that.""
             temperature=0.5,
             max_tokens=300,
         )
+        perf_tokens = response.usage.total_tokens if response.usage else 0
         narrative = response.choices[0].message.content.strip()
         logger.info(f"PerfAnalysis | Narrative generated ({len(narrative)} chars)")
+        try:
+            from analysis.groq_budget import budget as _budget
+            _budget.consume(perf_tokens, call_type="performance")
+        except Exception:
+            pass
     except Exception as exc:
         logger.error(f"PerfAnalysis | Groq call failed: {exc}")
 

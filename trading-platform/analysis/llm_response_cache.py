@@ -163,6 +163,57 @@ class LLMResponseCache:
                 "ttl_minutes":      self._ttl_s // 60,
             }
 
+    def get_or_call(
+        self,
+        context_hash: str,
+        call_fn,
+        ttl_minutes: int | None = None,
+    ) -> str:
+        """
+        Convenience wrapper: return cached raw_json if available; otherwise
+        call `call_fn()`, store the result, and return it.
+
+        Args:
+            context_hash: Pre-computed cache key (use `make_key()` to build one).
+            call_fn:      Zero-argument callable that returns a raw_json string.
+                          Called only on a cache miss.
+            ttl_minutes:  Override the instance TTL for this specific lookup.
+
+        Returns:
+            raw_json string (either from cache or from call_fn).
+
+        Raises:
+            Whatever `call_fn` raises on failure.
+        """
+        effective_ttl = (ttl_minutes * 60) if ttl_minutes is not None else self._ttl_s
+
+        with self._lock:
+            entry = self._store.get(context_hash)
+            if entry is not None:
+                age = time.time() - entry.get("saved_at", 0)
+                if age <= effective_ttl:
+                    self._hits += 1
+                    logger.info(
+                        f"LLMResponseCache | HIT via get_or_call "
+                        f"(age={age / 60:.1f}min, key={context_hash[:8]}…) "
+                        f"[hits={self._hits} misses={self._misses}]"
+                    )
+                    return entry["raw_json"]
+                del self._store[context_hash]
+            self._misses += 1
+
+        raw_json = call_fn()
+
+        with self._lock:
+            self._store[context_hash] = {"raw_json": raw_json, "saved_at": time.time()}
+            self._persist()
+            logger.debug(
+                f"LLMResponseCache | Stored via get_or_call key={context_hash[:8]}… "
+                f"({len(raw_json)} chars)"
+            )
+
+        return raw_json
+
     def invalidate(self) -> None:
         """Clear all cached entries (manual invalidation)."""
         with self._lock:

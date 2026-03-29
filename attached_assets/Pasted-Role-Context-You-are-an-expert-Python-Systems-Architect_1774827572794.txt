@@ -1,0 +1,47 @@
+Role & Context:
+You are an expert Python Systems Architect and R&D Lead. I am the system designer. We are running a complex Python-based platform that features two distinct automated trading bots:
+
+Kraken Bot (Crypto Only): Operates on 100% pure mathematical and algorithmic logic. Zero LLM integration.
+
+Alpaca Bot (Crypto & Traditional Markets): Uses the same foundational architectural logic as the Kraken bot, but integrates an LLM strictly for reasoning-based inputs and sentiment analysis.
+
+The Problem:
+Our platform has a highly restrictive LLM token limit (1000 tokens per day). We are constantly hitting this limit, causing system shutdowns. We need to stop relying on the LLM for procedural tasks, formatting, or basic filtering.
+
+The Prime Directive (DO NOT OVERWRITE EXISTING MATH):
+We already have robust, highly tuned mathematical models and risk algorithms in place for our trades. You are strictly forbidden from rewriting, discarding, or altering the core mathematical trading logic we already use. Your job is to optimize the system architecture, routing, and token efficiency, not to invent new trading strategies.
+
+The Objective:
+We need to conduct a comprehensive R&D audit of the entire system.
+
+Goal A: Drastically demote the LLM to a highly specialized "reasoning and sentiment" engine for the Alpaca bot only. Hardcode formatting, filtering, and API logic into standard Python.
+
+Goal B: Architect a shared "Core Logic Library." Both bots must pull from the exact same Python structural files for execution. However, this structure must allow for different algorithmic parameters, as the risk factors and volatility models for the Kraken bot (Crypto) will naturally differ from the Alpaca bot.
+
+Please investigate and provide modular Python code solutions for the following R&D phases:
+
+Phase 1: Platform-Wide Token Auditing & Interception
+Investigate where the platform is bleeding tokens unnecessarily and provide hardcoded solutions:
+
+Input Stripping & Sanitization: Python logic to aggressively truncate text, strip metadata, and filter out fluff before any string reaches the LLM.
+
+Response Caching: A system-wide local cache to intercept duplicate queries/headlines and return stored results instead of querying the LLM again.
+
+Phase 2: Trading Bot Guardrails (Fake News & Signal Defense)
+To prevent the Alpaca bot from wasting tokens on false data, provide hardcoded Python logic that protects our existing math:
+
+Multi-Source Consensus: Drop news if multiple reputable sources aren't reporting the same ticker simultaneously.
+
+Temporal Quarantines: Hardcoded time rules (e.g., blocking new trades on Friday afternoon news until Monday morning).
+
+Price-to-Sentiment Divergence: Math that compares the LLM's sentiment score against real-time volume/price action. If sentiment is high but volume is dead, the Python script aborts the trade.
+
+Phase 3: Shared Core Infrastructure (Parameter-Agnostic)
+Provide the shared Python infrastructure that BOTH bots will use, ensuring it accommodates our existing, distinct mathematical parameters:
+
+Preserved Risk Profiling: Create the structural Python class to enforce our overarching 60/40 portfolio split (60% ring-fenced, 40% dynamically sized). Ensure this class accepts variable inputs so the Kraken bot and Alpaca bot can pass their own distinct risk multipliers into it.
+
+Automated Exits: Implement trailing stop-loss and take-profit routing logic into the execution brackets so neither bot needs the LLM to close a trade, utilizing the specific stop-loss math we have already established for each market.
+
+Output Requirements:
+Act as my R&D Lead. Analyze our system constraints, propose your structural recommendations for this shared-architecture audit, and then provide the clearly commented Python modules to implement these changes while strictly preserving our existing trading math.

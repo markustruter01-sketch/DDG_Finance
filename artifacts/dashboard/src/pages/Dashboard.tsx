@@ -10,6 +10,7 @@ import {
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal,
   useDegradationLog, useDegradationReport, useDegradationHealth,
+  useRecentTrades, useRagWinsExtended,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
   type LearningEntry, type DegradationEvent, type DegradationStats,
@@ -63,6 +64,217 @@ function useCountUp(target: number, duration = 1200, enabled = true) {
   }, [target, duration, enabled]);
 
   return value;
+}
+
+// ── Gamification — Streak, XP Rank, Kill Board ────────────────────────────────
+
+type GamTrade = { pnl_pct?: number; pnl_percentage?: number; status?: string };
+
+function computeStreak(trades: GamTrade[]): { count: number; direction: "win" | "loss" | "none" } {
+  if (!trades || trades.length === 0) return { count: 0, direction: "none" };
+  const isWin = (t: GamTrade) => {
+    if (t.status) return t.status === "Closed_Win";
+    const pct = t.pnl_pct ?? t.pnl_percentage ?? 0;
+    return pct > 0;
+  };
+  const direction = isWin(trades[0]) ? "win" : "loss";
+  let count = 0;
+  for (const t of trades) {
+    if (isWin(t) === (direction === "win")) count++;
+    else break;
+  }
+  return { count, direction };
+}
+
+function computeXP(wins: number, total: number): number {
+  return wins * 100 + total * 10;
+}
+
+const KRAKEN_RANKS = [
+  { xp: 10000, label: "Davy Jones Himself", icon: "💀", tw: "text-cyan-300" },
+  { xp: 5000,  label: "Captain",            icon: "⚓", tw: "text-cyan-400" },
+  { xp: 2500,  label: "Quartermaster",      icon: "🗺️", tw: "text-cyan-500" },
+  { xp: 1000,  label: "First Mate",         icon: "🏴‍☠️", tw: "text-teal-400" },
+  { xp: 500,   label: "Able Seaman",        icon: "⚔️", tw: "text-slate-300" },
+  { xp: 0,     label: "Deckhand",           icon: "🪝", tw: "text-slate-400" },
+];
+
+const ORACLE_RANKS = [
+  { xp: 10000, label: "The Degen Oracle", icon: "🔮", tw: "text-violet-300" },
+  { xp: 5000,  label: "Galaxy Brain",     icon: "🧠", tw: "text-indigo-400" },
+  { xp: 2500,  label: "Diamond Hands",    icon: "💎", tw: "text-blue-400" },
+  { xp: 1000,  label: "Ape Mode",         icon: "🦍", tw: "text-violet-400" },
+  { xp: 500,   label: "Bag Holder",       icon: "💼", tw: "text-slate-300" },
+  { xp: 0,     label: "Paper Hands",      icon: "📄", tw: "text-slate-400" },
+];
+
+type RankEntry = typeof KRAKEN_RANKS[number];
+
+function getRank(xp: number, ranks: RankEntry[]): RankEntry {
+  for (const rank of ranks) {
+    if (xp >= rank.xp) return rank;
+  }
+  return ranks[ranks.length - 1];
+}
+
+function getNextRank(xp: number, ranks: RankEntry[]): RankEntry | null {
+  for (let i = ranks.length - 1; i >= 0; i--) {
+    if (ranks[i].xp > xp) return ranks[i];
+  }
+  return null;
+}
+
+function StreakChip({ count, direction }: { count: number; direction: "win" | "loss" | "none" }) {
+  if (count === 0 || direction === "none") return null;
+  const isWin = direction === "win";
+  const isHot  = isWin && count >= 5;
+  const isWarm = isWin && count >= 3 && !isHot;
+  const emoji = isWin ? "🔥" : "💀";
+  const label = `${count}${isWin ? "W" : "L"}`;
+  return (
+    <motion.span
+      className={cn(
+        "text-[9px] font-bold px-1.5 py-0.5 rounded-full border",
+        isHot  ? "text-red-300 bg-red-500/15 border-red-500/40" :
+        isWarm ? "text-amber-300 bg-amber-500/15 border-amber-500/30" :
+        isWin  ? "text-green-400 bg-green-500/10 border-green-500/20" :
+                 "text-slate-400 bg-slate-800/50 border-slate-600/30"
+      )}
+      animate={
+        isHot  ? { boxShadow: ["0 0 0px rgba(239,68,68,0)", "0 0 8px rgba(239,68,68,0.5)", "0 0 0px rgba(239,68,68,0)"] } :
+        isWarm ? { boxShadow: ["0 0 0px rgba(251,146,60,0)", "0 0 6px rgba(251,146,60,0.4)", "0 0 0px rgba(251,146,60,0)"] } :
+        {}
+      }
+      transition={{ duration: 1.5, repeat: Infinity }}
+    >
+      {emoji} {label}
+    </motion.span>
+  );
+}
+
+function XPRankBar({ xp, ranks, accent }: { xp: number; ranks: RankEntry[]; accent: string }) {
+  const current  = getRank(xp, ranks);
+  const next     = getNextRank(xp, ranks);
+  const progress = next
+    ? Math.min(((xp - current.xp) / (next.xp - current.xp)) * 100, 100)
+    : 100;
+  return (
+    <div className="mt-2 mb-3">
+      <div className="flex items-center justify-between mb-1">
+        <span className={cn("text-[9px] font-bold", current.tw)}>
+          {current.icon} {current.label}
+        </span>
+        <span className="text-[8px] text-muted-foreground/50 font-mono">{xp.toLocaleString()} XP</span>
+      </div>
+      <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ backgroundColor: accent }}
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 1, ease: "easeOut" }}
+        />
+      </div>
+      {next && (
+        <div className="text-[8px] text-muted-foreground/30 mt-0.5 text-right">
+          {next.icon} {next.label} at {next.xp.toLocaleString()} XP
+        </div>
+      )}
+    </div>
+  );
+}
+
+type KillTradeEntry = {
+  symbol?: string;
+  ticker?: string;
+  pnl_pct?: number;
+  pnl_percentage?: number;
+  exit_reason?: string;
+  reason?: string;
+};
+
+function KillBoardPanel({
+  trades,
+  theme,
+  bigWinPct,
+  bigWinLabel,
+}: {
+  trades: KillTradeEntry[];
+  theme: "pirate" | "degen";
+  bigWinPct: number;
+  bigWinLabel: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isPirate = theme === "pirate";
+
+  const wins = [...trades]
+    .filter(t => (t.pnl_pct ?? t.pnl_percentage ?? 0) > 0)
+    .sort((a, b) => (b.pnl_pct ?? b.pnl_percentage ?? 0) - (a.pnl_pct ?? a.pnl_percentage ?? 0))
+    .slice(0, 10);
+
+  if (wins.length === 0) return null;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className={cn(
+          "flex items-center gap-1.5 text-[9px] font-semibold px-2 py-0.5 rounded-full border transition-all",
+          isPirate
+            ? "text-cyan-400/70 border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/10 hover:text-cyan-300"
+            : "text-indigo-400/70 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 hover:text-indigo-300"
+        )}
+      >
+        <span>{isPirate ? "☠️" : "🎯"}</span>
+        <span>{wins.length} Kill{wins.length !== 1 ? "s" : ""}</span>
+        <span className={cn("transition-transform duration-200", expanded && "rotate-180")}>▾</span>
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 space-y-1.5">
+              {wins.map((trade, i) => {
+                const sym = (trade.symbol ?? trade.ticker ?? "?").replace("/USD", "");
+                const pnl = trade.pnl_pct ?? trade.pnl_percentage ?? 0;
+                const isBig = pnl >= bigWinPct;
+                const reason = trade.exit_reason ?? trade.reason ?? "";
+                return (
+                  <motion.div
+                    key={`${sym}-${i}`}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    className={cn(
+                      "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border",
+                      isPirate
+                        ? "border-cyan-500/10 bg-cyan-950/20"
+                        : "border-indigo-500/10 bg-indigo-950/20"
+                    )}
+                  >
+                    <span className="font-bold text-white font-mono text-[10px] w-10 shrink-0">{sym}</span>
+                    <span className="text-green-400 font-mono font-semibold text-[10px]">+{pnl.toFixed(2)}%</span>
+                    {reason && <span className="text-muted-foreground/40 text-[8px] flex-1 truncate">{reason}</span>}
+                    {isBig && (
+                      <span className="ml-auto text-[8px] font-bold text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
+                        {bigWinLabel}
+                      </span>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 // ── RollingPnl — animated unrealised P&L cell ─────────────────────────────────
@@ -1436,9 +1648,21 @@ function AIBrainSection() {
   const { mutate: refresh, isPending: isRefreshing } = useRefreshCommentary();
   const { data: alloc } = useLatestAllocation();
   const { data: posData } = useLivePositions();
+  const { data: journal } = useJournal();
+  const { data: recentTrades } = useRecentTrades(20);
+  const { data: winsData } = useRagWinsExtended(10);
   const [showInsights, setShowInsights] = useState(false);
 
   const thinking = isLoading || isRefreshing;
+
+  // Gamification — streak + XP
+  const oracleStreak = useMemo(
+    () => computeStreak(recentTrades?.trades ?? []),
+    [recentTrades?.trades]
+  );
+  const oracleWins  = journal?.summary?.wins  ?? 0;
+  const oracleTotal = journal?.summary?.total ?? 0;
+  const oracleXP = computeXP(oracleWins, oracleTotal);
 
   // Refresh only when position count changes or 10 minutes have passed — not blindly every 90s
   const prevPosCount = useRef<number>(-1);
@@ -1470,12 +1694,13 @@ function AIBrainSection() {
         <div className="absolute top-0 left-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-violet-500/4 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
 
-        <div className="relative flex items-center gap-2 mb-4">
+        <div className="relative flex items-center gap-2 mb-1">
           <Brain className="h-3.5 w-3.5 text-indigo-400" />
           <span className="text-[10px] uppercase font-semibold tracking-wider text-indigo-400/80">
             The Degen Oracle
           </span>
-          <span className="ml-auto flex items-center gap-1 text-[9px] text-indigo-400/40">
+          <span className="ml-auto flex items-center gap-1.5 text-[9px] text-indigo-400/40">
+            <StreakChip count={oracleStreak.count} direction={oracleStreak.direction} />
             <motion.span
               className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
               animate={{ opacity: [0.3, 1, 0.3] }}
@@ -1484,6 +1709,9 @@ function AIBrainSection() {
             updates on new activity
           </span>
         </div>
+
+        {/* XP Rank bar */}
+        <XPRankBar xp={oracleXP} ranks={ORACLE_RANKS} accent="#818cf8" />
 
         <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5 flex-1">
           <motion.div
@@ -1558,6 +1786,14 @@ function AIBrainSection() {
         )}
 
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
+
+        {/* Kill Board — Hit List */}
+        <KillBoardPanel
+          trades={(winsData?.wins ?? []).map(w => ({ ticker: w.ticker, pnl_percentage: w.pnl_percentage }))}
+          theme="degen"
+          bigWinPct={5}
+          bigWinLabel="🦍 APE MODE"
+        />
       </div>
     </>
   );
@@ -1790,6 +2026,7 @@ function AnchorSVG({ active }: { active: boolean }) {
 
 function DavyJonesBotSection() {
   const { data } = useKrakenStatus();
+  const { data: krakenPerf } = useKrakenPerformance();
   const { data: krakenCommentary, isLoading: commentaryLoading } = useKrakenCommentary();
   const { mutate: refreshKrakenCommentary, isPending: isRefreshingKraken } = useRefreshKrakenCommentary();
   const [showModal, setShowModal] = useState(false);
@@ -1804,6 +2041,11 @@ function DavyJonesBotSection() {
   const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
   const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
   const statusDot   = isCB ? "bg-red-400" : isRunning ? "bg-cyan-400" : isError ? "bg-amber-400" : "bg-slate-600";
+
+  // Gamification — streak + XP
+  const recentKrakenTrades = useMemo(() => [...(data?.recent_trades ?? [])].reverse(), [data?.recent_trades]);
+  const krakenStreak = useMemo(() => computeStreak(recentKrakenTrades), [recentKrakenTrades]);
+  const krakenXP = computeXP(krakenPerf?.win_count ?? 0, krakenPerf?.total_trades ?? 0);
 
   const lastTrade    = data?.recent_trades?.at(-1);
   const posCount     = data?.position_count ?? 0;
@@ -1852,12 +2094,13 @@ function DavyJonesBotSection() {
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
 
         {/* Header — mirrors Oracle header exactly */}
-        <div className="relative flex items-center gap-2 mb-4">
+        <div className="relative flex items-center gap-2 mb-1">
           <span className="text-cyan-500/70 text-sm">⚓</span>
           <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
             Davy Jones' Portfolio
           </span>
           <span className="ml-auto flex items-center gap-1.5">
+            <StreakChip count={krakenStreak.count} direction={krakenStreak.direction} />
             {isCB && (
               <motion.span
                 className="text-[9px] font-bold text-red-400 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded-full"
@@ -1877,6 +2120,9 @@ function DavyJonesBotSection() {
             </span>
           </span>
         </div>
+
+        {/* XP Rank bar */}
+        <XPRankBar xp={krakenXP} ranks={KRAKEN_RANKS} accent="#22d3ee" />
 
         {/* Body row: Anchor SVG + Speech bubble — SAME layout as Oracle */}
         <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
@@ -2069,6 +2315,14 @@ function DavyJonesBotSection() {
             </div>
           </div>
         </div>
+
+        {/* Kill Board — Trophy Wall */}
+        <KillBoardPanel
+          trades={data?.recent_trades ?? []}
+          theme="pirate"
+          bigWinPct={3}
+          bigWinLabel="⚓ LEVIATHAN KILL"
+        />
 
         {/* Last trade + cycle footer */}
         {(lastTrade || (data && data.status !== "not_started")) && (

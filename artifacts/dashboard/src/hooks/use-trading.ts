@@ -249,6 +249,35 @@ export function useRagWins() {
   });
 }
 
+export interface RecentTradeItem {
+  trade_id: string;
+  date: string;
+  ticker: string;
+  pnl_percentage: number;
+  status: "Closed_Win" | "Closed_Loss";
+}
+
+export interface RecentTrades {
+  count: number;
+  trades: RecentTradeItem[];
+}
+
+export function useRecentTrades(n = 20) {
+  return useQuery<RecentTrades>({
+    queryKey: ["/journal/recent", n],
+    queryFn: async () => (await api.get(`/journal/recent?n=${n}`)).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useRagWinsExtended(n = 10) {
+  return useQuery<RagWins>({
+    queryKey: ["/journal/wins/extended", n],
+    queryFn: async () => (await api.get(`/journal/wins?n=${n}`)).data,
+    staleTime: 60_000,
+  });
+}
+
 export function usePerformanceHistory() {
   return useQuery<PerformanceHistory>({
     queryKey: ["/performance"],

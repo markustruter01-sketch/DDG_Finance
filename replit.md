@@ -136,6 +136,33 @@ Production config:
 
 **IMPORTANT**: Deployment target must be `vm` (Reserved VM) for 24/7 scheduler operation. The scheduler, kill switch state, and SQLite DB require a persistent process.
 
+## Dashboard Gamification (Task #20)
+
+Both bot agent cards in the dashboard now include three gamification layers:
+
+### Utilities (module-level in Dashboard.tsx)
+- `computeStreak(trades)` — walks newest-first trade array, returns `{count, direction}` ("win"/"loss"/"none")
+- `computeXP(wins, total)` — `wins×100 + total×10`
+- `KRAKEN_RANKS` — pirate ladder: Deckhand(0) → Able Seaman(500) → First Mate(1000) → Quartermaster(2500) → Captain(5000) → Davy Jones Himself(10000+)
+- `ORACLE_RANKS` — degen ladder: Paper Hands(0) → Bag Holder(500) → Ape Mode(1000) → Diamond Hands(2500) → Galaxy Brain(5000) → The Degen Oracle(10000+)
+
+### Components
+- `StreakChip` — streak badge with amber glow at 3W+, red pulse at 5W+
+- `XPRankBar` — compact progress bar showing current rank → next rank threshold
+- `KillBoardPanel` — collapsible "☠️ N Kills" / "🎯 N Kills" chip; expands to show profitable trades with LEVIATHAN KILL/APE MODE badges
+
+### Data Sources
+- **Kraken streak**: `useKrakenStatus().data.recent_trades` (reversed newest-first)
+- **Kraken XP**: `useKrakenPerformance().data.{win_count, total_trades}`
+- **Kraken Kill Board**: `krakenStatus.recent_trades` (filter pnl_pct > 0), LEVIATHAN KILL badge at ≥3%
+- **Alpaca streak**: new `useRecentTrades(20)` hook → `/trading-api/journal/recent?n=20`
+- **Alpaca XP**: `useJournal().data.summary.{wins, total}`
+- **Alpaca Kill Board**: `useRagWinsExtended(10)` → `/journal/wins?n=10`, APE MODE badge at ≥5%
+
+### New Backend
+- `trading-platform/analysis/trade_journal.py`: `get_recent_trades_combined(limit)` — returns last N wins+losses combined, ordered by date DESC
+- `trading-platform/main.py`: `GET /trading-api/journal/recent?n=20` endpoint
+
 ## Required Secrets
 - `FRED_API_KEY` — fred.stlouisfed.org
 - `NEWS_API_KEY` — newsapi.org

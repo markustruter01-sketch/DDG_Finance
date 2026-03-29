@@ -53,6 +53,7 @@ from analysis.trade_journal import (
     get_all_trades,
     get_performance_snapshots,
     get_performance_summary,
+    get_recent_trades_combined,
     init_db,
 )
 from core.market_clock import is_market_open, get_next_open
@@ -873,6 +874,14 @@ async def journal_wins(n: int = 5) -> dict:
     """
     wins = get_recent_wins(limit=n)
     return {"count": len(wins), "wins": wins}
+
+
+@router.get("/journal/recent", tags=["Journal"])
+async def journal_recent(n: int = 20) -> dict:
+    """Last N closed trades (wins + losses combined), newest first.
+    Used by the dashboard for Alpaca streak computation."""
+    trades = get_recent_trades_combined(limit=n)
+    return {"count": len(trades), "trades": trades}
 
 
 @router.get("/learning-journal", tags=["Journal"])

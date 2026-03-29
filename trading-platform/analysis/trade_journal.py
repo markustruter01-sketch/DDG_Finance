@@ -213,6 +213,33 @@ def get_recent_wins(limit: int = 5) -> list[dict]:
     return _query_trades("Closed_Win", limit)
 
 
+def get_recent_trades_combined(limit: int = 20) -> list[dict]:
+    """Last N closed trades (wins + losses combined) ordered by date DESC.
+    Used by the /journal/recent endpoint for streak computation."""
+    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status")
+    if _use_pg():
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT {', '.join(cols)}
+                    FROM   trades
+                    WHERE  status IN ('Closed_Win', 'Closed_Loss')
+                    ORDER  BY date DESC
+                    LIMIT  %s
+                """, (limit,))
+                rows = cur.fetchall()
+        return [dict(zip(cols, r)) for r in rows]
+    else:
+        with _sqlite_conn() as conn:
+            rows = conn.execute(f"""
+                SELECT {', '.join(cols)}
+                FROM trades WHERE status IN ('Closed_Win', 'Closed_Loss')
+                ORDER BY date DESC LIMIT ?
+            """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
 def _query_trades(status: str, limit: int) -> list[dict]:
     cols = ("trade_id", "date", "ticker", "asset_class", "conviction_score",
             "original_thesis", "pnl_percentage", "intended_price", "actual_fill_price")

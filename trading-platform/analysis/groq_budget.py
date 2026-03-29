@@ -215,6 +215,13 @@ class GroqBudget:
         return dt.isoformat()
 
     def budget_status(self) -> dict:
+        """
+        Return a dict suitable for the /status groq block.
+
+        `commentary_calls_today` counts AUTO-triggered refreshes only (force=False).
+        Manual force=True calls bypass the cap and are not counted here,
+        though their token usage IS still tracked in `tokens_used_today`.
+        """
         with self._lock:
             self._maybe_reset()
             used = self._tokens_used

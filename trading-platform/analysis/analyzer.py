@@ -9,7 +9,7 @@ Called every market session (or 15-min for crypto off-hours):
     1. Query Alpaca for account state (buying power + positions).
     2. Run RAG feedback injection (recent wins, losses, slippage).
     3. Fetch 6-month data: FRED macro (cached 1hr) + Alpaca market prices
-       (fresh, includes 3mo/6mo MA signals) + NewsAPI (cached 30min).
+       (fresh, includes 3mo/6mo MA signals) + NewsAPI (cached 1hr).
     4. Assemble system prompt + user prompt with momentum signals.
     5. Call Groq (llama-3.3-70b-versatile) for regime-switching JSON.
     6. Validate with Pydantic (RegimeAnalysisOutput).
@@ -223,14 +223,14 @@ async def run_analysis_cycle(
     )
 
     if crypto_only:
-        logger.info("Step 3/5 | Fetching data (Crypto 6mo + MA signals | News cached 30min)...")
+        logger.info("Step 3/5 | Fetching data (Crypto 6mo + MA signals | News cached 1hr)...")
         market_data, news_data = await asyncio.gather(
             fetch_market_data(period=market_period, crypto_only=True),
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
         )
         macro_data = {}
     else:
-        logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 30min)...")
+        logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 1hr)...")
         macro_data, market_data, news_data = await asyncio.gather(
             fred_cache.get_or_fetch(fetch_macro_data, lookback_days=lookback_days_macro),
             fetch_market_data(period=market_period),

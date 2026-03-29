@@ -1563,5 +1563,7 @@ app.include_router(router)
 
 # ── System B: Public SaaS Platform routes ─────────────────────────────────────
 # Registered separately under /saas-api — no overlap with /trading-api above.
-from saas_router import saas_router  # noqa: E402
+from saas_router import saas_router                          # noqa: E402
+from saas_stripe_router import stripe_bp                     # noqa: E402
 app.include_router(saas_router)
+app.include_router(stripe_bp, prefix="/saas-api")

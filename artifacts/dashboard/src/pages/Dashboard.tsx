@@ -980,6 +980,7 @@ function BrainSVG({ thinking }: { thinking: boolean }) {
 
 function SpeechBubble({
   commentary, generatedAt, cached, cacheAge, thinking, onRefresh, isRefreshing,
+  theme = "indigo", title = "Oracle Dispatch",
 }: {
   commentary: string | undefined;
   generatedAt: string | null | undefined;
@@ -988,10 +989,12 @@ function SpeechBubble({
   thinking: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
+  theme?: "indigo" | "cyan";
+  title?: string;
 }) {
   const ageMin = cacheAge != null ? Math.round(cacheAge / 60) : null;
-
   const textRef = useRef<HTMLParagraphElement>(null);
+  const isCyan = theme === "cyan";
 
   useEffect(() => {
     if (!thinking && textRef.current) {
@@ -1003,14 +1006,25 @@ function SpeechBubble({
 
   return (
     <div className="relative flex-1 min-w-0">
-      {/* Arrow pointing left toward the brain */}
+      {/* Arrow pointing left toward the bot avatar */}
       <div className="absolute left-0 top-1/2 -translate-x-3 -translate-y-1/2 w-3 h-4 overflow-hidden">
-        <div className="absolute inset-0 border-r border-b border-indigo-500/40 bg-slate-900 rotate-[135deg] origin-top-right scale-75" />
+        <div className={cn(
+          "absolute inset-0 border-r border-b bg-slate-900 rotate-[135deg] origin-top-right scale-75",
+          isCyan ? "border-cyan-500/40" : "border-indigo-500/40"
+        )} />
       </div>
 
-      <div className="relative rounded-2xl border border-indigo-500/30 bg-slate-900/80 backdrop-blur-sm shadow-[0_0_30px_rgba(99,102,241,0.08)] overflow-hidden">
+      <div className={cn(
+        "relative rounded-2xl border bg-slate-900/80 backdrop-blur-sm overflow-hidden",
+        isCyan
+          ? "border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.08)]"
+          : "border-indigo-500/30 shadow-[0_0_30px_rgba(99,102,241,0.08)]"
+      )}>
         {/* Top accent line */}
-        <div className="h-px bg-gradient-to-r from-indigo-500/60 via-violet-400/40 to-transparent" />
+        <div className={cn(
+          "h-px bg-gradient-to-r to-transparent",
+          isCyan ? "from-cyan-500/60 via-teal-400/40" : "from-indigo-500/60 via-violet-400/40"
+        )} />
 
         <div className="px-5 py-4">
           <div className="flex items-center gap-2 mb-3">
@@ -1018,10 +1032,16 @@ function SpeechBubble({
               animate={{ scale: [1, 1.15, 1], opacity: [0.7, 1, 0.7] }}
               transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
             >
-              <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+              {isCyan
+                ? <span className="text-sm">⚓</span>
+                : <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+              }
             </motion.div>
-            <span className="text-[10px] uppercase font-semibold tracking-wider text-violet-400">
-              Oracle Dispatch
+            <span className={cn(
+              "text-[10px] uppercase font-semibold tracking-wider",
+              isCyan ? "text-cyan-400" : "text-violet-400"
+            )}>
+              {title}
             </span>
             {cached && ageMin != null && (
               <span className="ml-auto text-[9px] text-muted-foreground/50">
@@ -1036,7 +1056,7 @@ function SpeechBubble({
               <div className="flex items-center gap-2 mt-1">
                 {[0, 1, 2].map(i => (
                   <motion.div key={i}
-                    className="w-1.5 h-1.5 rounded-full bg-indigo-400"
+                    className={cn("w-1.5 h-1.5 rounded-full", isCyan ? "bg-cyan-400" : "bg-indigo-400")}
                     animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
                     transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
                   />
@@ -1066,8 +1086,10 @@ function SpeechBubble({
               disabled={isRefreshing || thinking}
               className={cn(
                 "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium transition-all",
-                "border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-400/50",
-                "disabled:opacity-40 disabled:cursor-not-allowed"
+                "disabled:opacity-40 disabled:cursor-not-allowed",
+                isCyan
+                  ? "border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-400/50"
+                  : "border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:border-indigo-400/50"
               )}
             >
               <RefreshCw className={cn("h-3 w-3", (isRefreshing || thinking) && "animate-spin")} />
@@ -1751,28 +1773,18 @@ function DavyJonesBotSection() {
         {showModal && <KrakenBrainModal open={showModal} onClose={() => setShowModal(false)} />}
       </AnimatePresence>
 
-      <div className="relative rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
+      <div className="relative rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
         {/* Ambient glow */}
         <div className="absolute top-0 left-0 w-48 h-48 bg-cyan-500/4 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
 
-        {/* Header row */}
+        {/* Header — mirrors Oracle header exactly */}
         <div className="relative flex items-center gap-2 mb-4">
-          <span className="text-cyan-500/70">⚓</span>
+          <span className="text-cyan-500/70 text-sm">⚓</span>
           <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
             Davy Jones' Portfolio
           </span>
           <span className="ml-auto flex items-center gap-1.5">
-            {isRunning && (
-              <motion.span
-                className="flex items-center gap-1 text-[9px] text-cyan-400/40"
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 2, repeat: Infinity }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block" />
-                live signals
-              </motion.span>
-            )}
             {isCB && (
               <motion.span
                 className="text-[9px] font-bold text-red-400 border border-red-500/30 bg-red-500/10 px-1.5 py-0.5 rounded-full"
@@ -1782,20 +1794,23 @@ function DavyJonesBotSection() {
                 CIRCUIT BREAKER
               </motion.span>
             )}
-            <span className={cn("text-[9px] font-mono font-semibold", statusColor)}>
-              <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1 mb-[1px]", statusDot, isRunning && "animate-pulse")} />
-              {statusLabel}
+            <span className="flex items-center gap-1 text-[9px] text-cyan-400/40">
+              <motion.span
+                className={cn("inline-block w-1.5 h-1.5 rounded-full", statusDot)}
+                animate={{ opacity: isRunning ? [0.3, 1, 0.3] : 1 }}
+                transition={{ duration: 2, repeat: isRunning ? Infinity : 0, ease: "easeInOut" }}
+              />
+              {statusLabel.toLowerCase()}
             </span>
           </span>
         </div>
 
-        {/* Body */}
-        <div className="relative flex flex-col sm:flex-row items-start gap-3 sm:gap-5 flex-1">
-          {/* Anchor SVG — clickable to open full modal */}
+        {/* Body row: Anchor SVG + Speech bubble — SAME layout as Oracle */}
+        <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
           <motion.div
-            className="flex-shrink-0 w-20 h-20 sm:w-32 sm:h-32 cursor-pointer relative group"
-            animate={isRunning ? { y: [0, -5, 0, 4, 0], rotate: [0, 1, 0, -1, 0] } : { rotate: [0, 2, 0, -2, 0] }}
-            transition={{ duration: isRunning ? 6 : 10, repeat: Infinity, ease: "easeInOut" }}
+            className="flex-shrink-0 w-24 h-24 sm:w-44 sm:h-44 cursor-pointer relative group"
+            animate={isRunning ? { y: [0, -6, 0, 4, 0], rotate: [0, 1, 0, -1, 0] } : { rotate: [0, 2, 0, -2, 0] }}
+            transition={{ duration: isRunning ? 7 : 10, repeat: Infinity, ease: "easeInOut" }}
             onClick={() => setShowModal(true)}
             title="Click to view full strategy analysis"
           >
@@ -1807,164 +1822,139 @@ function DavyJonesBotSection() {
             </div>
           </motion.div>
 
-          {/* Dialogue + signal scanner + stats */}
-          <div className="flex-1 min-w-0">
-            {/* AI Commentary bubble — cyan-themed */}
-            <div className="relative rounded-2xl rounded-tl-none border border-cyan-500/20 bg-slate-900/60 p-3.5 backdrop-blur-sm">
-              <div className="absolute -left-2 top-3 w-2 h-2 border-l border-t border-cyan-500/20 bg-slate-900/60 rotate-[-45deg]" />
-              {krakenThinking ? (
-                <div className="flex items-center gap-2 text-[10px] text-cyan-400/60">
-                  <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, repeat: Infinity }}>
-                    ⚓
-                  </motion.span>
-                  charting the currents...
-                </div>
-              ) : krakenCommentary?.commentary ? (
-                <>
-                  <p className="text-xs text-white/80 leading-relaxed mb-2">{krakenCommentary.commentary}</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[9px] text-cyan-400/40 font-mono">
-                      {krakenCommentary.cached
-                        ? `cached · ${Math.round((krakenCommentary.cache_age_seconds ?? 0) / 60)}m ago`
-                        : "just generated"} · Llama 3.3 70B
-                    </span>
-                    <button
-                      className="flex items-center gap-1 text-[9px] text-cyan-400/50 hover:text-cyan-400 transition-colors disabled:opacity-40"
-                      onClick={() => refreshKrakenCommentary()}
-                      disabled={isRefreshingKraken}
-                    >
-                      <RefreshCw className={cn("h-2.5 w-2.5", isRefreshingKraken && "animate-spin")} />
-                      refresh
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-xs text-white/60 leading-relaxed">{dialogueText}</div>
-              )}
-            </div>
+          <SpeechBubble
+            commentary={krakenCommentary?.commentary ?? (krakenThinking ? undefined : dialogueText)}
+            generatedAt={krakenCommentary?.generated_at ?? null}
+            cached={krakenCommentary?.cached}
+            cacheAge={krakenCommentary?.cache_age_seconds}
+            thinking={krakenThinking}
+            onRefresh={() => refreshKrakenCommentary()}
+            isRefreshing={isRefreshingKraken}
+            theme="cyan"
+            title="Davy Jones"
+          />
+        </div>
 
-            {/* Live Signal Scanner */}
-            {isRunning && signals.length > 0 && (
-              <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
-                <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
-                  <span>Signal Scanner</span>
-                  <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">full analysis →</button>
-                </div>
-                <div className="divide-y divide-white/[0.03]">
-                  {signals.map((sig: any) => {
-                    const rsiColor = sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
-                    const zColor = sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
-                    const isPosHeld = sig.has_position && sig.signal_type === "hold";
-                    return (
-                      <div key={sig.symbol} className="px-3 py-2 flex items-center gap-3">
-                        <span className="text-xs font-bold text-white w-16 shrink-0">{sig.symbol.replace("/USD","")}</span>
-                        {/* RSI mini bar */}
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
-                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />
-                          </div>
-                          <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{sig.rsi}</span>
-                        </div>
-                        {/* Z-score */}
-                        <div className="flex items-center gap-1.5 flex-1">
-                          <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
-                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
-                            <div className="absolute left-1/2 w-px h-full bg-slate-600" />
-                            {sig.z_score < 0 ? (
-                              <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
-                            ) : (
-                              <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
-                            )}
-                          </div>
-                          <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>{sig.z_score >= 0 ? "+" : ""}{sig.z_score}</span>
-                        </div>
-                        {/* Status pill */}
-                        <span className={cn(
-                          "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
-                          isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
-                          sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
-                          sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
-                          "text-slate-500 bg-slate-800/50 border-slate-700/40"
-                        )}>
-                          {isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
-                           sig.signal_type === "watching" ? "WATCH" :
-                           sig.signal_type.includes("entered") ? "IN" :
-                           sig.signal_type === "slots_full" ? "FULL" : "—"}
-                        </span>
+        {/* Signal Scanner — full width below SVG+bubble row, mirrors Oracle's Equity Scanner */}
+        {signals.length > 0 && (
+          <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+            <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
+              <span>Signal Scanner</span>
+              <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">
+                full analysis →
+              </button>
+            </div>
+            <div className="divide-y divide-white/[0.03]">
+              {signals.map((sig: any) => {
+                const rsiColor = sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                const zColor = sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                const isPosHeld = sig.has_position && sig.signal_type === "hold";
+                return (
+                  <div key={sig.symbol} className="px-3 py-2 flex items-center gap-3">
+                    <span className="text-xs font-bold text-white w-12 shrink-0">{sig.symbol.replace("/USD","")}</span>
+                    {/* RSI bar */}
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
+                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Stats row */}
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
-                <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
-                <div className="flex items-end gap-1 mb-1">
-                  <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
-                    {deployedPct.toFixed(0)}%
-                  </span>
-                  <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
-                </div>
-                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
-                    style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
-                <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Open Positions</div>
-                <div className="flex items-end gap-1 mb-1">
-                  <span className="text-lg font-bold font-mono leading-none text-white">{posCount}</span>
-                  <span className="text-[9px] text-muted-foreground mb-0.5">/ {data?.max_positions ?? 3} max</span>
-                </div>
-                <div className="flex gap-1">
-                  {Array.from({ length: data?.max_positions ?? 3 }).map((_, i) => (
-                    <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
-                  ))}
-                </div>
-              </div>
+                      <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{sig.rsi}</span>
+                    </div>
+                    {/* Z-score bar */}
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
+                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
+                        <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                        {sig.z_score < 0 ? (
+                          <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
+                        ) : (
+                          <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
+                        )}
+                      </div>
+                      <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>{sig.z_score >= 0 ? "+" : ""}{sig.z_score}</span>
+                    </div>
+                    {/* Status pill */}
+                    <span className={cn(
+                      "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+                      isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
+                      sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
+                      sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                      "text-slate-500 bg-slate-800/50 border-slate-700/40"
+                    )}>
+                      {isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
+                       sig.signal_type === "watching" ? "WATCH" :
+                       sig.signal_type.includes("entered") ? "IN" :
+                       sig.signal_type === "slots_full" ? "FULL" : "—"}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
+          </div>
+        )}
 
-            {/* Last trade */}
-            {lastTrade && (
-              <div className={cn(
-                "mt-2 rounded-xl border px-3 py-2 text-[10px] flex items-center justify-between",
-                lastTrade.pnl_pct >= 0 ? "border-green-500/20 bg-green-500/5" : "border-red-500/20 bg-red-500/5",
-              )}>
-                <span className="font-mono text-white/80">
-                  Last: <span className="font-bold">{lastTrade.symbol}</span> {lastTrade.side.toUpperCase()}
-                </span>
-                <span className={cn("font-mono font-bold", lastTrade.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
-                  {lastTrade.pnl_pct >= 0 ? "+" : ""}{lastTrade.pnl_pct.toFixed(2)}%
-                </span>
-              </div>
-            )}
+        {/* Stats + last trade — below scanner, mirrors Oracle's allocation panel area */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+            <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
+            <div className="flex items-end gap-1 mb-1">
+              <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
+                {deployedPct.toFixed(0)}%
+              </span>
+              <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
+            </div>
+            <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
+                style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
+            <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Open Positions</div>
+            <div className="flex items-end gap-1 mb-1">
+              <span className="text-lg font-bold font-mono leading-none text-white">{posCount}</span>
+              <span className="text-[9px] text-muted-foreground mb-0.5">/ {data?.max_positions ?? 10} max</span>
+            </div>
+            <div className="flex gap-1">
+              {Array.from({ length: data?.max_positions ?? 10 }).map((_, i) => (
+                <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
+              ))}
+            </div>
+          </div>
+        </div>
 
-            {/* Footer */}
+        {/* Last trade + cycle footer */}
+        {(lastTrade || (data && data.status !== "not_started")) && (
+          <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/50 font-mono">
+            {lastTrade ? (
+              <>
+                <span>Last:</span>
+                <span className="font-bold text-white/70">{lastTrade.symbol}</span>
+                <span>{lastTrade.side?.toUpperCase()}</span>
+                <span className={cn("font-bold", lastTrade.pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                  {lastTrade.pnl_pct >= 0 ? "+" : ""}{lastTrade.pnl_pct?.toFixed(2)}%
+                </span>
+              </>
+            ) : <span />}
             {data && data.status !== "not_started" && (
-              <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/60 font-mono">
-                <span>Cycle #{data.cycle_count}</span>
+              <>
+                <span className="ml-auto">Cycle #{data.cycle_count}</span>
                 <span>·</span>
-                <span>{data.cash_reserve_pct}% reserve held</span>
+                <span>{data.cash_reserve_pct}% reserve</span>
                 {data.total_equity_usd > 0 && (
                   <>
                     <span>·</span>
-                    <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })} equity</span>
+                    <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                   </>
                 )}
-                <button onClick={() => setShowModal(true)} className="ml-auto text-cyan-400/50 hover:text-cyan-400 transition-colors">
+                <button onClick={() => setShowModal(true)} className="text-cyan-400/50 hover:text-cyan-400 transition-colors">
                   full debrief →
                 </button>
-              </div>
+              </>
             )}
           </div>
-        </div>
+        )}
       </div>
     </>
   );

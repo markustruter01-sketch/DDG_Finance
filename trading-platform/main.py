@@ -66,7 +66,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 4
+EXPECTED_JOB_COUNT = 5  # 4 trading jobs + 1 auto-heal monitor
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -1675,7 +1675,14 @@ Current open positions:
                 "cache_age_seconds": int(cache_age),
                 "error": str(exc),
             }
-        raise HTTPException(status_code=503, detail=f"AI commentary unavailable: {exc}")
+        return {
+            "commentary": "The Oracle is resting — daily AI token limit reached. Check back tomorrow for fresh market insight.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "error": str(exc),
+            "unavailable": True,
+        }
 
 
 # ── High-Yield Growth Vault endpoints ─────────────────────────────────────────
@@ -2079,12 +2086,26 @@ async def kraken_commentary(force: bool = False) -> dict:
 
     status_file = _Path("../kraken-bot/status.json")
     if not status_file.exists():
-        raise HTTPException(status_code=503, detail="Kraken bot has not run yet — no status file")
+        return {
+            "commentary": "Davy Jones is still getting his sea legs — bot hasn't run yet. Check back shortly.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "unavailable": True,
+        }
 
     try:
         kdata = _json.loads(status_file.read_text())
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Cannot read kraken status: {exc}")
+        logger.warning(f"Kraken commentary: could not read status file: {exc}")
+        return {
+            "commentary": "Charts are foggy — status file temporarily unreadable. Davy Jones sails on.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "error": str(exc),
+            "unavailable": True,
+        }
 
     positions     = kdata.get("open_positions", [])
     recent_trades = kdata.get("recent_trades", [])
@@ -2190,7 +2211,14 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
                 "cache_age_seconds": int(cache_age),
                 "error": str(exc),
             }
-        raise HTTPException(status_code=503, detail=f"Kraken commentary unavailable: {exc}")
+        return {
+            "commentary": "Davy Jones' AI is resting — daily token limit reached. The seas will clear by tomorrow.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "error": str(exc),
+            "unavailable": True,
+        }
 
 
 # ── Kraken Bot — Performance Metrics ──────────────────────────────────────────

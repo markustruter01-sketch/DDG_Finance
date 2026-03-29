@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 39903.69007318822,
+  "cash_usd": 19898.223176823587,
   "positions": {
     "DOT/USD": {
       "side": "long",
@@ -11,26 +11,6 @@
       "best_price": 1.2652,
       "entry_fee": 25.9797,
       "order_id": "PAPER-DOTUSD-1774737395"
-    },
-    "ADA/USD": {
-      "side": "long",
-      "entry_price": 0.246234,
-      "size_usd": 9992.2,
-      "size_units": 40580.09860539162,
-      "entry_time": "2026-03-28T23:09:39.366225+00:00",
-      "best_price": 0.246234,
-      "entry_fee": 25.9797,
-      "order_id": "PAPER-ADAUSD-1774739379"
-    },
-    "AVAX/USD": {
-      "side": "long",
-      "entry_price": 8.76,
-      "size_usd": 9992.2,
-      "size_units": 1140.6621004566211,
-      "entry_time": "2026-03-28T23:10:51.529197+00:00",
-      "best_price": 8.76,
-      "entry_fee": 25.9797,
-      "order_id": "PAPER-AVAXUSD-1774739451"
     },
     "ATOM/USD": {
       "side": "long",
@@ -61,6 +41,46 @@
       "best_price": 82.2,
       "entry_fee": 25.9265,
       "order_id": "PAPER-SOLUSD-1774767862"
+    },
+    "LINK/USD": {
+      "side": "long",
+      "entry_price": 8.47786,
+      "size_usd": 9961.77,
+      "size_units": 1175.0335579969474,
+      "entry_time": "2026-03-29T10:07:49.610377+00:00",
+      "best_price": 8.47786,
+      "entry_fee": 25.9006,
+      "order_id": "PAPER-LINKUSD-1774778869"
+    },
+    "ETH/USD": {
+      "side": "long",
+      "entry_price": 1994.47,
+      "size_usd": 9944.85,
+      "size_units": 4.9862118758366885,
+      "entry_time": "2026-03-29T10:08:54.595689+00:00",
+      "best_price": 1994.47,
+      "entry_fee": 25.8566,
+      "order_id": "PAPER-ETHUSD-1774778934"
+    },
+    "LTC/USD": {
+      "side": "long",
+      "entry_price": 53.63,
+      "size_usd": 9848.7,
+      "size_units": 183.64161849710982,
+      "entry_time": "2026-03-29T13:08:56.605768+00:00",
+      "best_price": 53.63,
+      "entry_fee": 25.6066,
+      "order_id": "PAPER-LTCUSD-1774789736"
+    },
+    "ADA/USD": {
+      "side": "long",
+      "entry_price": 0.240485,
+      "size_usd": 9642.8,
+      "size_units": 40097.303366114305,
+      "entry_time": "2026-03-29T17:18:30.661265+00:00",
+      "best_price": 0.240485,
+      "entry_fee": 25.0713,
+      "order_id": "PAPER-ADAUSD-1774804710"
     }
   },
   "all_trades": [
@@ -98,6 +118,30 @@
       "fees_usd": 52.0352,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-29T03:54:31.088984+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ADA/USD",
+      "side": "long",
+      "entry_price": 0.246234,
+      "exit_price": 0.240488,
+      "pnl_pct": -2.33,
+      "pnl_usd": -284.53,
+      "fees_usd": 51.3532,
+      "reason": "stop",
+      "closed_at": "2026-03-29T13:08:50.584298+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "AVAX/USD",
+      "side": "long",
+      "entry_price": 8.76,
+      "exit_price": 8.58,
+      "pnl_pct": -2.05,
+      "pnl_usd": -256.74,
+      "fees_usd": 51.4256,
+      "reason": "stop",
+      "closed_at": "2026-03-29T17:17:20.908999+00:00",
       "paper": true
     }
   ]

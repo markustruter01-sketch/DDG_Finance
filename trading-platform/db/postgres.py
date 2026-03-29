@@ -151,6 +151,18 @@ CREATE TABLE IF NOT EXISTS ratchet_stops (
     last_updated  DATE NOT NULL
 );
 
+-- Equity snapshots (time-series portfolio value for equity curve chart)
+CREATE TABLE IF NOT EXISTS equity_snapshots (
+    id             BIGSERIAL PRIMARY KEY,
+    ts             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    alpaca_equity  DOUBLE PRECISION NOT NULL,
+    kraken_equity  DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_equity   DOUBLE PRECISION NOT NULL,
+    regime         TEXT,
+    source         TEXT NOT NULL DEFAULT 'pipeline'
+);
+CREATE INDEX IF NOT EXISTS idx_equity_snapshots_ts ON equity_snapshots (ts DESC);
+
 -- ── AlgoEdge SaaS users ────────────────────────────────────────────────────
 -- One row per registered SaaS user.
 -- Stripe IDs are stored here; all subscription state is sourced from Stripe.
@@ -195,3 +207,72 @@ def ensure_schema() -> None:
         logger.info("DB | PostgreSQL schema verified / created")
     except Exception as exc:
         logger.error(f"DB | Schema bootstrap failed: {exc}")
+
+
+# ── Equity snapshots ───────────────────────────────────────────────────────
+
+def insert_equity_snapshot(
+    alpaca_equity: float,
+    kraken_equity: float = 0.0,
+    regime: str | None = None,
+    source: str = "pipeline",
+) -> bool:
+    """
+    Insert a portfolio equity snapshot for the equity curve chart.
+    Returns True on success, False if PostgreSQL is unavailable or write fails.
+    """
+    if not is_pg_available():
+        return False
+    total = alpaca_equity + kraken_equity
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO equity_snapshots
+                        (alpaca_equity, kraken_equity, total_equity, regime, source)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (alpaca_equity, kraken_equity, total, regime, source),
+                )
+        logger.debug(
+            f"DB | Equity snapshot: alpaca={alpaca_equity:.2f} kraken={kraken_equity:.2f} "
+            f"total={total:.2f} regime={regime} source={source}"
+        )
+        return True
+    except Exception as exc:
+        logger.error(f"DB | insert_equity_snapshot failed: {exc}")
+        return False
+
+
+def get_equity_curve(limit: int = 500) -> list[dict]:
+    """
+    Return the last `limit` equity snapshots sorted ascending by timestamp
+    (oldest first, so charts render left-to-right in chronological order).
+    """
+    if not is_pg_available():
+        return []
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, ts AT TIME ZONE 'UTC' AS ts,
+                           alpaca_equity, kraken_equity, total_equity, regime, source
+                    FROM equity_snapshots
+                    ORDER BY ts DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+                rows = cur.fetchall()
+        cols = ["id", "ts", "alpaca_equity", "kraken_equity", "total_equity", "regime", "source"]
+        result = []
+        for row in reversed(rows):  # reverse to get ascending order
+            d = dict(zip(cols, row))
+            d["ts"] = d["ts"].isoformat()
+            result.append(d)
+        return result
+    except Exception as exc:
+        logger.error(f"DB | get_equity_curve failed: {exc}")
+        return []

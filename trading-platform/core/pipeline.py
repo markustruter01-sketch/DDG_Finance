@@ -27,8 +27,9 @@ from typing import Any, Union
 
 from loguru import logger
 
-from analysis.analyzer import run_analysis_cycle
+from analysis.analyzer import run_analysis_cycle, get_regime_fallback
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
+from db.postgres import insert_equity_snapshot
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
 from execution.kill_switch import (
@@ -44,15 +45,16 @@ from core.market_clock import is_market_open
 _pipeline_lock = asyncio.Lock()
 
 _state: dict[str, Any] = {
-    "last_run_utc":     None,
-    "last_run_status":  "never_run",
-    "last_allocation":  None,
-    "last_regime":      None,
-    "last_exec_result": None,
-    "run_count":        0,
-    "error_count":      0,
-    "cycle_interval":   "15min",
-    "trading_mode":     "idle",
+    "last_run_utc":          None,
+    "last_run_status":       "never_run",
+    "last_allocation":       None,
+    "last_regime":           None,
+    "last_exec_result":      None,
+    "run_count":             0,
+    "error_count":           0,
+    "cycle_interval":        "15min",
+    "trading_mode":          "idle",
+    "groq_using_fallback":   False,   # True when last cycle used stale cached regime
 }
 
 
@@ -179,32 +181,52 @@ async def _run_pipeline_inner(
         logger.warning(f"Pipeline | Blackout check failed: {exc} — continuing")
 
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
+    using_fallback = False
     try:
         logger.info("Pipeline | Step 1: Running analysis cycle...")
         allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)
-        if isinstance(allocation, RegimeAnalysisOutput):
-            result["market_regime"] = f"{allocation.regime}: {allocation.regime_rationale}"
-        else:
-            result["market_regime"] = allocation.market_regime
-        result["allocation_summary"] = [
-            {
-                "slot":             a.slot,
-                "ticker":           a.ticker,
-                "asset_class":      a.asset_class,
-                "conviction_score": a.conviction_score,
-                "kelly_fraction":   a.kelly_fraction,
-                "stop_loss_pct":    a.stop_loss_pct,
-                "take_profit_pct":  a.take_profit_pct,
-                "thesis":           a.thesis,
-            }
-            for a in sorted(allocation.allocations, key=lambda x: x.slot)
-        ]
     except Exception as exc:
         logger.error(f"Pipeline | Analysis cycle FAILED: {exc}")
-        result["status"] = "analysis_failed"
-        result["errors"].append(f"Analysis failed: {exc}")
-        _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
-        return result
+        # ── Groq fallback: use last-good regime cache if available and fresh ──
+        # This keeps the pipeline alive when Groq hits its 100k token/day limit.
+        fallback = get_regime_fallback() if not crypto_only else None
+        if fallback is not None:
+            using_fallback = True
+            logger.warning(
+                f"Pipeline | Groq failed — using CACHED regime '{fallback.regime}' as fallback. "
+                f"Execution will proceed with stale allocation. Groq error: {exc}"
+            )
+            allocation = fallback
+            result["errors"].append(
+                f"Groq unavailable ({exc.__class__.__name__}) — using cached regime '{fallback.regime}'"
+            )
+        else:
+            # No usable cache — abort as before
+            result["status"] = "analysis_failed"
+            result["errors"].append(f"Analysis failed (no fallback available): {exc}")
+            _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
+            return result
+
+    # ── Build allocation summary (same path for fresh and fallback allocations) ──
+    if isinstance(allocation, RegimeAnalysisOutput):
+        stale_tag = " [STALE — cached]" if using_fallback else ""
+        result["market_regime"] = f"{allocation.regime}{stale_tag}: {allocation.regime_rationale}"
+    else:
+        result["market_regime"] = allocation.market_regime
+    result["allocation_summary"] = [
+        {
+            "slot":             a.slot,
+            "ticker":           a.ticker,
+            "asset_class":      a.asset_class,
+            "conviction_score": a.conviction_score,
+            "kelly_fraction":   a.kelly_fraction,
+            "stop_loss_pct":    a.stop_loss_pct,
+            "take_profit_pct":  a.take_profit_pct,
+            "thesis":           a.thesis,
+        }
+        for a in sorted(allocation.allocations, key=lambda x: x.slot)
+    ]
+    result["using_fallback_regime"] = using_fallback
 
     if ks_check():
         msg = "Kill switch tripped mid-pipeline — execution aborted"
@@ -239,6 +261,28 @@ async def _run_pipeline_inner(
     result["status"] = "ok" if not result["errors"] else "ok_with_errors"
     _update_state(result, started, allocation, trading_mode=mode_label.lower().replace(" ", "_"))
 
+    # ── Equity snapshot ─────────────────────────────────────────────────────
+    # Write a time-series equity point to PostgreSQL for the equity curve chart.
+    # Kraken equity is read from the bot's status.json; safe to be 0 if missing.
+    try:
+        import json as _j, pathlib as _pl
+        _status_path = _pl.Path("../kraken-bot/status.json")
+        kraken_equity = 0.0
+        if _status_path.exists():
+            _bot_state = _j.loads(_status_path.read_text())
+            _ps = _bot_state.get("paper_summary") or {}
+            kraken_equity = float(_ps.get("total_equity_usd", 0.0) or 0.0)
+        alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
+        regime = _state.get("last_regime")
+        insert_equity_snapshot(
+            alpaca_equity=alpaca_equity,
+            kraken_equity=kraken_equity,
+            regime=regime,
+            source="pipeline",
+        )
+    except Exception as _snap_exc:
+        logger.warning(f"Pipeline | Equity snapshot write failed (non-fatal): {_snap_exc}")
+
     elapsed = (datetime.now(timezone.utc) - started).total_seconds()
     logger.info(f"PIPELINE COMPLETE in {elapsed:.1f}s | status={result['status']} mode={mode_label}")
     return result
@@ -263,10 +307,11 @@ def _update_state(
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None,
     trading_mode: str | None = None,
 ) -> None:
-    _state["last_run_utc"]    = started.isoformat()
-    _state["last_run_status"] = result["status"]
-    _state["last_exec_result"] = result.get("execution")
-    _state["run_count"]       += 1
+    _state["last_run_utc"]        = started.isoformat()
+    _state["last_run_status"]     = result["status"]
+    _state["last_exec_result"]    = result.get("execution")
+    _state["groq_using_fallback"] = result.get("using_fallback_regime", False)
+    _state["run_count"]          += 1
     if trading_mode:
         _state["trading_mode"] = trading_mode
     if result["status"] not in ("ok", "ok_with_errors"):

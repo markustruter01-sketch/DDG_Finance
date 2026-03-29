@@ -7,7 +7,7 @@ import {
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
-  useKrakenCommentary, useRefreshKrakenCommentary,
+  useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
 } from "@/hooks/use-trading";
@@ -168,7 +168,12 @@ function tradingModeColor(mode: string | undefined): string {
 function SystemStatusBanner() {
   const { data, isError } = usePlatformStatus();
 
-  let sysStatus: "online" | "degraded" | "offline";
+  // Three distinct states:
+  //   "offline"  — API is unreachable (genuine network/server failure) → RED
+  //   "ai_degraded" — API responded but Groq regime cache is being used → AMBER (not red)
+  //   "degraded" — API up, but pipeline/scheduler has errors → AMBER
+  //   "online"   — Everything healthy → GREEN
+  let sysStatus: "online" | "degraded" | "ai_degraded" | "offline";
   let reason: string;
   let tradingMode: string | undefined;
 
@@ -180,6 +185,7 @@ function SystemStatusBanner() {
     const lastStatus = data.last_run.last_run_status;
     const errorCount = data.last_run.error_count;
     tradingMode = data.trading_mode;
+    const groqFallback = data.groq?.using_fallback ?? false;
 
     if (jobCount < EXPECTED_JOBS) {
       sysStatus = "degraded";
@@ -187,6 +193,13 @@ function SystemStatusBanner() {
     } else if (["error", "analysis_failed", "execution_failed", "kill_switch_tripped"].includes(lastStatus)) {
       sysStatus = "degraded";
       reason = `Last run failed (${errorCount} total error${errorCount !== 1 ? "s" : ""})`;
+    } else if (groqFallback) {
+      // Groq hit its daily token limit — we're using a cached regime to keep trading.
+      // This is NOT an outage. Show amber to distinguish from genuine red failures.
+      sysStatus = "ai_degraded";
+      const cachedRegime = data.groq?.regime ? ` [${data.groq.regime}]` : "";
+      const ageMin = data.groq?.cache_age_min != null ? ` · ${Math.round(data.groq.cache_age_min)}min ago` : "";
+      reason = `Groq rate-limited — using cached regime${cachedRegime}${ageMin} · Trading continues normally`;
     } else {
       sysStatus = "online";
       const runCount = data.last_run.run_count;
@@ -209,6 +222,23 @@ function SystemStatusBanner() {
           </span>
           <span className="text-xs text-green-400 font-medium">ONLINE</span>
           <span className="text-xs text-green-500/60 break-words">— {reason}</span>
+          {tradingMode && (
+            <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
+              {tradingModeLabel(tradingMode)}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (sysStatus === "ai_degraded") {
+    return (
+      <div className="sticky top-14 z-30 w-full bg-amber-500/8 border-b border-amber-500/15 backdrop-blur-md">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 min-h-[2rem] py-1.5 md:py-0 md:h-8 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <Brain className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+          <span className="text-xs text-amber-400 font-medium">AI DEGRADED</span>
+          <span className="text-xs text-amber-500/70 break-words">— {reason}</span>
           {tradingMode && (
             <span className={cn("text-xs font-mono ml-auto", tradingModeColor(tradingMode))}>
               {tradingModeLabel(tradingMode)}
@@ -1835,63 +1865,81 @@ function DavyJonesBotSection() {
           />
         </div>
 
-        {/* Signal Scanner — full width below SVG+bubble row, mirrors Oracle's Equity Scanner */}
-        {signals.length > 0 && (
-          <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
-            <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
-              <span>Signal Scanner</span>
-              <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">
-                full analysis →
-              </button>
-            </div>
-            <div className="divide-y divide-white/[0.03]">
-              {signals.map((sig: any) => {
-                const rsiColor = sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
-                const zColor = sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
-                const isPosHeld = sig.has_position && sig.signal_type === "hold";
-                return (
-                  <div key={sig.symbol} className="px-3 py-2 flex items-center gap-3">
-                    <span className="text-xs font-bold text-white w-12 shrink-0">{sig.symbol.replace("/USD","")}</span>
-                    {/* RSI bar */}
-                    <div className="flex items-center gap-1.5 flex-1">
-                      <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
-                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />
+        {/* Signal Scanner — always visible, shows all 10 watched symbols */}
+        {(() => {
+          const WATCHED = ["BTC/USD","ETH/USD","SOL/USD","XRP/USD","ADA/USD","AVAX/USD","LINK/USD","DOT/USD","ATOM/USD","LTC/USD"];
+          // Build display list: merge live signals over the full watched-symbol list
+          const displayRows = WATCHED.map((sym) => {
+            const live = signals.find((s: any) => s.symbol === sym);
+            return live ?? { symbol: sym, rsi: null, z_score: null, signal_type: "monitoring", has_position: false, pnl_pct: null };
+          });
+          const hasLive = signals.length > 0;
+          return (
+            <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+              <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
+                <span>Signal Scanner</span>
+                <div className="flex items-center gap-2">
+                  {!hasLive && <span className="text-[8px] text-slate-600">waiting for data…</span>}
+                  <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">
+                    full analysis →
+                  </button>
+                </div>
+              </div>
+              <div className="divide-y divide-white/[0.03]">
+                {displayRows.map((sig: any) => {
+                  const hasData = sig.rsi != null;
+                  const rsiColor = !hasData ? "#374151" : sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                  const zColor = !hasData ? "#374151" : sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                  const isPosHeld = sig.has_position && sig.signal_type === "hold";
+                  return (
+                    <div key={sig.symbol} className={cn("px-3 py-2 flex items-center gap-3", !hasData && "opacity-40")}>
+                      <span className={cn("text-xs font-bold w-12 shrink-0", hasData ? "text-white" : "text-slate-600")}>{sig.symbol.replace("/USD","")}</span>
+                      {/* RSI bar */}
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
+                        <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                          {hasData && <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />}
+                        </div>
+                        <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{hasData ? sig.rsi : "—"}</span>
                       </div>
-                      <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{sig.rsi}</span>
-                    </div>
-                    {/* Z-score bar */}
-                    <div className="flex items-center gap-1.5 flex-1">
-                      <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
-                      <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
-                        <div className="absolute left-1/2 w-px h-full bg-slate-600" />
-                        {sig.z_score < 0 ? (
-                          <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
-                        ) : (
-                          <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
-                        )}
+                      {/* Z-score bar */}
+                      <div className="flex items-center gap-1.5 flex-1">
+                        <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
+                        <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
+                          <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                          {hasData && sig.z_score < 0 && (
+                            <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
+                          )}
+                          {hasData && sig.z_score >= 0 && (
+                            <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
+                          )}
+                        </div>
+                        <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>
+                          {hasData ? `${sig.z_score >= 0 ? "+" : ""}${sig.z_score}` : "—"}
+                        </span>
                       </div>
-                      <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>{sig.z_score >= 0 ? "+" : ""}{sig.z_score}</span>
+                      {/* Status pill */}
+                      <span className={cn(
+                        "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+                        !hasData ? "text-slate-700 bg-slate-800/30 border-slate-700/20" :
+                        isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
+                        sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
+                        sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                        "text-slate-500 bg-slate-800/50 border-slate-700/40"
+                      )}>
+                        {!hasData ? "…" :
+                         isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
+                         sig.signal_type === "watching" ? "WATCH" :
+                         sig.signal_type.includes("entered") ? "IN" :
+                         sig.signal_type === "slots_full" ? "FULL" : "—"}
+                      </span>
                     </div>
-                    {/* Status pill */}
-                    <span className={cn(
-                      "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
-                      isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
-                      sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
-                      sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
-                      "text-slate-500 bg-slate-800/50 border-slate-700/40"
-                    )}>
-                      {isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
-                       sig.signal_type === "watching" ? "WATCH" :
-                       sig.signal_type.includes("entered") ? "IN" :
-                       sig.signal_type === "slots_full" ? "FULL" : "—"}
-                    </span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Stats + last trade — below scanner, mirrors Oracle's allocation panel area */}
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -3101,6 +3149,114 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   );
 };
 
+// ── Live Equity Curve (from equity_snapshots table) ───────────────────────────
+function LiveEquityCurveSection() {
+  const { data, isLoading } = useEquityCurve(500);
+  const snapshots = data?.snapshots ?? [];
+
+  // Compute drawdown from peak
+  const { peak, drawdownPct } = useMemo(() => {
+    if (!snapshots.length) return { peak: 0, drawdownPct: 0 };
+    let pk = -Infinity;
+    for (const s of snapshots) pk = Math.max(pk, s.total_equity);
+    const last = snapshots[snapshots.length - 1]?.total_equity ?? pk;
+    const dd = pk > 0 ? ((last - pk) / pk) * 100 : 0;
+    return { peak: pk, drawdownPct: dd };
+  }, [snapshots]);
+
+  const chartData = useMemo(() => snapshots.map((s) => ({
+    ts: new Date(s.ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+    total: s.total_equity,
+    alpaca: s.alpaca_equity,
+    kraken: s.kraken_equity,
+    regime: s.regime,
+  })), [snapshots]);
+
+  const last = snapshots[snapshots.length - 1];
+  const first = snapshots[0];
+  const gainPct = first && last && first.total_equity > 0
+    ? ((last.total_equity - first.total_equity) / first.total_equity) * 100
+    : null;
+
+  const EquityTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
+        <p className="text-muted-foreground mb-1">{label}</p>
+        {payload.map((p: any) => (
+          <p key={p.dataKey} style={{ color: p.color }} className="font-mono">
+            {p.name}: {formatCurrency(p.value)}
+          </p>
+        ))}
+        {payload[0]?.payload?.regime && (
+          <p className="text-slate-500 mt-1">Regime: {payload[0].payload.regime}</p>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <Card className="border-white/5 overflow-hidden mb-4">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          <span>Live Portfolio Equity Curve</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Alpaca + Kraken</span>
+        </CardTitle>
+        <div className="flex items-center gap-4">
+          {last && (
+            <span className="text-xs font-mono text-white">{formatCurrency(last.total_equity)}</span>
+          )}
+          {gainPct != null && (
+            <span className={cn("text-xs font-mono", gainPct >= 0 ? "text-green-400" : "text-red-400")}>
+              {gainPct >= 0 ? "+" : ""}{gainPct.toFixed(2)}%
+            </span>
+          )}
+          {drawdownPct < -0.01 && (
+            <span className="text-xs font-mono text-amber-400">
+              DD: {drawdownPct.toFixed(2)}%
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="p-4">
+        {isLoading ? (
+          <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">Loading equity data…</div>
+        ) : snapshots.length < 2 ? (
+          <div className="h-40 flex flex-col items-center justify-center gap-1">
+            <TrendingUp className="h-6 w-6 text-muted-foreground/30" />
+            <p className="text-xs text-muted-foreground">No equity history yet</p>
+            <p className="text-[10px] text-muted-foreground/50">Data is recorded after each completed trading cycle</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+              <XAxis dataKey="ts" tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis
+                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                tick={{ fontSize: 9, fill: "#64748b" }}
+                tickLine={false}
+                axisLine={false}
+                width={42}
+              />
+              <Tooltip content={<EquityTooltip />} />
+              <Line type="monotone" dataKey="total" name="Total" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
+              <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1} dot={false} strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1} dot={false} strokeDasharray="4 2" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+        <div className="flex items-center gap-4 mt-2 justify-end">
+          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-blue-500 rounded" /><span className="text-[9px] text-muted-foreground">Total</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-green-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Alpaca</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-amber-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Kraken</span></div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PerformanceSection() {
   const isMobile = useIsMobile();
   const { data: history } = usePerformanceHistory();
@@ -3983,12 +4139,75 @@ function SystemOverridesPanel() {
 
 // ── Dashboard Root ────────────────────────────────────────────────────────────
 
+// ── Position change toast notifier ────────────────────────────────────────────
+// Fires toasts when Alpaca or Kraken positions open/close between polls.
+// Runs as a side-effect-only component (renders null) to keep Dashboard pure.
+function PositionChangeNotifier() {
+  const { data: liveData } = useLivePositions();
+  const { data: krakenData } = useKrakenStatus();
+  const { toast } = useToast();
+
+  const prevAlpacaRef = useRef<Set<string>>(new Set());
+  const prevKrakenRef = useRef<Set<string>>(new Set());
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    // Build current Alpaca position set
+    const curAlpaca = new Set<string>(
+      (liveData?.positions ?? []).map((p: LivePosition) => p.symbol)
+    );
+    // Build current Kraken position set
+    const curKraken = new Set<string>(
+      Object.keys(krakenData?.positions ?? {})
+    );
+
+    if (!initialized.current) {
+      // First load — seed refs without toasting
+      prevAlpacaRef.current = curAlpaca;
+      prevKrakenRef.current = curKraken;
+      initialized.current = true;
+      return;
+    }
+
+    // Alpaca opened
+    for (const sym of curAlpaca) {
+      if (!prevAlpacaRef.current.has(sym)) {
+        toast({ title: `📈 Position opened: ${sym}`, description: "Alpaca equities", duration: 5000 });
+      }
+    }
+    // Alpaca closed
+    for (const sym of prevAlpacaRef.current) {
+      if (!curAlpaca.has(sym)) {
+        toast({ title: `📉 Position closed: ${sym}`, description: "Alpaca equities", duration: 5000 });
+      }
+    }
+    // Kraken opened
+    for (const sym of curKraken) {
+      if (!prevKrakenRef.current.has(sym)) {
+        toast({ title: `📈 Position opened: ${sym}`, description: "Davy Jones crypto", duration: 5000 });
+      }
+    }
+    // Kraken closed
+    for (const sym of prevKrakenRef.current) {
+      if (!curKraken.has(sym)) {
+        toast({ title: `📉 Position closed: ${sym}`, description: "Davy Jones crypto", duration: 5000 });
+      }
+    }
+
+    prevAlpacaRef.current = curAlpaca;
+    prevKrakenRef.current = curKraken;
+  }, [liveData, krakenData, toast]);
+
+  return null;
+}
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
       <CRTOverlay />
       <RegimeGlow />
       <EquityEcho />
+      <PositionChangeNotifier />
       <Header />
       <SystemStatusBanner />
       <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-2">
@@ -4069,6 +4288,13 @@ export default function Dashboard() {
             </SafeSection>
           </motion.div>
         </div>
+
+        {/* LIVE EQUITY CURVE — combined Alpaca + Kraken portfolio value */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+          <SafeSection label="Live Equity Curve">
+            <LiveEquityCurveSection />
+          </SafeSection>
+        </motion.div>
 
         {/* ALPACA PERFORMANCE + ATTRIBUTION — stock trading system only */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

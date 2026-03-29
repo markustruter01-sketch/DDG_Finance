@@ -26,6 +26,7 @@ How to run:
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections import deque
 from datetime import datetime, timezone, timedelta
@@ -256,8 +257,10 @@ def write_status(error: str | None = None) -> None:
     }
 
     try:
-        with open(STATUS_FILE, "w") as f:
+        _tmp_status = STATUS_FILE + ".tmp"
+        with open(_tmp_status, "w") as f:
             json.dump(state, f, indent=2)
+        os.replace(_tmp_status, STATUS_FILE)
     except Exception as exc:
         logger.warning(f"Status | Could not write {STATUS_FILE}: {exc}")
 

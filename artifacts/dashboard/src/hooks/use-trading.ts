@@ -29,11 +29,29 @@ export interface PlatformStatus {
     last_allocation: any[] | null;
     last_exec_result: any;
     cycle_interval: string;
+    groq_using_fallback?: boolean;
   };
   auto_trading: boolean;
   cycle_interval: string;
   trading_mode: string;
   data_cache: Array<{ name: string; ttl_seconds: number; cached: boolean; age_seconds: number; hits: number; misses: number }>;
+  groq?: {
+    last_success_at: string | null;
+    cache_age_min: number | null;
+    cache_valid: boolean;
+    regime: string | null;
+    using_fallback: boolean;
+  };
+}
+
+export interface EquitySnapshot {
+  id: number;
+  ts: string;
+  alpaca_equity: number;
+  kraken_equity: number;
+  total_equity: number;
+  regime: string | null;
+  source: string;
 }
 
 export interface PortfolioData {
@@ -796,5 +814,15 @@ export function useSystemRestart() {
       qc.invalidateQueries({ queryKey: ["/status"] });
       qc.invalidateQueries({ queryKey: ["/health"] });
     },
+  });
+}
+
+export function useEquityCurve(limit = 500) {
+  return useQuery<{ count: number; snapshots: EquitySnapshot[] }>({
+    queryKey: ["/performance/equity-curve", limit],
+    queryFn: async () => (await api.get(`/performance/equity-curve?limit=${limit}`)).data,
+    refetchInterval: 60_000,
+    retry: false,
+    staleTime: 30_000,
   });
 }

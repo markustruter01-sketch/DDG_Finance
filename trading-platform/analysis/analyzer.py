@@ -22,6 +22,9 @@ Called every market session (or 15-min for crypto off-hours):
 
 import asyncio
 import json
+import os
+import time
+from pathlib import Path
 from typing import Any, Union
 
 from loguru import logger
@@ -34,6 +37,107 @@ from data.fred_client import fetch_macro_data
 from data.news_client import fetch_news
 from data.yfinance_client import fetch_market_data
 from portfolio.allocator import process_regime_llm_output, process_crypto_llm_output
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GROQ REGIME FALLBACK CACHE
+# Persists the last successful regime analysis to disk so the pipeline can
+# continue operating when Groq is rate-limited (100k TPD shared budget).
+# ══════════════════════════════════════════════════════════════════════════════
+
+_REGIME_CACHE_FILE = Path(__file__).parent.parent / "data" / "last_regime_cache.json"
+REGIME_FALLBACK_MAX_AGE_SECONDS = 4 * 3600  # reject stale cache older than 4 hours
+
+# In-memory cache dict: {"regime": str, "saved_at": float, "output": {...}}
+_last_regime_cache: dict | None = None
+
+
+def _load_regime_cache() -> None:
+    """Load the persisted regime cache from disk on startup."""
+    global _last_regime_cache
+    if _REGIME_CACHE_FILE.exists():
+        try:
+            raw = json.loads(_REGIME_CACHE_FILE.read_text())
+            _last_regime_cache = raw
+            age_min = (time.time() - raw.get("saved_at", 0)) / 60
+            logger.info(
+                f"Regime cache | Loaded from disk — regime={raw.get('regime', '?')} "
+                f"saved {age_min:.0f}min ago"
+            )
+        except Exception as exc:
+            logger.warning(f"Regime cache | Failed to load from disk: {exc}")
+
+
+def _save_regime_cache(output: RegimeAnalysisOutput) -> None:
+    """Atomically save a successful regime analysis to disk."""
+    global _last_regime_cache
+    try:
+        _REGIME_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        cache_data = {
+            "regime":   output.regime,
+            "saved_at": time.time(),
+            "output":   output.model_dump(),
+        }
+        tmp = str(_REGIME_CACHE_FILE) + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(cache_data, f, indent=2)
+        os.replace(tmp, str(_REGIME_CACHE_FILE))
+        _last_regime_cache = cache_data
+        logger.info(f"Regime cache | Saved to disk (regime={output.regime})")
+    except Exception as exc:
+        logger.warning(f"Regime cache | Failed to save to disk: {exc}")
+
+
+def get_regime_fallback() -> RegimeAnalysisOutput | None:
+    """
+    Return the last-good regime as a RegimeAnalysisOutput if the cache is fresh
+    enough (< REGIME_FALLBACK_MAX_AGE_SECONDS), else return None.
+
+    Called by pipeline.py when run_analysis_cycle() raises (Groq rate-limited).
+    """
+    if _last_regime_cache is None:
+        return None
+    age = time.time() - _last_regime_cache.get("saved_at", 0)
+    if age > REGIME_FALLBACK_MAX_AGE_SECONDS:
+        logger.warning(
+            f"Regime cache | Cache is stale ({age / 3600:.1f}h > "
+            f"{REGIME_FALLBACK_MAX_AGE_SECONDS / 3600:.0f}h limit) — rejecting fallback"
+        )
+        return None
+    try:
+        output = RegimeAnalysisOutput.model_validate(_last_regime_cache["output"])
+        return output
+    except Exception as exc:
+        logger.warning(f"Regime cache | Cannot reconstruct RegimeAnalysisOutput: {exc}")
+        return None
+
+
+def get_groq_status() -> dict:
+    """
+    Return a status dict for the /status endpoint.
+    Shows when the last successful Groq call happened and whether the cache is usable.
+    """
+    if _last_regime_cache is None:
+        return {
+            "last_success_at": None,
+            "cache_age_min":   None,
+            "cache_valid":     False,
+            "regime":          None,
+        }
+    age_s = time.time() - _last_regime_cache.get("saved_at", 0)
+    from datetime import datetime, timezone
+    saved_at_ts = _last_regime_cache.get("saved_at", 0)
+    last_success_at = datetime.fromtimestamp(saved_at_ts, tz=timezone.utc).isoformat()
+    return {
+        "last_success_at": last_success_at,
+        "cache_age_min":   round(age_s / 60, 1),
+        "cache_valid":     age_s < REGIME_FALLBACK_MAX_AGE_SECONDS,
+        "regime":          _last_regime_cache.get("regime"),
+    }
+
+
+# Load the persisted cache on module import so it's ready before the first cycle
+_load_regime_cache()
 
 
 def _fetch_account_state() -> dict[str, Any]:
@@ -164,6 +268,9 @@ def _call_regime_with_retry(system_prompt: str, user_prompt: str) -> RegimeAnaly
             output = process_regime_llm_output(raw_json)
             if attempt > 1:
                 logger.info(f"  LLM self-corrected on attempt {attempt}")
+            # Persist the successful regime so the pipeline can use it as a fallback
+            # if Groq is rate-limited on a future call.
+            _save_regime_cache(output)
             return output
 
         except Exception as exc:

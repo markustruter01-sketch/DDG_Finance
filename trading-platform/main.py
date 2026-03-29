@@ -72,6 +72,55 @@ COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 _kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
+# ── Commentary Cache Persistence ──────────────────────────────────────────────
+# Both commentary caches are file-backed so they survive server restarts.
+# Without this, every restart immediately burns Groq tokens to regenerate.
+import json as _json
+import threading as _ct_lock
+from pathlib import Path as _Path
+
+_COMMENTARY_CACHE_FILE = _Path("data/commentary_cache.json")
+_commentary_file_lock = _ct_lock.Lock()
+
+
+def _load_commentary_caches() -> None:
+    """Load both commentary caches from disk on startup."""
+    global _commentary_cache, _kraken_commentary_cache
+    if not _COMMENTARY_CACHE_FILE.exists():
+        return
+    try:
+        data = _json.loads(_COMMENTARY_CACHE_FILE.read_text())
+        alpaca = data.get("alpaca", {})
+        kraken = data.get("kraken", {})
+        if alpaca.get("text") and alpaca.get("ts", 0) > 0:
+            _commentary_cache = alpaca
+            age_min = (time.time() - alpaca["ts"]) / 60
+            logger.info(f"Commentary cache | Alpaca: loaded from disk ({age_min:.0f}min old)")
+        if kraken.get("text") and kraken.get("ts", 0) > 0:
+            _kraken_commentary_cache = kraken
+            age_min = (time.time() - kraken["ts"]) / 60
+            logger.info(f"Commentary cache | Kraken: loaded from disk ({age_min:.0f}min old)")
+    except Exception as exc:
+        logger.warning(f"Commentary cache | Failed to load from disk: {exc}")
+
+
+def _persist_commentary_caches() -> None:
+    """Atomically write both commentary caches to disk (thread-safe)."""
+    try:
+        _COMMENTARY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "alpaca": _commentary_cache,
+            "kraken": _kraken_commentary_cache,
+        }
+        tmp = str(_COMMENTARY_CACHE_FILE) + ".tmp"
+        with _commentary_file_lock:
+            with open(tmp, "w") as f:
+                _json.dump(payload, f, indent=2)
+            os.replace(tmp, str(_COMMENTARY_CACHE_FILE))
+    except Exception as exc:
+        logger.warning(f"Commentary cache | Failed to persist to disk: {exc}")
+
+
 # ── Self-Healing Remediation Log ──────────────────────────────────────────────
 import threading as _threading
 
@@ -113,6 +162,9 @@ async def lifespan(app: FastAPI):
 
     init_db()
     logger.info("Trade journal database initialised")
+
+    _load_commentary_caches()
+    logger.info("Commentary caches loaded from disk")
 
     scheduler = get_scheduler()
     scheduler.start()
@@ -219,8 +271,10 @@ async def health() -> dict:
 async def status() -> dict:
     """
     Full platform status snapshot:
-    market clock, kill switch, scheduler jobs, last pipeline run, cache stats.
+    market clock, kill switch, scheduler jobs, last pipeline run, cache stats,
+    and Groq regime cache status.
     """
+    from analysis.analyzer import get_groq_status as _get_groq_status
     market_open = is_market_open()
     last_run = get_last_run()
     if not is_auto_trading_enabled():
@@ -229,6 +283,8 @@ async def status() -> dict:
         trading_mode = "full_market"
     else:
         trading_mode = "crypto_only"
+    groq_status = _get_groq_status()
+    groq_status["using_fallback"] = last_run.get("groq_using_fallback", False)
     return {
         "market": {
             "is_open":   market_open,
@@ -242,6 +298,7 @@ async def status() -> dict:
         "trading_mode":   trading_mode,
         "data_cache":     get_cache_stats(),
         "blackout":       is_blackout_active(),
+        "groq":           groq_status,
     }
 
 
@@ -787,7 +844,166 @@ async def manual_run(request: RunRequest, background_tasks: BackgroundTasks) -> 
 async def manual_postmortem() -> dict:
     """Manually trigger the post-mortem P&L reconciliation."""
     logger.info("Manual post-mortem requested")
-    return await run_postmortem()
+    postmortem_result = await run_postmortem()
+
+    # ── Kraken journal sync ──────────────────────────────────────────────────
+    # Sync closed Kraken paper trades into the PostgreSQL trade journal so the
+    # HITL auditor has a complete view of all trading activity.
+    try:
+        kraken_sync = _sync_kraken_trades_to_journal()
+        postmortem_result["kraken_journal_sync"] = kraken_sync
+    except Exception as _ksync_exc:
+        logger.error(f"Kraken journal sync failed: {_ksync_exc}")
+        postmortem_result["kraken_journal_sync"] = {"error": str(_ksync_exc), "imported": 0}
+
+    # ── Equity snapshot at postmortem ────────────────────────────────────────
+    try:
+        from db.postgres import insert_equity_snapshot as _ins_snap, is_pg_available as _pg_ok
+        if _pg_ok():
+            import json as _j2, pathlib as _pl2
+            _sp2 = _pl2.Path("../kraken-bot/status.json")
+            _k_equity = 0.0
+            if _sp2.exists():
+                _bs2 = _j2.loads(_sp2.read_text())
+                _k_equity = float((_bs2.get("paper_summary") or {}).get("total_equity_usd", 0) or 0)
+            try:
+                from execution.broker import get_account as _ga2
+                _a_equity = float(_ga2().get("equity", 0) or 0)
+            except Exception:
+                _a_equity = 0.0
+            _ins_snap(alpaca_equity=_a_equity, kraken_equity=_k_equity, source="postmortem")
+            logger.info(f"Postmortem equity snapshot: alpaca={_a_equity:.2f} kraken={_k_equity:.2f}")
+    except Exception as _snap2_exc:
+        logger.warning(f"Postmortem equity snapshot failed (non-fatal): {_snap2_exc}")
+
+    return postmortem_result
+
+
+# ── Kraken paper-trade journal sync ───────────────────────────────────────────
+_KRAKEN_IMPORTED_SIDECAR = os.path.join(os.path.dirname(__file__), "data", "kraken_imported_trades.json")
+_kraken_imported_lock = __import__("threading").Lock()
+
+
+def _load_kraken_imported() -> set[str]:
+    """Load the set of already-imported Kraken trade keys from the sidecar file."""
+    try:
+        if os.path.exists(_KRAKEN_IMPORTED_SIDECAR):
+            with open(_KRAKEN_IMPORTED_SIDECAR) as f:
+                return set(__import__("json").load(f))
+    except Exception as exc:
+        logger.warning(f"Kraken sync | Failed to load import sidecar: {exc}")
+    return set()
+
+
+def _save_kraken_imported(keys: set[str]) -> None:
+    """Atomically persist the imported-key set to the sidecar file."""
+    tmp = _KRAKEN_IMPORTED_SIDECAR + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            __import__("json").dump(list(keys), f)
+        os.replace(tmp, _KRAKEN_IMPORTED_SIDECAR)
+    except Exception as exc:
+        logger.warning(f"Kraken sync | Failed to save import sidecar: {exc}")
+
+
+def _sync_kraken_trades_to_journal() -> dict:
+    """
+    Read all closed trades from kraken-bot/paper_portfolio.json and insert any
+    new ones into the PostgreSQL trade journal (source='kraken_paper').
+    Uses a sidecar JSON file to track already-imported trades by a composite key
+    (symbol|closed_at) to prevent duplicates across postmortem runs.
+    """
+    import json as _jk
+    from db.postgres import is_pg_available, get_conn
+
+    if not is_pg_available():
+        return {"imported": 0, "skipped": 0, "reason": "PostgreSQL unavailable"}
+
+    _portfolio_path = os.path.join(os.path.dirname(__file__), "..", "kraken-bot", "paper_portfolio.json")
+    if not os.path.exists(_portfolio_path):
+        return {"imported": 0, "skipped": 0, "reason": "paper_portfolio.json not found"}
+
+    try:
+        with open(_portfolio_path) as f:
+            portfolio = _jk.load(f)
+    except Exception as exc:
+        return {"imported": 0, "skipped": 0, "error": f"Could not read portfolio: {exc}"}
+
+    all_trades = portfolio.get("all_trades", [])
+    if not all_trades:
+        return {"imported": 0, "skipped": 0, "reason": "No trades in paper portfolio"}
+
+    with _kraken_imported_lock:
+        imported_keys = _load_kraken_imported()
+        new_keys = set()
+        imported = 0
+        skipped = 0
+        errors = 0
+
+        for trade in all_trades:
+            symbol = trade.get("symbol", "UNKNOWN")
+            closed_at = trade.get("closed_at", "")
+            key = f"{symbol}|{closed_at}"
+            if key in imported_keys:
+                skipped += 1
+                continue
+
+            # Derive a stable trade_id from the key
+            import hashlib
+            trade_id = "KRK-" + hashlib.md5(key.encode()).hexdigest()[:16]
+
+            # Parse date from closed_at
+            try:
+                from datetime import datetime, timezone
+                _dt = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+                trade_date = _dt.date().isoformat()
+            except Exception:
+                trade_date = date.today().isoformat()
+
+            pnl_pct = trade.get("pnl_pct")
+            entry_price = trade.get("entry_price")
+            exit_price = trade.get("exit_price")
+            reason = trade.get("reason", "kraken_paper")
+
+            try:
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        # Insert as a closed trade directly
+                        cur.execute(
+                            """
+                            INSERT INTO trades
+                                (trade_id, date, ticker, asset_class, conviction_score,
+                                 original_thesis, pnl_percentage, status,
+                                 intended_price, actual_fill_price)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (trade_id) DO NOTHING
+                            """,
+                            (
+                                trade_id,
+                                trade_date,
+                                symbol.replace("/", ""),   # LINK/USD → LINKUSD
+                                "Crypto",
+                                5.0,                       # default conviction for Kraken trades
+                                f"Kraken paper trade ({reason})",
+                                pnl_pct,
+                                "Closed",
+                                entry_price,
+                                exit_price,
+                            ),
+                        )
+                new_keys.add(key)
+                imported += 1
+                logger.info(f"Kraken sync | Imported {symbol} {trade_date} pnl={pnl_pct}%")
+            except Exception as exc:
+                logger.error(f"Kraken sync | Failed to insert {key}: {exc}")
+                errors += 1
+
+        imported_keys.update(new_keys)
+        if new_keys:
+            _save_kraken_imported(imported_keys)
+
+    logger.info(f"Kraken journal sync | imported={imported} skipped={skipped} errors={errors}")
+    return {"imported": imported, "skipped": skipped, "errors": errors}
 
 
 VAULT_TICKER = "JEPQ"
@@ -1280,6 +1496,7 @@ Current open positions:
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        _persist_commentary_caches()
         logger.info("AI commentary regenerated successfully")
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
@@ -1538,6 +1755,17 @@ async def risk_metrics() -> dict:
     }
 
 
+@router.get("/performance/equity-curve", tags=["Analytics"])
+async def equity_curve_endpoint(limit: int = 500) -> dict:
+    """
+    Return the last `limit` equity snapshots (oldest-first) for the equity curve chart.
+    Each row: {id, ts, alpaca_equity, kraken_equity, total_equity, regime, source}
+    """
+    from db.postgres import get_equity_curve
+    rows = get_equity_curve(limit=min(limit, 2000))
+    return {"count": len(rows), "snapshots": rows}
+
+
 @router.post("/backtest", tags=["Analytics"])
 async def run_backtest_endpoint(lookback_days: int = 90) -> dict:
     from data.yfinance_client import get_cached_market_data
@@ -1750,6 +1978,7 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _kraken_commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        _persist_commentary_caches()
         logger.info("Kraken AI commentary regenerated successfully")
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:

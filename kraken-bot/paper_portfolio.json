@@ -1,17 +1,7 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 19948.166770283446,
+  "cash_usd": 59901.57975118822,
   "positions": {
-    "SOL/USD": {
-      "side": "long",
-      "entry_price": 82.83,
-      "size_usd": 30000.0,
-      "size_units": 362.18761318362914,
-      "entry_time": "2026-03-28T21:43:41.546057+00:00",
-      "best_price": 82.83,
-      "entry_fee": 78.0,
-      "order_id": "PAPER-SOLUSD-1774734221"
-    },
     "DOT/USD": {
       "side": "long",
       "entry_price": 1.2652,
@@ -31,16 +21,6 @@
       "best_price": 0.246234,
       "entry_fee": 25.9797,
       "order_id": "PAPER-ADAUSD-1774739379"
-    },
-    "LINK/USD": {
-      "side": "long",
-      "entry_price": 8.52001,
-      "size_usd": 9992.2,
-      "size_units": 1172.7920507135557,
-      "entry_time": "2026-03-28T23:09:41.742360+00:00",
-      "best_price": 8.52001,
-      "entry_fee": 25.9797,
-      "order_id": "PAPER-LINKUSD-1774739381"
     },
     "AVAX/USD": {
       "side": "long",
@@ -74,6 +54,30 @@
       "fees_usd": 51.9454,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-29T01:07:54.797344+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "SOL/USD",
+      "side": "long",
+      "entry_price": 82.83,
+      "exit_price": 82.93,
+      "pnl_pct": 0.12,
+      "pnl_usd": -119.88,
+      "fees_usd": 156.0942,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-29T03:54:26.281226+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "LINK/USD",
+      "side": "long",
+      "entry_price": 8.52001,
+      "exit_price": 8.54486,
+      "pnl_pct": 0.29,
+      "pnl_usd": -22.89,
+      "fees_usd": 52.0352,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-29T03:54:31.088984+00:00",
       "paper": true
     }
   ]

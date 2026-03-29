@@ -290,6 +290,172 @@ function KillBoardPanel({
   );
 }
 
+// ── KrakenPositionCard — collapsible single-position row ──────────────────────
+// Thin collapsed pill showing PnL, stop & trail; expands to full detail on click.
+// Used in both the main Live Positions section and the DavyJones bot card.
+function KrakenPositionCard({
+  kpos,
+  signals,
+  isPaper,
+  compact = false,
+}: {
+  kpos: { symbol: string; side: string; qty: number; entry_price: number; current_price: number; size_usd: number; unrealized_pnl_usd: number; unrealized_pnl_pct: number; entry_time: string; best_price: number; stop_loss_price: number; take_profit_price: number };
+  signals?: any[];
+  isPaper?: boolean;
+  compact?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const isUp    = (kpos.unrealized_pnl_usd ?? 0) >= 0;
+  const pnlPct  = kpos.unrealized_pnl_pct ?? 0;
+  const sym     = kpos.symbol.replace("/USD", "");
+  const trailActive = kpos.best_price != null && kpos.best_price > kpos.entry_price;
+  const hoursIn = kpos.entry_time
+    ? (Date.now() - new Date(kpos.entry_time).getTime()) / 3_600_000
+    : null;
+  const ageLabel = hoursIn == null ? null : hoursIn < 2 ? "Fresh" : hoursIn < 12 ? "Active" : hoursIn < 48 ? "Aging" : "Stale";
+  const ageColor = hoursIn == null ? "#64748b" : hoursIn < 2 ? "#22c55e" : hoursIn < 12 ? "#22d3ee" : hoursIn < 48 ? "#f59e0b" : "#ef4444";
+  const sig        = signals?.find((s: any) => s.symbol === kpos.symbol);
+  const zScore     = sig?.z_score ?? null;
+  const conviction = zScore != null ? Math.min(Math.abs(zScore) / 2, 1) : null;
+
+  return (
+    <div
+      onClick={() => setExpanded(v => !v)}
+      className={cn(
+        "rounded-lg border cursor-pointer select-none transition-all duration-200",
+        isUp ? "border-cyan-500/20 bg-cyan-950/[0.07] hover:bg-cyan-950/20" : "border-red-500/15 bg-red-950/[0.07] hover:bg-red-950/20"
+      )}
+    >
+      {/* ── Collapsed header — always visible ── */}
+      <div className={cn("flex items-center gap-2 px-3 overflow-hidden", compact ? "py-1.5" : "py-2")}>
+        <span className={cn("w-0.5 h-4 rounded-full shrink-0", isUp ? "bg-cyan-500/70" : "bg-red-400/60")} />
+        <span className="font-bold font-mono text-white text-[11px] w-11 shrink-0">{sym}</span>
+        <span className={cn(
+          "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+          kpos.side === "long"
+            ? "text-green-400 border-green-500/30 bg-green-500/10"
+            : "text-orange-400 border-orange-500/30 bg-orange-500/10"
+        )}>
+          {kpos.side.toUpperCase()}
+        </span>
+        {isPaper && (
+          <span className="text-[7px] font-bold px-1 py-0.5 rounded border border-amber-500/25 text-amber-400/60 shrink-0">PAPER</span>
+        )}
+        {/* PnL */}
+        <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
+          {isUp ? "+" : ""}${(kpos.unrealized_pnl_usd ?? 0).toFixed(2)}
+          <span className="text-[8px] opacity-60 ml-1">({isUp ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+        </span>
+        {/* Stop loss */}
+        <span className="text-[9px] font-mono text-red-400/55 shrink-0 hidden sm:inline">
+          SL {formatCryptoPrice(kpos.stop_loss_price)}
+        </span>
+        {/* Trail status */}
+        <span className={cn(
+          "text-[8px] px-1.5 py-0.5 rounded-full border shrink-0",
+          trailActive ? "text-cyan-400 border-cyan-500/30 bg-cyan-500/10" : "text-slate-500/60 border-slate-700/30 bg-slate-800/20"
+        )}>
+          {trailActive ? "⚡ trail" : "waiting"}
+        </span>
+        {/* Age — hide on compact */}
+        {hoursIn != null && !compact && (
+          <span className="text-[8px] font-mono shrink-0" style={{ color: ageColor }}>{hoursIn.toFixed(0)}h</span>
+        )}
+        <span className={cn("text-muted-foreground/30 text-[10px] transition-transform duration-200 shrink-0", expanded && "rotate-180")}>▾</span>
+      </div>
+
+      {/* ── Expanded detail grid ── */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-3 pt-2 border-t border-white/[0.04] mt-0">
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-5 gap-y-2.5">
+                {([
+                  ["Entry", formatCryptoPrice(kpos.entry_price)],
+                  ["Current", formatCryptoPrice(kpos.current_price)],
+                  ["Size", formatCurrency(kpos.size_usd)],
+                  ["Qty", kpos.qty.toFixed(4)],
+                  ["Stop loss", formatCryptoPrice(kpos.stop_loss_price)],
+                  ["Trail trigger", formatCryptoPrice(kpos.take_profit_price)],
+                  ...(conviction != null ? [["Conviction", `${Math.round(conviction * 100)}%`]] : []),
+                  ...(hoursIn != null ? [["Age", `${hoursIn.toFixed(0)}h · ${ageLabel}`]] : []),
+                ] as [string, string][]).map(([label, value]) => (
+                  <div key={label}>
+                    <div className="text-[8px] text-muted-foreground/40 uppercase tracking-wide">{label}</div>
+                    <div className="text-[10px] font-mono text-white/80 font-semibold mt-0.5">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[9px] text-cyan-400/40 italic">Mean-reversion · auto-managed by Davy Jones</div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── KrakenPositionsPanel — collapsible section for all Kraken open positions ──
+// Used below the Alpaca positions table in LivePositionsSection.
+function KrakenPositionsPanel({
+  positions,
+  signals,
+  isPaper,
+}: {
+  positions: { symbol: string; side: string; qty: number; entry_price: number; current_price: number; size_usd: number; unrealized_pnl_usd: number; unrealized_pnl_pct: number; entry_time: string; best_price: number; stop_loss_price: number; take_profit_price: number }[];
+  signals?: any[];
+  isPaper?: boolean;
+}) {
+  const [open, setOpen] = useState(true);
+  if (positions.length === 0) return null;
+
+  const totalPnl = positions.reduce((sum, p) => sum + (p.unrealized_pnl_usd ?? 0), 0);
+  const isPnlUp  = totalPnl >= 0;
+
+  return (
+    <div className="border-t border-white/[0.04] bg-cyan-950/[0.03]">
+      {/* Section header / toggle */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-cyan-500/[0.04] transition-colors"
+      >
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-cyan-400/60">⚓ Davy Jones</span>
+        <Badge variant="outline" className="text-[8px] px-1 py-0 border-cyan-500/20 text-cyan-400/50">{positions.length}</Badge>
+        {isPaper && <Badge variant="outline" className="text-[8px] px-1 py-0 border-amber-500/20 text-amber-400/50">PAPER</Badge>}
+        <span className="text-[9px] text-muted-foreground/30 ml-1">crypto positions</span>
+        <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", isPnlUp ? "text-green-400" : "text-red-400")}>
+          {isPnlUp ? "+" : ""}${totalPnl.toFixed(2)}
+        </span>
+        <span className={cn("text-muted-foreground/30 text-[10px] transition-transform duration-200 ml-2", open && "rotate-180")}>▾</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 space-y-1.5">
+              {positions.map((kpos) => (
+                <KrakenPositionCard key={kpos.symbol} kpos={kpos} signals={signals} isPaper={isPaper} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── RollingPnl — animated unrealised P&L cell ─────────────────────────────────
 // Smoothly animates between value changes. Pulses with a glow every 10 seconds
 // and slides digits down from above on each tick, giving a live-feed odometer feel.
@@ -2331,6 +2497,39 @@ function DavyJonesBotSection() {
           </div>
         </div>
 
+        {/* Open Positions mini-list */}
+        {(data?.open_positions?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/30 overflow-hidden">
+            <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center gap-2">
+              <span>Open Positions</span>
+              <span className="text-cyan-400/50">{data!.open_positions.length}/{data!.max_positions}</span>
+              {data?.paper_trading && (
+                <span className="text-[7px] font-bold px-1 py-0.5 rounded border border-amber-500/25 text-amber-400/60 ml-1">PAPER</span>
+              )}
+              <span className={cn(
+                "ml-auto text-[10px] font-mono font-semibold tabular-nums",
+                (data!.open_positions.reduce((s, p) => s + p.unrealized_pnl_usd, 0)) >= 0 ? "text-green-400" : "text-red-400"
+              )}>
+                {(() => {
+                  const t = data!.open_positions.reduce((s, p) => s + p.unrealized_pnl_usd, 0);
+                  return `${t >= 0 ? "+" : ""}$${t.toFixed(2)}`;
+                })()}
+              </span>
+            </div>
+            <div className="p-2 space-y-1">
+              {data!.open_positions.map((kpos) => (
+                <KrakenPositionCard
+                  key={kpos.symbol}
+                  kpos={kpos}
+                  signals={signals}
+                  isPaper={data?.paper_trading}
+                  compact
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Kill Board — Trophy Wall */}
         <KillBoardPanel
           trades={data?.recent_trades ?? []}
@@ -3357,104 +3556,6 @@ function LivePositionsSection() {
                 </motion.tr>
               );
             })}
-            {/* ── Kraken / Davy Jones' Portfolio positions ── */}
-            {krakenPositions.map((kpos, i) => {
-              const isUp = (kpos.unrealized_pnl_usd ?? 0) >= 0;
-              const pnlPct = kpos.unrealized_pnl_pct ?? 0;
-              return (
-                <motion.tr
-                  key={`kraken-${kpos.symbol}`}
-                  custom={i + (data?.positions?.length ?? 0)}
-                  initial="hidden"
-                  animate="visible"
-                  variants={positionRowVariants}
-                  className={cn(
-                    "transition-all duration-300 cursor-default",
-                    isUp
-                      ? "border-l-2 border-l-cyan-500/40 hover:bg-cyan-500/[0.04]"
-                      : "border-l-2 border-l-red-500/30 hover:bg-red-500/[0.04]"
-                  )}
-                >
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-sm">{kpos.symbol}</span>
-                      <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase border-cyan-500/30 text-cyan-400 bg-cyan-500/10">KRAKEN</Badge>
-                      {krakenStatus?.paper_trading && (
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/30 text-amber-400/70">PAPER</Badge>
-                      )}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono capitalize">{kpos.side}</div>
-                  </td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">
-                    {kpos.qty != null ? kpos.qty.toFixed(4) : ((kpos.size_usd / kpos.entry_price) || 0).toFixed(4)}
-                  </td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">{formatCurrency(kpos.size_usd)}</td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-muted-foreground">{formatCryptoPrice(kpos.entry_price)}</td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs text-white">
-                    {kpos.current_price != null ? formatCryptoPrice(kpos.current_price) : <span className="text-muted-foreground/40">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {kpos.unrealized_pnl_usd != null
-                      ? <RollingPnl value={kpos.unrealized_pnl_usd} pct={pnlPct / 100} />
-                      : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {kpos.stop_loss_price != null ? (
-                      <span className="text-xs font-mono text-red-400">{formatCryptoPrice(kpos.stop_loss_price)}</span>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {kpos.take_profit_price != null ? (() => {
-                      const trailActive = kpos.best_price != null && kpos.best_price > kpos.entry_price;
-                      return (
-                        <div className="flex flex-col items-end gap-0.5">
-                          <span className={cn("text-xs font-mono", trailActive ? "text-cyan-400" : "text-muted-foreground/50")}>
-                            {formatCryptoPrice(kpos.take_profit_price)}
-                          </span>
-                          <span className={cn("text-[9px]", trailActive ? "text-cyan-500/60" : "text-muted-foreground/40")}>
-                            {trailActive ? "trail armed" : "not yet armed"}
-                          </span>
-                        </div>
-                      );
-                    })() : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  {/* Conviction — mean-reversion Z-score strength */}
-                  <td className="px-5 py-3.5 text-center">
-                    {(() => {
-                      const sig = krakenStatus?.signals?.find((s: any) => s.symbol === kpos.symbol);
-                      if (!sig || sig.z_score == null) return <span className="text-muted-foreground text-xs">—</span>;
-                      const strength = Math.min(Math.abs(sig.z_score) / 2, 1);
-                      return (
-                        <span className={cn("text-xs font-mono font-semibold", strength > 0.7 ? "text-cyan-400" : strength > 0.4 ? "text-primary" : "text-amber-400")}>
-                          {Math.round(strength * 100)}%
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  {/* Health — time in trade proxy */}
-                  <td className="px-5 py-3.5 text-center">
-                    {kpos.entry_time ? (() => {
-                      const hoursIn = (Date.now() - new Date(kpos.entry_time).getTime()) / 3_600_000;
-                      const label = hoursIn < 2 ? "Fresh" : hoursIn < 12 ? "Active" : hoursIn < 48 ? "Aging" : "Stale";
-                      const color = hoursIn < 2 ? "#22c55e" : hoursIn < 12 ? "#22d3ee" : hoursIn < 48 ? "#f59e0b" : "#ef4444";
-                      return (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="text-xs font-mono font-bold" style={{ color }}>{hoursIn.toFixed(0)}h</span>
-                          <span className="text-[9px]" style={{ color }}>{label}</span>
-                        </div>
-                      );
-                    })() : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-xs text-muted-foreground max-w-[180px] truncate">
-                    <span className="text-[10px] text-cyan-400/50 italic">Mean-reversion · auto-managed</span>
-                  </td>
-                  <td className="px-4 py-3.5 text-center">
-                    <span className="text-[9px] text-muted-foreground/40 italic">Bot-managed</span>
-                  </td>
-                </motion.tr>
-              );
-            })}
-
             {!isLoading && (!data || data.positions.length === 0) && krakenPositions.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-5 py-8 text-center">
@@ -3475,6 +3576,14 @@ function LivePositionsSection() {
         </table>
       </div>
       )}
+
+      {/* ── Kraken / Davy Jones crypto positions — collapsible card list ── */}
+      <KrakenPositionsPanel
+        positions={krakenPositions}
+        signals={krakenStatus?.signals ?? []}
+        isPaper={krakenStatus?.paper_trading}
+      />
+
       {thesisModal && (
         <ThesisModal
           ticker={thesisModal.ticker}

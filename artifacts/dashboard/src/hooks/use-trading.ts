@@ -877,3 +877,39 @@ export function useLearningJournal(regime?: string, category?: string, limit = 5
     staleTime: 60_000,
   });
 }
+
+// ── System Degradation Log ─────────────────────────────────────────────────
+
+export interface DegradationEvent {
+  id: number;
+  ts: string;
+  component: string;
+  severity: "critical" | "error" | "warning";
+  error_type: string;
+  message: string;
+  detail: string | null;
+  resolved_at: string | null;
+}
+
+export interface DegradationStats {
+  [component: string]: { critical?: number; error?: number; warning?: number };
+}
+
+export function useDegradationLog(hours = 48) {
+  return useQuery<{ window_hours: number; total: number; stats: DegradationStats; events: DegradationEvent[] }>({
+    queryKey: ["/system/degradations", hours],
+    queryFn: async () => (await api.get(`/system/degradations?hours=${hours}&limit=100`)).data,
+    refetchInterval: 60_000,
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+export function useDegradationReport(hours = 24) {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.get(`/system/degradations/report?hours=${hours}`);
+      return res.data.report as string;
+    },
+  });
+}

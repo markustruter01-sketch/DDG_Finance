@@ -212,6 +212,48 @@ app = FastAPI(
 router = APIRouter(prefix=API_PREFIX)
 
 
+# ── Degradation capture middleware ────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
+
+_DEGRADATION_ENDPOINTS = {
+    "/ai/commentary", "/kraken/commentary", "/kraken/status",
+    "/kraken/performance", "/kraken/trades",
+    "/run", "/run/postmortem", "/status", "/health",
+    "/positions/live", "/portfolio",
+}
+
+
+class DegradationCaptureMiddleware(BaseHTTPMiddleware):
+    """Silently records HTTP 500/503 responses to the degradation log."""
+
+    async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
+        response = await call_next(request)
+        if response.status_code in (500, 503):
+            path = request.url.path
+            # Only track our own trading-api routes
+            if API_PREFIX in path:
+                short_path = path.replace(API_PREFIX, "")
+                relevant = any(short_path.startswith(ep) for ep in _DEGRADATION_ENDPOINTS)
+                if relevant:
+                    try:
+                        from core.degradation_tracker import record_degradation
+                        record_degradation(
+                            component="http",
+                            severity="error",
+                            error_type=str(response.status_code),
+                            message=f"HTTP {response.status_code} on {short_path}",
+                            detail=f"method={request.method} full_path={path}",
+                        )
+                    except Exception:
+                        pass
+        return response
+
+
+app.add_middleware(DegradationCaptureMiddleware)
+
+
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class RunRequest(BaseModel):
@@ -555,6 +597,8 @@ async def _auto_heal_check() -> None:
     now = time.time()
     logger.debug("[AUTO-HEAL] Running health check…")
 
+    from core.degradation_tracker import record_degradation, mark_resolved
+
     # ── 1. Platform core ────────────────────────────────────────────────────
     try:
         jobs = get_job_status()
@@ -562,7 +606,16 @@ async def _auto_heal_check() -> None:
         last_status = last.get("last_run_status", "never")
         if len(jobs) < EXPECTED_JOB_COUNT or last_status in ("error", "analysis_failed", "execution_failed"):
             logger.warning(f"[AUTO-HEAL] platform_core critical: {len(jobs)} jobs, last_status={last_status}")
+            record_degradation(
+                component="platform_core",
+                severity="critical",
+                error_type=last_status if last_status != "never" else "missing_jobs",
+                message=f"Platform core degraded: {len(jobs)}/{EXPECTED_JOB_COUNT} scheduler jobs, last_status={last_status}",
+            )
             await _remediate_component("platform_core", triggered_by="auto_heal")
+        else:
+            mark_resolved("platform_core", "analysis_failed")
+            mark_resolved("platform_core", "execution_failed")
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] platform_core check skipped: {exc}")
 
@@ -571,9 +624,18 @@ async def _auto_heal_check() -> None:
         from data.cache import get_cache_stats as _gcs
         caches = _gcs()
         ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
-        if ages and max(ages) > 300:
-            logger.warning(f"[AUTO-HEAL] data_pipeline stale: max_age={max(ages):.0f}s")
+        max_age = max(ages) if ages else 0
+        if ages and max_age > 300:
+            logger.warning(f"[AUTO-HEAL] data_pipeline stale: max_age={max_age:.0f}s")
+            record_degradation(
+                component="data_pipeline",
+                severity="warning",
+                error_type="stale",
+                message=f"Data pipeline cache stale: oldest feed is {max_age:.0f}s old (threshold 300s)",
+            )
             await _remediate_component("data_pipeline", triggered_by="auto_heal")
+        else:
+            mark_resolved("data_pipeline", "stale")
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] data_pipeline check skipped: {exc}")
 
@@ -589,7 +651,17 @@ async def _auto_heal_check() -> None:
                 kstatus = kst.get("status", "unknown")
                 if kstatus == "error" or kage > 600:
                     logger.warning(f"[AUTO-HEAL] kraken_api critical: status={kstatus}, age={kage:.0f}s")
+                    record_degradation(
+                        component="kraken_api",
+                        severity="critical" if kstatus == "error" else "warning",
+                        error_type="error_state" if kstatus == "error" else "stale",
+                        message=f"Kraken bot {kstatus}: status file is {kage:.0f}s old (threshold 600s)",
+                        detail=f"status.json last_updated={last_upd}, bot_status={kstatus}",
+                    )
                     await _remediate_component("kraken_api", triggered_by="auto_heal")
+                else:
+                    mark_resolved("kraken_api", "stale")
+                    mark_resolved("kraken_api", "error_state")
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] kraken_api check skipped: {exc}")
 
@@ -818,6 +890,65 @@ async def learning_journal_endpoint(
     from analysis.learning_journal import get_journal_entries
     entries = get_journal_entries(regime=regime, category=category, limit=limit)
     return {"count": len(entries), "entries": entries}
+
+
+# ── System Degradation Log endpoints ─────────────────────────────────────────
+
+@router.get("/system/degradations", tags=["System"])
+async def system_degradations_endpoint(
+    hours: int = 48,
+    component: str | None = None,
+    unresolved_only: bool = False,
+    limit: int = 100,
+) -> dict:
+    """
+    Persistent log of every detected system failure or degradation event.
+    Captured from the auto-heal monitor, HTTP 500/503 middleware, and manual records.
+    Optional: component filter, unresolved_only=true to see open issues, hours window.
+    """
+    from core.degradation_tracker import get_recent_events, get_stats
+    events = get_recent_events(limit=limit, hours=hours, component=component, unresolved_only=unresolved_only)
+    stats = get_stats(hours=hours)
+    return {
+        "window_hours": hours,
+        "total": len(events),
+        "stats": stats,
+        "events": events,
+    }
+
+
+@router.get("/system/degradations/report", tags=["System"])
+async def system_degradations_report(hours: int = 24) -> dict:
+    """
+    Generate a plain-text bug report formatted for copy-paste to the AI.
+    Includes component summary + unique event timeline for the last N hours.
+    """
+    from core.degradation_tracker import build_bug_report
+    report = build_bug_report(hours=hours)
+    return {"hours": hours, "report": report}
+
+
+@router.post("/system/degradations/record", tags=["System"])
+async def record_manual_degradation(
+    component: str,
+    severity: str,
+    error_type: str,
+    message: str,
+    detail: str | None = None,
+) -> dict:
+    """
+    Manually record a degradation event (e.g. from operator observation).
+    Severity: critical | error | warning
+    """
+    from core.degradation_tracker import record_degradation
+    ok = record_degradation(
+        component=component,
+        severity=severity,
+        error_type=error_type,
+        message=message,
+        detail=detail,
+    )
+    return {"recorded": ok}
 
 
 @router.get("/performance", tags=["Performance"])

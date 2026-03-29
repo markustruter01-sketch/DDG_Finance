@@ -190,6 +190,22 @@ CREATE INDEX IF NOT EXISTS idx_saas_users_email       ON saas_users (email);
 CREATE INDEX IF NOT EXISTS idx_saas_users_stripe_cust ON saas_users (stripe_customer_id);
 CREATE INDEX IF NOT EXISTS idx_saas_users_tier        ON saas_users (active_license_tier);
 
+-- ── System Degradation Log ─────────────────────────────────────────────────
+-- Persistent record of every detected system failure or degradation event.
+-- Written by the auto-heal monitor, HTTP middleware, and manual captures.
+CREATE TABLE IF NOT EXISTS system_degradations (
+    id           BIGSERIAL PRIMARY KEY,
+    ts           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    component    TEXT NOT NULL,   -- platform_core | data_pipeline | kraken_api | groq | alpaca | http
+    severity     TEXT NOT NULL,   -- critical | error | warning
+    error_type   TEXT NOT NULL,   -- stale | analysis_failed | rate_limit | 500 | connection | etc.
+    message      TEXT NOT NULL,
+    detail       TEXT,            -- extra context (stack trace excerpt, endpoint, etc.)
+    resolved_at  TIMESTAMPTZ      -- filled in when a subsequent heal cycle succeeds
+);
+CREATE INDEX IF NOT EXISTS idx_sys_deg_ts        ON system_degradations (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_sys_deg_component ON system_degradations (component, ts DESC);
+
 -- ── LLM Learning Journal ───────────────────────────────────────────────────
 -- Consolidated insights extracted from every LLM analysis output.
 -- Similar insights are merged (Jaccard ≥ 0.4); confirmed_count grows each time.

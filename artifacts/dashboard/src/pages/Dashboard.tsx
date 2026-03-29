@@ -9,9 +9,10 @@ import {
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal,
+  useDegradationLog, useDegradationReport,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
-  type LearningEntry,
+  type LearningEntry, type DegradationEvent, type DegradationStats,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
 import { SentimentGauges } from "@/components/SentimentGauges";
@@ -31,7 +32,7 @@ import {
   RefreshCw, Sparkles, Brain, Trophy, Flame, Zap, X,
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
-  Lightbulb, Play, LogOut, ExternalLink,
+  Lightbulb, Play, LogOut, ExternalLink, Copy, Bug,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -4412,6 +4413,190 @@ function PositionChangeNotifier() {
   return null;
 }
 
+// ── System Degradation Log ────────────────────────────────────────────────────
+
+const SEV_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+  critical: { label: "CRITICAL", color: "text-red-400 border-red-400/30 bg-red-400/10", icon: <XCircle className="h-3 w-3" /> },
+  error:    { label: "ERROR",    color: "text-amber-400 border-amber-400/30 bg-amber-400/10", icon: <AlertTriangle className="h-3 w-3" /> },
+  warning:  { label: "WARN",     color: "text-yellow-300 border-yellow-300/30 bg-yellow-300/10", icon: <AlertOctagon className="h-3 w-3" /> },
+};
+
+const COMP_LABELS: Record<string, string> = {
+  platform_core: "Platform Core",
+  data_pipeline: "Data Pipeline",
+  kraken_api:    "Kraken Bot",
+  groq:          "Groq / LLM",
+  alpaca:        "Alpaca",
+  http:          "HTTP Endpoint",
+  database:      "Database",
+  scheduler:     "Scheduler",
+};
+
+function DegradationEventCard({ ev }: { ev: DegradationEvent }) {
+  const [expanded, setExpanded] = useState(false);
+  const sev = SEV_CONFIG[ev.severity] ?? SEV_CONFIG.warning;
+  const ts = new Date(ev.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const compLabel = COMP_LABELS[ev.component] ?? ev.component;
+
+  return (
+    <div
+      className={`rounded border px-3 py-2 cursor-pointer transition-colors ${sev.color} ${expanded ? "opacity-100" : "opacity-90 hover:opacity-100"}`}
+      onClick={() => setExpanded(x => !x)}
+    >
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex-shrink-0">{sev.icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold tracking-widest opacity-80">{sev.label}</span>
+            <span className="text-[10px] font-semibold opacity-70">{compLabel}</span>
+            <span className="text-[10px] opacity-50">/{ev.error_type}</span>
+            <span className="ml-auto text-[10px] opacity-50 flex-shrink-0">{ts}</span>
+            {ev.resolved_at && (
+              <span className="text-[10px] text-emerald-400 opacity-80 flex items-center gap-0.5">
+                <CheckCircle2 className="h-2.5 w-2.5" /> resolved
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] mt-0.5 leading-snug opacity-90 font-mono">{ev.message}</p>
+          {expanded && ev.detail && (
+            <pre className="text-[10px] mt-1.5 opacity-60 whitespace-pre-wrap break-all leading-relaxed font-mono max-h-32 overflow-y-auto">
+              {ev.detail}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SystemDegradationSection() {
+  const [hours, setHours] = useState(48);
+  const [copied, setCopied] = useState(false);
+  const { data, isLoading, refetch } = useDegradationLog(hours);
+  const reportMutation = useDegradationReport(hours);
+
+  const handleCopyReport = async () => {
+    const report = await reportMutation.mutateAsync();
+    await navigator.clipboard.writeText(report);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const events = data?.events ?? [];
+  const stats = data?.stats ?? {};
+  const total = data?.total ?? 0;
+
+  // Count by severity across all components
+  let critCount = 0, errCount = 0, warnCount = 0;
+  Object.values(stats).forEach(s => {
+    critCount += s.critical ?? 0;
+    errCount  += s.error    ?? 0;
+    warnCount += s.warning  ?? 0;
+  });
+
+  const overallColor =
+    critCount > 0 ? "text-red-400" :
+    errCount  > 0 ? "text-amber-400" :
+    warnCount > 0 ? "text-yellow-300" :
+    "text-emerald-400";
+
+  return (
+    <Card className="bg-card/60 border-border/40 backdrop-blur-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Bug className={`h-4 w-4 ${overallColor}`} />
+            <CardTitle className="text-sm font-semibold tracking-wide uppercase">
+              System Degradation Log
+            </CardTitle>
+            <span className={`text-[10px] font-bold ${overallColor}`}>
+              {total === 0 ? "Clean" : `${total} events`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Time window selector */}
+            <div className="flex gap-1">
+              {[12, 24, 48].map(h => (
+                <button
+                  key={h}
+                  onClick={() => setHours(h)}
+                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                    hours === h
+                      ? "bg-primary/20 border-primary/50 text-primary"
+                      : "border-border/30 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {h}h
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => refetch()}
+              className="text-[10px] px-2 py-0.5 rounded border border-border/30 text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <RefreshCw className="h-3 w-3" /> Refresh
+            </button>
+
+            <button
+              onClick={handleCopyReport}
+              disabled={reportMutation.isPending}
+              className="text-[10px] px-3 py-1 rounded border border-primary/50 text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5 font-semibold disabled:opacity-50"
+            >
+              {copied ? (
+                <><CheckCircle2 className="h-3 w-3 text-emerald-400" /> Copied!</>
+              ) : reportMutation.isPending ? (
+                <><RefreshCw className="h-3 w-3 animate-spin" /> Building…</>
+              ) : (
+                <><Copy className="h-3 w-3" /> Copy Bug Report</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Component summary chips */}
+        {Object.keys(stats).length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {Object.entries(stats).map(([comp, sevMap]) => {
+              const parts: string[] = [];
+              if (sevMap.critical) parts.push(`${sevMap.critical} crit`);
+              if (sevMap.error)    parts.push(`${sevMap.error} err`);
+              if (sevMap.warning)  parts.push(`${sevMap.warning} warn`);
+              const dominant = sevMap.critical ? "critical" : sevMap.error ? "error" : "warning";
+              const cfg = SEV_CONFIG[dominant];
+              return (
+                <span key={comp} className={`text-[10px] px-2 py-0.5 rounded border font-mono ${cfg.color}`}>
+                  {COMP_LABELS[comp] ?? comp}: {parts.join(" · ")}
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </CardHeader>
+
+      <CardContent>
+        {isLoading ? (
+          <div className="text-center text-muted-foreground text-xs py-6">Loading degradation log…</div>
+        ) : events.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+            <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+            <p className="text-xs">No degradation events recorded in the last {hours}h</p>
+            <p className="text-[10px] opacity-60">Events are captured automatically every 2 minutes by the auto-heal monitor</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-[480px] overflow-y-auto pr-1">
+            {events.map(ev => (
+              <DegradationEventCard key={ev.id} ev={ev} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -4588,6 +4773,13 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }}>
           <SafeSection label="LLM Learning Journal">
             <LLMJournalSection />
+          </SafeSection>
+        </motion.div>
+
+        {/* SYSTEM DEGRADATION LOG — full width */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.38 }}>
+          <SafeSection label="System Degradation Log">
+            <SystemDegradationSection />
           </SafeSection>
         </motion.div>
 

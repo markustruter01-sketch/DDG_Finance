@@ -94,7 +94,7 @@ def get_crypto_fallback() -> "CryptoAnalysisOutput | None":
         )
         return None
     try:
-        from analysis.models import CryptoAnalysisOutput
+        from analysis.schemas import CryptoAnalysisOutput
         return CryptoAnalysisOutput.model_validate(_last_crypto_cache["output"])
     except Exception as exc:
         logger.warning(f"Crypto cache | Failed to deserialise: {exc}")

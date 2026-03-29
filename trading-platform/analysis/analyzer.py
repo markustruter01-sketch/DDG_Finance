@@ -240,16 +240,17 @@ async def run_analysis_cycle(
             output = process_regime_llm_output(raw_json)
     else:
         from analysis.groq_budget import budget as _budget
-        if not _budget.can_call_regime():
+
+        if not crypto_only and not _budget.can_call_regime():
             cached = get_regime_fallback()
             if cached is not None:
                 logger.info(
-                    "Groq budget | Regime call throttled — returning cached regime "
+                    "Groq budget | Full-regime call throttled — returning cached regime "
                     f"(age={round((time.time() - _last_regime_cache.get('saved_at', 0)) / 60)}min)"
                 )
                 return cached
             logger.warning(
-                "Groq budget | Regime call throttled but no cache available — "
+                "Groq budget | Full-regime call throttled but no cache available — "
                 "proceeding with LLM call to avoid empty allocation"
             )
 

@@ -1509,12 +1509,13 @@ Current open positions:
         loop = asyncio.get_event_loop()
         commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
         _groq_budget.consume(tokens_used)
-        _groq_budget.record_commentary_call("alpaca")
+        if not force:
+            _groq_budget.record_commentary_call("alpaca")
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
         _persist_commentary_caches()
-        logger.info("AI commentary regenerated successfully")
+        logger.info(f"AI commentary regenerated successfully (force={force}, tokens={tokens_used})")
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
         logger.error(f"AI commentary generation failed: {exc}")
@@ -2006,12 +2007,13 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         loop = asyncio.get_event_loop()
         commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
         _groq_budget.consume(tokens_used)
-        _groq_budget.record_commentary_call("kraken")
+        if not force:
+            _groq_budget.record_commentary_call("kraken")
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
         _kraken_commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
         _persist_commentary_caches()
-        logger.info("Kraken AI commentary regenerated successfully")
+        logger.info(f"Kraken AI commentary regenerated successfully (force={force}, tokens={tokens_used})")
         return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
         logger.error(f"Kraken AI commentary generation failed: {exc}")

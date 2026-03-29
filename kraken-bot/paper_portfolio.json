@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 19854.56224,
+  "cash_usd": 19948.166770283446,
   "positions": {
     "SOL/USD": {
       "side": "long",
@@ -52,16 +52,29 @@
       "entry_fee": 25.9797,
       "order_id": "PAPER-AVAXUSD-1774739451"
     },
-    "BTC/USD": {
+    "ATOM/USD": {
       "side": "long",
-      "entry_price": 66250.2,
-      "size_usd": 9968.8,
-      "size_units": 0.15047199857509863,
-      "entry_time": "2026-03-28T23:11:56.524595+00:00",
-      "best_price": 66250.2,
-      "entry_fee": 25.9189,
-      "order_id": "PAPER-BTCUSD-1774739516"
+      "entry_price": 1.6636,
+      "size_usd": 9864.93,
+      "size_units": 5929.868958884347,
+      "entry_time": "2026-03-29T01:09:15.406125+00:00",
+      "best_price": 1.6636,
+      "entry_fee": 25.6488,
+      "order_id": "PAPER-ATOMUSD-1774746555"
     }
   },
-  "all_trades": []
+  "all_trades": [
+    {
+      "symbol": "BTC/USD",
+      "side": "long",
+      "entry_price": 66250.2,
+      "exit_price": 66525.4,
+      "pnl_pct": 0.42,
+      "pnl_usd": -10.54,
+      "fees_usd": 51.9454,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-29T01:07:54.797344+00:00",
+      "paper": true
+    }
+  ]
 }

@@ -116,19 +116,41 @@ _tier_prices: dict[str, dict] = {         # tier → {"4w": price_id, "annual": 
 }
 
 
+def _meta(obj) -> dict:
+    """Safely extract metadata from a Stripe object as a plain Python dict.
+
+    Stripe v15 returns metadata as a StripeObject, not a plain dict.
+    The StripeObject supports bracket access but not dict(). Use to_dict()
+    on the nested metadata field to get a real Python dict.
+    """
+    try:
+        md = obj.metadata
+        if md is None:
+            return {}
+        # StripeObject has .to_dict() → plain Python dict
+        if hasattr(md, "to_dict"):
+            return md.to_dict()
+        # Fallback: already a plain dict
+        return dict(md)
+    except Exception:
+        return {}
+
+
 def _reload_price_ids() -> None:
     """Scan active Stripe products and cache price IDs by tier+cycle."""
     if not _STRIPE_OK or not STRIPE_SECRET_KEY:
         return
     try:
-        products = _stripe_lib.Product.list(active=True, limit=20)
-        for prod in products.auto_paging_iter():
-            tier = prod.metadata.get("algoedge_tier")
+        products = _stripe_lib.Product.list(active=True, limit=50)
+        for prod in products:
+            meta = _meta(prod)
+            tier = meta.get("algoedge_tier")
             if tier not in _tier_prices:
                 continue
             prices = _stripe_lib.Price.list(product=prod.id, active=True)
-            for price in prices.auto_paging_iter():
-                cycle = price.metadata.get("billing_cycle")   # "4w" or "annual"
+            for price in prices:
+                pmeta = _meta(price)
+                cycle = pmeta.get("billing_cycle")   # "4w" or "annual"
                 if cycle in ("4w", "annual"):
                     _tier_prices[tier][cycle] = price.id
                     _price_map[price.id] = {"tier": tier, "cycle": cycle}

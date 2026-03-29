@@ -36,15 +36,15 @@ BASE_PATH = "/saas/"
 [[services]]
 name = "saas-api"
 paths = [ "/saas-api" ]
-localPort = 8000
+localPort = 8099
 
 [services.development]
-run = "cd /home/runner/workspace/trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+run = "cd /home/runner/workspace/trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8099 --reload"
 
 [services.production]
 
 [services.production.run]
-args = ["bash", "-c", "cd trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1"]
+args = ["bash", "-c", "cd trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8099 --workers 1"]
 
 [services.production.run.env]
 API_PREFIX = "/trading-api"
@@ -53,5 +53,5 @@ API_PREFIX = "/trading-api"
 path = "/saas-api/health"
 
 [services.env]
-PORT = "8000"
+PORT = "8099"
 API_PREFIX = "/trading-api"

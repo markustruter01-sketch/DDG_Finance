@@ -45,6 +45,12 @@ class Settings(BaseSettings):
         description="Ticker used to fill empty/low-conviction slots",
     )
 
+    # --- Groq Fallback ---
+    regime_fallback_max_age_hours: float = Field(
+        default=4.0,
+        description="How many hours a cached regime analysis remains valid for pipeline fallback when Groq is rate-limited",
+    )
+
     # --- Throttling ---
     max_retries: int = Field(
         default=5,

@@ -46,7 +46,10 @@ from portfolio.allocator import process_regime_llm_output, process_crypto_llm_ou
 # ══════════════════════════════════════════════════════════════════════════════
 
 _REGIME_CACHE_FILE = Path(__file__).parent.parent / "data" / "last_regime_cache.json"
-REGIME_FALLBACK_MAX_AGE_SECONDS = 4 * 3600  # reject stale cache older than 4 hours
+# Max age is loaded from settings so it can be tuned via env var without code edits.
+# Default: 4 hours (see config/settings.py: regime_fallback_max_age_hours).
+from config.settings import settings as _settings
+REGIME_FALLBACK_MAX_AGE_SECONDS = int(_settings.regime_fallback_max_age_hours * 3600)
 
 # In-memory cache dict: {"regime": str, "saved_at": float, "output": {...}}
 _last_regime_cache: dict | None = None

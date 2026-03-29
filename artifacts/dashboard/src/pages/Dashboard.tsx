@@ -822,7 +822,7 @@ function CombinedPortfolioSummary() {
             {/* Paper / Live Equity */}
             <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/20 transition-all duration-500 relative overflow-hidden">
               <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
                   {krakenPaper ? "Paper Equity" : "Live Equity"}
                 </div>
@@ -853,7 +853,7 @@ function CombinedPortfolioSummary() {
 
             {/* Deployed Capital */}
             <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/15 transition-all duration-500">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="text-xs font-medium text-muted-foreground mb-1.5">Deployed</div>
                 {krakenReady ? (
                   <>
@@ -882,7 +882,7 @@ function CombinedPortfolioSummary() {
 
             {/* Win Rate */}
             <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/15 transition-all duration-500">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">
                   Win Rate
                   <Trophy className="h-3 w-3 text-yellow-400/50" />
@@ -1793,6 +1793,7 @@ function DavyJonesBotSection() {
   const { data: krakenCommentary, isLoading: commentaryLoading } = useKrakenCommentary();
   const { mutate: refreshKrakenCommentary, isPending: isRefreshingKraken } = useRefreshKrakenCommentary();
   const [showModal, setShowModal] = useState(false);
+  const isMobile = useIsMobile();
 
   const isRunning  = data?.status === "running";
   const isCB       = data?.status === "paused_circuit_breaker";
@@ -1927,58 +1928,113 @@ function DavyJonesBotSection() {
                   </button>
                 </div>
               </div>
-              <div className="divide-y divide-white/[0.03]">
-                {displayRows.map((sig: any) => {
-                  const hasData = sig.rsi != null;
-                  const rsiColor = !hasData ? "#374151" : sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
-                  const zColor = !hasData ? "#374151" : sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
-                  const isPosHeld = sig.has_position && sig.signal_type === "hold";
-                  return (
-                    <div key={sig.symbol} className={cn("px-3 py-2 flex items-center gap-3", !hasData && "opacity-40")}>
-                      <span className={cn("text-xs font-bold w-12 shrink-0", hasData ? "text-white" : "text-slate-600")}>{sig.symbol.replace("/USD","")}</span>
-                      {/* RSI bar */}
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
-                        <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                          {hasData && <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />}
+              {isMobile ? (
+                /* ── Mobile: 2-column card grid ── */
+                <div className="grid grid-cols-2 gap-2 p-2">
+                  {displayRows.map((sig: any) => {
+                    const hasData = sig.rsi != null;
+                    const rsiColor = !hasData ? "#374151" : sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                    const zColor = !hasData ? "#374151" : sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                    const isPosHeld = sig.has_position && sig.signal_type === "hold";
+                    const pillClass = !hasData ? "text-slate-700 bg-slate-800/30 border-slate-700/20" :
+                      isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
+                      sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
+                      sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                      "text-slate-500 bg-slate-800/50 border-slate-700/40";
+                    const pillText = !hasData ? "…" :
+                      isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
+                      sig.signal_type === "watching" ? "WATCH" :
+                      sig.signal_type.includes("entered") ? "IN" :
+                      sig.signal_type === "slots_full" ? "FULL" : "—";
+                    return (
+                      <div key={sig.symbol} className={cn("rounded-lg border border-white/[0.06] bg-slate-900/60 p-2.5", !hasData && "opacity-40")}>
+                        {/* Symbol + pill row */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={cn("text-sm font-bold font-mono", hasData ? "text-white" : "text-slate-600")}>
+                            {sig.symbol.replace("/USD", "")}
+                          </span>
+                          <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border", pillClass)}>{pillText}</span>
                         </div>
-                        <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{hasData ? sig.rsi : "—"}</span>
+                        {/* RSI row */}
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                            {hasData && <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />}
+                          </div>
+                          <span className="text-[9px] font-mono w-6 text-right" style={{ color: rsiColor }}>{hasData ? sig.rsi : "—"}</span>
+                        </div>
+                        {/* Z-score row */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-muted-foreground/60 w-6">Z</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
+                            <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                            {hasData && sig.z_score < 0 && (
+                              <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
+                            )}
+                            {hasData && sig.z_score >= 0 && (
+                              <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-mono w-9 text-right" style={{ color: zColor }}>
+                            {hasData ? `${sig.z_score >= 0 ? "+" : ""}${sig.z_score}` : "—"}
+                          </span>
+                        </div>
                       </div>
-                      {/* Z-score bar */}
-                      <div className="flex items-center gap-1.5 flex-1">
-                        <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
-                        <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
-                          <div className="absolute left-1/2 w-px h-full bg-slate-600" />
-                          {hasData && sig.z_score < 0 && (
-                            <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
-                          )}
-                          {hasData && sig.z_score >= 0 && (
-                            <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
-                          )}
+                    );
+                  })}
+                </div>
+              ) : (
+                /* ── Desktop: compact divide-y rows ── */
+                <div className="divide-y divide-white/[0.03]">
+                  {displayRows.map((sig: any) => {
+                    const hasData = sig.rsi != null;
+                    const rsiColor = !hasData ? "#374151" : sig.rsi < 35 ? "#ef4444" : sig.rsi < 45 ? "#f97316" : sig.rsi > 65 ? "#22c55e" : sig.rsi > 55 ? "#22d3ee" : "#64748b";
+                    const zColor = !hasData ? "#374151" : sig.z_score < -0.6 ? "#f97316" : sig.z_score > 0.6 ? "#22d3ee" : "#64748b";
+                    const isPosHeld = sig.has_position && sig.signal_type === "hold";
+                    return (
+                      <div key={sig.symbol} className={cn("px-3 py-2 flex items-center gap-3", !hasData && "opacity-40")}>
+                        <span className={cn("text-xs font-bold w-12 shrink-0", hasData ? "text-white" : "text-slate-600")}>{sig.symbol.replace("/USD","")}</span>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                            {hasData && <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(sig.rsi,100)}%`, backgroundColor: rsiColor }} />}
+                          </div>
+                          <span className="text-[9px] font-mono w-7 text-right" style={{ color: rsiColor }}>{hasData ? sig.rsi : "—"}</span>
                         </div>
-                        <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>
-                          {hasData ? `${sig.z_score >= 0 ? "+" : ""}${sig.z_score}` : "—"}
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <span className="text-[9px] text-muted-foreground/60 w-4">Z</span>
+                          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
+                            <div className="absolute left-1/2 w-px h-full bg-slate-600" />
+                            {hasData && sig.z_score < 0 && (
+                              <div className="absolute right-1/2 h-full rounded-l-full" style={{ width: `${(Math.min(Math.abs(sig.z_score),2)/2)*50}%`, backgroundColor: "#f97316" }} />
+                            )}
+                            {hasData && sig.z_score >= 0 && (
+                              <div className="absolute left-1/2 h-full rounded-r-full" style={{ width: `${(Math.min(sig.z_score,2)/2)*50}%`, backgroundColor: "#22d3ee" }} />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-mono w-10 text-right" style={{ color: zColor }}>
+                            {hasData ? `${sig.z_score >= 0 ? "+" : ""}${sig.z_score}` : "—"}
+                          </span>
+                        </div>
+                        <span className={cn(
+                          "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
+                          !hasData ? "text-slate-700 bg-slate-800/30 border-slate-700/20" :
+                          isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
+                          sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
+                          sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
+                          "text-slate-500 bg-slate-800/50 border-slate-700/40"
+                        )}>
+                          {!hasData ? "…" :
+                           isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
+                           sig.signal_type === "watching" ? "WATCH" :
+                           sig.signal_type.includes("entered") ? "IN" :
+                           sig.signal_type === "slots_full" ? "FULL" : "—"}
                         </span>
                       </div>
-                      {/* Status pill */}
-                      <span className={cn(
-                        "text-[8px] font-bold px-1.5 py-0.5 rounded-full border shrink-0",
-                        !hasData ? "text-slate-700 bg-slate-800/30 border-slate-700/20" :
-                        isPosHeld ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" :
-                        sig.signal_type.includes("long") ? "text-green-400 bg-green-500/10 border-green-500/30" :
-                        sig.signal_type.includes("short") ? "text-red-400 bg-red-500/10 border-red-500/20" :
-                        "text-slate-500 bg-slate-800/50 border-slate-700/40"
-                      )}>
-                        {!hasData ? "…" :
-                         isPosHeld ? `HOLD ${sig.pnl_pct >= 0 ? "+" : ""}${sig.pnl_pct?.toFixed(1)}%` :
-                         sig.signal_type === "watching" ? "WATCH" :
-                         sig.signal_type.includes("entered") ? "IN" :
-                         sig.signal_type === "slots_full" ? "FULL" : "—"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })()}
@@ -5015,40 +5071,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* ═══ KRAKEN TAB — Kraken crypto bot performance history ═══ */}
-        <div className={cn("relative", mobileHide(['kraken']))}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/30 text-[10px] text-cyan-400/70 font-semibold uppercase tracking-widest">
-              <span>⚓</span>
-              <span className="hidden sm:inline">Kraken Crypto Bot — Separate Exchange · Separate Capital</span>
-              <span className="sm:hidden">Kraken Crypto Bot</span>
-            </div>
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
-          </div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
-            <SafeSection label="Kraken Crypto Performance">
-              <KrakenPerformanceSection />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ═══ ALPACA TAB — stock performance + attribution ═══ */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-6", mobileHide(['alpaca']))}>
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <SafeSection label="Alpaca Stock Performance">
-              <PerformanceSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <SafeSection label="P&L Attribution">
-              <AttributionPanel />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ═══ MORE TAB — tools, analytics, system health ═══ */}
-
+        {/* ═══ ECONOMIC CALENDAR (original desktop position — before risk section) ═══ */}
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className={mobileHide(['more'])}
@@ -5084,6 +5107,38 @@ export default function Dashboard() {
             <LiveEquityCurveSection />
           </SafeSection>
         </motion.div>
+
+        {/* ═══ ALPACA TAB — stock performance + attribution (original desktop position) ═══ */}
+        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-6", mobileHide(['alpaca']))}>
+          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+            <SafeSection label="Alpaca Stock Performance">
+              <PerformanceSection />
+            </SafeSection>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <SafeSection label="P&L Attribution">
+              <AttributionPanel />
+            </SafeSection>
+          </motion.div>
+        </div>
+
+        {/* ═══ KRAKEN TAB — Kraken performance (original desktop position, after Alpaca performance) ═══ */}
+        <div className={cn("relative", mobileHide(['kraken']))}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/30 text-[10px] text-cyan-400/70 font-semibold uppercase tracking-widest">
+              <span>⚓</span>
+              <span className="hidden sm:inline">Kraken Crypto Bot — Separate Exchange · Separate Capital</span>
+              <span className="sm:hidden">Kraken Crypto Bot</span>
+            </div>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+          </div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
+            <SafeSection label="Kraken Crypto Performance">
+              <KrakenPerformanceSection />
+            </SafeSection>
+          </motion.div>
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}

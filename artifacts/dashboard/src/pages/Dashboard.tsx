@@ -1805,7 +1805,6 @@ function AIBrainSection() {
           trades={(winsData?.wins ?? []).map(w => ({ symbol: w.ticker, pnl_pct: w.pnl_percentage, pnl_usd: null }))}
           theme="degen"
           bigWinUsd={200}
-          bigWinPctFallback={5}
           bigWinLabel="🦍 APE MODE"
           panelLabel="Hit List"
         />

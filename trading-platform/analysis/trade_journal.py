@@ -216,8 +216,7 @@ def get_recent_wins(limit: int = 5) -> list[dict]:
 def get_recent_trades_combined(limit: int = 20) -> list[dict]:
     """Last N closed trades (wins + losses combined) ordered by date DESC.
     Used by the /journal/recent endpoint for streak computation and Kill Board."""
-    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status",
-            "original_thesis")
+    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status")
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -248,8 +247,8 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
             "trade_id":    r["trade_id"],
             "symbol":      r["ticker"],
             "pnl_pct":     r["pnl_percentage"],
-            "pnl_usd":     None,          # not stored in Alpaca journal
-            "exit_reason": r.get("original_thesis", ""),
+            "pnl_usd":     None,          # not stored in Alpaca journal (no position size)
+            "exit_reason": None,          # not stored in Alpaca journal schema
             "closed_at":   str(r["date"]),
             "status":      r["status"],
         })

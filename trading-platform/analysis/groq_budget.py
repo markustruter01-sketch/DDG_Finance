@@ -64,13 +64,16 @@ class GroqBudget:
             self._maybe_reset()
             self._tokens_used += tokens
             remaining = max(0, settings.groq_daily_token_budget - self._tokens_used)
-            pct = self._tokens_used / settings.groq_daily_token_budget * 100
+            pct = (
+                self._tokens_used / settings.groq_daily_token_budget * 100
+                if settings.groq_daily_token_budget > 0 else 0.0
+            )
             logger.debug(
                 f"Groq budget | +{tokens} tokens consumed — "
                 f"used={self._tokens_used}/{settings.groq_daily_token_budget} "
                 f"({pct:.1f}%) remaining={remaining}"
             )
-            if pct >= 90:
+            if settings.groq_daily_token_budget > 0 and pct >= 90:
                 logger.warning(
                     f"Groq budget | ⚠️  {pct:.1f}% of daily token budget consumed"
                 )
@@ -242,6 +245,7 @@ class GroqBudget:
                 "pct_used":                pct_used,
                 "regime_calls_today":      self._regime_calls,
                 "crypto_calls_today":      self._crypto_calls,
+                "analysis_calls_today":    self._regime_calls + self._crypto_calls,
                 "commentary_calls_today":  dict(self._commentary_calls),
                 "regime_interval_min":     settings.groq_min_regime_interval_minutes,
                 "commentary_daily_cap":    settings.groq_commentary_daily_cap,

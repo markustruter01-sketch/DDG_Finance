@@ -719,17 +719,28 @@ def run_cycle() -> None:
     # ── Step 4: Summarise signals + generate thinking text ────────────────────
     latest_signals = cycle_signals
 
-    active_holds   = [s for s in cycle_signals if s["signal_type"] == "hold"]
-    new_longs      = [s for s in cycle_signals if s["signal_type"] == "long_entered"]
-    new_shorts     = [s for s in cycle_signals if s["signal_type"] == "short_entered"]
-    watching       = [s for s in cycle_signals if s["signal_type"] == "watching"]
-    oversold_near  = [s for s in watching if s["rsi"] < RSI_OVERSOLD + 10 and s["z_score"] < 0]
-    overbought_near= [s for s in watching if s["rsi"] > RSI_OVERBOUGHT - 10 and s["z_score"] > 0]
+    active_holds      = [s for s in cycle_signals if s["signal_type"] == "hold"]
+    min_profit_holds  = [s for s in cycle_signals if s["signal_type"] == "hold_min_profit"]
+    new_longs         = [s for s in cycle_signals if s["signal_type"] == "long_entered"]
+    new_shorts        = [s for s in cycle_signals if s["signal_type"] == "short_entered"]
+    watching          = [s for s in cycle_signals if s["signal_type"] == "watching"]
+    oversold_near     = [s for s in watching if s["rsi"] < RSI_OVERSOLD + 10 and s["z_score"] < 0]
+    overbought_near   = [s for s in watching if s["rsi"] > RSI_OVERBOUGHT - 10 and s["z_score"] > 0]
 
     if new_longs or new_shorts:
         entered = new_longs + new_shorts
         parts   = [f"{'LONG' if e['signal_type']=='long_entered' else 'SHORT'} {e['symbol'].replace('/USD','')} (RSI {e['rsi']}, Z={e['z_score']:+.2f})" for e in entered]
         thinking_text = "⚡ Entering: " + ", ".join(parts) + "."
+    elif min_profit_holds:
+        # Mean-reversion Z-score reverted but profit is below the fee break-even gate.
+        # This is the most actionable state — surface it prominently.
+        parts = [
+            f"{h['side'].upper()} {h['symbol'].replace('/USD','')} "
+            f"{h.get('pnl_pct', 0):+.2f}% (need {MIN_NET_PROFIT_PCT*100:.1f}%) "
+            f"· Z={h['z_score']:+.2f}"
+            for h in min_profit_holds
+        ]
+        thinking_text = "⏳ Holding — awaiting min profit threshold: " + " · ".join(parts)
     elif active_holds:
         hold_parts = [f"{h['side'].upper()} {h['symbol'].replace('/USD','')} {h.get('pnl_pct', 0):+.2f}% · Z={h['z_score']:+.2f}" for h in active_holds]
         thinking_text = "⚓ " + " · ".join(hold_parts)

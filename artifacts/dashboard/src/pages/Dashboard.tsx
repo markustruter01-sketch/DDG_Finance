@@ -4159,7 +4159,7 @@ function PositionChangeNotifier() {
     );
     // Build current Kraken position set
     const curKraken = new Set<string>(
-      (krakenData?.open_positions ?? []).map((p: any) => p.symbol)
+      (krakenData?.open_positions ?? []).map((p) => p.symbol)
     );
 
     if (!initialized.current) {

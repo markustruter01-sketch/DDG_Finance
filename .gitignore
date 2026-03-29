@@ -50,3 +50,10 @@ Thumbs.db
 
 # Generated market-data snapshots (re-generate with python3 kraken-bot/fetch_data.py)
 kraken_training_data.csv
+
+# Runtime state files — regenerated automatically, should not be tracked
+kraken-bot/status.json
+kraken-bot/paper_portfolio.json
+trading-platform/data/commentary_cache.json
+trading-platform/data/last_regime_cache.json
+trading-platform/data/kraken_imported_trades.json

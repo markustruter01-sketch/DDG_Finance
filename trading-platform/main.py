@@ -957,13 +957,51 @@ async def journal() -> dict:
     return {"summary": summary, "trades": trades}
 
 
+def _load_kraken_journal_trades() -> list[dict]:
+    """Load and normalise Kraken all_trades from paper_portfolio.json into the
+    same dict shape used by the Alpaca trades table so they can be merged into
+    journal endpoints."""
+    try:
+        import json as _j
+        from pathlib import Path as _P
+        _pf_path = _P("../kraken-bot/paper_portfolio.json")
+        if not _pf_path.exists():
+            return []
+        _pf = _j.loads(_pf_path.read_text())
+        trades = []
+        for idx, t in enumerate(_pf.get("all_trades", [])):
+            if t.get("pnl_pct") is None:
+                continue
+            trades.append({
+                "trade_id": f"kraken-{idx}",
+                "date": (t.get("closed_at") or "")[:10],
+                "ticker": t.get("symbol", "?"),
+                "asset_class": "crypto",
+                "conviction_score": None,
+                "original_thesis": f"Kraken {t.get('side','?')} {t.get('symbol','?')} — exit: {t.get('reason','?')}",
+                "pnl_percentage": float(t["pnl_pct"]),
+                "intended_price": None,
+                "actual_fill_price": None,
+                "slippage_pct": None,
+                "source": "kraken",
+            })
+        return trades
+    except Exception as _e:
+        logger.warning(f"Kraken journal load failed: {_e}")
+        return []
+
+
 @router.get("/journal/losses", tags=["Journal"])
 async def journal_losses(n: int = 5) -> dict:
     """
     The N most recent losing trades — what the RAG loop feeds into the
-    next Groq system prompt as failure examples.
+    next Groq system prompt as failure examples. Includes both Alpaca and Kraken.
     """
-    losses = get_recent_losses(limit=n)
+    alpaca_losses = get_recent_losses(limit=n * 4)
+    kraken_all = _load_kraken_journal_trades()
+    kraken_losses = [t for t in kraken_all if t["pnl_percentage"] < 0]
+    combined = sorted(alpaca_losses + kraken_losses, key=lambda x: x["pnl_percentage"])
+    losses = combined[:n]
     return {"count": len(losses), "losses": losses}
 
 
@@ -971,9 +1009,13 @@ async def journal_losses(n: int = 5) -> dict:
 async def journal_wins(n: int = 5) -> dict:
     """
     The N most recent winning trades — what the RAG loop feeds into the
-    next Groq system prompt as positive reinforcement examples.
+    next Groq system prompt as positive reinforcement examples. Includes both Alpaca and Kraken.
     """
-    wins = get_recent_wins(limit=n)
+    alpaca_wins = get_recent_wins(limit=n * 4)
+    kraken_all = _load_kraken_journal_trades()
+    kraken_wins = [t for t in kraken_all if t["pnl_percentage"] > 0]
+    combined = sorted(alpaca_wins + kraken_wins, key=lambda x: x["pnl_percentage"], reverse=True)
+    wins = combined[:n]
     return {"count": len(wins), "wins": wins}
 
 
@@ -2220,6 +2262,10 @@ async def risk_metrics() -> dict:
                     )
                     _rows = _cur.fetchall()
             trade_returns = [float(r[0]) / 100.0 for r in _rows if r[0] is not None]
+            # Also add Kraken trade returns so risk metrics combine both bots
+            for _kt in _load_kraken_journal_trades():
+                if _kt.get("pnl_percentage") is not None:
+                    trade_returns.append(float(_kt["pnl_percentage"]) / 100.0)
             if len(trade_returns) >= 2:
                 arr = np.array(trade_returns)
                 mean_ret = float(np.mean(arr))

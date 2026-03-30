@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 69022.6770879534,
+  "cash_usd": 59141.2119039534,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -31,6 +31,16 @@
       "best_price": 2031.77,
       "entry_fee": 25.5865,
       "order_id": "PAPER-ETHUSD-1774840800"
+    },
+    "DOT/USD": {
+      "side": "long",
+      "entry_price": 1.2454,
+      "size_usd": 9855.84,
+      "size_units": 7913.794764734222,
+      "entry_time": "2026-03-30T18:54:00.259773+00:00",
+      "best_price": 1.2454,
+      "entry_fee": 25.6252,
+      "order_id": "PAPER-DOTUSD-1774896840"
     }
   },
   "all_trades": [

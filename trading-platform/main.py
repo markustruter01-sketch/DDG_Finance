@@ -476,12 +476,22 @@ async def system_health_architecture() -> dict:
             _mkt_open_h = is_market_open()
         except Exception:
             pass
+        _groq_exhausted_h = False
+        try:
+            from analysis.groq_budget import budget as _gb_h
+            _groq_exhausted_h = _gb_h.budget_exhausted()
+        except Exception:
+            pass
         if job_count < EXPECTED_JOB_COUNT:
             level = "red"          # Missing jobs = always critical
         elif last_status in ("error", "execution_failed"):
             level = "red"          # Hard failures = always critical
         elif last_status == "analysis_failed":
-            level = "red" if _mkt_open_h else "yellow"  # Off-hours = expected
+            # If Groq budget is exhausted, analysis_failed is expected even during market hours
+            if _groq_exhausted_h:
+                level = "yellow"   # Budget exhausted — will auto-recover at midnight UTC
+            else:
+                level = "red" if _mkt_open_h else "yellow"
         else:
             level = "green"
         nodes["platform_core"] = {
@@ -552,9 +562,18 @@ async def system_health_architecture() -> dict:
         cached_count = sum(1 for c in caches if c.get("cached"))
         ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
         oldest = max(ages) if ages else None
-        if oldest is not None and oldest > 600:
+        # Thresholds account for the 15-min (900s) intraday cycle:
+        # red  = >1800s (missed 2 full cycles — something is broken)
+        # yellow = >900s (one full cycle stale — expected off-hours or between cycles)
+        # During off-hours the pipeline is always stale; cap at yellow, not red.
+        _mkt_open_dp = False
+        try:
+            _mkt_open_dp = is_market_open()
+        except Exception:
+            pass
+        if oldest is not None and oldest > 1800 and _mkt_open_dp:
             level = "red"
-        elif oldest is not None and oldest > 60:
+        elif oldest is not None and oldest > 900:
             level = "yellow"
         elif cached_count == 0:
             level = "yellow"
@@ -577,20 +596,35 @@ async def system_health_architecture() -> dict:
         acct_dict = _acct_cache if _acct_cache is not None else get_account()
         equity_val = float(acct_dict["equity"])
         total_market = sum(float(p["market_value"]) for p in positions) if positions else 0
-        max_single = max((float(p["market_value"]) for p in positions), default=0)
-        max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
-        if max_pct > 15.0:
-            level = "red"
-        elif max_pct > 12.0:
-            level = "yellow"
-        else:
+        # SGOV = AI-designated cash-equivalent / safe-haven (can be 100% of portfolio by design)
+        # JEPQ = profit-sweep DRIP vault (exempt from position-size limits)
+        # Neither counts toward the 15% active-position cap.
+        _EXEMPT_SYMBOLS = {"SGOV", "JEPQ"}
+        active_positions = [p for p in positions if p.get("symbol", "") not in _EXEMPT_SYMBOLS]
+        max_single = max((float(p["market_value"]) for p in active_positions), default=0)
+        # Guard: if equity is trivially small (<$100) or there are no active positions,
+        # percentage math is meaningless — report green and skip the check.
+        if len(active_positions) == 0 or equity_val < 100:
             level = "green"
+            max_pct = 0.0
+        else:
+            max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
+            if max_pct > 15.0:
+                level = "red"
+            elif max_pct > 12.0:
+                level = "yellow"
+            else:
+                level = "green"
+        _exempt_count = len(positions) - len(active_positions)
+        _detail_parts = [f"Max active position: {max_pct:.1f}%", f"{len(active_positions)} active holding(s)"]
+        if _exempt_count:
+            _detail_parts.append(f"{_exempt_count} exempt (SGOV/JEPQ vault)")
         nodes["equity_manager"] = {
             "label": "Equity Manager (15% Enforcer)",
             "level": level,
             "latency_ms": None,
             "data_age_s": 0,
-            "detail": f"Max position: {max_pct:.1f}% · {len(positions)} holdings",
+            "detail": " · ".join(_detail_parts),
         }
     except Exception as exc:
         nodes["equity_manager"] = {"label": "Equity Manager (15% Enforcer)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
@@ -645,7 +679,12 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                     kst = _json.loads(sf.read_text())
                     kst["heal_requested"] = True
                     kst["heal_requested_at"] = time.time()
-                    sf.write_text(_json.dumps(kst, indent=2))
+                    # Atomic write: write to a temp file then rename to avoid
+                    # corrupting status.json while the Kraken bot is reading it.
+                    import os as _os
+                    _tmp = str(sf) + ".tmp"
+                    _Path(_tmp).write_text(_json.dumps(kst, indent=2))
+                    _os.replace(_tmp, str(sf))
                     steps.append(f"Heal flag written to status.json (cycle #{kst.get('cycle_count', 0)})")
                 except Exception as exc:
                     steps.append(f"Status write warning: {exc}")
@@ -731,9 +770,19 @@ async def _auto_heal_check() -> None:
             _severity = "critical"
         elif last_status == "analysis_failed":
             # analysis_failed off-hours is expected (Alpaca/yfinance unavailable);
-            # only escalate to CRITICAL when the market is actually open.
+            # only escalate to CRITICAL when the market is open AND Groq budget is not exhausted.
+            # If the budget is exhausted, analysis_failed is expected — treat as warning.
+            _groq_exhausted_ah = False
+            try:
+                from analysis.groq_budget import budget as _gb_ah
+                _groq_exhausted_ah = _gb_ah.budget_exhausted()
+            except Exception:
+                pass
             _degraded = True
-            _severity = "critical" if _mkt_open else "warning"
+            if _groq_exhausted_ah or not _mkt_open:
+                _severity = "warning"   # expected: budget exhausted or market closed
+            else:
+                _severity = "critical"  # genuine failure during market hours
 
         if _degraded:
             logger.warning(f"[AUTO-HEAL] platform_core {_severity}: {len(jobs)} jobs, last_status={last_status}, market_open={_mkt_open}")
@@ -750,19 +799,27 @@ async def _auto_heal_check() -> None:
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] platform_core check skipped: {exc}")
 
-    # ── 2. Data pipeline — stale feeds > 10 min (600s) ─────────────────────
+    # ── 2. Data pipeline — stale feeds > 20 min (1200s) ─────────────────────
+    # Threshold is 1200s (2x the 15-min intraday cycle) so normal between-cycle
+    # staleness doesn't generate noise.  Off-hours staleness is expected and
+    # is only flagged if the market is open and data is >20 min stale.
     try:
         from data.cache import get_cache_stats as _gcs
         caches = _gcs()
         ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
         max_age = max(ages) if ages else 0
-        if ages and max_age > 600:
+        _mkt_open_dp2 = False
+        try:
+            _mkt_open_dp2 = is_market_open()
+        except Exception:
+            pass
+        if ages and max_age > 1200 and _mkt_open_dp2:
             logger.warning(f"[AUTO-HEAL] data_pipeline stale: max_age={max_age:.0f}s")
             record_degradation(
                 component="data_pipeline",
                 severity="warning",
                 error_type="stale",
-                message=f"Data pipeline cache stale: oldest feed is {max_age:.0f}s old (threshold 600s)",
+                message=f"Data pipeline cache stale: oldest feed is {max_age:.0f}s old (threshold 1200s)",
             )
             await _remediate_component("data_pipeline", triggered_by="auto_heal")
         else:

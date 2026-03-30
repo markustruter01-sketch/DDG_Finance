@@ -1,0 +1,53 @@
+============================================================
+SYSTEM DEGRADATION REPORT — 2026-03-30 18:51 UTC
+Window: last 48h  |  Total events: 50
+============================================================
+
+COMPONENT SUMMARY
+----------------------------------------
+  data_pipeline        warning×184
+  http                 error×15
+  kraken_api           warning×288
+  platform_core        critical×71 | warning×10
+
+RECENT EVENTS (newest first)
+----------------------------------------
+[2026-03-30 18:47:01] [CRITICAL] platform_core / analysis_failed [RESOLVED]
+  Platform core degraded: 8/8 scheduler jobs, last_status=analysis_failed
+
+[2026-03-30 18:43:00] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 719s old (threshold 600s)
+
+[2026-03-30 18:43:00] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 718s old (threshold 600s)
+
+[2026-03-30 18:27:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 660s old (threshold 600s)
+
+[2026-03-30 18:27:00] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 659s old (threshold 600s)
+
+[2026-03-30 18:13:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 702s old (threshold 600s)
+
+[2026-03-30 17:57:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 658s old (threshold 600s)
+
+[2026-03-30 17:13:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 713s old (threshold 600s)
+
+[2026-03-30 16:43:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 716s old (threshold 600s)
+
+[2026-03-30 16:43:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 717s old (threshold 600s)
+
+[2026-03-30 16:13:00] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 714s old (threshold 600s)
+
+[2026-03-30 14:43:01] [WARNING] data_pipeline / stale [RESOLVED]
+  Data pipeline cache stale: oldest feed is 720s old (threshold 600s)
+
+============================================================
+END OF REPORT — paste this to the AI for diagnosis
+============================================================

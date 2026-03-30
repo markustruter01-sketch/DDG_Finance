@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 68868.77886315701,
+  "cash_usd": 59002.23236715702,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -31,6 +31,16 @@
       "best_price": 8.84,
       "entry_fee": 25.5998,
       "order_id": "PAPER-AVAXUSD-1774838970"
+    },
+    "ETH/USD": {
+      "side": "short",
+      "entry_price": 2031.77,
+      "size_usd": 9840.96,
+      "size_units": 4.843540361359799,
+      "entry_time": "2026-03-30T03:20:00.464180+00:00",
+      "best_price": 2031.77,
+      "entry_fee": 25.5865,
+      "order_id": "PAPER-ETHUSD-1774840800"
     }
   },
   "all_trades": [

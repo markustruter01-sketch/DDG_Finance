@@ -225,6 +225,60 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Learning snapshot auto-export registered (6-hour interval)")
 
+    # ── Equity Curve: seed on startup + record every hour ─────────────────────
+    async def _record_equity_snapshot_now():
+        """Record the current Alpaca + Kraken equity into the equity_snapshots table."""
+        from db.postgres import insert_equity_snapshot
+        try:
+            acct = get_account()
+            alpaca_eq = float(acct.get("equity", 0))
+        except Exception:
+            alpaca_eq = 0.0
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            _status_file = _Path("../kraken-bot/status.json")
+            if _status_file.exists():
+                _ks = _json.loads(_status_file.read_text())
+                kraken_eq = float(_ks.get("total_equity_usd", 0))
+            else:
+                kraken_eq = 0.0
+        except Exception:
+            kraken_eq = 0.0
+        insert_equity_snapshot(alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat")
+
+    def _equity_heartbeat_sync():
+        import asyncio as _aio
+        try:
+            loop = _aio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_record_equity_snapshot_now())
+            else:
+                loop.run_until_complete(_record_equity_snapshot_now())
+        except Exception as _e:
+            logger.warning(f"Equity Heartbeat | Failed: {_e}")
+
+    # Seed on startup only if the table is empty (avoids duplicate on every reload)
+    try:
+        from db.postgres import get_equity_curve as _gec
+        if not _gec(limit=1):
+            await _record_equity_snapshot_now()
+            logger.info("Equity Curve | Startup snapshot seeded (table was empty)")
+        else:
+            logger.debug("Equity Curve | Table already has data — skipping startup seed")
+    except Exception as _ese:
+        logger.warning(f"Equity Curve | Startup seed failed (non-fatal): {_ese}")
+
+    scheduler.add_job(
+        func=_equity_heartbeat_sync,
+        trigger=_ITrigger(hours=1),
+        id="equity_curve_heartbeat",
+        name="Equity Curve Hourly Heartbeat",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Equity curve heartbeat registered (1-hour interval)")
+
     yield
 
     logger.info("Shutting down scheduler...")
@@ -2063,10 +2117,15 @@ async def trigger_gemini_audit(background_tasks: BackgroundTasks) -> dict:
 
 @router.get("/correlation", tags=["Analytics"])
 async def correlation_matrix() -> dict:
-    from data.yfinance_client import get_cached_market_data
+    from data.yfinance_client import get_cached_market_data, fetch_market_data
     market_data = get_cached_market_data()
     if not market_data:
-        return {"error": "No market data cached yet", "matrix": {}, "tickers": []}
+        try:
+            logger.info("Correlation | Cache empty — fetching market data on demand")
+            market_data = await fetch_market_data(period="3mo", crypto_only=False)
+        except Exception as _fe:
+            logger.warning(f"Correlation | On-demand fetch failed: {_fe}")
+            return {"error": "Unable to fetch market data for correlation", "matrix": {}, "tickers": []}
 
     by_ticker = market_data.get("by_ticker", {})
     positions = []
@@ -2150,12 +2209,52 @@ async def performance_attribution() -> dict:
 async def risk_metrics() -> dict:
     snapshots = get_performance_snapshots(limit=90)
     if not snapshots:
+        # Fallback: compute approximate metrics from closed trades in the DB
+        try:
+            import numpy as np
+            from db.postgres import get_conn as _gc
+            with _gc() as _conn:
+                with _conn.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT pnl_percentage FROM trades WHERE status LIKE 'Closed_%' ORDER BY date ASC"
+                    )
+                    _rows = _cur.fetchall()
+            trade_returns = [float(r[0]) / 100.0 for r in _rows if r[0] is not None]
+            if len(trade_returns) >= 2:
+                arr = np.array(trade_returns)
+                mean_ret = float(np.mean(arr))
+                std_ret = float(np.std(arr, ddof=1))
+                # Treat each trade as ~30-day hold; scale to annualised
+                periods_per_year = 252 / 30
+                rf_per_period = 0.05 / periods_per_year
+                sharpe = float((mean_ret - rf_per_period) / std_ret * np.sqrt(periods_per_year)) if std_ret > 0 else None
+                downside = arr[arr < 0]
+                downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
+                sortino = float((mean_ret - rf_per_period) / downside_std * np.sqrt(periods_per_year)) if downside_std and downside_std > 0 else None
+                max_dd = round(abs(float(np.min(arr))) * 100, 2)
+                ann_return = round(mean_ret * periods_per_year * 100, 2)
+                calmar = round(ann_return / max_dd, 3) if max_dd > 0 else None
+                vol_annual = round(std_ret * np.sqrt(periods_per_year) * 100, 2) if std_ret > 0 else None
+                return {
+                    "sharpe_ratio": round(sharpe, 3) if sharpe is not None else None,
+                    "sortino_ratio": round(sortino, 3) if sortino is not None else None,
+                    "max_drawdown_pct": max_dd,
+                    "calmar_ratio": calmar,
+                    "volatility_annual_pct": vol_annual,
+                    "annualised_return_pct": ann_return,
+                    "data_points": len(trade_returns),
+                    "period_days": len(trade_returns) * 30,
+                    "source": "trade_journal",
+                    "message": f"Estimated from {len(trade_returns)} closed trades (30-day hold assumption)",
+                }
+        except Exception as _te:
+            logger.warning(f"Risk Metrics | Trade journal fallback failed: {_te}")
+        # Last resort: single data point from account state
         try:
             account = get_account()
             equity = float(account["equity"])
             last_equity = float(account.get("last_equity", account["equity"]))
             if last_equity > 0:
-                daily_pnl = (equity - last_equity) / last_equity * 100
                 dd = max(0, (last_equity - equity) / last_equity * 100)
                 return {
                     "sharpe_ratio": None,
@@ -2242,10 +2341,14 @@ async def equity_curve_endpoint(limit: int = 500) -> dict:
 
 @router.post("/backtest", tags=["Analytics"])
 async def run_backtest_endpoint(lookback_days: int = 90) -> dict:
-    from data.yfinance_client import get_cached_market_data
+    from data.yfinance_client import get_cached_market_data, fetch_market_data
     market_data = get_cached_market_data()
     if not market_data:
-        raise HTTPException(status_code=503, detail="No market data cached yet — run a pipeline cycle first")
+        try:
+            logger.info("Backtest | Cache empty — fetching 1y market data on demand (backtester needs 200-day warmup)")
+            market_data = await fetch_market_data(period="1y", crypto_only=False)
+        except Exception as _fe:
+            raise HTTPException(status_code=503, detail=f"Unable to fetch market data for backtesting: {_fe}")
 
     bars_by_ticker: dict[str, list[dict]] = {}
     for ticker, data in market_data.get("by_ticker", {}).items():

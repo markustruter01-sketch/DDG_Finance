@@ -471,10 +471,17 @@ async def system_health_architecture() -> dict:
         last_ts = last.get("last_run_timestamp")
         age_s = (now - last_ts) if last_ts else None
         latency_ms = 0
+        _mkt_open_h = False
+        try:
+            _mkt_open_h = is_market_open()
+        except Exception:
+            pass
         if job_count < EXPECTED_JOB_COUNT:
-            level = "yellow"
-        elif last_status in ("error", "analysis_failed", "execution_failed"):
-            level = "red"
+            level = "red"          # Missing jobs = always critical
+        elif last_status in ("error", "execution_failed"):
+            level = "red"          # Hard failures = always critical
+        elif last_status == "analysis_failed":
+            level = "red" if _mkt_open_h else "yellow"  # Off-hours = expected
         else:
             level = "green"
         nodes["platform_core"] = {
@@ -482,7 +489,7 @@ async def system_health_architecture() -> dict:
             "level": level,
             "latency_ms": latency_ms,
             "data_age_s": round(age_s, 1) if age_s else None,
-            "detail": f"{job_count} jobs · last: {last_status}",
+            "detail": f"{job_count}/{EXPECTED_JOB_COUNT} jobs · last: {last_status}",
         }
     except Exception as exc:
         nodes["platform_core"] = {"label": "Main Platform Core", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)}
@@ -521,9 +528,9 @@ async def system_health_architecture() -> dict:
             else:
                 kage = None
             kstatus = kst.get("status", "unknown")
-            if kstatus in ("error",) or (kage and kage > 300):
+            if kstatus in ("error",) or (kage and kage > 1800):
                 level = "red"
-            elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 60):
+            elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 600):
                 level = "yellow"
             else:
                 level = "green"
@@ -545,7 +552,7 @@ async def system_health_architecture() -> dict:
         cached_count = sum(1 for c in caches if c.get("cached"))
         ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
         oldest = max(ages) if ages else None
-        if oldest is not None and oldest > 300:
+        if oldest is not None and oldest > 600:
             level = "red"
         elif oldest is not None and oldest > 60:
             level = "yellow"

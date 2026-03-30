@@ -113,8 +113,8 @@ function buildExplanation(key: string, node: NodeHealth): string {
   if (latency_ms != null && latency_ms > 200)
     return `Latency is ${latency_ms}ms — above the 200ms optimal threshold. The API is reachable but responding slowly.`;
 
-  if (data_age_s != null && data_age_s > 300)
-    return `Feed data is ${data_age_s.toFixed(0)}s old — critical threshold is 300s. The data pipeline may be stalled or the bot has stopped writing updates.`;
+  if (data_age_s != null && data_age_s > 600)
+    return `Feed data is ${data_age_s.toFixed(0)}s old — critical threshold is 600s. The data pipeline may be stalled or the bot has stopped writing updates.`;
   if (data_age_s != null && data_age_s > 60)
     return `Feed data is ${data_age_s.toFixed(0)}s old — past the 60s freshness threshold. Normal if a cycle just completed; watch if it continues rising.`;
 
@@ -124,7 +124,8 @@ function buildExplanation(key: string, node: NodeHealth): string {
   }
 
   if (key === "platform_core") {
-    if (detail.includes("0 jobs")) return "The APScheduler crashed or lost all registered jobs. Restart the trading API server to recover.";
+    if (detail.includes("0/8 jobs") || detail.includes("0 jobs")) return "The APScheduler crashed or lost all 8 registered jobs. Restart the trading API server to recover.";
+    if (detail.includes("analysis_failed") && level === "yellow") return `analysis_failed off market hours — expected (Alpaca/yfinance unavailable). Clears when market opens. Detail: ${detail}`;
     if (detail.includes("error") || detail.includes("failed")) return `The last analysis cycle ended in an error state. Check server logs for the root cause. Detail: ${detail}`;
     if (detail.includes("never_run")) return "No analysis cycle has run yet since the server started. This clears automatically once the first cycle fires.";
   }
@@ -136,8 +137,10 @@ function buildExplanation(key: string, node: NodeHealth): string {
 
   if (key === "kraken_api") {
     if (detail.includes("Bot not started")) return "The Kraken bot process hasn't written a status file yet. Start the 'Davy Jones' Portfolio' workflow to resolve.";
-    if (detail.includes("paused")) return "The Kraken bot is paused — either manually via the dashboard toggle or by the circuit breaker (>10% price drop). Resume from the toolbar.";
+    if (detail.includes("paused")) return "The Kraken bot is paused — either manually via the dashboard toggle or by the circuit breaker (>3% drop / 30min). Resume from the toolbar.";
     if (detail.includes("503") || detail.includes("timeout")) return "The Kraken exchange API returned a server error. This is usually transient — the bot will retry on the next cycle.";
+    if (data_age_s != null && data_age_s > 1800) return `Kraken status file is ${data_age_s.toFixed(0)}s old (threshold 1800s / 30 min). The Replit workflow may have been paused — check if the bot is still running.`;
+    if (data_age_s != null && data_age_s > 600) return `Kraken status file is ${data_age_s.toFixed(0)}s old (warning threshold 600s). Bot is cycling but slower than expected.`;
   }
 
   if (key === "alpaca_api") {
@@ -507,17 +510,17 @@ function TestControlPanel({
         data_pipeline: { level: "yellow", data_age_s: 120, detail: "Data 120s old > 60s threshold" },
       },
       "stale-data": {
-        data_pipeline: { level: "red", data_age_s: 450, detail: "Data 450s old > 300s CRITICAL" },
-        kraken_api: { level: "red", data_age_s: 360, detail: "Status 360s old > 300s CRITICAL" },
+        data_pipeline: { level: "red", data_age_s: 700, detail: "Data 700s old > 600s CRITICAL" },
+        kraken_api: { level: "red", data_age_s: 2100, detail: "Status 2100s old > 1800s CRITICAL" },
       },
       "alloc-breach": {
         equity_manager: { level: "red", detail: "BREACH: single position 18.4% > 15.00% limit" },
       },
       "total-failure": {
-        platform_core: { level: "red", detail: "Scheduler crashed — 0 jobs" },
+        platform_core: { level: "red", detail: "Scheduler crashed — 0/8 jobs" },
         alpaca_api: { level: "red", latency_ms: 5000, detail: "Connection timeout (5000ms)" },
         kraken_api: { level: "red", detail: "HTTP 503 Service Unavailable" },
-        data_pipeline: { level: "red", data_age_s: 600, detail: "All feeds stale > 300s" },
+        data_pipeline: { level: "red", data_age_s: 900, detail: "All feeds stale > 600s" },
         equity_manager: { level: "red", detail: "Cannot validate — API unreachable" },
       },
     };

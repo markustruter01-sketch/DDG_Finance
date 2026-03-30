@@ -144,6 +144,14 @@ price_history: dict[str, deque] = {
     sym: deque(maxlen=100) for sym in SYMBOLS
 }
 
+# Stateful circuit-breaker instance from shared/ — tracks pause window and
+# observation count in memory across cycles.  One per-symbol breaker so each
+# pair can trip independently without halting the whole bot.
+shared_circuit_breakers: dict[str, "SharedCircuitBreaker"] = {
+    sym: SharedCircuitBreaker(pause_hours=CB_PAUSE_HOURS)
+    for sym in SYMBOLS
+}
+
 # Total account equity in USD — refreshed every EQUITY_REFRESH_INTERVAL seconds.
 total_equity: float = 0.0
 
@@ -570,13 +578,22 @@ def run_cycle() -> None:
 
             # ── 3b. Record price for circuit breaker ──────────────────────────
             price_history[symbol].append((now_utc, current_price))
+            # Also feed the stateful CircuitBreaker so it can maintain an
+            # observation count and manage its own pause window.
+            shared_circuit_breakers[symbol].record(now_utc, current_price)
 
             # ── 3c. Check circuit breaker for this symbol ─────────────────────
-            if check_circuit_breaker(
+            # Primary check: stateless helper on the deque (source of truth).
+            # Secondary check: stateful CircuitBreaker.check_and_trip() keeps
+            # the shared instance's pause window in sync for observation-count
+            # tracking and state persistence across the cycle.
+            _cb_triggered = check_circuit_breaker(
                 price_history[symbol],
                 drop_threshold=CB_PRICE_DROP_PCT,
                 window_minutes=CB_WINDOW_MINUTES,
-            ):
+            )
+            shared_circuit_breakers[symbol].check_and_trip()
+            if _cb_triggered:
                 pause_until = now_utc + timedelta(hours=CB_PAUSE_HOURS)
                 circuit_breaker_until = pause_until
                 logger.warning(

@@ -45,6 +45,7 @@ export interface PlatformStatus {
     tokens_remaining: number;
     token_budget_total: number;
     pct_used: number;
+    budget_exhausted?: boolean;
     regime_calls_today: number;
     commentary_calls_today: Record<string, number>;
     regime_interval_min: number;

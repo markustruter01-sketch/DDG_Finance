@@ -75,7 +75,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 5  # 4 trading jobs + 1 auto-heal monitor
+EXPECTED_JOB_COUNT = 6  # 5 trading jobs + 1 auto-heal monitor
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -2003,6 +2003,59 @@ async def get_risk_profile() -> dict:
         name="alpaca",
     )
     return rp.to_dict()
+
+
+@router.get("/admin/gemini-audit-status", tags=["Admin"])
+async def get_gemini_audit_status() -> dict:
+    """
+    Return the most recent Gemini self-critic audit result from
+    logs/veto_conditions.json.
+
+    Fields when the auditor has run (status = "ok"):
+      - generated_at    : ISO-8601 UTC timestamp of when the audit ran
+      - valid_until     : ISO-8601 UTC expiry (generated_at + 24 h)
+      - vetoed_tickers  : list of ticker symbols blocked today
+      - conditions      : list of structured risk-rule overrides
+      - critique_summary: 2–4 sentence prose summary
+      - critique_flags  : list of specific issues found
+      - overall_verdict : "CLEAN" | "CAUTION" | "HOLD"
+      - veto_status     : live veto cache state from the enforcer
+
+    Fields when the auditor has not yet run (status = "not_run"):
+      - message         : human-readable explanation
+
+    The auditor job runs at 04:15 AM ET Monday–Friday.
+    Use POST /admin/gemini-audit/run to trigger it manually.
+    """
+    from analysis.gemini_auditor import get_last_gemini_audit
+    from core.veto_enforcer import get_veto_status
+
+    result = get_last_gemini_audit()
+    result["veto_status"] = get_veto_status()
+    return result
+
+
+@router.post("/admin/gemini-audit/run", tags=["Admin"])
+async def trigger_gemini_audit(background_tasks: BackgroundTasks) -> dict:
+    """
+    Manually trigger the Gemini self-critic auditor in the background.
+
+    The job writes logs/veto_conditions.json when complete.
+    Poll GET /admin/gemini-audit-status to see the result.
+    """
+    from analysis.gemini_auditor import run_daily_self_critic
+
+    async def _bg():
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_daily_self_critic)
+        logger.info(f"Manual Gemini audit complete: {result}")
+
+    background_tasks.add_task(_bg)
+    return {
+        "status":  "triggered",
+        "message": "Gemini self-critic auditor started — poll GET /admin/gemini-audit-status for results",
+    }
 
 
 @router.get("/correlation", tags=["Analytics"])

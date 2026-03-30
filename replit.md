@@ -19,13 +19,13 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **LLM**: Groq (Llama 3.3 70B Versatile)
 - **Database**: PostgreSQL (primary) with SQLite fallback; trade journal, vault ledger, ratchet stops, performance snapshots
 - **Validation**: Pydantic v2
-- **Scheduling**: APScheduler (4 jobs: 15-min intraday full-market cycle, 15-min 24/7 crypto-only cycle, evening post-mortem, daily auditor at 4:30 PM ET)
+- **Scheduling**: APScheduler (5 jobs: 15-min intraday full-market cycle, 15-min 24/7 crypto-only cycle, evening post-mortem, daily auditor at 4:30 PM ET, Gemini self-critic at 4:15 AM ET)
 
 ### Architecture
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
-- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence), **input_sanitizer** (strips news descriptions + deduplicates headlines before LLM injection), **hardcoded_exits** (per-asset-class SL/TP table applied post-parse), **llm_response_cache** (MD5-keyed 90-min response cache, prevents redundant Groq calls when signals unchanged)
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor at 4:30 PM ET), **gemini_auditor** (Gemini self-critic pre-market auditor at 4:15 AM ET — writes `logs/veto_conditions.json`), **gemini_context_sanitizer** (HTML strip, news dedup, float rounding, 8-hour chunking for token budget management), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence), **input_sanitizer** (strips news descriptions + deduplicates headlines before LLM injection), **hardcoded_exits** (per-asset-class SL/TP table applied post-parse), **llm_response_cache** (MD5-keyed 90-min response cache, prevents redundant Groq calls when signals unchanged)
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper, kill switch (5% drawdown guard), order executor with slippage tracking

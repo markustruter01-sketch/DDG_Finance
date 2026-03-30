@@ -743,7 +743,7 @@ async def _auto_heal_check() -> None:
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] platform_core check skipped: {exc}")
 
-    # ── 2. Data pipeline — stale feeds > 5 min ──────────────────────────────
+    # ── 2. Data pipeline — stale feeds > 10 min (600s) ─────────────────────
     try:
         from data.cache import get_cache_stats as _gcs
         caches = _gcs()
@@ -763,7 +763,7 @@ async def _auto_heal_check() -> None:
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] data_pipeline check skipped: {exc}")
 
-    # ── 3. Kraken bot — status file older than 10 min or error state ─────────
+    # ── 3. Kraken bot — status file older than 30 min (1800s) or error state ──
     try:
         sf = _Path("../kraken-bot/status.json")
         if sf.exists():

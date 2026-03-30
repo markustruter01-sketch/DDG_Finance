@@ -886,11 +886,11 @@ class TestExecutorVaRGate(unittest.TestCase):
         var_skips = [e for e in results["skipped"] if e.get("reason") == "var_circuit_breaker"]
         self.assertEqual(len(var_skips), 0)
 
-    def test_cash_ticker_exempt_from_var_gate(self):
-        """SGOV (cash proxy) is never blocked by the VaR gate."""
+    def test_cash_ticker_no_var_circuit_breaker_entry(self):
+        """SGOV with kelly=0.0 is caught by the zero-kelly check before the VaR gate."""
         slot    = self._make_slot(ticker="SGOV", kelly=0.0)
         results = self._make_results()
-        # kelly_fraction=0.0 triggers zero_kelly skip first; verify no var_circuit_breaker
+        # zero_kelly check runs first → no var_circuit_breaker entry ever created
         results, _ = self._execute_slot(
             slot, equity=100_000, max_position_usd=20_000,
             remaining_cash=100_000, current_positions={},

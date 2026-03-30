@@ -41,7 +41,7 @@ from loguru import logger
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker, VaRCircuitBreaker
+from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker
 from microstructure import MicrostructureSignal
 from penalty_tracker import PenaltyTracker
 
@@ -122,8 +122,8 @@ logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}%")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
-logger.info(f"  VaR circuit breaker: 99% 1d-VaR > 8% equity → 6hr pause")
-logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active")
+logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
+logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active (order-book primary)")
 logger.info("=" * 65)
 
 _adaptive.initialise()
@@ -164,19 +164,6 @@ last_equity_refresh: float = 0.0
 
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
-
-# ── VaR Circuit Breaker (portfolio-level tail-risk guard) ─────────────────────
-# Trips when the rolling 99% 1-period parametric VaR exceeds 8% of equity.
-# pause_hours=6 gives sufficient cool-down after a volatile session.
-_var_circuit_breaker: VaRCircuitBreaker = VaRCircuitBreaker(
-    var_limit_pct = 0.08,
-    confidence    = 0.99,
-    window        = 20,
-    min_obs       = 5,
-    pause_hours   = 6.0,
-)
-# Track the equity from the previous cycle to compute per-cycle returns.
-_prev_equity_for_var: float = 0.0
 
 # Recent trade history for the status file (last 20 trades shown on dashboard).
 recent_trades: list[dict] = []
@@ -297,7 +284,6 @@ def write_status(error: str | None = None) -> None:
         "position_count":   len(open_positions),
         "max_positions":    MAX_POSITIONS,
         "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
-        "var_circuit_breaker": _var_circuit_breaker.to_dict(),
         "recent_trades":    recent_trades[-20:],  # last 20 trades
         "paper_summary":    paper_summary,        # None in live mode
         "signals":          latest_signals,       # per-symbol RSI / z-score scan
@@ -506,7 +492,6 @@ def run_cycle() -> None:
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
     global latest_signals, thinking_text, latest_microstructure
-    global _prev_equity_for_var
 
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
     cycle_microstructure: dict[str, dict] = {}
@@ -529,13 +514,6 @@ def run_cycle() -> None:
         write_status(error="Could not determine account balance")
         return
 
-    # ── VaR CB: record per-cycle equity return ────────────────────────────────
-    # On the very first cycle after startup, _prev_equity_for_var is 0 — skip.
-    if _prev_equity_for_var > 0 and total_equity > 0:
-        _cycle_return = (total_equity - _prev_equity_for_var) / _prev_equity_for_var
-        _var_circuit_breaker.record_return(_cycle_return)
-    _prev_equity_for_var = total_equity
-
     # In paper mode, resync positions from the persistent paper state each cycle
     # so that positions survive a bot restart.
     if PAPER_TRADING:
@@ -548,17 +526,6 @@ def run_cycle() -> None:
         logger.warning(f"Cycle | Circuit breaker active — {remaining}min remaining, all trading paused")
         write_status()
         return
-
-    # ── Step 2b: Check VaR circuit breaker ───────────────────────────────────
-    # Parametric 1-period 99% VaR. If the estimated tail loss exceeds 8% of
-    # equity, all NEW ENTRIES are blocked for 6 hours (exits are always allowed).
-    _var_triggered, _var_pct = _var_circuit_breaker.check_and_trip(total_equity)
-    if _var_triggered:
-        logger.warning(
-            f"VaR Circuit Breaker | ACTIVE — estimated 1-period 99% VaR = "
-            f"{_var_pct*100:.2f}% of equity (limit: {_var_circuit_breaker.var_limit_pct*100:.0f}%) — "
-            f"new entries BLOCKED until {_var_circuit_breaker.paused_until}"
-        )
 
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
@@ -792,16 +759,6 @@ def run_cycle() -> None:
                 cycle_signals.append({
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "skip_ceiling_breach",
-                    "has_position": False,
-                })
-                continue
-
-            # ── VaR circuit breaker: block new entries when active ────────────
-            if _var_triggered:
-                logger.debug(f"Signal | {symbol}: skipping entry — VaR circuit breaker active")
-                cycle_signals.append({
-                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                    "price": round(current_price, 4), "signal_type": "skip_var_cb",
                     "has_position": False,
                 })
                 continue

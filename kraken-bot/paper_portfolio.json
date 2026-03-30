@@ -1,7 +1,18 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 98486.38494315701,
-  "positions": {},
+  "cash_usd": 88612.13847915702,
+  "positions": {
+    "XRP/USD": {
+      "side": "short",
+      "entry_price": 1.34148,
+      "size_usd": 9848.64,
+      "size_units": 7341.622685392253,
+      "entry_time": "2026-03-30T02:08:13.927310+00:00",
+      "best_price": 1.34148,
+      "entry_fee": 25.6065,
+      "order_id": "PAPER-XRPUSD-1774836493"
+    }
+  },
   "all_trades": [
     {
       "symbol": "BTC/USD",

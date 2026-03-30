@@ -359,9 +359,11 @@ def _execute_slot(
         results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "zero_kelly"})
         return results, remaining_cash
 
-    # ── VaR Circuit Breaker — block new entries when tripped ─────────────────
-    # Cash (SGOV) and vault (JEPQ) sweeps are exempt — only risk-on entries blocked.
-    if var_tripped and ticker not in (CASH_TICKER, VAULT_TICKER):
+    # ── VaR Circuit Breaker — block ALL new entries when tripped ─────────────
+    # When VaR exceeds the daily loss limit, every new allocation is suspended
+    # for this cycle.  SGOV (kelly=0) is already caught by the zero-kelly check
+    # above; other tickers including defensive/vault allocations are skipped here.
+    if var_tripped:
         logger.info(
             f"Slot {slot.slot}: {ticker:10s} → SKIP "
             f"(var_circuit_breaker — new entries blocked)"

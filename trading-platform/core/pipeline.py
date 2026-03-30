@@ -407,3 +407,24 @@ def _update_state(
             _state["last_regime"] = allocation.regime
         else:
             _state["last_regime"] = "Crypto"
+
+    # ── Stateful cycle memory ─────────────────────────────────────────────────
+    # Record cycle outcome so CycleStateTracker can compute the confidence
+    # multiplier for subsequent cycles.  Skip non-cycle exits (market closed,
+    # guardrail blocks, kill-switch) so they don't pollute the quality signal.
+    _CYCLE_OUTCOME_MAP = {
+        "ok":               "success",
+        "ok_with_errors":   "warning",
+        "analysis_failed":  "failure",
+        "execution_failed": "failure",
+    }
+    cycle_outcome = _CYCLE_OUTCOME_MAP.get(result["status"])
+    if cycle_outcome:
+        # Also degrade "success" to "warning" if the cycle used a cached fallback
+        if cycle_outcome == "success" and result.get("using_fallback_regime"):
+            cycle_outcome = "warning"
+        try:
+            from core.cycle_state import get_tracker as _get_tracker
+            _get_tracker().record_outcome(cycle_outcome)
+        except Exception as _cse:
+            logger.debug(f"Pipeline | CycleStateTracker update failed (non-fatal): {_cse}")

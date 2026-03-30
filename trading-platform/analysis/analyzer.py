@@ -229,6 +229,8 @@ async def run_analysis_cycle(
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
         )
 
+    _snapshot_fetch_ts = time.time()   # used by the data circuit breaker below
+
     if crypto_only:
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
         news_ok   = len(news_data["all_headlines"])
@@ -241,6 +243,41 @@ async def run_analysis_cycle(
             f"  Data snapshot: FRED={macro_ok}/10 | "
             f"Market={market_ok}/{len(market_data['by_ticker'])} tickers | "
             f"News={news_ok} headlines"
+        )
+
+    # ── Data Circuit Breaker ──────────────────────────────────────────────────
+    # Validate structural integrity of the freshly-fetched snapshot BEFORE
+    # spending any LLM tokens.  A failed validation aborts the cycle with a
+    # RuntimeError that pipeline.py will catch and classify as analysis_failed
+    # (allowing it to record the outcome in CycleStateTracker).
+    try:
+        import sys as _sys
+        _shared_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        if _shared_root not in _sys.path:
+            _sys.path.insert(0, _shared_root)
+        from shared.market_snapshot_validator import validate_snapshot as _validate_snapshot
+        _validation = _validate_snapshot({
+            "market_data":  market_data,
+            "macro_data":   macro_data if not crypto_only else {},
+            "news_data":    news_data,
+            "_snapshot_ts": _snapshot_fetch_ts,
+        })
+        if not _validation.ok:
+            logger.warning(
+                f"DataCircuitBreaker | Aborting cycle — {_validation.reason} "
+                f"(checks passed={_validation.checks_passed} "
+                f"failed={_validation.checks_failed})"
+            )
+            raise RuntimeError(f"DataCircuitBreaker: {_validation.reason}")
+        logger.debug(
+            f"DataCircuitBreaker | Snapshot OK "
+            f"({_validation.checks_passed} checks passed)"
+        )
+    except RuntimeError:
+        raise   # re-raise so pipeline.py can handle the abort
+    except Exception as _vexc:
+        logger.warning(
+            f"DataCircuitBreaker | Validation import/check failed (non-fatal): {_vexc}"
         )
 
     # ── Step 3: Pre-LLM Signal Guardrails ────────────────────────────────────

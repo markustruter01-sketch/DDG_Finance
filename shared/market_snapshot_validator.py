@@ -103,7 +103,12 @@ def validate_snapshot(
     news_data   = snapshot.get("news_data")
 
     # ── Check 1: Required keys are present and not None ────────────────────────
-    missing = [k for k in ("market_data", "news_data") if snapshot.get(k) is None]
+    # All three data domains must be present.  macro_data may be an empty dict
+    # for crypto-only cycles (FRED data not applicable), but must not be None.
+    missing = [
+        k for k in ("market_data", "macro_data", "news_data")
+        if snapshot.get(k) is None
+    ]
     if missing:
         failures.append(
             f"Missing required snapshot key(s): {', '.join(missing)}"

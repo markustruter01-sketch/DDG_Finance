@@ -276,9 +276,12 @@ async def run_analysis_cycle(
     except RuntimeError:
         raise   # re-raise so pipeline.py can handle the abort
     except Exception as _vexc:
-        logger.warning(
-            f"DataCircuitBreaker | Validation import/check failed (non-fatal): {_vexc}"
+        # Fail-closed: if the validator itself cannot run (import error, shape error,
+        # etc.), abort the cycle rather than silently continuing to the LLM.
+        logger.error(
+            f"DataCircuitBreaker | Validator raised unexpected error — aborting cycle: {_vexc}"
         )
+        raise RuntimeError(f"DataCircuitBreaker: validator error — {_vexc}") from _vexc
 
     # ── Step 3: Pre-LLM Signal Guardrails ────────────────────────────────────
     # Run BEFORE building any prompts so guards can gate and adjust all inputs.

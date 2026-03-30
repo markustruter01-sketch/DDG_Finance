@@ -156,10 +156,25 @@ class TestMarketSnapshotValidator(unittest.TestCase):
         with self.assertRaises(Exception):
             result.ok = False    # type: ignore[misc]
 
-    def test_crypto_only_empty_macro_data_passes(self):
-        """Crypto-only cycles may pass empty macro_data."""
+    def test_missing_macro_data_key_fails(self):
+        """macro_data is a required key — None should fail."""
         snap = _healthy_snapshot()
-        snap["macro_data"] = {}
+        snap.pop("macro_data")
+        result = validate_snapshot(snap)
+        self.assertFalse(result.ok)
+        self.assertIn("macro_data", result.reason)
+
+    def test_none_macro_data_fails(self):
+        """Explicitly passing macro_data=None should fail."""
+        snap = _healthy_snapshot(macro_data=None)
+        result = validate_snapshot(snap)
+        self.assertFalse(result.ok)
+        self.assertIn("macro_data", result.reason)
+
+    def test_crypto_only_empty_macro_data_passes(self):
+        """Crypto-only cycles pass an empty dict {}, not None — must pass."""
+        snap = _healthy_snapshot()
+        snap["macro_data"] = {}   # empty dict is valid (no FRED data for crypto)
         result = validate_snapshot(snap)
         self.assertTrue(result.ok)
 

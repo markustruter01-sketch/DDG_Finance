@@ -261,6 +261,23 @@ async def _run_pipeline_inner(
         #   RuntimeError("Account state unavailable, analysis aborted: ...")
         # All other non-LLM failures use different messages / types.
         exc_msg = str(exc)
+
+        # ── Data Circuit Breaker abort ────────────────────────────────────────
+        # The market snapshot validator (shared/market_snapshot_validator.py)
+        # raises RuntimeError("DataCircuitBreaker: ...") when the fetched data
+        # has structural gaps or stale timestamps.  This is an explicit,
+        # deliberate abort before any LLM tokens were consumed — handle it as
+        # a first-class analysis failure with a descriptive error.
+        if exc_msg.startswith("DataCircuitBreaker:"):
+            result["status"] = "analysis_failed"
+            result["errors"].append(f"Data integrity gate tripped: {exc}")
+            logger.warning(
+                f"Pipeline | DataCircuitBreaker tripped — cycle aborted "
+                f"without LLM call. Reason: {exc_msg}"
+            )
+            _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
+            return result
+
         is_llm_failure = (
             "Regime LLM failed after" in exc_msg
             or "Crypto LLM failed after" in exc_msg

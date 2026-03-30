@@ -267,14 +267,12 @@ def compute_exit_levels(
     -------
     (stop_loss_price, take_profit_price, trail_activation_price)
     """
-    # When a RiskProfile is provided, derive the stop_loss_pct from the
-    # profile's max_position_pct so that stop sizing respects the same
-    # risk envelope that governs position sizing.
-    if risk_profile is not None and hasattr(risk_profile, "max_position_pct"):
-        # The stop is set so that a full stop-out costs at most
-        # (max_position_pct / 2) of equity — a conservative derivation
-        # that keeps stop distance proportional to the position limit.
-        stop_loss_pct = risk_profile.max_position_pct / 2.0
+    # risk_profile is accepted as context metadata for callers who want to
+    # pass it through for audit/logging.  It does NOT modify any calculation —
+    # stop_loss_pct, take_profit_pct, and trail_pct are always used as passed.
+    # Callers that want profile-derived stops should compute stop_loss_pct
+    # before calling this function.
+    _ = risk_profile  # accepted, not used — keeps the signature future-proof
 
     bracket = ExitBracket(
         entry_price=entry_price,

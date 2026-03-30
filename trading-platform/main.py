@@ -1975,11 +1975,22 @@ async def get_risk_profile() -> dict:
         _sys.path.insert(0, _repo_root)
     from shared.risk_profile import RiskProfile
 
+    # Tickers that are treated as ring-fenced / safe-harbour assets.
+    # SGOV = cash proxy (short-term treasuries, used for 0-Kelly slots)
+    # JEPQ = vault / profit-sweep target — never counted as risk capital
+    # These are excluded from deployed_usd so the profile correctly reflects
+    # only actively risk-on capital.
+    SAFE_TICKERS = frozenset({"SGOV", "JEPQ"})
+
     try:
         account   = get_account()
         equity    = float(account.get("equity", 0.0))
         positions = get_positions()
-        deployed  = sum(float(p.get("market_value", 0.0)) for p in (positions or []))
+        deployed  = sum(
+            float(p.get("market_value", 0.0))
+            for p in (positions or [])
+            if p.get("symbol") not in SAFE_TICKERS
+        )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Failed to fetch Alpaca account: {exc}")
 

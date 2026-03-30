@@ -507,6 +507,34 @@ def run_cycle() -> None:
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
 
+    # ── RiskProfile: deployment ceiling guard ─────────────────────────────────
+    # Build a RiskProfile from the live equity snapshot.  Uses the same
+    # ring-fence / reserve constants as the Alpaca bot for consistency.
+    # This is purely a guard — it does not change position sizing math;
+    # get_position_size() (logic.py) remains the source of truth.
+    _risk_profile = RiskProfile(
+        total_equity=total_equity,
+        deployed_usd=deployed_usd,
+        ring_fenced_pct=0.60,
+        deployable_pct=0.40,
+        max_position_pct=MAX_POSITION_FRACTION,
+        daily_loss_limit_pct=0.05,
+        reserve_pct=CASH_RESERVE,
+        name="kraken",
+    )
+    if _risk_profile.is_breached():
+        logger.warning(
+            f"RiskProfile | Reserve breach: deployed=${deployed_usd:,.2f} "
+            f"ceiling=${_risk_profile.active_ceiling_usd():,.2f} "
+            f"— new entries BLOCKED for this cycle"
+        )
+    else:
+        logger.debug(
+            f"RiskProfile | {_risk_profile.deployed_pct():.1f}% deployed "
+            f"(${deployed_usd:,.0f} / ${_risk_profile.active_ceiling_usd():,.0f})"
+        )
+    _profile_breached = _risk_profile.is_breached()
+
     # ── Pull current adaptive parameters (self-tuning layer) ─────────────────
     # maybe_adapt() only does real work every 6 hours; otherwise returns fast.
     _adaptive.maybe_adapt()
@@ -666,6 +694,18 @@ def run_cycle() -> None:
                 })
                 continue
 
+            # ── RiskProfile ceiling guard ─────────────────────────────────────
+            # If the deployment ceiling is already breached, skip new entries.
+            # This does not affect existing positions or exit logic.
+            if _profile_breached:
+                logger.debug(f"Signal | {symbol}: skipping entry — RiskProfile ceiling breached")
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "skip_ceiling_breach",
+                    "has_position": False,
+                })
+                continue
+
             # LONG signal: price is unusually low + RSI is oversold
             if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
                 size_usd = get_position_size(
@@ -678,9 +718,20 @@ def run_cycle() -> None:
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
+                    # ExitBracket: log expected exit levels (audit only).
+                    # Existing check_stops() logic is the source of truth.
+                    _bracket = ExitBracket(
+                        entry_price=current_price,
+                        direction="long",
+                        stop_loss_pct=_stop_loss_pct,
+                        take_profit_pct=_stop_loss_pct * 2,
+                        trail_pct=_trail_pct,
+                    )
+                    _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
-                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | Size: ${size_usd:,.2f}"
+                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "long", size_usd, current_price):
                         deployed_usd += size_usd
@@ -715,9 +766,20 @@ def run_cycle() -> None:
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
+                    # ExitBracket: log expected exit levels (audit only).
+                    # Existing check_stops() logic is the source of truth.
+                    _bracket = ExitBracket(
+                        entry_price=current_price,
+                        direction="short",
+                        stop_loss_pct=_stop_loss_pct,
+                        take_profit_pct=_stop_loss_pct * 2,
+                        trail_pct=_trail_pct,
+                    )
+                    _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
-                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | Size: ${size_usd:,.2f}"
+                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "short", size_usd, current_price):
                         deployed_usd += size_usd

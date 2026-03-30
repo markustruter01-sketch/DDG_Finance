@@ -131,12 +131,13 @@ def execute_allocations(
     # ── RiskProfile enforcement ───────────────────────────────────────────────
     # Build a RiskProfile using live account data and the Alpaca platform
     # constants (60/40 ring-fence, 15% per-position cap, 18% reserve).
-    # The deployed_usd figure uses the market value of all current positions
-    # (including the vault ticker) so the ceiling enforcement is conservative.
+    # SGOV (cash proxy for 0-Kelly slots) and VAULT_TICKER (JEPQ profit-sweep
+    # target) are excluded from deployed_usd — only risk-on positions count.
+    _SAFE_TICKERS: frozenset[str] = frozenset({CASH_TICKER, VAULT_TICKER})
     _deployed_usd = sum(
         p.get("market_value", 0.0)
         for p in current_positions.values()
-        if p.get("symbol") not in (CASH_TICKER,)
+        if p.get("symbol") not in _SAFE_TICKERS
     )
     _risk_profile = RiskProfile(
         total_equity=equity,

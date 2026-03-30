@@ -245,7 +245,7 @@ class TestExitBracket(unittest.TestCase):
         self.assertAlmostEqual(trail, 105.0, places=4)
 
     def test_compute_exit_levels_with_risk_profile(self):
-        """When risk_profile is supplied, stop_loss_pct = max_position_pct / 2."""
+        """risk_profile is accepted but does NOT change computation (pure metadata)."""
         rp = RiskProfile(
             total_equity=100_000,
             ring_fenced_pct=0.60,
@@ -253,29 +253,32 @@ class TestExitBracket(unittest.TestCase):
             max_position_pct=0.15,
             name="test",
         )
-        # Expected: stop_loss_pct = 0.15 / 2 = 0.075 → SL = 100 × (1 - 0.075) = 92.5
+        # risk_profile is passed but stop_loss_pct=0.02 is used unchanged
         sl, tp, trail = compute_exit_levels(
             entry_price=100.0, direction="long",
             risk_profile=rp,
+            stop_loss_pct=0.02,
             take_profit_pct=0.06, trail_pct=0.05,
         )
-        self.assertAlmostEqual(sl, 100.0 * (1.0 - 0.075), places=4)
+        self.assertAlmostEqual(sl, 98.0, places=4)   # 100 × (1 - 0.02)
+        self.assertAlmostEqual(tp, 106.0, places=4)
+        self.assertAlmostEqual(trail, 105.0, places=4)
 
-    def test_compute_exit_levels_risk_profile_overrides_stop_pct(self):
-        """risk_profile stop derivation overrides explicit stop_loss_pct."""
+    def test_compute_exit_levels_risk_profile_does_not_override_stop_pct(self):
+        """Passing risk_profile does NOT override the explicit stop_loss_pct."""
         rp = RiskProfile(
             total_equity=100_000,
             ring_fenced_pct=0.60,
             deployable_pct=0.40,
-            max_position_pct=0.20,  # → derived stop = 0.10
+            max_position_pct=0.20,
             name="test",
         )
         sl, _, _ = compute_exit_levels(
             entry_price=100.0, direction="long",
             risk_profile=rp,
-            stop_loss_pct=0.02,  # should be overridden
+            stop_loss_pct=0.03,  # explicit; must be honoured
         )
-        self.assertAlmostEqual(sl, 100.0 * (1.0 - 0.10), places=4)
+        self.assertAlmostEqual(sl, 100.0 * (1.0 - 0.03), places=4)
 
     def test_repr(self):
         b = ExitBracket(entry_price=100.0, direction="long")

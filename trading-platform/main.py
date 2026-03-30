@@ -951,10 +951,38 @@ async def live_positions() -> dict:
 
 @router.get("/journal", tags=["Journal"])
 async def journal() -> dict:
-    """Trade journal summary + full trade history."""
+    """Trade journal summary + full trade history (Alpaca + Kraken)."""
     summary = get_journal_summary()
-    trades  = get_all_trades()
-    return {"summary": summary, "trades": trades}
+    alpaca_trades = get_all_trades()
+    kraken_trades = _load_kraken_journal_trades()
+    # Merge and sort by date descending (newest first)
+    all_trades = alpaca_trades + kraken_trades
+    try:
+        all_trades.sort(key=lambda t: (t.get("date") or ""), reverse=True)
+    except Exception:
+        pass
+    # Update summary totals to include Kraken
+    k_wins  = sum(1 for t in kraken_trades if t.get("pnl_percentage", 0) > 0)
+    k_total = len(kraken_trades)
+    combined_wins  = (summary.get("wins", 0)  or 0) + k_wins
+    combined_total = (summary.get("total", 0) or 0) + k_total
+    combined_losses = combined_total - combined_wins
+    # Recalculate avg_pnl across all trades
+    all_pnl = [
+        t.get("pnl_percentage")
+        for t in all_trades
+        if t.get("pnl_percentage") is not None
+    ]
+    avg_pnl = round(sum(all_pnl) / len(all_pnl), 3) if all_pnl else None
+    combined_summary = {
+        **summary,
+        "total":        combined_total,
+        "wins":         combined_wins,
+        "losses":       combined_losses,
+        "avg_pnl":      avg_pnl,
+        "win_rate_pct": round(combined_wins / combined_total * 100, 1) if combined_total > 0 else 0,
+    }
+    return {"summary": combined_summary, "trades": all_trades}
 
 
 def _load_kraken_journal_trades() -> list[dict]:
@@ -972,6 +1000,7 @@ def _load_kraken_journal_trades() -> list[dict]:
         for idx, t in enumerate(_pf.get("all_trades", [])):
             if t.get("pnl_pct") is None:
                 continue
+            _pnl = float(t["pnl_pct"])
             trades.append({
                 "trade_id": f"kraken-{idx}",
                 "date": (t.get("closed_at") or "")[:10],
@@ -979,7 +1008,8 @@ def _load_kraken_journal_trades() -> list[dict]:
                 "asset_class": "crypto",
                 "conviction_score": None,
                 "original_thesis": f"Kraken {t.get('side','?')} {t.get('symbol','?')} — exit: {t.get('reason','?')}",
-                "pnl_percentage": float(t["pnl_pct"]),
+                "pnl_percentage": _pnl,
+                "status": "Closed_Win" if _pnl > 0 else "Closed_Loss",
                 "intended_price": None,
                 "actual_fill_price": None,
                 "slippage_pct": None,
@@ -2374,14 +2404,93 @@ async def risk_metrics() -> dict:
     }
 
 
+def _build_synthetic_equity_curve() -> list[dict]:
+    """Build a synthetic equity curve from trade history when DB has insufficient real snapshots."""
+    import json as _j
+    from pathlib import Path as _P
+    from collections import defaultdict
+    from datetime import datetime, timedelta
+
+    alpaca_start = 100_000.0
+    kraken_start = 100_000.0
+
+    # --- Kraken trades (have exact pnl_usd) ---
+    kraken_daily_pnl: dict = defaultdict(float)
+    try:
+        _pf_path = _P("../kraken-bot/paper_portfolio.json")
+        if _pf_path.exists():
+            _pf = _j.loads(_pf_path.read_text())
+            kraken_start = float(_pf.get("starting_balance_usd", 100_000.0))
+            for _t in _pf.get("all_trades", []):
+                _d = (_t.get("closed_at") or "")[:10]
+                if _d and _t.get("pnl_usd") is not None:
+                    kraken_daily_pnl[_d] += float(_t["pnl_usd"])
+    except Exception:
+        pass
+
+    # --- Alpaca trades: use pnl_percentage with 5% position sizing estimate ---
+    alpaca_daily_pnl: dict = defaultdict(float)
+    try:
+        from db.postgres import get_conn as _gc2
+        with _gc2() as _conn2:
+            with _conn2.cursor() as _cur2:
+                _cur2.execute(
+                    "SELECT date, pnl_percentage FROM trades WHERE status LIKE 'Closed_%' ORDER BY date ASC"
+                )
+                for _row in _cur2.fetchall():
+                    if _row[0] and _row[1] is not None:
+                        _d = str(_row[0])
+                        alpaca_daily_pnl[_d] += (alpaca_start * 0.05) * (float(_row[1]) / 100.0)
+    except Exception:
+        pass
+
+    all_dates = sorted(set(list(kraken_daily_pnl.keys()) + list(alpaca_daily_pnl.keys())))
+    if not all_dates:
+        return []
+
+    first_dt = datetime.strptime(all_dates[0], "%Y-%m-%d")
+    start_ts = (first_dt - timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
+
+    rows: list[dict] = [{
+        "id": 0, "ts": start_ts,
+        "alpaca_equity": alpaca_start, "kraken_equity": kraken_start,
+        "total_equity": alpaca_start + kraken_start,
+        "regime": None, "source": "synthetic_start",
+    }]
+
+    a_eq = alpaca_start
+    k_eq = kraken_start
+    for _d in all_dates:
+        a_eq = round(a_eq + alpaca_daily_pnl.get(_d, 0.0), 2)
+        k_eq = round(k_eq + kraken_daily_pnl.get(_d, 0.0), 2)
+        rows.append({
+            "id": 0, "ts": f"{_d}T12:00:00",
+            "alpaca_equity": a_eq, "kraken_equity": k_eq,
+            "total_equity": round(a_eq + k_eq, 2),
+            "regime": None, "source": "synthetic",
+        })
+
+    return rows
+
+
 @router.get("/performance/equity-curve", tags=["Analytics"])
 async def equity_curve_endpoint(limit: int = 500) -> dict:
     """
     Return the last `limit` equity snapshots (oldest-first) for the equity curve chart.
+    Falls back to a synthetic curve built from trade history when DB has < 5 real snapshots.
     Each row: {id, ts, alpaca_equity, kraken_equity, total_equity, regime, source}
     """
     from db.postgres import get_equity_curve
     rows = get_equity_curve(limit=min(limit, 2000))
+    if len(rows) < 5:
+        synthetic = _build_synthetic_equity_curve()
+        if synthetic:
+            # Append any real snapshots that aren't already represented by synthetic dates
+            real_dates = {r["ts"][:10] for r in rows}
+            synthetic_dates = {r["ts"][:10] for r in synthetic}
+            extra_real = [r for r in rows if r["ts"][:10] not in synthetic_dates]
+            rows = synthetic + extra_real
+            rows.sort(key=lambda r: r["ts"])
     return {"count": len(rows), "snapshots": rows}
 
 

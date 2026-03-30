@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRunBacktest, type BacktestResult } from "@/hooks/use-trading";
 import { cn, formatCurrency } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, Badge } from "@/components/ui";
@@ -8,6 +8,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export function BacktesterPanel() {
   const { mutate: runBacktest, data, isPending, error: mutationError } = useRunBacktest();
   const [lookback, setLookback] = useState(90);
+  const didAutoRun = useRef(false);
+
+  useEffect(() => {
+    if (!didAutoRun.current) {
+      didAutoRun.current = true;
+      runBacktest(90);
+    }
+  }, [runBacktest]);
 
   return (
     <Card className="border-white/5">

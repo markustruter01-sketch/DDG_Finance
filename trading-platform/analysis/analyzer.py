@@ -289,11 +289,15 @@ async def run_analysis_cycle(
                     "Groq budget | Crypto call throttled but no cache available — "
                     "proceeding with LLM call to avoid empty allocation"
                 )
-            cache_key = _llm_cache.make_key("crypto", market_data, news_data["all_headlines"])
+            cache_key = _llm_cache.make_key("crypto", market_data)
+            hits_before = _llm_cache._hits
             output = _call_crypto_with_retry(
                 system_prompt, user_prompt, cache_key=cache_key
             )
-            _budget.record_crypto_call()
+            if _llm_cache._hits == hits_before:   # no cache hit → real Groq call
+                _budget.record_crypto_call()
+            else:
+                logger.debug("LLMResponseCache | Crypto cache hit — skipping budget call counter")
         else:
             if not _budget.can_call_regime():
                 cached_regime = get_regime_fallback()
@@ -307,11 +311,15 @@ async def run_analysis_cycle(
                     "Groq budget | Full-regime call throttled but no cache available — "
                     "proceeding with LLM call to avoid empty allocation"
                 )
-            cache_key = _llm_cache.make_key("regime", market_data, news_data["all_headlines"])
+            cache_key = _llm_cache.make_key("regime", market_data)
+            hits_before = _llm_cache._hits
             output = _call_regime_with_retry(
                 system_prompt, user_prompt, cache_key=cache_key
             )
-            _budget.record_regime_call()
+            if _llm_cache._hits == hits_before:   # no cache hit → real Groq call
+                _budget.record_regime_call()
+            else:
+                logger.debug("LLMResponseCache | Regime cache hit — skipping budget call counter")
 
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE COMPLETE ({mode_label})")

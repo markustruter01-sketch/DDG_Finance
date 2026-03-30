@@ -132,3 +132,40 @@ class TestGetOrCall(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCacheHitZeroTokenConsumption(unittest.TestCase):
+    """Integration-level: cache hit must not invoke call_fn (i.e. no Groq call = zero tokens)."""
+
+    def setUp(self):
+        self.cache = LLMResponseCache(ttl_minutes=90)
+        self.cache._persist = lambda: None
+
+    def test_cache_hit_call_fn_not_invoked(self):
+        """
+        After a cache entry is stored, a subsequent get_or_call with the same key
+        must NOT invoke call_fn — proving zero Groq client invocations (zero tokens).
+        """
+        call_fn = MagicMock(return_value='{"tokens": "expensive"}')
+        key = LLMResponseCache.make_key("regime", _MARKET_BULL)
+
+        # First call — populates cache
+        result_1 = self.cache.get_or_call(key, call_fn)
+        self.assertEqual(call_fn.call_count, 1)
+
+        # Second call — should be a cache hit
+        result_2 = self.cache.get_or_call(key, call_fn)
+        self.assertEqual(result_2, result_1)
+        self.assertEqual(call_fn.call_count, 1, "call_fn must NOT be invoked on a cache hit")
+
+    def test_cache_miss_then_hit_counters(self):
+        """Counters reflect exactly one miss (first call) and one hit (second call)."""
+        key = LLMResponseCache.make_key("crypto", _MARKET_BEAR)
+        misses_before = self.cache._misses
+        hits_before   = self.cache._hits
+
+        self.cache.get_or_call(key, lambda: '{"x": 1}')          # miss
+        self.cache.get_or_call(key, lambda: '{"y": 2}')          # hit
+
+        self.assertEqual(self.cache._misses, misses_before + 1)
+        self.assertEqual(self.cache._hits,   hits_before   + 1)

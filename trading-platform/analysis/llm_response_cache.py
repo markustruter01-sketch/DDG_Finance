@@ -82,7 +82,6 @@ class LLMResponseCache:
     def make_key(
         call_type: str,
         market_data: dict,
-        news_headlines: list[str] | None = None,
     ) -> str:
         """
         Build a stable MD5 cache key from the canonical context tuple:

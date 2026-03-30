@@ -80,12 +80,14 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
 };
 
 const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server }> = {
-  platform_core: { x: 400, y: 160, icon: Server },
-  equity_manager: { x: 180, y: 310, icon: Shield },
-  alpaca_api: { x: 100, y: 460, icon: Wifi },
-  kraken_api: { x: 620, y: 310, icon: Anchor },
-  data_pipeline: { x: 540, y: 460, icon: Database },
+  platform_core: { x: 400, y: 120, icon: Server },
+  equity_manager: { x: 160, y: 295, icon: Shield },
+  alpaca_api: { x: 70,  y: 450, icon: Wifi },
+  kraken_api: { x: 640, y: 295, icon: Anchor },
+  data_pipeline: { x: 540, y: 450, icon: Database },
 };
+const NODE_W = 188;
+const NODE_H = 92;
 
 const WIRES: [string, string][] = [
   ["platform_core", "equity_manager"],
@@ -156,32 +158,45 @@ function buildExplanation(key: string, node: NodeHealth): string {
 function GlowingWire({ x1, y1, x2, y2, level, id }: { x1: number; y1: number; x2: number; y2: number; level: Level; id: string }) {
   const colors = LEVEL_COLORS[level];
   const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  const dur  = level === "red" ? "0.7s" : level === "yellow" ? "1.6s" : "2.8s";
+  const dur2 = level === "red" ? "0.9s" : level === "yellow" ? "2.2s" : "4s";
 
   return (
     <g>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.04)" strokeWidth={2} />
+      {/* Wide glow underlay */}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.wire} strokeWidth={8} opacity={0.06} />
+      {/* Dim track */}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+      {/* Lit wire */}
       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.wire} strokeWidth={1.5} opacity={0.3} />
+      {/* Primary pulse */}
       <line
         x1={x1} y1={y1} x2={x2} y2={y2}
-        stroke={colors.wire}
-        strokeWidth={3}
-        opacity={0.6}
-        strokeDasharray={`8 ${length - 8}`}
-        strokeLinecap="round"
+        stroke={colors.wire} strokeWidth={3} opacity={0.95}
+        strokeDasharray={`12 ${length}`} strokeLinecap="round"
       >
-        <animate
-          attributeName="stroke-dashoffset"
-          from={length}
-          to={0}
-          dur={level === "red" ? "0.8s" : level === "yellow" ? "2s" : "3s"}
-          repeatCount="indefinite"
-        />
+        <animate attributeName="stroke-dashoffset" from={length + 12} to={-(length)} dur={dur} repeatCount="indefinite" />
       </line>
-      {level === "red" && (
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.wire} strokeWidth={4} opacity={0.3}>
-          <animate attributeName="opacity" values="0.3;0.8;0.3" dur="0.6s" repeatCount="indefinite" />
-        </line>
-      )}
+      {/* Secondary pulse */}
+      <line
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={colors.wire} strokeWidth={2} opacity={0.5}
+        strokeDasharray={`6 ${length}`} strokeLinecap="round"
+      >
+        <animate attributeName="stroke-dashoffset" from={length + 6} to={-(length)} dur={dur2} repeatCount="indefinite" />
+      </line>
+      {/* Data-packet dot #1 */}
+      <circle cx={x1} cy={y1} r={level === "red" ? 5 : 4} fill={colors.wire} opacity={0.95}>
+        <animate attributeName="cx" from={x1} to={x2} dur={dur} repeatCount="indefinite" />
+        <animate attributeName="cy" from={y1} to={y2} dur={dur} repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0;0.95;0.95;0" keyTimes="0;0.1;0.9;1" dur={dur} repeatCount="indefinite" />
+      </circle>
+      {/* Data-packet dot #2 (offset) */}
+      <circle cx={x1} cy={y1} r={3} fill={colors.wire} opacity={0.6}>
+        <animate attributeName="cx" from={x1} to={x2} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
+        <animate attributeName="cy" from={y1} to={y2} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0;0.6;0.6;0" keyTimes="0;0.1;0.9;1" dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
+      </circle>
     </g>
   );
 }
@@ -201,51 +216,87 @@ function ArchitectureNode({
   if (!pos) return null;
   const colors = LEVEL_COLORS[health.level];
   const Icon = pos.icon;
-  const W = 160;
-  const H = 80;
+  const W = NODE_W;
+  const H = NODE_H;
+  const cs = 14; // corner-bracket size
+
+  const metric = health.latency_ms != null
+    ? `${health.latency_ms}ms`
+    : health.data_age_s != null
+    ? `${health.data_age_s.toFixed(0)}s`
+    : "—";
 
   return (
-    <g
-      onClick={onClick}
-      className="cursor-pointer"
-      style={{ filter: `drop-shadow(0 0 ${selected ? "12px" : "6px"} ${colors.glow})` }}
-    >
-      <rect
-        x={pos.x - W / 2}
-        y={pos.y - H / 2}
-        width={W}
-        height={H}
-        rx={12}
-        fill={colors.fill}
-        stroke={colors.stroke}
-        strokeWidth={selected ? 2 : 1.2}
-      />
+    <g onClick={onClick} className="cursor-pointer">
+      {/* Outer pulsing halo for non-green nodes */}
+      {health.level !== "green" && (
+        <ellipse cx={pos.x} cy={pos.y} rx={W / 2 + 16} ry={H / 2 + 14}
+          fill="none" stroke={colors.wire} strokeWidth={1}>
+          <animate attributeName="rx" values={`${W/2+10};${W/2+22};${W/2+10}`} dur={health.level === "red" ? "1s" : "2.5s"} repeatCount="indefinite" />
+          <animate attributeName="ry" values={`${H/2+8};${H/2+18};${H/2+8}`} dur={health.level === "red" ? "1s" : "2.5s"} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.5;0;0.5" dur={health.level === "red" ? "1s" : "2.5s"} repeatCount="indefinite" />
+        </ellipse>
+      )}
+
+      {/* Main node body */}
+      <rect x={pos.x - W/2} y={pos.y - H/2} width={W} height={H} rx={8}
+        fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2 : 1.2} />
+
+      {/* Selected glow overlay */}
+      {selected && (
+        <rect x={pos.x - W/2} y={pos.y - H/2} width={W} height={H} rx={8}
+          fill={colors.wire} opacity={0.06} />
+      )}
+
+      {/* Critical flash */}
       {health.level === "red" && (
-        <rect
-          x={pos.x - W / 2}
-          y={pos.y - H / 2}
-          width={W}
-          height={H}
-          rx={12}
-          fill="none"
-          stroke={colors.stroke}
-          strokeWidth={2}
-        >
-          <animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite" />
+        <rect x={pos.x - W/2} y={pos.y - H/2} width={W} height={H} rx={8}
+          fill="none" stroke={colors.stroke} strokeWidth={2.5}>
+          <animate attributeName="opacity" values="1;0.15;1" dur="0.9s" repeatCount="indefinite" />
         </rect>
       )}
-      <foreignObject x={pos.x - W / 2} y={pos.y - H / 2} width={W} height={H}>
-        <div className="w-full h-full flex flex-col items-center justify-center px-2">
-          <Icon className={cn("h-4 w-4 mb-1", colors.text)} />
-          <div className={cn("text-[10px] font-semibold text-center leading-tight", colors.text)}>
+
+      {/* Corner brackets — top-left */}
+      <path d={`M ${pos.x-W/2} ${pos.y-H/2+cs} L ${pos.x-W/2} ${pos.y-H/2} L ${pos.x-W/2+cs} ${pos.y-H/2}`}
+        fill="none" stroke={colors.wire} strokeWidth={2} opacity={0.9} />
+      {/* top-right */}
+      <path d={`M ${pos.x+W/2-cs} ${pos.y-H/2} L ${pos.x+W/2} ${pos.y-H/2} L ${pos.x+W/2} ${pos.y-H/2+cs}`}
+        fill="none" stroke={colors.wire} strokeWidth={2} opacity={0.9} />
+      {/* bottom-left */}
+      <path d={`M ${pos.x-W/2} ${pos.y+H/2-cs} L ${pos.x-W/2} ${pos.y+H/2} L ${pos.x-W/2+cs} ${pos.y+H/2}`}
+        fill="none" stroke={colors.wire} strokeWidth={2} opacity={0.9} />
+      {/* bottom-right */}
+      <path d={`M ${pos.x+W/2-cs} ${pos.y+H/2} L ${pos.x+W/2} ${pos.y+H/2} L ${pos.x+W/2} ${pos.y+H/2-cs}`}
+        fill="none" stroke={colors.wire} strokeWidth={2} opacity={0.9} />
+
+      {/* Status indicator dot — top right inside corner */}
+      <circle cx={pos.x + W/2 - 11} cy={pos.y - H/2 + 11} r={4} fill={colors.wire} opacity={0.95} />
+      {health.level !== "green" && (
+        <circle cx={pos.x + W/2 - 11} cy={pos.y - H/2 + 11} r={4} fill="none" stroke={colors.wire} strokeWidth={1.5}>
+          <animate attributeName="r" values="4;9;4" dur={health.level === "red" ? "0.8s" : "2s"} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.9;0;0.9" dur={health.level === "red" ? "0.8s" : "2s"} repeatCount="indefinite" />
+        </circle>
+      )}
+
+      {/* Center separator line */}
+      <line x1={pos.x - W/2 + 10} y1={pos.y - 4} x2={pos.x + W/2 - 10} y2={pos.y - 4}
+        stroke={colors.wire} strokeWidth={0.5} opacity={0.25} />
+
+      {/* Content */}
+      <foreignObject x={pos.x - W/2} y={pos.y - H/2} width={W} height={H}>
+        <div className="w-full h-full flex flex-col items-center justify-center px-3 gap-1" style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}>
+          {/* Icon in circle */}
+          <div className="flex items-center justify-center h-6 w-6 rounded-full" style={{ background: colors.fill, border: `1px solid ${colors.stroke}` }}>
+            <Icon style={{ height: 12, width: 12, color: colors.wire }} />
+          </div>
+          {/* Label */}
+          <div className="text-center leading-tight font-bold tracking-wide uppercase"
+            style={{ fontSize: 9, color: colors.wire, textShadow: `0 0 8px ${colors.wire}` }}>
             {health.label.split("(")[0].trim()}
           </div>
-          <div className="text-[8px] text-muted-foreground/60 font-mono mt-0.5 text-center truncate max-w-full">
-            {health.latency_ms != null
-              ? `${health.latency_ms}ms`
-              : health.data_age_s != null
-              ? `${health.data_age_s.toFixed(0)}s ago`
-              : "—"}
+          {/* Metric */}
+          <div className="font-mono text-center" style={{ fontSize: 8, color: "rgba(148,163,184,0.6)" }}>
+            {metric}
           </div>
         </div>
       </foreignObject>
@@ -724,59 +775,84 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const healLog: HealEntry[] = logData?.log ?? [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative w-[90vw] h-[90vh] max-w-5xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-[92vw] h-[92vh] max-w-5xl rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        style={{
+          background: "radial-gradient(ellipse at 30% 0%, rgba(8,18,38,1) 0%, rgba(2,6,18,1) 100%)",
+          border: `1px solid ${overallColors.stroke}`,
+          boxShadow: `0 0 80px ${overallColors.glow}, 0 0 0 1px rgba(255,255,255,0.04) inset`,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 shrink-0"
+          style={{ borderBottom: `1px solid ${overallColors.stroke}30`, background: `${overallColors.wire}06` }}>
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Activity className={cn("h-5 w-5", overallColors.text)} />
-              <span
-                className={cn("absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-slate-900", {
+            {/* Animated radar icon */}
+            <div className="relative h-8 w-8 flex items-center justify-center shrink-0">
+              <div className="absolute inset-0 rounded-full animate-ping opacity-20"
+                style={{ background: overallColors.wire }} />
+              <Activity className={cn("h-4 w-4 relative z-10", overallColors.text)} />
+            </div>
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-[0.25em]"
+                style={{ color: overallColors.wire, textShadow: `0 0 10px ${overallColors.wire}` }}>
+                SYS / HEALTH / ARCHITECTURE
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className={cn("h-1.5 w-1.5 rounded-full", {
                   "bg-green-400": overallLevel === "green",
                   "bg-yellow-400 animate-pulse": overallLevel === "yellow",
                   "bg-red-400 animate-pulse": overallLevel === "red",
-                })}
-              />
+                })} />
+                <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                  {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — self-heal active" : "Critical — auto-remediating"}
+                </span>
+              </div>
             </div>
-            <h3 className="text-lg font-bold text-white">System Health Architecture</h3>
             {hasOverrides && (
-              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-500/20 uppercase">
+              <span className="text-[8px] font-mono px-2 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-500/20 uppercase tracking-widest">
                 Test Mode
               </span>
             )}
             {overallLevel !== "green" && (
-              <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center gap-1">
+              <span className="text-[8px] font-mono px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-widest"
+                style={{ background: `${overallColors.wire}12`, color: overallColors.wire, border: `1px solid ${overallColors.wire}30` }}>
                 <Zap className="h-2.5 w-2.5" />
                 self-heal active
               </span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
-          >
-            <X className="h-5 w-5" />
+          <button onClick={onClose}
+            className="p-2 rounded-lg text-muted-foreground hover:text-white transition-colors"
+            style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* ── Body (diagram) ── */}
         <div className="flex-1 relative overflow-hidden min-h-0">
           {isLoading || !mergedNodes ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-muted-foreground text-sm font-mono animate-pulse">Scanning subsystems…</div>
+            <div className="flex items-center justify-center h-full gap-3">
+              <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+              <span className="text-muted-foreground text-xs font-mono ml-1">Scanning subsystems…</span>
             </div>
           ) : (
             <>
-              {/* Legend */}
-              <div className="absolute top-4 left-6 flex items-center gap-4 z-10">
+              {/* Legend — top-left */}
+              <div className="absolute top-3 left-5 flex items-center gap-4 z-10">
                 {(["green", "yellow", "red"] as Level[]).map((lvl) => (
                   <div key={lvl} className="flex items-center gap-1.5">
-                    <span className={cn("h-2.5 w-2.5 rounded-full", { "bg-green-400": lvl === "green", "bg-yellow-400": lvl === "yellow", "bg-red-400": lvl === "red" })} />
-                    <span className="text-[9px] font-mono text-muted-foreground/60 uppercase">
+                    <span className={cn("h-2 w-2 rounded-full", {
+                      "bg-green-400": lvl === "green",
+                      "bg-yellow-400": lvl === "yellow",
+                      "bg-red-400": lvl === "red",
+                    })} style={{ boxShadow: `0 0 6px ${LEVEL_COLORS[lvl].wire}` }} />
+                    <span className="text-[8px] font-mono uppercase tracking-widest"
+                      style={{ color: LEVEL_COLORS[lvl].wire, opacity: 0.7 }}>
                       {lvl === "green" ? "Optimal" : lvl === "yellow" ? "Degraded" : "Critical"}
                     </span>
                   </div>
@@ -784,22 +860,32 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* SVG Diagram */}
-              <svg viewBox="0 0 800 560" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+              <svg viewBox="0 0 800 530" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
                 <defs>
-                  {(["green", "yellow", "red"] as Level[]).map((lvl) => (
-                    <filter key={lvl} id={`glow-${lvl}`} x="-50%" y="-50%" width="200%" height="200%">
-                      <feGaussianBlur stdDeviation="4" result="blur" />
-                      <feFlood floodColor={LEVEL_COLORS[lvl].glow} />
-                      <feComposite in2="blur" operator="in" />
-                      <feMerge>
-                        <feMergeNode />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
-                    </filter>
-                  ))}
+                  {/* Dot grid */}
+                  <pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.05)" />
+                  </pattern>
+                  {/* Radial mask so grid fades at edges */}
+                  <radialGradient id="gridFade" cx="50%" cy="50%" r="55%">
+                    <stop offset="0%" stopColor="white" stopOpacity="1" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0" />
+                  </radialGradient>
+                  <mask id="gridMask">
+                    <rect width="800" height="530" fill="url(#gridFade)" />
+                  </mask>
                 </defs>
 
-                {/* Wires */}
+                {/* Grid background */}
+                <rect width="800" height="530" fill="url(#dots)" mask="url(#gridMask)" />
+
+                {/* Horizontal scan line */}
+                <line x1="0" y1="0" x2="800" y2="0" stroke={overallColors.wire} strokeWidth="1.5" opacity="0.12">
+                  <animate attributeName="y1" values="0;530;0" dur="5s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="0;530;0" dur="5s" repeatCount="indefinite" />
+                </line>
+
+                {/* Wires (drawn first, under nodes) */}
                 {WIRES.map(([from, to], i) => {
                   const fromPos = NODE_POSITIONS[from];
                   const toPos = NODE_POSITIONS[to];
@@ -807,45 +893,46 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                   const toNode = mergedNodes[to];
                   if (!fromPos || !toPos || !fromNode || !toNode) return null;
                   const worstLevel: Level =
-                    fromNode.level === "red" || toNode.level === "red"
-                      ? "red"
-                      : fromNode.level === "yellow" || toNode.level === "yellow"
-                      ? "yellow"
-                      : "green";
+                    fromNode.level === "red" || toNode.level === "red" ? "red"
+                    : fromNode.level === "yellow" || toNode.level === "yellow" ? "yellow"
+                    : "green";
                   return (
-                    <GlowingWire
-                      key={i}
-                      x1={fromPos.x}
-                      y1={fromPos.y}
-                      x2={toPos.x}
-                      y2={toPos.y}
-                      level={worstLevel}
-                      id={`wire-${i}`}
-                    />
+                    <GlowingWire key={i}
+                      x1={fromPos.x} y1={fromPos.y}
+                      x2={toPos.x}   y2={toPos.y}
+                      level={worstLevel} id={`wire-${i}`} />
                   );
                 })}
 
                 {/* Nodes */}
                 {Object.entries(mergedNodes).map(([key, health]) => (
-                  <ArchitectureNode
-                    key={key}
-                    nodeKey={key}
-                    health={health}
+                  <ArchitectureNode key={key} nodeKey={key} health={health}
                     selected={selectedNode === key}
-                    onClick={() => setSelectedNode(selectedNode === key ? null : key)}
-                  />
+                    onClick={() => setSelectedNode(selectedNode === key ? null : key)} />
                 ))}
               </svg>
 
-              {/* Selected Node Detail */}
+              {/* Selected Node Detail Panel */}
               {selectedHealth && (
-                <div className="absolute bottom-4 left-6 max-w-xs bg-slate-900/95 border border-white/10 rounded-xl p-3 backdrop-blur-lg">
-                  <div className={cn("text-[10px] font-semibold font-mono mb-1", LEVEL_COLORS[selectedHealth.level].text)}>
+                <div className="absolute bottom-3 left-4 max-w-[260px] rounded-xl p-3 backdrop-blur-lg"
+                  style={{
+                    background: "rgba(4,10,24,0.95)",
+                    border: `1px solid ${LEVEL_COLORS[selectedHealth.level].stroke}`,
+                    boxShadow: `0 0 20px ${LEVEL_COLORS[selectedHealth.level].glow}`,
+                  }}>
+                  {/* Corner accent */}
+                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 rounded-tl-xl"
+                    style={{ borderColor: LEVEL_COLORS[selectedHealth.level].wire }} />
+                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 rounded-br-xl"
+                    style={{ borderColor: LEVEL_COLORS[selectedHealth.level].wire }} />
+                  <div className="text-[10px] font-bold font-mono uppercase tracking-wider mb-1"
+                    style={{ color: LEVEL_COLORS[selectedHealth.level].wire }}>
                     {selectedHealth.label}
                   </div>
-                  <div className="text-[9px] font-mono text-muted-foreground/70">{selectedHealth.detail}</div>
+                  <div className="text-[9px] font-mono text-slate-400/80">{selectedHealth.detail}</div>
                   {selectedHealth.level !== "green" && (
-                    <div className={cn("text-[9px] mt-2 leading-relaxed", LEVEL_COLORS[selectedHealth.level].text, "opacity-80")}>
+                    <div className="text-[9px] mt-2 leading-relaxed font-mono"
+                      style={{ color: LEVEL_COLORS[selectedHealth.level].wire, opacity: 0.85 }}>
                       {buildExplanation(selectedNode!, selectedHealth)}
                     </div>
                   )}

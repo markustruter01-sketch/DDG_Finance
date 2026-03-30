@@ -53,7 +53,19 @@ def compute_daily_var(
     Returns
     -------
     float
-        VaR as a fraction of total portfolio value, e.g. 0.03 = 3 %.
+        VaR expressed as a **fraction of the total invested value of
+        ``positions``** (i.e. the sum of all ``market_value`` entries),
+        not as a fraction of total account equity.
+
+        Examples:
+          * ``0.03`` means a 1-day 95% loss of 3% of the invested positions.
+          * If ``$50k`` is invested and VaR is 3%, the dollar loss is ``$1,500``.
+
+        Callers that compare against an equity-relative limit (e.g.
+        ``daily_loss_limit_pct * total_equity``) must first scale:
+        ``var_usd = var_pct * invested_usd`` and then compare
+        ``var_usd > daily_loss_limit_pct * total_equity``.
+
         Returns 0.0 on empty positions or insufficient data.
     """
     if not positions:

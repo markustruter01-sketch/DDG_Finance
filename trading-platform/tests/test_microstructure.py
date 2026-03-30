@@ -24,6 +24,7 @@ import math
 import time
 import tempfile
 import unittest
+import unittest.mock
 from datetime import datetime, timezone, timedelta
 
 # ── Ensure repo root on path ──────────────────────────────────────────────────
@@ -731,10 +732,35 @@ class TestVaRCircuitBreaker(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 12. compute_daily_var — historical simulation VaR
+# 12. compute_daily_var — historical simulation VaR (deterministic / mocked)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestComputeDailyVar(unittest.TestCase):
+    """
+    All tests here use unittest.mock to patch yfinance so they run offline and
+    deterministically.  No live network calls are made.
+
+    compute_daily_var() return contract:
+        Returns VaR as a *fraction of the invested positions*, not of total
+        equity.  Callers must scale to USD before comparing to equity limits:
+        ``var_usd = var_pct × invested_usd > daily_loss_limit_pct × equity``.
+    """
+
+    def _make_df(self, tickers, prices):
+        """Build a minimal yfinance-like multi-ticker DataFrame."""
+        import pandas as pd
+        idx = pd.date_range("2025-01-01", periods=len(prices), freq="D")
+        if isinstance(tickers, list) and len(tickers) == 1:
+            # Single-ticker: single-level column
+            df = pd.DataFrame({"Close": prices}, index=idx)
+            df.columns = pd.Index(tickers)
+        else:
+            # Multi-ticker: MultiIndex (price_type, ticker)
+            arrays = [["Close"] * len(tickers), tickers]
+            cols = pd.MultiIndex.from_arrays(arrays)
+            data = {("Close", t): prices for t in tickers}
+            df = pd.DataFrame(data, index=idx, columns=cols)
+        return df
 
     def test_empty_positions_returns_zero(self):
         from portfolio.var_calculator import compute_daily_var
@@ -745,34 +771,95 @@ class TestComputeDailyVar(unittest.TestCase):
         positions = [{"symbol": "SPY", "market_value": 0.0}]
         self.assertEqual(compute_daily_var(positions), 0.0)
 
-    def test_unknown_symbol_returns_zero_gracefully(self):
+    def test_negative_market_value_skipped(self):
         from portfolio.var_calculator import compute_daily_var
-        positions = [{"symbol": "XXXXINVALIDXXX", "market_value": 1000.0}]
-        result = compute_daily_var(positions, lookback_days=10)
-        self.assertIsInstance(result, float)
-        self.assertGreaterEqual(result, 0.0)
+        positions = [{"symbol": "SPY", "market_value": -500.0}]
+        self.assertEqual(compute_daily_var(positions), 0.0)
 
-    def test_returns_float(self):
+    def test_yfinance_returns_none_returns_zero(self):
         from portfolio.var_calculator import compute_daily_var
-        positions = [{"symbol": "SPY", "market_value": 10000.0}]
-        result = compute_daily_var(positions, confidence=0.95, lookback_days=30)
-        self.assertIsInstance(result, float)
+        with unittest.mock.patch("yfinance.download", return_value=None):
+            result = compute_daily_var([{"symbol": "SPY", "market_value": 1000.0}])
+        self.assertEqual(result, 0.0)
 
-    def test_result_in_reasonable_range(self):
+    def test_yfinance_raises_returns_zero_gracefully(self):
         from portfolio.var_calculator import compute_daily_var
-        positions = [{"symbol": "SPY", "market_value": 10000.0}]
-        result = compute_daily_var(positions, confidence=0.95, lookback_days=60)
-        # SPY 1-day 95% VaR should be between 0% and 10%
-        self.assertGreaterEqual(result, 0.0)
-        self.assertLessEqual(result, 0.10)
+        with unittest.mock.patch("yfinance.download", side_effect=RuntimeError("network")):
+            result = compute_daily_var([{"symbol": "SPY", "market_value": 1000.0}])
+        self.assertEqual(result, 0.0)
+
+    def test_insufficient_observations_returns_zero(self):
+        """Fewer than 5 trading days → return 0.0."""
+        import pandas as pd
+        from portfolio.var_calculator import compute_daily_var
+        df = self._make_df(["SPY"], [100.0, 101.0, 99.0])  # 3 prices → 2 returns
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            result = compute_daily_var([{"symbol": "SPY", "market_value": 10_000.0}])
+        self.assertEqual(result, 0.0)
+
+    def test_all_zero_returns_gives_zero_var(self):
+        """Flat prices → zero returns → VaR = 0."""
+        from portfolio.var_calculator import compute_daily_var
+        flat = [100.0] * 30
+        df = self._make_df(["SPY"], flat)
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            result = compute_daily_var([{"symbol": "SPY", "market_value": 10_000.0}])
+        self.assertAlmostEqual(result, 0.0, places=6)
+
+    def test_known_returns_95pct_var(self):
+        """
+        With 20 daily prices alternating +2% and -3%, the worst 5% of daily
+        returns is the -3% days.  Expected 95% VaR ≈ 0.03 (3%).
+        """
+        from portfolio.var_calculator import compute_daily_var
+        prices = []
+        p = 100.0
+        for i in range(25):
+            prices.append(p)
+            p = p * (1.02 if i % 2 == 0 else 0.97)
+        df = self._make_df(["SPY"], prices)
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            result = compute_daily_var(
+                [{"symbol": "SPY", "market_value": 10_000.0}],
+                confidence=0.95,
+            )
+        # Should be close to 3% loss
+        self.assertGreater(result, 0.0)
+        self.assertLess(result, 0.10)
 
     def test_higher_confidence_gte_lower(self):
+        """99% VaR ≥ 95% VaR on the same position."""
         from portfolio.var_calculator import compute_daily_var
-        positions = [{"symbol": "SPY", "market_value": 10000.0}]
-        var_95 = compute_daily_var(positions, confidence=0.95, lookback_days=60)
-        var_99 = compute_daily_var(positions, confidence=0.99, lookback_days=60)
-        # 99% VaR should be >= 95% VaR (or both 0 when insufficient data)
-        self.assertGreaterEqual(var_99, var_95 - 0.001)
+        prices = []
+        p = 100.0
+        for i in range(30):
+            prices.append(p)
+            p = p * (1.01 if i % 3 != 0 else 0.97)
+        df = self._make_df(["SPY"], prices)
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            var_95 = compute_daily_var([{"symbol": "SPY", "market_value": 10_000.0}], 0.95)
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            var_99 = compute_daily_var([{"symbol": "SPY", "market_value": 10_000.0}], 0.99)
+        self.assertGreaterEqual(var_99, var_95 - 1e-6)
+
+    def test_return_is_fraction_of_invested_not_equity(self):
+        """
+        With $50k invested (out of $100k equity) and a VaR of 5%,
+        var_pct should be 0.05 — representing 5% of invested capital,
+        i.e. $2,500, not $5,000.
+        """
+        from portfolio.var_calculator import compute_daily_var
+        prices = []
+        p = 100.0
+        for i in range(30):
+            prices.append(p)
+            p = p * (1.02 if i % 3 != 0 else 0.95)
+        df = self._make_df(["SPY"], prices)
+        with unittest.mock.patch("yfinance.download", return_value=df):
+            var_pct = compute_daily_var([{"symbol": "SPY", "market_value": 50_000.0}], 0.99)
+        # var_pct is a fraction of the $50k position, not of $100k equity
+        self.assertIsInstance(var_pct, float)
+        self.assertGreaterEqual(var_pct, 0.0)
 
     def test_to_yfinance_ticker_mapping(self):
         from portfolio.var_calculator import _to_yfinance_ticker

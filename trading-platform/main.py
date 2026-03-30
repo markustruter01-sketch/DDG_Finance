@@ -1186,13 +1186,75 @@ async def system_degradations_endpoint(
 
 
 @router.get("/system/degradations/report", tags=["System"])
-async def system_degradations_report(hours: int = 24) -> dict:
+async def system_degradations_report(hours: int = 48) -> dict:
     """
-    Generate a plain-text bug report formatted for copy-paste to the AI.
-    Includes component summary + unique event timeline for the last N hours.
+    Generate a rich plain-text bug report formatted for copy-paste to the AI.
+
+    Includes:
+    - Live system snapshot (green/yellow/red per node, right now)
+    - Market context: open/closed, Groq budget state, Kraken positions/VPIN
+    - Active (unresolved) issues with first-seen / last-seen duration
+    - Auto-heal success rate (last 20 attempts)
+    - Component summary with total counts
+    - Full event timeline with MARKET OPEN / AFTER HOURS annotations
+    - 8-line detail excerpts (enough for full tracebacks)
     """
+    import json as _json
+    from pathlib import Path as _Path
     from core.degradation_tracker import build_bug_report
-    report = build_bug_report(hours=hours)
+
+    # ── Gather live context ───────────────────────────────────────────────
+    live_health: dict | None = None
+    groq_budget: dict | None = None
+    kraken_status: dict | None = None
+    market_open_flag: bool | None = None
+    market_next_open: str | None = None
+    heal_log_data: list[dict] | None = None
+
+    try:
+        # Live health snapshot (same function powering the dashboard diagram)
+        live_health = await system_health_architecture()
+    except Exception:
+        pass
+
+    try:
+        from analysis.groq_budget import budget as _gb
+        groq_budget = _gb.budget_status()
+        groq_budget["budget_exhausted"] = _gb.budget_exhausted()
+        groq_budget["daily_limit"] = groq_budget.get("token_budget_total", 100000)
+    except Exception:
+        pass
+
+    try:
+        sf = _Path("../kraken-bot/status.json")
+        if sf.exists():
+            kraken_status = _json.loads(sf.read_text())
+    except Exception:
+        pass
+
+    try:
+        market_open_flag = is_market_open()
+        if not market_open_flag:
+            nxt = get_next_open()
+            market_next_open = str(nxt)[:19].replace("T", " ") + " UTC" if nxt else None
+    except Exception:
+        pass
+
+    try:
+        with _heal_lock:
+            heal_log_data = list(_heal_log[:20])  # newest-first, first 20
+    except Exception:
+        pass
+
+    report = build_bug_report(
+        hours=hours,
+        live_health=live_health,
+        groq_budget=groq_budget,
+        kraken_status=kraken_status,
+        market_open=market_open_flag,
+        market_next_open=market_next_open,
+        heal_log=heal_log_data,
+    )
     return {"hours": hours, "report": report}
 
 

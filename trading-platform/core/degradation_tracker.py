@@ -257,67 +257,303 @@ def get_stats(hours: int = 24) -> dict:
         return {}
 
 
+# ── Market-hours helper ──────────────────────────────────────────────────────
+
+def _market_context(ts_iso: str) -> str:
+    """
+    Return a short label indicating whether a UTC timestamp fell during
+    US stock-market hours (Mon–Fri 09:30–16:00 ET).
+    """
+    try:
+        import datetime as _dt
+        # Simple ET offset: UTC-5 (EST) / UTC-4 (EDT).
+        # Approximate: use -4 Apr-Oct, -5 Nov-Mar.
+        ts_utc = _dt.datetime.fromisoformat(ts_iso.replace("Z", "+00:00"))
+        month = ts_utc.month
+        et_offset = -4 if 4 <= month <= 10 else -5
+        ts_et = ts_utc + _dt.timedelta(hours=et_offset)
+        weekday = ts_et.weekday()   # 0=Mon … 4=Fri
+        t = ts_et.time()
+        open_t  = _dt.time(9, 30)
+        close_t = _dt.time(16, 0)
+        if weekday < 5 and open_t <= t < close_t:
+            return "MARKET OPEN"
+        else:
+            return "AFTER HOURS"
+    except Exception:
+        return ""
+
+
+def _hours_ago(ts_iso: str) -> str:
+    """Return a human-readable 'N h ago' or 'Xm ago' string for a UTC timestamp."""
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        ts = _dt.fromisoformat(ts_iso.replace("Z", "+00:00"))
+        delta = _dt.now(_tz.utc) - ts
+        secs = int(delta.total_seconds())
+        if secs < 120:
+            return f"{secs}s ago"
+        if secs < 7200:
+            return f"{secs // 60}m ago"
+        return f"{secs // 3600}h ago"
+    except Exception:
+        return ""
+
+
+# ── Persistent (still-open) issue finder ────────────────────────────────────
+
+def get_active_issues() -> list[dict]:
+    """Return unresolved degradation events with first-seen / last-seen metadata."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return []
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT component, error_type, severity,
+                           MIN(ts AT TIME ZONE 'UTC') AS first_seen,
+                           MAX(ts AT TIME ZONE 'UTC') AS last_seen,
+                           COUNT(*)                   AS occurrences,
+                           (SELECT message FROM system_degradations sd2
+                            WHERE sd2.component = sd.component
+                              AND sd2.error_type = sd.error_type
+                              AND sd2.resolved_at IS NULL
+                            ORDER BY sd2.ts DESC LIMIT 1) AS last_message
+                    FROM system_degradations sd
+                    WHERE resolved_at IS NULL
+                      AND ts >= NOW() - INTERVAL '48 hours'
+                    GROUP BY component, error_type, severity
+                    ORDER BY last_seen DESC
+                    """,
+                )
+                rows = cur.fetchall()
+        cols = ["component", "error_type", "severity", "first_seen", "last_seen", "occurrences", "last_message"]
+        result = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            d["first_seen"] = d["first_seen"].isoformat() + "Z"
+            d["last_seen"]  = d["last_seen"].isoformat() + "Z"
+            result.append(d)
+        return result
+    except Exception:
+        return []
+
+
 # ── Bug report builder ───────────────────────────────────────────────────────
 
-def build_bug_report(hours: int = 24) -> str:
+def build_bug_report(
+    hours: int = 48,
+    live_health:   dict | None = None,
+    groq_budget:   dict | None = None,
+    kraken_status: dict | None = None,
+    market_open:   bool | None = None,
+    market_next_open: str | None = None,
+    heal_log:      list[dict] | None = None,
+) -> str:
     """
-    Generate a plain-text bug report the operator can paste directly to the AI.
-    Includes a summary, component stats, and the last 30 unique events.
+    Generate a rich plain-text bug report for AI-assisted diagnosis.
+
+    Includes:
+    - Live system health snapshot (green/yellow/red per node)
+    - Market context (open vs closed, Groq budget, Kraken positions)
+    - Unresolved active issues with duration
+    - Auto-heal effectiveness
+    - Component summary with market-hours breakdown
+    - Full event timeline with market-context annotations
     """
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    events = get_recent_events(limit=50, hours=hours)
-    stats = get_stats(hours=hours)
+    from datetime import datetime as _dt, timezone as _tz
+    now_utc = _dt.now(_tz.utc)
+    now_str = now_utc.strftime("%Y-%m-%d %H:%M UTC")
+    events  = get_recent_events(limit=100, hours=hours)
+    stats   = get_stats(hours=hours)
+    active  = get_active_issues()
 
-    lines: list[str] = [
-        "=" * 60,
-        f"SYSTEM DEGRADATION REPORT — {now_str}",
-        f"Window: last {hours}h  |  Total events: {len(events)}",
-        "=" * 60,
-        "",
-    ]
+    resolved_count   = sum(1 for e in events if e["resolved_at"])
+    unresolved_count = len(events) - resolved_count
 
-    # ── Summary by component ─────────────────────────────────────────────
+    L = []   # output lines
+
+    # ════════════════════════════════════════════════════════════════════
+    L.append("=" * 60)
+    L.append(f"SYSTEM DEGRADATION REPORT — {now_str}")
+    L.append(f"Window: last {hours}h  |  Total events: {len(events)}"
+             f"  |  Open: {unresolved_count}  |  Resolved: {resolved_count}")
+    L.append("=" * 60)
+    L.append("")
+
+    # ── LIVE SNAPSHOT ────────────────────────────────────────────────────
+    if live_health:
+        L.append("LIVE SYSTEM SNAPSHOT")
+        L.append("-" * 40)
+        nodes = live_health.get("nodes", {})
+        icons = {"green": "✓", "yellow": "!", "red": "✗"}
+        for name, node in nodes.items():
+            lvl  = node.get("level", "?")
+            icon = icons.get(lvl, "?")
+            det  = node.get("detail", "")[:60]
+            L.append(f"  {icon} {name:<22} [{lvl:<8}] {det}")
+        L.append("")
+
+    # ── CONTEXT ──────────────────────────────────────────────────────────
+    L.append("SYSTEM CONTEXT")
+    L.append("-" * 40)
+
+    # Market state
+    if market_open is not None:
+        mkt_label = "OPEN" if market_open else "CLOSED"
+        nxt = f"  (next open: {market_next_open})" if market_next_open and not market_open else ""
+        L.append(f"  Market:      {mkt_label}{nxt}")
+    else:
+        L.append("  Market:      unknown")
+
+    # Groq budget
+    if groq_budget:
+        used      = groq_budget.get("tokens_used_today", "?")
+        limit     = groq_budget.get("daily_limit", 100000)
+        remaining = groq_budget.get("tokens_remaining", "?")
+        exhausted = groq_budget.get("budget_exhausted", False)
+        exhausted_at = groq_budget.get("exhausted_at") or groq_budget.get("reset_at")
+        budget_str = f"  Groq budget: {used:,}/{limit:,} used, {remaining:,} remaining"
+        if exhausted:
+            budget_str += f"  ← EXHAUSTED"
+            if exhausted_at:
+                budget_str += f" (at {str(exhausted_at)[:16]} UTC)"
+            budget_str += "\n    → analysis_failed events during market hours are EXPECTED NOISE until midnight UTC reset"
+        L.append(budget_str)
+    else:
+        L.append("  Groq budget: (not available)")
+
+    # Kraken bot summary
+    if kraken_status:
+        keq   = kraken_status.get("total_equity_usd", 0)
+        kdep  = kraken_status.get("deployed_usd", 0)
+        kpct  = kraken_status.get("deployed_pct", 0)
+        kpos  = kraken_status.get("position_count", 0)
+        kstatus = kraken_status.get("status", "?")
+        kcycle  = kraken_status.get("cycle_count", 0)
+        ceiling = kraken_status.get("deployable_ceiling_pct", 80)
+        L.append(f"  Kraken bot:  {kstatus.upper()} | Equity ${keq:,.0f}"
+                 f" | Deployed ${kdep:,.0f} ({kpct:.0f}% of equity,"
+                 f" ceiling={(ceiling * keq / 100):,.0f}) | Cycle #{kcycle}")
+        # Open positions
+        positions = kraken_status.get("open_positions", [])
+        if positions:
+            for p in positions[:6]:
+                sym   = p.get("symbol", "?")
+                side  = p.get("side", "?").upper()
+                pnl   = p.get("unrealized_pnl_pct", 0)
+                size  = p.get("size_usd", 0)
+                L.append(f"    {side:<5} {sym:<12} ${size:,.0f}  P&L: {pnl:+.2f}%")
+        # VPIN / microstructure
+        ms = kraken_status.get("microstructure", {})
+        if ms:
+            high_vpin = [(sym, v.get("vpin", 0)) for sym, v in ms.items() if v.get("vpin", 0) > 0.7]
+            if high_vpin:
+                L.append(f"    VPIN > 0.70 on {len(high_vpin)}/{len(ms)} pairs"
+                         f" (entries filtered — toxic/institutional flow)")
+    else:
+        L.append("  Kraken bot:  (not available)")
+
+    L.append("")
+
+    # ── AUTO-HEAL EFFECTIVENESS ──────────────────────────────────────────
+    if heal_log:
+        heal_total   = len(heal_log)
+        heal_success = sum(1 for h in heal_log if h.get("success"))
+        heal_rate    = f"{heal_success}/{heal_total}"
+        L.append("AUTO-HEAL EFFECTIVENESS (last 20 attempts)")
+        L.append("-" * 40)
+        L.append(f"  Success rate: {heal_rate}"
+                 + ("  ← healer working" if heal_success >= heal_total * 0.7 else "  ← healer struggling"))
+        # Show the last 5 heal entries
+        from datetime import datetime as _dt2, timezone as _tz2
+        for h in heal_log[:5]:
+            ts_raw = h.get("ts", 0)
+            try:
+                ts_h = _dt2.fromtimestamp(float(ts_raw), tz=_tz2.utc).strftime("%H:%M UTC")
+            except Exception:
+                ts_h = str(ts_raw)[:16]
+            comp_h  = h.get("component", "?")
+            trig_h  = h.get("triggered_by", "?")
+            ok_h    = "✓" if h.get("success") else "✗"
+            action_h = h.get("action") or h.get("result") or ""
+            L.append(f"  {ok_h} [{ts_h}] {comp_h} ({trig_h}) — {action_h[:70]}")
+        L.append("")
+
+    # ── ACTIVE (UNRESOLVED) ISSUES ───────────────────────────────────────
+    if active:
+        L.append(f"ACTIVE UNRESOLVED ISSUES ({len(active)})")
+        L.append("-" * 40)
+        for a in active:
+            dur = _hours_ago(a["first_seen"])
+            lst = _hours_ago(a["last_seen"])
+            sev = a["severity"].upper()
+            ctx = _market_context(a["last_seen"])
+            ctx_tag = f" [{ctx}]" if ctx else ""
+            L.append(f"  [{sev}] {a['component']} / {a['error_type']}{ctx_tag}")
+            L.append(f"    First seen: {dur}  |  Last seen: {lst}"
+                     f"  |  Occurrences: {a['occurrences']}")
+            if a.get("last_message"):
+                L.append(f"    Latest msg: {a['last_message'][:80]}")
+            L.append("")
+    else:
+        L.append("ACTIVE UNRESOLVED ISSUES")
+        L.append("-" * 40)
+        L.append("  None — all recent issues resolved.")
+        L.append("")
+
+    # ── COMPONENT SUMMARY ────────────────────────────────────────────────
     if stats:
-        lines.append("COMPONENT SUMMARY")
-        lines.append("-" * 40)
+        L.append(f"COMPONENT SUMMARY (last {hours}h)")
+        L.append("-" * 40)
         for comp, sev_map in sorted(stats.items()):
             parts = []
             for sev in ("critical", "error", "warning"):
                 if sev in sev_map:
                     parts.append(f"{sev}×{sev_map[sev]}")
-            lines.append(f"  {comp:<20} {' | '.join(parts)}")
-        lines.append("")
+            L.append(f"  {comp:<22} {' | '.join(parts)}")
+        L.append("")
 
-    # ── Event timeline ───────────────────────────────────────────────────
-    lines.append("RECENT EVENTS (newest first)")
-    lines.append("-" * 40)
+    # ── EVENT TIMELINE ───────────────────────────────────────────────────
+    L.append("RECENT EVENTS (newest first, market context annotated)")
+    L.append("-" * 40)
     if not events:
-        lines.append("  No events recorded in this window.")
+        L.append("  No events recorded in this window.")
     else:
-        seen_signatures: set[str] = set()
+        seen_sigs: set[str] = set()
         shown = 0
         for ev in events:
             sig = f"{ev['component']}::{ev['error_type']}::{ev['message'][:60]}"
-            if sig in seen_signatures:
+            if sig in seen_sigs:
                 continue
-            seen_signatures.add(sig)
-            ts = ev["ts"][:19].replace("T", " ")
-            resolved = " [RESOLVED]" if ev["resolved_at"] else ""
-            sev_tag = ev["severity"].upper()
-            lines.append(f"[{ts}] [{sev_tag}] {ev['component']} / {ev['error_type']}{resolved}")
-            lines.append(f"  {ev['message']}")
+            seen_sigs.add(sig)
+
+            ts_raw   = ev["ts"][:19].replace("T", " ")
+            ctx      = _market_context(ev["ts"])
+            ctx_tag  = f" [{ctx}]" if ctx else ""
+            resolved = " [RESOLVED]" if ev["resolved_at"] else " [OPEN]"
+            sev_tag  = ev["severity"].upper()
+            ago      = _hours_ago(ev["ts"])
+
+            L.append(f"[{ts_raw} UTC / {ago}] [{sev_tag}]{ctx_tag} {ev['component']} / {ev['error_type']}{resolved}")
+            L.append(f"  {ev['message']}")
+
             if ev.get("detail"):
                 detail_lines = ev["detail"].strip().splitlines()
-                for dl in detail_lines[:4]:
-                    lines.append(f"    {dl}")
-                if len(detail_lines) > 4:
-                    lines.append(f"    ... ({len(detail_lines) - 4} more lines)")
-            lines.append("")
+                # Show up to 8 lines — enough to capture tracebacks' actual error line
+                for dl in detail_lines[:8]:
+                    L.append(f"    {dl}")
+                if len(detail_lines) > 8:
+                    L.append(f"    ... ({len(detail_lines) - 8} more lines)")
+            L.append("")
             shown += 1
-            if shown >= 30:
+            if shown >= 40:
+                L.append(f"  ... {len(events) - shown} more events truncated (increase hours or filter by component)")
                 break
 
-    lines.append("=" * 60)
-    lines.append("END OF REPORT — paste this to the AI for diagnosis")
-    lines.append("=" * 60)
-    return "\n".join(lines)
+    L.append("=" * 60)
+    L.append("END OF REPORT — paste this to the AI for diagnosis")
+    L.append("=" * 60)
+    return "\n".join(L)

@@ -715,12 +715,16 @@ async def _auto_heal_check() -> None:
         _degraded = False
         _severity = "warning"
         if len(jobs) < EXPECTED_JOB_COUNT:
-            # Missing scheduler jobs is always a CRITICAL regardless of market hours
+            # Missing scheduler jobs is always CRITICAL regardless of market hours
             _degraded = True
             _severity = "critical"
-        elif last_status in ("error", "analysis_failed", "execution_failed"):
-            # Analysis failures during market hours = CRITICAL; off-hours = WARNING
-            # (off-hours failures are expected — Alpaca/yfinance unavailable)
+        elif last_status in ("error", "execution_failed"):
+            # Hard errors / execution failures are always CRITICAL at any hour
+            _degraded = True
+            _severity = "critical"
+        elif last_status == "analysis_failed":
+            # analysis_failed off-hours is expected (Alpaca/yfinance unavailable);
+            # only escalate to CRITICAL when the market is actually open.
             _degraded = True
             _severity = "critical" if _mkt_open else "warning"
 

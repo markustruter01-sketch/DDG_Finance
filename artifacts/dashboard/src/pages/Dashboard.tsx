@@ -12,7 +12,7 @@ import {
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
   useLearningJournal, useAttribution,
   useDegradationLog, useDegradationReport, useDegradationHealth,
-  useRecentTrades, useRagWinsExtended,
+  useRecentTrades, useRagWinsExtended, useExportReport,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
   type LearningEntry, type DegradationEvent, type DegradationStats,
@@ -36,7 +36,7 @@ import {
   Vault, ArrowUpRight, Coins, TrendingUp as GrowthIcon,
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
   Lightbulb, Play, LogOut, ExternalLink, Copy, Bug,
-  LayoutDashboard, MoreHorizontal, Anchor, Database,
+  LayoutDashboard, MoreHorizontal, Anchor, Database, FileDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1344,6 +1344,25 @@ function CombinedPortfolioSummary() {
   const { data: vault }     = useVault();
   const { data: positions } = useLivePositions();
   const { data: kraken }    = useKrakenStatus();
+  const exportReport        = useExportReport();
+  const { toast }           = useToast();
+
+  const handleExportReport = async () => {
+    try {
+      const result = await exportReport.mutateAsync();
+      await navigator.clipboard.writeText(result.report);
+      toast({
+        title: "Report Copied to Clipboard",
+        description: `${result.line_count.toLocaleString()} lines · ${Math.round(result.char_count / 1000)}k chars · Paste into Claude or Gemini for analysis.`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Export Failed",
+        description: err?.message ?? "Could not generate report.",
+      });
+    }
+  };
 
   // ── Alpaca values ────────────────────────────────────────────────────────────
   const alpacaEquity  = portfolio?.account.equity       ?? 0;
@@ -1398,6 +1417,26 @@ function CombinedPortfolioSummary() {
               {formatCurrency(grandTotal)}
             </span>
           )}
+          <button
+            onClick={handleExportReport}
+            disabled={exportReport.isPending}
+            title="Export full diagnostic report (both bots) — copy to clipboard for LLM analysis"
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase transition-all duration-150",
+              "bg-blue-950/50 border border-blue-800/40 text-blue-400",
+              "hover:bg-blue-600/20 hover:border-blue-500/60 hover:text-blue-300",
+              "disabled:opacity-40 disabled:cursor-not-allowed",
+              "min-h-[32px]"
+            )}
+          >
+            {exportReport.isPending
+              ? <RefreshCw className="h-3 w-3 animate-spin" />
+              : <FileDown className="h-3 w-3" />
+            }
+            <span className="hidden sm:inline">
+              {exportReport.isPending ? "Generating…" : "Export Report"}
+            </span>
+          </button>
         </div>
       </div>
 

@@ -3083,6 +3083,681 @@ async def kraken_performance() -> dict:
     }
 
 
+# ── Diagnostic Export Report ────────────────────────────────────────────────────
+
+@router.get("/export/report", tags=["Export"])
+async def export_diagnostic_report() -> dict:
+    """
+    Generate a comprehensive plain-text diagnostic report covering both trading bots.
+    Intended to be pasted into an LLM (Claude / Gemini / GPT) for strategy analysis.
+    Returns: { report: str, generated_at: str, char_count: int }
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt, timezone as _tz
+    from analysis.attribution import compute_attribution as _attr
+    from analysis.learning_journal import get_journal_entries as _lj
+    from analysis.groq_budget import budget as _groq_budget
+
+    now_utc = _dt.now(_tz.utc)
+    ts = now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    def _c(v, decimals=2, prefix="$"):
+        """Format a number as currency or plain float."""
+        if v is None:
+            return "N/A"
+        if prefix == "$":
+            return f"${v:,.{decimals}f}"
+        return f"{v:.{decimals}f}"
+
+    def _pct(v, decimals=2):
+        if v is None:
+            return "N/A"
+        sign = "+" if v >= 0 else ""
+        return f"{sign}{v:.{decimals}f}%"
+
+    def _safe(d, *keys, default="N/A"):
+        for k in keys:
+            if not isinstance(d, dict):
+                return default
+            d = d.get(k, None)
+            if d is None:
+                return default
+        return d if d is not None else default
+
+    lines: list[str] = []
+    W = "═" * 80
+
+    def h1(title: str):
+        lines.append(W)
+        lines.append(f"  {title}")
+        lines.append(W)
+
+    def h2(title: str):
+        lines.append("")
+        lines.append(f"── {title} {'─' * max(0, 74 - len(title))}")
+
+    def row(label: str, value: str, indent: int = 2):
+        lines.append(f"{'  ' * indent}{label:<32}{value}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # HEADER
+    # ─────────────────────────────────────────────────────────────────────────
+    lines.append(W)
+    lines.append("  QUANTITATIVE TRADING PLATFORM — AI DIAGNOSTIC REPORT")
+    lines.append(f"  Generated: {ts}")
+    lines.append("  PURPOSE: Paste into Claude / Gemini / ChatGPT for strategy analysis.")
+    lines.append("           Contains all trade history, AI reasoning, risk parameters,")
+    lines.append("           entry/exit conditions, and performance data for both bots.")
+    lines.append(W)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 1: SYSTEM STATUS
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        ks_state   = ks_get_state()
+        mkt_open   = is_market_open()
+        sched_jobs = get_job_status()
+        last_run   = get_last_run()
+        groq_tok   = _groq_budget.remaining if hasattr(_groq_budget, "remaining") else None
+        groq_max   = getattr(_groq_budget, "daily_limit", 100_000)
+        groq_used  = (groq_max - groq_tok) if groq_tok is not None else None
+    except Exception:
+        ks_state = {}; mkt_open = False; sched_jobs = []; last_run = {}; groq_tok = None; groq_used = None; groq_max = 100_000
+
+    h1("SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT")
+    row("Report timestamp:", ts)
+    row("Market status:", "OPEN (US Equities)" if mkt_open else "CLOSED (After Hours / Weekend)")
+    row("Kill switch:", "TRIPPED — ALL TRADING HALTED" if ks_state.get("tripped") else "ARMED (not tripped — normal)")
+    row("Daily drawdown:", f"{_pct(ks_state.get('drawdown_pct', 0), 3)} / {_pct(ks_state.get('threshold_pct', 5.0), 1)} threshold")
+    row("Opening equity baseline:", _c(ks_state.get("opening_equity")))
+    row("Pending liquidation:", "YES — deferred close queued for market open" if ks_state.get("pending_liquidation") else "NO")
+    if groq_tok is not None:
+        row("Groq token budget:", f"{groq_tok:,} remaining / {groq_max:,} daily ({groq_used:,} used)")
+    else:
+        row("Groq token budget:", "Unknown")
+
+    last_regime = last_run.get("last_regime") or "Unknown"
+    last_status = last_run.get("last_run_status") or "Unknown"
+    last_run_ts = last_run.get("last_run_utc") or "Never"
+    row("Last analysis cycle:", f"{last_run_ts} | status={last_status}")
+    row("Current market regime:", last_regime)
+
+    if sched_jobs:
+        lines.append("")
+        lines.append("  Scheduler (8 jobs):")
+        for job in sched_jobs:
+            lines.append(f"    • {job.get('name','?'):<45} next: {str(job.get('next_fire_utc','?'))[:19]}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 2: ALPACA BOT — QUANTITATIVE EQUITY PLATFORM
+    # ─────────────────────────────────────────────────────────────────────────
+    try:
+        acct      = get_account()
+        positions = get_positions()
+    except Exception:
+        acct = {}; positions = []
+
+    equity      = acct.get("equity", 0) or 0
+    cash        = acct.get("cash", 0) or 0
+    buying_pwr  = acct.get("buying_power", 0) or 0
+    start_cap   = 100_000.0
+    pnl_usd     = equity - start_cap
+    pnl_pct     = (pnl_usd / start_cap) * 100
+
+    h1("SECTION 2: ALPACA BOT — QUANTITATIVE EQUITY PLATFORM (US Equities)")
+    h2("PORTFOLIO OVERVIEW")
+    row("Capital pool:", "US Equity — Paper Trading via Alpaca")
+    row("Starting capital:", _c(start_cap))
+    row("Current equity:", _c(equity))
+    row("Total P&L:", f"{_c(pnl_usd)} ({_pct(pnl_pct)})")
+    row("Available cash:", _c(cash))
+    row("Buying power:", _c(buying_pwr))
+    row("Open positions:", str(len(positions)))
+
+    # ── Current positions ──
+    h2("CURRENT OPEN POSITIONS (ALPACA)")
+    if not positions:
+        lines.append("  No open positions.")
+    for p in positions:
+        sym         = p.get("symbol", "?")
+        qty         = p.get("qty", 0)
+        entry       = p.get("avg_entry_price")
+        current     = p.get("current_price")
+        mval        = p.get("market_value")
+        upl         = p.get("unrealized_pl")
+        uplpc       = (p.get("unrealized_plpc") or 0) * 100
+        ac          = p.get("asset_class", "unknown")
+        conv        = p.get("conviction_score")
+        kelly       = p.get("kelly_fraction")
+        sl_pct      = p.get("stop_loss_pct")
+        tp_pct      = p.get("take_profit_pct")
+        sl_px       = p.get("stop_loss_price")
+        tp_px       = p.get("take_profit_price")
+        thesis      = p.get("original_thesis") or "N/A"
+        is_vault    = sym in ("JEPQ",)
+
+        lines.append(f"\n  {sym}{' [PROFIT VAULT — protected from liquidation]' if is_vault else ''}")
+        row("Qty:", f"{qty:.6f} shares" if qty else "N/A", indent=2)
+        row("Avg entry price:", _c(entry), indent=2)
+        row("Current price:", _c(current), indent=2)
+        row("Market value:", _c(mval), indent=2)
+        row("Unrealized P&L:", f"{_c(upl)} ({_pct(uplpc)})", indent=2)
+        row("Asset class:", ac, indent=2)
+        row("Conviction score:", f"{conv:.2f} / 1.0" if conv else "N/A", indent=2)
+        row("Kelly fraction:", f"{(kelly or 0)*100:.2f}%" if kelly else "N/A", indent=2)
+        if sl_pct:
+            row("Stop loss:", f"{_pct(sl_pct)} from entry | price: {_c(sl_px)}", indent=2)
+        else:
+            row("Stop loss:", "N/A", indent=2)
+        if tp_pct:
+            row("Take profit:", f"{_pct(tp_pct)} from entry | price: {_c(tp_px)}", indent=2)
+        else:
+            row("Take profit:", "N/A", indent=2)
+        row("Original thesis:", thesis[:120] if len(thesis) > 120 else thesis, indent=2)
+
+    # ── Latest AI allocation ──
+    h2("LATEST AI ALLOCATION DECISION (GROQ LLAMA 3.3 70B)")
+    last_alloc = last_run.get("last_allocation") or []
+    if not last_alloc:
+        lines.append("  No allocation has been generated yet. Run an analysis cycle to populate.")
+    else:
+        lines.append(f"  Market Regime:  {last_regime}")
+        lines.append(f"  Generated:      {last_run_ts}")
+        lines.append("")
+        for slot in last_alloc:
+            slot_n  = slot.get("slot", "?")
+            ticker  = slot.get("ticker", "?")
+            ac      = slot.get("asset_class", "?")
+            conv    = slot.get("conviction_score")
+            kelly   = slot.get("kelly_fraction")
+            sl      = slot.get("stop_loss_pct")
+            tp      = slot.get("take_profit_pct")
+            thesis  = slot.get("thesis", "N/A")
+            lines.append(f"  Slot {slot_n} — {ticker} ({ac})")
+            row("Conviction:", f"{conv:.2f} / 1.0" if conv else "N/A", indent=3)
+            row("Kelly fraction:", f"{(kelly or 0)*100:.2f}%" if kelly else "N/A", indent=3)
+            row("Stop loss:", _pct(sl) if sl else "N/A", indent=3)
+            row("Take profit:", _pct(tp) if tp else "N/A", indent=3)
+            # Word-wrap thesis at 80 chars
+            words = thesis.split()
+            thesis_line = "      "
+            for w in words:
+                if len(thesis_line) + len(w) + 1 > 80:
+                    lines.append(f"    AI Thesis:    {thesis_line.strip()}")
+                    thesis_line = "      " + w + " "
+                else:
+                    thesis_line += w + " "
+            if thesis_line.strip():
+                lines.append(f"    AI Thesis:    {thesis_line.strip()}")
+            lines.append("")
+
+    # ── Alpaca performance metrics ──
+    h2("ALPACA PERFORMANCE METRICS")
+    try:
+        perf_summary = get_performance_summary()
+    except Exception:
+        perf_summary = {"total_days": 0, "total_trades": 0, "latest_equity": equity, "total_return_pct": pnl_pct}
+
+    # Compute risk metrics inline from snapshots
+    risk_metrics: dict = {}
+    try:
+        import numpy as _np
+        snapshots = get_performance_snapshots(limit=90)
+        equities = [s.get("total_equity", 0) for s in snapshots if s.get("total_equity")]
+        if len(equities) >= 2:
+            returns = _np.diff(equities) / _np.array(equities[:-1])
+            mean_r = float(_np.mean(returns))
+            std_r  = float(_np.std(returns))
+            rf     = 0.05 / 252
+            min_e  = min(equities)
+            max_e  = max(equities[:equities.index(min_e)+1]) if min_e in equities else equities[0]
+            max_dd = round(((max_e - min_e) / max_e) * 100, 2) if max_e > 0 else 0
+            ann_r  = mean_r * 252
+            sharpe = float((mean_r - rf) / std_r * _np.sqrt(252)) if std_r > 0 else None
+            neg_r  = returns[returns < 0]
+            ds     = float(_np.std(neg_r)) if len(neg_r) > 0 else None
+            sortino = float((mean_r - rf) / ds * _np.sqrt(252)) if ds and ds > 0 else None
+            calmar  = round(ann_r / (max_dd / 100), 3) if max_dd > 0 else None
+            risk_metrics = {
+                "sharpe_ratio": round(sharpe, 3) if sharpe else None,
+                "sortino_ratio": round(sortino, 3) if sortino else None,
+                "max_drawdown_pct": max_dd,
+                "calmar_ratio": calmar,
+                "volatility_annual_pct": round(std_r * _np.sqrt(252) * 100, 2),
+                "data_points": len(equities),
+            }
+        elif equities:
+            risk_metrics = {"data_points": len(equities)}
+    except Exception:
+        risk_metrics = {}
+
+    row("Trading days tracked:", str(perf_summary.get("total_days", "N/A")))
+    row("Total closed trades:", str(perf_summary.get("total_trades", "N/A")))
+    wr = perf_summary.get("avg_win_rate")
+    row("Win rate:", f"{wr*100:.1f}%" if wr else "N/A")
+    row("Best day:", _pct(perf_summary.get("best_day_pct", None), 3) if perf_summary.get("best_day_pct") else "N/A")
+    row("Worst day:", _pct(perf_summary.get("worst_day_pct", None), 3) if perf_summary.get("worst_day_pct") else "N/A")
+    row("Total return:", _pct(perf_summary.get("total_return_pct", None), 3))
+    conv_avg = perf_summary.get("avg_conviction")
+    row("Avg AI conviction:", f"{conv_avg:.4f}" if conv_avg else "N/A")
+
+    h2("ALPACA RISK METRICS (requires 30+ days of equity snapshots)")
+    sharpe  = risk_metrics.get("sharpe_ratio")
+    sortino = risk_metrics.get("sortino_ratio")
+    mdd     = risk_metrics.get("max_drawdown_pct")
+    calmar  = risk_metrics.get("calmar_ratio")
+    vol     = risk_metrics.get("volatility_annual_pct")
+    dpts    = risk_metrics.get("data_points", 0)
+    row("Data points (days):", str(dpts))
+    row("Sharpe ratio:", f"{sharpe:.4f}" if sharpe is not None else f"N/A ({dpts} day(s) — need 30+)")
+    row("Sortino ratio:", f"{sortino:.4f}" if sortino is not None else f"N/A ({dpts} day(s) — need 30+)")
+    row("Max drawdown:", _pct(mdd) if mdd is not None else f"N/A ({dpts} day(s) — need 30+)")
+    row("Calmar ratio:", f"{calmar:.4f}" if calmar is not None else "N/A")
+    row("Annual volatility:", _pct(vol) if vol is not None else "N/A")
+
+    # ── Alpaca trade history ──
+    h2("ALPACA TRADE HISTORY (all trades, chronological oldest-first)")
+    try:
+        alpaca_trades = list(reversed(get_all_trades()))  # oldest first
+    except Exception:
+        alpaca_trades = []
+
+    if not alpaca_trades:
+        lines.append("  No Alpaca trades recorded yet.")
+    else:
+        lines.append(f"  Total Alpaca trades: {len(alpaca_trades)}")
+        lines.append(f"  {'#':<4} {'Date':<12} {'Symbol':<10} {'Status':<16} {'PnL%':>8} {'PnL$':>12}  Thesis / Exit Reason")
+        lines.append("  " + "-" * 78)
+        for i, t in enumerate(alpaca_trades, 1):
+            sym     = str(t.get("ticker") or t.get("symbol") or "?")[:8]
+            date    = str(t.get("date") or t.get("closed_at") or "?")[:10]
+            status  = str(t.get("status") or "?")[:14]
+            pnl_p   = t.get("pnl_percentage") or t.get("pnl_pct")
+            pnl_d   = t.get("pnl_usd") or t.get("pnl_usd")
+            pnl_p_s = _pct(pnl_p) if pnl_p is not None else "N/A"
+            pnl_d_s = _c(pnl_d) if pnl_d is not None else "N/A"
+            thesis  = str(t.get("original_thesis") or t.get("exit_reason") or "N/A")[:55]
+            lines.append(f"  {i:<4} {date:<12} {sym:<10} {status:<16} {pnl_p_s:>8} {pnl_d_s:>12}  {thesis}")
+            # Entry/exit details
+            entry_px    = t.get("intended_price") or t.get("avg_entry_price")
+            fill_px     = t.get("actual_fill_price")
+            slippage    = t.get("slippage_pct")
+            conv_score  = t.get("conviction_score")
+            asset_cls   = t.get("asset_class", "")
+            if any(v is not None for v in [entry_px, fill_px, slippage, conv_score]):
+                detail = []
+                if entry_px:   detail.append(f"entry={_c(entry_px)}")
+                if fill_px:    detail.append(f"fill={_c(fill_px)}")
+                if slippage:   detail.append(f"slippage={_pct(slippage, 3)}")
+                if conv_score: detail.append(f"conviction={conv_score:.2f}")
+                if asset_cls:  detail.append(f"class={asset_cls}")
+                lines.append(f"       └─ {' | '.join(detail)}")
+
+    # ── Attribution ──
+    h2("ATTRIBUTION ANALYSIS (What worked and what didn't)")
+    try:
+        attr = _attr()
+        by_class = attr.get("asset_class_attribution", {})
+        by_conv  = attr.get("conviction_attribution", {})
+        by_regime = attr.get("regime_attribution", {})
+    except Exception:
+        by_class = {}; by_conv = {}; by_regime = {}
+
+    if by_class:
+        lines.append("  By Asset Class:")
+        lines.append(f"    {'Asset Class':<14} {'Trades':>7} {'Win Rate':>10} {'Total PnL':>11} {'Avg PnL':>9}")
+        lines.append("    " + "-" * 55)
+        for cls, v in sorted(by_class.items(), key=lambda x: x[1].get("total_pnl_pct", 0)):
+            lines.append(f"    {cls:<14} {v.get('count',0):>7} {_pct(v.get('win_rate',0)):>10} {_pct(v.get('total_pnl_pct')):>11} {_pct(v.get('avg_pnl_pct')):>9}")
+
+    if by_conv:
+        lines.append("")
+        lines.append("  By AI Conviction Level:")
+        lines.append(f"    {'Level':<10} {'Trades':>7} {'Win Rate':>10} {'Total PnL':>11} {'Avg PnL':>9}")
+        lines.append("    " + "-" * 51)
+        for lvl, v in sorted(by_conv.items()):
+            lines.append(f"    {lvl:<10} {v.get('count',0):>7} {_pct(v.get('win_rate',0)):>10} {_pct(v.get('total_pnl_pct')):>11} {_pct(v.get('avg_pnl_pct')):>9}")
+
+    if by_regime:
+        lines.append("")
+        lines.append("  By Market Regime:")
+        for regime, v in sorted(by_regime.items()):
+            lines.append(f"    {regime:<12} {v.get('count',0)} trades | {_pct(v.get('win_rate',0))} win | avg {_pct(v.get('avg_pnl_pct'))}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 3: KRAKEN BOT — DAVY JONES' PORTFOLIO
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 3: KRAKEN BOT — DAVY JONES' PORTFOLIO (24/7 Crypto)")
+
+    try:
+        _kraken_status_file = _Path("../kraken-bot/status.json")
+        _ks = _json.loads(_kraken_status_file.read_text()) if _kraken_status_file.exists() else {}
+    except Exception:
+        _ks = {}
+
+    try:
+        _pf_path = _Path("../kraken-bot/paper_portfolio.json")
+        _pf = _json.loads(_pf_path.read_text()) if _pf_path.exists() else {}
+    except Exception:
+        _pf = {}
+
+    k_status     = _ks.get("status", "not_started")
+    k_equity     = _ks.get("total_equity_usd", 0) or 0
+    k_deployed   = _ks.get("deployed_usd", 0) or 0
+    k_deploy_pct = _ks.get("deployed_pct", 0) or 0
+    k_cycles     = _ks.get("cycle_count", 0) or 0
+    k_paused     = _ks.get("bot_paused", False)
+    k_paper      = _ks.get("paper_trading", True)
+    k_updated    = _ks.get("last_updated", "N/A")
+    k_positions  = _ks.get("open_positions", []) or []
+    k_signals    = _ks.get("signals", []) or []
+    k_cb         = _ks.get("circuit_breaker", {}) or {}
+    k_adaptive   = _ks.get("adaptive_params", {}) or {}
+    k_micro      = _ks.get("microstructure", {}) or {}
+    k_thinking   = _ks.get("thinking_text", "") or ""
+    k_recent_trd = _ks.get("recent_trades", []) or []
+    k_paper_summ = _ks.get("paper_summary", {}) or {}
+
+    # From paper_portfolio.json
+    _pf_trades   = _pf.get("all_trades", []) or []
+    k_start_bal  = _pf.get("starting_balance", 100_000)
+    k_pnl_usd_all = k_equity - k_start_bal
+
+    h2("OVERVIEW")
+    row("Capital pool:", "Crypto — Paper Trading via Kraken")
+    row("Bot status:", f"{'PAUSED' if k_paused else 'RUNNING'} ({k_status})")
+    row("Paper trading:", "YES" if k_paper else "NO — LIVE FUNDS")
+    row("Cycles completed:", str(k_cycles))
+    row("Last updated:", str(k_updated)[:19])
+    row("Starting capital:", _c(k_start_bal))
+    row("Current equity:", _c(k_equity))
+    row("Total P&L (paper):", f"{_c(k_pnl_usd_all)} ({_pct((k_pnl_usd_all/k_start_bal)*100 if k_start_bal else 0)})")
+    row("Deployed capital:", f"{_c(k_deployed)} ({_pct(k_deploy_pct, 1)} of equity)")
+    row("Max positions:", str(_ks.get("max_positions", 5)))
+    row("Open positions:", str(len(k_positions)))
+
+    # ── Kraken paper summary ──
+    if k_paper_summ:
+        ps_trades = k_paper_summ.get("total_trades", 0)
+        ps_wins   = k_paper_summ.get("win_count", 0)
+        ps_losses = k_paper_summ.get("loss_count", 0)
+        ps_pnl_u  = k_paper_summ.get("all_time_pnl_usd", 0)
+        ps_pnl_p  = k_paper_summ.get("all_time_pnl_pct", 0)
+        ps_wr     = (ps_wins / ps_trades * 100) if ps_trades else 0
+        lines.append("")
+        row("All-time trades:", str(ps_trades))
+        row("Win / Loss:", f"{ps_wins}W / {ps_losses}L ({_pct(ps_wr, 1)} win rate)")
+        row("All-time P&L:", f"{_c(ps_pnl_u)} ({_pct(ps_pnl_p)})")
+
+    # ── Kraken current positions ──
+    h2("CURRENT OPEN POSITIONS (KRAKEN CRYPTO)")
+    if not k_positions:
+        lines.append("  No open positions (VPIN or reserve ceiling may be blocking entries).")
+    for pos in k_positions:
+        sym       = pos.get("symbol", "?")
+        side      = str(pos.get("side", "?")).upper()
+        qty       = pos.get("qty", 0)
+        entry     = pos.get("entry_price")
+        curr      = pos.get("current_price")
+        sz_usd    = pos.get("size_usd", 0)
+        upl_usd   = pos.get("unrealized_pnl_usd", 0)
+        upl_pct   = pos.get("unrealized_pnl_pct", 0)
+        sl        = pos.get("stop_loss_price")
+        tp        = pos.get("take_profit_price")
+        entry_t   = str(pos.get("entry_time", "?"))[:16]
+        best_px   = pos.get("best_price")
+
+        lines.append(f"\n  {sym}  {side}")
+        row("Qty:", f"{qty:,.4f}", indent=2)
+        row("Entry price:", _c(entry, 4), indent=2)
+        row("Current price:", _c(curr, 4), indent=2)
+        row("Position size:", _c(sz_usd), indent=2)
+        row("Unrealized P&L:", f"{_c(upl_usd)} ({_pct(upl_pct)})", indent=2)
+        if sl:
+            sl_pct_from_entry = ((sl - entry) / entry * 100) if entry else 0
+            row("Stop loss:", f"{_c(sl, 4)} ({_pct(sl_pct_from_entry, 2)} from entry)", indent=2)
+        if tp:
+            tp_pct_from_entry = ((tp - entry) / entry * 100) if entry else 0
+            row("Take profit:", f"{_c(tp, 4)} ({_pct(tp_pct_from_entry, 2)} from entry)", indent=2)
+        row("Entry time:", entry_t + " UTC", indent=2)
+        if best_px:
+            row("Best price seen:", _c(best_px, 4), indent=2)
+
+    # ── Kraken signals ──
+    h2("KRAKEN SIGNAL DASHBOARD (current pair signals)")
+    if not k_signals:
+        lines.append("  No signal data available.")
+    else:
+        lines.append(f"  {'Pair':<12} {'VPIN':>6} {'Signal':<10} {'Momentum':<12} {'Spread':>8}  Notes")
+        lines.append("  " + "-" * 70)
+        for sig in (k_signals if isinstance(k_signals, list) else []):
+            pair  = str(sig.get("symbol") or sig.get("pair", "?"))[:11]
+            vpin  = sig.get("vpin", sig.get("vpin_score"))
+            vpin_s = f"{vpin:.3f}" if vpin is not None else "N/A"
+            stype = str(sig.get("signal_type") or sig.get("signal", "none"))[:9]
+            mom   = str(sig.get("momentum_signal") or sig.get("momentum", "?"))[:11]
+            sprd  = sig.get("spread_pct")
+            sprd_s = _pct(sprd, 3) if sprd is not None else "N/A"
+            note  = "BLOCKED (VPIN>0.70)" if (vpin or 0) > 0.70 else ""
+            lines.append(f"  {pair:<12} {vpin_s:>6} {stype:<10} {mom:<12} {sprd_s:>8}  {note}")
+
+    # ── Kraken microstructure ──
+    if k_micro:
+        h2("ORDER BOOK MICROSTRUCTURE")
+        for pair, m in (k_micro.items() if isinstance(k_micro, dict) else []):
+            vpin = m.get("vpin")
+            sprd = m.get("spread_pct")
+            imb  = m.get("order_imbalance")
+            lines.append(f"  {pair:<12} VPIN={f'{vpin:.3f}' if vpin else 'N/A'}  Spread={_pct(sprd, 3) if sprd else 'N/A'}  Imbalance={f'{imb:.3f}' if imb else 'N/A'}")
+
+    # ── Kraken per-symbol performance ──
+    h2("KRAKEN PER-SYMBOL PERFORMANCE (all-time from paper_portfolio.json)")
+    if _pf_trades:
+        sym_stats: dict = {}
+        for t in _pf_trades:
+            s = t.get("symbol", "UNKNOWN")
+            if s not in sym_stats:
+                sym_stats[s] = {"trades": 0, "wins": 0, "pnl_pct": 0.0, "pnl_usd": 0.0}
+            sym_stats[s]["trades"] += 1
+            ppct = t.get("pnl_pct", 0) or 0
+            pusd = t.get("pnl_usd", 0) or 0
+            sym_stats[s]["pnl_pct"] += ppct
+            sym_stats[s]["pnl_usd"] += pusd
+            if ppct > 0:
+                sym_stats[s]["wins"] += 1
+
+        lines.append(f"  {'Symbol':<12} {'Trades':>7} {'Win Rate':>10} {'Total PnL%':>12} {'Total PnL$':>12} {'Avg PnL%':>9}")
+        lines.append("  " + "-" * 68)
+        for sym, v in sorted(sym_stats.items(), key=lambda x: x[1]["pnl_usd"]):
+            n   = v["trades"]
+            wr  = (v["wins"] / n * 100) if n else 0
+            avg = (v["pnl_pct"] / n) if n else 0
+            lines.append(f"  {sym:<12} {n:>7} {_pct(wr, 1):>10} {_pct(v['pnl_pct']):>12} {_c(v['pnl_usd']):>12} {_pct(avg):>9}")
+    else:
+        lines.append("  No trade data in paper_portfolio.json yet.")
+
+    # ── Kraken recent trade history ──
+    h2("KRAKEN TRADE HISTORY (all trades from paper_portfolio.json, oldest-first)")
+    pf_trades_sorted = list(reversed(_pf_trades))  # oldest first
+    if not pf_trades_sorted and k_recent_trd:
+        pf_trades_sorted = list(reversed(k_recent_trd))
+
+    if not pf_trades_sorted:
+        lines.append("  No Kraken trade history available yet.")
+    else:
+        lines.append(f"  Total trades: {len(pf_trades_sorted)}")
+        lines.append(f"  {'#':<4} {'Date/Time':<18} {'Symbol':<12} {'Side':<6} {'Entry':>10} {'Exit':>10} {'PnL%':>7} {'PnL$':>10}  Exit Reason")
+        lines.append("  " + "-" * 88)
+        for i, t in enumerate(pf_trades_sorted, 1):
+            sym    = str(t.get("symbol", "?"))[:11]
+            dt     = str(t.get("entry_time") or t.get("timestamp") or t.get("date") or "?")[:16]
+            side   = str(t.get("side", "?")).upper()[:5]
+            entry  = t.get("entry_price") or t.get("intended_price")
+            exit_p = t.get("exit_price") or t.get("actual_fill_price")
+            ppct   = t.get("pnl_pct") or t.get("pnl_percentage", 0)
+            pusd   = t.get("pnl_usd")
+            reason = str(t.get("exit_reason") or t.get("original_thesis") or t.get("reason") or "?")[:40]
+            entry_s = _c(entry, 4) if entry else "N/A"
+            exit_s  = _c(exit_p, 4) if exit_p else "N/A"
+            ppct_s  = _pct(ppct) if ppct is not None else "N/A"
+            pusd_s  = _c(pusd) if pusd is not None else "N/A"
+            lines.append(f"  {i:<4} {dt:<18} {sym:<12} {side:<6} {entry_s:>10} {exit_s:>10} {ppct_s:>7} {pusd_s:>10}  {reason}")
+
+    # ── Kraken circuit breaker ──
+    h2("CIRCUIT BREAKER STATUS")
+    if k_cb:
+        cb_trip = k_cb.get("triggered") or k_cb.get("tripped", False)
+        cb_reason = k_cb.get("reason") or k_cb.get("trigger_reason", "N/A")
+        cb_consec = k_cb.get("consecutive_losses") or k_cb.get("losses_in_a_row", 0)
+        cb_thresh = k_cb.get("threshold") or k_cb.get("max_consecutive_losses", 3)
+        row("Triggered:", "YES — bot paused" if cb_trip else "NO")
+        row("Consecutive losses:", f"{cb_consec} / {cb_thresh} threshold")
+        if cb_reason != "N/A":
+            row("Trigger reason:", str(cb_reason))
+    else:
+        lines.append("  Circuit breaker state not available.")
+
+    # ── Kraken adaptive params ──
+    if k_adaptive:
+        h2("ADAPTIVE RISK PARAMETERS (current auto-tuned values)")
+        for k, v in k_adaptive.items():
+            row(f"{k}:", str(v)[:60], indent=2)
+
+    # ── Kraken AI thinking ──
+    if k_thinking and len(k_thinking) > 20:
+        h2("LAST AI THINKING / REASONING (Kraken bot)")
+        thinking_lines = k_thinking.strip().split("\n")
+        for tl in thinking_lines[:40]:  # cap at 40 lines
+            lines.append(f"  {tl}")
+        if len(thinking_lines) > 40:
+            lines.append(f"  ... [{len(thinking_lines) - 40} more lines truncated]")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 4: COMBINED PORTFOLIO
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 4: COMBINED PORTFOLIO OVERVIEW")
+    grand_start = 200_000.0
+    grand_now   = equity + k_equity
+    grand_pnl   = grand_now - grand_start
+    grand_pct   = (grand_pnl / grand_start) * 100 if grand_start else 0
+
+    row("Starting capital (both bots):", _c(grand_start))
+    row("Alpaca current equity:", f"{_c(equity)}  ({_pct((equity - 100_000) / 100_000 * 100)} from $100k)")
+    row("Kraken current equity:", f"{_c(k_equity)}  ({_pct((k_equity - k_start_bal) / k_start_bal * 100 if k_start_bal else 0)} from ${k_start_bal:,.0f})")
+    row("Grand total:", _c(grand_now))
+    row("Combined P&L:", f"{_c(grand_pnl)} ({_pct(grand_pct)})")
+
+    # Separate analysis of each bot
+    lines.append("")
+    lines.append("  OBSERVATION: These are two completely separate capital pools:")
+    lines.append("    • Alpaca:  US equities strategy — regime-driven, long-only, Kelly-sized,")
+    lines.append("               AI allocation via Groq Llama 3.3 70B, 15-min cycles.")
+    lines.append("    • Kraken:  Crypto mean-reversion + momentum, VPIN microstructure filter,")
+    lines.append("               24/7, 10% position sizing, trailing stops, circuit breaker.")
+    lines.append("  They cannot be directly compared — different asset classes and strategies.")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 5: AI LEARNING JOURNAL
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 5: AI LEARNING JOURNAL (Persistent insights across cycles)")
+    try:
+        lj_entries = _lj(limit=50)
+    except Exception:
+        lj_entries = []
+
+    if not lj_entries:
+        lines.append("  No learning journal entries yet.")
+    else:
+        lines.append(f"  {len(lj_entries)} insights stored:")
+        lines.append("")
+        for e in lj_entries:
+            insight   = e.get("insight_text", "?")
+            regime    = e.get("regime", "?")
+            cat       = e.get("category", "?")
+            conf      = e.get("confidence_score", 0)
+            confirmed = e.get("confirmed_count", 1)
+            first_s   = str(e.get("first_seen", "?"))[:10]
+            lines.append(f"  [{regime.upper()} / {cat}]  confidence={conf:.2f}  confirmed×{confirmed}  first_seen={first_s}")
+            lines.append(f"    \"{insight}\"")
+            lines.append("")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 6: STRATEGY PARAMETERS
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 6: STRATEGY PARAMETERS (for LLM context)")
+
+    h2("ALPACA BOT — HOW IT WORKS")
+    lines += [
+        "  AI Engine:         Groq Llama 3.3 70B (100,000 tokens/day budget)",
+        "  Execution:         Alpaca paper trading (simulated US equities)",
+        "  Cycle frequency:   Every 15 minutes during market hours",
+        "                     24/7 crypto-only cycle for crypto ETFs",
+        "  Market regimes:    Bear | Bull | Neutral | Risk-Off",
+        "                     Regime changes the entire allocation strategy",
+        "  Position sizing:   Kelly Criterion × conviction score (0.0–1.0)",
+        "                     Max 15% per position (except SGOV)",
+        "  Risk controls:",
+        "    - Kill switch:   Trips at 5% daily drawdown — liquidates all",
+        "    - Stop losses:   Per-trade, set by AI in allocation decision",
+        "    - Take profits:  Per-trade, set by AI in allocation decision",
+        "    - Ratchet stops: Trailing stop that locks in gains",
+        "  Special positions:",
+        "    - SGOV:          AI cash-equivalent — absorbs overflow when all",
+        "                     normal slots are capped. Exempt from 15% cap.",
+        "    - JEPQ:          Profit vault. 20% of every profit event swept here",
+        "                     as a DRIP position. Protected from all liquidations.",
+        "  Auditing:          Gemini self-critic runs daily pre-market,",
+        "                     HITL auditor agent runs post-close.",
+        "  Learning:          AI insights persist in a learning journal and are",
+        "                     injected as context into future allocation calls.",
+    ]
+
+    h2("KRAKEN BOT — HOW IT WORKS")
+    lines += [
+        "  Name:              Davy Jones' Portfolio",
+        "  Execution:         Kraken exchange (paper trading simulation)",
+        "  Strategy:          Mean reversion + momentum with VPIN microstructure filter",
+        "  Pairs:             BTC/USD, ETH/USD, XRP/USD, ADA/USD, SOL/USD,",
+        "                     DOT/USD, ATOM/USD, AVAX/USD, LINK/USD, MATIC/USD",
+        "  Position sizing:   10% of equity per position",
+        "  Max positions:     5 simultaneous",
+        "  VPIN filter:       Volume-synchronized Probability of Informed Trading.",
+        "                     VPIN > 0.70 on a pair blocks new entries — indicates",
+        "                     too much informed flow (insider-like activity)",
+        "  Entry conditions:  VPIN < 0.70 AND momentum signal AND spread ok",
+        "  Stop loss:         Trailing — adapts to best price seen",
+        "  Take profit:       Fixed target from entry",
+        "  Circuit breaker:   Pauses bot after N consecutive losses",
+        "  Capital reserve:   Cannot deploy beyond ceiling % of equity",
+        "  Cycle:             Runs 24/7 (crypto never closes)",
+        "  Sides:             Both LONG and SHORT allowed",
+    ]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # FOOTER
+    # ─────────────────────────────────────────────────────────────────────────
+    lines.append("")
+    lines.append(W)
+    lines.append("  END OF REPORT")
+    lines.append(f"  Generated: {ts}")
+    lines.append("  Suggested LLM prompt:")
+    lines.append("    \"Review this trading report. Identify (1) what's working and why,")
+    lines.append("     (2) what's losing and the likely root cause, (3) specific parameter")
+    lines.append("     changes to improve performance (stop loss %, position sizing, VPIN")
+    lines.append("     threshold, conviction cutoffs), and (4) any regime-specific patterns")
+    lines.append("     you can see in the trade history. Be specific with numbers.\"")
+    lines.append(W)
+
+    report_text = "\n".join(lines)
+    return {
+        "report":       report_text,
+        "generated_at": ts,
+        "char_count":   len(report_text),
+        "line_count":   len(lines),
+    }
+
+
 app.include_router(router)
 
 # ── System B: Public SaaS Platform routes ─────────────────────────────────────

@@ -933,6 +933,19 @@ export function useSystemRestart() {
   });
 }
 
+export interface ExportReportResult {
+  report: string;
+  generated_at: string;
+  char_count: number;
+  line_count: number;
+}
+
+export function useExportReport() {
+  return useMutation<ExportReportResult, Error, void>({
+    mutationFn: async () => (await api.get("/export/report")).data,
+  });
+}
+
 export function useEquityCurve(limit = 500) {
   return useQuery<{ count: number; snapshots: EquitySnapshot[] }>({
     queryKey: ["/performance/equity-curve", limit],

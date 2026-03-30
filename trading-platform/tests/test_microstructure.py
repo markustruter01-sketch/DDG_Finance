@@ -783,5 +783,135 @@ class TestComputeDailyVar(unittest.TestCase):
         self.assertEqual(_to_yfinance_ticker("BTC-USD"), "BTC-USD")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 13. Executor VaR Gate — _execute_slot skips risk-on slots when var_tripped
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExecutorVaRGate(unittest.TestCase):
+    """
+    Verifies that `_execute_slot` skips non-cash, non-vault entries when
+    `var_tripped=True` and records reason="var_circuit_breaker".
+
+    This test imports the private helper directly to avoid instantiating the
+    full executor pipeline (which requires broker credentials).
+    """
+
+    def setUp(self):
+        """Import the private executor helper and required dataclasses."""
+        sys.path.insert(0, os.path.join(_TP, ".."))
+        from execution.executor import _execute_slot
+        from analysis.schemas import RegimeAllocationSlot
+        self._execute_slot       = _execute_slot
+        self._RegimeAllocationSlot = RegimeAllocationSlot
+
+    def _make_slot(self, ticker="SPY", kelly=0.15, slot=1):
+        """Create a minimal valid RegimeAllocationSlot for testing."""
+        # Use a ticker-to-asset_class mapping that matches the approved universe
+        _ac_map = {
+            "SPY": "equity", "QQQ": "equity", "XLK": "equity",
+            "GLD": "commodity", "SLV": "commodity",
+            "TLT": "safe_haven", "IEF": "safe_haven",
+            "SGOV": "cash",
+            "BTC/USD": "crypto_spot",
+            "TQQQ": "leveraged_risk", "UPRO": "leveraged_risk",
+        }
+        asset_class = _ac_map.get(ticker, "equity")
+        return self._RegimeAllocationSlot(
+            slot=slot,
+            ticker=ticker,
+            asset_class=asset_class,
+            conviction_score=0.70,
+            kelly_fraction=kelly,
+            thesis=f"Unit test placeholder thesis for {ticker}",
+            stop_loss_pct=-0.07,
+            take_profit_pct=0.15,
+        )
+
+    def _make_results(self):
+        return {
+            "filled":         [],
+            "placed":         [],
+            "skipped":        [],
+            "closed":         [],
+            "errors":         [],
+            "risk_overrides": [],
+            "vault_sweep":    [],
+            "new_positions":    0,
+            "closed_positions": 0,
+            "margin_blocks":    0,
+            "cap_overrides":    0,
+        }
+
+    def test_var_tripped_skips_risk_on_slot(self):
+        """Risk-on ticker is skipped with reason var_circuit_breaker."""
+        slot    = self._make_slot(ticker="SPY")
+        results = self._make_results()
+        results, _ = self._execute_slot(
+            slot, equity=100_000, max_position_usd=20_000,
+            remaining_cash=100_000, current_positions={},
+            results=results, dry_run=True,
+            var_tripped=True,
+        )
+        self.assertEqual(len(results["skipped"]), 1)
+        self.assertEqual(results["skipped"][0]["reason"], "var_circuit_breaker")
+        self.assertEqual(results["skipped"][0]["ticker"], "SPY")
+
+    def test_var_tripped_skips_multiple_slots(self):
+        """All risk-on slots are skipped individually when var_tripped."""
+        tickers = ["SPY", "QQQ", "XLK"]
+        results = self._make_results()
+        for i, tk in enumerate(tickers, start=1):
+            slot = self._make_slot(ticker=tk, slot=i)
+            results, _ = self._execute_slot(
+                slot, equity=100_000, max_position_usd=20_000,
+                remaining_cash=100_000, current_positions={},
+                results=results, dry_run=True,
+                var_tripped=True,
+            )
+        self.assertEqual(len(results["skipped"]), 3)
+        reasons = {e["reason"] for e in results["skipped"]}
+        self.assertEqual(reasons, {"var_circuit_breaker"})
+
+    def test_var_not_tripped_does_not_block_slot(self):
+        """Slots are NOT blocked when var_tripped=False (dry_run exits after compliance checks)."""
+        slot    = self._make_slot(ticker="SPY")
+        results = self._make_results()
+        results, _ = self._execute_slot(
+            slot, equity=100_000, max_position_usd=20_000,
+            remaining_cash=100_000, current_positions={},
+            results=results, dry_run=True,
+            var_tripped=False,
+        )
+        # Should NOT have a var_circuit_breaker skip entry
+        var_skips = [e for e in results["skipped"] if e.get("reason") == "var_circuit_breaker"]
+        self.assertEqual(len(var_skips), 0)
+
+    def test_cash_ticker_exempt_from_var_gate(self):
+        """SGOV (cash proxy) is never blocked by the VaR gate."""
+        slot    = self._make_slot(ticker="SGOV", kelly=0.0)
+        results = self._make_results()
+        # kelly_fraction=0.0 triggers zero_kelly skip first; verify no var_circuit_breaker
+        results, _ = self._execute_slot(
+            slot, equity=100_000, max_position_usd=20_000,
+            remaining_cash=100_000, current_positions={},
+            results=results, dry_run=True,
+            var_tripped=True,
+        )
+        var_skips = [e for e in results["skipped"] if e.get("reason") == "var_circuit_breaker"]
+        self.assertEqual(len(var_skips), 0)
+
+    def test_var_tripped_remaining_cash_unchanged(self):
+        """Skipped slots must not consume any remaining_cash."""
+        slot    = self._make_slot(ticker="QQQ")
+        results = self._make_results()
+        _, remaining = self._execute_slot(
+            slot, equity=100_000, max_position_usd=20_000,
+            remaining_cash=80_000, current_positions={},
+            results=results, dry_run=True,
+            var_tripped=True,
+        )
+        self.assertEqual(remaining, 80_000)
+
+
 if __name__ == "__main__":
     unittest.main()

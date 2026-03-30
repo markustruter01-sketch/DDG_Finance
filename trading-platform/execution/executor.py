@@ -230,23 +230,35 @@ def execute_allocations(
         for sym, pos in current_positions.items()
         if sym not in _SAFE_TICKERS
     ]
+    # compute_daily_var returns VaR as a fraction of *invested* capital (not total equity).
+    # Convert to USD and compare against the USD limit derived from total equity so that
+    # partial deployment (e.g. 30% invested) doesn't erroneously trip the breaker.
+    #   var_usd       = var_pct × invested_usd
+    #   limit_usd     = daily_loss_limit_pct × total_equity
+    _invested_usd  = sum(abs(float(p.get("market_value", 0.0) or 0.0)) for p in _risk_positions)
     try:
         _var_pct = compute_daily_var(_risk_positions, confidence=0.95)
     except Exception as _ve:
         logger.debug(f"Executor | VaR computation failed (non-fatal): {_ve}")
         _var_pct = 0.0
 
-    _var_tripped = _var_pct > _risk_profile.daily_loss_limit_pct
+    _var_usd       = _var_pct * _invested_usd
+    _var_limit_usd = _risk_profile.daily_loss_limit_pct * equity
+
+    _var_tripped = (_var_limit_usd > 0) and (_var_usd > _var_limit_usd)
     if _var_tripped:
         logger.warning(
-            f"VaR Circuit Breaker | 1-day 95% historical VaR = {_var_pct*100:.2f}% "
-            f"exceeds daily loss limit {_risk_profile.daily_loss_limit_pct*100:.0f}% "
+            f"VaR Circuit Breaker | 1-day 95% historical VaR = ${_var_usd:,.2f} "
+            f"({_var_pct*100:.2f}% of ${_invested_usd:,.0f} invested) "
+            f"exceeds daily limit ${_var_limit_usd:,.2f} "
+            f"({_risk_profile.daily_loss_limit_pct*100:.0f}% of equity) "
             f"— all new entries BLOCKED this cycle | reason: var_circuit_breaker"
         )
-    elif _var_pct > 0:
+    elif _var_usd > 0:
         logger.info(
-            f"VaR | 1-day 95% historical VaR = {_var_pct*100:.2f}% "
-            f"(limit {_risk_profile.daily_loss_limit_pct*100:.0f}%) — within bounds"
+            f"VaR | 1-day 95% historical VaR = ${_var_usd:,.2f} "
+            f"({_var_pct*100:.2f}% of invested) — "
+            f"limit ${_var_limit_usd:,.2f} ({_risk_profile.daily_loss_limit_pct*100:.0f}% of equity) — within bounds"
         )
 
     results = _close_stale_positions(

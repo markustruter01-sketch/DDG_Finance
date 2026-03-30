@@ -145,54 +145,6 @@ def get_regime_fallback() -> RegimeAnalysisOutput | None:
         return None
 
 
-def get_regime_fallback_force() -> RegimeAnalysisOutput | None:
-    """
-    LLM FAILSAFE: Return the last-good regime regardless of cache age.
-
-    Called ONLY as a last resort when the LLM is completely unavailable
-    (token budget exhausted, API down, network failure) AND the normal TTL-
-    bounded cache has also expired.  Allows the trading pipeline to continue
-    executing algorithmic logic (stop-losses, ratchet-stops, position sizing)
-    rather than halting entirely.  No new LLM reasoning is applied — the bot
-    operates on its last known regime + allocation until the LLM recovers.
-    """
-    if _last_regime_cache is None:
-        return None
-    age = time.time() - _last_regime_cache.get("saved_at", 0)
-    logger.warning(
-        f"[LLM_FAILSAFE] Regime cache aged {age / 3600:.1f}h — "
-        f"LLM unavailable, using stale allocation for algo-only execution"
-    )
-    try:
-        output = RegimeAnalysisOutput.model_validate(_last_regime_cache["output"])
-        return output
-    except Exception as exc:
-        logger.warning(f"[LLM_FAILSAFE] Regime cache | Cannot reconstruct output: {exc}")
-        return None
-
-
-def get_crypto_fallback_force() -> "CryptoAnalysisOutput | None":
-    """
-    LLM FAILSAFE: Return the last-good crypto analysis regardless of cache age.
-
-    Parallel to get_regime_fallback_force() — used when crypto-only LLM calls
-    fail and the normal TTL-bounded crypto cache has also expired.
-    """
-    if _last_crypto_cache is None:
-        return None
-    age = time.time() - _last_crypto_cache.get("saved_at", 0)
-    logger.warning(
-        f"[LLM_FAILSAFE] Crypto cache aged {age / 3600:.1f}h — "
-        f"LLM unavailable, using stale allocation for algo-only execution"
-    )
-    try:
-        from analysis.schemas import CryptoAnalysisOutput
-        return CryptoAnalysisOutput.model_validate(_last_crypto_cache["output"])
-    except Exception as exc:
-        logger.warning(f"[LLM_FAILSAFE] Crypto cache | Cannot reconstruct output: {exc}")
-        return None
-
-
 def get_groq_status() -> dict:
     """
     Return a status dict for the /status endpoint.

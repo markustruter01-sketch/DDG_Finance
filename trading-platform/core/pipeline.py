@@ -29,13 +29,7 @@ from typing import Any, Union
 
 from loguru import logger
 
-from analysis.analyzer import (
-    run_analysis_cycle,
-    get_regime_fallback,
-    get_crypto_fallback,
-    get_regime_fallback_force,
-    get_crypto_fallback_force,
-)
+from analysis.analyzer import run_analysis_cycle, get_regime_fallback
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from db.postgres import insert_equity_snapshot
 from analysis.post_mortem import run_post_mortem
@@ -63,7 +57,6 @@ _state: dict[str, Any] = {
     "cycle_interval":        "15min",
     "trading_mode":          "idle",
     "groq_using_fallback":   False,   # True when last cycle used stale cached regime
-    "algo_fallback_active":  False,   # True when LLM down + cache expired — algo-only mode
 }
 
 

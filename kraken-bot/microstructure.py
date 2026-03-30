@@ -57,8 +57,8 @@ from typing import Optional
 
 # ── Thresholds for the entry filter ───────────────────────────────────────────
 # OFI: positive means net buying pressure.
-OFI_LONG_MIN   =  0.05   # require weakly positive OFI for long entries
-OFI_SHORT_MAX  = -0.05   # require weakly negative OFI for short entries
+OFI_LONG_MIN   =  0.02   # require weakly positive OFI for long entries
+OFI_SHORT_MAX  = -0.02   # require weakly negative OFI for short entries
 
 # VAMP: deviation of last close from volume-weighted mean
 VAMP_LONG_MIN  = -0.005  # allow longs even with slight negative VAMP (mean-rev)

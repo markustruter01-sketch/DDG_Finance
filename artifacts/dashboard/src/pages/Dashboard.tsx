@@ -343,6 +343,7 @@ function KrakenPositionCard({
         {isPaper && (
           <span className="text-[7px] font-bold px-1 py-0.5 rounded border border-amber-500/25 text-amber-400/60 shrink-0">PAPER</span>
         )}
+        <MarketStatusBadge symbol={kpos.symbol} isCrypto={true} />
         {/* PnL */}
         <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
           {isUp ? "+" : ""}${(kpos.unrealized_pnl_usd ?? 0).toFixed(2)}
@@ -510,6 +511,7 @@ function AlpacaPositionCard({
         <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-green-400 border-green-500/30 bg-green-500/10 shrink-0">
           LONG
         </span>
+        <MarketStatusBadge symbol={pos.symbol} isCrypto={isAssetCrypto(pos.symbol)} />
         {/* P&L */}
         <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
           {isUp ? "+" : ""}{formatCurrency(pos.unrealized_pl)}
@@ -822,6 +824,52 @@ function tradingModeColor(mode: string | undefined): string {
   }
 }
 
+const CRYPTO_SYMBOLS = new Set(["BTC", "ETH", "SOL", "ATOM", "AVAX", "LINK", "DOT", "ADA", "XRP", "DOGE", "LTC", "UNI", "AAVE", "MATIC", "BNB", "XLM", "ALGO", "NEAR", "FTM", "ARB"]);
+function isAssetCrypto(symbol: string): boolean {
+  const base = symbol.replace(/[/\-]?USD[TC]?$/, "").toUpperCase();
+  return CRYPTO_SYMBOLS.has(base);
+}
+function isNYSEOpen(): boolean {
+  const now = new Date();
+  const etStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+  const et = new Date(etStr);
+  const day = et.getDay();
+  if (day === 0 || day === 6) return false;
+  const totalMin = et.getHours() * 60 + et.getMinutes();
+  return totalMin >= 570 && totalMin < 960;
+}
+function MarketStatusBadge({ symbol, isCrypto }: { symbol: string; isCrypto: boolean }) {
+  const open = isCrypto || isNYSEOpen();
+  if (isCrypto) {
+    return (
+      <span className="flex items-center gap-0.5 text-[7px] font-bold px-1 py-0.5 rounded border border-cyan-500/25 text-cyan-400/70 shrink-0">
+        <span className="relative flex h-1 w-1 mr-0.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
+          <span className="relative inline-flex rounded-full h-1 w-1 bg-cyan-400" />
+        </span>
+        24/7
+      </span>
+    );
+  }
+  if (open) {
+    return (
+      <span className="flex items-center gap-0.5 text-[7px] font-bold px-1 py-0.5 rounded border border-green-500/25 text-green-400/70 shrink-0">
+        <span className="relative flex h-1 w-1 mr-0.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-60" />
+          <span className="relative inline-flex rounded-full h-1 w-1 bg-green-400" />
+        </span>
+        NYSE
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-0.5 text-[7px] font-medium px-1 py-0.5 rounded border border-slate-600/40 text-slate-500 shrink-0">
+      <span className="inline-flex rounded-full h-1 w-1 bg-slate-600 mr-0.5" />
+      CLOSED
+    </span>
+  );
+}
+
 function SystemStatusBanner() {
   const { data, isError } = usePlatformStatus();
 
@@ -837,14 +885,23 @@ function SystemStatusBanner() {
   const groqPct = data?.groq?.pct_used ?? 0;
   const groqUsed = data?.groq?.tokens_used_today ?? 0;
   const groqTotal = data?.groq?.token_budget_total ?? 100000;
+  const groqRemaining = Math.max(0, groqTotal - groqUsed);
+  const groqExhausted = data?.groq?.budget_exhausted ?? false;
   const groqBudgetColor =
-    groqPct >= 90 ? "text-red-400" :
-    groqPct >= 70 ? "text-amber-400" :
+    groqExhausted     ? "text-red-400" :
+    groqPct >= 90     ? "text-red-400" :
+    groqPct >= 70     ? "text-amber-400" :
+    groqUsed > 0      ? "text-emerald-400" :
     "text-zinc-500";
   const groqBarColor =
-    groqPct >= 90 ? "bg-red-500" :
+    groqExhausted || groqPct >= 90 ? "bg-red-500" :
     groqPct >= 70 ? "bg-amber-400" :
     "bg-emerald-500";
+  const groqRemainingLabel = groqExhausted
+    ? "EXHAUSTED"
+    : groqRemaining >= 1000
+      ? `${Math.round(groqRemaining / 1000)}k left`
+      : `${groqRemaining} left`;
   const showBudgetMeter = data?.groq != null;
 
   if (isError || !data) {
@@ -884,17 +941,29 @@ function SystemStatusBanner() {
 
   const BudgetMeter = showBudgetMeter ? (
     <span
-      className="ml-auto flex items-center gap-1.5 flex-shrink-0"
-      title={`Groq daily tokens: ${groqUsed.toLocaleString()} / ${groqTotal.toLocaleString()} (${groqPct}%)`}
+      className="ml-auto flex items-center gap-3 flex-shrink-0"
+      title={`Groq session tokens: ${groqUsed.toLocaleString()} used / ${groqTotal.toLocaleString()} total · Resets at midnight UTC`}
     >
-      <span className={cn("text-xs font-mono tabular-nums", groqBudgetColor)}>
-        LLM {groqPct}%
+      {/* Gemini indicator */}
+      <span className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-violet-400/60 flex-shrink-0">
+        <span className="w-1 h-1 rounded-full bg-violet-400/50 flex-shrink-0" />
+        <span>Gemini</span>
+        <span className="text-violet-400/35">pre-mkt</span>
       </span>
-      <span className="w-16 h-1.5 bg-zinc-700 rounded-full overflow-hidden flex-shrink-0">
-        <span
-          className={cn("h-full rounded-full transition-all duration-700", groqBarColor)}
-          style={{ width: `${Math.min(groqPct, 100)}%` }}
-        />
+      {/* Groq countdown meter */}
+      <span className="flex flex-col gap-0.5 flex-shrink-0">
+        <span className="flex items-center gap-1.5">
+          <span className="text-[9px] uppercase font-semibold tracking-wider text-zinc-600">Groq</span>
+          <span className={cn("text-[10px] font-mono font-semibold tabular-nums", groqBudgetColor)}>
+            {groqRemainingLabel}
+          </span>
+        </span>
+        <span className="w-20 h-1 bg-zinc-800 rounded-full overflow-hidden flex-shrink-0">
+          <span
+            className={cn("h-full rounded-full transition-all duration-700", groqBarColor)}
+            style={{ width: `${Math.min(groqPct, 100)}%` }}
+          />
+        </span>
       </span>
     </span>
   ) : null;

@@ -7,6 +7,8 @@ pnpm workspace monorepo with three main products:
 2. **Trading Dashboard** (React/Vite) — dark terminal-themed private monitoring UI at `/`
 3. **AlgoEdge SaaS Platform** (React/Vite) — public-facing SaaS platform at `/saas/` (all 5 stages complete)
 
+**`Technical_Logic_Blueprint.md`** — Full system architecture whitepaper. Updated March 2026 to cover all Hybrid Agentic Architecture upgrades through Stage 4. Dual-audience format: Simple Explanation (teen-friendly) + Advanced Technical (audit-grade) for every section. 29-shape canvas diagram also maintained in sync.
+
 ## Trading Platform (Python/FastAPI)
 
 Located in `trading-platform/`. A private, automated AI-driven quantitative trading system.

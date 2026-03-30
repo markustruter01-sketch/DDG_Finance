@@ -329,89 +329,85 @@ def _call_regime_with_retry(
     user_prompt: str,
     cache_key: str | None = None,
 ) -> RegimeAnalysisOutput:
+    """
+    Execute the regime LLM call with retry logic and response caching.
+
+    Uses `llm_cache.get_or_call(cache_key, call_fn, ttl_minutes=90)` as the
+    single cache integration point: on a cache hit the inner call_fn is never
+    invoked, so no Groq tokens are consumed; on a miss the full self-correcting
+    retry loop runs and the validated raw_json is stored for future hits.
+    """
     from analysis.llm_response_cache import llm_cache as _llm_cache
 
-    def _do_regime_llm_call() -> str:
-        return call_groq(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=0.2,
-            max_tokens=2048,
-            call_type="regime",
+    def _fetch_raw_regime_json() -> str:
+        """Full self-correcting retry loop; returns validated raw_json string."""
+        last_error: Exception | None = None
+        current_prompt = user_prompt
+
+        for attempt in range(1, MAX_LLM_RETRIES + 1):
+            logger.info(f"Step 5/5 | Regime LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+            try:
+                raw_json = call_groq(
+                    system_prompt=system_prompt,
+                    user_prompt=current_prompt,
+                    temperature=0.2,
+                    max_tokens=2048,
+                    call_type="regime",
+                )
+                process_regime_llm_output(raw_json)   # validate — raises on bad JSON
+                if attempt > 1:
+                    logger.info(f"  LLM self-corrected on attempt {attempt}")
+                return raw_json
+
+            except Exception as exc:
+                last_error = exc
+                error_msg = str(exc)
+                logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
+
+                if attempt < MAX_LLM_RETRIES:
+                    current_prompt = (
+                        f"{user_prompt}\n\n"
+                        f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
+                        f"Your previous JSON output failed validation with this error:\n"
+                        f"  {error_msg}\n\n"
+                        f"Please fix and return corrected JSON only. Key rules:\n"
+                        f"  - 'regime' must be exactly 'Bull', 'Bear', or 'Sideways'\n"
+                        f"  - Bull: 3-7 slots of equity/crypto_spot/commodity with positive momentum\n"
+                        f"  - Bear: 1-4 slots of safe_haven (TLT, IEF, GLD, SLV) with positive momentum, else SGOV\n"
+                        f"  - Sideways: 0-3 mean-reversion slots (any class), or single SGOV slot\n"
+                        f"  - Only approved tickers: SPY, QQQ, XLK, XLF, XLV, XLE, IWM, "
+                        f"TLT, IEF, GLD, SLV, USO, PDBC, BTC/USD, ETH/USD, SGOV\n"
+                        f"  - Slots numbered 1, 2, 3 ... sequentially\n"
+                        f"  - kelly_fraction sum (excluding SGOV) must not exceed 1.0\n"
+                        f"  - asset_class must match ticker:\n"
+                        f"      equity→SPY/QQQ/XLK/XLF/XLV/XLE/IWM\n"
+                        f"      safe_haven→TLT/IEF/GLD/SLV\n"
+                        f"      commodity→USO/PDBC\n"
+                        f"      crypto_spot→BTC/USD/ETH/USD\n"
+                        f"      cash→SGOV\n"
+                        f"  - Each position is capped at 10% of equity by the executor. "
+                        f"Plan allocations with this in mind: use 10 slots at 10% each to deploy 100%.\n"
+                        f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
+                    )
+
+        raise RuntimeError(
+            f"Regime LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
         )
 
+    # ── Cache integration via get_or_call ─────────────────────────────────────
     if cache_key:
-        try:
-            cached_raw = _llm_cache.get(cache_key)
-            if cached_raw is not None:
-                output = process_regime_llm_output(cached_raw)
-                logger.info("LLMResponseCache | Regime output served from cache — Groq call skipped")
-                return output
-        except Exception as _ce:
-            logger.warning(f"LLMResponseCache | Regime cached entry invalid, re-fetching: {_ce}")
+        raw_json = _llm_cache.get_or_call(cache_key, _fetch_raw_regime_json, ttl_minutes=90)
+    else:
+        raw_json = _fetch_raw_regime_json()
 
-    last_error: Exception | None = None
-    current_user_prompt = user_prompt
-
-    for attempt in range(1, MAX_LLM_RETRIES + 1):
-        logger.info(f"Step 5/5 | Regime LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
-        try:
-            raw_json = call_groq(
-                system_prompt=system_prompt,
-                user_prompt=current_user_prompt,
-                temperature=0.2,
-                max_tokens=2048,
-                call_type="regime",
-            )
-            output = process_regime_llm_output(raw_json)
-            if attempt > 1:
-                logger.info(f"  LLM self-corrected on attempt {attempt}")
-            # Persist the successful regime so the pipeline can use it as a fallback
-            # if Groq is rate-limited on a future call.
-            _save_regime_cache(output)
-            if cache_key:
-                _llm_cache.put(cache_key, raw_json)
-            try:
-                from analysis.learning_journal import record_cycle_learnings
-                record_cycle_learnings(output)
-            except Exception as _lj_exc:
-                logger.warning(f"Learning journal | Regime record failed (non-fatal): {_lj_exc}")
-            return output
-
-        except Exception as exc:
-            last_error = exc
-            error_msg = str(exc)
-            logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
-
-            if attempt < MAX_LLM_RETRIES:
-                current_user_prompt = (
-                    f"{user_prompt}\n\n"
-                    f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
-                    f"Your previous JSON output failed validation with this error:\n"
-                    f"  {error_msg}\n\n"
-                    f"Please fix and return corrected JSON only. Key rules:\n"
-                    f"  - 'regime' must be exactly 'Bull', 'Bear', or 'Sideways'\n"
-                    f"  - Bull: 3-7 slots of equity/crypto_spot/commodity with positive momentum\n"
-                    f"  - Bear: 1-4 slots of safe_haven (TLT, IEF, GLD, SLV) with positive momentum, else SGOV\n"
-                    f"  - Sideways: 0-3 mean-reversion slots (any class), or single SGOV slot\n"
-                    f"  - Only approved tickers: SPY, QQQ, XLK, XLF, XLV, XLE, IWM, "
-                    f"TLT, IEF, GLD, SLV, USO, PDBC, BTC/USD, ETH/USD, SGOV\n"
-                    f"  - Slots numbered 1, 2, 3 ... sequentially\n"
-                    f"  - kelly_fraction sum (excluding SGOV) must not exceed 1.0\n"
-                    f"  - asset_class must match ticker:\n"
-                    f"      equity→SPY/QQQ/XLK/XLF/XLV/XLE/IWM\n"
-                    f"      safe_haven→TLT/IEF/GLD/SLV\n"
-                    f"      commodity→USO/PDBC\n"
-                    f"      crypto_spot→BTC/USD/ETH/USD\n"
-                    f"      cash→SGOV\n"
-                    f"  - Each position is capped at 10% of equity by the executor. "
-                    f"Plan allocations with this in mind: use 10 slots at 10% each to deploy 100%.\n"
-                    f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
-                )
-
-    raise RuntimeError(
-        f"Regime LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
-    )
+    output = process_regime_llm_output(raw_json)
+    _save_regime_cache(output)
+    try:
+        from analysis.learning_journal import record_cycle_learnings
+        record_cycle_learnings(output)
+    except Exception as _lj_exc:
+        logger.warning(f"Learning journal | Regime record failed (non-fatal): {_lj_exc}")
+    return output
 
 
 def _call_crypto_with_retry(
@@ -419,67 +415,74 @@ def _call_crypto_with_retry(
     user_prompt: str,
     cache_key: str | None = None,
 ) -> CryptoAnalysisOutput:
+    """
+    Execute the crypto LLM call with retry logic and response caching.
+
+    Uses `llm_cache.get_or_call(cache_key, call_fn, ttl_minutes=90)` as the
+    single cache integration point: on a cache hit the inner call_fn is never
+    invoked, so no Groq tokens are consumed; on a miss the full self-correcting
+    retry loop runs and the validated raw_json is stored for future hits.
+    """
     from analysis.llm_response_cache import llm_cache as _llm_cache
 
-    if cache_key:
-        cached_raw = _llm_cache.get(cache_key)
-        if cached_raw is not None:
+    def _fetch_raw_crypto_json() -> str:
+        """Full self-correcting retry loop; returns validated raw_json string."""
+        last_error: Exception | None = None
+        current_prompt = user_prompt
+
+        for attempt in range(1, MAX_LLM_RETRIES + 1):
+            logger.info(f"Step 5/5 | Crypto LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
             try:
-                output = process_crypto_llm_output(cached_raw)
-                logger.info("LLMResponseCache | Crypto output served from cache — Groq call skipped")
-                return output
-            except Exception as _ce:
-                logger.warning(f"LLMResponseCache | Crypto cached entry invalid, re-fetching: {_ce}")
-
-    last_error: Exception | None = None
-    current_user_prompt = user_prompt
-
-    for attempt in range(1, MAX_LLM_RETRIES + 1):
-        logger.info(f"Step 5/5 | Crypto LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
-        try:
-            raw_json = call_groq(
-                system_prompt=system_prompt,
-                user_prompt=current_user_prompt,
-                temperature=0.2,
-                max_tokens=2048,
-                call_type="crypto",
-            )
-            output = process_crypto_llm_output(raw_json)
-            if attempt > 1:
-                logger.info(f"  LLM self-corrected on attempt {attempt}")
-            _save_crypto_cache(output)
-            if cache_key:
-                _llm_cache.put(cache_key, raw_json)
-            try:
-                from analysis.learning_journal import record_cycle_learnings
-                record_cycle_learnings(output)
-            except Exception as _lj_exc:
-                logger.warning(f"Learning journal | Crypto record failed (non-fatal): {_lj_exc}")
-            return output
-
-        except Exception as exc:
-            last_error = exc
-            error_msg = str(exc)
-            logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
-
-            if attempt < MAX_LLM_RETRIES:
-                current_user_prompt = (
-                    f"{user_prompt}\n\n"
-                    f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
-                    f"Your previous JSON output failed validation with this error:\n"
-                    f"  {error_msg}\n\n"
-                    f"Please fix and return corrected JSON only. Rules:\n"
-                    f"  - Only approved tickers: BTC/USD, ETH/USD, SGOV (ATOM/USD is NOT valid)\n"
-                    f"  - asset_class: 'crypto_spot' for BTC/USD and ETH/USD, 'cash' for SGOV\n"
-                    f"  - 1 to 2 slots, numbered sequentially from 1\n"
-                    f"  - kelly_fraction sum (excluding SGOV) <= 1.0\n"
-                    f"  - Only allocate to crypto with POSITIVE momentum. Default SGOV if uncertain.\n"
-                    f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
+                raw_json = call_groq(
+                    system_prompt=system_prompt,
+                    user_prompt=current_prompt,
+                    temperature=0.2,
+                    max_tokens=2048,
+                    call_type="crypto",
                 )
+                process_crypto_llm_output(raw_json)   # validate — raises on bad JSON
+                if attempt > 1:
+                    logger.info(f"  LLM self-corrected on attempt {attempt}")
+                return raw_json
 
-    raise RuntimeError(
-        f"Crypto LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
-    )
+            except Exception as exc:
+                last_error = exc
+                error_msg = str(exc)
+                logger.warning(f"  Attempt {attempt} failed: {error_msg[:300]}")
+
+                if attempt < MAX_LLM_RETRIES:
+                    current_prompt = (
+                        f"{user_prompt}\n\n"
+                        f"--- CORRECTION REQUIRED (attempt {attempt} was invalid) ---\n"
+                        f"Your previous JSON output failed validation with this error:\n"
+                        f"  {error_msg}\n\n"
+                        f"Please fix and return corrected JSON only. Rules:\n"
+                        f"  - Only approved tickers: BTC/USD, ETH/USD, SGOV (ATOM/USD is NOT valid)\n"
+                        f"  - asset_class: 'crypto_spot' for BTC/USD and ETH/USD, 'cash' for SGOV\n"
+                        f"  - 1 to 2 slots, numbered sequentially from 1\n"
+                        f"  - kelly_fraction sum (excluding SGOV) <= 1.0\n"
+                        f"  - Only allocate to crypto with POSITIVE momentum. Default SGOV if uncertain.\n"
+                        f"  - stop_loss_pct: -0.07, take_profit_pct: 0.15 (use exactly these placeholder values)\n"
+                    )
+
+        raise RuntimeError(
+            f"Crypto LLM failed after {MAX_LLM_RETRIES} attempts. Last error: {last_error}"
+        )
+
+    # ── Cache integration via get_or_call ─────────────────────────────────────
+    if cache_key:
+        raw_json = _llm_cache.get_or_call(cache_key, _fetch_raw_crypto_json, ttl_minutes=90)
+    else:
+        raw_json = _fetch_raw_crypto_json()
+
+    output = process_crypto_llm_output(raw_json)
+    _save_crypto_cache(output)
+    try:
+        from analysis.learning_journal import record_cycle_learnings
+        record_cycle_learnings(output)
+    except Exception as _lj_exc:
+        logger.warning(f"Learning journal | Crypto record failed (non-fatal): {_lj_exc}")
+    return output
 
 
 def _mock_regime_llm_response() -> str:

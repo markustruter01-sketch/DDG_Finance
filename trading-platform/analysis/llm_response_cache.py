@@ -82,33 +82,64 @@ class LLMResponseCache:
     def make_key(
         call_type: str,
         market_data: dict,
-        news_headlines: list[str],
+        news_headlines: list[str] | None = None,
     ) -> str:
         """
-        Build a stable MD5 cache key from the signals that drive LLM decisions.
+        Build a stable MD5 cache key from the canonical context tuple:
+          (call_type, regime_band, top_tickers_sorted, sentiment_band)
 
         Components:
-          - call_type:  'regime' or 'crypto'
-          - Momentum signals for every ticker (positive/negative — strips price noise)
-          - First 5 news headline titles (stripped of description + category prefix)
+          - call_type:          'regime' or 'crypto'
+          - regime_band:        coarse SPY EMA-anchor label — 'bull' | 'bear' | 'unknown'
+          - top_tickers_sorted: alphabetically-sorted names of the top-3 tickers with
+                                positive 3-month momentum (stable across cycles when
+                                momentum direction is unchanged)
+          - sentiment_band:     'positive' when ≥50% of non-error tickers have positive
+                                3-month momentum, 'negative' otherwise, 'neutral' if no
+                                data
+
+        This produces the same hash on consecutive cycles only when macro regime,
+        leader tickers, and overall market bias are all unchanged — capturing exactly
+        the conditions under which a fresh Groq call would return the same answer.
         """
-        momentum_parts: list[str] = []
-        for cat, tickers in market_data.get("by_category", {}).items():
-            if not isinstance(tickers, dict):
+        # 1. Regime band — derived from SPY EMA anchor in market_data
+        spy_above_ema = market_data.get("spy_above_ema_20")
+        if spy_above_ema is True:
+            regime_band = "bull"
+        elif spy_above_ema is False:
+            regime_band = "bear"
+        else:
+            regime_band = "unknown"
+
+        # 2. Top-3 tickers by positive 3mo momentum, sorted for determinism
+        positive_tickers: list[str] = []
+        negative_or_flat: list[str] = []
+        total_with_data = 0
+        for ticker, d in market_data.get("by_ticker", {}).items():
+            if not isinstance(d, dict) or "error" in d:
                 continue
-            for ticker, d in tickers.items():
-                if isinstance(d, dict) and "error" not in d:
-                    m3 = (d.get("momentum_3mo") or "?")[0]
-                    m6 = (d.get("momentum_6mo") or "?")[0]
-                    momentum_parts.append(f"{ticker}:{m3}{m6}")
-        momentum_parts.sort()
+            total_with_data += 1
+            m3 = (d.get("momentum_3mo") or "").lower()
+            if m3.startswith("p"):
+                positive_tickers.append(ticker)
+            else:
+                negative_or_flat.append(ticker)
+        top_tickers = sorted(positive_tickers)[:3]
 
-        news_parts: list[str] = []
-        for h in news_headlines[:5]:
-            clean = _CATEGORY_RE.sub("", h).split(" — ")[0].strip()[:60].lower()
-            news_parts.append(clean)
+        # 3. Sentiment band — majority momentum direction across all tickers
+        if total_with_data == 0:
+            sentiment_band = "neutral"
+        elif len(positive_tickers) >= total_with_data / 2:
+            sentiment_band = "positive"
+        else:
+            sentiment_band = "negative"
 
-        key_str = f"{call_type}|{','.join(momentum_parts)}|{','.join(news_parts)}"
+        key_str = (
+            f"{call_type}"
+            f"|regime={regime_band}"
+            f"|tickers={','.join(top_tickers)}"
+            f"|sentiment={sentiment_band}"
+        )
         return hashlib.md5(key_str.encode()).hexdigest()
 
     # ── Public API ────────────────────────────────────────────────────────────

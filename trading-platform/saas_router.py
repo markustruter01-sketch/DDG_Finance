@@ -24,6 +24,7 @@ Future stages will add:
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
@@ -33,8 +34,10 @@ from pydantic import BaseModel
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 # Stage 3 will build full auth. For now this flag bypasses it entirely
-# so development is frictionless. Set to False before going to production.
-DEV_MODE: bool = True
+# so development is frictionless.
+# In production: set SAAS_DEV_MODE=false to require authentication once auth is built.
+# Default is True (open access / beta mode) until Stage 3 auth is complete.
+DEV_MODE: bool = os.environ.get("SAAS_DEV_MODE", "true").lower() == "true"
 
 SAAS_VERSION: str = "0.1.0"
 SAAS_API_PREFIX: str = "/saas-api"

@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 88612.13847915702,
+  "cash_usd": 68868.77886315701,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -11,6 +11,26 @@
       "best_price": 1.34148,
       "entry_fee": 25.6065,
       "order_id": "PAPER-XRPUSD-1774836493"
+    },
+    "ATOM/USD": {
+      "side": "short",
+      "entry_price": 1.6708,
+      "size_usd": 9846.08,
+      "size_units": 5893.03327747187,
+      "entry_time": "2026-03-30T02:46:31.656925+00:00",
+      "best_price": 1.6708,
+      "entry_fee": 25.5998,
+      "order_id": "PAPER-ATOMUSD-1774838791"
+    },
+    "AVAX/USD": {
+      "side": "short",
+      "entry_price": 8.84,
+      "size_usd": 9846.08,
+      "size_units": 1113.8099547511313,
+      "entry_time": "2026-03-30T02:49:30.489978+00:00",
+      "best_price": 8.84,
+      "entry_fee": 25.5998,
+      "order_id": "PAPER-AVAXUSD-1774838970"
     }
   },
   "all_trades": [

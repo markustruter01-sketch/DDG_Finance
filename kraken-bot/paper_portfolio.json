@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 59002.23236715702,
+  "cash_usd": 69022.6770879534,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -21,16 +21,6 @@
       "best_price": 1.6708,
       "entry_fee": 25.5998,
       "order_id": "PAPER-ATOMUSD-1774838791"
-    },
-    "AVAX/USD": {
-      "side": "short",
-      "entry_price": 8.84,
-      "size_usd": 9846.08,
-      "size_units": 1113.8099547511313,
-      "entry_time": "2026-03-30T02:49:30.489978+00:00",
-      "best_price": 8.84,
-      "entry_fee": 25.5998,
-      "order_id": "PAPER-AVAXUSD-1774838970"
     },
     "ETH/USD": {
       "side": "short",
@@ -342,6 +332,18 @@
       "fees_usd": 51.8915,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-30T00:39:54.331059+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "AVAX/USD",
+      "side": "short",
+      "entry_price": 8.84,
+      "exit_price": 9.02,
+      "pnl_pct": -2.04,
+      "pnl_usd": -252.21,
+      "fees_usd": 51.7209,
+      "reason": "stop",
+      "closed_at": "2026-03-30T08:51:25.754088+00:00",
       "paper": true
     }
   ]

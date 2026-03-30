@@ -75,7 +75,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 6  # 5 trading jobs + 1 auto-heal monitor
+EXPECTED_JOB_COUNT = 8  # 5 trading jobs (scheduler.py) + 3 startup jobs (auto_heal, learning_snapshot, equity_heartbeat)
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -706,11 +706,29 @@ async def _auto_heal_check() -> None:
         jobs = get_job_status()
         last = get_last_run()
         last_status = last.get("last_run_status", "never")
-        if len(jobs) < EXPECTED_JOB_COUNT or last_status in ("error", "analysis_failed", "execution_failed"):
-            logger.warning(f"[AUTO-HEAL] platform_core critical: {len(jobs)} jobs, last_status={last_status}")
+        _mkt_open = False
+        try:
+            _mkt_open = is_market_open()
+        except Exception:
+            pass
+
+        _degraded = False
+        _severity = "warning"
+        if len(jobs) < EXPECTED_JOB_COUNT:
+            # Missing scheduler jobs is always a CRITICAL regardless of market hours
+            _degraded = True
+            _severity = "critical"
+        elif last_status in ("error", "analysis_failed", "execution_failed"):
+            # Analysis failures during market hours = CRITICAL; off-hours = WARNING
+            # (off-hours failures are expected — Alpaca/yfinance unavailable)
+            _degraded = True
+            _severity = "critical" if _mkt_open else "warning"
+
+        if _degraded:
+            logger.warning(f"[AUTO-HEAL] platform_core {_severity}: {len(jobs)} jobs, last_status={last_status}, market_open={_mkt_open}")
             record_degradation(
                 component="platform_core",
-                severity="critical",
+                severity=_severity,
                 error_type=last_status if last_status != "never" else "missing_jobs",
                 message=f"Platform core degraded: {len(jobs)}/{EXPECTED_JOB_COUNT} scheduler jobs, last_status={last_status}",
             )
@@ -727,13 +745,13 @@ async def _auto_heal_check() -> None:
         caches = _gcs()
         ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
         max_age = max(ages) if ages else 0
-        if ages and max_age > 300:
+        if ages and max_age > 600:
             logger.warning(f"[AUTO-HEAL] data_pipeline stale: max_age={max_age:.0f}s")
             record_degradation(
                 component="data_pipeline",
                 severity="warning",
                 error_type="stale",
-                message=f"Data pipeline cache stale: oldest feed is {max_age:.0f}s old (threshold 300s)",
+                message=f"Data pipeline cache stale: oldest feed is {max_age:.0f}s old (threshold 600s)",
             )
             await _remediate_component("data_pipeline", triggered_by="auto_heal")
         else:
@@ -751,13 +769,13 @@ async def _auto_heal_check() -> None:
                 from datetime import datetime as _dt
                 kage = now - _dt.fromisoformat(last_upd).timestamp()
                 kstatus = kst.get("status", "unknown")
-                if kstatus == "error" or kage > 600:
-                    logger.warning(f"[AUTO-HEAL] kraken_api critical: status={kstatus}, age={kage:.0f}s")
+                if kstatus == "error" or kage > 1800:
+                    logger.warning(f"[AUTO-HEAL] kraken_api stale/error: status={kstatus}, age={kage:.0f}s")
                     record_degradation(
                         component="kraken_api",
                         severity="critical" if kstatus == "error" else "warning",
                         error_type="error_state" if kstatus == "error" else "stale",
-                        message=f"Kraken bot {kstatus}: status file is {kage:.0f}s old (threshold 600s)",
+                        message=f"Kraken bot {kstatus}: status file is {kage:.0f}s old (threshold 1800s)",
                         detail=f"status.json last_updated={last_upd}, bot_status={kstatus}",
                     )
                     await _remediate_component("kraken_api", triggered_by="auto_heal")

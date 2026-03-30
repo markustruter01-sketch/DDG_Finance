@@ -532,6 +532,11 @@ def run_cycle() -> None:
 
     cycle_count += 1
 
+    # ── Heartbeat — always write status.json at the start of every cycle ─────
+    # This guarantees the timestamp is fresh even if the cycle exits early or
+    # the workflow was paused between cycles by the hosting environment.
+    write_status()
+
     # ── Pause check — dashboard can pause the bot without stopping the workflow ─
     if is_bot_paused():
         logger.info("Cycle | Bot is PAUSED by dashboard — skipping signal processing")

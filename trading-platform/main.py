@@ -25,6 +25,7 @@ Endpoints:
 
 import asyncio
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,6 +33,13 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter
 from pydantic import BaseModel
 from loguru import logger
+
+# ── Shared core library ────────────────────────────────────────────────────────
+# Both bots (Alpaca + Kraken) share RiskProfile, ExitBracket, CircuitBreaker
+# from the repo-root shared/ package.
+_REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from config.settings import settings
 from core.pipeline import get_last_run, run_pipeline, run_postmortem, reset_error_state
@@ -1934,6 +1942,58 @@ async def invalidate_llm_cache() -> dict:
     from analysis.llm_response_cache import llm_cache as _lc
     _lc.invalidate()
     return {"status": "cleared", "message": "LLM response cache invalidated — next cycle will call Groq API"}
+
+
+@router.get("/admin/risk-profile", tags=["Admin"])
+async def get_risk_profile() -> dict:
+    """
+    Live Alpaca risk profile state.
+
+    Returns the current ring-fenced %, deployed %, reserve buffer, and
+    single-position cap computed from the live Alpaca account balance and
+    open positions.
+
+    Fields:
+      - name                    : "alpaca"
+      - total_equity_usd        : Current account equity in USD
+      - deployed_usd            : Total USD tied up in open positions
+      - ring_fenced_pct         : % of equity always held in safe assets (60%)
+      - ring_fenced_usd         : USD value of the ring-fenced portion
+      - deployable_ceiling_pct  : % available for active deployment (40%)
+      - deployable_ceiling_usd  : USD ceiling for active positions
+      - reserve_pct             : Additional cash buffer within deployable (18%)
+      - active_ceiling_usd      : Effective deployment ceiling (after reserve)
+      - reserve_buffer_usd      : Remaining headroom — positive = room to deploy
+      - deployed_pct_of_ceiling : deployed_usd / active_ceiling_usd × 100
+      - max_single_position_usd : Hard cap per individual position (15% of equity)
+      - daily_loss_limit_usd    : USD drawdown that would trip the kill-switch (5%)
+      - is_breached             : True if deployed > active_ceiling (risk breach)
+    """
+    import sys as _sys, os as _os
+    _repo_root = _os.path.join(_os.path.dirname(__file__), "..")
+    if _repo_root not in _sys.path:
+        _sys.path.insert(0, _repo_root)
+    from shared.risk_profile import RiskProfile
+
+    try:
+        account   = get_account()
+        equity    = float(account.get("equity", 0.0))
+        positions = get_positions()
+        deployed  = sum(float(p.get("market_value", 0.0)) for p in (positions or []))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Failed to fetch Alpaca account: {exc}")
+
+    rp = RiskProfile(
+        total_equity=equity,
+        deployed_usd=max(deployed, 0.0),
+        ring_fenced_pct=0.60,
+        deployable_pct=0.40,
+        max_position_pct=0.15,
+        daily_loss_limit_pct=0.05,
+        reserve_pct=0.18,
+        name="alpaca",
+    )
+    return rp.to_dict()
 
 
 @router.get("/correlation", tags=["Analytics"])

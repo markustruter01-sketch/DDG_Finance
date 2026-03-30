@@ -48,6 +48,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - **Groq budget guardrails** — `analysis/groq_budget.py` singleton tracks daily token usage (100K TPD limit), enforces 90-min minimum interval between regime LLM calls (returns cached regime if throttled), caps auto-commentary at 4/day per endpoint; `force=True` bypasses call-count cap but NOT zero-budget (budget check runs before force bypass), all counters reset at midnight UTC; commentary endpoints return HTTP 200 graceful fallback (not 429) when budget is exhausted; on Groq API failure the commentary cache `ts` is advanced by (TTL − 300s) so the next retry waits 5 min instead of retrying every request
 - **LLM response cache** — `analysis/llm_response_cache.py` MD5-keyed cache (90-min TTL) keyed on `call_type|regime_band|top_tickers_sorted|sentiment_band`; `get_or_call()` is the single integration point in both retry functions; budget counters skip on cache hits; `GET /admin/token-usage` + `POST /admin/llm-cache/invalidate` endpoints
 - **Pre-LLM signal guardrails** — `analysis/signal_guard.py` runs three guards before every Groq call (Step 3.5): (1) **TemporalQuarantine** (hard, skips LLM): blocks Fri 14:00→Mon 09:30 ET and ±30min around economic calendar blackout events — returns cached regime if available; (2) **MultiSourceConsensus** (soft): removes single-source headlines with no cross-category topic corroboration, reducing noisy input; (3) **PriceToSentimentDivergence** (soft): downgrades market sentiment one band (Greed→Neutral, Extreme Greed→Greed) when SPY 5-day avg volume < 20-day avg volume. Guard results exposed in `GET /status` under `signal_guard` key. All guards fail-open (non-fatal exceptions fall through to raw data)
+- **Shared risk library** — `shared/` at repo root is imported by both bots via `sys.path.insert(0, REPO_ROOT)`: `RiskProfile` (60/40 ring-fence, reserve buffer, daily loss limit, `to_dict()`), `ExitBracket` (stop/TP/trail-activation levels, ATR-based or fixed-%, `compute_exit_levels()` convenience fn), `CircuitBreaker` (stateless `check_circuit_breaker()` fn + stateful class with `record()`/`check_and_trip()`/`reset()`). 59 unit tests in `trading-platform/tests/test_shared_lib.py`.
 - **Variable Kelly slots** — 1–6 slots, even-weight Python override (not LLM arithmetic), normalised to ≤ 100% equity
 - **SQLite RAG trade journal** — losses/wins/slippage injected into LLM system prompt (unified for ETF and crypto trades)
 - **Strict LLM state awareness** — analyzer aborts with RuntimeError if account state fetch fails
@@ -90,6 +91,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `POST /kraken/auto-trading` — Pause/resume Kraken bot (writes control.json)
 - `GET /admin/token-usage` — Per-call-type Groq token breakdown (regime/crypto/commentary/unknown) + LLM cache hit/miss stats
 - `POST /admin/llm-cache/invalidate` — Clear the LLM response cache (forces fresh Groq call next cycle)
+- `GET /admin/risk-profile` — Live Alpaca risk profile state: ring-fenced % (60%), deployed %, reserve buffer USD, max single-position USD, is_breached flag; powered by `shared/risk_profile.py`
 
 ## Dashboard (React/Vite)
 
@@ -177,6 +179,11 @@ Both bot agent cards in the dashboard now include three gamification layers:
 ## Monorepo Structure
 
 ```text
+├── shared/                    # Shared risk infrastructure (both bots import this)
+│   ├── __init__.py            # Re-exports RiskProfile, ExitBracket, CircuitBreaker
+│   ├── risk_profile.py        # Portfolio risk envelope (60/40 ring-fence, reserves, caps)
+│   ├── exit_bracket.py        # Exit-level calculator (stop/TP/trail, ATR-based or fixed %)
+│   └── circuit_breaker.py     # Flash-crash detector (stateless fn + stateful class)
 ├── trading-platform/          # Python FastAPI trading API
 │   ├── main.py                # FastAPI app + router
 │   ├── config/                # Settings

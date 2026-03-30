@@ -1,17 +1,7 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 68411.48822518403,
+  "cash_usd": 78550.46610656011,
   "positions": {
-    "SOL/USD": {
-      "side": "long",
-      "entry_price": 79.69,
-      "size_usd": 9868.21,
-      "size_units": 123.83247584389508,
-      "entry_time": "2026-03-29T22:47:25.420243+00:00",
-      "best_price": 79.69,
-      "entry_fee": 25.6573,
-      "order_id": "PAPER-SOLUSD-1774824445"
-    },
     "LINK/USD": {
       "side": "long",
       "entry_price": 8.27443,
@@ -294,6 +284,18 @@
       "fees_usd": 51.4491,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-30T00:25:46.026880+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "SOL/USD",
+      "side": "long",
+      "entry_price": 79.69,
+      "exit_price": 82.09,
+      "pnl_pct": 3.01,
+      "pnl_usd": 245.11,
+      "fees_usd": 52.0874,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:33:54.424307+00:00",
       "paper": true
     }
   ]

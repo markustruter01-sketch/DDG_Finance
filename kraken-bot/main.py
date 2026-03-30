@@ -27,12 +27,21 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from loguru import logger
+
+# ── Shared core library ────────────────────────────────────────────────────────
+# Both bots (Kraken + Alpaca) share RiskProfile, ExitBracket, CircuitBreaker
+# from the repo-root shared/ package.
+_REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker
 
 # Import our configuration — also handles the PAPER_TRADING startup message
 # and validates/creates the exchange connection.

@@ -161,6 +161,26 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
+    # ── Weekend temporal quarantine guard ─────────────────────────────────────
+    # Block new LLM-driven trade decisions from Friday 14:00 ET through
+    # Monday 09:30 ET.  Weekend news is thin, illiquid, and often reversed by
+    # Monday open — not a signal worth burning Groq tokens on.
+    # (Economic blackout ±30min is handled separately by is_blackout_active().)
+    if not force and not crypto_only:
+        try:
+            from analysis.signal_guard import temporal_quarantine_guard as _tq_guard
+            _tq = _tq_guard(calendar_check=False)  # calendar blackout checked below
+            if not _tq.passed:
+                msg = f"Signal guard temporal quarantine: {_tq.reason} — pipeline skipped"
+                logger.info(msg)
+                result["status"] = "guardrail_blocked"
+                result["errors"].append(msg)
+                result["signal_guard"] = {"hard_block": True, "reason": _tq.reason}
+                _update_state(result, started)
+                return result
+        except Exception as _tq_exc:
+            logger.warning(f"Pipeline | Weekend quarantine check failed (non-fatal): {_tq_exc}")
+
     try:
         from data.economic_calendar import is_blackout_active
         blackout = is_blackout_active()

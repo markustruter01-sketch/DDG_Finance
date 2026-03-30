@@ -88,12 +88,28 @@ class TestMultiSourceConsensusGuard(unittest.TestCase):
         self.assertEqual(result.severity, "soft")
         self.assertLessEqual(result.meta["filtered_count"], result.meta["original_count"])
 
-    def test_multi_source_articles_are_kept(self):
-        """When multiple articles share a source or topic, all headlines are retained."""
+    def test_same_source_same_category_cannot_self_corroborate(self):
+        """Two Reuters/macro articles with topic overlap cannot corroborate each other
+        (same source AND same category → no corroboration per spec)."""
         articles = {
             "macro": [
-                _make_article("Federal Reserve raises rates by 25bps", "Reuters"),
+                _make_article("Federal Reserve raises rates by 25bps today", "Reuters"),
                 _make_article("Federal Reserve signals rate hike cycle end", "Reuters"),
+            ],
+        }
+        news_data = _make_news_data(articles)
+        result, filtered = multi_source_consensus_guard(news_data)
+        self.assertTrue(result.passed)
+        # Both articles share topic words but are same-source, same-category → both dropped
+        self.assertEqual(result.meta["dropped_count"], 2)
+        self.assertEqual(len(filtered), 0)
+
+    def test_different_source_same_category_corroborates(self):
+        """Two articles on the same topic from different sources (same category) pass."""
+        articles = {
+            "macro": [
+                _make_article("Federal Reserve raises interest rates by 25bps", "Reuters"),
+                _make_article("Federal Reserve interest rates hike 25bps decision", "Bloomberg"),
             ],
         }
         news_data = _make_news_data(articles)
@@ -333,10 +349,11 @@ class TestSentimentVolumeDivergenceGuard(unittest.TestCase):
 class TestRunAllGuards(unittest.TestCase):
 
     def _make_context(self, sentiment_band: str = "Neutral", n_volumes: int = 25) -> dict:
+        # Two articles on the same topic from different sources so they corroborate each other.
         articles = {
             "macro": [
-                _make_article("Federal Reserve holds rates", "Reuters"),
-                _make_article("Federal Reserve holds rates again", "Reuters"),
+                _make_article("Federal Reserve holds interest rates steady today", "Reuters"),
+                _make_article("Federal Reserve holds interest rates policy unchanged", "Bloomberg"),
             ],
         }
         return {

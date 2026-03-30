@@ -1,17 +1,7 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 38199.91553707044,
+  "cash_usd": 58167.81248721925,
   "positions": {
-    "BTC/USD": {
-      "side": "long",
-      "entry_price": 65293.3,
-      "size_usd": 9697.46,
-      "size_units": 0.1485215175217059,
-      "entry_time": "2026-03-29T22:46:12.012253+00:00",
-      "best_price": 65293.3,
-      "entry_fee": 25.2134,
-      "order_id": "PAPER-BTCUSD-1774824372"
-    },
     "SOL/USD": {
       "side": "long",
       "entry_price": 79.69,
@@ -31,16 +21,6 @@
       "best_price": 0.235,
       "entry_fee": 25.6573,
       "order_id": "PAPER-ADAUSD-1774824447"
-    },
-    "AVAX/USD": {
-      "side": "long",
-      "entry_price": 8.44,
-      "size_usd": 9868.21,
-      "size_units": 1169.2191943127962,
-      "entry_time": "2026-03-29T22:47:28.995997+00:00",
-      "best_price": 8.44,
-      "entry_fee": 25.6573,
-      "order_id": "PAPER-AVAXUSD-1774824448"
     },
     "LINK/USD": {
       "side": "long",
@@ -276,6 +256,30 @@
       "fees_usd": 51.7824,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-30T00:00:54.145107+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "BTC/USD",
+      "side": "long",
+      "entry_price": 65293.3,
+      "exit_price": 66462.6,
+      "pnl_pct": 1.79,
+      "pnl_usd": 122.79,
+      "fees_usd": 50.8783,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:19:40.257410+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "AVAX/USD",
+      "side": "long",
+      "entry_price": 8.44,
+      "exit_price": 8.68,
+      "pnl_pct": 2.84,
+      "pnl_usd": 228.57,
+      "fees_usd": 52.0442,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:19:46.252851+00:00",
       "paper": true
     }
   ]

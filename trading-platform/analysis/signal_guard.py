@@ -158,32 +158,27 @@ def multi_source_consensus_guard(
             all_headlines,
         )
 
-    # Count how many articles each source contributed
-    source_counts: dict[str, int] = {}
-    for art in articles_meta:
-        source_counts[art["source"]] = source_counts.get(art["source"], 0) + 1
-
-    # Build topic-word index for cross-category corroboration
-    topic_index: list[tuple[str, frozenset]] = [
-        (art["category"], _topic_words(art["title"]))
-        for art in articles_meta
-    ]
-
-    # Determine which article sources are "corroborated"
-    # A source is corroborated if it has published ≥2 articles, OR
-    # at least one of its articles is topic-overlapping with an article
-    # from a different category.
+    # Determine which articles are "corroborated":
+    # An article passes if at least ONE OTHER article in the batch satisfies
+    # EITHER condition (distinct source OR distinct category) AND shares
+    # ≥3 significant title words with it.
+    # This matches the spec: "ticker/topic passes if it appears in ≥2 distinct
+    # articles (different sources or different category tags)".
     def _is_corroborated(art: dict) -> bool:
         src = art["source"]
-        if source_counts[src] >= min_sources:
-            return True
         cat = art["category"]
         art_words = _topic_words(art["title"])
         if len(art_words) < 3:
-            return True   # very short titles — keep by default
-        for other_cat, other_words in topic_index:
-            if other_cat != cat and len(art_words & other_words) >= 3:
-                return True
+            return True   # very short titles — keep by default (can't meaningfully score)
+        for other in articles_meta:
+            if other is art:
+                continue
+            # Must differ by source name OR by category tag (or both)
+            if other["source"] == src and other["category"] == cat:
+                continue   # same source AND same category → cannot corroborate
+            other_words = _topic_words(other["title"])
+            if len(art_words & other_words) >= 3:
+                return True   # topic corroborated by a distinct-source/category article
         return False
 
     # Build the keep-set: category+first-8-words of title
@@ -221,6 +216,7 @@ def multi_source_consensus_guard(
             f"SignalGuard | Consensus: all {len(all_headlines)} headlines corroborated — none dropped"
         )
 
+    unique_sources = len({a["source"] for a in articles_meta})
     return (
         GuardResult(
             name="multi_source_consensus",
@@ -231,7 +227,7 @@ def multi_source_consensus_guard(
                 "original_count": len(all_headlines),
                 "filtered_count": len(filtered),
                 "dropped_count":  dropped_count,
-                "unique_sources": len(source_counts),
+                "unique_sources": unique_sources,
             },
         ),
         filtered,

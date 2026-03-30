@@ -217,6 +217,7 @@ def build_system_prompt_with_feedback(
     buying_power: float | None = None,
     held_symbols: list[str] | None = None,
     crypto_only: bool = False,
+    sentiment_override: str | None = None,
 ) -> str:
     losses = get_recent_losses(limit=n_losses)
     wins   = get_recent_wins(limit=n_wins)
@@ -296,11 +297,31 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
         logger.info("Feedback injection | No trading history — using clean prompt")
 
     try:
-        from data.sentiment import get_sentiment_prompt_block
-        sentiment_block = get_sentiment_prompt_block(crypto_only=crypto_only)
+        from data.sentiment import get_sentiment_prompt_block, get_sentiment
+        if sentiment_override is not None:
+            # A signal guard downgraded the sentiment band — build a patched block
+            # using the adjusted label so the LLM receives the correct (weaker) signal
+            # without any explanation of why it was adjusted.
+            raw_sent = get_sentiment()
+            crypto_fg = raw_sent.get("crypto_fear_greed", {})
+            lines = ["\n=== SENTIMENT INTELLIGENCE (FEAR & GREED INDICES) ==="]
+            if crypto_fg.get("value") is not None:
+                lines.append(
+                    f"Crypto Fear & Greed Index: {crypto_fg['value']}/100 ({crypto_fg.get('label', 'N/A')})"
+                )
+            lines.append(
+                f"Market Fear & Greed Index: (adjusted band) {sentiment_override}"
+            )
+            lines.append("")
+            sentiment_block = "\n".join(lines)
+            logger.info(
+                f"Feedback injection | Sentiment injected with guard override: '{sentiment_override}'"
+            )
+        else:
+            sentiment_block = get_sentiment_prompt_block(crypto_only=crypto_only)
+            logger.info("Feedback injection | Sentiment intelligence injected")
         if sentiment_block.strip():
             full_prompt += sentiment_block
-            logger.info("Feedback injection | Sentiment intelligence injected")
     except Exception as exc:
         logger.warning(f"Feedback injection | Sentiment injection failed: {exc}")
 

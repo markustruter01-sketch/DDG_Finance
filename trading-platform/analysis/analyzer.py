@@ -214,23 +214,15 @@ async def run_analysis_cycle(
         logger.error(f"ABORTING analysis — cannot fetch account state: {exc}")
         raise RuntimeError(f"Account state unavailable, analysis aborted: {exc}") from exc
 
-    logger.info("Step 2/5 | Building RAG-enhanced system prompt...")
-    system_prompt = build_system_prompt_with_feedback(
-        n_losses=n_loss_feedback,
-        buying_power=account_state["buying_power"],
-        held_symbols=account_state["held_symbols"],
-        crypto_only=crypto_only,
-    )
-
     if crypto_only:
-        logger.info("Step 3/5 | Fetching data (Crypto 6mo + MA signals | News cached 1hr)...")
+        logger.info("Step 2/5 | Fetching data (Crypto 6mo + MA signals | News cached 1hr)...")
         market_data, news_data = await asyncio.gather(
             fetch_market_data(period=market_period, crypto_only=True),
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
         )
         macro_data = {}
     else:
-        logger.info("Step 3/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 1hr)...")
+        logger.info("Step 2/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 1hr)...")
         macro_data, market_data, news_data = await asyncio.gather(
             fred_cache.get_or_fetch(fetch_macro_data, lookback_days=lookback_days_macro),
             fetch_market_data(period=market_period),
@@ -251,11 +243,17 @@ async def run_analysis_cycle(
             f"News={news_ok} headlines"
         )
 
-    # ── Step 3.5: Pre-LLM Signal Guardrails ──────────────────────────────────
-    # Run BEFORE building the user prompt so guards can filter/adjust inputs.
-    # Temporal quarantine (hard) saves Groq tokens by using the cached regime.
-    logger.info("Step 3.5/5 | Running pre-LLM signal guardrails...")
+    # ── Step 3: Pre-LLM Signal Guardrails ────────────────────────────────────
+    # Run BEFORE building any prompts so guards can gate and adjust all inputs.
+    # TemporalQuarantine (hard): if active, NEVER call the LLM — use cached
+    # regime or raise a clean error so the pipeline skips execution entirely.
+    # MultiSourceConsensus (soft): filters noisy single-source headlines.
+    # PriceToSentimentDivergence (soft): adjusts market sentiment band when
+    # SPY volume conviction is absent.
+    logger.info("Step 3/5 | Running pre-LLM signal guardrails...")
     from analysis.signal_guard import run_all_guards as _run_guards
+    headlines_for_llm = news_data["all_headlines"]
+    adjusted_sentiment: str | None = None
     try:
         _sentiment_band = "Neutral"
         try:
@@ -277,32 +275,33 @@ async def run_analysis_cycle(
         adjusted_sentiment = guard_result.adjusted_sentiment
 
         if guard_result.hard_block:
-            # Temporal quarantine fired — try to reuse cached regime
+            # Temporal quarantine is active — NEVER call the LLM.
+            # Return cached regime when available; otherwise raise so the
+            # pipeline surfaces a clean `guardrail_blocked` state.
             _reason = next(
                 (r.reason for r in guard_result.results if not r.passed and r.severity == "hard"),
-                "signal guard hard block",
+                "temporal quarantine active",
             )
-            logger.warning(
-                f"SignalGuard | HARD BLOCK: {_reason} — "
-                "attempting cached regime before falling through to LLM"
-            )
+            logger.warning(f"SignalGuard | HARD BLOCK: {_reason}")
             cached_regime = get_regime_fallback()
             if cached_regime is not None:
                 logger.info(
-                    f"SignalGuard | Using cached regime '{cached_regime.regime}' "
-                    "(temporal quarantine active — LLM call skipped)"
+                    f"SignalGuard | Returning cached regime '{cached_regime.regime}' "
+                    "(LLM call skipped — temporal quarantine)"
                 )
                 return cached_regime
-            logger.warning(
-                "SignalGuard | No valid regime cache — temporal quarantine active "
-                "but LLM call will proceed (no stale data to fall back on)"
+            raise RuntimeError(
+                f"Signal guard hard block: {_reason}. No cached regime available — "
+                "pipeline must skip this cycle."
             )
         else:
             logger.info(
                 f"SignalGuard | All guards passed — "
                 f"headlines {news_ok} → {len(headlines_for_llm)} after consensus filter"
-                + (f" | sentiment adjusted to '{adjusted_sentiment}'" if adjusted_sentiment else "")
+                + (f" | sentiment adjusted: {_sentiment_band} → {adjusted_sentiment}" if adjusted_sentiment else "")
             )
+    except RuntimeError:
+        raise   # propagate hard-block guardrail errors unchanged
     except Exception as _guard_exc:
         logger.warning(
             f"SignalGuard | Guard evaluation failed (non-fatal): {_guard_exc} — "
@@ -311,7 +310,19 @@ async def run_analysis_cycle(
         headlines_for_llm = news_data["all_headlines"]
         adjusted_sentiment = None
 
-    logger.info("Step 4/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
+    # ── Step 4: Build RAG-enhanced system prompt (sentiment already adjusted) ─
+    # System prompt is built AFTER guards so the sentiment_override (if any)
+    # is silently substituted before the LLM ever sees it.
+    logger.info("Step 4/5 | Building RAG-enhanced system prompt (post-guard)...")
+    system_prompt = build_system_prompt_with_feedback(
+        n_losses=n_loss_feedback,
+        buying_power=account_state["buying_power"],
+        held_symbols=account_state["held_symbols"],
+        crypto_only=crypto_only,
+        sentiment_override=adjusted_sentiment,  # None = use live sentiment as-is
+    )
+
+    logger.info("Step 5/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
     user_prompt = build_user_prompt(
         macro_data,
         market_data,
@@ -319,15 +330,6 @@ async def run_analysis_cycle(
         account_state=account_state,
         crypto_only=crypto_only,
     )
-
-    # Append sentiment override note if the divergence guard downgraded the band
-    if adjusted_sentiment:
-        user_prompt += (
-            f"\n\n[SIGNAL GUARD OVERRIDE] Market fear/greed sentiment band has been "
-            f"downgraded to '{adjusted_sentiment}' due to low SPY volume conviction "
-            f"(5-day avg volume < 20-day avg). Treat bullish sentiment signals with "
-            f"additional caution and increase defensive positioning accordingly."
-        )
 
     if dry_run:
         logger.warning("DRY RUN: skipping actual Groq API call, returning mock output")

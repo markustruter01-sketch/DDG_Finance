@@ -104,6 +104,71 @@ def estimate_tokens(text: str) -> int:
     return len(text) // CHARS_PER_TOKEN
 
 
+# ── Compact row summarizers ───────────────────────────────────────────────────
+# These convert structured DB row dicts into single-line strings, drastically
+# reducing token count vs. verbose JSON and removing structural noise.
+
+def _compact_trade(row: dict) -> str:
+    """Trade record → "AAPL Closed_Win +2.5% conv=0.78 [2026-03-29]"."""
+    ticker  = row.get("ticker", "?")
+    status  = row.get("status", "?")
+    pnl     = row.get("pnl_percentage")
+    conv    = row.get("conviction_score")
+    date    = row.get("date", "")
+    pnl_s   = f"{float(pnl):+.2f}%" if pnl is not None else "n/a"
+    conv_s  = f"conv={float(conv):.2f}" if conv is not None else ""
+    thesis  = row.get("original_thesis", "")
+    if thesis:
+        thesis = _strip_markup(str(thesis))[:120]
+        thesis = f' "{thesis}"'
+    return f"{ticker} {status} {pnl_s} {conv_s} [{date}]{thesis}".strip()
+
+
+def _compact_equity(row: dict) -> str:
+    """Equity snapshot → "2026-03-29T10:00Z eq=100000.0 reg=Bull src=pipeline"."""
+    ts    = str(row.get("ts", ""))[:19]
+    eq    = row.get("total_equity") or row.get("alpaca_equity")
+    reg   = row.get("regime", "")
+    src   = row.get("source", "")
+    eq_s  = f"eq={float(eq):.2f}" if eq is not None else ""
+    reg_s = f"reg={reg}" if reg else ""
+    src_s = f"src={src}" if src else ""
+    return " ".join(p for p in [ts, eq_s, reg_s, src_s] if p)
+
+
+def _compact_degradation(row: dict) -> str:
+    """Degradation event → "2026-03-29T10:00Z platform_core critical stale_data"."""
+    ts       = str(row.get("ts", ""))[:19]
+    comp     = row.get("component", "")
+    severity = row.get("severity", "")
+    err_type = row.get("error_type", "")
+    msg      = _strip_markup(str(row.get("message", "")))[:80]
+    return " ".join(p for p in [ts, comp, severity, err_type, f'"{msg}"'] if p)
+
+
+def _compact_performance(row: dict) -> str:
+    """Performance row → "2026-03-29 pnl=+1.5% wr=65% trades=5 eq=100000"."""
+    date     = str(row.get("date", ""))
+    pnl      = row.get("daily_pnl_pct")
+    wr       = row.get("win_rate")
+    trades   = row.get("trades_placed")
+    equity   = row.get("equity")
+    pnl_s    = f"pnl={float(pnl):+.2f}%" if pnl is not None else ""
+    wr_s     = f"wr={float(wr)*100:.1f}%" if wr is not None else ""
+    trades_s = f"trades={trades}" if trades is not None else ""
+    eq_s     = f"eq={float(equity):.0f}" if equity is not None else ""
+    return " ".join(p for p in [date, pnl_s, wr_s, trades_s, eq_s] if p)
+
+
+# Mapping: key in raw_dict → compact converter function
+_COMPACT_CONVERTERS: dict[str, Any] = {
+    "trades":       _compact_trade,
+    "equity_curve": _compact_equity,
+    "degradations": _compact_degradation,
+    "performance":  _compact_performance,
+}
+
+
 def sanitize_daily_context(raw_dict: dict) -> str:
     """
     Convert raw trading data into a compact, sanitized JSON string suitable
@@ -111,9 +176,13 @@ def sanitize_daily_context(raw_dict: dict) -> str:
 
     Steps
     -----
-    1. Clean each value recursively (strip markup, round floats, drop empties).
-    2. Deduplicate news headlines (exact-match; keep first occurrence).
-    3. Serialise to compact JSON (no indent, sorted keys for diff stability).
+    1. For known DB-row list keys (trades, equity_curve, degradations,
+       performance), replace each row dict with a compact one-line summary
+       string — drastically reducing token count vs. verbose JSON.
+    2. Clean all remaining values recursively (strip markup, round floats,
+       drop empty/None values).
+    3. Deduplicate news headlines (exact-match; keep first occurrence).
+    4. Serialise to compact JSON (no indent, sorted keys for diff stability).
 
     Parameters
     ----------
@@ -130,14 +199,34 @@ def sanitize_daily_context(raw_dict: dict) -> str:
     str
         Compact JSON string ready for token estimation or Gemini injection.
     """
-    # Deep-clean the payload
     cleaned: dict[str, Any] = {}
+
     for key, val in raw_dict.items():
+        # ── Known DB-row lists: compact to one-liners ─────────────────────────
+        if key in _COMPACT_CONVERTERS and isinstance(val, list):
+            converter = _COMPACT_CONVERTERS[key]
+            summaries = []
+            for row in val:
+                if isinstance(row, dict):
+                    try:
+                        summaries.append(converter(row))
+                    except Exception:
+                        # Fall back to light clean if converter fails
+                        cv = _clean_value(row)
+                        if cv:
+                            summaries.append(cv)
+                elif row is not None:
+                    summaries.append(row)
+            if summaries:
+                cleaned[key] = summaries
+            continue
+
+        # ── All other values: deep-clean ──────────────────────────────────────
         cv = _clean_value(val)
         if cv is not None:
             cleaned[key] = cv
 
-    # Deduplicate news headlines (exact match)
+    # ── Deduplicate news headlines ────────────────────────────────────────────
     if "news_headlines" in cleaned and isinstance(cleaned["news_headlines"], list):
         seen: set[str] = set()
         deduped: list[str] = []

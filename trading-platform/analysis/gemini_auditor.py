@@ -75,7 +75,7 @@ _LOG_DIR.mkdir(exist_ok=True)
 
 # ── Gemini model ───────────────────────────────────────────────────────────────
 _GEMINI_MODEL          = "gemini-3-flash-preview"
-_GEMINI_CALL_DELAY_SEC = 5.0        # polite gap between chunk calls
+_GEMINI_CALL_DELAY_SEC = 300.0      # 5-minute spacing between chunk calls (rate limit safety)
 
 # ── Lookback window ────────────────────────────────────────────────────────────
 _LOOKBACK_HOURS = 28                # yesterday + a few pre-market hours of today
@@ -512,22 +512,44 @@ def run_daily_self_critic() -> dict[str, Any]:
 
     else:
         # ── Chunked path ──────────────────────────────────────────────────────
+        # Primary time-series for chunking: equity_curve.
+        # Fallback: if equity_curve is absent or has no parseable timestamps,
+        # use trade records (also time-ordered).
         equity_records = audit_data.get("equity_curve", [])
         chunks = chunk_by_hours(equity_records, hours_per_chunk=8, ts_key="ts")
+
+        if not chunks:
+            # Try falling back to trades (keyed by "date", not "ts")
+            trade_records = audit_data.get("trades", [])
+            chunks = chunk_by_hours(trade_records, hours_per_chunk=8, ts_key="date")
+
+        if not chunks:
+            # Both time-series sources are empty or un-timestamped — treat
+            # the full context as a single oversized chunk and let Gemini
+            # handle it (it will stay within model context limits at 720K+ chars).
+            logger.warning(
+                "GeminiAuditor | No chunkable time-series found — "
+                "sending full context as single chunk"
+            )
+            chunks = [equity_records or audit_data.get("trades", [])]
+
+        num_chunks = len(chunks)
         logger.info(
-            f"GeminiAuditor | Token budget exceeded — chunking equity curve "
-            f"into {len(chunks)} × 8-hour windows"
+            f"GeminiAuditor | Adaptive chunking: splitting into {num_chunks} 8-hour blocks "
+            f"(inter-chunk delay: {_GEMINI_CALL_DELAY_SEC:.0f}s)"
         )
 
         for idx, chunk in enumerate(chunks, start=1):
+            # Reconstruct the full data dict with the current chunk's time-series
+            # so Gemini sees trades, degradations and performance in every call.
             chunk_data = {
                 **audit_data,
                 "equity_curve": chunk,
-                "_chunk_info": f"{idx}/{len(chunks)}",
+                "_chunk_info": f"{idx}/{num_chunks}",
             }
             chunk_ctx = sanitize_daily_context(chunk_data)
             logger.info(
-                f"GeminiAuditor | Chunk {idx}/{len(chunks)}: "
+                f"GeminiAuditor | Block {idx}/{num_chunks}: "
                 f"{estimate_tokens(chunk_ctx):,} tokens"
             )
             try:
@@ -535,11 +557,11 @@ def run_daily_self_critic() -> dict[str, Any]:
                 responses.append(resp)
             except RuntimeError as exc:
                 logger.warning(
-                    f"GeminiAuditor | Chunk {idx} Gemini call failed: {exc} — aborting"
+                    f"GeminiAuditor | Block {idx} Gemini call failed: {exc} — aborting"
                 )
                 return {"status": "failed", "reason": str(exc), "chunk": idx}
 
-            if idx < len(chunks):
+            if idx < num_chunks:
                 time.sleep(_GEMINI_CALL_DELAY_SEC)
 
     # ── Merge + write ─────────────────────────────────────────────────────────

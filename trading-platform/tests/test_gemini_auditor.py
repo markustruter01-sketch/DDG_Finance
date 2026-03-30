@@ -67,13 +67,15 @@ class TestGeminiContextSanitizer(unittest.TestCase):
     # ── sanitize_daily_context ─────────────────────────────────────────────────
 
     def test_sanitize_strips_html(self):
-        raw = {"trades": [{"ticker": "AAPL", "thesis": "<b>Strong momentum</b>"}]}
+        raw = {"trades": [{"ticker": "AAPL", "original_thesis": "<b>Strong momentum</b>",
+                           "status": "ok"}]}
         out = self.sanitize(raw)
         self.assertNotIn("<b>", out)
         self.assertIn("Strong momentum", out)
 
     def test_sanitize_strips_markdown_bold(self):
-        raw = {"trades": [{"thesis": "**Very bullish** on MSFT"}]}
+        raw = {"trades": [{"ticker": "MSFT", "original_thesis": "**Very bullish** on MSFT",
+                           "status": "ok"}]}
         out = self.sanitize(raw)
         self.assertNotIn("**", out)
         self.assertIn("Very bullish", out)
@@ -91,24 +93,63 @@ class TestGeminiContextSanitizer(unittest.TestCase):
         self.assertEqual(len(data["news_headlines"]), 2)
 
     def test_sanitize_rounds_floats(self):
-        raw = {"trades": [{"pnl": 1.123456789}]}
+        raw = {"trades": [{"pnl_percentage": 1.123456789, "ticker": "T", "status": "ok"}]}
         out  = self.sanitize(raw)
-        data = json.loads(out)
-        pnl  = data["trades"][0]["pnl"]
-        self.assertAlmostEqual(pnl, 1.1235, places=4)
+        # trade rows are compact strings now; verify the rounded value appears
+        self.assertIn("1.12", out)
 
     def test_sanitize_drops_none(self):
-        raw = {"trades": [{"ticker": "AAPL", "notes": None}]}
+        raw = {"misc": {"ticker": "AAPL", "notes": None}}
         out  = self.sanitize(raw)
         data = json.loads(out)
-        self.assertNotIn("notes", data["trades"][0])
+        self.assertNotIn("notes", data.get("misc", {}))
 
     def test_sanitize_truncates_long_strings(self):
         long_thesis = "X" * 600
-        raw = {"trades": [{"thesis": long_thesis}]}
+        raw = {"trades": [{"ticker": "T", "status": "ok", "original_thesis": long_thesis}]}
         out  = self.sanitize(raw)
         data = json.loads(out)
-        self.assertLessEqual(len(data["trades"][0]["thesis"]), 400 + 10)  # _MAX_STR_LEN
+        # Compact trade summary string must not exceed the truncation limit + some overhead
+        trade_summary = data["trades"][0]
+        self.assertIsInstance(trade_summary, str)
+        # The thesis portion is truncated to 120 chars inside _compact_trade
+        self.assertLessEqual(len(trade_summary), 600)
+
+    def test_sanitize_trade_rows_become_strings(self):
+        raw = {
+            "trades": [
+                {"ticker": "SPY", "status": "Closed_Win", "pnl_percentage": 2.5,
+                 "conviction_score": 0.78, "date": "2026-03-29"}
+            ]
+        }
+        out  = self.sanitize(raw)
+        data = json.loads(out)
+        self.assertIsInstance(data["trades"][0], str)
+        self.assertIn("SPY", data["trades"][0])
+        self.assertIn("Closed_Win", data["trades"][0])
+
+    def test_sanitize_equity_rows_become_strings(self):
+        raw = {
+            "equity_curve": [
+                {"ts": "2026-03-29T10:00:00Z", "total_equity": 100_000.0, "regime": "Bull"}
+            ]
+        }
+        out  = self.sanitize(raw)
+        data = json.loads(out)
+        self.assertIsInstance(data["equity_curve"][0], str)
+        self.assertIn("eq=100000", data["equity_curve"][0])
+
+    def test_sanitize_degradation_rows_become_strings(self):
+        raw = {
+            "degradations": [
+                {"ts": "2026-03-29T10:00:00Z", "component": "platform_core",
+                 "severity": "critical", "error_type": "stale", "message": "Data stale"}
+            ]
+        }
+        out  = self.sanitize(raw)
+        data = json.loads(out)
+        self.assertIsInstance(data["degradations"][0], str)
+        self.assertIn("platform_core", data["degradations"][0])
 
     def test_sanitize_returns_valid_json(self):
         raw = {

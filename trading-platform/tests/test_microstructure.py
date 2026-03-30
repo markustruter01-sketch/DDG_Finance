@@ -2,12 +2,18 @@
 Tests for Task #27 — Kraken Microstructure Alpha + VaR Circuit Breaker
 
 Covers:
-  1. compute_ofi()           — order-flow imbalance (pure function)
-  2. compute_vamp()          — volume-adjusted momentum price (pure function)
-  3. compute_vpin()          — VPIN adverse-selection proxy (pure function)
-  4. MicrostructureSignal    — dataclass factory, entry_filter, to_dict
-  5. compute_parametric_var  — VaR math (pure function)
-  6. VaRCircuitBreaker       — stateful VaR CB: record, check_and_trip, reset
+  1. compute_ofi()              — order-book OFI (primary API)
+  2. compute_vamp()             — order-book VAMP (primary API)
+  3. build_trade_buckets()      — trade bucket builder
+  4. compute_vpin()             — trade-bucket VPIN (primary API)
+  5. compute_ofi_ohlcv()        — OHLCV OFI (backward-compat)
+  6. compute_vamp_ohlcv()       — OHLCV VAMP (backward-compat)
+  7. compute_vpin_ohlcv()       — OHLCV VPIN (backward-compat)
+  8. MicrostructureSignal       — from_orderbook, from_ohlcv, entry_filter, to_dict
+  9. PenaltyTracker             — decay, throttle, record, persist
+  10. compute_parametric_var     — VaR math (shared/)
+  11. VaRCircuitBreaker          — stateful VaR CB: record, check_and_trip, reset
+  12. compute_daily_var           — historical simulation VaR (portfolio/)
 """
 
 from __future__ import annotations
@@ -15,6 +21,8 @@ from __future__ import annotations
 import os
 import sys
 import math
+import time
+import tempfile
 import unittest
 from datetime import datetime, timezone, timedelta
 
@@ -22,20 +30,29 @@ from datetime import datetime, timezone, timedelta
 _HERE      = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.join(_HERE, "..", "..")
 _KRAKEN    = os.path.join(_REPO_ROOT, "kraken-bot")
+_TP        = os.path.join(_REPO_ROOT, "trading-platform")
 
-for p in (_REPO_ROOT, _KRAKEN):
+for p in (_REPO_ROOT, _KRAKEN, _TP):
     if p not in sys.path:
         sys.path.insert(0, p)
 
 from microstructure import (
+    # Primary API (order-book / trade-bucket)
     compute_ofi,
     compute_vamp,
     compute_vpin,
+    build_trade_buckets,
+    # OHLCV backward-compat
+    compute_ofi_ohlcv,
+    compute_vamp_ohlcv,
+    compute_vpin_ohlcv,
+    # Dataclass + thresholds
     MicrostructureSignal,
     OFI_LONG_MIN,
     OFI_SHORT_MAX,
     VPIN_BLOCK_THRESH,
 )
+from penalty_tracker import PenaltyTracker
 from shared.var_circuit_breaker import (
     VaRCircuitBreaker,
     compute_parametric_var,
@@ -45,161 +62,315 @@ from shared.var_circuit_breaker import (
 
 # ── Candle helpers ────────────────────────────────────────────────────────────
 
-def _bar(o: float, h: float, l: float, c: float, v: float, ts: int = 0) -> list:
+def _bar(o, h, l, c, v, ts=0):
     return [ts, o, h, l, c, v]
 
+def _bullish_candles(n=20, base=100.0, vol=1000.0):
+    return [_bar(base, base+2, base-0.5, base+1.5, vol, i*3600_000) for i in range(n)]
 
-def _bullish_candles(n: int = 20, base: float = 100.0, vol: float = 1000.0) -> list:
-    """N candles where close > open (buy pressure)."""
-    return [_bar(base, base + 2, base - 0.5, base + 1.5, vol, i * 3600_000) for i in range(n)]
+def _bearish_candles(n=20, base=100.0, vol=1000.0):
+    return [_bar(base+1.5, base+2, base-0.5, base-0.5, vol, i*3600_000) for i in range(n)]
 
-
-def _bearish_candles(n: int = 20, base: float = 100.0, vol: float = 1000.0) -> list:
-    """N candles where close < open (sell pressure)."""
-    return [_bar(base + 1.5, base + 2, base - 0.5, base - 0.5, vol, i * 3600_000) for i in range(n)]
-
-
-def _balanced_candles(n: int = 20, base: float = 100.0, vol: float = 1000.0) -> list:
-    """N candles alternating bullish/bearish (balanced flow)."""
+def _balanced_candles(n=20, base=100.0, vol=1000.0):
     bars = []
     for i in range(n):
         if i % 2 == 0:
-            bars.append(_bar(base, base + 2, base - 0.5, base + 1.5, vol, i * 3600_000))
+            bars.append(_bar(base, base+2, base-0.5, base+1.5, vol, i*3600_000))
         else:
-            bars.append(_bar(base + 1.5, base + 2, base - 0.5, base - 0.5, vol, i * 3600_000))
+            bars.append(_bar(base+1.5, base+2, base-0.5, base-0.5, vol, i*3600_000))
     return bars
 
 
+# ── Order-book / trade helpers ────────────────────────────────────────────────
+
+def _ob(bid_size=10.0, ask_size=10.0, levels=5, mid=50000.0):
+    """Synthetic ccxt order book dict."""
+    spread = 0.5
+    bids = [[mid - spread/2 - i*0.1, bid_size] for i in range(levels)]
+    asks = [[mid + spread/2 + i*0.1, ask_size] for i in range(levels)]
+    return {"bids": bids, "asks": asks}
+
+def _trade(side, price=50000.0, amount=0.1):
+    """Synthetic ccxt trade dict."""
+    return {
+        "side":   side,
+        "price":  price,
+        "amount": amount,
+        "cost":   price * amount,
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. compute_ofi
+# 1. compute_ofi  (order-book based — primary API)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestComputeOFI(unittest.TestCase):
+class TestComputeOFIOrderBook(unittest.TestCase):
+
+    def test_empty_ob_returns_zero(self):
+        self.assertEqual(compute_ofi({}), 0.0)
+
+    def test_empty_bids_and_asks_returns_zero(self):
+        self.assertEqual(compute_ofi({"bids": [], "asks": []}), 0.0)
+
+    def test_all_bid_depth_returns_plus_one(self):
+        ob = {"bids": [[50000, 100], [49999, 100]], "asks": [[50001, 0], [50002, 0]]}
+        self.assertAlmostEqual(compute_ofi(ob), 1.0, places=4)
+
+    def test_all_ask_depth_returns_minus_one(self):
+        ob = {"bids": [[50000, 0], [49999, 0]], "asks": [[50001, 100], [50002, 100]]}
+        self.assertAlmostEqual(compute_ofi(ob), -1.0, places=4)
+
+    def test_balanced_depth_returns_zero(self):
+        ob = _ob(bid_size=10.0, ask_size=10.0)
+        self.assertAlmostEqual(compute_ofi(ob), 0.0, places=4)
+
+    def test_positive_when_buy_pressure_dominates(self):
+        ob = _ob(bid_size=20.0, ask_size=5.0)
+        self.assertGreater(compute_ofi(ob), 0.0)
+
+    def test_negative_when_sell_pressure_dominates(self):
+        ob = _ob(bid_size=5.0, ask_size=20.0)
+        self.assertLess(compute_ofi(ob), 0.0)
+
+    def test_result_in_minus_one_to_plus_one(self):
+        for bid, ask in [(10, 3), (3, 10), (100, 100), (1, 1000)]:
+            ofi = compute_ofi(_ob(bid_size=bid, ask_size=ask))
+            self.assertGreaterEqual(ofi, -1.0)
+            self.assertLessEqual(ofi, 1.0)
+
+    def test_levels_parameter_respected(self):
+        ob = {
+            "bids": [[50000 - i*0.1, 1.0] for i in range(10)],
+            "asks": [[50001 + i*0.1, 1.0 if i < 5 else 10.0] for i in range(10)],
+        }
+        ofi_5  = compute_ofi(ob, levels=5)
+        ofi_10 = compute_ofi(ob, levels=10)
+        self.assertNotEqual(ofi_5, ofi_10)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 2. compute_vamp  (order-book based — primary API)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestComputeVAMPOrderBook(unittest.TestCase):
+
+    def test_empty_ob_returns_zero(self):
+        self.assertEqual(compute_vamp({}), 0.0)
+
+    def test_empty_sides_returns_zero(self):
+        self.assertEqual(compute_vamp({"bids": [], "asks": []}), 0.0)
+
+    def test_returns_midprice_for_symmetric_book(self):
+        mid = 50000.0
+        ob  = _ob(bid_size=5.0, ask_size=5.0, mid=mid)
+        vamp = compute_vamp(ob)
+        # Should be close to mid
+        self.assertAlmostEqual(vamp, mid, delta=1.0)
+
+    def test_positive_finite_result(self):
+        ob = _ob(bid_size=8.0, ask_size=5.0)
+        self.assertGreater(compute_vamp(ob), 0.0)
+
+    def test_zero_volume_side_uses_other_side(self):
+        ob = {"bids": [[50000, 10]], "asks": [[50001, 0]]}
+        vamp = compute_vamp(ob, levels=1)
+        self.assertAlmostEqual(vamp, 50000.0, delta=1.0)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 3. build_trade_buckets
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestBuildTradeBuckets(unittest.TestCase):
+
+    def test_empty_trades_returns_empty(self):
+        self.assertEqual(build_trade_buckets([]), [])
+
+    def test_single_large_trade_not_bucketed_until_full(self):
+        trades = [_trade("buy", price=50000, amount=0.1)]  # cost=$5000
+        buckets = build_trade_buckets(trades, bucket_size_usd=6000.0)
+        self.assertEqual(len(buckets), 0)  # not enough to fill bucket
+
+    def test_bucket_fills_on_exact_threshold(self):
+        trades = [_trade("buy", price=50000, amount=0.1)]  # cost=$5000
+        buckets = build_trade_buckets(trades, bucket_size_usd=5000.0)
+        self.assertEqual(len(buckets), 1)
+        self.assertAlmostEqual(buckets[0]["buy_vol"], 5000.0, delta=1.0)
+        self.assertAlmostEqual(buckets[0]["sell_vol"], 0.0, delta=1.0)
+
+    def test_buy_and_sell_split_correctly(self):
+        # Each $5000 trade fills exactly one bucket → 2 buckets total
+        trades = [
+            _trade("buy",  price=50000, amount=0.1),
+            _trade("sell", price=50000, amount=0.1),
+        ]
+        buckets = build_trade_buckets(trades, bucket_size_usd=5000.0)
+        self.assertEqual(len(buckets), 2)
+        buy_vol  = sum(b["buy_vol"]  for b in buckets)
+        sell_vol = sum(b["sell_vol"] for b in buckets)
+        self.assertAlmostEqual(buy_vol,  5000.0, delta=1.0)
+        self.assertAlmostEqual(sell_vol, 5000.0, delta=1.0)
+
+    def test_multiple_buckets(self):
+        # 10 trades of $1000 each → 2 buckets of $5000
+        trades = [_trade("buy", price=10000, amount=0.1)] * 10
+        buckets = build_trade_buckets(trades, bucket_size_usd=5000.0)
+        self.assertEqual(len(buckets), 2)
+
+    def test_zero_cost_trades_skipped(self):
+        trades = [{"side": "buy", "price": 0.0, "amount": 0.0, "cost": 0.0}]
+        self.assertEqual(build_trade_buckets(trades, bucket_size_usd=100.0), [])
+
+    def test_missing_cost_uses_price_times_amount(self):
+        trade = {"side": "buy", "price": 50000.0, "amount": 0.1}
+        buckets = build_trade_buckets([trade], bucket_size_usd=5000.0)
+        self.assertEqual(len(buckets), 1)
+        self.assertAlmostEqual(buckets[0]["buy_vol"], 5000.0, delta=1.0)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 4. compute_vpin  (trade-bucket based — primary API)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestComputeVPINBuckets(unittest.TestCase):
+
+    def test_empty_buckets_returns_zero(self):
+        self.assertEqual(compute_vpin([]), 0.0)
+
+    def test_perfectly_balanced_returns_zero(self):
+        buckets = [{"buy_vol": 5000, "sell_vol": 5000, "total_vol": 10000}] * 10
+        self.assertAlmostEqual(compute_vpin(buckets), 0.0, places=4)
+
+    def test_all_buy_returns_one(self):
+        buckets = [{"buy_vol": 10000, "sell_vol": 0, "total_vol": 10000}] * 10
+        self.assertAlmostEqual(compute_vpin(buckets), 1.0, places=4)
+
+    def test_all_sell_returns_one(self):
+        buckets = [{"buy_vol": 0, "sell_vol": 10000, "total_vol": 10000}] * 10
+        self.assertAlmostEqual(compute_vpin(buckets), 1.0, places=4)
+
+    def test_result_in_zero_to_one(self):
+        for b, s in [(7000, 3000), (2000, 8000), (5000, 5000)]:
+            buckets = [{"buy_vol": b, "sell_vol": s, "total_vol": b+s}] * 5
+            vpin = compute_vpin(buckets)
+            self.assertGreaterEqual(vpin, 0.0)
+            self.assertLessEqual(vpin, 1.0)
+
+    def test_vpin_from_build_trade_buckets_roundtrip(self):
+        """Integration: build_trade_buckets → compute_vpin."""
+        all_buy  = [_trade("buy",  price=50000, amount=0.1)] * 10
+        buckets  = build_trade_buckets(all_buy, bucket_size_usd=5000.0)
+        vpin     = compute_vpin(buckets)
+        self.assertAlmostEqual(vpin, 1.0, places=4)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 5. compute_ofi_ohlcv  (OHLCV backward-compat)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestComputeOFIOHLCV(unittest.TestCase):
 
     def test_empty_returns_zero(self):
-        self.assertEqual(compute_ofi([]), 0.0)
+        self.assertEqual(compute_ofi_ohlcv([]), 0.0)
 
     def test_single_bar_returns_zero(self):
-        self.assertEqual(compute_ofi([_bar(100, 101, 99, 100.5, 1000)]), 0.0)
+        self.assertEqual(compute_ofi_ohlcv([_bar(100, 101, 99, 100.5, 1000)]), 0.0)
 
     def test_all_bullish_returns_positive_one(self):
-        candles = _bullish_candles(10)
-        ofi = compute_ofi(candles, window=10)
+        ofi = compute_ofi_ohlcv(_bullish_candles(10), window=10)
         self.assertAlmostEqual(ofi, 1.0, places=4)
 
     def test_all_bearish_returns_negative_one(self):
-        candles = _bearish_candles(10)
-        ofi = compute_ofi(candles, window=10)
+        ofi = compute_ofi_ohlcv(_bearish_candles(10), window=10)
         self.assertAlmostEqual(ofi, -1.0, places=4)
 
     def test_balanced_near_zero(self):
-        candles = _balanced_candles(10)
-        ofi = compute_ofi(candles, window=10)
+        ofi = compute_ofi_ohlcv(_balanced_candles(10), window=10)
         self.assertAlmostEqual(ofi, 0.0, places=4)
 
     def test_range_in_minus_one_to_plus_one(self):
         for _ in range(20):
-            candles = _bullish_candles(15)
-            ofi = compute_ofi(candles, window=15)
+            ofi = compute_ofi_ohlcv(_bullish_candles(15), window=15)
             self.assertGreaterEqual(ofi, -1.0)
             self.assertLessEqual(ofi, 1.0)
 
     def test_window_respected(self):
-        # Last 5 candles are bearish; earlier 10 are bullish
         candles = _bullish_candles(10) + _bearish_candles(5)
-        ofi_full = compute_ofi(candles, window=15)
-        ofi_recent = compute_ofi(candles, window=5)
-        # recent-only window should be more bearish
+        ofi_full   = compute_ofi_ohlcv(candles, window=15)
+        ofi_recent = compute_ofi_ohlcv(candles, window=5)
         self.assertLess(ofi_recent, ofi_full)
 
     def test_zero_volume_bars_skipped(self):
         candles = [_bar(100, 101, 99, 101, 0)] * 10 + [_bar(100, 102, 98, 99, 500)]
-        ofi = compute_ofi(candles, window=11)
-        # Only last bar contributes — close < open → bearish
+        ofi = compute_ofi_ohlcv(candles, window=11)
         self.assertLess(ofi, 0.0)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. compute_vamp
+# 6. compute_vamp_ohlcv  (OHLCV backward-compat)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestComputeVAMP(unittest.TestCase):
+class TestComputeVAMPOHLCV(unittest.TestCase):
 
     def test_empty_returns_zero(self):
-        self.assertEqual(compute_vamp([]), 0.0)
+        self.assertEqual(compute_vamp_ohlcv([]), 0.0)
 
     def test_single_bar_returns_zero(self):
-        self.assertEqual(compute_vamp([_bar(100, 101, 99, 100.5, 500)]), 0.0)
+        self.assertEqual(compute_vamp_ohlcv([_bar(100, 101, 99, 100.5, 500)]), 0.0)
 
     def test_positive_when_close_above_vwap(self):
-        # All bars identical except last is higher close
         candles = [_bar(100, 102, 98, 100, 1000)] * 19 + [_bar(100, 102, 98, 110, 1000)]
-        vamp = compute_vamp(candles, window=20)
-        self.assertGreater(vamp, 0.0)
+        self.assertGreater(compute_vamp_ohlcv(candles, window=20), 0.0)
 
     def test_negative_when_close_below_vwap(self):
         candles = [_bar(100, 102, 98, 100, 1000)] * 19 + [_bar(100, 102, 98, 90, 1000)]
-        vamp = compute_vamp(candles, window=20)
-        self.assertLess(vamp, 0.0)
+        self.assertLess(compute_vamp_ohlcv(candles, window=20), 0.0)
 
     def test_zero_when_close_equals_vwap(self):
-        # Uniform candles: typical = (h+l+c)/3 = (102+98+100)/3 = 100; close = 100
         candles = [_bar(100, 102, 98, 100, 1000)] * 10
-        vamp = compute_vamp(candles, window=10)
-        self.assertAlmostEqual(vamp, 0.0, places=6)
+        self.assertAlmostEqual(compute_vamp_ohlcv(candles, window=10), 0.0, places=6)
 
     def test_zero_volume_skipped(self):
-        # Only valid bar contributes; close = vwap → 0
         candles = [_bar(100, 102, 98, 100, 0)] * 9 + [_bar(100, 102, 98, 100, 1000)]
-        vamp = compute_vamp(candles, window=10)
-        self.assertAlmostEqual(vamp, 0.0, places=6)
+        self.assertAlmostEqual(compute_vamp_ohlcv(candles, window=10), 0.0, places=6)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 3. compute_vpin
+# 7. compute_vpin_ohlcv  (OHLCV backward-compat)
 # ══════════════════════════════════════════════════════════════════════════════
 
-class TestComputeVPIN(unittest.TestCase):
+class TestComputeVPINOHLCV(unittest.TestCase):
 
     def test_empty_returns_zero(self):
-        self.assertEqual(compute_vpin([]), 0.0)
+        self.assertEqual(compute_vpin_ohlcv([]), 0.0)
 
     def test_single_bar_returns_zero(self):
-        self.assertEqual(compute_vpin([_bar(100, 101, 99, 100.5, 500)]), 0.0)
+        self.assertEqual(compute_vpin_ohlcv([_bar(100, 101, 99, 100.5, 500)]), 0.0)
 
     def test_one_sided_buy_returns_high_vpin(self):
-        # close = high → buy_vol = volume, sell_vol = 0
         candles = [_bar(100, 102, 98, 102, 1000)] * 20
-        vpin = compute_vpin(candles, window=20)
-        self.assertGreater(vpin, 0.9)
+        self.assertGreater(compute_vpin_ohlcv(candles, window=20), 0.9)
 
     def test_one_sided_sell_returns_high_vpin(self):
-        # close = low → sell_vol = volume, buy_vol = 0
         candles = [_bar(100, 102, 98, 98, 1000)] * 20
-        vpin = compute_vpin(candles, window=20)
-        self.assertGreater(vpin, 0.9)
+        self.assertGreater(compute_vpin_ohlcv(candles, window=20), 0.9)
 
     def test_balanced_returns_low_vpin(self):
-        # close = midpoint → 50/50 split → VPIN ≈ 0
         candles = [_bar(98, 102, 98, 100, 1000)] * 20
-        vpin = compute_vpin(candles, window=20)
-        self.assertAlmostEqual(vpin, 0.0, places=4)
+        self.assertAlmostEqual(compute_vpin_ohlcv(candles, window=20), 0.0, places=4)
 
     def test_vpin_in_range_zero_to_one(self):
-        candles = _bullish_candles(20)
-        vpin = compute_vpin(candles, window=20)
+        vpin = compute_vpin_ohlcv(_bullish_candles(20), window=20)
         self.assertGreaterEqual(vpin, 0.0)
         self.assertLessEqual(vpin, 1.0)
 
     def test_zero_range_candle_split_fifty_fifty(self):
-        # h == l → zero-range → 50/50 split → VPIN ≈ 0
         candles = [_bar(100, 100, 100, 100, 1000)] * 10
-        vpin = compute_vpin(candles, window=10)
-        self.assertAlmostEqual(vpin, 0.0, places=4)
+        self.assertAlmostEqual(compute_vpin_ohlcv(candles, window=10), 0.0, places=4)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. MicrostructureSignal
+# 8. MicrostructureSignal
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestMicrostructureSignal(unittest.TestCase):
@@ -208,12 +379,37 @@ class TestMicrostructureSignal(unittest.TestCase):
         return MicrostructureSignal(symbol="BTC/USD", ofi=ofi, vamp=vamp, vpin=vpin)
 
     def test_from_ohlcv_creates_signal(self):
-        candles = _bullish_candles(20)
-        ms = MicrostructureSignal.from_ohlcv(candles, symbol="ETH/USD")
+        ms = MicrostructureSignal.from_ohlcv(_bullish_candles(20), symbol="ETH/USD")
         self.assertEqual(ms.symbol, "ETH/USD")
         self.assertIsInstance(ms.ofi,  float)
         self.assertIsInstance(ms.vamp, float)
         self.assertIsInstance(ms.vpin, float)
+
+    def test_from_orderbook_creates_signal(self):
+        ob     = _ob(bid_size=10, ask_size=5)
+        trades = [_trade("buy", amount=0.1)] * 5 + [_trade("sell", amount=0.1)] * 5
+        ms = MicrostructureSignal.from_orderbook(ob, trades, symbol="BTC/USD")
+        self.assertEqual(ms.symbol, "BTC/USD")
+        self.assertIsInstance(ms.ofi,  float)
+        self.assertIsInstance(ms.vamp, float)
+        self.assertIsInstance(ms.vpin, float)
+
+    def test_from_orderbook_buy_pressure_positive_ofi(self):
+        ob = _ob(bid_size=20, ask_size=5)
+        ms = MicrostructureSignal.from_orderbook(ob, [], symbol="X")
+        self.assertGreater(ms.ofi, 0.0)
+
+    def test_from_orderbook_sell_pressure_negative_ofi(self):
+        ob = _ob(bid_size=5, ask_size=20)
+        ms = MicrostructureSignal.from_orderbook(ob, [], symbol="X")
+        self.assertLess(ms.ofi, 0.0)
+
+    def test_from_orderbook_all_buy_trades_high_vpin(self):
+        ob     = _ob()
+        trades = [_trade("buy", price=50000, amount=0.1)] * 20
+        ms     = MicrostructureSignal.from_orderbook(ob, trades, symbol="X",
+                                                     bucket_size_usd=5000.0)
+        self.assertGreater(ms.vpin, 0.9)
 
     def test_entry_filter_long_allowed_positive_ofi(self):
         ms = self._make_signal(ofi=0.3, vpin=0.2)
@@ -257,45 +453,132 @@ class TestMicrostructureSignal(unittest.TestCase):
         self.assertFalse(ms.is_elevated_vpin(threshold=0.65))
 
     def test_to_dict_keys(self):
-        ms = self._make_signal(ofi=0.1, vamp=0.002, vpin=0.3)
-        d = ms.to_dict()
+        d = self._make_signal(ofi=0.1, vamp=0.002, vpin=0.3).to_dict()
         for key in ("symbol", "ofi", "vamp", "vpin"):
             self.assertIn(key, d)
 
     def test_to_dict_values_rounded(self):
         ms = self._make_signal(ofi=0.123456789, vpin=0.999999)
-        d = ms.to_dict()
-        # ofi is rounded to 4 dp
+        d  = ms.to_dict()
         self.assertEqual(d["ofi"], round(ms.ofi, 4))
 
     def test_repr(self):
-        ms = self._make_signal(ofi=0.1, vamp=0.002, vpin=0.3)
-        self.assertIn("MicrostructureSignal", repr(ms))
+        self.assertIn("MicrostructureSignal", repr(self._make_signal()))
 
     def test_neutral_signal_long_just_above_threshold(self):
-        # OFI just above the minimum → allowed
         ms = self._make_signal(ofi=OFI_LONG_MIN + 0.001, vpin=0.1)
         allowed, _ = ms.entry_filter(side="long")
         self.assertTrue(allowed)
 
     def test_neutral_signal_long_just_below_threshold(self):
-        # OFI just below the minimum → blocked
         ms = self._make_signal(ofi=OFI_LONG_MIN - 0.001, vpin=0.1)
         allowed, _ = ms.entry_filter(side="long")
         self.assertFalse(allowed)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 5. compute_parametric_var (pure function)
+# 9. PenaltyTracker
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestPenaltyTracker(unittest.TestCase):
+
+    def _tracker(self):
+        """Create a tracker backed by a temp file so tests don't pollute disk."""
+        f = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        f.close()
+        os.unlink(f.name)  # remove file — tracker will create fresh
+        return PenaltyTracker(state_file=f.name)
+
+    def test_initial_points_zero(self):
+        t = self._tracker()
+        self.assertAlmostEqual(t.current_points(), 0.0, places=1)
+
+    def test_not_throttled_initially(self):
+        self.assertFalse(self._tracker().is_throttled())
+
+    def test_placement_adds_one_point(self):
+        t = self._tracker()
+        t.record_placement()
+        self.assertAlmostEqual(t.current_points(), 1.0, delta=0.1)
+
+    def test_cancellation_adds_two_points(self):
+        t = self._tracker()
+        t.record_cancellation()
+        self.assertAlmostEqual(t.current_points(), 2.0, delta=0.1)
+
+    def test_throttled_when_above_80_pct(self):
+        t = self._tracker()
+        # 15 * 0.80 = 12 points → use 13 placements to be safely over the
+        # threshold even accounting for negligible inter-call decay
+        for _ in range(13):
+            t.record_placement()
+        self.assertTrue(t.is_throttled())
+
+    def test_not_throttled_below_80_pct(self):
+        t = self._tracker()
+        for _ in range(11):  # 11 < 12
+            t.record_placement()
+        self.assertFalse(t.is_throttled())
+
+    def test_points_capped_at_max(self):
+        t = self._tracker()
+        for _ in range(30):
+            t.record_placement()
+        self.assertLessEqual(t.current_points(), t.MAX_POINTS)
+
+    def test_remaining_capacity_one_hundred_when_empty(self):
+        t = self._tracker()
+        self.assertAlmostEqual(t.remaining_capacity(), 100.0, delta=1.0)
+
+    def test_remaining_capacity_decreases_with_points(self):
+        t = self._tracker()
+        t.record_placement()
+        self.assertLess(t.remaining_capacity(), 100.0)
+
+    def test_decay_reduces_points_over_time(self):
+        t = self._tracker()
+        for _ in range(5):
+            t.record_placement()
+        pts_before = t.current_points()
+        time.sleep(2.0)  # let bucket drain (1 pt/sec)
+        pts_after = t.current_points()
+        self.assertLess(pts_after, pts_before)
+
+    def test_reset_clears_points(self):
+        t = self._tracker()
+        for _ in range(10):
+            t.record_placement()
+        t.reset()
+        self.assertAlmostEqual(t.current_points(), 0.0, delta=0.1)
+        self.assertFalse(t.is_throttled())
+
+    def test_persist_and_reload(self):
+        """State survives a new PenaltyTracker loaded from the same file."""
+        f = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        f.close()
+        os.unlink(f.name)
+        t1 = PenaltyTracker(state_file=f.name)
+        for _ in range(5):
+            t1.record_placement()
+        pts_saved = t1.current_points()
+        t2 = PenaltyTracker(state_file=f.name)
+        # After reload, points should be ≤ saved (decay may have applied)
+        self.assertLessEqual(t2.current_points(), pts_saved + 0.5)
+        os.unlink(f.name)
+
+    def test_repr_contains_class_name(self):
+        self.assertIn("PenaltyTracker", repr(self._tracker()))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 10. compute_parametric_var (shared/ — pure function)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestComputeParametricVar(unittest.TestCase):
 
     def test_known_returns(self):
-        # Returns: 10 × +1% + 10 × -1%; mean=0, std=0.01
         returns = [0.01] * 10 + [-0.01] * 10
         var_usd, var_pct = compute_parametric_var(returns, portfolio_usd=100_000, confidence=0.99)
-        # VaR(99%) ≈ z_{0.99} × σ × portfolio = 2.3263 × 0.01 × 100_000 ≈ 2326.30
         self.assertAlmostEqual(var_usd, 2326.30, delta=1.0)
         self.assertAlmostEqual(var_pct, 0.023263, delta=0.0001)
 
@@ -305,16 +588,16 @@ class TestComputeParametricVar(unittest.TestCase):
         _, var_95 = compute_parametric_var(returns, 100_000, confidence=0.95)
         self.assertGreater(var_99, var_95)
 
-    def test_higher_portfolio_usd_scales_linearly(self):
+    def test_higher_portfolio_scales_linearly(self):
         returns = [0.01, -0.02, 0.005] * 5
         var_100k, _ = compute_parametric_var(returns, 100_000, confidence=0.99)
         var_200k, _ = compute_parametric_var(returns, 200_000, confidence=0.99)
         self.assertAlmostEqual(var_200k, var_100k * 2, delta=0.01)
 
     def test_zero_variance_returns_zero_var(self):
-        returns = [0.01] * 10  # all same → std = 0 → VaR = max(0, -(μ - 0)) = 0 if μ > 0
+        returns = [0.01] * 10
         var_usd, var_pct = compute_parametric_var(returns, 100_000, confidence=0.99)
-        self.assertEqual(var_usd, 0.0)   # mean > 0, no downside at all
+        self.assertEqual(var_usd, 0.0)
         self.assertEqual(var_pct, 0.0)
 
     def test_raises_on_insufficient_data(self):
@@ -326,13 +609,12 @@ class TestComputeParametricVar(unittest.TestCase):
             compute_parametric_var([0.01, -0.02], 0.0)
 
     def test_normal_quantile_table(self):
-        # z_0.99 ≈ 2.3263, z_0.95 ≈ 1.6449
         self.assertAlmostEqual(_normal_quantile(0.99), 2.3263, places=3)
         self.assertAlmostEqual(_normal_quantile(0.95), 1.6449, places=3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 6. VaRCircuitBreaker — stateful class
+# 11. VaRCircuitBreaker (shared/ — stateful class)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestVaRCircuitBreaker(unittest.TestCase):
@@ -341,8 +623,7 @@ class TestVaRCircuitBreaker(unittest.TestCase):
         return VaRCircuitBreaker(var_limit_pct=var_limit_pct, min_obs=min_obs, **kwargs)
 
     def test_not_triggered_initially(self):
-        vcb = self._vcb()
-        self.assertFalse(vcb.is_triggered())
+        self.assertFalse(self._vcb().is_triggered())
 
     def test_insufficient_obs_never_trips(self):
         vcb = self._vcb(min_obs=5)
@@ -353,7 +634,6 @@ class TestVaRCircuitBreaker(unittest.TestCase):
 
     def test_trips_on_high_variance(self):
         vcb = self._vcb(var_limit_pct=0.01, min_obs=3)
-        # Very volatile returns → high VaR → should trip at limit=1%
         for r in [0.10, -0.10, 0.10, -0.10, 0.10]:
             vcb.record_return(r)
         triggered, var_pct = vcb.check_and_trip(100_000)
@@ -381,27 +661,23 @@ class TestVaRCircuitBreaker(unittest.TestCase):
         for r in [0.10, -0.10, 0.10, -0.10, 0.10]:
             vcb.record_return(r)
         vcb.check_and_trip(100_000)
-        paused_until_first = vcb.paused_until
+        paused_first = vcb.paused_until
         vcb.check_and_trip(100_000)
-        # Second call should not re-trip (idempotent)
-        self.assertEqual(vcb.paused_until, paused_until_first)
+        self.assertEqual(vcb.paused_until, paused_first)
 
     def test_pause_expires(self):
         vcb = VaRCircuitBreaker(var_limit_pct=0.01, min_obs=3, pause_hours=0.0)
         for r in [0.10, -0.10, 0.10, -0.10, 0.10]:
             vcb.record_return(r)
         vcb.check_and_trip(100_000)
-        import time as _t
-        _t.sleep(0.01)
+        time.sleep(0.01)
         self.assertFalse(vcb.is_triggered())
 
     def test_paused_until_none_when_inactive(self):
-        vcb = self._vcb()
-        self.assertIsNone(vcb.paused_until)
+        self.assertIsNone(self._vcb().paused_until)
 
     def test_minutes_remaining_zero_when_inactive(self):
-        vcb = self._vcb()
-        self.assertEqual(vcb.minutes_remaining(), 0.0)
+        self.assertEqual(self._vcb().minutes_remaining(), 0.0)
 
     def test_minutes_remaining_positive_when_active(self):
         vcb = VaRCircuitBreaker(var_limit_pct=0.01, min_obs=3, pause_hours=2.0)
@@ -417,14 +693,13 @@ class TestVaRCircuitBreaker(unittest.TestCase):
         self.assertEqual(vcb.observation_count(), 3)
 
     def test_to_dict_keys(self):
-        vcb = self._vcb()
-        d = vcb.to_dict()
+        d = self._vcb().to_dict()
         for key in (
             "active", "paused_until", "minutes_remaining",
             "last_var_pct", "last_var_usd", "var_limit_pct",
             "confidence_pct", "window", "observation_count", "pause_hours",
         ):
-            self.assertIn(key, d, f"Missing key in to_dict(): {key}")
+            self.assertIn(key, d, f"Missing key: {key}")
 
     def test_to_dict_active(self):
         vcb = VaRCircuitBreaker(var_limit_pct=0.01, min_obs=3, pause_hours=1.0)
@@ -436,29 +711,77 @@ class TestVaRCircuitBreaker(unittest.TestCase):
         self.assertIsNotNone(d["paused_until"])
 
     def test_repr(self):
-        vcb = self._vcb()
-        self.assertIn("VaRCircuitBreaker", repr(vcb))
+        self.assertIn("VaRCircuitBreaker", repr(self._vcb()))
 
     def test_window_rolling(self):
         vcb = VaRCircuitBreaker(var_limit_pct=0.01, window=3, min_obs=3, pause_hours=0.01)
-        # Feed volatile returns to trip the breaker
         for r in [0.10, -0.10, 0.10]:
             vcb.record_return(r)
         triggered, _ = vcb.check_and_trip(100_000)
         self.assertTrue(triggered)
-        # Reset and re-feed calm returns after the window fills up
         vcb.reset()
-        # Now add calm returns — they replace the volatile ones in the rolling window
         for r in [0.0001, -0.0001, 0.0001]:
             vcb.record_return(r)
         triggered_calm, _ = vcb.check_and_trip(100_000)
         self.assertFalse(triggered_calm)
 
     def test_shared_import(self):
-        """VaRCircuitBreaker is importable from shared package."""
         from shared import VaRCircuitBreaker as _VCB
         self.assertTrue(callable(_VCB))
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 12. compute_daily_var — historical simulation VaR
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestComputeDailyVar(unittest.TestCase):
+
+    def test_empty_positions_returns_zero(self):
+        from portfolio.var_calculator import compute_daily_var
+        self.assertEqual(compute_daily_var([]), 0.0)
+
+    def test_zero_market_value_returns_zero(self):
+        from portfolio.var_calculator import compute_daily_var
+        positions = [{"symbol": "SPY", "market_value": 0.0}]
+        self.assertEqual(compute_daily_var(positions), 0.0)
+
+    def test_unknown_symbol_returns_zero_gracefully(self):
+        from portfolio.var_calculator import compute_daily_var
+        positions = [{"symbol": "XXXXINVALIDXXX", "market_value": 1000.0}]
+        result = compute_daily_var(positions, lookback_days=10)
+        self.assertIsInstance(result, float)
+        self.assertGreaterEqual(result, 0.0)
+
+    def test_returns_float(self):
+        from portfolio.var_calculator import compute_daily_var
+        positions = [{"symbol": "SPY", "market_value": 10000.0}]
+        result = compute_daily_var(positions, confidence=0.95, lookback_days=30)
+        self.assertIsInstance(result, float)
+
+    def test_result_in_reasonable_range(self):
+        from portfolio.var_calculator import compute_daily_var
+        positions = [{"symbol": "SPY", "market_value": 10000.0}]
+        result = compute_daily_var(positions, confidence=0.95, lookback_days=60)
+        # SPY 1-day 95% VaR should be between 0% and 10%
+        self.assertGreaterEqual(result, 0.0)
+        self.assertLessEqual(result, 0.10)
+
+    def test_higher_confidence_gte_lower(self):
+        from portfolio.var_calculator import compute_daily_var
+        positions = [{"symbol": "SPY", "market_value": 10000.0}]
+        var_95 = compute_daily_var(positions, confidence=0.95, lookback_days=60)
+        var_99 = compute_daily_var(positions, confidence=0.99, lookback_days=60)
+        # 99% VaR should be >= 95% VaR (or both 0 when insufficient data)
+        self.assertGreaterEqual(var_99, var_95 - 0.001)
+
+    def test_to_yfinance_ticker_mapping(self):
+        from portfolio.var_calculator import _to_yfinance_ticker
+        self.assertEqual(_to_yfinance_ticker("BTCUSD"), "BTC-USD")
+        self.assertEqual(_to_yfinance_ticker("ETHUSD"), "ETH-USD")
+        self.assertEqual(_to_yfinance_ticker("BTC/USD"), "BTC-USD")
+        self.assertEqual(_to_yfinance_ticker("SPY"), "SPY")
+        self.assertEqual(_to_yfinance_ticker("BTC-USD"), "BTC-USD")
+
+
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    unittest.main()

@@ -43,6 +43,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker, VaRCircuitBreaker
 from microstructure import MicrostructureSignal
+from penalty_tracker import PenaltyTracker
 
 # Import our configuration — also handles the PAPER_TRADING startup message
 # and validates/creates the exchange connection.
@@ -195,6 +196,11 @@ thinking_text: str = "Initialising — fetching market data..."
 
 # Latest microstructure readings per symbol (written to status.json each cycle).
 latest_microstructure: dict[str, dict] = {}
+
+# ── Kraken API Penalty Tracker ────────────────────────────────────────────────
+# Tracks the leaky-bucket penalty point accumulation for Kraken REST calls.
+# Throttles new order placement when the bucket exceeds 80% of the 15-point ceiling.
+_penalty_tracker: PenaltyTracker = PenaltyTracker()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,6 +394,7 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
                 side=order_side,
                 amount=size_units,
             )
+            _penalty_tracker.record_placement()
 
             fill_price = float(order.get("average") or order.get("price") or current_price)
             open_positions[symbol] = {
@@ -618,14 +625,28 @@ def run_cycle() -> None:
             sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
 
             # ── Microstructure signals (OFI / VAMP / VPIN) ────────────────────
-            # Computed from the same OHLCV candles — no L2 data needed.
-            # Used to gate and log entry signals (not exit logic).
+            # Primary: order-book snapshot + recent trades (ccxt live data).
+            # Fallback: OHLCV-based approximation when order-book fetch fails.
             try:
-                _ms = MicrostructureSignal.from_ohlcv(candles, symbol=symbol)
+                _ob     = exchange.fetch_order_book(symbol, limit=20)
+                _trades = exchange.fetch_trades(symbol, limit=200)
+                _ms = MicrostructureSignal.from_orderbook(
+                    _ob, _trades, symbol=symbol,
+                )
                 cycle_microstructure[symbol] = _ms.to_dict()
+                logger.debug(
+                    f"Microstructure | {symbol}: OFI={_ms.ofi:+.3f} "
+                    f"VAMP={_ms.vamp:.2f} VPIN={_ms.vpin:.3f} (order-book)"
+                )
             except Exception as _ms_exc:
-                logger.debug(f"Microstructure | {symbol}: compute failed (non-fatal): {_ms_exc}")
-                _ms = MicrostructureSignal(symbol=symbol, ofi=0.0, vamp=0.0, vpin=0.0)
+                logger.debug(
+                    f"Microstructure | {symbol}: order-book fetch failed "
+                    f"({_ms_exc}) — falling back to OHLCV"
+                )
+                try:
+                    _ms = MicrostructureSignal.from_ohlcv(candles, symbol=symbol)
+                except Exception:
+                    _ms = MicrostructureSignal(symbol=symbol, ofi=0.0, vamp=0.0, vpin=0.0)
                 cycle_microstructure[symbol] = _ms.to_dict()
 
             # ── 3b. Record price for circuit breaker ──────────────────────────
@@ -781,6 +802,38 @@ def run_cycle() -> None:
                 cycle_signals.append({
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "skip_var_cb",
+                    "has_position": False,
+                })
+                continue
+
+            # ── Kraken API penalty throttle ───────────────────────────────────
+            # When the leaky-bucket penalty counter exceeds 80% of the ceiling
+            # (12/15 points), the bot enters read-only polling mode and skips
+            # all new entries until the bucket recovers.
+            if _penalty_tracker.is_throttled():
+                logger.info(
+                    f"Signal | {symbol}: skipping entry — Kraken API penalty throttled "
+                    f"({_penalty_tracker.current_points():.1f}/{_penalty_tracker.MAX_POINTS} pts, "
+                    f"capacity {_penalty_tracker.remaining_capacity():.0f}%)"
+                )
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "skip_penalty_throttle",
+                    "has_position": False,
+                })
+                continue
+
+            # ── VPIN toxic flow defensive gate ────────────────────────────────
+            # When VPIN > 0.70 the bot enters a defensive state: new entries are
+            # skipped but existing positions continue to run under their stops.
+            if _ms.vpin > 0.70:
+                logger.info(
+                    f"Signal | {symbol}: skipping entry — VPIN={_ms.vpin:.3f} > 0.70 "
+                    f"(defensive state — toxic/institutional flow detected)"
+                )
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "skip_vpin_defensive",
                     "has_position": False,
                 })
                 continue

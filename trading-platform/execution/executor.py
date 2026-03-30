@@ -76,6 +76,7 @@ from execution.broker import (
 from execution.compliance import check_wash_sale, DRIP_ENABLED
 from execution.ratchet_stop import initialise_ratchet_stop, delete_stop
 from data.yfinance_client import get_cached_market_data
+from portfolio.var_calculator import compute_daily_var
 
 logger.info(f"Executor | DRIP_ENABLED={DRIP_ENABLED} (vault dividends accumulate as cash)")
 
@@ -220,6 +221,34 @@ def execute_allocations(
         "cap_overrides":    0,
     }
 
+    # ── Historical VaR Circuit Breaker ───────────────────────────────────────
+    # Compute 1-day 95% VaR via historical simulation on the current positions.
+    # If VaR exceeds the daily_loss_limit_pct, block all NEW entries this cycle.
+    # Existing positions continue to run under ratchet stops — no forced exits.
+    _risk_positions = [
+        {"symbol": sym, "market_value": pos.get("market_value", 0.0)}
+        for sym, pos in current_positions.items()
+        if sym not in _SAFE_TICKERS
+    ]
+    try:
+        _var_pct = compute_daily_var(_risk_positions, confidence=0.95)
+    except Exception as _ve:
+        logger.debug(f"Executor | VaR computation failed (non-fatal): {_ve}")
+        _var_pct = 0.0
+
+    _var_tripped = _var_pct > _risk_profile.daily_loss_limit_pct
+    if _var_tripped:
+        logger.warning(
+            f"VaR Circuit Breaker | 1-day 95% historical VaR = {_var_pct*100:.2f}% "
+            f"exceeds daily loss limit {_risk_profile.daily_loss_limit_pct*100:.0f}% "
+            f"— all new entries BLOCKED this cycle | reason: var_circuit_breaker"
+        )
+    elif _var_pct > 0:
+        logger.info(
+            f"VaR | 1-day 95% historical VaR = {_var_pct*100:.2f}% "
+            f"(limit {_risk_profile.daily_loss_limit_pct*100:.0f}%) — within bounds"
+        )
+
     results = _close_stale_positions(
         current_positions, active_symbols, protected_symbols,
         results, dry_run, crypto_only=is_crypto_only,
@@ -229,6 +258,7 @@ def execute_allocations(
         results, remaining_cash = _execute_slot(
             slot, equity, max_position_usd, remaining_cash,
             current_positions, results, dry_run,
+            var_tripped=_var_tripped,
         )
 
     results = _run_vault_sweep(equity, results, dry_run)
@@ -305,6 +335,7 @@ def _execute_slot(
     current_positions: dict,
     results: dict,
     dry_run: bool,
+    var_tripped: bool = False,
 ) -> tuple[dict, float]:
     ticker = slot.ticker
     symbol = _normalize_symbol(ticker)
@@ -314,6 +345,20 @@ def _execute_slot(
     if slot.kelly_fraction == 0.0:
         logger.info(f"Slot {slot.slot}: {ticker:10s} → SKIP (zero kelly)")
         results["skipped"].append({"slot": slot.slot, "ticker": ticker, "reason": "zero_kelly"})
+        return results, remaining_cash
+
+    # ── VaR Circuit Breaker — block new entries when tripped ─────────────────
+    # Cash (SGOV) and vault (JEPQ) sweeps are exempt — only risk-on entries blocked.
+    if var_tripped and ticker not in (CASH_TICKER, VAULT_TICKER):
+        logger.info(
+            f"Slot {slot.slot}: {ticker:10s} → SKIP "
+            f"(var_circuit_breaker — new entries blocked)"
+        )
+        results["skipped"].append({
+            "slot":   slot.slot,
+            "ticker": ticker,
+            "reason": "var_circuit_breaker",
+        })
         return results, remaining_cash
 
     # ── Gemini Auditor Veto Gate ──────────────────────────────────────────────

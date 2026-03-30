@@ -161,17 +161,22 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
-    # ── Pre-dispatch Signal Guardrails (authoritative gate) ───────────────────
-    # run_all_guards() is the single source of truth for all guard decisions.
-    # It updates the _last_guard_result singleton (read by /status.signal_guard)
-    # so the dashboard always reflects the most recent gate decision.
+    # ── Pre-dispatch Signal Guardrails (authoritative temporal gate) ──────────
+    # We call run_all_guards() at this point so that:
+    #   1) _last_guard_result is always written before any LLM work begins,
+    #      keeping /status.signal_guard accurate even when the pipeline aborts.
+    #   2) The temporal hard-block (Fri 14:00 ET → Mon 09:30 ET) is evaluated
+    #      before we fetch expensive market/news data.
     #
-    # For full-market (equities) mode the temporal quarantine is the primary
-    # hard gate (Fri 14:00 ET → Mon 09:30 ET).  For crypto_only=True the
-    # temporal guard is bypassed inside run_all_guards (crypto runs 24/7).
+    # NOTE: No real market_data or news_data are available at this stage, so
+    # only the temporal guard (Guard 1) can meaningfully fire here.  The soft
+    # guards (consensus, divergence) run a second time inside run_analysis_cycle
+    # where they have the actual fetched data and do real filtering work.  This
+    # pre-dispatch call is intentionally temporal-only: an empty context means
+    # consensus/divergence guards see nothing to filter and pass trivially.
     #
-    # NOTE: We run this BEFORE the economic blackout check so the guard
-    # status is always written even when the blackout fires immediately after.
+    # For crypto_only=True the temporal guard is skipped inside run_all_guards
+    # (crypto trades 24/7 through weekends and calendar events).
     if not force:
         try:
             from analysis.signal_guard import run_all_guards as _run_guards

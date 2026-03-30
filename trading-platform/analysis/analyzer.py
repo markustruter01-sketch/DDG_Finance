@@ -251,14 +251,83 @@ async def run_analysis_cycle(
             f"News={news_ok} headlines"
         )
 
+    # ── Step 3.5: Pre-LLM Signal Guardrails ──────────────────────────────────
+    # Run BEFORE building the user prompt so guards can filter/adjust inputs.
+    # Temporal quarantine (hard) saves Groq tokens by using the cached regime.
+    logger.info("Step 3.5/5 | Running pre-LLM signal guardrails...")
+    from analysis.signal_guard import run_all_guards as _run_guards
+    try:
+        _sentiment_band = "Neutral"
+        try:
+            from data.sentiment import get_sentiment as _get_sentiment
+            _sent = _get_sentiment()
+            _sentiment_band = (
+                _sent.get("market_fear_greed", {}).get("label", "Neutral") or "Neutral"
+            )
+        except Exception as _se:
+            logger.debug(f"SignalGuard | Could not fetch sentiment band: {_se}")
+
+        guard_result = _run_guards({
+            "news_data":      news_data,
+            "market_data":    market_data,
+            "sentiment_band": _sentiment_band,
+        })
+
+        headlines_for_llm = guard_result.filtered_headlines
+        adjusted_sentiment = guard_result.adjusted_sentiment
+
+        if guard_result.hard_block:
+            # Temporal quarantine fired — try to reuse cached regime
+            _reason = next(
+                (r.reason for r in guard_result.results if not r.passed and r.severity == "hard"),
+                "signal guard hard block",
+            )
+            logger.warning(
+                f"SignalGuard | HARD BLOCK: {_reason} — "
+                "attempting cached regime before falling through to LLM"
+            )
+            cached_regime = get_regime_fallback()
+            if cached_regime is not None:
+                logger.info(
+                    f"SignalGuard | Using cached regime '{cached_regime.regime}' "
+                    "(temporal quarantine active — LLM call skipped)"
+                )
+                return cached_regime
+            logger.warning(
+                "SignalGuard | No valid regime cache — temporal quarantine active "
+                "but LLM call will proceed (no stale data to fall back on)"
+            )
+        else:
+            logger.info(
+                f"SignalGuard | All guards passed — "
+                f"headlines {news_ok} → {len(headlines_for_llm)} after consensus filter"
+                + (f" | sentiment adjusted to '{adjusted_sentiment}'" if adjusted_sentiment else "")
+            )
+    except Exception as _guard_exc:
+        logger.warning(
+            f"SignalGuard | Guard evaluation failed (non-fatal): {_guard_exc} — "
+            "using raw headlines and original sentiment"
+        )
+        headlines_for_llm = news_data["all_headlines"]
+        adjusted_sentiment = None
+
     logger.info("Step 4/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
     user_prompt = build_user_prompt(
         macro_data,
         market_data,
-        news_data["all_headlines"],
+        headlines_for_llm,
         account_state=account_state,
         crypto_only=crypto_only,
     )
+
+    # Append sentiment override note if the divergence guard downgraded the band
+    if adjusted_sentiment:
+        user_prompt += (
+            f"\n\n[SIGNAL GUARD OVERRIDE] Market fear/greed sentiment band has been "
+            f"downgraded to '{adjusted_sentiment}' due to low SPY volume conviction "
+            f"(5-day avg volume < 20-day avg). Treat bullish sentiment signals with "
+            f"additional caution and increase defensive positioning accordingly."
+        )
 
     if dry_run:
         logger.warning("DRY RUN: skipping actual Groq API call, returning mock output")

@@ -342,6 +342,14 @@ async def health() -> dict:
     }
 
 
+def _get_signal_guard_status() -> dict | None:
+    try:
+        from analysis.signal_guard import get_last_guard_result
+        return get_last_guard_result()
+    except Exception:
+        return None
+
+
 @router.get("/status", tags=["System"])
 async def status() -> dict:
     """
@@ -376,6 +384,7 @@ async def status() -> dict:
         "data_cache":     get_cache_stats(),
         "blackout":       is_blackout_active(),
         "groq":           groq_status,
+        "signal_guard":   _get_signal_guard_status(),
     }
 
 

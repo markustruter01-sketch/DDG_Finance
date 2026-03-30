@@ -349,3 +349,57 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
     except Exception as exc:
         logger.error(f"Vault | Unexpected error in run_profit_sweep: {exc}")
         return {"swept": False, "reason": f"internal_error: {exc}"}
+
+
+def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20) -> dict:
+    """
+    Record a per-trade vault contribution from the Kraken crypto bot.
+
+    Called after each profitable Kraken paper trade closes.  Unlike the Alpaca
+    HWM sweep (portfolio-level), this is a per-trade sweep — sweep_rate % of
+    each winning trade's gross PnL is earmarked for the Growth Vault (JEPQ).
+
+    Since Kraken is paper-trading we cannot place a real JEPQ order, but the
+    amount is recorded in vault_ledger alongside Alpaca contributions so that
+    total_vaulted_usd reflects the combined vault balance.
+
+    Returns a dict with swept=True/False and the contributed amount.
+    """
+    if pnl_usd <= 0:
+        return {"swept": False, "reason": "no_profit"}
+
+    amount = round(pnl_usd * sweep_rate, 2)
+    if amount < MIN_SWEEP:
+        return {"swept": False, "reason": f"below_minimum (${amount:.2f})"}
+
+    try:
+        init_vault_db()
+        state = get_vault_state()
+
+        if state is None:
+            _set_vault_state(
+                hwm=0.0,
+                total_vaulted_usd=amount,
+                total_sweeps=1,
+                last_sweep_date=str(date.today()),
+                last_sweep_amount=amount,
+            )
+        else:
+            _set_vault_state(
+                hwm=float(state["hwm"]),
+                total_vaulted_usd=float(state["total_vaulted_usd"]) + amount,
+                total_sweeps=int(state["total_sweeps"]) + 1,
+                last_sweep_date=str(date.today()),
+                last_sweep_amount=amount,
+                da_adjustment=float(state.get("da_adjustment", 0.0)),
+            )
+
+        logger.info(
+            f"Vault | Kraken contribution: ${amount:.2f} "
+            f"({sweep_rate*100:.0f}% of ${pnl_usd:.2f} profit) → Growth Vault"
+        )
+        return {"swept": True, "amount": amount, "source": "kraken_paper"}
+
+    except Exception as exc:
+        logger.error(f"Vault | Kraken contribution failed: {exc}")
+        return {"swept": False, "reason": f"error: {exc}"}

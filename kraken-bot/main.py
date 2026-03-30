@@ -41,6 +41,11 @@ from loguru import logger
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
+
+_TRADING_PLATFORM = os.path.join(_REPO_ROOT, "trading-platform")
+if _TRADING_PLATFORM not in sys.path:
+    sys.path.append(_TRADING_PLATFORM)  # append (not insert) to avoid shadowing kraken-bot/config.py
+
 from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker
 from microstructure import MicrostructureSignal
 from penalty_tracker import PenaltyTracker
@@ -75,6 +80,7 @@ from config import (
     CB_PAUSE_HOURS,
     STATUS_FILE,
     CONTROL_FILE,
+    PAPER_PORTFOLIO_FILE,
 )
 
 import adaptive_params as _adaptive
@@ -211,6 +217,26 @@ def is_bot_paused() -> bool:
 # The FastAPI server reads this file to power the dashboard card.
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _get_persistent_trade_history() -> list[dict]:
+    """
+    Return the full closed-trade history for status.json.
+
+    In PAPER mode: reads all_trades from paper_portfolio.json so the dashboard
+    continues to show trade history after a bot restart (the in-memory
+    recent_trades list resets on every restart by design).
+
+    In LIVE mode: falls back to the in-memory recent_trades list (capped at 20).
+    """
+    if PAPER_TRADING:
+        try:
+            with open(PAPER_PORTFOLIO_FILE, "r") as _pf:
+                _pp = json.load(_pf)
+            return _pp.get("all_trades", [])[-50:]
+        except Exception:
+            pass
+    return recent_trades[-20:]
+
+
 def write_status(error: str | None = None) -> None:
     """
     Serialise the bot's current state to STATUS_FILE (kraken-bot/status.json).
@@ -284,7 +310,7 @@ def write_status(error: str | None = None) -> None:
         "position_count":   len(open_positions),
         "max_positions":    MAX_POSITIONS,
         "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
-        "recent_trades":    recent_trades[-20:],  # last 20 trades
+        "recent_trades":    _get_persistent_trade_history(),  # persists across restarts
         "paper_summary":    paper_summary,        # None in live mode
         "signals":          latest_signals,       # per-symbol RSI / z-score scan
         "microstructure":   latest_microstructure,
@@ -421,6 +447,14 @@ def close_position(symbol: str, reason: str) -> None:
         trade_record  = paper_close_position(symbol, current_price, reason)
         if trade_record:
             recent_trades.append(trade_record)
+            # Growth Vault sweep: 20% of gross profit → JEPQ (paper entry)
+            _pnl = trade_record.get("pnl_usd", 0)
+            if _pnl > 0:
+                try:
+                    from execution.profit_sweep import record_kraken_vault_contribution
+                    record_kraken_vault_contribution(_pnl)
+                except Exception as _ve:
+                    logger.warning(f"Vault | Kraken sweep failed: {_ve}")
         # Sync in-memory state from the paper engine
         open_positions = get_paper_positions()
 

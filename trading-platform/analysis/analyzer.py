@@ -214,6 +214,8 @@ async def run_analysis_cycle(
         logger.error(f"ABORTING analysis — cannot fetch account state: {exc}")
         raise RuntimeError(f"Account state unavailable, analysis aborted: {exc}") from exc
 
+    _snapshot_fetch_ts = time.time()   # timestamp of when the data fetch began (used by Data Circuit Breaker staleness check)
+
     if crypto_only:
         logger.info("Step 2/5 | Fetching data (Crypto 6mo + MA signals | News cached 1hr)...")
         market_data, news_data = await asyncio.gather(
@@ -228,8 +230,6 @@ async def run_analysis_cycle(
             fetch_market_data(period=market_period),
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
         )
-
-    _snapshot_fetch_ts = time.time()   # used by the data circuit breaker below
 
     if crypto_only:
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
@@ -255,7 +255,10 @@ async def run_analysis_cycle(
         _shared_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
         if _shared_root not in _sys.path:
             _sys.path.insert(0, _shared_root)
-        from shared.market_snapshot_validator import validate_snapshot as _validate_snapshot
+        from shared.market_snapshot_validator import (
+            validate_snapshot as _validate_snapshot,
+            DataCircuitBreakerError as _DataCircuitBreakerError,
+        )
         _validation = _validate_snapshot({
             "market_data":  market_data,
             "macro_data":   macro_data if not crypto_only else {},
@@ -268,20 +271,24 @@ async def run_analysis_cycle(
                 f"(checks passed={_validation.checks_passed} "
                 f"failed={_validation.checks_failed})"
             )
-            raise RuntimeError(f"DataCircuitBreaker: {_validation.reason}")
+            raise _DataCircuitBreakerError(_validation.reason)
         logger.debug(
             f"DataCircuitBreaker | Snapshot OK "
             f"({_validation.checks_passed} checks passed)"
         )
-    except RuntimeError:
-        raise   # re-raise so pipeline.py can handle the abort
+    except _DataCircuitBreakerError:
+        raise   # re-raise typed exception so pipeline.py can isinstance-check it
     except Exception as _vexc:
         # Fail-closed: if the validator itself cannot run (import error, shape error,
         # etc.), abort the cycle rather than silently continuing to the LLM.
         logger.error(
             f"DataCircuitBreaker | Validator raised unexpected error — aborting cycle: {_vexc}"
         )
-        raise RuntimeError(f"DataCircuitBreaker: validator error — {_vexc}") from _vexc
+        try:
+            from shared.market_snapshot_validator import DataCircuitBreakerError as _DCBError
+            raise _DCBError(f"validator error — {_vexc}") from _vexc
+        except ImportError:
+            raise RuntimeError(f"DataCircuitBreaker: validator error — {_vexc}") from _vexc
 
     # ── Step 3: Pre-LLM Signal Guardrails ────────────────────────────────────
     # Run BEFORE building any prompts so guards can gate and adjust all inputs.

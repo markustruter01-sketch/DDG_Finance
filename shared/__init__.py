@@ -20,7 +20,11 @@ Both bots import this package by inserting the repo root on sys.path:
 from shared.risk_profile import RiskProfile
 from shared.exit_bracket import ExitBracket
 from shared.circuit_breaker import CircuitBreaker
-from shared.market_snapshot_validator import validate_snapshot, ValidationResult
+from shared.market_snapshot_validator import (
+    validate_snapshot,
+    ValidationResult,
+    DataCircuitBreakerError,
+)
 
 __all__ = [
     "RiskProfile",
@@ -28,4 +32,5 @@ __all__ = [
     "CircuitBreaker",
     "validate_snapshot",
     "ValidationResult",
+    "DataCircuitBreakerError",
 ]

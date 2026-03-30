@@ -37,6 +37,18 @@ MAX_STALENESS_MINUTES: int = 20
 MIN_BAR_COUNT: int = 1
 
 
+class DataCircuitBreakerError(RuntimeError):
+    """
+    Raised when ``validate_snapshot()`` determines that the data snapshot
+    is structurally invalid or stale, and the analysis cycle must abort
+    before making any LLM calls.
+
+    Catching this specific exception type (rather than a bare RuntimeError
+    or string-prefix match) allows callers to provide first-class handling
+    of data-integrity aborts versus all other runtime failures.
+    """
+
+
 @dataclass(frozen=True)
 class ValidationResult:
     """

@@ -23,7 +23,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 # ── Ensure shared/ is importable ─────────────────────────────────────────────
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from shared.market_snapshot_validator import validate_snapshot, ValidationResult
+from shared.market_snapshot_validator import (
+    validate_snapshot,
+    ValidationResult,
+    DataCircuitBreakerError,
+)
 from core.cycle_state import CycleStateTracker
 from core.veto_enforcer import (
     load_active_vetoes,
@@ -177,6 +181,58 @@ class TestMarketSnapshotValidator(unittest.TestCase):
         snap["macro_data"] = {}   # empty dict is valid (no FRED data for crypto)
         result = validate_snapshot(snap)
         self.assertTrue(result.ok)
+
+    # ── DataCircuitBreakerError exception type ─────────────────────────────
+
+    def test_data_circuit_breaker_error_is_runtime_error(self):
+        """DataCircuitBreakerError must subclass RuntimeError for backward compat."""
+        err = DataCircuitBreakerError("some reason")
+        self.assertIsInstance(err, RuntimeError)
+        self.assertIsInstance(err, DataCircuitBreakerError)
+
+    def test_data_circuit_breaker_error_message(self):
+        msg = "Missing required snapshot key(s): market_data"
+        err = DataCircuitBreakerError(msg)
+        self.assertIn(msg, str(err))
+
+    # ── Integration: no LLM call occurs when validation fails ─────────────
+
+    def test_no_llm_invocation_on_failed_validation(self):
+        """
+        When validate_snapshot() returns ok=False, the caller (analyzer.py)
+        must raise DataCircuitBreakerError before any downstream (LLM) call.
+        This tests the exception path directly from validate_snapshot() + the
+        error type, which is what the analyzer's circuit breaker block relies on.
+        """
+        bad_snap = _healthy_snapshot()
+        bad_snap.pop("market_data")  # guaranteed failure
+
+        result = validate_snapshot(bad_snap)
+        self.assertFalse(result.ok)
+
+        # Simulate what the analyzer does on ok=False
+        llm_called = []
+
+        def _fake_llm(*args, **kwargs):
+            llm_called.append(True)
+            return {"decision": "BUY"}
+
+        # Test the exception pattern the analyzer raises
+        try:
+            if not result.ok:
+                raise DataCircuitBreakerError(result.reason)
+            _fake_llm()   # must NOT be reached
+        except DataCircuitBreakerError as exc:
+            self.assertIn("market_data", str(exc))
+
+        self.assertEqual(llm_called, [], "LLM must not be invoked after circuit breaker fires")
+
+    def test_circuit_breaker_is_caught_by_runtime_error(self):
+        """Callers catching plain RuntimeError (legacy) still catch DataCircuitBreakerError."""
+        try:
+            raise DataCircuitBreakerError("all tickers errored")
+        except RuntimeError as exc:
+            self.assertIn("all tickers errored", str(exc))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

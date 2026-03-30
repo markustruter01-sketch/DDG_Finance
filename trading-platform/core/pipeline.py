@@ -22,6 +22,8 @@ GET /status endpoint can expose them without re-running.
 """
 
 import asyncio
+import sys
+import os
 from datetime import datetime, timezone
 from typing import Any, Union
 
@@ -264,16 +266,24 @@ async def _run_pipeline_inner(
 
         # ── Data Circuit Breaker abort ────────────────────────────────────────
         # The market snapshot validator (shared/market_snapshot_validator.py)
-        # raises RuntimeError("DataCircuitBreaker: ...") when the fetched data
-        # has structural gaps or stale timestamps.  This is an explicit,
-        # deliberate abort before any LLM tokens were consumed — handle it as
-        # a first-class analysis failure with a descriptive error.
-        if exc_msg.startswith("DataCircuitBreaker:"):
+        # raises DataCircuitBreakerError when fetched data has structural gaps
+        # or stale timestamps.  This is a deliberate, pre-LLM abort — handle it
+        # as a first-class analysis failure with a descriptive error message.
+        try:
+            _shared_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+            if _shared_root not in sys.path:
+                sys.path.insert(0, _shared_root)
+            from shared.market_snapshot_validator import DataCircuitBreakerError as _DCBError
+            _is_dcb = isinstance(exc, _DCBError)
+        except ImportError:
+            _is_dcb = "DataCircuitBreaker" in exc_msg
+
+        if _is_dcb:
             result["status"] = "analysis_failed"
             result["errors"].append(f"Data integrity gate tripped: {exc}")
             logger.warning(
                 f"Pipeline | DataCircuitBreaker tripped — cycle aborted "
-                f"without LLM call. Reason: {exc_msg}"
+                f"without LLM call. Reason: {exc}"
             )
             _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
             return result

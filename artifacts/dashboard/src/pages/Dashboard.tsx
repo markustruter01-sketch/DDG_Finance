@@ -10,7 +10,7 @@ import {
   useLearningSnapshotInfo, useSyncLearningSnapshot,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
   useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
-  useLearningJournal,
+  useLearningJournal, useAttribution,
   useDegradationLog, useDegradationReport, useDegradationHealth,
   useRecentTrades, useRagWinsExtended,
   type AllocationPlan, type AuditFinding, type LivePosition,
@@ -2250,13 +2250,19 @@ function AIBrainSection() {
           />
         </div>
 
-        {/* Equity Signal Scanner — mirrors Kraken's signal scanner format */}
-        {(posData?.positions?.length ?? 0) > 0 && (
-          <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
-            <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
-              <span>Equity Scanner</span>
-              <span className="text-[9px] text-indigo-400/50 font-normal normal-case">live positions</span>
+        {/* Equity Signal Scanner — always visible, mirrors Kraken's signal scanner format */}
+        <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+          <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center justify-between">
+            <span>Signal Scanner</span>
+            <span className="text-[9px] text-indigo-400/50 font-normal normal-case">
+              {(posData?.positions?.length ?? 0) > 0 ? "live positions" : "awaiting positions"}
+            </span>
+          </div>
+          {(posData?.positions?.length ?? 0) === 0 ? (
+            <div className="px-3 py-3 text-[10px] text-muted-foreground/50 italic text-center">
+              No open positions — scanner activates when trades are entered
             </div>
+          ) : (
             <div className="divide-y divide-white/[0.03]">
               {(posData?.positions ?? []).map((pos) => {
                 const pnlPct = (pos.unrealized_plpc ?? 0) * 100;
@@ -2292,8 +2298,8 @@ function AIBrainSection() {
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <RegimeAllocationPanel regime={alloc?.regime} allocation={alloc?.allocation ?? null} />
 
@@ -4294,9 +4300,20 @@ function PerformanceSection() {
   const isMobile = useIsMobile();
   const { data: history } = usePerformanceHistory();
   const { data: summary } = usePerformanceSummary();
+  const { data: attrData } = useAttribution();
 
   const chartHeight = isMobile ? 140 : 180;
   const hasData = history && history.count > 0;
+
+  // Fallback stats from attribution when no performance snapshots exist
+  const totalTrades = summary?.total_trades ?? attrData?.closed_trades ?? null;
+  const winRate = summary?.avg_win_rate != null
+    ? summary.avg_win_rate * 100
+    : attrData?.overall?.win_rate ?? null;
+  const winCount = attrData?.overall?.wins ?? null;
+  const lossCount = attrData?.overall?.losses ?? null;
+  const avgPnl = attrData?.overall?.avg_pnl_pct ?? null;
+  const hasAttrFallback = !hasData && attrData?.closed_trades != null;
 
   const chartData = useMemo(() => {
     if (!history?.snapshots) return [];
@@ -4325,7 +4342,7 @@ function PerformanceSection() {
       </CardHeader>
       <CardContent className="p-5">
 
-        {/* Summary stat cards */}
+        {/* Summary stat cards — with attribution fallback when no snapshot history */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           {[
             {
@@ -4339,50 +4356,63 @@ function PerformanceSection() {
             },
             {
               label: "Win Rate",
-              value: summary?.avg_win_rate != null
-                ? `${(summary.avg_win_rate * 100).toFixed(1)}%`
-                : "—",
-              color: summary?.avg_win_rate != null
-                ? summary.avg_win_rate >= 0.5 ? "text-green-400" : "text-amber-400"
+              value: winRate != null ? `${winRate.toFixed(1)}%` : "—",
+              color: winRate != null
+                ? winRate >= 50 ? "text-green-400" : "text-amber-400"
                 : "text-muted-foreground",
             },
             {
-              label: "Best Day",
+              label: "Best Trade",
               value: summary?.best_day_pct != null ? `+${summary.best_day_pct.toFixed(2)}%` : "—",
               color: "text-green-400",
             },
             {
-              label: "Worst Day",
+              label: "Worst Trade",
               value: summary?.worst_day_pct != null ? `${summary.worst_day_pct.toFixed(2)}%` : "—",
               color: "text-red-400",
             },
             {
               label: "Total Trades",
-              value: summary?.total_trades != null ? String(summary.total_trades) : "—",
+              value: totalTrades != null ? String(totalTrades) : "—",
+              sub: winCount != null && lossCount != null ? `${winCount}W / ${lossCount}L` : undefined,
               color: "text-white",
             },
             {
-              label: "Avg Conviction",
-              value: summary?.avg_conviction != null
-                ? `${(summary.avg_conviction * 100).toFixed(1)}%`
-                : "—",
-              color: summary?.avg_conviction != null
-                ? summary.avg_conviction >= 0.75 ? "text-green-400" : "text-amber-400"
-                : "text-muted-foreground",
+              label: "Avg P&L",
+              value: avgPnl != null
+                ? `${avgPnl >= 0 ? "+" : ""}${avgPnl.toFixed(2)}%`
+                : summary?.avg_conviction != null
+                  ? `${(summary.avg_conviction * 100).toFixed(1)}% conv`
+                  : "—",
+              color: avgPnl != null
+                ? avgPnl >= 0 ? "text-green-400" : "text-red-400"
+                : summary?.avg_conviction != null
+                  ? summary.avg_conviction >= 0.75 ? "text-green-400" : "text-amber-400"
+                  : "text-muted-foreground",
             },
           ].map((stat) => (
             <div key={stat.label} className="bg-slate-900/70 rounded-xl p-3 border border-white/5">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{stat.label}</div>
               <div className={cn("text-xl font-mono font-bold", stat.color)}>{stat.value}</div>
+              {(stat as any).sub && <div className="text-[9px] text-muted-foreground/60 mt-0.5 font-mono">{(stat as any).sub}</div>}
             </div>
           ))}
         </div>
 
         {!hasData ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center">
             <BarChart3 className="h-10 w-10 text-muted-foreground/30 mb-3" />
-            <p className="text-sm text-muted-foreground">Performance history appears after the first post-mortem runs</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">The system records a snapshot automatically each weekday at 4:10 PM ET after market close</p>
+            {hasAttrFallback ? (
+              <>
+                <p className="text-sm text-muted-foreground">Equity curve builds after first post-mortem</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">Stats above sourced from trade journal · {attrData!.closed_trades} closed trade{attrData!.closed_trades !== 1 ? "s" : ""} recorded</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">Performance history appears after the first post-mortem runs</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">The system records a snapshot automatically each weekday at 4:10 PM ET after market close</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -4617,6 +4647,135 @@ function KrakenPerformanceSection() {
               </div>
             </div>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Kraken P&L Attribution Panel ─────────────────────────────────────────────
+// DATA SOURCE: kraken-bot/status.json via useKrakenPerformance()
+
+function KrakenBucketTable({ title, buckets, accent = "cyan" }: {
+  title: string;
+  buckets: Record<string, { count: number; total_pnl_pct: number; avg_pnl_pct: number; win_rate: number }>;
+  accent?: string;
+}) {
+  const entries = Object.entries(buckets).sort((a, b) => b[1].total_pnl_pct - a[1].total_pnl_pct);
+  if (!entries.length) return null;
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 font-semibold">{title}</div>
+      <div className="space-y-1.5">
+        {entries.map(([key, b]) => (
+          <div key={key} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-900/60 border border-cyan-500/8">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-white min-w-[70px]">{key}</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full", b.win_rate >= 60 ? "bg-green-500" : b.win_rate >= 45 ? "bg-amber-500" : "bg-red-500")}
+                    style={{ width: `${b.win_rate}%` }}
+                  />
+                </div>
+                <span className={cn("text-[10px] font-mono", b.win_rate >= 60 ? "text-green-400" : b.win_rate >= 45 ? "text-amber-400" : "text-red-400")}>
+                  {Math.round(b.win_rate)}%
+                </span>
+                <span className="text-[9px] text-muted-foreground">({b.count})</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] text-muted-foreground">Avg</span>
+              <span className={cn("text-xs font-mono font-semibold", b.avg_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                {b.avg_pnl_pct >= 0 ? "+" : ""}{b.avg_pnl_pct.toFixed(2)}%
+              </span>
+              <span className="text-[10px] text-muted-foreground">Total</span>
+              <span className={cn("text-xs font-mono font-semibold", b.total_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+                {b.total_pnl_pct >= 0 ? "+" : ""}{b.total_pnl_pct.toFixed(2)}%
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KrakenAttributionPanel() {
+  const { data, isLoading } = useKrakenPerformance();
+
+  const attribution = useMemo(() => {
+    if (!data?.has_data || !data.recent_trades?.length) return null;
+    const trades = data.recent_trades;
+    type Bucket = { count: number; wins: number; total_pnl_pct: number };
+    const bySymbol: Record<string, Bucket> = {};
+    const bySide: Record<string, Bucket> = {};
+    const byReason: Record<string, Bucket> = {};
+
+    for (const t of trades) {
+      const sym = (t.symbol ?? "UNKNOWN").replace("/USD", "");
+      const side = t.side === "long" ? "Long" : "Short";
+      const reason = t.reason === "mean_reversion_complete" ? "Take Profit"
+        : t.reason === "stop" ? "Stop Loss"
+        : t.reason === "trailing_stop" ? "Trailing Stop"
+        : t.reason ?? "Other";
+      const isWin = (t.pnl_pct ?? 0) > 0;
+
+      for (const [key, grp] of [[sym, bySymbol], [side, bySide], [reason, byReason]] as [string, Record<string, Bucket>][]) {
+        if (!grp[key]) grp[key] = { count: 0, wins: 0, total_pnl_pct: 0 };
+        grp[key].count++;
+        if (isWin) grp[key].wins++;
+        grp[key].total_pnl_pct += t.pnl_pct ?? 0;
+      }
+    }
+
+    const toResult = (grp: Record<string, Bucket>) =>
+      Object.fromEntries(Object.entries(grp).map(([k, v]) => [k, {
+        count: v.count,
+        total_pnl_pct: parseFloat(v.total_pnl_pct.toFixed(2)),
+        avg_pnl_pct: parseFloat((v.total_pnl_pct / v.count).toFixed(2)),
+        win_rate: parseFloat((v.wins / v.count * 100).toFixed(1)),
+      }]));
+
+    return { by_symbol: toResult(bySymbol), by_side: toResult(bySide), by_reason: toResult(byReason) };
+  }, [data]);
+
+  return (
+    <Card className="border-cyan-500/10">
+      <CardHeader className="bg-cyan-950/20 border-b border-cyan-500/10 py-4">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <BarChart3 className="h-4 w-4 text-cyan-400" /> P&amp;L Attribution
+          {data?.total_pnl_pct != null && (
+            <span className={cn("text-xs font-mono font-semibold ml-2", data.total_pnl_pct >= 0 ? "text-green-400" : "text-red-400")}>
+              {data.total_pnl_pct >= 0 ? "+" : ""}{data.total_pnl_pct.toFixed(2)}%
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-5 space-y-5">
+        {isLoading ? (
+          <div className="text-xs text-muted-foreground italic">Loading...</div>
+        ) : !data?.has_data ? (
+          <div className="text-xs text-muted-foreground italic">No closed trades for attribution analysis</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: "Closed Trades", value: String(data.total_trades ?? 0), color: "text-white" },
+                { label: "Win Rate", value: data.win_rate_pct != null ? `${data.win_rate_pct.toFixed(1)}%` : "—", color: data.win_rate_pct != null && data.win_rate_pct >= 50 ? "text-green-400" : "text-amber-400" },
+                { label: "W / L", value: `${data.win_count ?? 0} / ${data.loss_count ?? 0}`, color: "text-white" },
+                { label: "Avg P&L", value: data.avg_trade_pct != null ? `${data.avg_trade_pct >= 0 ? "+" : ""}${data.avg_trade_pct.toFixed(2)}%` : "—", color: data.avg_trade_pct != null && data.avg_trade_pct >= 0 ? "text-green-400" : "text-red-400" },
+              ].map((s) => (
+                <div key={s.label} className="bg-slate-900/70 rounded-xl p-3 border border-cyan-500/8">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{s.label}</div>
+                  <div className={cn("text-lg font-mono font-bold", s.color)}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+            {attribution && <KrakenBucketTable title="By Symbol" buckets={attribution.by_symbol} />}
+            {attribution && <KrakenBucketTable title="By Side" buckets={attribution.by_side} />}
+            {attribution && <KrakenBucketTable title="By Exit Reason" buckets={attribution.by_reason} />}
+          </>
         )}
       </CardContent>
     </Card>
@@ -6057,7 +6216,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* ═══ KRAKEN TAB — Kraken performance (original desktop position, after Alpaca performance) ═══ */}
+        {/* ═══ KRAKEN TAB — performance + attribution (mirrors Alpaca tab layout) ═══ */}
         <div className={cn("relative", mobileHide(['kraken']))}>
           <div className="flex items-center gap-3 mb-4">
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
@@ -6068,11 +6227,18 @@ export default function Dashboard() {
             </div>
             <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
           </div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
-            <SafeSection label="Kraken Crypto Performance">
-              <KrakenPerformanceSection />
-            </SafeSection>
-          </motion.div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
+              <SafeSection label="Kraken Crypto Performance">
+                <KrakenPerformanceSection />
+              </SafeSection>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.21 }}>
+              <SafeSection label="P&L Attribution">
+                <KrakenAttributionPanel />
+              </SafeSection>
+            </motion.div>
+          </div>
         </div>
 
         <motion.div

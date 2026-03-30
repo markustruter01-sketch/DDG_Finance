@@ -161,25 +161,42 @@ async def _run_pipeline_inner(
         _update_state(result, started)
         return result
 
-    # ── Weekend temporal quarantine guard ─────────────────────────────────────
-    # Block new LLM-driven trade decisions from Friday 14:00 ET through
-    # Monday 09:30 ET.  Weekend news is thin, illiquid, and often reversed by
-    # Monday open — not a signal worth burning Groq tokens on.
-    # (Economic blackout ±30min is handled separately by is_blackout_active().)
-    if not force and not crypto_only:
+    # ── Pre-dispatch Signal Guardrails (authoritative gate) ───────────────────
+    # run_all_guards() is the single source of truth for all guard decisions.
+    # It updates the _last_guard_result singleton (read by /status.signal_guard)
+    # so the dashboard always reflects the most recent gate decision.
+    #
+    # For full-market (equities) mode the temporal quarantine is the primary
+    # hard gate (Fri 14:00 ET → Mon 09:30 ET).  For crypto_only=True the
+    # temporal guard is bypassed inside run_all_guards (crypto runs 24/7).
+    #
+    # NOTE: We run this BEFORE the economic blackout check so the guard
+    # status is always written even when the blackout fires immediately after.
+    if not force:
         try:
-            from analysis.signal_guard import temporal_quarantine_guard as _tq_guard
-            _tq = _tq_guard(calendar_check=False)  # calendar blackout checked below
-            if not _tq.passed:
-                msg = f"Signal guard temporal quarantine: {_tq.reason} — pipeline skipped"
+            from analysis.signal_guard import run_all_guards as _run_guards
+            _guard_ctx: dict = {
+                "news_data":      {"all_headlines": [], "by_category": {}},
+                "market_data":    {},
+                "sentiment_band": "Neutral",
+                "crypto_only":    crypto_only,
+            }
+            _pre_guard = _run_guards(_guard_ctx)
+            result["signal_guard"] = _pre_guard.to_dict()
+
+            if _pre_guard.hard_block:
+                _reason = next(
+                    (r.reason for r in _pre_guard.results if not r.passed and r.severity == "hard"),
+                    "temporal quarantine active",
+                )
+                msg = f"Signal guard hard block: {_reason} — pipeline skipped"
                 logger.info(msg)
                 result["status"] = "guardrail_blocked"
                 result["errors"].append(msg)
-                result["signal_guard"] = {"hard_block": True, "reason": _tq.reason}
                 _update_state(result, started)
                 return result
-        except Exception as _tq_exc:
-            logger.warning(f"Pipeline | Weekend quarantine check failed (non-fatal): {_tq_exc}")
+        except Exception as _grd_exc:
+            logger.warning(f"Pipeline | Pre-dispatch guard check failed (non-fatal): {_grd_exc}")
 
     try:
         from data.economic_calendar import is_blackout_active

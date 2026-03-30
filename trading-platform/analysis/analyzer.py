@@ -281,26 +281,19 @@ async def run_analysis_cycle(
         adjusted_sentiment = guard_result.adjusted_sentiment
 
         if guard_result.hard_block:
-            # Temporal quarantine is active (should only reach here if the
-            # pipeline did not pre-screen, e.g. direct force-run).
-            # Return cached regime when available; otherwise raise so the
-            # caller surfaces a clean `guardrail_blocked` state.
+            # Temporal quarantine fired inside the analyzer.  This should only
+            # happen when force=True bypasses the pipeline pre-screen, or in
+            # direct unit tests.  In production the pipeline gate prevents this.
+            # Always raise — the caller (pipeline) must surface guardrail_blocked;
+            # cached-regime reuse is NOT done here to keep hard-block semantics
+            # unambiguous (the pipeline is the sole authority for stale-regime use).
             _reason = next(
                 (r.reason for r in guard_result.results if not r.passed and r.severity == "hard"),
                 "temporal quarantine active",
             )
-            logger.warning(f"SignalGuard | HARD BLOCK: {_reason}")
-            if not crypto_only:
-                cached_regime = get_regime_fallback()
-                if cached_regime is not None:
-                    logger.info(
-                        f"SignalGuard | Returning cached regime '{cached_regime.regime}' "
-                        "(LLM call skipped — temporal quarantine)"
-                    )
-                    return cached_regime
+            logger.warning(f"SignalGuard | HARD BLOCK inside analyzer: {_reason}")
             raise RuntimeError(
-                f"Signal guard hard block: {_reason}. No cached regime available — "
-                "pipeline must skip this cycle."
+                f"Signal guard hard block: {_reason}. Pipeline should have blocked this cycle."
             )
         else:
             logger.info(

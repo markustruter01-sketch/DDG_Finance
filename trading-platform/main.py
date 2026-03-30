@@ -2674,9 +2674,9 @@ async def kraken_commentary(force: bool = False) -> dict:
         _exhausted = _groq_budget.budget_exhausted()
         return {
             "commentary": (
-                "Davy Jones' AI is resting — daily token budget exhausted. The commentary will return tomorrow at midnight UTC."
+                "AI narrative paused — daily token budget reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC."
                 if _exhausted else
-                "Davy Jones' AI is resting — daily call limit reached. The commentary will return tomorrow at midnight UTC."
+                "AI narrative paused — daily call limit reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC."
             ),
             "generated_at": None,
             "cached": False,

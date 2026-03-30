@@ -1793,7 +1793,7 @@ function BrainSVG({ thinking }: { thinking: boolean }) {
 
 function SpeechBubble({
   commentary, generatedAt, cached, cacheAge, thinking, onRefresh, isRefreshing,
-  theme = "indigo", title = "Oracle Dispatch",
+  theme = "indigo", title = "Oracle Dispatch", infoNote,
 }: {
   commentary: string | undefined;
   generatedAt: string | null | undefined;
@@ -1804,6 +1804,7 @@ function SpeechBubble({
   isRefreshing: boolean;
   theme?: "indigo" | "cyan";
   title?: string;
+  infoNote?: string;
 }) {
   const ageMin = cacheAge != null ? Math.round(cacheAge / 60) : null;
   const textRef = useRef<HTMLParagraphElement>(null);
@@ -1886,6 +1887,19 @@ function SpeechBubble({
               </p>
             )}
           </div>
+
+          {/* Info note (e.g. narrative paused) */}
+          {infoNote && !thinking && (
+            <div className={cn(
+              "mt-2 flex items-center gap-1.5 text-[9px] font-mono px-2 py-1 rounded-md",
+              isCyan
+                ? "bg-cyan-500/6 border border-cyan-500/15 text-cyan-400/60"
+                : "bg-indigo-500/6 border border-indigo-500/15 text-indigo-400/60"
+            )}>
+              <span className="shrink-0">ℹ</span>
+              <span>{infoNote}</span>
+            </div>
+          )}
 
           {/* Footer */}
           <div className="mt-3 flex items-center justify-between">
@@ -2574,6 +2588,7 @@ function DavyJonesBotSection() {
   const isError    = data?.status === "error";
   const notStarted = !data || data.status === "not_started";
   const krakenThinking = commentaryLoading || isRefreshingKraken;
+  const krakenThrottled = krakenCommentary?.throttled === true;
 
   const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
   const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
@@ -2679,15 +2694,20 @@ function DavyJonesBotSection() {
           </motion.div>
 
           <SpeechBubble
-            commentary={krakenCommentary?.commentary ?? (krakenThinking ? undefined : dialogueText)}
-            generatedAt={krakenCommentary?.generated_at ?? null}
-            cached={krakenCommentary?.cached}
-            cacheAge={krakenCommentary?.cache_age_seconds}
+            commentary={
+              krakenThrottled
+                ? (krakenThinking ? undefined : dialogueText)
+                : (krakenCommentary?.commentary ?? (krakenThinking ? undefined : dialogueText))
+            }
+            generatedAt={krakenThrottled ? null : (krakenCommentary?.generated_at ?? null)}
+            cached={krakenThrottled ? false : krakenCommentary?.cached}
+            cacheAge={krakenThrottled ? undefined : krakenCommentary?.cache_age_seconds}
             thinking={krakenThinking}
             onRefresh={() => refreshKrakenCommentary()}
             isRefreshing={isRefreshingKraken}
             theme="cyan"
             title="Davy Jones"
+            infoNote={krakenThrottled ? "AI narrative paused — daily token budget reached. Trades are unaffected; all decisions are algorithmic." : undefined}
           />
         </div>
 

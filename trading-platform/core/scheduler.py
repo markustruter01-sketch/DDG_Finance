@@ -40,7 +40,7 @@ from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripp
 
 
 _scheduler: AsyncIOScheduler | None = None
-_auto_trading_enabled: bool = False
+_auto_trading_enabled: bool = True
 _last_reset_date: date | None = None
 
 

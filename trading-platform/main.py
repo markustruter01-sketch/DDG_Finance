@@ -191,13 +191,11 @@ async def lifespan(app: FastAPI):
 
     scheduler = get_scheduler()
     scheduler.start()
-    for job in scheduler.get_jobs():
-        job.pause()
-    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} trading jobs registered (paused — auto-trading OFF)")
-    logger.info("Enable auto-trading via dashboard toggle or POST /auto-trading")
+    logger.info(f"Scheduler started — {len(scheduler.get_jobs())} trading jobs registered (auto-trading ON by default)")
+    logger.info("Disable auto-trading via dashboard toggle or POST /auto-trading")
     logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
 
-    # Register the auto-heal monitor AFTER the pause loop so it stays active
+    # Register the auto-heal monitor — always active regardless of auto-trading toggle
     from apscheduler.triggers.interval import IntervalTrigger as _ITrigger
     scheduler.add_job(
         func=_auto_heal_check,

@@ -281,19 +281,30 @@ async def run_analysis_cycle(
         adjusted_sentiment = guard_result.adjusted_sentiment
 
         if guard_result.hard_block:
-            # Temporal quarantine fired inside the analyzer.  This should only
-            # happen when force=True bypasses the pipeline pre-screen, or in
-            # direct unit tests.  In production the pipeline gate prevents this.
-            # Always raise — the caller (pipeline) must surface guardrail_blocked;
-            # cached-regime reuse is NOT done here to keep hard-block semantics
-            # unambiguous (the pipeline is the sole authority for stale-regime use).
+            # Temporal quarantine fired.  In normal operation the pipeline
+            # pre-screens this before calling run_analysis_cycle(); this path is
+            # only reached on a direct force-run or during testing.
+            # For full-market mode, return the cached regime if one exists; this
+            # mirrors the pipeline's own fallback behavior so force-runs still
+            # surface actionable data when the LLM is intentionally skipped.
+            # For crypto_only (which never hits this branch because temporal guard
+            # is bypassed in run_all_guards when crypto_only=True), raise cleanly.
             _reason = next(
                 (r.reason for r in guard_result.results if not r.passed and r.severity == "hard"),
                 "temporal quarantine active",
             )
-            logger.warning(f"SignalGuard | HARD BLOCK inside analyzer: {_reason}")
+            logger.warning(f"SignalGuard | HARD BLOCK: {_reason}")
+            if not crypto_only:
+                cached_regime = get_regime_fallback()
+                if cached_regime is not None:
+                    logger.info(
+                        f"SignalGuard | Returning cached regime '{cached_regime.regime}' "
+                        "(LLM call skipped — temporal quarantine)"
+                    )
+                    return cached_regime
             raise RuntimeError(
-                f"Signal guard hard block: {_reason}. Pipeline should have blocked this cycle."
+                f"Signal guard hard block: {_reason}. No cached regime available — "
+                "pipeline must skip this cycle."
             )
         else:
             logger.info(

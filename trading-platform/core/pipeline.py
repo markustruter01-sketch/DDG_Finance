@@ -189,7 +189,27 @@ async def _run_pipeline_inner(
                     (r.reason for r in _pre_guard.results if not r.passed and r.severity == "hard"),
                     "temporal quarantine active",
                 )
-                msg = f"Signal guard hard block: {_reason} — pipeline skipped"
+                # Temporal quarantine: prefer reusing last cached regime over
+                # returning a hard error, so the dashboard still shows actionable
+                # allocation data.  Only emit guardrail_blocked when no cache exists.
+                try:
+                    from analysis.analyzer import get_regime_fallback as _get_cached
+                    _cached = _get_cached()
+                except Exception:
+                    _cached = None
+
+                if _cached is not None:
+                    logger.info(
+                        f"SignalGuard | Temporal quarantine ({_reason}) — "
+                        f"returning cached regime '{_cached.regime}' (LLM skipped)"
+                    )
+                    result["status"] = "completed"
+                    result["signal_guard_note"] = f"quarantine active: {_reason} — cached regime used"
+                    result["allocation"] = _cached.dict() if hasattr(_cached, "dict") else str(_cached)
+                    _update_state(result, started)
+                    return result
+
+                msg = f"Signal guard hard block: {_reason} — no cached regime available"
                 logger.info(msg)
                 result["status"] = "guardrail_blocked"
                 result["errors"].append(msg)

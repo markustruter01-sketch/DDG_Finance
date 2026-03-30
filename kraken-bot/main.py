@@ -41,7 +41,8 @@ from loguru import logger
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker
+from shared import RiskProfile, ExitBracket, CircuitBreaker as SharedCircuitBreaker, VaRCircuitBreaker
+from microstructure import MicrostructureSignal
 
 # Import our configuration — also handles the PAPER_TRADING startup message
 # and validates/creates the exchange connection.
@@ -120,6 +121,8 @@ logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}%")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
+logger.info(f"  VaR circuit breaker: 99% 1d-VaR > 8% equity → 6hr pause")
+logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active")
 logger.info("=" * 65)
 
 _adaptive.initialise()
@@ -161,6 +164,19 @@ last_equity_refresh: float = 0.0
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
 
+# ── VaR Circuit Breaker (portfolio-level tail-risk guard) ─────────────────────
+# Trips when the rolling 99% 1-period parametric VaR exceeds 8% of equity.
+# pause_hours=6 gives sufficient cool-down after a volatile session.
+_var_circuit_breaker: VaRCircuitBreaker = VaRCircuitBreaker(
+    var_limit_pct = 0.08,
+    confidence    = 0.99,
+    window        = 20,
+    min_obs       = 5,
+    pause_hours   = 6.0,
+)
+# Track the equity from the previous cycle to compute per-cycle returns.
+_prev_equity_for_var: float = 0.0
+
 # Recent trade history for the status file (last 20 trades shown on dashboard).
 recent_trades: list[dict] = []
 
@@ -176,6 +192,9 @@ latest_signals: list[dict] = []
 
 # Plain-English "what the bot is thinking" written each cycle for the dashboard.
 thinking_text: str = "Initialising — fetching market data..."
+
+# Latest microstructure readings per symbol (written to status.json each cycle).
+latest_microstructure: dict[str, dict] = {}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -206,7 +225,7 @@ def write_status(error: str | None = None) -> None:
     Positions are enriched with live P&L, stop/TP prices, and qty for the dashboard table.
     """
     global total_equity, open_positions, circuit_breaker_until, recent_trades, cycle_count
-    global latest_signals, thinking_text
+    global latest_signals, thinking_text, latest_microstructure
 
     deployed_usd  = sum(p["size_usd"] for p in open_positions.values())
     deployable    = total_equity * (1.0 - CASH_RESERVE)
@@ -272,9 +291,11 @@ def write_status(error: str | None = None) -> None:
         "position_count":   len(open_positions),
         "max_positions":    MAX_POSITIONS,
         "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
+        "var_circuit_breaker": _var_circuit_breaker.to_dict(),
         "recent_trades":    recent_trades[-20:],  # last 20 trades
         "paper_summary":    paper_summary,        # None in live mode
         "signals":          latest_signals,       # per-symbol RSI / z-score scan
+        "microstructure":   latest_microstructure,
         "thinking_text":    thinking_text,        # plain-English reasoning for dashboard
         "adaptive_params":  _adaptive.status_snapshot(),
         "error":            error,
@@ -477,9 +498,11 @@ def run_cycle() -> None:
       4. Write status.json for the dashboard
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
-    global latest_signals, thinking_text
+    global latest_signals, thinking_text, latest_microstructure
+    global _prev_equity_for_var
 
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
+    cycle_microstructure: dict[str, dict] = {}
 
     cycle_count += 1
 
@@ -499,6 +522,13 @@ def run_cycle() -> None:
         write_status(error="Could not determine account balance")
         return
 
+    # ── VaR CB: record per-cycle equity return ────────────────────────────────
+    # On the very first cycle after startup, _prev_equity_for_var is 0 — skip.
+    if _prev_equity_for_var > 0 and total_equity > 0:
+        _cycle_return = (total_equity - _prev_equity_for_var) / _prev_equity_for_var
+        _var_circuit_breaker.record_return(_cycle_return)
+    _prev_equity_for_var = total_equity
+
     # In paper mode, resync positions from the persistent paper state each cycle
     # so that positions survive a bot restart.
     if PAPER_TRADING:
@@ -511,6 +541,17 @@ def run_cycle() -> None:
         logger.warning(f"Cycle | Circuit breaker active — {remaining}min remaining, all trading paused")
         write_status()
         return
+
+    # ── Step 2b: Check VaR circuit breaker ───────────────────────────────────
+    # Parametric 1-period 99% VaR. If the estimated tail loss exceeds 8% of
+    # equity, all NEW ENTRIES are blocked for 6 hours (exits are always allowed).
+    _var_triggered, _var_pct = _var_circuit_breaker.check_and_trip(total_equity)
+    if _var_triggered:
+        logger.warning(
+            f"VaR Circuit Breaker | ACTIVE — estimated 1-period 99% VaR = "
+            f"{_var_pct*100:.2f}% of equity (limit: {_var_circuit_breaker.var_limit_pct*100:.0f}%) — "
+            f"new entries BLOCKED until {_var_circuit_breaker.paused_until}"
+        )
 
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
@@ -575,6 +616,17 @@ def run_cycle() -> None:
             # Pre-compute indicators once — used in both position mgmt and entry signals
             sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
             sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
+
+            # ── Microstructure signals (OFI / VAMP / VPIN) ────────────────────
+            # Computed from the same OHLCV candles — no L2 data needed.
+            # Used to gate and log entry signals (not exit logic).
+            try:
+                _ms = MicrostructureSignal.from_ohlcv(candles, symbol=symbol)
+                cycle_microstructure[symbol] = _ms.to_dict()
+            except Exception as _ms_exc:
+                logger.debug(f"Microstructure | {symbol}: compute failed (non-fatal): {_ms_exc}")
+                _ms = MicrostructureSignal(symbol=symbol, ofi=0.0, vamp=0.0, vpin=0.0)
+                cycle_microstructure[symbol] = _ms.to_dict()
 
             # ── 3b. Record price for circuit breaker ──────────────────────────
             price_history[symbol].append((now_utc, current_price))
@@ -723,6 +775,16 @@ def run_cycle() -> None:
                 })
                 continue
 
+            # ── VaR circuit breaker: block new entries when active ────────────
+            if _var_triggered:
+                logger.debug(f"Signal | {symbol}: skipping entry — VaR circuit breaker active")
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "skip_var_cb",
+                    "has_position": False,
+                })
+                continue
+
             # LONG signal: price is unusually low + RSI is oversold
             if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
                 size_usd = get_position_size(
@@ -735,6 +797,19 @@ def run_cycle() -> None:
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
+                    # ── Microstructure entry filter (long) ────────────────────
+                    _ms_allowed, _ms_reason = _ms.entry_filter(side="long")
+                    if not _ms_allowed:
+                        logger.info(
+                            f"Signal | LONG {symbol} blocked by microstructure: {_ms_reason} "
+                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "long_blocked_microstructure",
+                            "has_position": False,
+                        })
+                        continue  # skip this entry
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(
@@ -748,6 +823,7 @@ def run_cycle() -> None:
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
                         f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "long", size_usd, current_price):
@@ -783,6 +859,19 @@ def run_cycle() -> None:
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
+                    # ── Microstructure entry filter (short) ───────────────────
+                    _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
+                    if not _ms_allowed:
+                        logger.info(
+                            f"Signal | SHORT {symbol} blocked by microstructure: {_ms_reason} "
+                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "short_blocked_microstructure",
+                            "has_position": False,
+                        })
+                        continue  # skip this entry
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(
@@ -796,6 +885,7 @@ def run_cycle() -> None:
                     logger.info(
                         f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
                         f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "short", size_usd, current_price):
@@ -835,6 +925,7 @@ def run_cycle() -> None:
 
     # ── Step 4: Summarise signals + generate thinking text ────────────────────
     latest_signals = cycle_signals
+    latest_microstructure = cycle_microstructure
 
     active_holds      = [s for s in cycle_signals if s["signal_type"] == "hold"]
     min_profit_holds  = [s for s in cycle_signals if s["signal_type"] == "hold_min_profit"]

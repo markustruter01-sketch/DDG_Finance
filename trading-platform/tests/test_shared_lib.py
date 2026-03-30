@@ -244,6 +244,39 @@ class TestExitBracket(unittest.TestCase):
         self.assertAlmostEqual(tp,   106.0,  places=4)
         self.assertAlmostEqual(trail, 105.0, places=4)
 
+    def test_compute_exit_levels_with_risk_profile(self):
+        """When risk_profile is supplied, stop_loss_pct = max_position_pct / 2."""
+        rp = RiskProfile(
+            total_equity=100_000,
+            ring_fenced_pct=0.60,
+            deployable_pct=0.40,
+            max_position_pct=0.15,
+            name="test",
+        )
+        # Expected: stop_loss_pct = 0.15 / 2 = 0.075 → SL = 100 × (1 - 0.075) = 92.5
+        sl, tp, trail = compute_exit_levels(
+            entry_price=100.0, direction="long",
+            risk_profile=rp,
+            take_profit_pct=0.06, trail_pct=0.05,
+        )
+        self.assertAlmostEqual(sl, 100.0 * (1.0 - 0.075), places=4)
+
+    def test_compute_exit_levels_risk_profile_overrides_stop_pct(self):
+        """risk_profile stop derivation overrides explicit stop_loss_pct."""
+        rp = RiskProfile(
+            total_equity=100_000,
+            ring_fenced_pct=0.60,
+            deployable_pct=0.40,
+            max_position_pct=0.20,  # → derived stop = 0.10
+            name="test",
+        )
+        sl, _, _ = compute_exit_levels(
+            entry_price=100.0, direction="long",
+            risk_profile=rp,
+            stop_loss_pct=0.02,  # should be overridden
+        )
+        self.assertAlmostEqual(sl, 100.0 * (1.0 - 0.10), places=4)
+
     def test_repr(self):
         b = ExitBracket(entry_price=100.0, direction="long")
         self.assertIn("ExitBracket", repr(b))
@@ -447,6 +480,70 @@ class TestSharedImport(unittest.TestCase):
         self.assertTrue(callable(RiskProfile))
         self.assertTrue(callable(ExitBracket))
         self.assertTrue(callable(CircuitBreaker))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Delegation — kraken-bot/logic.py delegates to shared/circuit_breaker.py
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestKrakenLogicDelegation(unittest.TestCase):
+    """
+    Verify that kraken-bot/logic.py's check_circuit_breaker is a thin
+    delegate to shared.circuit_breaker.check_circuit_breaker and produces
+    identical results for all input cases.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Import kraken-bot logic from the repo root path."""
+        _KRAKEN_ROOT = os.path.join(_REPO_ROOT, "kraken-bot")
+        if _KRAKEN_ROOT not in sys.path:
+            sys.path.insert(0, _KRAKEN_ROOT)
+        import logic as _logic
+        # Store as a staticmethod-like reference to avoid Python passing
+        # the test instance as the first positional argument.
+        cls._logic_cb_fn = staticmethod(_logic.check_circuit_breaker)
+
+    def _cb(self, *args, **kwargs):
+        return self._logic_cb_fn(*args, **kwargs)
+
+    def _make_history(self, prices, minutes_apart=1):
+        now = datetime.now(tz=timezone.utc)
+        history = deque(maxlen=200)
+        for i, price in enumerate(prices):
+            ts = now - timedelta(minutes=(len(prices) - 1 - i) * minutes_apart)
+            history.append((ts, price))
+        return history
+
+    def test_no_crash_same_result(self):
+        history = self._make_history([100, 101, 102])
+        self.assertEqual(
+            self._cb(history),
+            check_circuit_breaker(history),
+        )
+
+    def test_crash_same_result(self):
+        history = self._make_history([100, 85])
+        self.assertEqual(
+            self._cb(history, drop_threshold=0.10),
+            check_circuit_breaker(history, drop_threshold=0.10),
+        )
+
+    def test_empty_same_result(self):
+        history = deque()
+        self.assertEqual(
+            self._cb(history),
+            check_circuit_breaker(history),
+        )
+
+    def test_logic_cb_returns_true_on_crash(self):
+        """kraken-bot logic.check_circuit_breaker still returns True on crash."""
+        history = self._make_history([100, 80])
+        self.assertTrue(self._cb(history, drop_threshold=0.10))
+
+    def test_logic_cb_returns_false_on_no_crash(self):
+        history = self._make_history([100, 97])
+        self.assertFalse(self._cb(history, drop_threshold=0.10))
 
 
 if __name__ == "__main__":

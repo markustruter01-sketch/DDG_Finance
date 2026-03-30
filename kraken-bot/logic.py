@@ -17,9 +17,20 @@ The five functions here are:
 from __future__ import annotations
 
 import math
+import os
+import sys
 from collections import deque
 from datetime import datetime, timezone
 from typing import Literal, Optional
+
+# ── Shared core library ────────────────────────────────────────────────────────
+# check_circuit_breaker is re-exported from the shared package so kraken-bot
+# callers continue to use this module as their import point while the canonical
+# implementation lives once in shared/circuit_breaker.py.
+_REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.circuit_breaker import check_circuit_breaker as _shared_check_circuit_breaker
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -205,14 +216,12 @@ def check_circuit_breaker(
     Detect a flash crash by checking if price has dropped more than
     'drop_threshold' (default 10%) within the last 'window_minutes' minutes.
 
-    A "flash crash" is a sudden, extreme price drop — often caused by
-    a whale liquidation, exchange glitch, or panic selling — that can
-    make technical indicators produce wildly wrong signals. The circuit
-    breaker says: "Something abnormal is happening. Stop trading and wait."
+    Delegates to the canonical implementation in shared/circuit_breaker.py.
+    This function is kept here so callers in kraken-bot do not need to change
+    their import statements — it is a thin re-export.
 
     Args:
         price_history: A collections.deque of (timestamp_utc, price) tuples.
-                       We add a new entry every trading cycle.
         drop_threshold: How large a price drop triggers the breaker (default 10%).
         window_minutes: How far back to look for the high-water mark (default 5).
 
@@ -220,29 +229,11 @@ def check_circuit_breaker(
         True  → Circuit breaker TRIGGERED — stop trading immediately.
         False → No crash detected — safe to trade normally.
     """
-    if len(price_history) < 2:
-        return False  # Not enough history to compare — assume safe
-
-    now_utc = datetime.now(tz=timezone.utc)
-    current_price = price_history[-1][1]  # The most recent price
-
-    # Find the highest price seen within the look-back window
-    high_price_in_window = None
-    for ts, price in price_history:
-        # Only look at prices within the last 'window_minutes' minutes
-        age_minutes = (now_utc - ts).total_seconds() / 60.0
-        if age_minutes <= window_minutes:
-            if high_price_in_window is None or price > high_price_in_window:
-                high_price_in_window = price
-
-    if high_price_in_window is None or high_price_in_window == 0:
-        return False
-
-    # How much has the price dropped from that peak?
-    drop_pct = (high_price_in_window - current_price) / high_price_in_window
-
-    # If the drop exceeds our threshold, trigger the circuit breaker
-    return drop_pct >= drop_threshold
+    return _shared_check_circuit_breaker(
+        price_history=price_history,
+        drop_threshold=drop_threshold,
+        window_minutes=window_minutes,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

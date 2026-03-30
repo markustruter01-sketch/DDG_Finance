@@ -222,23 +222,60 @@ class ExitBracket:
 def compute_exit_levels(
     entry_price:     float,
     direction:       Literal["long", "short"],
+    risk_profile:    Optional[object]  = None,
+    atr:             Optional[float]   = None,
     stop_loss_pct:   float = 0.02,
     take_profit_pct: float = 0.06,
     trail_pct:       float = 0.05,
-    atr:             Optional[float] = None,
     atr_multiplier:  float = 2.0,
 ) -> Tuple[float, float, float]:
     """
     Module-level convenience wrapper around ExitBracket.compute().
 
+    Parameters
+    ----------
+    entry_price : float
+        Fill price at which the position was opened.
+
+    direction : "long" | "short"
+        Trade direction.
+
+    risk_profile : RiskProfile | None
+        Optional shared.risk_profile.RiskProfile instance.  When supplied,
+        the stop_loss_pct is derived from the profile's max_position_pct
+        (i.e. we risk at most max_position_pct × entry per position).
+        Explicit *stop_loss_pct* is used as a fallback / override when
+        risk_profile is None.
+
+    atr : float | None
+        Average True Range in price units.  When > 0, overrides the fixed
+        percentage stop with an ATR-based stop.
+
+    stop_loss_pct : float
+        Fixed-percentage stop used when risk_profile is None and atr is None.
+
+    take_profit_pct : float
+        Take-profit target distance from entry.
+
+    trail_pct : float
+        Trailing-stop activation distance from the best price.
+
+    atr_multiplier : float
+        ATR multiplier (2.0 standard, 1.5 for leveraged ETFs).
+
     Returns
     -------
     (stop_loss_price, take_profit_price, trail_activation_price)
-
-    This matches the signature referenced in the task specification:
-      compute_exit_levels(entry_price, direction, risk_profile, atr=None)
-    where risk_profile parameters can be passed explicitly.
     """
+    # When a RiskProfile is provided, derive the stop_loss_pct from the
+    # profile's max_position_pct so that stop sizing respects the same
+    # risk envelope that governs position sizing.
+    if risk_profile is not None and hasattr(risk_profile, "max_position_pct"):
+        # The stop is set so that a full stop-out costs at most
+        # (max_position_pct / 2) of equity — a conservative derivation
+        # that keeps stop distance proportional to the position limit.
+        stop_loss_pct = risk_profile.max_position_pct / 2.0
+
     bracket = ExitBracket(
         entry_price=entry_price,
         direction=direction,

@@ -1,38 +1,7 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 78550.46610656011,
-  "positions": {
-    "LINK/USD": {
-      "side": "long",
-      "entry_price": 8.27443,
-      "size_usd": 9868.21,
-      "size_units": 1192.6150804345434,
-      "entry_time": "2026-03-29T22:47:30.204444+00:00",
-      "best_price": 8.27443,
-      "entry_fee": 25.6573,
-      "order_id": "PAPER-LINKUSD-1774824450"
-    },
-    "ETH/USD": {
-      "side": "long",
-      "entry_price": 1950.05,
-      "size_usd": 190.25,
-      "size_units": 0.09756160098459014,
-      "entry_time": "2026-03-29T22:48:35.212265+00:00",
-      "best_price": 1950.05,
-      "entry_fee": 0.4946,
-      "order_id": "PAPER-ETHUSD-1774824515"
-    },
-    "XRP/USD": {
-      "side": "short",
-      "entry_price": 1.34379,
-      "size_usd": 9805.24,
-      "size_units": 7296.7055864383565,
-      "entry_time": "2026-03-30T00:20:54.870715+00:00",
-      "best_price": 1.34379,
-      "entry_fee": 25.4936,
-      "order_id": "PAPER-XRPUSD-1774830054"
-    }
-  },
+  "cash_usd": 98486.38494315701,
+  "positions": {},
   "all_trades": [
     {
       "symbol": "BTC/USD",
@@ -296,6 +265,42 @@
       "fees_usd": 52.0874,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-30T00:33:54.424307+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ETH/USD",
+      "side": "long",
+      "entry_price": 1950.05,
+      "exit_price": 1996.83,
+      "pnl_pct": 2.4,
+      "pnl_usd": 3.56,
+      "fees_usd": 1.0011,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:38:37.206037+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "XRP/USD",
+      "side": "short",
+      "entry_price": 1.34379,
+      "exit_price": 1.32978,
+      "pnl_pct": 1.04,
+      "pnl_usd": 51.51,
+      "fees_usd": 50.7214,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:39:50.749579+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "LINK/USD",
+      "side": "long",
+      "entry_price": 8.27443,
+      "exit_price": 8.46045,
+      "pnl_pct": 2.25,
+      "pnl_usd": 169.96,
+      "fees_usd": 51.8915,
+      "reason": "mean_reversion_complete",
+      "closed_at": "2026-03-30T00:39:54.331059+00:00",
       "paper": true
     }
   ]

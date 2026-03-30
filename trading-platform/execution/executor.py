@@ -44,9 +44,18 @@ Universe (v4.3):
   Vault:          JEPQ  (profit sweep only, LLM cannot sell)
 """
 
+import os
+import sys
 import time
 
 from loguru import logger
+
+# ── Shared core library ────────────────────────────────────────────────────────
+_REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.risk_profile import RiskProfile
+from shared.exit_bracket import ExitBracket
 
 from analysis.schemas import (
     RegimeAnalysisOutput, RegimeAllocationSlot,
@@ -118,6 +127,41 @@ def execute_allocations(
 
     current_positions = {p["symbol"]: p for p in get_positions()}
     logger.info(f"Current open positions: {list(current_positions.keys()) or 'none'}")
+
+    # ── RiskProfile enforcement ───────────────────────────────────────────────
+    # Build a RiskProfile using live account data and the Alpaca platform
+    # constants (60/40 ring-fence, 15% per-position cap, 18% reserve).
+    # The deployed_usd figure uses the market value of all current positions
+    # (including the vault ticker) so the ceiling enforcement is conservative.
+    _deployed_usd = sum(
+        p.get("market_value", 0.0)
+        for p in current_positions.values()
+        if p.get("symbol") not in (CASH_TICKER,)
+    )
+    _risk_profile = RiskProfile(
+        total_equity=equity,
+        deployed_usd=max(_deployed_usd, 0.0),
+        ring_fenced_pct=0.60,
+        deployable_pct=0.40,
+        max_position_pct=MAX_POSITION_PCT,
+        daily_loss_limit_pct=0.05,
+        reserve_pct=0.18,
+        name="alpaca",
+    )
+    if _risk_profile.is_breached():
+        logger.warning(
+            f"RiskProfile | Reserve breach detected before execution: "
+            f"deployed=${_risk_profile.deployed_usd:,.2f} "
+            f"ceiling=${_risk_profile.active_ceiling_usd():,.2f} "
+            f"buffer=${_risk_profile.reserve_buffer_usd():,.2f} "
+            f"— new positions will still be size-capped but breach is logged"
+        )
+    else:
+        logger.info(
+            f"RiskProfile | {_risk_profile.deployed_pct():.1f}% of ceiling deployed "
+            f"(${_risk_profile.deployed_usd:,.0f} / ${_risk_profile.active_ceiling_usd():,.0f}) "
+            f"| buffer=${_risk_profile.reserve_buffer_usd():,.0f}"
+        )
 
     is_crypto_only = isinstance(output, CryptoAnalysisOutput)
 
@@ -540,14 +584,38 @@ def _place_ratchet_stop(
     Leveraged ETFs (TQQQ/SOXL/UPRO) use 1.5×ATR (auto-detected in ratchet_stop module).
     Standard tickers use 2.0×ATR(14).
     The stop is persisted and can only be ratcheted UP on future cycles.
-    Falls back to a 2% static stop if ATR is unavailable.
+    Falls back to a 2% static stop (FALLBACK_STOP_PCT) if ATR is unavailable.
+
+    ExitBracket is used to compute the expected stop/take-profit/trail levels
+    for logging and audit purposes.  The actual stop order placement delegates to
+    initialise_ratchet_stop() in ratchet_stop.py (the existing source of truth for
+    ATR computation and GTC order management).
     """
+    from execution.ratchet_stop import FALLBACK_STOP_PCT, ATR_MULTIPLIER, LEVERAGED_ATR_MULTIPLIER
+
     qty     = notional_usd / fill_price
     is_letf = ticker in LEVERAGED_RISK_TICKERS
-    mult_label = "1.5×ATR [LETF tighter stop]" if is_letf else "2.0×ATR"
+    atr_mult = LEVERAGED_ATR_MULTIPLIER if is_letf else ATR_MULTIPLIER
+    mult_label = f"{atr_mult}×ATR {'[LETF tighter stop]' if is_letf else ''}"
+
+    # ── ExitBracket: compute expected exit levels for logging ─────────────────
+    # The ATR value is not yet known (initialise_ratchet_stop fetches it); use
+    # the fixed-percentage fallback for the bracket preview.
+    _bracket = ExitBracket(
+        entry_price=fill_price,
+        direction="long",
+        stop_loss_pct=FALLBACK_STOP_PCT,
+        take_profit_pct=FALLBACK_STOP_PCT * 3,  # 3:1 risk-reward target
+        trail_pct=FALLBACK_STOP_PCT * 2.5,
+        atr=None,
+        atr_multiplier=atr_mult,
+    )
+    _sl_preview, _tp_preview, _trail_preview = _bracket.compute()
     logger.warning(
         f"⚠ Risk Overlay | Initialising ATR ratchet stop for {ticker}: "
-        f"fill=${fill_price:.4f} qty={qty:.6f} | multiplier={mult_label}"
+        f"fill=${fill_price:.4f} qty={qty:.6f} | multiplier={mult_label} | "
+        f"bracket preview → SL=${_sl_preview:.4f} TP=${_tp_preview:.4f} "
+        f"trail@${_trail_preview:.4f} (ATR-based stop will override if available)"
     )
     try:
         stop_result = initialise_ratchet_stop(
@@ -560,6 +628,7 @@ def _place_ratchet_stop(
             results["risk_overrides"][-1]["stop_order"] = stop_result.get("order")
             results["risk_overrides"][-1]["stop_price"] = stop_result.get("stop_price")
             results["risk_overrides"][-1]["atr"]        = stop_result.get("atr")
+            results["risk_overrides"][-1]["exit_bracket_preview"] = _bracket.to_dict()
     except Exception as exc:
         logger.warning(f"Risk Overlay | Ratchet stop init failed for {ticker}: {exc} — position unprotected")
         results["risk_overrides"][-1]["stop_order_error"] = str(exc)

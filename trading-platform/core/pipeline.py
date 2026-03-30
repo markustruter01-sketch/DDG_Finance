@@ -373,6 +373,41 @@ async def _run_pipeline_inner(
     result["status"] = "ok" if not result["errors"] else "ok_with_errors"
     _update_state(result, started, allocation, trading_mode=mode_label.lower().replace(" ", "_"))
 
+    # ── Regime Sync File ──────────────────────────────────────────────────────
+    # Write market_regime.json so the Kraken bot can read the current regime
+    # and apply Bear/RISK-OFF defensive filters without any HTTP call.
+    # Location: trading-platform/data/market_regime.json  (repo-relative)
+    if allocation is not None:
+        try:
+            import json as _json
+            from pathlib import Path as _Path
+            from datetime import datetime as _dt, timezone as _tz
+
+            _regime_str = (
+                allocation.regime
+                if isinstance(allocation, RegimeAnalysisOutput)
+                else "Crypto"
+            )
+            _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
+            _regime_path.parent.mkdir(parents=True, exist_ok=True)
+            _regime_path.write_text(_json.dumps({
+                "regime":       _regime_str,
+                "written_at":   _dt.now(_tz.utc).isoformat(),
+                "cycle_number": _state["run_count"],
+                "using_fallback": using_fallback,
+                "rationale": (
+                    allocation.regime_rationale
+                    if isinstance(allocation, RegimeAnalysisOutput) and not using_fallback
+                    else None
+                ),
+            }, indent=2))
+            logger.debug(
+                f"Pipeline | market_regime.json written: regime='{_regime_str}' "
+                f"(Kraken bot will read on next cycle)"
+            )
+        except Exception as _rw_exc:
+            logger.warning(f"Pipeline | market_regime.json write failed (non-fatal): {_rw_exc}")
+
     # ── Equity snapshot ─────────────────────────────────────────────────────
     # Write a time-series equity point to PostgreSQL for the equity curve chart.
     # Kraken equity is read from the bot's status.json; safe to be 0 if missing.

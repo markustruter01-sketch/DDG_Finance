@@ -81,6 +81,9 @@ from config import (
     STATUS_FILE,
     CONTROL_FILE,
     PAPER_PORTFOLIO_FILE,
+    VPIN_ENTRY_BLOCK,
+    BEAR_MAX_POSITIONS,
+    BEAR_MAX_POSITION_FRACTION,
 )
 
 import adaptive_params as _adaptive
@@ -194,6 +197,34 @@ latest_microstructure: dict[str, dict] = {}
 # Tracks the leaky-bucket penalty point accumulation for Kraken REST calls.
 # Throttles new order placement when the bucket exceeds 80% of the 15-point ceiling.
 _penalty_tracker: PenaltyTracker = PenaltyTracker()
+
+# ── Cross-Bot Regime Sync ─────────────────────────────────────────────────────
+# Path to the shared file the Alpaca pipeline writes after every successful cycle.
+# The Kraken bot reads this file once per cycle to apply Bear/RISK-OFF filters.
+_MARKET_REGIME_FILE = os.path.join(_REPO_ROOT, "trading-platform", "data", "market_regime.json")
+
+# Bear and Risk-Off regimes that trigger Kraken's defensive mode.
+_BEAR_REGIMES = frozenset({"Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off"})
+
+
+def _read_market_regime() -> dict:
+    """
+    Read the shared market_regime.json written by the Alpaca pipeline.
+    Returns a dict with at minimum {"regime": str, "is_bear": bool}.
+    Falls back gracefully if the file is missing or corrupt.
+    """
+    try:
+        import pathlib as _pl
+        _path = _pl.Path(_MARKET_REGIME_FILE)
+        if not _path.exists():
+            return {"regime": "unknown", "is_bear": False, "source": "no_file"}
+        data = json.loads(_path.read_text())
+        regime = data.get("regime", "unknown")
+        is_bear = regime in _BEAR_REGIMES
+        return {**data, "is_bear": is_bear}
+    except Exception as _exc:
+        logger.debug(f"RegimeSync | Could not read market_regime.json: {_exc}")
+        return {"regime": "unknown", "is_bear": False, "source": "read_error"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -607,6 +638,33 @@ def run_cycle() -> None:
     _trail_pct          = _ap["TRAIL_PCT"]
     _min_net_profit_pct = _ap["MIN_NET_PROFIT_PCT"]
 
+    # ── Cross-Bot Regime Sync ─────────────────────────────────────────────────
+    # Read the shared market_regime.json file that the Alpaca pipeline writes
+    # after every successful analysis cycle.  When the Alpaca bot signals a
+    # Bear or RISK-OFF regime, the Kraken bot operates in defensive mode:
+    #   • All new LONG entries are blocked (crypto "dip buying" disabled)
+    #   • Max simultaneous positions reduced from 10 → BEAR_MAX_POSITIONS (5)
+    #   • Max position size reduced from 10% → BEAR_MAX_POSITION_FRACTION (7.5%)
+    _regime_data  = _read_market_regime()
+    _regime_label = _regime_data.get("regime", "unknown")
+    _is_bear      = _regime_data.get("is_bear", False)
+
+    # Apply bear-regime sizing overrides
+    _effective_max_positions       = BEAR_MAX_POSITIONS       if _is_bear else MAX_POSITIONS
+    _effective_max_position_frac   = BEAR_MAX_POSITION_FRACTION if _is_bear else MAX_POSITION_FRACTION
+
+    if _is_bear:
+        logger.info(
+            f"RegimeSync | BEAR/RISK-OFF detected (Alpaca regime='{_regime_label}') — "
+            f"LONG entries DISABLED | max_positions={_effective_max_positions} | "
+            f"max_position_fraction={_effective_max_position_frac:.1%}"
+        )
+    else:
+        logger.debug(
+            f"RegimeSync | Regime='{_regime_label}' — normal parameters active "
+            f"(max_positions={_effective_max_positions} max_frac={_effective_max_position_frac:.0%})"
+        )
+
     for symbol in SYMBOLS:
         try:
             # ── 3a. Fetch candles — real live data in both paper and live mode ─
@@ -782,8 +840,12 @@ def run_cycle() -> None:
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
 
-            if len(open_positions) >= MAX_POSITIONS:
-                logger.debug(f"Signal | {symbol}: Max positions ({MAX_POSITIONS}) reached — skip")
+            if len(open_positions) >= _effective_max_positions:
+                logger.debug(
+                    f"Signal | {symbol}: Max positions ({_effective_max_positions}"
+                    + (" [bear-regime]" if _is_bear else "")
+                    + f") reached — skip"
+                )
                 cycle_signals.append({
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "slots_full", "has_position": False,
@@ -820,17 +882,38 @@ def run_cycle() -> None:
                 continue
 
             # ── VPIN toxic flow defensive gate ────────────────────────────────
-            # When VPIN > 0.70 the bot enters a defensive state: new entries are
-            # skipped but existing positions continue to run under their stops.
-            if _ms.vpin > 0.70:
+            # When VPIN > VPIN_ENTRY_BLOCK (0.65) the bot enters a defensive
+            # state: new entries are skipped but existing positions continue to
+            # run under their stops.  Threshold lowered from 0.70 to 0.65 for
+            # more selective entry during high-volatility/Bear conditions.
+            if _ms.vpin > VPIN_ENTRY_BLOCK:
                 logger.info(
-                    f"Signal | {symbol}: skipping entry — VPIN={_ms.vpin:.3f} > 0.70 "
+                    f"Signal | {symbol}: skipping entry — VPIN={_ms.vpin:.3f} > {VPIN_ENTRY_BLOCK} "
                     f"(defensive state — toxic/institutional flow detected)"
                 )
                 cycle_signals.append({
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "skip_vpin_defensive",
                     "has_position": False,
+                })
+                continue
+
+            # ── Bear Regime LONG Filter ───────────────────────────────────────
+            # In a confirmed Bear or RISK-OFF regime (from Alpaca's analysis),
+            # all new LONG signals are blocked.  The bot remains SHORT-only
+            # until the regime clears.  Existing LONG positions are unaffected
+            # (they continue under their normal stops).
+            if _is_bear and sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+                logger.info(
+                    f"BearRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
+                    f"RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
+                    f"Capital preserved (SHORT-only mode active)"
+                )
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4), "signal_type": "long_blocked_bear_regime",
+                    "has_position": False,
+                    "regime": _regime_label,
                 })
                 continue
 
@@ -842,7 +925,7 @@ def run_cycle() -> None:
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
                     stop_loss_pct=_stop_loss_pct,
-                    max_position_fraction=MAX_POSITION_FRACTION,
+                    max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:
@@ -904,7 +987,7 @@ def run_cycle() -> None:
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
                     stop_loss_pct=_stop_loss_pct,
-                    max_position_fraction=MAX_POSITION_FRACTION,
+                    max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                 )
                 if size_usd >= 10.0:

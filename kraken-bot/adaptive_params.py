@@ -110,7 +110,7 @@ def _pg_load() -> dict | None:
 DEFAULTS = {
     "ZSCORE_ENTRY":       1.0,
     "ZSCORE_EXIT":        0.3,
-    "STOP_LOSS_PCT":      0.02,
+    "STOP_LOSS_PCT":      0.015,  # Tightened from 0.02 — Bear-regime defensive posture
     "TRAIL_PCT":          0.05,
     "MIN_NET_PROFIT_PCT": 0.008,
 }
@@ -119,7 +119,7 @@ DEFAULTS = {
 BOUNDS = {
     "ZSCORE_ENTRY":       (0.7,   1.5),
     "ZSCORE_EXIT":        (0.10,  0.55),
-    "STOP_LOSS_PCT":      (0.010, 0.040),
+    "STOP_LOSS_PCT":      (0.008, 0.040),
     "TRAIL_PCT":          (0.030, 0.100),
     "MIN_NET_PROFIT_PCT": (0.006, 0.020),
 }

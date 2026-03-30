@@ -363,6 +363,131 @@ def _enforce_leveraged_fence(allocations: list[dict]) -> list[dict]:
     return result
 
 
+# ── Bear Regime Controls ──────────────────────────────────────────────────────
+
+BEAR_KELLY_MULTIPLIER = 0.50   # Additional position-size haircut in Bear/RISK-OFF
+SAFE_HAVEN_TICKERS    = {"GLD", "TLT"}   # Safe-haven assets checked for positive momentum
+
+
+def _apply_bear_half_kelly(allocations: list[dict]) -> list[dict]:
+    """
+    Bear regime capital-preservation step.
+    Applies an additional 0.50x multiplier to all non-SGOV kelly_fractions,
+    then injects the freed capacity as a SGOV slot.
+    This is on top of the existing half-Kelly baked into the vol-adjusted sizing,
+    making it an effective quarter-Kelly in a confirmed Bear regime.
+    """
+    active = [s for s in allocations if s["ticker"] != "SGOV" and s["kelly_fraction"] > 0]
+    if not active:
+        return allocations
+
+    excess = 0.0
+    result = []
+    for slot in allocations:
+        if slot["ticker"] != "SGOV" and slot["kelly_fraction"] > 0:
+            original_frac = slot["kelly_fraction"]
+            new_frac = round(original_frac * BEAR_KELLY_MULTIPLIER, 4)
+            excess += original_frac - new_frac
+            result.append({**slot, "kelly_fraction": new_frac})
+        else:
+            result.append(slot)
+
+    logger.warning(
+        f"Allocator | BEAR Half-Kelly: all positions scaled by {BEAR_KELLY_MULTIPLIER:.0%} "
+        f"— {excess:.1%} excess capital swept to SGOV"
+    )
+
+    if excess >= 0.001:
+        result = _inject_sgov_slot(
+            result, excess,
+            thesis=(
+                f"Bear Regime capital preservation: additional {BEAR_KELLY_MULTIPLIER:.0%} position-size "
+                f"haircut applied — excess {excess:.1%} held as SGOV."
+            ),
+        )
+
+    return result
+
+
+def _has_safe_haven_momentum(allocations: list[dict]) -> bool:
+    """
+    Returns True if any SGOV-replacement safe-haven asset (GLD or TLT) that
+    appears in the allocation list has positive 3-month momentum in the
+    market data cache.  If neither ticker is in the allocation, returns True
+    (no SGOV sweep — we can't assert the condition is failed).
+    """
+    present_safe_havens = [
+        s["ticker"] for s in allocations
+        if s["ticker"] in SAFE_HAVEN_TICKERS and s["ticker"] != "SGOV"
+    ]
+    if not present_safe_havens:
+        return True  # no safe havens in allocation — don't force SGOV
+
+    try:
+        from data.yfinance_client import get_cached_market_data
+        cache = get_cached_market_data()
+        by_ticker = cache.get("by_ticker", {}) if cache else {}
+        for ticker in present_safe_havens:
+            mom = by_ticker.get(ticker, {}).get("momentum_3mo", "negative")
+            if mom == "positive":
+                return True
+    except Exception as exc:
+        logger.debug(f"Allocator | Could not read safe-haven momentum: {exc}")
+        return True   # fail-safe: don't force SGOV if we can't check
+
+    return False   # no safe haven has positive 3-month momentum
+
+
+def _apply_bear_sgov_default(allocations: list[dict]) -> list[dict]:
+    """
+    Bear regime SGOV default sweep.
+    If NO safe-haven asset (GLD, TLT) in the allocation shows positive
+    3-month momentum, force ALL non-SGOV slots to SGOV.
+    This ensures that when even the safe havens are in downtrends the bot
+    holds 100% of non-vault equity in short-term Treasuries.
+    """
+    if _has_safe_haven_momentum(allocations):
+        return allocations  # at least one safe haven is bullish — normal allocation OK
+
+    # Calculate total kelly across all non-SGOV slots to preserve for SGOV
+    total_redirected = sum(
+        s["kelly_fraction"] for s in allocations
+        if s["ticker"] != "SGOV" and s["kelly_fraction"] > 0
+    )
+
+    logger.warning(
+        f"Allocator | BEAR SGOV Default: no safe-haven (GLD/TLT) has positive 3-month momentum — "
+        f"ALL {total_redirected:.1%} non-SGOV allocation redirected to SGOV"
+    )
+
+    result = []
+    max_slot = max(s["slot"] for s in allocations)
+    sgov_slot = 1
+    for slot in allocations:
+        if slot["ticker"] == "SGOV":
+            result.append(slot)
+        else:
+            result.append({
+                **SGOV_SLOT_TEMPLATE,
+                "slot": slot["slot"],
+                "thesis": (
+                    f"Bear Regime SGOV Default: no safe-haven has positive 3-month momentum. "
+                    f"{slot['ticker']} ({slot.get('asset_class', 'unknown')}) replaced with SGOV."
+                ),
+            })
+
+    if total_redirected >= 0.001:
+        result = _inject_sgov_slot(
+            result, total_redirected,
+            thesis=(
+                f"Bear Regime SGOV Default: {total_redirected:.1%} of equity swept to SGOV "
+                f"— no GLD/TLT with positive 3-month momentum."
+            ),
+        )
+
+    return result
+
+
 # ── Public Pipeline Functions ─────────────────────────────────────────────────
 
 def process_regime_llm_output(raw_json: str) -> RegimeAnalysisOutput:
@@ -408,6 +533,26 @@ def process_regime_llm_output(raw_json: str) -> RegimeAnalysisOutput:
 
     # Step 6: Normalise so non-SGOV total ≤ 1.0
     allocations = normalise_kelly_fractions(allocations)
+
+    # ── Bear Regime Controls (steps 6a & 6b) ─────────────────────────────────
+    # Only applied when the Alpaca bot has confirmed a Bear or RISK-OFF regime.
+    _BEAR_REGIMES_ALLOC = {"Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off"}
+    if regime in _BEAR_REGIMES_ALLOC:
+        logger.warning(
+            f"Allocator | Bear Regime active ('{regime}') — applying defensive controls"
+        )
+
+        # Step 6a: Half-Kelly multiplier — halve all position sizes, sweep excess to SGOV.
+        # This is additive on top of the existing vol-adjusted sizing, making the
+        # effective sizing ~quarter-Kelly of full Kelly to preserve capital.
+        allocations = _apply_bear_half_kelly(allocations)
+
+        # Step 6b: SGOV default sweep — if no safe-haven (GLD/TLT) has positive
+        # 3-month momentum, redirect ALL remaining capital to SGOV.
+        allocations = _apply_bear_sgov_default(allocations)
+
+        # Re-normalise after bear controls (excess was already redistributed to SGOV)
+        allocations = normalise_kelly_fractions(allocations)
 
     # Step 7: Apply hardcoded per-asset-class SL/TP (overrides LLM placeholder values)
     from analysis.hardcoded_exits import apply_hardcoded_exits

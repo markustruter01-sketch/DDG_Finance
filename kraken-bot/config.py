@@ -139,13 +139,23 @@ OHLCV_LIMIT      = 100    # How many recent candles to fetch each cycle.
 # These are the guardrails that protect the account from large losses.
 
 CASH_RESERVE          = 0.20   # Always keep at least 20% of total equity as cash.
-MAX_POSITION_FRACTION = 0.10   # No single position can exceed 10% of total equity.
-                               # (Down from 30% — with 10 slots, 10×10% = 100% of
-                               #  the 80% deployable ceiling, so cash reserve holds.)
-MAX_POSITIONS         = 10     # Maximum number of positions open simultaneously.
+MAX_POSITION_FRACTION = 0.10   # No single position can exceed 10% of total equity (normal regime).
+                               # In Bear/RISK-OFF regime this is overridden to 7.5%.
+MAX_POSITIONS         = 10     # Maximum number of positions (normal regime).
+                               # In Bear/RISK-OFF regime this is overridden to 5.
 RISK_FRACTION         = 0.01   # Risk 1% of total equity per trade.
-STOP_LOSS_PCT         = 0.02   # Hard stop loss at 2% against us.
+STOP_LOSS_PCT         = 0.015  # Hard stop loss at 1.5% against us (tightened from 2%).
 TRAIL_PCT             = 0.05   # Trailing take-profit kicks in after 5% gain.
+
+# ── VPIN Defensive Threshold ──────────────────────────────────────────────────
+# When VPIN exceeds this level, all new entries are blocked (toxic/institutional
+# flow detected). Lowered from 0.70 to 0.65 for a more selective/defensive posture.
+VPIN_ENTRY_BLOCK      = 0.65
+
+# ── Bear-Regime Position-Sizing Overrides ────────────────────────────────────
+# Applied when the Alpaca bot's market_regime.json signals BEAR or RISK-OFF.
+BEAR_MAX_POSITIONS       = 5     # Half the normal slot count
+BEAR_MAX_POSITION_FRACTION = 0.075  # 7.5% of equity per position
 
 MIN_NET_PROFIT_PCT    = 0.008  # Minimum required gross P&L before a mean-reversion
                                # exit is allowed.  Kraken charges 0.26% per side

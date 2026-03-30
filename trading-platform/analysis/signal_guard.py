@@ -168,8 +168,10 @@ def multi_source_consensus_guard(
         src = art["source"]
         cat = art["category"]
         art_words = _topic_words(art["title"])
-        if len(art_words) < 3:
-            return True   # very short titles — keep by default (can't meaningfully score)
+        # No short-title bypass: every article must meet the corroboration rule.
+        # An article with fewer than 3 significant words simply cannot form
+        # a ≥3-word topic overlap with any other article, so it will not pass —
+        # which is the correct conservative behaviour (drop uncertain signals).
         for other in articles_meta:
             if other is art:
                 continue
@@ -463,6 +465,7 @@ def run_all_guards(context: dict) -> GuardRunResult:
         news_data      (dict)  — output of news_client.fetch_news()
         market_data    (dict)  — output of yfinance_client.fetch_market_data()
         sentiment_band (str)   — market fear/greed label e.g. "Greed", "Neutral"
+        crypto_only    (bool)  — when True, skip temporal hard-block (crypto runs 24/7)
 
     Returns GuardRunResult with:
         hard_block           — True if temporal quarantine fired (LLM should be skipped)
@@ -475,23 +478,28 @@ def run_all_guards(context: dict) -> GuardRunResult:
     news_data      = context.get("news_data", {})
     market_data    = context.get("market_data", {})
     sentiment_band = context.get("sentiment_band", "Neutral")
+    crypto_only    = bool(context.get("crypto_only", False))
 
     results: list[GuardResult] = []
 
     # Guard 1 — Temporal (HARD, check first to bail early before expensive ops)
-    temporal_result = temporal_quarantine_guard()
-    results.append(temporal_result)
+    # Skipped for crypto_only mode: crypto markets run 24/7, including weekends.
+    # The authoritative pipeline.py pre-screen also skips crypto cycles, so
+    # this guard is only meaningful for full-market (equities) analysis.
+    if not crypto_only:
+        temporal_result = temporal_quarantine_guard()
+        results.append(temporal_result)
 
-    if not temporal_result.passed:
-        # Hard block — skip remaining guards (they are irrelevant now)
-        run_result = GuardRunResult(
-            results=results,
-            hard_block=True,
-            filtered_headlines=news_data.get("all_headlines", []),
-            adjusted_sentiment=None,
-        )
-        _last_guard_result = run_result.to_dict()
-        return run_result
+        if not temporal_result.passed:
+            # Hard block — skip remaining guards (they are irrelevant now)
+            run_result = GuardRunResult(
+                results=results,
+                hard_block=True,
+                filtered_headlines=news_data.get("all_headlines", []),
+                adjusted_sentiment=None,
+            )
+            _last_guard_result = run_result.to_dict()
+            return run_result
 
     # Guard 2 — Multi-source consensus (SOFT)
     consensus_result, filtered_headlines = multi_source_consensus_guard(news_data)

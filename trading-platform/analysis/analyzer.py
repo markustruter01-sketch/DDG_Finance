@@ -245,11 +245,15 @@ async def run_analysis_cycle(
 
     # ── Step 3: Pre-LLM Signal Guardrails ────────────────────────────────────
     # Run BEFORE building any prompts so guards can gate and adjust all inputs.
-    # TemporalQuarantine (hard): if active, NEVER call the LLM — use cached
-    # regime or raise a clean error so the pipeline skips execution entirely.
+    #
+    # Authoritative weekend/calendar hard-block lives in pipeline.py — by the
+    # time we reach here for full-market mode the pipeline has already cleared
+    # that gate.  For crypto_only=True the temporal quarantine is intentionally
+    # bypassed (crypto trades 24/7 including weekends).
+    #
     # MultiSourceConsensus (soft): filters noisy single-source headlines.
-    # PriceToSentimentDivergence (soft): adjusts market sentiment band when
-    # SPY volume conviction is absent.
+    # PriceToSentimentDivergence (soft, full-market only): adjusts market
+    # sentiment band when SPY volume conviction is absent.
     logger.info("Step 3/5 | Running pre-LLM signal guardrails...")
     from analysis.signal_guard import run_all_guards as _run_guards
     headlines_for_llm = news_data["all_headlines"]
@@ -269,27 +273,31 @@ async def run_analysis_cycle(
             "news_data":      news_data,
             "market_data":    market_data,
             "sentiment_band": _sentiment_band,
+            # Signal to run_all_guards: skip temporal hard-block for crypto
+            "crypto_only":    crypto_only,
         })
 
         headlines_for_llm = guard_result.filtered_headlines
         adjusted_sentiment = guard_result.adjusted_sentiment
 
         if guard_result.hard_block:
-            # Temporal quarantine is active — NEVER call the LLM.
+            # Temporal quarantine is active (should only reach here if the
+            # pipeline did not pre-screen, e.g. direct force-run).
             # Return cached regime when available; otherwise raise so the
-            # pipeline surfaces a clean `guardrail_blocked` state.
+            # caller surfaces a clean `guardrail_blocked` state.
             _reason = next(
                 (r.reason for r in guard_result.results if not r.passed and r.severity == "hard"),
                 "temporal quarantine active",
             )
             logger.warning(f"SignalGuard | HARD BLOCK: {_reason}")
-            cached_regime = get_regime_fallback()
-            if cached_regime is not None:
-                logger.info(
-                    f"SignalGuard | Returning cached regime '{cached_regime.regime}' "
-                    "(LLM call skipped — temporal quarantine)"
-                )
-                return cached_regime
+            if not crypto_only:
+                cached_regime = get_regime_fallback()
+                if cached_regime is not None:
+                    logger.info(
+                        f"SignalGuard | Returning cached regime '{cached_regime.regime}' "
+                        "(LLM call skipped — temporal quarantine)"
+                    )
+                    return cached_regime
             raise RuntimeError(
                 f"Signal guard hard block: {_reason}. No cached regime available — "
                 "pipeline must skip this cycle."

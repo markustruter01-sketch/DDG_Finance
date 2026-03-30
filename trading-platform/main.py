@@ -1604,7 +1604,7 @@ async def trip_kill_switch() -> dict:
     and blocks further trading for the rest of the day.
     """
     logger.warning("Kill switch MANUALLY tripped via API")
-    ks_check(current_equity=0.0)
+    ks_manual_trip(reason="manual_api_trip")
     return {"status": "tripped", "kill_switch": ks_get_state()}
 
 

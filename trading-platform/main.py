@@ -2031,7 +2031,10 @@ async def get_gemini_audit_status() -> dict:
     from core.veto_enforcer import get_veto_status
 
     result = get_last_gemini_audit()
-    result["veto_status"] = get_veto_status()
+    veto_status = get_veto_status()
+    result["veto_status"] = veto_status
+    result["veto_count"]  = veto_status.get("active_veto_count", 0)
+    result["last_run"]    = result.get("generated_at")
     return result
 
 

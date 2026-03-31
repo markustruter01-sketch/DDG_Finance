@@ -3262,6 +3262,71 @@ async def export_diagnostic_report() -> dict:
             row("Take profit:", "N/A", indent=2)
         row("Original thesis:", thesis[:120] if len(thesis) > 120 else thesis, indent=2)
 
+    # ── Short positions summary ──────────────────────────────────────────────
+    long_positions  = [p for p in positions if str(p.get("side", "long")).lower() != "short"]
+    short_positions = [p for p in positions if str(p.get("side", "long")).lower() == "short"]
+    bear_hedge_syms = {"SH", "PSQ", "SPXS", "SQQQ", "SRTY", "DOG"}
+
+    h2("SHORT & BEAR-HEDGE POSITIONS (ALGO SHORT SCANNER)")
+    if not short_positions:
+        lines.append("  No direct short positions open.")
+    else:
+        total_short_exposure = sum(abs(p.get("market_value") or 0) for p in short_positions)
+        total_short_pnl      = sum(p.get("unrealized_pl") or 0 for p in short_positions)
+        short_exposure_pct   = (total_short_exposure / equity * 100) if equity > 0 else 0
+        row("Open short positions:", str(len(short_positions)))
+        row("Total short exposure:", f"{_c(total_short_exposure)} ({_pct(short_exposure_pct)} of equity)")
+        row("Aggregate short P&L:", f"{_c(total_short_pnl)} (profit = positive when price falls)")
+        lines.append("")
+        lines.append(
+            f"  {'TICKER':<8} {'QTY':>8} {'ENTRY':>10} {'CURRENT':>10} "
+            f"{'MARKET VAL':>12} {'UNREAL P&L':>12}"
+        )
+        lines.append("  " + "-" * 66)
+        for sp in short_positions:
+            sym     = sp.get("symbol", "?")
+            qty     = sp.get("qty", 0)
+            entry   = sp.get("avg_entry_price") or 0
+            curr    = sp.get("current_price") or 0
+            mv      = sp.get("market_value") or 0
+            upl     = sp.get("unrealized_pl") or 0
+            lines.append(
+                f"  {sym:<8} {qty:>8.2f} {_c(entry):>10} {_c(curr):>10} "
+                f"{_c(mv):>12} {_c(upl):>12}"
+            )
+        lines.append("")
+
+    # ── Bear-hedge long positions (SPXS / SQQQ / SRTY / SH / PSQ / DOG) ────
+    bear_hedge_longs = [p for p in long_positions if p.get("symbol", "") in bear_hedge_syms]
+    if bear_hedge_longs:
+        total_bh_exposure = sum(abs(p.get("market_value") or 0) for p in bear_hedge_longs)
+        total_bh_pnl      = sum(p.get("unrealized_pl") or 0 for p in bear_hedge_longs)
+        bh_exposure_pct   = (total_bh_exposure / equity * 100) if equity > 0 else 0
+        row("Bear-hedge ETF positions:", str(len(bear_hedge_longs)))
+        row("Bear-hedge exposure:", f"{_c(total_bh_exposure)} ({_pct(bh_exposure_pct)} of equity)")
+        row("Bear-hedge P&L:", _c(total_bh_pnl))
+        lines.append("")
+        lines.append(
+            f"  {'TICKER':<8} {'QTY':>8} {'ENTRY':>10} {'CURRENT':>10} "
+            f"{'MARKET VAL':>12} {'UNREAL P&L':>12} {'ENTRY_TIME'}"
+        )
+        lines.append("  " + "-" * 80)
+        for bp in bear_hedge_longs:
+            sym    = bp.get("symbol", "?")
+            qty    = bp.get("qty", 0)
+            entry  = bp.get("avg_entry_price") or 0
+            curr   = bp.get("current_price") or 0
+            mv     = bp.get("market_value") or 0
+            upl    = bp.get("unrealized_pl") or 0
+            et     = bp.get("entry_time") or "N/A"
+            lines.append(
+                f"  {sym:<8} {qty:>8.2f} {_c(entry):>10} {_c(curr):>10} "
+                f"{_c(mv):>12} {_c(upl):>12} {str(et)[:19]}"
+            )
+        lines.append("")
+    else:
+        lines.append("  No bear-hedge ETF positions open.")
+
     # ── Latest AI allocation ──
     h2("LATEST AI ALLOCATION DECISION (GROQ LLAMA 3.3 70B)")
     last_alloc = last_run.get("last_allocation") or []

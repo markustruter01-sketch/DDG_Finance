@@ -357,19 +357,19 @@ def _try_enter_short(
 
         # Log to trade journal
         try:
+            import uuid
             from analysis.trade_journal import log_trade
             log_trade(
+                trade_id=f"short_{ticker}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
                 ticker=ticker,
                 asset_class="direct_short",
                 conviction_score=0.0,
-                kelly_fraction=round(notional_required / equity, 4),
-                fill_price=fill_price,
-                intended_price=price,
-                notional_usd=notional_required,
-                thesis=(
-                    f"Algo short entry: Z-score={signals['zscore']:.2f} "
-                    f"RSI={signals['rsi']:.1f} (entry thresholds Z>{ZSCORE_ENTRY_THRESHOLD} RSI>{RSI_ENTRY_THRESHOLD})"
+                original_thesis=(
+                    f"Algo short ENTRY: Z={signals['zscore']:.2f} "
+                    f"RSI={signals['rsi']:.1f} qty={qty} fill=${fill_price:.2f} "
+                    f"(thresholds Z>{ZSCORE_ENTRY_THRESHOLD} RSI>{RSI_ENTRY_THRESHOLD})"
                 ),
+                intended_price=price,
             )
         except Exception as log_exc:
             logger.warning(f"ShortScanner | Journal log failed for {ticker}: {log_exc}")
@@ -463,19 +463,17 @@ def _try_exit_short(
 
         # Journal log the exit
         try:
+            import uuid
             entry_price = float(pos.get("avg_entry_price") or current_price)
-            notional_closed = qty * current_price
             pl = float(pos.get("unrealized_pl", 0.0))
             from analysis.trade_journal import log_trade
             log_trade(
+                trade_id=f"short_exit_{ticker}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
                 ticker=ticker,
                 asset_class="direct_short",
                 conviction_score=0.0,
-                kelly_fraction=0.0,
-                fill_price=current_price,
+                original_thesis=f"Algo short EXIT: {reason} | entry=${entry_price:.2f} cover=${current_price:.2f} pl=${pl:+.2f}",
                 intended_price=current_price,
-                notional_usd=notional_closed,
-                thesis=f"Algo short EXIT: {reason} | entry=${entry_price:.2f} pl=${pl:+.2f}",
             )
         except Exception as _log_exc:
             logger.debug(f"ShortScanner | Exit journal log failed for {ticker}: {_log_exc}")
@@ -606,19 +604,19 @@ def run_scan(
                     result["skips"].append({"ticker": ticker, "reason": skip_reason})
                     # Journal-log entry-signal skips (borrow/margin/exposure blocks)
                     try:
+                        import uuid
                         from analysis.trade_journal import log_trade
                         log_trade(
+                            trade_id=f"short_skip_{ticker}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
                             ticker=ticker,
                             asset_class="direct_short",
                             conviction_score=0.0,
-                            kelly_fraction=0.0,
-                            fill_price=signals["close"],
-                            intended_price=signals["close"],
-                            notional_usd=0.0,
-                            thesis=(
+                            original_thesis=(
                                 f"Algo short SKIP ({skip_reason}): "
-                                f"Z={signals['zscore']:.2f} RSI={signals['rsi']:.1f}"
+                                f"Z={signals['zscore']:.2f} RSI={signals['rsi']:.1f} "
+                                f"price=${signals['close']:.2f}"
                             ),
+                            intended_price=signals["close"],
                         )
                     except Exception:
                         pass

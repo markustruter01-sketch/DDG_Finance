@@ -75,6 +75,29 @@ def get_account() -> dict:
 @alpaca_retry
 def get_positions() -> list[dict]:
     positions: list[Position] = _client().get_all_positions()
+
+    # Enrich entry_time from ratchet_stops.last_updated (DATE of stop creation).
+    # Used by check_time_exits() to enforce 5-day 3× inverse ETF exit rule.
+    # last_updated is a DATE — converted to ISO string for _count_trading_days_held().
+    _entry_times: dict[str, str] = {}
+    try:
+        from db.postgres import is_pg_available, get_conn
+        if is_pg_available():
+            with get_conn() as _conn:
+                with _conn.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT symbol, last_updated FROM ratchet_stops "
+                        "WHERE last_updated IS NOT NULL"
+                    )
+                    for _row in _cur.fetchall():
+                        _sym, _ts = _row[0], _row[1]
+                        # Keep earliest entry_time per symbol (first open)
+                        _ts_str = str(_ts)
+                        if _sym not in _entry_times or _ts_str < _entry_times[_sym]:
+                            _entry_times[_sym] = _ts_str
+    except Exception:
+        pass  # Non-fatal — entry_time defaults to None (time-exit won't fire)
+
     return [
         {
             "symbol":          p.symbol,
@@ -85,6 +108,7 @@ def get_positions() -> list[dict]:
             "unrealized_pl":   float(p.unrealized_pl),
             "unrealized_plpc": float(p.unrealized_plpc),
             "current_price":   float(p.current_price),
+            "entry_time":      _entry_times.get(p.symbol),
         }
         for p in positions
     ]

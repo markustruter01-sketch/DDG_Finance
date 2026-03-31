@@ -3136,6 +3136,221 @@ function KrakenBotCard({ botId }: { botId: string }) {
   );
 }
 
+function CommandersLog() {
+  const { data: recentTrades } = useRecentTrades(20);
+  const { data: journal } = useJournal();
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
+  const djPerf = useKrakenPerformance("davy-jones");
+  const bbPerf = useKrakenPerformance("blackbeard");
+  const caPerf = useKrakenPerformance("calypso");
+
+  const oracleStreak = useMemo(() => computeStreak(recentTrades?.trades ?? []), [recentTrades?.trades]);
+  const oracleWins = journal?.summary?.wins ?? 0;
+  const oracleTotal = journal?.summary?.total ?? 0;
+  const oracleXP = computeXP(oracleWins, oracleTotal);
+  const oracleRank = getRank(oracleXP, ORACLE_RANKS);
+
+  const krakenBots = [
+    { id: "davy-jones", status: djStatus.data, perf: djPerf.data },
+    { id: "blackbeard", status: bbStatus.data, perf: bbPerf.data },
+    { id: "calypso", status: caStatus.data, perf: caPerf.data },
+  ];
+
+  const entries = [
+    {
+      name: "Oracle",
+      icon: "🔮",
+      accent: "#818cf8",
+      streak: oracleStreak,
+      xp: oracleXP,
+      rank: oracleRank,
+      wins: oracleWins,
+      total: oracleTotal,
+      ranks: ORACLE_RANKS,
+    },
+    ...krakenBots.map((b) => {
+      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      const recentKrTrades = [...(b.status?.recent_trades ?? [])].reverse();
+      const streak = computeStreak(recentKrTrades);
+      const wins = b.perf?.win_count ?? 0;
+      const total = b.perf?.total_trades ?? 0;
+      const xp = computeXP(wins, total);
+      const rank = getRank(xp, KRAKEN_RANKS);
+      return {
+        name: b.status?.bot_name ?? b.id.replace("-", " "),
+        icon: t.icon,
+        accent: t.accent,
+        streak,
+        xp,
+        rank,
+        wins,
+        total,
+        ranks: KRAKEN_RANKS,
+      };
+    }),
+  ];
+
+  return (
+    <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-r from-slate-950/90 via-amber-950/5 to-slate-950/90 p-4 shadow-[0_0_40px_rgba(245,158,11,0.04)]">
+      <div className="flex items-center gap-2 mb-3">
+        <Trophy className="h-3.5 w-3.5 text-amber-400" />
+        <span className="text-[10px] uppercase font-bold tracking-widest text-amber-400/80">Commander&apos;s Log</span>
+        <span className="text-[8px] text-muted-foreground/40 ml-auto font-mono">{entries.length} agents</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {entries.map((e) => {
+          const winRate = e.total > 0 ? ((e.wins / e.total) * 100).toFixed(0) : "—";
+          const next = getNextRank(e.xp, e.ranks);
+          const progress = next
+            ? Math.min(((e.xp - e.rank.xp) / (next.xp - e.rank.xp)) * 100, 100)
+            : 100;
+          return (
+            <div
+              key={e.name}
+              className="rounded-xl border border-white/5 bg-slate-900/60 p-3 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">{e.icon}</span>
+                  <span className="text-[10px] font-bold text-white capitalize truncate">{e.name}</span>
+                </div>
+                <StreakChip count={e.streak.count} direction={e.streak.direction} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("text-[9px] font-bold", e.rank.tw)}>
+                  {e.rank.icon} {e.rank.label}
+                </span>
+              </div>
+              <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: e.accent }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${progress}%` }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[8px] text-muted-foreground/50 font-mono">
+                <span>{e.xp.toLocaleString()} XP</span>
+                <span>{winRate !== "—" ? `${winRate}% WR` : "— WR"} · {e.total} trades</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FleetPerformanceHero() {
+  const { data: portfolio } = usePortfolio();
+  const { data: kraken } = useKrakenStatus();
+  const { data: journal } = useJournal();
+  const djPerf = useKrakenPerformance("davy-jones");
+  const bbPerf = useKrakenPerformance("blackbeard");
+  const caPerf = useKrakenPerformance("calypso");
+
+  const alpacaEquity = portfolio?.account.equity ?? 0;
+  const krakenEquity = kraken?.total_equity_usd ?? 0;
+  const grandTotal = alpacaEquity + krakenEquity;
+
+  const alpacaWins = journal?.summary?.wins ?? 0;
+  const alpacaTotal = journal?.summary?.total ?? 0;
+
+  const allPerfs = [djPerf.data, bbPerf.data, caPerf.data].filter(Boolean);
+  const krakenWins = allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
+  const krakenTotal = allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
+
+  const totalWins = alpacaWins + krakenWins;
+  const totalTrades = alpacaTotal + krakenTotal;
+  const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
+
+  const bestKrakenPct = Math.max(0, ...allPerfs.map(p => p?.best_trade_pct ?? 0));
+  const worstKrakenPct = Math.min(0, ...allPerfs.map(p => p?.worst_trade_pct ?? 0));
+
+  const stats = [
+    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: "2 exchanges" },
+    { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
+    { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
+    { label: "Best Trade", value: bestKrakenPct > 0 ? `+${bestKrakenPct.toFixed(2)}%` : "—", color: "text-green-400", sub: "kraken fleet best" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-3"
+        >
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">{s.label}</div>
+          <div className={cn("text-lg font-mono font-bold", s.color)}>{s.value}</div>
+          <div className="text-[8px] text-muted-foreground/40 mt-0.5">{s.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FleetComparisonMini() {
+  const djPerf = useKrakenPerformance("davy-jones");
+  const bbPerf = useKrakenPerformance("blackbeard");
+  const caPerf = useKrakenPerformance("calypso");
+
+  const bots = [
+    { id: "davy-jones", data: djPerf.data },
+    { id: "blackbeard", data: bbPerf.data },
+    { id: "calypso", data: caPerf.data },
+  ];
+
+  const maxTrades = Math.max(1, ...bots.map(b => b.data?.total_trades ?? 0));
+
+  return (
+    <div className="rounded-2xl border border-cyan-500/10 bg-slate-900/40 overflow-hidden">
+      <div className="px-4 py-2 text-[9px] uppercase font-bold text-cyan-400/60 tracking-widest border-b border-white/5 flex items-center gap-2">
+        <Anchor className="h-3 w-3" />
+        <span>Kraken Fleet</span>
+      </div>
+      <div className="p-3 space-y-2">
+        {bots.map((b) => {
+          const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+          const trades = b.data?.total_trades ?? 0;
+          const winRate = b.data?.win_rate_pct;
+          const pnl = b.data?.total_pnl_usd;
+          const barW = maxTrades > 0 ? (trades / maxTrades) * 100 : 0;
+          return (
+            <div key={b.id} className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 w-24 shrink-0">
+                <span className="text-xs">{t.icon}</span>
+                <span className="text-[10px] font-semibold text-white capitalize truncate">{b.id.replace("-", " ")}</span>
+              </div>
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ backgroundColor: t.accent }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${barW}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[9px] font-mono text-muted-foreground">{trades}t</span>
+                <span className={cn("text-[9px] font-mono font-semibold", winRate != null && winRate >= 50 ? "text-green-400" : winRate != null ? "text-red-400" : "text-muted-foreground")}>
+                  {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
+                </span>
+                <span className={cn("text-[9px] font-mono font-bold w-16 text-right", (pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                  {pnl != null ? `${pnl >= 0 ? "+" : ""}$${Math.abs(pnl).toFixed(0)}` : "—"}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function KrakenFleetSection() {
   const { data: bots } = useKrakenBots();
   const botIds = bots?.map(b => b.bot_id) ?? ["davy-jones"];
@@ -5284,15 +5499,11 @@ function KrakenAttributionPanel() {
 function AllocationSection() {
   const { data } = useLatestAllocation();
 
-  if (!data?.allocation) return (
-    <Card className="border-dashed border-white/10 bg-transparent h-48 flex items-center justify-center">
-      <div className="flex flex-col items-center gap-2">
-        <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}>
-          <LayoutList className="h-8 w-8 text-muted-foreground/20" />
-        </motion.div>
-        <p className="text-muted-foreground italic text-sm">No allocation plan yet — the AI will generate one on the next cycle.</p>
-      </div>
-    </Card>
+  if (!data?.allocation?.length) return (
+    <div className="rounded-xl border border-dashed border-white/5 bg-transparent px-4 py-3 flex items-center gap-3">
+      <LayoutList className="h-4 w-4 text-muted-foreground/20 shrink-0" />
+      <p className="text-muted-foreground/40 italic text-xs">No allocation plan yet — awaiting next AI cycle.</p>
+    </div>
   );
 
   const slotCount = data.allocation.length;
@@ -6609,10 +6820,28 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
-        {/* ═══ OVERVIEW TAB — portfolio stats + live positions ═══ */}
+        {/* ═══ OVERVIEW TAB — Commander's Log + Fleet Hero + portfolio + positions ═══ */}
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+          className={mobileHide(['overview'])}
+        >
+          <SafeSection label="Commander's Log">
+            <CommandersLog />
+          </SafeSection>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}
+          className={mobileHide(['overview'])}
+        >
+          <SafeSection label="Fleet Performance">
+            <FleetPerformanceHero />
+          </SafeSection>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}
           className={mobileHide(['overview'])}
         >
           <SafeSection label="Portfolio Metrics">
@@ -6620,14 +6849,22 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
-          className={mobileHide(['overview'])}
-        >
-          <SafeSection label="Live Positions">
-            <LivePositionsSection />
-          </SafeSection>
-        </motion.div>
+        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['overview']))}>
+          <motion.div className="lg:col-span-2"
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+          >
+            <SafeSection label="Live Positions">
+              <LivePositionsSection />
+            </SafeSection>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+          >
+            <SafeSection label="Kraken Fleet Overview">
+              <FleetComparisonMini />
+            </SafeSection>
+          </motion.div>
+        </div>
 
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}

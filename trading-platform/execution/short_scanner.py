@@ -535,7 +535,25 @@ def run_scan(
     -------
     dict with scan summary: { regime, activated, entries, exits, skips, errors }
     """
-    regime_str = str(regime) if regime else "unknown"
+    # Activation gate: read market_regime.json first (the authoritative persisted
+    # regime written by the pipeline each cycle), then fall back to the passed
+    # `regime` argument if the file is missing or unparseable.
+    _file_regime: Optional[str] = None
+    try:
+        from pathlib import Path as _Path
+        import json as _json
+        _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
+        if _regime_path.exists() and _regime_path.stat().st_size > 0:
+            _regime_data = _json.loads(_regime_path.read_text())
+            _file_regime = str(_regime_data.get("regime", "") or "").strip() or None
+    except Exception as _rj_exc:
+        logger.debug(f"ShortScanner | market_regime.json read failed: {_rj_exc} — using passed regime")
+
+    regime_str = _file_regime or (str(regime) if regime else "unknown")
+    logger.debug(
+        f"ShortScanner | regime resolved to '{regime_str}' "
+        f"(source: {'market_regime.json' if _file_regime else 'pipeline arg'})"
+    )
 
     result: dict = {
         "regime":    regime_str,
@@ -663,6 +681,25 @@ def run_scan(
                     f"ShortScanner | SCAN {ticker}: "
                     f"Z={signals['zscore']:.2f} RSI={signals['rsi']:.1f} — signal not met"
                 )
+                # Journal all scan outcomes (including signal-not-met) for full audit trail
+                try:
+                    import uuid
+                    from analysis.trade_journal import log_trade
+                    log_trade(
+                        trade_id=f"short_scan_{ticker}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
+                        ticker=ticker,
+                        asset_class="direct_short",
+                        conviction_score=0.0,
+                        original_thesis=(
+                            f"Algo short SCAN (signal not met): "
+                            f"Z={signals['zscore']:.2f} (need >{ZSCORE_ENTRY_THRESHOLD}) "
+                            f"RSI={signals['rsi']:.1f} (need >{RSI_ENTRY_THRESHOLD}) "
+                            f"price=${signals['close']:.2f}"
+                        ),
+                        intended_price=signals["close"],
+                    )
+                except Exception:
+                    pass
 
         except Exception as exc:
             logger.error(f"ShortScanner | Unexpected error on {ticker}: {exc}")

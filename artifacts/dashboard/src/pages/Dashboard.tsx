@@ -519,7 +519,7 @@ function AlpacaPositionCard({
       className={cn(
         "rounded-lg border cursor-pointer select-none transition-all duration-200",
         isShort
-          ? "border-purple-500/25 bg-purple-950/[0.08] hover:bg-purple-950/20"
+          ? "border-red-500/25 bg-red-950/[0.08] hover:bg-red-950/20"
           : isUp
             ? "border-green-500/20 bg-green-950/[0.07] hover:bg-green-950/20"
             : "border-red-500/15 bg-red-950/[0.07] hover:bg-red-950/20"
@@ -529,7 +529,7 @@ function AlpacaPositionCard({
       <div className={cn("flex items-center gap-2 px-3 overflow-hidden", compact ? "py-1.5" : "py-2")}>
         <span className={cn(
           "w-0.5 h-4 rounded-full shrink-0",
-          isShort ? "bg-purple-400/70" : isUp ? "bg-green-500/70" : "bg-red-400/60"
+          isShort ? "bg-red-500/70" : isUp ? "bg-green-500/70" : "bg-red-400/60"
         )} />
         <span className="font-bold font-mono text-white text-[11px] w-12 shrink-0">{pos.symbol}</span>
         {isBearHedge && (
@@ -543,7 +543,7 @@ function AlpacaPositionCard({
           </span>
         )}
         {isShort ? (
-          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-purple-300 border-purple-500/40 bg-purple-500/15 shrink-0">
+          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-red-300 border-red-500/40 bg-red-500/15 shrink-0">
             SHORT
           </span>
         ) : (
@@ -728,7 +728,7 @@ function AlpacaPositionsPanel({
         </Badge>
         <span className="text-[9px] text-muted-foreground/30 ml-1">equity positions</span>
         {shortPositions.length > 0 && (
-          <Badge variant="outline" className="text-[8px] px-1 py-0 border-purple-500/30 text-purple-400/60 ml-1">
+          <Badge variant="outline" className="text-[8px] px-1 py-0 border-red-500/30 text-red-400/70 ml-1">
             {shortPositions.length} short
           </Badge>
         )}

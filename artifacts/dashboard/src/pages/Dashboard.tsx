@@ -507,6 +507,9 @@ function AlpacaPositionCard({
   compact?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isShort = (pos.side ?? "long").toLowerCase() === "short";
+  const isBearHedge = (pos.asset_class ?? "").toLowerCase() === "bear_hedge";
+  // For short positions, P&L logic is the same (negative pl = loss, positive = gain from short)
   const isUp  = pos.unrealized_pl >= 0;
   const pnlPct = (pos.unrealized_plpc ?? 0) * 100;
 
@@ -515,21 +518,39 @@ function AlpacaPositionCard({
       onClick={() => setExpanded(v => !v)}
       className={cn(
         "rounded-lg border cursor-pointer select-none transition-all duration-200",
-        isUp
-          ? "border-green-500/20 bg-green-950/[0.07] hover:bg-green-950/20"
-          : "border-red-500/15 bg-red-950/[0.07] hover:bg-red-950/20"
+        isShort
+          ? "border-purple-500/25 bg-purple-950/[0.08] hover:bg-purple-950/20"
+          : isUp
+            ? "border-green-500/20 bg-green-950/[0.07] hover:bg-green-950/20"
+            : "border-red-500/15 bg-red-950/[0.07] hover:bg-red-950/20"
       )}
     >
       {/* ── Collapsed header ── */}
       <div className={cn("flex items-center gap-2 px-3 overflow-hidden", compact ? "py-1.5" : "py-2")}>
-        <span className={cn("w-0.5 h-4 rounded-full shrink-0", isUp ? "bg-green-500/70" : "bg-red-400/60")} />
+        <span className={cn(
+          "w-0.5 h-4 rounded-full shrink-0",
+          isShort ? "bg-purple-400/70" : isUp ? "bg-green-500/70" : "bg-red-400/60"
+        )} />
         <span className="font-bold font-mono text-white text-[11px] w-12 shrink-0">{pos.symbol}</span>
-        <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full border text-orange-400 border-orange-500/30 bg-orange-500/10 shrink-0">
-          DEGEN
-        </span>
-        <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-green-400 border-green-500/30 bg-green-500/10 shrink-0">
-          LONG
-        </span>
+        {isBearHedge && (
+          <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full border text-orange-400 border-orange-500/30 bg-orange-500/10 shrink-0">
+            BEAR
+          </span>
+        )}
+        {!isBearHedge && !isShort && (
+          <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-full border text-orange-400 border-orange-500/30 bg-orange-500/10 shrink-0">
+            DEGEN
+          </span>
+        )}
+        {isShort ? (
+          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-purple-300 border-purple-500/40 bg-purple-500/15 shrink-0">
+            SHORT
+          </span>
+        ) : (
+          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border text-green-400 border-green-500/30 bg-green-500/10 shrink-0">
+            LONG
+          </span>
+        )}
         <MarketStatusBadge symbol={pos.symbol} isCrypto={isAssetCrypto(pos.symbol)} />
         {/* P&L */}
         <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
@@ -687,7 +708,11 @@ function AlpacaPositionsPanel({
   const [open, setOpen] = useState(true);
   if (positions.length === 0) return null;
 
-  const totalPnl = positions.reduce((sum, p) => sum + p.unrealized_pl, 0);
+  const longPositions  = positions.filter(p => (p.side ?? "long").toLowerCase() !== "short");
+  const shortPositions = positions.filter(p => (p.side ?? "long").toLowerCase() === "short");
+  const totalPnl  = positions.reduce((sum, p) => sum + p.unrealized_pl, 0);
+  const shortPnl  = shortPositions.reduce((sum, p) => sum + p.unrealized_pl, 0);
+  const shortExposure = shortPositions.reduce((sum, p) => sum + Math.abs(p.market_value), 0);
   const isPnlUp  = totalPnl >= 0;
 
   return (
@@ -702,6 +727,11 @@ function AlpacaPositionsPanel({
           {positions.length}
         </Badge>
         <span className="text-[9px] text-muted-foreground/30 ml-1">equity positions</span>
+        {shortPositions.length > 0 && (
+          <Badge variant="outline" className="text-[8px] px-1 py-0 border-purple-500/30 text-purple-400/60 ml-1">
+            {shortPositions.length} short
+          </Badge>
+        )}
         <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", isPnlUp ? "text-green-400" : "text-red-400")}>
           {isPnlUp ? "+" : ""}{formatCurrency(totalPnl)}
         </span>
@@ -717,8 +747,42 @@ function AlpacaPositionsPanel({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
+            {/* Algo Short Scanner Stats Bar */}
+            {shortPositions.length > 0 && (
+              <div className="mx-3 mb-2 px-3 py-2 rounded-lg border border-purple-500/20 bg-purple-950/[0.12]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-purple-400/70">Bear Scanner</span>
+                    <span className="text-[8px] text-muted-foreground/40">{shortPositions.length} algo short{shortPositions.length > 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[9px] font-mono text-muted-foreground/50">
+                      Exposure: {formatCurrency(shortExposure)}
+                    </span>
+                    <span className={cn("text-[9px] font-mono font-semibold tabular-nums", shortPnl >= 0 ? "text-green-400" : "text-red-400")}>
+                      {shortPnl >= 0 ? "+" : ""}{formatCurrency(shortPnl)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="px-3 pb-3 space-y-1.5">
-              {positions.map((pos) => (
+              {/* Render longs first, then shorts */}
+              {longPositions.map((pos) => (
+                <AlpacaPositionCard
+                  key={pos.symbol}
+                  pos={pos}
+                  onThesisClick={onThesisClick}
+                  onEject={onEject}
+                  confirmClose={confirmClose}
+                  setConfirmClose={setConfirmClose}
+                  isClosing={isClosing}
+                  isRebalancing={isRebalancing}
+                  closingSymbol={closingSymbol}
+                />
+              ))}
+              {shortPositions.map((pos) => (
                 <AlpacaPositionCard
                   key={pos.symbol}
                   pos={pos}

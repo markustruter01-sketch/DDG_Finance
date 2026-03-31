@@ -42,6 +42,7 @@ from analysis.schemas import (
     RegimeAllocationSlot, RegimeAnalysisOutput,
     CryptoAllocationSlot, CryptoAnalysisOutput,
     LEVERAGED_RISK_TICKERS,
+    BEAR_HEDGE_TICKERS, BEAR_HEDGE_3X_TICKERS,
 )
 from config.settings import settings
 from portfolio.kelly import compute_kelly_for_slots, normalise_kelly_fractions
@@ -315,52 +316,84 @@ def _enforce_asset_class_cap(allocations: list[dict]) -> list[dict]:
 def _enforce_leveraged_fence(allocations: list[dict]) -> list[dict]:
     """
     Cap total kelly_fraction for the leveraged_risk group to MAX_LEVERAGED_KELLY (20%).
-    Excess is injected as a non-zero-kelly SGOV slot so it is actively purchased.
+    Also applies the same 20% cap to the 3× bear hedge group (SPXS, SQQQ, SRTY).
+    Excess from either group is injected as a non-zero-kelly SGOV slot.
     """
+    # ── 1. Standard leveraged_risk fence (TQQQ, SOXL, UPRO) ─────────────────
     leveraged = [
         s for s in allocations
         if (s.get("asset_class") == "leveraged_risk" or s.get("ticker") in LEVERAGED_RISK_TICKERS)
         and s["kelly_fraction"] > 0
     ]
-    if not leveraged:
-        return allocations
-
-    total_leveraged = sum(s["kelly_fraction"] for s in leveraged)
-    if total_leveraged <= MAX_LEVERAGED_KELLY:
-        logger.info(
-            f"Allocator | Leveraged fence: total={total_leveraged:.1%} ≤ "
-            f"{MAX_LEVERAGED_KELLY:.0%} cap — no adjustment"
-        )
-        return allocations
-
-    scale = MAX_LEVERAGED_KELLY / total_leveraged
-    excess_kelly = round(total_leveraged - MAX_LEVERAGED_KELLY, 4)
-    tickers_capped = [s["ticker"] for s in leveraged]
-
-    logger.warning(
-        f"Allocator | Leveraged fence TRIGGERED: {tickers_capped} total={total_leveraged:.1%} "
-        f"→ capped to {MAX_LEVERAGED_KELLY:.0%} | excess={excess_kelly:.4f} swept to SGOV"
-    )
-
-    result = []
-    for slot in allocations:
-        is_letf = (
-            slot.get("asset_class") == "leveraged_risk"
-            or slot.get("ticker") in LEVERAGED_RISK_TICKERS
-        )
-        if is_letf and slot["kelly_fraction"] > 0:
-            result.append({**slot, "kelly_fraction": round(slot["kelly_fraction"] * scale, 4)})
+    if leveraged:
+        total_leveraged = sum(s["kelly_fraction"] for s in leveraged)
+        if total_leveraged > MAX_LEVERAGED_KELLY:
+            scale = MAX_LEVERAGED_KELLY / total_leveraged
+            excess_kelly = round(total_leveraged - MAX_LEVERAGED_KELLY, 4)
+            tickers_capped = [s["ticker"] for s in leveraged]
+            logger.warning(
+                f"Allocator | Leveraged fence TRIGGERED: {tickers_capped} total={total_leveraged:.1%} "
+                f"→ capped to {MAX_LEVERAGED_KELLY:.0%} | excess={excess_kelly:.4f} swept to SGOV"
+            )
+            result_pass1 = []
+            for slot in allocations:
+                is_letf = (
+                    slot.get("asset_class") == "leveraged_risk"
+                    or slot.get("ticker") in LEVERAGED_RISK_TICKERS
+                )
+                if is_letf and slot["kelly_fraction"] > 0:
+                    result_pass1.append({**slot, "kelly_fraction": round(slot["kelly_fraction"] * scale, 4)})
+                else:
+                    result_pass1.append(slot)
+            if excess_kelly >= 0.001:
+                result_pass1 = _inject_sgov_slot(
+                    result_pass1, excess_kelly,
+                    thesis=f"Leveraged risk fence: {excess_kelly:.1%} excess swept from "
+                           f"{', '.join(tickers_capped)}.",
+                )
+            allocations = result_pass1
         else:
-            result.append(slot)
+            logger.info(
+                f"Allocator | Leveraged fence: total={total_leveraged:.1%} ≤ "
+                f"{MAX_LEVERAGED_KELLY:.0%} cap — no adjustment"
+            )
 
-    if excess_kelly >= 0.001:
-        result = _inject_sgov_slot(
-            result, excess_kelly,
-            thesis=f"Leveraged risk fence: {excess_kelly:.1%} excess swept from "
-                   f"{', '.join(tickers_capped)}.",
-        )
+    # ── 2. Bear hedge 3× fence (SPXS, SQQQ, SRTY) — same 20% combined cap ──
+    bear3x = [
+        s for s in allocations
+        if s.get("ticker") in BEAR_HEDGE_3X_TICKERS
+        and s["kelly_fraction"] > 0
+    ]
+    if bear3x:
+        total_bear3x = sum(s["kelly_fraction"] for s in bear3x)
+        if total_bear3x > MAX_LEVERAGED_KELLY:
+            scale = MAX_LEVERAGED_KELLY / total_bear3x
+            excess_kelly = round(total_bear3x - MAX_LEVERAGED_KELLY, 4)
+            tickers_capped = [s["ticker"] for s in bear3x]
+            logger.warning(
+                f"Allocator | Bear-hedge 3× fence TRIGGERED: {tickers_capped} total={total_bear3x:.1%} "
+                f"→ capped to {MAX_LEVERAGED_KELLY:.0%} | excess={excess_kelly:.4f} swept to SGOV"
+            )
+            result_pass2 = []
+            for slot in allocations:
+                if slot.get("ticker") in BEAR_HEDGE_3X_TICKERS and slot["kelly_fraction"] > 0:
+                    result_pass2.append({**slot, "kelly_fraction": round(slot["kelly_fraction"] * scale, 4)})
+                else:
+                    result_pass2.append(slot)
+            if excess_kelly >= 0.001:
+                result_pass2 = _inject_sgov_slot(
+                    result_pass2, excess_kelly,
+                    thesis=f"Bear-hedge 3× fence: {excess_kelly:.1%} excess swept from "
+                           f"{', '.join(tickers_capped)}.",
+                )
+            allocations = result_pass2
+        else:
+            logger.info(
+                f"Allocator | Bear-hedge 3× fence: total={total_bear3x:.1%} ≤ "
+                f"{MAX_LEVERAGED_KELLY:.0%} cap — no adjustment"
+            )
 
-    return result
+    return allocations
 
 
 # ── Bear Regime Controls ──────────────────────────────────────────────────────

@@ -16,10 +16,25 @@ Asset-class defaults (midpoint of back-tested ranges):
   commodity       SL = -8%   TP = +18%
   crypto_spot     SL = -10%  TP = +25%
   leveraged_risk  SL = -8%   TP = +20%
+  bear_hedge      SL = -8%   TP = +20%  (same risk profile as leveraged)
   cash (SGOV)     SL = -1%   TP = +1%   (nominal — never triggered in practice)
+
+5-Day Time Exit (v4.4)
+-----------------------
+  3× inverse ETFs (SPXS, SQQQ, SRTY) decay rapidly due to daily rebalancing.
+  check_time_exits() is called from the pipeline each cycle and force-exits
+  any 3× inverse ETF position held for >= 5 trading days.
 """
 
+import math
+from datetime import date, datetime, timezone
+from typing import Any
+
 from loguru import logger
+
+# 3× inverse ETFs subject to 5-trading-day max hold
+_BEAR_HEDGE_3X: frozenset[str] = frozenset({"SPXS", "SQQQ", "SRTY"})
+_MAX_HOLD_TRADING_DAYS: int = 5
 
 
 _SL_TP_BY_CLASS: dict[str, tuple[float, float]] = {
@@ -28,6 +43,7 @@ _SL_TP_BY_CLASS: dict[str, tuple[float, float]] = {
     "commodity":       (-0.08,  0.18),
     "crypto_spot":     (-0.10,  0.25),
     "leveraged_risk":  (-0.08,  0.20),
+    "bear_hedge":      (-0.08,  0.20),   # inverse ETFs: same risk profile as leveraged
     "cash":            (-0.01,  0.01),
 }
 
@@ -76,3 +92,92 @@ def apply_hardcoded_exits(allocations: list[dict]) -> list[dict]:
 def get_exit_params(asset_class: str) -> tuple[float, float]:
     """Return (stop_loss_pct, take_profit_pct) for a given asset class."""
     return _SL_TP_BY_CLASS.get(asset_class, _DEFAULT_SL_TP)
+
+
+def _count_trading_days_held(entry_time: Any) -> int:
+    """
+    Estimate the number of trading days a position has been held.
+    entry_time can be a datetime object, ISO string, or None.
+    Returns 0 if we cannot determine entry time.
+    """
+    if entry_time is None:
+        return 0
+    try:
+        if isinstance(entry_time, str):
+            if "T" in entry_time or " " in entry_time:
+                entry_dt = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
+            else:
+                entry_dt = datetime.fromisoformat(entry_time)
+            if entry_dt.tzinfo is None:
+                entry_dt = entry_dt.replace(tzinfo=timezone.utc)
+        elif isinstance(entry_time, datetime):
+            entry_dt = entry_time
+            if entry_dt.tzinfo is None:
+                entry_dt = entry_dt.replace(tzinfo=timezone.utc)
+        else:
+            return 0
+
+        now = datetime.now(timezone.utc)
+        calendar_days = (now - entry_dt).days
+        # Approximate: 5 trading days ≈ 7 calendar days (excludes weekends)
+        trading_days = math.floor(calendar_days * 5.0 / 7.0)
+        return max(0, trading_days)
+    except Exception:
+        return 0
+
+
+def check_time_exits(
+    positions: list[dict],
+    dry_run: bool = False,
+) -> list[str]:
+    """
+    Force-exit 3× inverse ETF positions (SPXS, SQQQ, SRTY) held for >= 5 trading days.
+
+    Parameters
+    ----------
+    positions : list[dict]
+        From broker.get_positions() — each dict has ``symbol``, ``qty``, and
+        optionally ``entry_time`` (ISO string or datetime).
+    dry_run : bool
+        If True, log but do not actually close positions.
+
+    Returns
+    -------
+    list[str]
+        Symbols that were force-exited (or would be, in dry_run).
+    """
+    exited: list[str] = []
+
+    for pos in positions:
+        symbol = str(pos.get("symbol", "")).upper()
+        if symbol not in _BEAR_HEDGE_3X:
+            continue
+
+        entry_time = pos.get("entry_time") or pos.get("created_at") or pos.get("filled_at")
+        days_held = _count_trading_days_held(entry_time)
+
+        if days_held < _MAX_HOLD_TRADING_DAYS:
+            logger.debug(
+                f"TimeExit | {symbol} held ~{days_held}d — below {_MAX_HOLD_TRADING_DAYS}d limit"
+            )
+            continue
+
+        logger.warning(
+            f"TimeExit | {symbol} held ~{days_held} trading days ≥ {_MAX_HOLD_TRADING_DAYS} "
+            f"— triggering mandatory time-exit for 3× inverse ETF"
+        )
+
+        if dry_run:
+            logger.info(f"TimeExit | DRY RUN — would force-close {symbol}")
+            exited.append(symbol)
+            continue
+
+        try:
+            from execution.broker import close_position
+            close_position(symbol)
+            logger.warning(f"TimeExit | {symbol} force-closed (5-day 3× inverse ETF rule)")
+            exited.append(symbol)
+        except Exception as exc:
+            logger.error(f"TimeExit | Failed to close {symbol}: {exc}")
+
+    return exited

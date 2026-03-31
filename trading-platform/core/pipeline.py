@@ -373,6 +373,48 @@ async def _run_pipeline_inner(
     result["status"] = "ok" if not result["errors"] else "ok_with_errors"
     _update_state(result, started, allocation, trading_mode=mode_label.lower().replace(" ", "_"))
 
+    # ── 3× Inverse ETF 5-Day Time Exit ───────────────────────────────────────
+    # Force-exit SPXS/SQQQ/SRTY positions held >= 5 trading days before
+    # the short scanner runs (avoids interference).
+    try:
+        from analysis.hardcoded_exits import check_time_exits as _check_time_exits
+        from execution.broker import get_positions as _gpos
+        _all_positions = _gpos()
+        _time_exits = _check_time_exits(_all_positions, dry_run=dry_run)
+        if _time_exits:
+            result.setdefault("time_exits", []).extend(_time_exits)
+            logger.warning(f"Pipeline | 5-day time exits fired: {_time_exits}")
+    except Exception as _te_exc:
+        logger.warning(f"Pipeline | Time-exit check failed (non-fatal): {_te_exc}")
+
+    # ── Algorithmic Short Scanner ─────────────────────────────────────────────
+    # Runs after execute_allocations. Only active in Bear/RISK-OFF regime.
+    # Non-fatal: existing positions and LLM allocations are unaffected if scanner fails.
+    if not crypto_only:
+        try:
+            from execution.short_scanner import run_scan as _run_short_scan
+            _regime_for_scan = (
+                allocation.regime
+                if isinstance(allocation, RegimeAnalysisOutput)
+                else "Crypto"
+            )
+            _scan_result = _run_short_scan(
+                regime=_regime_for_scan,
+                allocation=allocation if isinstance(allocation, RegimeAnalysisOutput) else None,
+                dry_run=dry_run,
+            )
+            result["short_scanner"] = _scan_result
+            if _scan_result.get("activated"):
+                logger.info(
+                    f"Pipeline | Short scanner: "
+                    f"entries={len(_scan_result.get('entries', []))} "
+                    f"exits={len(_scan_result.get('exits', []))} "
+                    f"exposure={_scan_result.get('short_exposure_pct', 0):.1f}%"
+                )
+        except Exception as _ss_exc:
+            logger.warning(f"Pipeline | Short scanner failed (non-fatal): {_ss_exc}")
+            result.setdefault("errors", []).append(f"Short scanner error: {_ss_exc}")
+
     # ── Regime Sync File ──────────────────────────────────────────────────────
     # Write market_regime.json so the Kraken bot can read the current regime
     # and apply Bear/RISK-OFF defensive filters without any HTTP call.

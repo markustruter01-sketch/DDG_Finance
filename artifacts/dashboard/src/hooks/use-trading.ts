@@ -88,6 +88,7 @@ export interface PositionHealth {
 export interface LivePosition {
   symbol: string;
   qty: number;
+  side: string;
   avg_entry_price: number;
   current_price: number;
   market_value: number;

@@ -382,12 +382,38 @@ async def run_analysis_cycle(
     )
 
     logger.info("Step 5/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
+    # Build algo short context for Bear regime LLM awareness
+    _algo_short_ctx: dict | None = None
+    if not crypto_only:
+        try:
+            from execution.short_scanner import get_algo_short_state
+            from execution.broker import get_positions as _gpos_llm
+            _short_state = get_algo_short_state()
+            if _short_state:
+                _positions_now = _gpos_llm()
+                _open_shorts = [
+                    p for p in _positions_now
+                    if str(p.get("side", "long")).lower() == "short"
+                    and p["symbol"] in _short_state
+                ]
+                _algo_short_ctx = {
+                    "activated":          True,
+                    "open_shorts":        _open_shorts,
+                    "short_exposure_pct": sum(
+                        abs(float(p.get("market_value", 0.0)))
+                        for p in _open_shorts
+                    ) / max(float(account_state.get("equity", 1.0)), 1.0) * 100,
+                }
+        except Exception as _ctx_exc:
+            logger.debug(f"Analyzer | Algo short context build failed (non-fatal): {_ctx_exc}")
+
     user_prompt = build_user_prompt(
         macro_data,
         market_data,
         headlines_for_llm,
         account_state=account_state,
         crypto_only=crypto_only,
+        algo_short_context=_algo_short_ctx,
     )
 
     if dry_run:

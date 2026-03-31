@@ -1,23 +1,26 @@
 """
 Pydantic Schemas — Structured LLM Output
 ------------------------------------------
-v4.3 — Leveraged Risk Satellite Bucket + SPY EMA Anchor
+v4.4 — Bear Hedge Inverse ETF Expansion
 
 RegimeAnalysisOutput  — variable-slot allocation driven by Bull/Bear/Sideways regime
 CryptoAnalysisOutput  — off-hours crypto-only allocation (BTC/USD, ETH/USD)
 
-Asset universe (19 instruments + SGOV):
+Asset universe (25 instruments + SGOV):
   Equities (Sectors)  : SPY, QQQ, XLK, XLF, XLV, XLE, IWM
   Safe Havens/Bonds   : TLT, IEF, GLD, SLV
   Commodities         : USO, PDBC
   Crypto Spot         : BTC/USD, ETH/USD
-  Leveraged Risk      : TQQQ, SOXL, UPRO  ← NEW (Bull-only, 20% total cap)
+  Leveraged Risk      : TQQQ, SOXL, UPRO  (Bull-only, 20% total cap)
+  Bear Hedge          : SH, PSQ, SPXS, SQQQ, DOG, SRTY  ← NEW (Bear-only, bought long)
   Cash                : SGOV
 
 Position sizing rules (enforced in executor, not here):
-  - Max single position: 10% of equity (hard cap)
+  - Max single position: 15% of equity (hard cap)
   - Leveraged Risk group: max 20% combined (enforced in allocator)
+  - Bear Hedge 3× group (SPXS, SQQQ, SRTY): max 20% combined (enforced in allocator)
   - Leveraged Risk allowed ONLY in confirmed Bull regime (vetted by SPY EMA anchor)
+  - Bear Hedge allowed ONLY in confirmed Bear regime
   - No margin: trades blocked when available cash ≤ 0
   - LLM kelly_fractions sum ≤ 1.0 as always
 
@@ -35,6 +38,7 @@ REGIME_UNIVERSE: dict[str, list[str]] = {
     "commodity":       ["USO", "PDBC"],
     "crypto_spot":     ["BTC/USD", "ETH/USD"],
     "leveraged_risk":  ["TQQQ", "SOXL", "UPRO"],
+    "bear_hedge":      ["SH", "PSQ", "SPXS", "SQQQ", "DOG", "SRTY"],
     "cash":            ["SGOV"],
 }
 
@@ -43,8 +47,14 @@ ALL_REGIME_TICKERS: set[str] = {t for tickers in REGIME_UNIVERSE.values() for t 
 CRYPTO_SPOT_TICKERS: set[str] = set(REGIME_UNIVERSE["crypto_spot"])
 LEVERAGED_RISK_TICKERS: set[str] = set(REGIME_UNIVERSE["leveraged_risk"])
 
+# Bear hedge universe: all 6 inverse ETFs (bought long in Bear regime)
+BEAR_HEDGE_TICKERS: set[str] = set(REGIME_UNIVERSE["bear_hedge"])
+
+# 3× leveraged inverse ETFs — 5-trading-day auto-exit rule applies
+BEAR_HEDGE_3X_TICKERS: frozenset[str] = frozenset({"SPXS", "SQQQ", "SRTY"})
+
 RegimeLabel = Literal["Bull", "Bear", "Sideways"]
-AssetClass = Literal["equity", "safe_haven", "commodity", "crypto_spot", "leveraged_risk", "cash"]
+AssetClass = Literal["equity", "safe_haven", "commodity", "crypto_spot", "leveraged_risk", "bear_hedge", "cash"]
 CryptoAssetClass = Literal["crypto_spot", "cash"]
 
 
@@ -142,21 +152,29 @@ class RegimeAnalysisOutput(BaseModel):
                 )
 
         elif self.regime == "Bear":
-            safe_assets = set(REGIME_UNIVERSE["safe_haven"] + ["SGOV"])
+            safe_assets = set(
+                REGIME_UNIVERSE["safe_haven"]
+                + REGIME_UNIVERSE["bear_hedge"]
+                + ["SGOV"]
+            )
             bad = [t for t in tickers if t not in safe_assets]
             if bad:
                 raise ValueError(
-                    f"Bear regime: only safe_haven/cash allowed, got: {bad}. "
-                    f"Use TLT, IEF, GLD, SLV, or SGOV if safe havens have negative momentum. "
-                    f"Leveraged ETFs (TQQQ/SOXL/UPRO) are strictly forbidden in Bear regime."
+                    f"Bear regime: only safe_haven/bear_hedge/cash allowed, got: {bad}. "
+                    f"Use TLT, IEF, GLD, SLV, SH, PSQ, SPXS, SQQQ, DOG, SRTY, or SGOV. "
+                    f"Leveraged long ETFs (TQQQ/SOXL/UPRO) are strictly forbidden in Bear regime."
                 )
 
         elif self.regime == "Sideways":
-            if any(t in LEVERAGED_RISK_TICKERS for t in tickers):
-                bad_letf = [t for t in tickers if t in LEVERAGED_RISK_TICKERS]
+            bad_side = [
+                t for t in tickers
+                if t in LEVERAGED_RISK_TICKERS or t in BEAR_HEDGE_TICKERS
+            ]
+            if bad_side:
                 raise ValueError(
-                    f"Sideways regime: leveraged ETFs {bad_letf} are forbidden. "
-                    f"Leveraged risk positions are only permitted in confirmed Bull regime."
+                    f"Sideways regime: leveraged/inverse ETFs {bad_side} are forbidden. "
+                    f"Leveraged risk (TQQQ/SOXL/UPRO) only in Bull; "
+                    f"Bear hedge (SH/PSQ/SPXS/SQQQ/DOG/SRTY) only in Bear."
                 )
 
         return self
@@ -184,10 +202,12 @@ class RegimeAnalysisOutput(BaseModel):
         for a in sorted(self.allocations, key=lambda x: x.slot):
             flag = " [CASH]" if a.ticker == "SGOV" else ""
             letf = " [LETF]" if a.ticker in LEVERAGED_RISK_TICKERS else ""
+            hedge = " [BEAR-HEDGE]" if a.ticker in BEAR_HEDGE_TICKERS else ""
+            triple = " [3×]" if a.ticker in BEAR_HEDGE_3X_TICKERS else ""
             lines.append(
                 f"  Slot {a.slot}: {a.ticker:10s} | {a.asset_class:15s} | "
                 f"conv={a.conviction_score:.0%} | kelly={a.kelly_fraction:.1%} | "
-                f"SL={a.stop_loss_pct:.1%} TP={a.take_profit_pct:.1%}{flag}{letf}"
+                f"SL={a.stop_loss_pct:.1%} TP={a.take_profit_pct:.1%}{flag}{letf}{hedge}{triple}"
             )
         return "\n".join(lines)
 

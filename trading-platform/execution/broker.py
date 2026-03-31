@@ -1,6 +1,6 @@
 """
-Alpaca Broker — Order Execution Layer  (v2 — Rate-Limit Resilient)
--------------------------------------------------------------------
+Alpaca Broker — Order Execution Layer  (v2.1 — Short Order Primitives)
+-----------------------------------------------------------------------
 Wraps the Alpaca Trading API for all order operations.
 
 v2 changes
@@ -13,11 +13,21 @@ v2 changes
   • Minimum call-spacing of 300 ms is enforced automatically (≈ 200
     req/min retail limit).
 
+v2.1 additions (Bear Engine)
+-----------------------------
+  • place_short_order()       — SELL_SHORT market order (whole shares, DAY TIF)
+  • buy_to_cover()            — BUY market order to close a short (GTC)
+  • place_short_stop_order()  — BUY stop order (stop-buy above price) to cap loss on short
+  • check_shortable()         — Alpaca asset endpoint; returns (shortable, easy_to_borrow)
+  • get_positions() now includes `side` field ("long" or "short")
+  • get_account() now exposes `initial_margin` (used for short exposure cap)
+
 Supports ETF/stock (TimeInForce.DAY) and crypto spot (TimeInForce.GTC).
 Crypto pairs are detected by "/" in the ticker (e.g. BTC/USD).
 Paper trading only — paper=True is hardcoded.
 """
 
+import math
 from decimal import Decimal
 
 from alpaca.trading.client import TradingClient
@@ -56,6 +66,7 @@ def get_account() -> dict:
         "last_equity":        float(acct.last_equity),
         "cash":               float(acct.cash),
         "buying_power":       float(acct.buying_power),
+        "initial_margin":     float(acct.initial_margin) if acct.initial_margin else 0.0,
         "trading_blocked":    acct.trading_blocked,
         "pattern_day_trader": acct.pattern_day_trader,
     }
@@ -68,6 +79,7 @@ def get_positions() -> list[dict]:
         {
             "symbol":          p.symbol,
             "qty":             float(p.qty),
+            "side":            p.side.value if hasattr(p, "side") and p.side else "long",
             "avg_entry_price": float(p.avg_entry_price),
             "market_value":    float(p.market_value),
             "unrealized_pl":   float(p.unrealized_pl),
@@ -324,3 +336,153 @@ def close_all_positions() -> int:
     n = len(closed) if closed else 0
     logger.warning(f"Broker | {n} positions closed")
     return n
+
+
+# ── Short Selling Primitives (Bear Engine v2.1) ────────────────────────────
+
+@alpaca_retry
+def check_shortable(ticker: str) -> tuple[bool, bool]:
+    """
+    Check whether *ticker* can be shorted via Alpaca.
+
+    Returns
+    -------
+    (shortable, easy_to_borrow)
+        Both must be True for the algo scanner to open a short.
+    """
+    try:
+        from alpaca.trading.requests import GetAssetsRequest
+        from alpaca.trading.enums import AssetClass as AlpacaAssetClass
+        asset = _client().get_asset(ticker)
+        shortable = bool(getattr(asset, "shortable", False))
+        easy_to_borrow = bool(getattr(asset, "easy_to_borrow", False))
+        logger.debug(
+            f"Broker | check_shortable({ticker}): shortable={shortable} etb={easy_to_borrow}"
+        )
+        return shortable, easy_to_borrow
+    except Exception as exc:
+        logger.warning(f"Broker | check_shortable({ticker}) failed: {exc} — returning (False, False)")
+        return False, False
+
+
+@alpaca_retry
+def place_short_order(ticker: str, qty_int: int) -> dict:
+    """
+    Place a SELL_SHORT market order for *qty_int* whole shares (DAY TIF).
+
+    Parameters
+    ----------
+    ticker  : str   Equity ticker (no "/" — not for crypto).
+    qty_int : int   Must be a whole positive integer (Alpaca does not support
+                    fractional short positions).  Enforced here with math.floor().
+
+    Returns
+    -------
+    dict with id, symbol, side, qty, status.
+    """
+    qty = max(1, math.floor(qty_int))
+    req = MarketOrderRequest(
+        symbol=ticker,
+        qty=qty,
+        side=OrderSide.SELL_SHORT,
+        time_in_force=TimeInForce.DAY,
+    )
+    logger.info(f"Broker | SHORT {ticker} qty={qty} (DAY market order)")
+    try:
+        order: Order = _client().submit_order(req)
+        result = {
+            "id":         str(order.id),
+            "symbol":     order.symbol,
+            "side":       order.side.value,
+            "qty":        qty,
+            "status":     order.status.value,
+            "created_at": str(order.created_at),
+        }
+        logger.info(f"Broker | Short order placed: {result['id']} {ticker} status={result['status']}")
+        return result
+    except Exception as exc:
+        logger.error(f"Broker | Short order failed for {ticker}: {exc}")
+        raise RuntimeError(f"Short order failed for {ticker}: {exc}") from exc
+
+
+@alpaca_retry
+def buy_to_cover(ticker: str, qty_int: int) -> dict:
+    """
+    Place a BUY market order to close an existing short position (GTC).
+
+    Parameters
+    ----------
+    ticker  : str   Equity ticker.
+    qty_int : int   Whole shares to cover.
+
+    Returns
+    -------
+    dict with id, symbol, side, qty, status.
+    """
+    qty = max(1, math.floor(qty_int))
+    req = MarketOrderRequest(
+        symbol=ticker,
+        qty=qty,
+        side=OrderSide.BUY,
+        time_in_force=TimeInForce.GTC,
+    )
+    logger.info(f"Broker | BUY-TO-COVER {ticker} qty={qty} (GTC)")
+    try:
+        order: Order = _client().submit_order(req)
+        result = {
+            "id":         str(order.id),
+            "symbol":     order.symbol,
+            "side":       order.side.value,
+            "qty":        qty,
+            "status":     order.status.value,
+            "created_at": str(order.created_at),
+        }
+        logger.info(f"Broker | Cover order placed: {result['id']} {ticker} status={result['status']}")
+        return result
+    except Exception as exc:
+        logger.error(f"Broker | buy_to_cover failed for {ticker}: {exc}")
+        raise RuntimeError(f"buy_to_cover failed for {ticker}: {exc}") from exc
+
+
+@alpaca_retry
+def place_short_stop_order(ticker: str, qty_int: int, stop_price: float) -> dict:
+    """
+    Place a GTC stop-BUY order to protect a short position.
+
+    The stop fills if *ticker* price rises to *stop_price* (i.e. the trade
+    moves against the short).  This is the inverse of a long stop-loss.
+
+    Parameters
+    ----------
+    ticker     : str   Equity ticker.
+    qty_int    : int   Whole shares to cover at the stop.
+    stop_price : float Price at which to trigger the covering buy.
+
+    Returns
+    -------
+    dict with id, symbol, side, stop_price, qty, status.
+    """
+    qty = max(1, math.floor(qty_int))
+    req = StopOrderRequest(
+        symbol=ticker,
+        qty=qty,
+        side=OrderSide.BUY,
+        time_in_force=TimeInForce.GTC,
+        stop_price=round(stop_price, 4),
+    )
+    logger.info(f"Broker | Short-stop BUY {ticker} qty={qty} stop=${stop_price:.4f} (GTC)")
+    try:
+        order: Order = _client().submit_order(req)
+        result = {
+            "id":         str(order.id),
+            "symbol":     order.symbol,
+            "side":       order.side.value,
+            "stop_price": stop_price,
+            "qty":        qty,
+            "status":     order.status.value,
+        }
+        logger.info(f"Broker | Short-stop order placed: {result['id']} status={result['status']}")
+        return result
+    except Exception as exc:
+        logger.warning(f"Broker | Short-stop order failed for {ticker}: {exc}")
+        raise RuntimeError(f"Short-stop order failed for {ticker}: {exc}") from exc

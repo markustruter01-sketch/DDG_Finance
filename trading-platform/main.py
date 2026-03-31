@@ -1015,9 +1015,15 @@ async def live_positions() -> dict:
                 pos, alloc, by_ticker_data, saved_stops
             )
 
+            # Determine asset class: short positions are labelled "direct_short"
+            pos_side = str(pos.get("side", "long")).lower()
+            raw_asset_class = alloc.get("asset_class", "unknown")
+            if pos_side == "short" and raw_asset_class == "unknown":
+                raw_asset_class = "direct_short"
+
             enriched.append({
                 **pos,
-                "asset_class":      alloc.get("asset_class", "unknown"),
+                "asset_class":      raw_asset_class,
                 "conviction_score": alloc.get("conviction_score"),
                 "kelly_fraction":   alloc.get("kelly_fraction"),
                 "stop_loss_pct":    stop_loss_pct,

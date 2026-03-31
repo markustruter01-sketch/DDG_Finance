@@ -81,6 +81,7 @@ def build_user_prompt(
     news_headlines: list[str],
     account_state: dict | None = None,
     crypto_only: bool = False,
+    algo_short_context: dict | None = None,
 ) -> str:
     lines = []
 
@@ -147,6 +148,30 @@ def build_user_prompt(
         lines.append("⚠️  OVERHEATED ASSET RULE: Z-Score > 2.0 OR RSI > 75 signals irrational exuberance.")
         lines.append("   → Lower conviction scores for overheated assets. Prefer rotating to SGOV or uncorrelated safe havens.")
         lines.append("   → The execution engine will automatically cut any overheated allocation by 50% as a hard guard.")
+        lines.append("")
+
+    # ── Algo Short Scanner Context ────────────────────────────────────────────
+    # Only injected when the scanner is active (Bear/RISK-OFF) and has results.
+    # Informs the LLM about existing short positions to avoid double-dipping.
+    if algo_short_context and algo_short_context.get("activated"):
+        lines.append("=== ALGORITHMIC SHORT SCANNER REPORT (Bear/RISK-OFF) ===")
+        open_shorts = algo_short_context.get("open_shorts", [])
+        if open_shorts:
+            lines.append("  Active algo shorts (do NOT buy these ETFs as longs):")
+            for s in open_shorts:
+                sym   = s.get("symbol", "?")
+                price = s.get("current_price", 0.0)
+                pl    = s.get("unrealized_pl", 0.0)
+                lines.append(f"    SHORT {sym}: price=${price:.2f} unrealized_pl=${pl:+.2f}")
+        else:
+            lines.append("  No active algo short positions at this time.")
+        exp_pct = algo_short_context.get("short_exposure_pct", 0.0)
+        lines.append(f"  Total short exposure: {exp_pct:.1f}% of equity")
+        lines.append(
+            "  NOTE: The short scanner runs INDEPENDENTLY. "
+            "Do not include SPY/QQQ/XLK/XLF/XLE/IWM as direct short allocations — "
+            "use bear_hedge ETFs (SH, PSQ, DOG, SPXS, SQQQ, SRTY) instead."
+        )
         lines.append("")
 
     clean_headlines = sanitize_news_payload(news_headlines, cap=15)

@@ -27,7 +27,7 @@ Located in `trading-platform/`. A private, automated AI-driven quantitative trad
 - `main.py` — FastAPI app with `APIRouter(prefix=API_PREFIX)` where `API_PREFIX` defaults to env var (set to `/trading-api` in artifact config)
 - `config/settings.py` — Pydantic BaseSettings
 - `data/` — FRED, Alpaca Market Data, NewsAPI, yfinance, sentiment (Fear & Greed), on-chain BTC data, economic calendar
-- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor at 4:30 PM ET), **gemini_auditor** (Gemini self-critic pre-market auditor at 4:15 AM ET — writes `logs/veto_conditions.json`), **gemini_context_sanitizer** (HTML strip, news dedup, float rounding, 8-hour chunking for token budget management), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence), **input_sanitizer** (strips news descriptions + deduplicates headlines before LLM injection), **hardcoded_exits** (per-asset-class SL/TP table applied post-parse), **llm_response_cache** (MD5-keyed 90-min response cache, prevents redundant Groq calls when signals unchanged)
+- `analysis/` — Trade journal, post-mortem, Groq LLM, RAG feedback, analyzer, **Inspector Rekt** (HITL auditor at 4:30 PM ET), **gemini_auditor** (Gemini self-critic pre-market auditor at 4:15 AM ET — writes `logs/veto_conditions.json`), **gemini_context_sanitizer** (HTML strip, news dedup, float rounding, 8-hour chunking for token budget management), attribution breakdown, backtester, **learning_journal** (persistent LLM insight ledger), **learning_snapshot** (cross-deploy knowledge persistence), **input_sanitizer** (strips news descriptions + deduplicates headlines before LLM injection), **hardcoded_exits** (per-asset-class SL/TP table applied post-parse), **llm_response_cache** (MD5-keyed 90-min response cache, prevents redundant Groq calls when signals unchanged), **rule_engine** (Phase 4 permanent rules: scans execution_post_mortems for 3+ identical failure patterns, promotes to hardcoded_rules table, injects as non-negotiable RULE constraints into every LLM system prompt)
 - `notifications/` — Discord webhook alerts (trades, kills, sweeps, audits, blackouts)
 - `portfolio/` — Kelly Criterion sizing, allocation logic
 - `execution/` — Alpaca broker wrapper (v2.1: `place_short_order`, `buy_to_cover`, `place_short_stop_order`, `check_shortable`, `initial_margin`), kill switch (5% drawdown guard), order executor with slippage tracking, **short_scanner.py** (Bear Engine algo short scanner: Z-score >2.0 + RSI >68 signal, 35% max exposure, 15% per-position cap, ATR ratchet, mean-reversion exit at Z<0.3, 5% trailing stop)
@@ -170,6 +170,33 @@ Both bot agent cards in the dashboard now include three gamification layers:
 ### New Backend
 - `trading-platform/analysis/trade_journal.py`: `get_recent_trades_combined(limit)` — returns last N wins+losses combined, ordered by date DESC
 - `trading-platform/main.py`: `GET /trading-api/journal/recent?n=20` endpoint
+
+## RAG Memory Architecture (4-Phase — COMPLETE)
+
+The trading system has a 4-phase Retrieval-Augmented Generation memory layer that makes the LLM smarter with every trade.
+
+### Phase 1: Database Schema Expansion — DONE
+- Extended `trades` table with RAG columns: `regime_at_entry`, `time_in_trade_hours`, `exit_reason`, `realized_pnl`, `slippage_pct`
+- Created `execution_post_mortems` table for deterministic Python-generated lesson text
+- Added DB functions: `close_trade()`, `log_post_mortem()`, `get_post_mortems()`, `get_position_entry_times()`
+
+### Phase 2: Deterministic Post-Mortem Logging — DONE
+- `analysis/post_mortem_lessons.py`: 7-branch lesson rule matrix (ratchet_stop, time_exit, algo_cover, allocation_sell, manual, bear_hedge, unknown × win/loss × short-hold) with structured prefixes: `[EXECUTION FAILURE]`, `[THESIS FAILURE]`, `[THESIS WIN]`, `[EXECUTION WIN]`, `[MANUAL EXIT]`, `[AUDIT NOTE]`
+- Three deterministic hooks write to `execution_post_mortems` on every trade close:
+  1. Evening reconciliation (`post_mortem.py`) — detects ratchet stops via Alpaca order type `"stop"`, calls `close_trade()` + `log_post_mortem()`
+  2. 5-day 3× ETF exits (`hardcoded_exits.py`) — captures `entry_ts`, generates `time_exit` lesson
+  3. Algo short covers (`short_scanner.py`) — captures `entry_ts`, generates `algo_cover` lesson
+
+### Phase 3: Context-Aware Prompt Injection — DONE
+- `trade_journal.py`: `get_contextual_losses()` + `get_contextual_wins()` query `trades` WHERE `regime_at_entry EXACTLY MATCHES` the current regime; asset-class priority sort (bear_hedge first in Bear, equity first in Bull, safe_haven first in Sideways); falls back to FIFO with explicit cross-regime disclaimer
+- `feedback_injection.py`: Removed FIFO `LOSS_FEEDBACK_TEMPLATE` / `WIN_FEEDBACK_TEMPLATE`; replaced with `[RELEVANT HISTORICAL CONTEXT]` block that attaches lesson text from `execution_post_mortems` for each matched trade; `_REGIME_PRIORITY_CLASS` auto-infers asset-class priority from regime
+- `analyzer.py`: Loads cached regime from `market_regime.json` and passes as `current_regime=` to prompt builder
+
+### Phase 4: Permanent Hardcoded Rules — DONE
+- `db/postgres.py`: `hardcoded_rules` table (ticker, regime, exit_reason, failure_count, rule_text, active); `upsert_hardcoded_rule()` + `get_hardcoded_rules()`
+- `analysis/rule_engine.py`: `rollup_permanent_rules(threshold=3)` — SQL GROUP BY (ticker, regime, exit_reason) WHERE pnl_pct < 0 HAVING COUNT >= 3; generates `RULE [EXECUTION FAILURE/THESIS FAILURE/etc]: ...` text; upserts to `hardcoded_rules` (ON CONFLICT DO UPDATE); `get_active_rules()` + `build_permanent_rules_block()` for prompt injection
+- `analysis/post_mortem.py`: Phase 4 rollup runs automatically after every evening post-mortem cycle (non-fatal hook)
+- `analysis/feedback_injection.py`: `build_permanent_rules_block()` injected immediately after base system prompt — rules are labelled NON-NEGOTIABLE and treated with equal weight to the 10% position-sizing hard cap; regime-matched rules shown first, cross-regime rules appended
 
 ## Required Secrets
 - `FRED_API_KEY` — fred.stlouisfed.org

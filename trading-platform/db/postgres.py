@@ -248,6 +248,25 @@ CREATE TABLE IF NOT EXISTS execution_post_mortems (
 );
 CREATE INDEX IF NOT EXISTS idx_post_mortems_ts     ON execution_post_mortems (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_post_mortems_regime ON execution_post_mortems (regime, ticker);
+
+-- ── Phase 4: Permanent Hardcoded Rules ─────────────────────────────────────
+-- Recurring failure patterns (>= 3 occurrences) are promoted to permanent
+-- rules that are injected into EVERY LLM system prompt.  The rollup job
+-- upserts rows here; prompt injection reads only active=TRUE rows.
+CREATE TABLE IF NOT EXISTS hardcoded_rules (
+    id            BIGSERIAL PRIMARY KEY,
+    ticker        TEXT NOT NULL,
+    regime        TEXT NOT NULL,
+    asset_class   TEXT,
+    exit_reason   TEXT NOT NULL,
+    failure_count INTEGER NOT NULL DEFAULT 3,
+    rule_text     TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    active        BOOLEAN NOT NULL DEFAULT TRUE,
+    UNIQUE (ticker, regime, exit_reason)
+);
+CREATE INDEX IF NOT EXISTS idx_hardcoded_rules_active ON hardcoded_rules (active, regime);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -377,6 +396,93 @@ def get_post_mortems(
         return result
     except Exception as exc:
         logger.error(f"DB | get_post_mortems failed: {exc}")
+        return []
+
+
+# ── Phase 4: Permanent Hardcoded Rules ─────────────────────────────────────
+
+def upsert_hardcoded_rule(
+    ticker: str,
+    regime: str,
+    asset_class: str | None,
+    exit_reason: str,
+    failure_count: int,
+    rule_text: str,
+) -> bool:
+    """
+    Insert a new permanent rule or update failure_count + rule_text + updated_at
+    if the (ticker, regime, exit_reason) key already exists.
+    Returns True on success.
+    """
+    if not is_pg_available():
+        return False
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO hardcoded_rules
+                        (ticker, regime, asset_class, exit_reason,
+                         failure_count, rule_text)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (ticker, regime, exit_reason) DO UPDATE SET
+                        failure_count = EXCLUDED.failure_count,
+                        rule_text     = EXCLUDED.rule_text,
+                        updated_at    = NOW(),
+                        active        = TRUE
+                    """,
+                    (ticker, regime, asset_class, exit_reason,
+                     failure_count, rule_text),
+                )
+        logger.debug(
+            f"DB | Hardcoded rule upserted: {ticker} [{regime}/{exit_reason}] "
+            f"count={failure_count}"
+        )
+        return True
+    except Exception as exc:
+        logger.error(f"DB | upsert_hardcoded_rule failed: {exc}")
+        return False
+
+
+def get_hardcoded_rules(regime: str | None = None) -> list[dict]:
+    """
+    Fetch active permanent rules, optionally filtered by regime.
+    Returns rows ordered by failure_count DESC (most severe patterns first).
+    """
+    if not is_pg_available():
+        return []
+    try:
+        conditions = ["active = TRUE"]
+        params: list = []
+        if regime:
+            conditions.append("regime = %s")
+            params.append(regime)
+        where = "WHERE " + " AND ".join(conditions)
+        params.append(100)  # hard limit: never inject more than 100 rules
+        cols = ("id", "ticker", "regime", "asset_class", "exit_reason",
+                "failure_count", "rule_text", "updated_at")
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT {', '.join(cols)}
+                    FROM   hardcoded_rules
+                    {where}
+                    ORDER  BY failure_count DESC, updated_at DESC
+                    LIMIT  %s
+                    """,
+                    params,
+                )
+                rows = cur.fetchall()
+        result = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            if d.get("updated_at"):
+                d["updated_at"] = d["updated_at"].isoformat()
+            result.append(d)
+        return result
+    except Exception as exc:
+        logger.error(f"DB | get_hardcoded_rules failed: {exc}")
         return []
 
 

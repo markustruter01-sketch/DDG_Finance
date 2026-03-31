@@ -457,6 +457,19 @@ def build_system_prompt_with_feedback(
     # ── Base prompt ────────────────────────────────────────────────────────
     full_prompt = CRYPTO_ONLY_SYSTEM_PROMPT if crypto_only else BASE_SYSTEM_PROMPT
 
+    # ── Phase 4: Permanent Rules (injected into the foundational prompt) ───
+    # Rules are derived from >= 3 confirmed identical failures and stored in
+    # hardcoded_rules.  They are NON-NEGOTIABLE — treated like hard caps.
+    # Injected immediately after the base strategy text so the LLM reads them
+    # before any contextual or historical data.
+    try:
+        from analysis.rule_engine import build_permanent_rules_block
+        rules_block = build_permanent_rules_block(regime=current_regime)
+        if rules_block:
+            full_prompt += rules_block
+    except Exception as exc:
+        logger.warning(f"Feedback injection | Permanent rules injection failed: {exc}")
+
     # ── Live account state ─────────────────────────────────────────────────
     if buying_power is not None:
         full_prompt += f"""

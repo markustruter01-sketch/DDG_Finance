@@ -279,6 +279,24 @@ async def run_post_mortem() -> dict[str, Any]:
 
     snapshot_info = await _save_snapshot(wins=wins, losses=losses)
     summary["snapshot"] = snapshot_info
+
+    # ── Phase 4: Permanent Rules Rollup ────────────────────────────────────
+    # Scan execution_post_mortems for recurring failure patterns and promote
+    # them to permanent rules that persist in every future LLM system prompt.
+    # This is non-fatal — a rollup failure never aborts the post-mortem cycle.
+    try:
+        from analysis.rule_engine import rollup_permanent_rules
+        rollup_result = rollup_permanent_rules()
+        summary["rule_rollup"] = rollup_result
+        if rollup_result.get("rules_promoted", 0) > 0:
+            logger.info(
+                f"Phase 4 | {rollup_result['rules_promoted']} new permanent rule(s) promoted "
+                f"from {rollup_result['patterns_scanned']} recurring failure patterns"
+            )
+    except Exception as exc:
+        logger.warning(f"Phase 4 | Permanent rules rollup failed (non-fatal): {exc}")
+        summary["rule_rollup"] = {"error": str(exc)}
+
     return summary
 
 

@@ -81,6 +81,19 @@ COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 _kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
+KRAKEN_BOT_PROFILES = {
+    "davy-jones": {"display_name": "Davy Jones' Portfolio", "db_id": 1, "strategy_label": "Conservative", "port": 8085},
+    "blackbeard": {"display_name": "Blackbeard's Fleet", "db_id": 2, "strategy_label": "Aggressive", "port": 8086},
+    "calypso":    {"display_name": "Calypso's Tide", "db_id": 3, "strategy_label": "Most Aggressive", "port": 8087},
+}
+
+_kraken_commentary_caches: dict[str, dict[str, Any]] = {
+    bot_id: {"text": None, "generated_at": None, "ts": 0}
+    for bot_id in KRAKEN_BOT_PROFILES
+}
+
+_kraken_commentary_round_robin_idx = 0
+
 # ── Commentary Cache Persistence ──────────────────────────────────────────────
 # Both commentary caches are file-backed so they survive server restarts.
 # Without this, every restart immediately burns Groq tokens to regenerate.
@@ -93,33 +106,41 @@ _commentary_file_lock = _ct_lock.Lock()
 
 
 def _load_commentary_caches() -> None:
-    """Load both commentary caches from disk on startup."""
-    global _commentary_cache, _kraken_commentary_cache
+    """Load all commentary caches from disk on startup."""
+    global _commentary_cache, _kraken_commentary_cache, _kraken_commentary_caches
     if not _COMMENTARY_CACHE_FILE.exists():
         return
     try:
         data = _json.loads(_COMMENTARY_CACHE_FILE.read_text())
         alpaca = data.get("alpaca", {})
-        kraken = data.get("kraken", {})
         if alpaca.get("text") and alpaca.get("ts", 0) > 0:
             _commentary_cache = alpaca
             age_min = (time.time() - alpaca["ts"]) / 60
             logger.info(f"Commentary cache | Alpaca: loaded from disk ({age_min:.0f}min old)")
+        kraken = data.get("kraken", {})
         if kraken.get("text") and kraken.get("ts", 0) > 0:
             _kraken_commentary_cache = kraken
+            _kraken_commentary_caches["davy-jones"] = dict(kraken)
             age_min = (time.time() - kraken["ts"]) / 60
-            logger.info(f"Commentary cache | Kraken: loaded from disk ({age_min:.0f}min old)")
+            logger.info(f"Commentary cache | Kraken (davy-jones): loaded from disk ({age_min:.0f}min old)")
+        kraken_bots = data.get("kraken_bots", {})
+        for bot_id, cache_data in kraken_bots.items():
+            if bot_id in _kraken_commentary_caches and cache_data.get("text") and cache_data.get("ts", 0) > 0:
+                _kraken_commentary_caches[bot_id] = cache_data
+                age_min = (time.time() - cache_data["ts"]) / 60
+                logger.info(f"Commentary cache | Kraken ({bot_id}): loaded from disk ({age_min:.0f}min old)")
     except Exception as exc:
         logger.warning(f"Commentary cache | Failed to load from disk: {exc}")
 
 
 def _persist_commentary_caches() -> None:
-    """Atomically write both commentary caches to disk (thread-safe)."""
+    """Atomically write all commentary caches to disk (thread-safe)."""
     try:
         _COMMENTARY_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "alpaca": _commentary_cache,
             "kraken": _kraken_commentary_cache,
+            "kraken_bots": _kraken_commentary_caches,
         }
         tmp = str(_COMMENTARY_CACHE_FILE) + ".tmp"
         with _commentary_file_lock:
@@ -242,7 +263,7 @@ async def lifespan(app: FastAPI):
                 _eqconn = _pg2eq.connect(_dburlq)
                 try:
                     with _eqconn.cursor() as _eqcur:
-                        _eqcur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                        _eqcur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
                         _eqrow = _eqcur.fetchone()
                         if _eqrow:
                             kraken_eq = float(_eqrow[0] or 0)
@@ -2879,27 +2900,41 @@ async def data_snapshot() -> dict:
 
 # ── Kraken Bot Status ─────────────────────────────────────────────────────────
 
+@router.get("/kraken/bots", tags=["Kraken Bot"])
+async def kraken_bots_list() -> dict:
+    """Return metadata for all configured Kraken bots."""
+    return {"bots": KRAKEN_BOT_PROFILES}
+
+
+def _resolve_bot(bot_id: str | None) -> tuple[str, dict]:
+    """Resolve bot_id to a valid (bot_id, profile) tuple. Defaults to davy-jones."""
+    bid = bot_id or "davy-jones"
+    profile = KRAKEN_BOT_PROFILES.get(bid)
+    if not profile:
+        bid = "davy-jones"
+        profile = KRAKEN_BOT_PROFILES["davy-jones"]
+    return bid, profile
+
+
 @router.get("/kraken/status", tags=["Kraken Bot"])
-async def kraken_status() -> dict:
+async def kraken_status(bot_id: str | None = None) -> dict:
     """
-    Read and return the Kraken bot's full runtime state for the dashboard.
-
-    All persistent state comes exclusively from PostgreSQL:
-      1. kraken_heartbeat  — bot status, equity, cycle count, circuit breaker
-      2. kraken_portfolio  — cash_usd, open positions (JSONB)
-      3. kraken_trades     — trade history + paper_summary
-
-    Live telemetry (not persisted across restarts) comes from live_state.json:
-      - signals, microstructure, adaptive_params, thinking_text
-
-    Returns "not_started" empty state if the bot has never run (DB rows absent).
+    Read and return a Kraken bot's full runtime state for the dashboard.
+    Accepts optional bot_id query param (defaults to davy-jones).
     """
     import json as _json
     from pathlib import Path as _Path
     import psycopg2 as _pg2, psycopg2.extras as _pg2x
     import os as _os
 
-    live_state_file = _Path("../kraken-bot/live_state.json")
+    bid, profile = _resolve_bot(bot_id)
+    db_id = profile["db_id"]
+    display_name = profile["display_name"]
+    strategy_label = profile["strategy_label"]
+
+    live_state_file = _Path(f"../kraken-bot/{bid}_live_state.json")
+    if not live_state_file.exists() and bid == "davy-jones":
+        live_state_file = _Path("../kraken-bot/live_state.json")
 
     # ── Live telemetry (non-persistent) — always from live_state.json ──────────
     # live_state.json is ALLOWED for: signals, microstructure, adaptive_params,
@@ -2925,34 +2960,29 @@ async def kraken_status() -> dict:
         pass
 
     # ── All persistent state from PostgreSQL (DB-only, no file fallback) ───────
+    _not_started = {
+        "bot_id": bid, "bot_name": display_name, "strategy_label": strategy_label,
+        "status": "not_started",
+        "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
+        "circuit_breaker": {"active": False, "paused_until": None},
+        "position_count": 0, "open_positions": [], "deployed_usd": 0,
+        "deployed_pct": 0, "cash_usd": 0, "error": None,
+        "recent_trades": [], "paper_summary": None, **_live_telemetry,
+    }
+
     _dburl = _os.environ.get("DATABASE_URL")
     if not _dburl:
-        return {
-            "bot_name": "Davy Jones' Portfolio", "status": "not_started",
-            "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
-            "circuit_breaker": {"active": False, "paused_until": None},
-            "position_count": 0, "open_positions": [], "deployed_usd": 0,
-            "deployed_pct": 0, "cash_usd": 0, "error": None,
-            "recent_trades": [], "paper_summary": None, **_live_telemetry,
-        }
+        return _not_started
 
     try:
         _pgconn = _pg2.connect(_dburl)
         try:
-            # ── 1. Heartbeat ────────────────────────────────────────────────
             with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _hc:
-                _hc.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
+                _hc.execute("SELECT * FROM kraken_heartbeat WHERE id = %s", (db_id,))
                 _hrow = _hc.fetchone()
 
             if not _hrow:
-                return {
-                    "bot_name": "Davy Jones' Portfolio", "status": "not_started",
-                    "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
-                    "circuit_breaker": {"active": False, "paused_until": None},
-                    "position_count": 0, "open_positions": [], "deployed_usd": 0,
-                    "deployed_pct": 0, "cash_usd": 0, "error": None,
-                    "recent_trades": [], "paper_summary": None, **_live_telemetry,
-                }
+                return _not_started
 
             hb = dict(_hrow)
             if hb.get("last_updated"):
@@ -2966,7 +2996,8 @@ async def kraken_status() -> dict:
             _db_positions: list = []
             with _pgconn.cursor() as _pc:
                 _pc.execute(
-                    "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
+                    "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = %s",
+                    (db_id,)
                 )
                 _pr = _pc.fetchone()
                 if _pr:
@@ -2992,8 +3023,9 @@ async def kraken_status() -> dict:
                     """
                     SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                            fees_usd, reason, closed_at, paper
-                    FROM   kraken_trades ORDER BY closed_at ASC
-                    """
+                    FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
+                    """,
+                    (bid,)
                 )
                 _all_rows = _tc.fetchall()
 
@@ -3020,7 +3052,9 @@ async def kraken_status() -> dict:
             deployed_pct = round((deployed_usd / equity) * 100, 1) if equity > 0 else 0.0
 
             return {
-                "bot_name":             "Davy Jones' Portfolio",
+                "bot_id":               bid,
+                "bot_name":             display_name,
+                "strategy_label":       strategy_label,
                 "paper_trading":        hb.get("paper_trading", True),
                 "bot_paused":           hb.get("bot_paused", False),
                 "status":               hb.get("status", "not_started"),
@@ -3046,7 +3080,8 @@ async def kraken_status() -> dict:
     except Exception as exc:
         logger.warning(f"[kraken/status] DB read failed: {exc}")
         return {
-            "bot_name": "Davy Jones' Portfolio", "status": "db_unavailable",
+            "bot_id": bid, "bot_name": display_name, "strategy_label": strategy_label,
+            "status": "db_unavailable",
             "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
             "circuit_breaker": {"active": False, "paused_until": None},
             "position_count": 0, "open_positions": [], "deployed_usd": 0,
@@ -3058,32 +3093,40 @@ async def kraken_status() -> dict:
 # ── Kraken Bot — AI Narrative Commentary ──────────────────────────────────────
 
 @router.get("/kraken/commentary", tags=["Kraken Bot"])
-async def kraken_commentary(force: bool = False) -> dict:
+async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> dict:
     """
-    Generate Davy Jones' AI narrative: thought process, learnings, and future
-    behavioural adjustments.  Cached for 30 minutes.
+    Generate a Kraken bot's AI narrative. Cached for 30 minutes per bot.
+    Round-robin: only one bot gets fresh Groq generation per request cycle.
     """
-    global _kraken_commentary_cache
+    global _kraken_commentary_cache, _kraken_commentary_round_robin_idx
     import json as _json, os as _os
     from pathlib import Path as _Path
 
-    now = time.time()
-    cache_age = now - _kraken_commentary_cache["ts"]
+    bid, profile = _resolve_bot(bot_id)
+    db_id = profile["db_id"]
+    display_name = profile["display_name"]
 
-    if not force and _kraken_commentary_cache["text"] and cache_age < COMMENTARY_TTL_SECONDS:
+    bot_cache = _kraken_commentary_caches.get(bid, {"text": None, "generated_at": None, "ts": 0})
+
+    now = time.time()
+    cache_age = now - bot_cache["ts"]
+
+    if not force and bot_cache["text"] and cache_age < COMMENTARY_TTL_SECONDS:
         return {
-            "commentary": _kraken_commentary_cache["text"],
-            "generated_at": _kraken_commentary_cache["generated_at"],
+            "bot_id": bid,
+            "commentary": bot_cache["text"],
+            "generated_at": bot_cache["generated_at"],
             "cached": True,
             "cache_age_seconds": int(cache_age),
         }
 
     from analysis.groq_budget import budget as _groq_budget
     if not _groq_budget.can_call_commentary("kraken", force=force):
-        if _kraken_commentary_cache["text"]:
+        if bot_cache["text"]:
             return {
-                "commentary": _kraken_commentary_cache["text"],
-                "generated_at": _kraken_commentary_cache["generated_at"],
+                "bot_id": bid,
+                "commentary": bot_cache["text"],
+                "generated_at": bot_cache["generated_at"],
                 "cached": True,
                 "cache_age_seconds": int(cache_age),
                 "throttled": True,
@@ -3091,11 +3134,8 @@ async def kraken_commentary(force: bool = False) -> dict:
             }
         _exhausted = _groq_budget.budget_exhausted()
         return {
-            "commentary": (
-                "AI narrative paused — daily token budget reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC."
-                if _exhausted else
-                "AI narrative paused — daily call limit reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC."
-            ),
+            "bot_id": bid,
+            "commentary": "AI narrative paused — daily token budget reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC.",
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,
@@ -3103,7 +3143,19 @@ async def kraken_commentary(force: bool = False) -> dict:
             "budget_exhausted": _exhausted,
         }
 
-    # ── Load bot data for commentary (DB primary, file fallback) ─────────────
+    bot_ids_list = list(KRAKEN_BOT_PROFILES.keys())
+    if not force:
+        rr_bot = bot_ids_list[_kraken_commentary_round_robin_idx % len(bot_ids_list)]
+        if bid != rr_bot and bot_cache["text"]:
+            return {
+                "bot_id": bid,
+                "commentary": bot_cache["text"],
+                "generated_at": bot_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "round_robin_skip": True,
+            }
+
     import psycopg2 as _pg2c, psycopg2.extras as _pg2cx
     kdata: dict = {}
     recent_trades: list[dict] = []
@@ -3114,7 +3166,7 @@ async def kraken_commentary(force: bool = False) -> dict:
             _kcpgconn = _pg2c.connect(_dburl)
             try:
                 with _kcpgconn.cursor(cursor_factory=_pg2cx.RealDictCursor) as _kcc:
-                    _kcc.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
+                    _kcc.execute("SELECT * FROM kraken_heartbeat WHERE id = %s", (db_id,))
                     _khr = _kcc.fetchone()
                     if _khr:
                         kdata = {
@@ -3129,8 +3181,9 @@ async def kraken_commentary(force: bool = False) -> dict:
                         """
                         SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                                fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades ORDER BY closed_at ASC
-                        """
+                        FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
+                        """,
+                        (bid,)
                     )
                     for _r in _kct.fetchall():
                         _d = dict(_r)
@@ -3142,18 +3195,19 @@ async def kraken_commentary(force: bool = False) -> dict:
         except Exception as exc:
             logger.debug(f"Kraken commentary: DB read failed: {exc}")
 
-    # If DB returned no data, the bot hasn't run yet
     if not kdata:
         return {
-            "commentary": "Davy Jones is still getting his sea legs — bot hasn't run yet. Check back shortly.",
+            "bot_id": bid,
+            "commentary": f"{display_name} is still getting started — bot hasn't run yet. Check back shortly.",
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,
             "unavailable": True,
         }
 
-    # Live telemetry (non-persistent) — signals from live_state.json
-    _lsf = _Path("../kraken-bot/live_state.json")
+    _lsf = _Path(f"../kraken-bot/{bid}_live_state.json")
+    if not _lsf.exists() and bid == "davy-jones":
+        _lsf = _Path("../kraken-bot/live_state.json")
     _live: dict = {}
     try:
         if _lsf.exists():
@@ -3197,8 +3251,15 @@ async def kraken_commentary(force: bool = False) -> dict:
     except Exception:
         sentiment_line = ""
 
+    _persona_map = {
+        "davy-jones": ("Davy Jones", "a relentless 24/7 crypto mean-reversion trading AI with the soul of a seasoned sailor who reads market currents like ocean tides"),
+        "blackbeard": ("Blackbeard", "an aggressive 24/7 crypto mean-reversion trading AI who attacks weak signals like a pirate raiding merchant ships — tight entry thresholds, higher risk tolerance, bigger positions"),
+        "calypso": ("Calypso", "the most aggressive 24/7 crypto mean-reversion trading AI — a mythical sea goddess who bends markets to her will with the tightest entry thresholds, smallest cash reserves, and maximum position sizing"),
+    }
+    persona_name, persona_desc = _persona_map.get(bid, ("Kraken Bot", "a 24/7 crypto mean-reversion trading AI"))
+
     user_prompt = f"""
-Davy Jones' current open positions (Kraken 24/7 mean-reversion crypto bot):
+{persona_name}'s current open positions (Kraken 24/7 mean-reversion crypto bot, {profile.get('strategy_label', '')} strategy):
 {pos_text}
 
 Recent wins (reinforcing behaviour):
@@ -3217,8 +3278,7 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
 """
 
     system_prompt = (
-        "You are 'Davy Jones' — a relentless 24/7 crypto mean-reversion trading AI with the soul of a seasoned "
-        "sailor who reads market currents like ocean tides. In exactly 3 punchy sentences: "
+        f"You are '{persona_name}' — {persona_desc}. In exactly 3 punchy sentences: "
         "(1) your sharpest read on the current crypto signals and any open positions, "
         "(2) one concrete learning from your recent wins or losses, "
         "(3) one specific behavioural adjustment you're making going forward. "
@@ -3248,26 +3308,32 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         _groq_budget.consume(tokens_used, call_type="commentary")
         if not force:
             _groq_budget.record_commentary_call("kraken")
+            _kraken_commentary_round_robin_idx += 1
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
-        _kraken_commentary_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        new_cache = {"text": commentary, "generated_at": generated_at, "ts": now}
+        _kraken_commentary_caches[bid] = new_cache
+        if bid == "davy-jones":
+            _kraken_commentary_cache = new_cache
         _persist_commentary_caches()
-        logger.info(f"Kraken AI commentary regenerated successfully (force={force}, tokens={tokens_used})")
-        return {"commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
+        logger.info(f"Kraken AI commentary regenerated for {bid} (force={force}, tokens={tokens_used})")
+        return {"bot_id": bid, "commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
-        logger.error(f"Kraken AI commentary generation failed: {exc}")
-        # Back off 5 min so the next auto-refresh does not immediately retry Groq
-        _kraken_commentary_cache["ts"] = now - COMMENTARY_TTL_SECONDS + 300
-        if _kraken_commentary_cache["text"]:
+        logger.error(f"Kraken AI commentary generation failed for {bid}: {exc}")
+        bot_cache["ts"] = now - COMMENTARY_TTL_SECONDS + 300
+        _kraken_commentary_caches[bid] = bot_cache
+        if bot_cache["text"]:
             return {
-                "commentary": _kraken_commentary_cache["text"],
-                "generated_at": _kraken_commentary_cache["generated_at"],
+                "bot_id": bid,
+                "commentary": bot_cache["text"],
+                "generated_at": bot_cache["generated_at"],
                 "cached": True,
                 "cache_age_seconds": int(cache_age),
                 "error": str(exc),
             }
         return {
-            "commentary": "Davy Jones' AI is resting — daily token limit reached. The seas will clear by tomorrow.",
+            "bot_id": bid,
+            "commentary": f"{persona_name}'s AI is resting — daily token limit reached. The seas will clear by tomorrow.",
             "generated_at": None,
             "cached": False,
             "cache_age_seconds": 0,
@@ -3283,17 +3349,20 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
 # The Alpaca trading system never touches these tables.
 
 @router.get("/kraken/auto-trading", tags=["Kraken Bot"])
-async def kraken_auto_trading_status() -> dict:
+async def kraken_auto_trading_status(bot_id: str | None = None) -> dict:
     """Return the current Kraken bot pause state from control.json."""
     import json as _json
     from pathlib import Path as _Path
-    ctrl = _Path("../kraken-bot/control.json")  # server cwd = trading-platform/
+    bid, _ = _resolve_bot(bot_id)
+    ctrl = _Path(f"../kraken-bot/{bid}_control.json")
+    if not ctrl.exists() and bid == "davy-jones":
+        ctrl = _Path("../kraken-bot/control.json")
     if not ctrl.exists():
-        return {"bot_paused": False}
+        return {"bot_id": bid, "bot_paused": False}
     try:
-        return {"bot_paused": bool(_json.loads(ctrl.read_text()).get("bot_paused", False))}
+        return {"bot_id": bid, "bot_paused": bool(_json.loads(ctrl.read_text()).get("bot_paused", False))}
     except Exception:
-        return {"bot_paused": False}
+        return {"bot_id": bid, "bot_paused": False}
 
 
 class KrakenControlRequest(BaseModel):
@@ -3301,39 +3370,30 @@ class KrakenControlRequest(BaseModel):
 
 
 @router.post("/kraken/auto-trading", tags=["Kraken Bot"])
-async def kraken_toggle_auto_trading(request: KrakenControlRequest) -> dict:
-    """
-    Pause or resume the Kraken bot by writing control.json.
-    The bot reads this file at the start of each cycle.
-    The workflow keeps running — only signal processing is paused.
-    """
+async def kraken_toggle_auto_trading(request: KrakenControlRequest, bot_id: str | None = None) -> dict:
+    """Pause or resume a Kraken bot by writing its control.json."""
     import json as _json
     from pathlib import Path as _Path
-    ctrl = _Path("../kraken-bot/control.json")  # server cwd = trading-platform/
+    bid, _ = _resolve_bot(bot_id)
+    ctrl = _Path(f"../kraken-bot/{bid}_control.json")
     ctrl.write_text(_json.dumps({"bot_paused": request.bot_paused}, indent=2))
-    logger.info(f"Kraken bot {'PAUSED' if request.bot_paused else 'RESUMED'} via dashboard toggle")
-    return {"bot_paused": request.bot_paused, "message": "Kraken bot paused" if request.bot_paused else "Kraken bot resumed"}
+    logger.info(f"Kraken bot {bid} {'PAUSED' if request.bot_paused else 'RESUMED'} via dashboard toggle")
+    return {"bot_id": bid, "bot_paused": request.bot_paused, "message": f"Kraken bot {bid} paused" if request.bot_paused else f"Kraken bot {bid} resumed"}
 
 
 @router.get("/kraken/performance", tags=["Kraken Bot"])
-async def kraken_performance() -> dict:
-    """
-    Derive performance statistics from the Kraken bot.
-
-    DATA SOURCE: kraken_trades PostgreSQL table (only — no file fallback).
-    NOT RELATED TO: /performance/history or /performance/summary (Alpaca data)
-
-    Returns computed metrics over the complete trade history:
-      - trade count, win rate, total/best/worst/avg P&L
-      - per-symbol breakdown
-      - the full recent trade list
-    """
+async def kraken_performance(bot_id: str | None = None) -> dict:
+    """Derive performance statistics from a Kraken bot."""
     import json as _json
     from pathlib import Path as _Path
     import psycopg2 as _pg2, psycopg2.extras as _pg2x
     import os as _os
 
+    bid, profile = _resolve_bot(bot_id)
+    db_id = profile["db_id"]
+
     empty: dict = {
+        "bot_id":          bid,
         "data_source":     "postgresql:kraken_trades",
         "exchange":        "Kraken (crypto, independent from Alpaca)",
         "has_data":        False,
@@ -3358,7 +3418,6 @@ async def kraken_performance() -> dict:
     cycle_count    = 0
     bot_status     = "not_started"
 
-    # ── Primary: PostgreSQL ──────────────────────────────────────────────────
     _dburl = _os.environ.get("DATABASE_URL")
     if _dburl:
         try:
@@ -3369,9 +3428,10 @@ async def kraken_performance() -> dict:
                         """
                         SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                                fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades
+                        FROM   kraken_trades WHERE bot_id = %s
                         ORDER  BY closed_at ASC
-                        """
+                        """,
+                        (bid,)
                     )
                     for r in _tc.fetchall():
                         d = dict(r)
@@ -3381,7 +3441,8 @@ async def kraken_performance() -> dict:
 
                 with _pgconn.cursor() as _hc:
                     _hc.execute(
-                        "SELECT equity_usd, cycle_count, status FROM kraken_heartbeat WHERE id = 1"
+                        "SELECT equity_usd, cycle_count, status FROM kraken_heartbeat WHERE id = %s",
+                        (db_id,)
                     )
                     _hr = _hc.fetchone()
                     if _hr:
@@ -3427,6 +3488,7 @@ async def kraken_performance() -> dict:
         by_symbol[sym]["total_pnl_usd"] = round(by_symbol[sym]["total_pnl_usd"], 2)
 
     return {
+        "bot_id":          bid,
         "data_source":     "postgresql:kraken_trades",
         "exchange":        "Kraken (crypto, independent from Alpaca)",
         "has_data":        True,

@@ -93,6 +93,13 @@ from config import (
     MICRO_LOT_EQUITY_PCT,
     BEAR_MAX_POSITIONS,
     BEAR_MAX_POSITION_FRACTION,
+    BOT_ID,
+    BOT_DISPLAY_NAME,
+    BOT_DB_ID,
+    BOT_STRATEGY_LABEL,
+    MARKET_CACHE_FILE,
+    IS_PRIMARY_FETCHER,
+    MARKET_CACHE_TTL,
 )
 
 import adaptive_params as _adaptive
@@ -128,11 +135,13 @@ from paper_engine import (
 
 logger.info("=" * 65)
 if PAPER_TRADING:
-    logger.info("  DAVY JONES' PORTFOLIO  —  *** PAPER TRADING MODE ***")
+    logger.info(f"  {BOT_DISPLAY_NAME.upper()}  —  *** PAPER TRADING MODE ***")
+    logger.info(f"  Bot ID: {BOT_ID} (db_id={BOT_DB_ID}) | Strategy: {BOT_STRATEGY_LABEL}")
     logger.info(f"  Simulated balance : ${PAPER_STARTING_BALANCE:,.0f} USD (fake money)")
     logger.info("  No real orders will be placed on Kraken.")
 else:
-    logger.info("  DAVY JONES' PORTFOLIO  —  *** LIVE TRADING MODE ***")
+    logger.info(f"  {BOT_DISPLAY_NAME.upper()}  —  *** LIVE TRADING MODE ***")
+    logger.info(f"  Bot ID: {BOT_ID} (db_id={BOT_DB_ID}) | Strategy: {BOT_STRATEGY_LABEL}")
     logger.info("  REAL MONEY — Real orders on Kraken Pro.")
 logger.info("=" * 65)
 logger.info(f"  Symbols        : {', '.join(SYMBOLS)}")
@@ -671,6 +680,61 @@ def scale_into_position(symbol: str, tranche: dict, current_price: float) -> boo
 # SINGLE TRADING CYCLE — run once per LOOP_SLEEP_SECONDS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _write_market_cache(data: dict) -> None:
+    """Write shared market data cache with file locking (primary fetcher only)."""
+    import fcntl
+    cache_path = MARKET_CACHE_FILE
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        tmp = cache_path + ".tmp"
+        with open(tmp, "w") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+            json.dump(data, f, default=str)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        os.replace(tmp, cache_path)
+    except Exception as exc:
+        logger.debug(f"MarketCache | write failed: {exc}")
+
+
+def _read_market_cache() -> dict | None:
+    """Read shared market data cache. Returns None if stale or missing."""
+    import fcntl
+    cache_path = MARKET_CACHE_FILE
+    try:
+        if not os.path.exists(cache_path):
+            return None
+        with open(cache_path, "r") as f:
+            fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+            data = json.load(f)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        ts = data.get("_cache_ts", 0)
+        if time.time() - ts > MARKET_CACHE_TTL:
+            return None
+        return data
+    except Exception as exc:
+        logger.debug(f"MarketCache | read failed: {exc}")
+        return None
+
+
+def _fetch_ohlcv_with_cache(symbol: str) -> list | None:
+    """Fetch OHLCV data, using shared cache for non-primary bots."""
+    if not IS_PRIMARY_FETCHER:
+        cache = _read_market_cache()
+        if cache and symbol in cache.get("ohlcv", {}):
+            return cache["ohlcv"][symbol]
+
+    try:
+        candles = exchange.fetch_ohlcv(
+            symbol=symbol,
+            timeframe=OHLCV_TIMEFRAME,
+            limit=OHLCV_LIMIT,
+        )
+        return candles
+    except Exception as exc:
+        logger.warning(f"OHLCV | {symbol} fetch failed: {exc}")
+        return None
+
+
 def run_cycle() -> None:
     """
     Execute one full trading cycle:
@@ -805,15 +869,11 @@ def run_cycle() -> None:
             f"(max_positions={_effective_max_positions} max_frac={_effective_max_position_frac:.0%})"
         )
 
+    _ohlcv_cache_data: dict[str, list] = {}
+
     for symbol in SYMBOLS:
         try:
-            # ── 3a. Fetch candles — real live data in both paper and live mode ─
-            # Paper trading uses Kraken's public OHLCV endpoint (no auth needed).
-            candles = exchange.fetch_ohlcv(
-                symbol=symbol,
-                timeframe=OHLCV_TIMEFRAME,
-                limit=OHLCV_LIMIT,
-            )
+            candles = _fetch_ohlcv_with_cache(symbol)
             if not candles or len(candles) < max(RSI_PERIOD, ZSCORE_WINDOW) + 2:
                 logger.debug(f"Signal | {symbol}: Not enough candle data, skipping")
                 continue
@@ -823,6 +883,9 @@ def run_cycle() -> None:
             lows          = [c[3] for c in candles]
             volumes       = [c[5] for c in candles]
             current_price = closes[-1]
+
+            if IS_PRIMARY_FETCHER:
+                _ohlcv_cache_data[symbol] = candles
 
             _volume_history[symbol].append(volumes[-1] if volumes else 0.0)
             _vol_24h_sum = sum(list(volumes)[-24:]) if len(volumes) >= 24 else sum(volumes)
@@ -1403,6 +1466,9 @@ def run_cycle() -> None:
     else:
         thinking_text = "🔍 No setups — markets neutral."
 
+    if IS_PRIMARY_FETCHER and _ohlcv_cache_data:
+        _write_market_cache({"_cache_ts": time.time(), "ohlcv": _ohlcv_cache_data})
+
     # ── Step 5: Write status for the dashboard ────────────────────────────────
     write_status()
     write_live_state()
@@ -1457,7 +1523,7 @@ def _start_health_server() -> None:
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b'{"status":"running","service":"kraken-bot"}')
+            self.wfile.write(json.dumps({"status": "running", "service": "kraken-bot", "bot_id": BOT_ID}).encode())
 
         def log_message(self, fmt, *args):
             pass

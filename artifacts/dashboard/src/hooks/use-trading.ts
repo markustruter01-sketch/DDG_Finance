@@ -753,7 +753,30 @@ export interface SystemRestartResult {
   message: string;
 }
 
-// ── Kraken Bot (Davy Jones' Portfolio) ───────────────────────────────────────
+// ── Kraken Bot (Multi-bot: Davy Jones, Blackbeard, Calypso) ──────────────────
+
+export interface KrakenBotProfile {
+  bot_id: string;
+  display_name: string;
+  strategy_label: string;
+  db_id: number;
+}
+
+export function useKrakenBots() {
+  return useQuery<KrakenBotProfile[]>({
+    queryKey: ["/kraken/bots"],
+    queryFn: async () => {
+      const res = (await api.get("/kraken/bots")).data;
+      const botsObj = res?.bots ?? res;
+      if (Array.isArray(botsObj)) return botsObj;
+      return Object.entries(botsObj).map(([k, v]: [string, any]) => ({ bot_id: k, ...v }));
+    },
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+  });
+}
 
 export interface KrakenPosition {
   symbol: string;
@@ -771,7 +794,9 @@ export interface KrakenPosition {
 }
 
 export interface KrakenStatus {
+  bot_id?: string;
   bot_name: string;
+  strategy_label?: string;
   paper_trading: boolean;
   bot_paused: boolean;
   status: "running" | "paused_circuit_breaker" | "paused_dashboard" | "not_started" | "error";
@@ -816,10 +841,11 @@ export interface KrakenStatus {
   error: string | null;
 }
 
-export function useKrakenStatus() {
+export function useKrakenStatus(botId?: string) {
+  const params = botId ? `?bot_id=${botId}` : "";
   return useQuery<KrakenStatus>({
-    queryKey: ["/kraken/status"],
-    queryFn: async () => (await api.get("/kraken/status")).data,
+    queryKey: ["/kraken/status", botId ?? "default"],
+    queryFn: async () => (await api.get(`/kraken/status${params}`)).data,
     refetchInterval: 30_000,
     retry: false,
   });
@@ -828,6 +854,7 @@ export function useKrakenStatus() {
 // ── Kraken AI Commentary ──────────────────────────────────────────────────────
 
 export interface KrakenCommentary {
+  bot_id?: string;
   commentary: string;
   generated_at: string | null;
   cached: boolean;
@@ -837,29 +864,29 @@ export interface KrakenCommentary {
   error?: string;
 }
 
-export function useKrakenCommentary() {
+export function useKrakenCommentary(botId?: string) {
+  const params = botId ? `?bot_id=${botId}` : "";
   return useQuery<KrakenCommentary>({
-    queryKey: ["/kraken/commentary"],
-    queryFn: async () => (await api.get("/kraken/commentary")).data,
+    queryKey: ["/kraken/commentary", botId ?? "default"],
+    queryFn: async () => (await api.get(`/kraken/commentary${params}`)).data,
     staleTime: 1000 * 60 * 25,
     retry: 1,
   });
 }
 
-export function useRefreshKrakenCommentary() {
+export function useRefreshKrakenCommentary(botId?: string) {
   const qc = useQueryClient();
+  const params = botId ? `&bot_id=${botId}` : "";
   return useMutation({
     mutationFn: async () =>
-      (await api.get("/kraken/commentary?force=true")).data as KrakenCommentary,
+      (await api.get(`/kraken/commentary?force=true${params}`)).data as KrakenCommentary,
     onSuccess: (data) => {
-      qc.setQueryData(["/kraken/commentary"], data);
+      qc.setQueryData(["/kraken/commentary", botId ?? "default"], data);
     },
   });
 }
 
 // ── Kraken Performance Metrics ────────────────────────────────────────────────
-// DATA SOURCE: kraken-bot/status.json  (Kraken exchange, separate capital pool)
-// NOT RELATED TO: usePerformanceSummary / usePerformanceHistory (Alpaca data)
 
 export interface KrakenSymbolStats {
   trades: number;
@@ -870,6 +897,7 @@ export interface KrakenSymbolStats {
 }
 
 export interface KrakenPerformance {
+  bot_id?: string;
   data_source: string;
   exchange: string;
   has_data: boolean;
@@ -889,10 +917,11 @@ export interface KrakenPerformance {
   bot_status: string;
 }
 
-export function useKrakenPerformance() {
+export function useKrakenPerformance(botId?: string) {
+  const params = botId ? `?bot_id=${botId}` : "";
   return useQuery<KrakenPerformance>({
-    queryKey: ["/kraken/performance"],
-    queryFn: async () => (await api.get("/kraken/performance")).data,
+    queryKey: ["/kraken/performance", botId ?? "default"],
+    queryFn: async () => (await api.get(`/kraken/performance${params}`)).data,
     refetchInterval: 60_000,
     retry: 2,
     retryDelay: 3000,
@@ -900,26 +929,26 @@ export function useKrakenPerformance() {
 }
 
 // ── Kraken Bot Auto-Trading Toggle ────────────────────────────────────────────
-// Reads/writes kraken-bot/control.json via FastAPI.
-// The bot checks this file at the start of each cycle.
 
-export function useKrakenAutoTrading() {
-  return useQuery<{ bot_paused: boolean }>({
-    queryKey: ["/kraken/auto-trading"],
-    queryFn: async () => (await api.get("/kraken/auto-trading")).data,
+export function useKrakenAutoTrading(botId?: string) {
+  const params = botId ? `?bot_id=${botId}` : "";
+  return useQuery<{ bot_id?: string; bot_paused: boolean }>({
+    queryKey: ["/kraken/auto-trading", botId ?? "default"],
+    queryFn: async () => (await api.get(`/kraken/auto-trading${params}`)).data,
     refetchInterval: 15_000,
     retry: false,
   });
 }
 
-export function useToggleKrakenAutoTrading() {
+export function useToggleKrakenAutoTrading(botId?: string) {
   const qc = useQueryClient();
-  return useMutation<{ bot_paused: boolean }, Error, boolean>({
+  const params = botId ? `?bot_id=${botId}` : "";
+  return useMutation<{ bot_id?: string; bot_paused: boolean }, Error, boolean>({
     mutationFn: async (bot_paused: boolean) =>
-      (await api.post("/kraken/auto-trading", { bot_paused })).data,
+      (await api.post(`/kraken/auto-trading${params}`, { bot_paused })).data,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/kraken/auto-trading"] });
-      qc.invalidateQueries({ queryKey: ["/kraken/status"] });
+      qc.invalidateQueries({ queryKey: ["/kraken/auto-trading", botId ?? "default"] });
+      qc.invalidateQueries({ queryKey: ["/kraken/status", botId ?? "default"] });
     },
   });
 }

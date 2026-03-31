@@ -1,0 +1,31 @@
+{
+  "last_updated": "2026-03-31T23:12:59.260929+00:00",
+  "deployed_usd": 0,
+  "deployed_pct": 0.0,
+  "deployable_ceiling_pct": 90.0,
+  "cash_reserve_pct": 10.0,
+  "max_positions": 10,
+  "open_positions": [],
+  "signals": [],
+  "microstructure": {},
+  "thinking_text": "Initialising \u2014 fetching market data...",
+  "adaptive_params": {
+    "active": {
+      "ZSCORE_ENTRY": 0.6,
+      "ZSCORE_EXIT": 0.3,
+      "STOP_LOSS_PCT": 0.025,
+      "TRAIL_PCT": 0.05,
+      "MIN_NET_PROFIT_PCT": 0.008
+    },
+    "defaults": {
+      "ZSCORE_ENTRY": 0.6,
+      "ZSCORE_EXIT": 0.3,
+      "STOP_LOSS_PCT": 0.025,
+      "TRAIL_PCT": 0.05,
+      "MIN_NET_PROFIT_PCT": 0.008
+    },
+    "reasons": {},
+    "adapted_at": null,
+    "next_adapt_in_hours": 6
+  }
+}

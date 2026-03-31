@@ -9,12 +9,13 @@ import {
   useAuditorPerformance, useTriggerPerformanceAnalysis,
   useLearningSnapshotInfo, useSyncLearningSnapshot,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
-  useKrakenCommentary, useRefreshKrakenCommentary, useEquityCurve,
+  useKrakenCommentary, useRefreshKrakenCommentary, useKrakenBots, useEquityCurve,
   useLearningJournal, useAttribution,
   useDegradationLog, useDegradationReport, useDegradationHealth,
   useRecentTrades, useRagWinsExtended, useExportReport,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
+  type KrakenBotProfile,
   type LearningEntry, type DegradationEvent, type DegradationStats,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
@@ -2762,13 +2763,23 @@ function AnchorSVG({ active }: { active: boolean }) {
   );
 }
 
-function DavyJonesBotSection() {
-  const { data } = useKrakenStatus();
-  const { data: krakenPerf } = useKrakenPerformance();
-  const { data: krakenCommentary, isLoading: commentaryLoading } = useKrakenCommentary();
-  const { mutate: refreshKrakenCommentary, isPending: isRefreshingKraken } = useRefreshKrakenCommentary();
+const BOT_THEMES: Record<string, { accent: string; accentTw: string; icon: string; glowRgb: string; borderTw: string; bgGradient: string }> = {
+  "davy-jones": { accent: "#22d3ee", accentTw: "cyan", icon: "⚓", glowRgb: "6,182,212", borderTw: "border-cyan-500/20", bgGradient: "from-slate-950/90 to-cyan-950/10" },
+  "blackbeard": { accent: "#f97316", accentTw: "orange", icon: "🏴‍☠️", glowRgb: "249,115,22", borderTw: "border-orange-500/20", bgGradient: "from-slate-950/90 to-orange-950/10" },
+  "calypso":    { accent: "#a855f7", accentTw: "purple", icon: "🌊", glowRgb: "168,85,247", borderTw: "border-purple-500/20", bgGradient: "from-slate-950/90 to-purple-950/10" },
+};
+
+function KrakenBotCard({ botId }: { botId: string }) {
+  const theme = BOT_THEMES[botId] ?? BOT_THEMES["davy-jones"];
+  const { data } = useKrakenStatus(botId);
+  const { data: krakenPerf } = useKrakenPerformance(botId);
+  const { data: krakenCommentary, isLoading: commentaryLoading } = useKrakenCommentary(botId);
+  const { mutate: refreshKrakenCommentary, isPending: isRefreshingKraken } = useRefreshKrakenCommentary(botId);
   const [showModal, setShowModal] = useState(false);
   const isMobile = useIsMobile();
+
+  const botName = data?.bot_name ?? botId;
+  const strategyLabel = data?.strategy_label ?? "";
 
   const isRunning  = data?.status === "running";
   const isCB       = data?.status === "paused_circuit_breaker";
@@ -2777,11 +2788,9 @@ function DavyJonesBotSection() {
   const krakenThinking = commentaryLoading || isRefreshingKraken;
   const krakenThrottled = krakenCommentary?.throttled === true;
 
-  const statusColor = isCB ? "text-red-400" : isRunning ? "text-cyan-400" : isError ? "text-amber-400" : "text-slate-500";
   const statusLabel = isCB ? "CIRCUIT BREAKER" : isRunning ? "RUNNING" : isError ? "ERROR" : "NOT STARTED";
-  const statusDot   = isCB ? "bg-red-400" : isRunning ? "bg-cyan-400" : isError ? "bg-amber-400" : "bg-slate-600";
+  const statusDot   = isCB ? "bg-red-400" : isRunning ? `bg-[${theme.accent}]` : isError ? "bg-amber-400" : "bg-slate-600";
 
-  // Gamification — streak + XP
   const recentKrakenTrades = useMemo(() => [...(data?.recent_trades ?? [])].reverse(), [data?.recent_trades]);
   const krakenStreak = useMemo(() => computeStreak(recentKrakenTrades), [recentKrakenTrades]);
   const krakenXP = computeXP(krakenPerf?.win_count ?? 0, krakenPerf?.total_trades ?? 0);
@@ -2793,14 +2802,13 @@ function DavyJonesBotSection() {
   const signals: any[] = data?.signals ?? [];
 
   const fallbackText = notStarted
-    ? "Awaiting Kraken keys — add KRAKEN_API_KEY and KRAKEN_SECRET_KEY, then start the bot."
+    ? `${botName} is waiting to start — bot hasn't run yet.`
     : isCB
     ? "Circuit breaker tripped — all trading paused until volatility clears."
     : isError
     ? `Error: ${data?.error ?? "unknown"}. Regrouping...`
     : "Scanning for mean-reversion setups.";
 
-  // Latch dialogue — only update when position count or held-signal types change
   const [displayedText, setDisplayedText] = useState<string | null>(null);
   const prevPosCount   = useRef<number>(-1);
   const prevSignalKey  = useRef<string>("");
@@ -2827,17 +2835,18 @@ function DavyJonesBotSection() {
         {showModal && <KrakenBrainModal open={showModal} onClose={() => setShowModal(false)} />}
       </AnimatePresence>
 
-      <div className="relative rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-950/90 to-cyan-950/10 p-5 shadow-[0_0_60px_rgba(6,182,212,0.04)] overflow-hidden flex-1 flex flex-col">
-        {/* Ambient glow */}
-        <div className="absolute top-0 left-0 w-48 h-48 bg-cyan-500/4 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-64 h-64 bg-teal-500/3 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none" />
+      <div className={cn("relative rounded-2xl border bg-gradient-to-br p-5 shadow-[0_0_60px_rgba(var(--glow),0.04)] overflow-hidden flex-1 flex flex-col", theme.borderTw, theme.bgGradient)} style={{ "--glow": theme.glowRgb } as any}>
+        <div className={cn("absolute top-0 left-0 w-48 h-48 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4 pointer-events-none")} style={{ backgroundColor: `rgba(${theme.glowRgb}, 0.04)` }} />
+        <div className={cn("absolute bottom-0 right-0 w-64 h-64 rounded-full blur-3xl translate-x-1/4 translate-y-1/4 pointer-events-none")} style={{ backgroundColor: `rgba(${theme.glowRgb}, 0.03)` }} />
 
-        {/* Header — mirrors Oracle header exactly */}
         <div className="relative flex items-center gap-2 mb-1">
-          <span className="text-cyan-500/70 text-sm">⚓</span>
-          <span className="text-[10px] uppercase font-semibold tracking-wider text-cyan-400/80">
-            Davy Jones' Portfolio
+          <span className="text-sm" style={{ color: `rgba(${theme.glowRgb}, 0.7)` }}>{theme.icon}</span>
+          <span className="text-[10px] uppercase font-semibold tracking-wider" style={{ color: `rgba(${theme.glowRgb}, 0.8)` }}>
+            {botName}
           </span>
+          {strategyLabel && (
+            <span className="text-[8px] px-1.5 py-0.5 rounded-full border border-white/10 text-muted-foreground/60">{strategyLabel}</span>
+          )}
           <span className="ml-auto flex items-center gap-1.5">
             <StreakChip count={krakenStreak.count} direction={krakenStreak.direction} />
             {isCB && (
@@ -2849,9 +2858,10 @@ function DavyJonesBotSection() {
                 CIRCUIT BREAKER
               </motion.span>
             )}
-            <span className="flex items-center gap-1 text-[9px] text-cyan-400/40">
+            <span className="flex items-center gap-1 text-[9px]" style={{ color: `rgba(${theme.glowRgb}, 0.4)` }}>
               <motion.span
-                className={cn("inline-block w-1.5 h-1.5 rounded-full", statusDot)}
+                className={cn("inline-block w-1.5 h-1.5 rounded-full")}
+                style={{ backgroundColor: isCB ? "#f87171" : isRunning ? theme.accent : isError ? "#fbbf24" : "#475569" }}
                 animate={{ opacity: isRunning ? [0.3, 1, 0.3] : 1 }}
                 transition={{ duration: 2, repeat: isRunning ? Infinity : 0, ease: "easeInOut" }}
               />
@@ -2860,10 +2870,8 @@ function DavyJonesBotSection() {
           </span>
         </div>
 
-        {/* XP Rank bar */}
-        <XPRankBar xp={krakenXP} ranks={KRAKEN_RANKS} accent="#22d3ee" />
+        <XPRankBar xp={krakenXP} ranks={KRAKEN_RANKS} accent={theme.accent} />
 
-        {/* Body row: Anchor SVG + Speech bubble — SAME layout as Oracle */}
         <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-5">
           <motion.div
             className="flex-shrink-0 w-24 h-24 sm:w-44 sm:h-44 cursor-pointer relative group"
@@ -2874,7 +2882,7 @@ function DavyJonesBotSection() {
           >
             <AnchorSVG active={isRunning} />
             <div className="absolute inset-0 flex items-end justify-center pb-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-              <span className="text-[9px] font-semibold text-cyan-300/80 bg-slate-950/80 rounded-full px-2 py-0.5 border border-cyan-500/20 backdrop-blur-sm">
+              <span className="text-[9px] font-semibold bg-slate-950/80 rounded-full px-2 py-0.5 border backdrop-blur-sm" style={{ color: `rgba(${theme.glowRgb}, 0.8)`, borderColor: `rgba(${theme.glowRgb}, 0.2)` }}>
                 tap to inspect
               </span>
             </div>
@@ -2892,16 +2900,14 @@ function DavyJonesBotSection() {
             thinking={krakenThinking}
             onRefresh={() => refreshKrakenCommentary()}
             isRefreshing={isRefreshingKraken}
-            theme="cyan"
-            title="Davy Jones"
+            theme={theme.accentTw as any}
+            title={botName.split("'")[0] ?? botName}
             infoNote={krakenThrottled ? "AI narrative paused — daily token budget reached. Trades are unaffected; all decisions are algorithmic." : undefined}
           />
         </div>
 
-        {/* Signal Scanner — always visible, shows all 10 watched symbols */}
         {(() => {
           const WATCHED = ["BTC/USD","ETH/USD","SOL/USD","XRP/USD","ADA/USD","AVAX/USD","LINK/USD","DOT/USD","ATOM/USD","LTC/USD"];
-          // Build display list: merge live signals over the full watched-symbol list
           const displayRows = WATCHED.map((sym) => {
             const live = signals.find((s: any) => s.symbol === sym);
             return live ?? { symbol: sym, rsi: null, z_score: null, signal_type: "monitoring", has_position: false, pnl_pct: null };
@@ -2913,13 +2919,12 @@ function DavyJonesBotSection() {
                 <span>Signal Scanner</span>
                 <div className="flex items-center gap-2">
                   {!hasLive && <span className="text-[8px] text-slate-600">waiting for data…</span>}
-                  <button onClick={() => setShowModal(true)} className="text-cyan-400/60 hover:text-cyan-400 transition-colors text-[9px]">
+                  <button onClick={() => setShowModal(true)} className="transition-colors text-[9px]" style={{ color: `rgba(${theme.glowRgb}, 0.6)` }}>
                     full analysis →
                   </button>
                 </div>
               </div>
               {isMobile ? (
-                /* ── Mobile: 2-column card grid ── */
                 <div className="grid grid-cols-2 gap-2 p-2">
                   {displayRows.map((sig: any) => {
                     const hasData = sig.rsi != null;
@@ -2938,14 +2943,12 @@ function DavyJonesBotSection() {
                       sig.signal_type === "slots_full" ? "FULL" : "—";
                     return (
                       <div key={sig.symbol} className={cn("rounded-lg border border-white/[0.06] bg-slate-900/60 p-2.5", !hasData && "opacity-40")}>
-                        {/* Symbol + pill row */}
                         <div className="flex items-center justify-between mb-2">
                           <span className={cn("text-sm font-bold font-mono", hasData ? "text-white" : "text-slate-600")}>
                             {sig.symbol.replace("/USD", "")}
                           </span>
                           <span className={cn("text-[8px] font-bold px-1.5 py-0.5 rounded-full border", pillClass)}>{pillText}</span>
                         </div>
-                        {/* RSI row */}
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <span className="text-[9px] text-muted-foreground/60 w-6">RSI</span>
                           <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
@@ -2953,7 +2956,6 @@ function DavyJonesBotSection() {
                           </div>
                           <span className="text-[9px] font-mono w-6 text-right" style={{ color: rsiColor }}>{hasData ? sig.rsi : "—"}</span>
                         </div>
-                        {/* Z-score row */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[9px] text-muted-foreground/60 w-6">Z</span>
                           <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden relative">
@@ -3029,20 +3031,19 @@ function DavyJonesBotSection() {
           );
         })()}
 
-        {/* Stats + last trade — below scanner, mirrors Oracle's allocation panel area */}
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-white/5 bg-slate-900/40 p-2.5">
             <div className="text-[9px] uppercase font-semibold text-muted-foreground tracking-wider mb-1.5">Capital Deployed</div>
             <div className="flex items-end gap-1 mb-1">
-              <span className={cn("text-lg font-bold font-mono leading-none", deployedPct > 70 ? "text-amber-400" : "text-cyan-400")}>
+              <span className="text-lg font-bold font-mono leading-none" style={{ color: deployedPct > 70 ? "#fbbf24" : theme.accent }}>
                 {deployedPct.toFixed(0)}%
               </span>
               <span className="text-[9px] text-muted-foreground mb-0.5">/ {maxDeployPct}% ceiling</span>
             </div>
             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all duration-500", deployedPct > 70 ? "bg-amber-400" : "bg-cyan-400")}
-                style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%` }}
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${Math.min((deployedPct / maxDeployPct) * 100, 100)}%`, backgroundColor: deployedPct > 70 ? "#fbbf24" : theme.accent }}
               />
             </div>
           </div>
@@ -3054,18 +3055,17 @@ function DavyJonesBotSection() {
             </div>
             <div className="flex gap-1">
               {Array.from({ length: data?.max_positions ?? 10 }).map((_, i) => (
-                <div key={i} className={cn("h-1.5 flex-1 rounded-full", i < posCount ? "bg-cyan-400" : "bg-slate-700")} />
+                <div key={i} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: i < posCount ? theme.accent : "#334155" }} />
               ))}
             </div>
           </div>
         </div>
 
-        {/* Open Positions mini-list */}
         {(data?.open_positions?.length ?? 0) > 0 && (
           <div className="mt-3 rounded-xl border border-white/5 bg-slate-900/30 overflow-hidden">
             <div className="px-3 py-1.5 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center gap-2">
               <span>Open Positions</span>
-              <span className="text-cyan-400/50">{data!.open_positions.length}/{data!.max_positions}</span>
+              <span style={{ color: `rgba(${theme.glowRgb}, 0.5)` }}>{data!.open_positions.length}/{data!.max_positions}</span>
               {data?.paper_trading && (
                 <span className="text-[7px] font-bold px-1 py-0.5 rounded border border-amber-500/25 text-amber-400/60 ml-1">PAPER</span>
               )}
@@ -3093,16 +3093,14 @@ function DavyJonesBotSection() {
           </div>
         )}
 
-        {/* Kill Board — Trophy Wall */}
         <KillBoardPanel
           trades={data?.recent_trades ?? []}
           theme="pirate"
           bigWinUsd={50}
-          bigWinLabel="⚓ LEVIATHAN KILL"
+          bigWinLabel={`${theme.icon} LEVIATHAN KILL`}
           panelLabel="Trophy Wall"
         />
 
-        {/* Last trade + cycle footer */}
         {(lastTrade || (data && data.status !== "not_started")) && (
           <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/50 font-mono">
             {lastTrade ? (
@@ -3126,7 +3124,7 @@ function DavyJonesBotSection() {
                     <span>${data.total_equity_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                   </>
                 )}
-                <button onClick={() => setShowModal(true)} className="text-cyan-400/50 hover:text-cyan-400 transition-colors">
+                <button onClick={() => setShowModal(true)} className="transition-colors" style={{ color: `rgba(${theme.glowRgb}, 0.5)` }}>
                   full debrief →
                 </button>
               </>
@@ -3135,6 +3133,106 @@ function DavyJonesBotSection() {
         )}
       </div>
     </>
+  );
+}
+
+function KrakenFleetSection() {
+  const { data: bots } = useKrakenBots();
+  const botIds = bots?.map(b => b.bot_id) ?? ["davy-jones"];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        {botIds.map((bid) => (
+          <KrakenBotCard key={bid} botId={bid} />
+        ))}
+      </div>
+      <StrategyComparisonPanel botIds={botIds} />
+    </div>
+  );
+}
+
+function StrategyComparisonPanel({ botIds }: { botIds: string[] }) {
+  const dj = useKrakenPerformance("davy-jones");
+  const bb = useKrakenPerformance("blackbeard");
+  const ca = useKrakenPerformance("calypso");
+  const perfMap: Record<string, typeof dj> = { "davy-jones": dj, blackbeard: bb, calypso: ca };
+
+  const rows = botIds.map((id) => {
+    const { data } = perfMap[id] ?? dj;
+    const t = BOT_THEMES[id] ?? BOT_THEMES["davy-jones"];
+    return {
+      id,
+      name: data?.bot_id ?? id,
+      accent: t.accent,
+      icon: t.icon,
+      trades: data?.total_trades ?? 0,
+      winRate: data?.win_rate_pct,
+      totalPnl: data?.total_pnl_usd,
+      avgPnl: data?.avg_trade_pct,
+      equity: data?.current_equity ?? 0,
+      status: data?.bot_status ?? "not_started",
+    };
+  });
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-slate-900/40 overflow-hidden">
+      <div className="px-4 py-2 text-[9px] uppercase font-semibold text-muted-foreground tracking-wider border-b border-white/5 flex items-center gap-2">
+        <span>Strategy Comparison</span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="text-muted-foreground/40">{botIds.length} bots</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[9px] uppercase text-muted-foreground/60 border-b border-white/5">
+              <th className="text-left px-4 py-2 font-semibold">Bot</th>
+              <th className="text-right px-3 py-2 font-semibold">Trades</th>
+              <th className="text-right px-3 py-2 font-semibold">Win Rate</th>
+              <th className="text-right px-3 py-2 font-semibold">Total P&L</th>
+              <th className="text-right px-3 py-2 font-semibold">Avg Trade</th>
+              <th className="text-right px-3 py-2 font-semibold">Equity</th>
+              <th className="text-center px-3 py-2 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span>{r.icon}</span>
+                    <span className="font-semibold text-white capitalize">{r.id.replace("-", " ")}</span>
+                  </div>
+                </td>
+                <td className="text-right px-3 py-2.5 font-mono text-white">{r.trades}</td>
+                <td className="text-right px-3 py-2.5 font-mono" style={{ color: r.winRate != null && r.winRate >= 50 ? "#22c55e" : r.winRate != null ? "#ef4444" : "#64748b" }}>
+                  {r.winRate != null ? `${r.winRate.toFixed(1)}%` : "—"}
+                </td>
+                <td className={cn("text-right px-3 py-2.5 font-mono font-semibold", (r.totalPnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                  {r.totalPnl != null ? `${r.totalPnl >= 0 ? "+" : ""}$${r.totalPnl.toFixed(2)}` : "—"}
+                </td>
+                <td className={cn("text-right px-3 py-2.5 font-mono", (r.avgPnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
+                  {r.avgPnl != null ? `${r.avgPnl >= 0 ? "+" : ""}${r.avgPnl.toFixed(2)}%` : "—"}
+                </td>
+                <td className="text-right px-3 py-2.5 font-mono text-white">
+                  ${r.equity.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </td>
+                <td className="text-center px-3 py-2.5">
+                  <span className={cn(
+                    "text-[8px] font-bold px-2 py-0.5 rounded-full",
+                    r.status === "running" ? "text-green-400 bg-green-500/10" :
+                    r.status === "not_started" ? "text-slate-500 bg-slate-800/50" :
+                    "text-amber-400 bg-amber-500/10"
+                  )}>
+                    {r.status.replace("_", " ").toUpperCase()}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -6563,15 +6661,16 @@ export default function Dashboard() {
               <AuditorAgentSection />
             </SafeSection>
           </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
-            className={cn("flex flex-col", mobileHide(['kraken']))}
-          >
-            <SafeSection label="Davy Jones' Portfolio">
-              <DavyJonesBotSection />
-            </SafeSection>
-          </motion.div>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
+          className={mobileHide(['kraken'])}
+        >
+          <SafeSection label="Kraken Fleet">
+            <KrakenFleetSection />
+          </SafeSection>
+        </motion.div>
 
         {/* ═══ MORE TAB — COMPACT GRID LAYOUT ═══════════════════════════════════════ */}
 

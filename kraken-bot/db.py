@@ -1,21 +1,15 @@
 """
-db.py — PostgreSQL access layer for Davy Jones' Portfolio (kraken-bot).
+db.py — PostgreSQL access layer for Kraken bots (multi-bot).
 
-The bot process runs independently from the FastAPI server; this module
-provides all DB I/O the bot needs: heartbeat upserts, portfolio load/save,
-and trade inserts.  It also handles the one-time bootstrap migration that
-seeds the DB tables from legacy JSON files on first startup.
+Supports multiple bot instances via bot_id / db_id parameters.
+Each bot gets its own row in heartbeat/portfolio/adaptive_params (keyed by integer id)
+and its own trades in kraken_trades (filtered by bot_id text column).
 
-All public functions degrade gracefully if PostgreSQL is unavailable —
-the caller should always handle a None / empty return value.
-
-Tables owned here (created idempotently on first call to ensure_schema()):
-  kraken_heartbeat  — single-row (id=1) heartbeat upserted every cycle
-  kraken_portfolio  — single-row (id=1) portfolio state (cash + positions)
-  kraken_trades     — append-only trade history
-
-kraken_adaptive_params is managed by adaptive_params.py and is NOT touched
-here to avoid any cross-module schema conflicts.
+Tables:
+  kraken_heartbeat      — one row per bot (id=1 davy-jones, id=2 blackbeard, id=3 calypso)
+  kraken_portfolio      — one row per bot
+  kraken_trades         — append-only, filtered by bot_id column
+  kraken_adaptive_params — one row per bot
 """
 
 from __future__ import annotations
@@ -37,12 +31,10 @@ except ImportError:
     logger.warning("DB | psycopg2 not installed — Kraken bot DB unavailable")
 
 
-# ── Schema ─────────────────────────────────────────────────────────────────────
-
 _KRAKEN_SCHEMA = """
--- Single-row heartbeat updated every bot cycle (id always = 1)
 CREATE TABLE IF NOT EXISTS kraken_heartbeat (
-    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    id              INTEGER PRIMARY KEY,
+    bot_id          TEXT    NOT NULL DEFAULT 'davy-jones',
     status          TEXT    NOT NULL DEFAULT 'not_started',
     cycle_count     INTEGER NOT NULL DEFAULT 0,
     equity_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -54,17 +46,17 @@ CREATE TABLE IF NOT EXISTS kraken_heartbeat (
     last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Single-row portfolio state (id always = 1)
 CREATE TABLE IF NOT EXISTS kraken_portfolio (
-    id                   INTEGER PRIMARY KEY CHECK (id = 1),
+    id                   INTEGER PRIMARY KEY,
+    bot_id               TEXT NOT NULL DEFAULT 'davy-jones',
     starting_balance_usd DOUBLE PRECISION NOT NULL DEFAULT 100000,
     cash_usd             DOUBLE PRECISION NOT NULL DEFAULT 100000,
     positions            JSONB NOT NULL DEFAULT '{}'
 );
 
--- Append-only trade history
 CREATE TABLE IF NOT EXISTS kraken_trades (
     id          BIGSERIAL PRIMARY KEY,
+    bot_id      TEXT             NOT NULL DEFAULT 'davy-jones',
     symbol      TEXT             NOT NULL,
     side        TEXT             NOT NULL,
     entry_price DOUBLE PRECISION NOT NULL,
@@ -78,10 +70,11 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
     order_id    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
 
--- Single-row adaptive params (id=1) upserted by adaptive_params.py every adaptation cycle.
 CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    id          INTEGER PRIMARY KEY,
+    bot_id      TEXT NOT NULL DEFAULT 'davy-jones',
     params      JSONB NOT NULL DEFAULT '{}',
     metrics     JSONB,
     reasons     JSONB,
@@ -90,8 +83,50 @@ CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
 );
 """
 
+_MIGRATION_SQL = """
+DO $$
+BEGIN
+    -- Drop CHECK constraints if they exist
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname LIKE '%kraken_heartbeat%check%' OR
+               (conrelid = 'kraken_heartbeat'::regclass AND contype = 'c')) THEN
+        BEGIN
+            ALTER TABLE kraken_heartbeat DROP CONSTRAINT IF EXISTS kraken_heartbeat_id_check;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname LIKE '%kraken_portfolio%check%' OR
+               (conrelid = 'kraken_portfolio'::regclass AND contype = 'c')) THEN
+        BEGIN
+            ALTER TABLE kraken_portfolio DROP CONSTRAINT IF EXISTS kraken_portfolio_id_check;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname LIKE '%kraken_adaptive_params%check%' OR
+               (conrelid = 'kraken_adaptive_params'::regclass AND contype = 'c')) THEN
+        BEGIN
+            ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END IF;
 
-# ── Connection helper ──────────────────────────────────────────────────────────
+    -- Add bot_id columns if missing
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_heartbeat' AND column_name='bot_id') THEN
+        ALTER TABLE kraken_heartbeat ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_portfolio' AND column_name='bot_id') THEN
+        ALTER TABLE kraken_portfolio ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='bot_id') THEN
+        ALTER TABLE kraken_trades ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_adaptive_params' AND column_name='bot_id') THEN
+        ALTER TABLE kraken_adaptive_params ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
+"""
+
 
 def _get_dsn() -> str | None:
     return os.environ.get("DATABASE_URL")
@@ -103,7 +138,6 @@ def _is_available() -> bool:
 
 @contextmanager
 def _conn() -> "Generator[psycopg2.extensions.connection, None, None]":
-    """Open a psycopg2 connection; commit on success, rollback on failure."""
     conn = psycopg2.connect(_get_dsn())
     try:
         yield conn
@@ -115,13 +149,12 @@ def _conn() -> "Generator[psycopg2.extensions.connection, None, None]":
         conn.close()
 
 
-# ── Schema bootstrap ──────────────────────────────────────────────────────────
+def _get_bot_config():
+    from config import BOT_ID, BOT_DB_ID
+    return BOT_ID, BOT_DB_ID
+
 
 def ensure_schema() -> None:
-    """
-    Create the three Kraken DB tables if they don't already exist.
-    Fully idempotent — safe to call on every bot startup.
-    """
     if not _is_available():
         logger.debug("DB | ensure_schema skipped (PostgreSQL unavailable)")
         return
@@ -129,20 +162,13 @@ def ensure_schema() -> None:
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(_KRAKEN_SCHEMA)
-        logger.info("DB | Kraken schema verified / created")
+                cur.execute(_MIGRATION_SQL)
+        logger.info("DB | Kraken schema verified / migrated (multi-bot)")
     except Exception as exc:
         logger.error(f"DB | Kraken schema bootstrap failed: {exc}")
 
 
-# ── Migration bootstrap ───────────────────────────────────────────────────────
-
 def migrate_from_json(paper_portfolio_path: str) -> bool:
-    """
-    Seed the DB tables from paper_portfolio.json on first startup.
-
-    Only runs when kraken_portfolio is empty (cash_usd = 0 or no row).
-    Returns True if migration was performed, False if skipped.
-    """
     if not _is_available():
         return False
     if not os.path.exists(paper_portfolio_path):
@@ -154,15 +180,15 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
         logger.warning(f"DB | migration_from_json: could not read {paper_portfolio_path}: {exc}")
         return False
 
-    # Check if portfolio row already exists — row existence is authoritative.
-    # Do NOT gate on cash_usd > 0: a zero-cash (fully-deployed) row is valid state.
+    bot_id, db_id = _get_bot_config()
+
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM kraken_portfolio WHERE id = 1")
+                cur.execute("SELECT 1 FROM kraken_portfolio WHERE id = %s", (db_id,))
                 row = cur.fetchone()
                 if row is not None:
-                    logger.debug("DB | Portfolio row already exists — skipping JSON migration")
+                    logger.debug(f"DB | Portfolio row exists for {bot_id} — skipping JSON migration")
                     return False
     except Exception:
         pass
@@ -175,32 +201,32 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
 
         with _conn() as conn:
             with conn.cursor() as cur:
-                # Seed portfolio
                 cur.execute(
                     """
-                    INSERT INTO kraken_portfolio (id, starting_balance_usd, cash_usd, positions)
-                    VALUES (1, %s, %s, %s)
+                    INSERT INTO kraken_portfolio (id, bot_id, starting_balance_usd, cash_usd, positions)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
+                        bot_id               = EXCLUDED.bot_id,
                         starting_balance_usd = EXCLUDED.starting_balance_usd,
                         cash_usd             = EXCLUDED.cash_usd,
                         positions            = EXCLUDED.positions
                     """,
-                    (starting, cash, json.dumps(positions, default=str)),
+                    (db_id, bot_id, starting, cash, json.dumps(positions, default=str)),
                 )
 
-                # Seed trade history (only if table is empty)
-                cur.execute("SELECT COUNT(*) FROM kraken_trades")
+                cur.execute("SELECT COUNT(*) FROM kraken_trades WHERE bot_id = %s", (bot_id,))
                 existing = cur.fetchone()[0]
                 if existing == 0 and all_trades:
                     for t in all_trades:
                         cur.execute(
                             """
                             INSERT INTO kraken_trades
-                                (symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                                (bot_id, symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                                  fees_usd, reason, closed_at, paper)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                             """,
                             (
+                                bot_id,
                                 t.get("symbol"),
                                 t.get("side"),
                                 t.get("entry_price", 0),
@@ -212,10 +238,10 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
                                 t.get("closed_at"),
                             ),
                         )
-                    logger.info(f"DB | Migrated {len(all_trades)} trades from JSON")
+                    logger.info(f"DB | Migrated {len(all_trades)} trades from JSON for {bot_id}")
 
         logger.info(
-            f"DB | Migration complete — "
+            f"DB | Migration complete for {bot_id} — "
             f"cash=${cash:,.2f}, {len(positions)} open positions, "
             f"{len(all_trades)} historical trades"
         )
@@ -227,26 +253,22 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
 
 
 def migrate_heartbeat_from_json(status_file_path: str) -> bool:
-    """
-    Seed kraken_heartbeat (id=1) from status.json if the DB row is absent.
-    Only runs when the heartbeat row does not yet exist.
-    Returns True if migration was performed, False if skipped.
-    """
     if not _is_available():
         return False
     if not os.path.exists(status_file_path):
         return False
-    # Only seed if row is absent
+
+    bot_id, db_id = _get_bot_config()
+
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT status FROM kraken_heartbeat WHERE id = 1")
+                cur.execute("SELECT status FROM kraken_heartbeat WHERE id = %s", (db_id,))
                 if cur.fetchone():
-                    logger.debug("DB | kraken_heartbeat row exists — skipping heartbeat migration")
+                    logger.debug(f"DB | kraken_heartbeat row exists for {bot_id} — skipping heartbeat migration")
                     return False
     except Exception:
         return False
-    # Read status.json
     try:
         with open(status_file_path) as f:
             st = json.load(f)
@@ -260,12 +282,14 @@ def migrate_heartbeat_from_json(status_file_path: str) -> bool:
                 cur.execute(
                     """
                     INSERT INTO kraken_heartbeat
-                        (id, status, cycle_count, equity_usd, position_count,
+                        (id, bot_id, status, cycle_count, equity_usd, position_count,
                          paper_trading, bot_paused, circuit_breaker, error, last_updated)
-                    VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (id) DO NOTHING
                     """,
                     (
+                        db_id,
+                        bot_id,
                         st.get("status", "not_started"),
                         st.get("cycle_count", 0),
                         st.get("total_equity_usd", 0),
@@ -276,14 +300,12 @@ def migrate_heartbeat_from_json(status_file_path: str) -> bool:
                         st.get("error"),
                     ),
                 )
-        logger.info(f"DB | Migrated heartbeat from {status_file_path} to PostgreSQL")
+        logger.info(f"DB | Migrated heartbeat from {status_file_path} to PostgreSQL for {bot_id}")
         return True
     except Exception as exc:
         logger.error(f"DB | migrate_heartbeat_from_json failed: {exc}")
         return False
 
-
-# ── Heartbeat ─────────────────────────────────────────────────────────────────
 
 def upsert_heartbeat(
     status: str,
@@ -295,22 +317,20 @@ def upsert_heartbeat(
     circuit_breaker: dict,
     error: str | None,
 ) -> bool:
-    """
-    Upsert the single-row heartbeat (id=1) in kraken_heartbeat.
-    Returns True on success, False on failure.
-    """
     if not _is_available():
         return False
+    bot_id, db_id = _get_bot_config()
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO kraken_heartbeat
-                        (id, status, cycle_count, equity_usd, position_count,
+                        (id, bot_id, status, cycle_count, equity_usd, position_count,
                          paper_trading, bot_paused, circuit_breaker, error, last_updated)
-                    VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (id) DO UPDATE SET
+                        bot_id          = EXCLUDED.bot_id,
                         status          = EXCLUDED.status,
                         cycle_count     = EXCLUDED.cycle_count,
                         equity_usd      = EXCLUDED.equity_usd,
@@ -322,6 +342,8 @@ def upsert_heartbeat(
                         last_updated    = NOW()
                     """,
                     (
+                        db_id,
+                        bot_id,
                         status,
                         cycle_count,
                         equity_usd,
@@ -339,13 +361,13 @@ def upsert_heartbeat(
 
 
 def load_heartbeat() -> dict | None:
-    """Load the kraken_heartbeat row (id=1). Returns None if unavailable."""
     if not _is_available():
         return None
+    bot_id, db_id = _get_bot_config()
     try:
         with _conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
+                cur.execute("SELECT * FROM kraken_heartbeat WHERE id = %s", (db_id,))
                 row = cur.fetchone()
         if not row:
             return None
@@ -360,20 +382,16 @@ def load_heartbeat() -> dict | None:
         return None
 
 
-# ── Portfolio ──────────────────────────────────────────────────────────────────
-
 def load_portfolio() -> dict | None:
-    """
-    Load the kraken_portfolio row (id=1).
-    Returns None if unavailable or not yet seeded.
-    """
     if not _is_available():
         return None
+    bot_id, db_id = _get_bot_config()
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
+                    "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = %s",
+                    (db_id,)
                 )
                 row = cur.fetchone()
         if not row:
@@ -396,37 +414,36 @@ def save_portfolio(
     positions: dict,
     starting_balance_usd: float | None = None,
 ) -> bool:
-    """
-    Upsert the single-row portfolio (id=1).
-    Returns True on success, False on failure.
-    """
     if not _is_available():
         return False
+    bot_id, db_id = _get_bot_config()
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
                 if starting_balance_usd is not None:
                     cur.execute(
                         """
-                        INSERT INTO kraken_portfolio (id, starting_balance_usd, cash_usd, positions)
-                        VALUES (1, %s, %s, %s)
+                        INSERT INTO kraken_portfolio (id, bot_id, starting_balance_usd, cash_usd, positions)
+                        VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE SET
+                            bot_id               = EXCLUDED.bot_id,
                             starting_balance_usd = EXCLUDED.starting_balance_usd,
                             cash_usd             = EXCLUDED.cash_usd,
                             positions            = EXCLUDED.positions
                         """,
-                        (starting_balance_usd, cash_usd, json.dumps(positions, default=str)),
+                        (db_id, bot_id, starting_balance_usd, cash_usd, json.dumps(positions, default=str)),
                     )
                 else:
                     cur.execute(
                         """
-                        INSERT INTO kraken_portfolio (id, cash_usd, positions)
-                        VALUES (1, %s, %s)
+                        INSERT INTO kraken_portfolio (id, bot_id, cash_usd, positions)
+                        VALUES (%s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE SET
+                            bot_id    = EXCLUDED.bot_id,
                             cash_usd  = EXCLUDED.cash_usd,
                             positions = EXCLUDED.positions
                         """,
-                        (cash_usd, json.dumps(positions, default=str)),
+                        (db_id, bot_id, cash_usd, json.dumps(positions, default=str)),
                     )
         return True
     except Exception as exc:
@@ -434,16 +451,10 @@ def save_portfolio(
         return False
 
 
-# ── Trades ────────────────────────────────────────────────────────────────────
-
 def insert_trade(trade: dict) -> bool:
-    """
-    Insert a closed trade record into kraken_trades.
-    The trade dict matches the format from paper_engine.paper_close_position().
-    Returns True on success.
-    """
     if not _is_available():
         return False
+    bot_id, db_id = _get_bot_config()
     try:
         closed_at = trade.get("closed_at")
         if isinstance(closed_at, str):
@@ -456,11 +467,12 @@ def insert_trade(trade: dict) -> bool:
                 cur.execute(
                     """
                     INSERT INTO kraken_trades
-                        (symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                        (bot_id, symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                          fees_usd, reason, closed_at, paper, order_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
                     """,
                     (
+                        bot_id,
                         trade.get("symbol"),
                         trade.get("side"),
                         trade.get("entry_price", 0),
@@ -480,20 +492,18 @@ def insert_trade(trade: dict) -> bool:
 
 
 def load_all_trades(limit: int | None = None) -> list[dict]:
-    """
-    Load all kraken trades ordered by closed_at ascending.
-    Returns empty list if unavailable.
-    """
     if not _is_available():
         return []
+    bot_id, db_id = _get_bot_config()
     try:
         sql = """
             SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                    fees_usd, reason, closed_at, paper, order_id
             FROM   kraken_trades
+            WHERE  bot_id = %s
             ORDER  BY closed_at ASC
         """
-        params = []
+        params: list = [bot_id]
         if limit:
             sql += " LIMIT %s"
             params.append(limit)

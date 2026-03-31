@@ -68,3 +68,38 @@ args = ["bash", "-c", "python3 kraken-bot/main.py"]
 
 [services.env]
 PORT = "8085"
+BOT_ID = "davy-jones"
+
+[[services]]
+name = "blackbeard-bot"
+paths = [ "/blackbeard-bot" ]
+localPort = 8086
+
+[services.development]
+run = "cd /home/runner/workspace && BOT_ID=blackbeard python3 kraken-bot/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "BOT_ID=blackbeard python3 kraken-bot/main.py"]
+
+[services.env]
+PORT = "8086"
+BOT_ID = "blackbeard"
+
+[[services]]
+name = "calypso-bot"
+paths = [ "/calypso-bot" ]
+localPort = 8087
+
+[services.development]
+run = "cd /home/runner/workspace && BOT_ID=calypso python3 kraken-bot/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "BOT_ID=calypso python3 kraken-bot/main.py"]
+
+[services.env]
+PORT = "8087"
+BOT_ID = "calypso"

@@ -32,8 +32,9 @@ logger = logging.getLogger("kraken_adaptive")
 # ── PostgreSQL helpers ────────────────────────────────────────────────────────
 
 def _pg_save(payload: dict) -> None:
-    """Upsert adaptive params into the single-row kraken_adaptive_params table (id=1)."""
+    """Upsert adaptive params into kraken_adaptive_params (keyed by bot's db_id)."""
     try:
+        from config import BOT_DB_ID, BOT_ID
         import psycopg2
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
@@ -44,9 +45,10 @@ def _pg_save(payload: dict) -> None:
                 cur.execute(
                     """
                     INSERT INTO kraken_adaptive_params
-                        (id, params, metrics, reasons, adapted_at, lookback_n)
-                    VALUES (1, %s, %s, %s, NOW(), %s)
+                        (id, bot_id, params, metrics, reasons, adapted_at, lookback_n)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), %s)
                     ON CONFLICT (id) DO UPDATE SET
+                        bot_id     = EXCLUDED.bot_id,
                         params     = EXCLUDED.params,
                         metrics    = EXCLUDED.metrics,
                         reasons    = EXCLUDED.reasons,
@@ -54,6 +56,8 @@ def _pg_save(payload: dict) -> None:
                         lookback_n = EXCLUDED.lookback_n
                     """,
                     (
+                        BOT_DB_ID,
+                        BOT_ID,
                         json.dumps(payload.get("params", {})),
                         json.dumps(payload.get("metrics")),
                         json.dumps(payload.get("reasons", {})),
@@ -68,8 +72,9 @@ def _pg_save(payload: dict) -> None:
 
 
 def _pg_load() -> dict | None:
-    """Load adaptive params from the single-row kraken_adaptive_params table."""
+    """Load adaptive params from kraken_adaptive_params (keyed by bot's db_id)."""
     try:
+        from config import BOT_DB_ID
         import psycopg2
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
@@ -81,8 +86,9 @@ def _pg_load() -> dict | None:
                     """
                     SELECT params, metrics, lookback_n
                     FROM   kraken_adaptive_params
-                    WHERE  id = 1
-                    """
+                    WHERE  id = %s
+                    """,
+                    (BOT_DB_ID,)
                 )
                 row = cur.fetchone()
         finally:
@@ -109,7 +115,7 @@ def migrate_adaptive_from_json(params_file: "str | Path") -> None:
     params_file = Path(params_file)
     if not params_file.exists():
         return
-    # Only migrate if DB row is absent
+    from config import BOT_DB_ID
     try:
         import psycopg2
         db_url = os.environ.get("DATABASE_URL")
@@ -118,7 +124,7 @@ def migrate_adaptive_from_json(params_file: "str | Path") -> None:
         conn = psycopg2.connect(db_url)
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT lookback_n FROM kraken_adaptive_params WHERE id = 1")
+                cur.execute("SELECT lookback_n FROM kraken_adaptive_params WHERE id = %s", (BOT_DB_ID,))
                 existing = cur.fetchone()
         finally:
             conn.close()
@@ -141,11 +147,12 @@ def migrate_adaptive_from_json(params_file: "str | Path") -> None:
     except Exception as exc:
         logger.warning(f"Adaptive | migrate_adaptive_from_json failed: {exc}")
 
-# ── Defaults (mirrors config.py) ──────────────────────────────────────────────
+# ── Defaults (loaded from bot profile in config.py) ──────────────────────────
+from config import ZSCORE_ENTRY as _CFG_ZE, STOP_LOSS_PCT as _CFG_SL
 DEFAULTS = {
-    "ZSCORE_ENTRY":       1.0,
+    "ZSCORE_ENTRY":       _CFG_ZE,
     "ZSCORE_EXIT":        0.3,
-    "STOP_LOSS_PCT":      0.015,  # Tightened from 0.02 — Bear-regime defensive posture
+    "STOP_LOSS_PCT":      _CFG_SL,
     "TRAIL_PCT":          0.05,
     "MIN_NET_PROFIT_PCT": 0.008,
 }

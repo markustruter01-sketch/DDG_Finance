@@ -31,7 +31,7 @@ from loguru import logger
 
 from analysis.analyzer import run_analysis_cycle, get_regime_fallback
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
-from db.postgres import insert_equity_snapshot
+from db.postgres import insert_equity_snapshot, get_kraken_equity
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
 from execution.kill_switch import (
@@ -452,17 +452,9 @@ async def _run_pipeline_inner(
 
     # ── Equity snapshot ─────────────────────────────────────────────────────
     # Write a time-series equity point to PostgreSQL for the equity curve chart.
-    # Kraken equity is read from the bot's status.json; safe to be 0 if missing.
+    # Kraken equity is read from the authoritative kraken_heartbeat DB table.
     try:
-        import json as _j, pathlib as _pl
-        _status_path = _pl.Path("../kraken-bot/status.json")
-        kraken_equity = 0.0
-        if _status_path.exists():
-            _bot_state = _j.loads(_status_path.read_text())
-            kraken_equity = float(_bot_state.get("total_equity_usd", 0.0) or 0.0)
-            if kraken_equity == 0.0:
-                _ps = _bot_state.get("paper_summary") or {}
-                kraken_equity = float(_ps.get("total_equity_usd", 0.0) or 0.0)
+        kraken_equity = get_kraken_equity()
         alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
         regime = _state.get("last_regime")
         insert_equity_snapshot(

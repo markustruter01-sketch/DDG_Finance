@@ -537,6 +537,20 @@ def get_hardcoded_rules(regime: str | None = None) -> list[dict]:
         return []
 
 
+def get_kraken_equity() -> float:
+    if not is_pg_available():
+        return 0.0
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                row = cur.fetchone()
+                return float(row[0]) if row else 0.0
+    except Exception as exc:
+        logger.error(f"DB | get_kraken_equity failed: {exc}")
+        return 0.0
+
+
 # ── Equity snapshots ───────────────────────────────────────────────────────
 
 def insert_equity_snapshot(

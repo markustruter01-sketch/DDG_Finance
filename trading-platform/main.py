@@ -235,14 +235,19 @@ async def lifespan(app: FastAPI):
         except Exception:
             alpaca_eq = 0.0
         try:
-            import json as _json
-            from pathlib import Path as _Path
-            _status_file = _Path("../kraken-bot/status.json")
-            if _status_file.exists():
-                _ks = _json.loads(_status_file.read_text())
-                kraken_eq = float(_ks.get("total_equity_usd", 0))
-            else:
-                kraken_eq = 0.0
+            import psycopg2 as _pg2eq, os as _oseq
+            _dburlq = _oseq.environ.get("DATABASE_URL")
+            kraken_eq = 0.0
+            if _dburlq:
+                _eqconn = _pg2eq.connect(_dburlq)
+                try:
+                    with _eqconn.cursor() as _eqcur:
+                        _eqcur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                        _eqrow = _eqcur.fetchone()
+                        if _eqrow:
+                            kraken_eq = float(_eqrow[0] or 0)
+                finally:
+                    _eqconn.close()
         except Exception:
             kraken_eq = 0.0
         insert_equity_snapshot(alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat")
@@ -555,15 +560,6 @@ async def system_health_architecture() -> dict:
         except Exception:
             pass
 
-        # ── Fall back to status.json ──────────────────────────────────────────
-        if kst is None:
-            sf = _Path("../kraken-bot/status.json")
-            if sf.exists():
-                try:
-                    kst = _json.loads(sf.read_text())
-                except Exception:
-                    pass
-
         if kst is not None:
             last_upd = kst.get("last_updated")
             kage = now - _dt.fromisoformat(last_upd).timestamp() if last_upd else None
@@ -759,31 +755,31 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
             steps.append("Fresh data will load on next cycle")
 
         elif component == "kraken_api":
-            sf = _Path("../kraken-bot/status.json")
-            if sf.exists():
-                import os as _os
-                _raw = sf.read_text()
-                try:
-                    kst = _json.loads(_raw)
-                    kst["heal_requested"] = True
-                    kst["heal_requested_at"] = time.time()
-                    # Atomic write: use a distinct .heal.tmp path so we never
-                    # race with the bot's own status.json.tmp write.
-                    _tmp = str(sf) + ".heal.tmp"
-                    _Path(_tmp).write_text(_json.dumps(kst, indent=2))
-                    _os.replace(_tmp, str(sf))
-                    steps.append(f"Heal flag written to status.json (cycle #{kst.get('cycle_count', 0)})")
-                except _json.JSONDecodeError as exc:
-                    # status.json is corrupt — delete it so the bot regenerates
-                    # a fresh copy on its very next write_status() call.
+            # Bot state is in PostgreSQL (kraken_heartbeat / kraken_portfolio / kraken_trades).
+            # No file-based heal flag needed — the DB is the authoritative state store.
+            try:
+                import psycopg2 as _pg2r, os as _osr
+                _dburlr = _osr.environ.get("DATABASE_URL")
+                if _dburlr:
+                    _rconn = _pg2r.connect(_dburlr)
                     try:
-                        sf.unlink()
-                        steps.append(f"Corrupt status.json deleted — bot will regenerate ({exc})")
-                    except Exception as del_exc:
-                        steps.append(f"Corrupt file could not be removed: {del_exc}")
+                        with _rconn.cursor() as _rc:
+                            _rc.execute("SELECT status, cycle_count FROM kraken_heartbeat WHERE id = 1")
+                            _rrow = _rc.fetchone()
+                        if _rrow:
+                            steps.append(
+                                f"DB heartbeat reachable — status={_rrow[0]}, cycle #{_rrow[1]}"
+                            )
+                        else:
+                            steps.append("DB reachable but bot has not run yet (no heartbeat row)")
+                    finally:
+                        _rconn.close()
+                else:
+                    steps.append("DATABASE_URL not set — cannot verify bot state")
                     success = False
-            else:
-                steps.append("status.json not found — start Davy Jones bot first")
+            except Exception as exc:
+                steps.append(f"DB health check failed: {str(exc)[:120]}")
+                success = False
             _kraken_commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
             steps.append("Kraken commentary cache cleared")
 
@@ -922,54 +918,28 @@ async def _auto_heal_check() -> None:
         logger.debug(f"[AUTO-HEAL] data_pipeline check skipped: {exc}")
 
     # ── 3. Kraken bot — heartbeat older than 30 min (1800s) or error state ──
-    # Primary source: kraken_heartbeat PostgreSQL table (no file parsing possible).
-    # Fallback: status.json (JSON file) for graceful degradation if DB is unavailable.
+    # Source: kraken_heartbeat PostgreSQL table (DB-only — no file parsing, no JSONDecodeError).
     try:
         from datetime import datetime as _dt
         kst: dict | None = None
 
-        # ── 3a. Try PostgreSQL first ───────────────────────────────────────
-        try:
-            import psycopg2, psycopg2.extras, os as _os
-            _dburl = _os.environ.get("DATABASE_URL")
-            if _dburl:
-                _pgconn = psycopg2.connect(_dburl)
-                try:
-                    with _pgconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as _cur:
-                        _cur.execute("SELECT status, last_updated, error FROM kraken_heartbeat WHERE id = 1")
-                        _row = _cur.fetchone()
-                    if _row:
-                        kst = {
-                            "last_updated": _row["last_updated"].isoformat() if _row["last_updated"] else None,
-                            "status":       _row["status"],
-                            "error":        _row["error"],
-                        }
-                finally:
-                    _pgconn.close()
-        except Exception as _dbe:
-            logger.debug(f"[AUTO-HEAL] kraken_api DB heartbeat unavailable: {_dbe}")
+        import psycopg2, psycopg2.extras, os as _os
+        _dburl = _os.environ.get("DATABASE_URL")
+        if _dburl:
+            _pgconn = psycopg2.connect(_dburl)
+            try:
+                with _pgconn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as _cur:
+                    _cur.execute("SELECT status, last_updated, error FROM kraken_heartbeat WHERE id = 1")
+                    _row = _cur.fetchone()
+                if _row:
+                    kst = {
+                        "last_updated": _row["last_updated"].isoformat() if _row["last_updated"] else None,
+                        "status":       _row["status"],
+                        "error":        _row["error"],
+                    }
+            finally:
+                _pgconn.close()
 
-        # ── 3b. Fall back to status.json ──────────────────────────────────
-        if kst is None:
-            sf = _Path("../kraken-bot/status.json")
-            if sf.exists():
-                try:
-                    kst = _json.loads(sf.read_text())
-                except _json.JSONDecodeError as _jde:
-                    logger.warning(
-                        f"[AUTO-HEAL] kraken_api: status.json is corrupt ({_jde}) — triggering remediation"
-                    )
-                    record_degradation(
-                        component="kraken_api",
-                        severity="error",
-                        error_type="error_state",
-                        message=f"status.json corrupt: {_jde}",
-                        detail="JSONDecodeError in _auto_heal_check; remediation triggered",
-                    )
-                    await _remediate_component("kraken_api", triggered_by="auto_heal")
-                    kst = None
-
-        # ── 3c. Evaluate heartbeat ────────────────────────────────────────
         if kst is not None:
             last_upd = kst.get("last_updated")
             if last_upd:
@@ -1216,24 +1186,34 @@ async def journal() -> dict:
 
 
 def _load_kraken_journal_trades() -> list[dict]:
-    """Load and normalise Kraken all_trades from paper_portfolio.json into the
+    """Load and normalise Kraken closed trades from kraken_trades (PostgreSQL) into the
     same dict shape used by the Alpaca trades table so they can be merged into
     journal endpoints."""
     try:
-        import json as _j
-        from pathlib import Path as _P
-        _pf_path = _P("../kraken-bot/paper_portfolio.json")
-        if not _pf_path.exists():
+        import psycopg2 as _pg2j, psycopg2.extras as _pg2xj, os as _osj
+        _dburlj = _osj.environ.get("DATABASE_URL")
+        if not _dburlj:
             return []
-        _pf = _j.loads(_pf_path.read_text())
+        _jconn = _pg2j.connect(_dburlj)
+        try:
+            with _jconn.cursor(cursor_factory=_pg2xj.RealDictCursor) as _jc:
+                _jc.execute(
+                    """
+                    SELECT symbol, side, pnl_pct, pnl_usd, reason, closed_at
+                    FROM   kraken_trades ORDER BY closed_at ASC
+                    """
+                )
+                _jrows = _jc.fetchall()
+        finally:
+            _jconn.close()
         trades = []
-        for idx, t in enumerate(_pf.get("all_trades", [])):
+        for idx, t in enumerate(_jrows):
             if t.get("pnl_pct") is None:
                 continue
             _pnl = float(t["pnl_pct"])
             trades.append({
                 "trade_id": f"kraken-{idx}",
-                "date": (t.get("closed_at") or "")[:10],
+                "date": (t["closed_at"].isoformat() if t.get("closed_at") else "")[:10],
                 "ticker": t.get("symbol", "?"),
                 "asset_class": "crypto",
                 "conviction_score": None,
@@ -1370,9 +1350,23 @@ async def system_degradations_report(hours: int = 48) -> dict:
         pass
 
     try:
-        sf = _Path("../kraken-bot/status.json")
-        if sf.exists():
-            kraken_status = _json.loads(sf.read_text())
+        import psycopg2 as _pg2dr, psycopg2.extras as _pg2xdr, os as _osdr
+        _dburldr = _osdr.environ.get("DATABASE_URL")
+        if _dburldr:
+            _drconn = _pg2dr.connect(_dburldr)
+            try:
+                with _drconn.cursor(cursor_factory=_pg2xdr.RealDictCursor) as _drc:
+                    _drc.execute("SELECT status, equity_usd, cycle_count, last_updated FROM kraken_heartbeat WHERE id = 1")
+                    _drrow = _drc.fetchone()
+                    if _drrow:
+                        kraken_status = {
+                            "status":           _drrow["status"],
+                            "total_equity_usd": _drrow["equity_usd"],
+                            "cycle_count":      _drrow["cycle_count"],
+                            "last_updated":     _drrow["last_updated"].isoformat() if _drrow["last_updated"] else None,
+                        }
+            finally:
+                _drconn.close()
     except Exception:
         pass
 
@@ -1484,12 +1478,22 @@ async def manual_postmortem() -> dict:
     try:
         from db.postgres import insert_equity_snapshot as _ins_snap, is_pg_available as _pg_ok
         if _pg_ok():
-            import json as _j2, pathlib as _pl2
-            _sp2 = _pl2.Path("../kraken-bot/status.json")
             _k_equity = 0.0
-            if _sp2.exists():
-                _bs2 = _j2.loads(_sp2.read_text())
-                _k_equity = float(_bs2.get("total_equity_usd", 0) or 0)
+            try:
+                import psycopg2 as _pg2pm, os as _ospm
+                _dburlpm = _ospm.environ.get("DATABASE_URL")
+                if _dburlpm:
+                    _pmconn = _pg2pm.connect(_dburlpm)
+                    try:
+                        with _pmconn.cursor() as _pmc:
+                            _pmc.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                            _pmrow = _pmc.fetchone()
+                            if _pmrow:
+                                _k_equity = float(_pmrow[0] or 0)
+                    finally:
+                        _pmconn.close()
+            except Exception:
+                pass
             try:
                 from execution.broker import get_account as _ga2
                 _a_equity = float(_ga2().get("equity", 0) or 0)
@@ -2706,17 +2710,26 @@ def _build_synthetic_equity_curve() -> list[dict]:
     alpaca_start = 100_000.0
     kraken_start = 100_000.0
 
-    # --- Kraken trades (have exact pnl_usd) ---
+    # --- Kraken trades (from kraken_trades + kraken_portfolio PostgreSQL tables) ---
     kraken_daily_pnl: dict = defaultdict(float)
     try:
-        _pf_path = _P("../kraken-bot/paper_portfolio.json")
-        if _pf_path.exists():
-            _pf = _j.loads(_pf_path.read_text())
-            kraken_start = float(_pf.get("starting_balance_usd", 100_000.0))
-            for _t in _pf.get("all_trades", []):
-                _d = (_t.get("closed_at") or "")[:10]
-                if _d and _t.get("pnl_usd") is not None:
-                    kraken_daily_pnl[_d] += float(_t["pnl_usd"])
+        import psycopg2 as _pg2sc, os as _ossc
+        _dburlsc = _ossc.environ.get("DATABASE_URL")
+        if _dburlsc:
+            _scconn = _pg2sc.connect(_dburlsc)
+            try:
+                with _scconn.cursor() as _scc:
+                    _scc.execute("SELECT starting_balance_usd FROM kraken_portfolio WHERE id = 1")
+                    _scr = _scc.fetchone()
+                    if _scr:
+                        kraken_start = float(_scr[0] or 100_000.0)
+                    _scc.execute("SELECT pnl_usd, closed_at FROM kraken_trades WHERE pnl_usd IS NOT NULL ORDER BY closed_at ASC")
+                    for _tr in _scc.fetchall():
+                        _d = (_tr[1].isoformat() if _tr[1] else "")[:10]
+                        if _d:
+                            kraken_daily_pnl[_d] += float(_tr[0])
+            finally:
+                _scconn.close()
     except Exception:
         pass
 
@@ -2853,12 +2866,15 @@ async def kraken_status() -> dict:
     """
     Read and return the Kraken bot's full runtime state for the dashboard.
 
-    Data sources (in order of precedence):
-      1. kraken_heartbeat (PostgreSQL) — bot status, equity, cycle count
-      2. kraken_portfolio (PostgreSQL) — cash, open positions
-      3. kraken_trades    (PostgreSQL) — trade history + paper_summary
-      4. live_state.json  (file)       — signals, microstructure, adaptive params
-      5. status.json      (file)       — fallback heartbeat if DB unavailable
+    All persistent state comes exclusively from PostgreSQL:
+      1. kraken_heartbeat  — bot status, equity, cycle count, circuit breaker
+      2. kraken_portfolio  — cash_usd, open positions (JSONB)
+      3. kraken_trades     — trade history + paper_summary
+
+    Live telemetry (not persisted across restarts) comes from live_state.json:
+      - signals, microstructure, adaptive_params, thinking_text
+
+    Returns "not_started" empty state if the bot has never run (DB rows absent).
     """
     import json as _json
     from pathlib import Path as _Path
@@ -2866,63 +2882,99 @@ async def kraken_status() -> dict:
     import os as _os
 
     live_state_file = _Path("../kraken-bot/live_state.json")
-    status_file     = _Path("../kraken-bot/status.json")
 
-    _EMPTY_LIVE = {
-        "deployed_usd":           0,
-        "deployed_pct":           0,
-        "deployable_ceiling_pct": 80,
-        "cash_reserve_pct":       20,
-        "max_positions":          3,
-        "open_positions":         [],
-        "signals":                [],
-        "microstructure":         {},
-        "thinking_text":          "",
-        "adaptive_params":        {},
+    # ── Live telemetry (non-persistent) — always from live_state.json ──────────
+    _live_telemetry: dict = {
+        "signals":       [],
+        "microstructure": {},
+        "thinking_text": "",
+        "adaptive_params": {},
     }
+    try:
+        if live_state_file.exists():
+            _ls = _json.loads(live_state_file.read_text())
+            _live_telemetry["signals"]         = _ls.get("signals", [])
+            _live_telemetry["microstructure"]  = _ls.get("microstructure", {})
+            _live_telemetry["thinking_text"]   = _ls.get("thinking_text", "")
+            _live_telemetry["adaptive_params"] = _ls.get("adaptive_params", {})
+    except Exception:
+        pass
 
-    def _load_live_state() -> dict:
-        if not live_state_file.exists():
-            return _EMPTY_LIVE.copy()
-        try:
-            return _json.loads(live_state_file.read_text())
-        except Exception:
-            return _EMPTY_LIVE.copy()
+    # ── All persistent state from PostgreSQL (DB-only, no file fallback) ───────
+    _dburl = _os.environ.get("DATABASE_URL")
+    if not _dburl:
+        return {
+            "bot_name": "Davy Jones' Portfolio", "status": "not_started",
+            "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
+            "circuit_breaker": {"active": False, "paused_until": None},
+            "position_count": 0, "open_positions": [], "deployed_usd": 0,
+            "deployed_pct": 0, "cash_usd": 0, "error": None,
+            "recent_trades": [], "paper_summary": None, **_live_telemetry,
+        }
 
-    def _trades_and_summary_from_db(conn) -> tuple[list, dict]:
-        """Read the last 50 trades and compute paper_summary from kraken_trades."""
+    try:
+        _pgconn = _pg2.connect(_dburl)
         try:
-            with conn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
+            # ── 1. Heartbeat ────────────────────────────────────────────────
+            with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _hc:
+                _hc.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
+                _hrow = _hc.fetchone()
+
+            if not _hrow:
+                return {
+                    "bot_name": "Davy Jones' Portfolio", "status": "not_started",
+                    "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
+                    "circuit_breaker": {"active": False, "paused_until": None},
+                    "position_count": 0, "open_positions": [], "deployed_usd": 0,
+                    "deployed_pct": 0, "cash_usd": 0, "error": None,
+                    "recent_trades": [], "paper_summary": None, **_live_telemetry,
+                }
+
+            hb = dict(_hrow)
+            if hb.get("last_updated"):
+                hb["last_updated"] = hb["last_updated"].isoformat()
+            if isinstance(hb.get("circuit_breaker"), str):
+                hb["circuit_breaker"] = _json.loads(hb["circuit_breaker"])
+
+            # ── 2. Portfolio (cash + open positions) ────────────────────────
+            cash_usd      = 0.0
+            starting      = 100_000.0
+            open_positions: list = []
+            with _pgconn.cursor() as _pc:
+                _pc.execute(
+                    "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
+                )
+                _pr = _pc.fetchone()
+                if _pr:
+                    starting, cash_usd, _pos_raw = _pr
+                    if isinstance(_pos_raw, str):
+                        _pos_raw = _json.loads(_pos_raw)
+                    # positions is a JSONB dict {symbol: {...}} — convert to list for dashboard
+                    if isinstance(_pos_raw, dict):
+                        open_positions = list(_pos_raw.values())
+                    elif isinstance(_pos_raw, list):
+                        open_positions = _pos_raw
+
+            # ── 3. Trades + paper_summary ────────────────────────────────────
+            with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
                 _tc.execute(
                     """
                     SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                            fees_usd, reason, closed_at, paper
-                    FROM   kraken_trades
-                    ORDER  BY closed_at ASC
+                    FROM   kraken_trades ORDER BY closed_at ASC
                     """
                 )
-                all_rows = _tc.fetchall()
+                _all_rows = _tc.fetchall()
+
             all_trades = []
-            for r in all_rows:
+            for r in _all_rows:
                 d = dict(r)
                 if d.get("closed_at"):
                     d["closed_at"] = d["closed_at"].isoformat()
                 all_trades.append(d)
+
             wins = [t for t in all_trades if (t.get("pnl_pct") or 0) > 0]
-
-            # Portfolio cash from kraken_portfolio
-            cash_usd = 0.0
-            starting = 100_000.0
-            try:
-                with conn.cursor() as _pc:
-                    _pc.execute("SELECT starting_balance_usd, cash_usd FROM kraken_portfolio WHERE id = 1")
-                    _pr = _pc.fetchone()
-                    if _pr:
-                        starting, cash_usd = _pr
-            except Exception:
-                pass
-
-            summary = {
+            paper_summary = {
                 "starting_balance_usd": starting,
                 "cash_usd":             round(cash_usd, 2),
                 "total_trades":         len(all_trades),
@@ -2931,108 +2983,45 @@ async def kraken_status() -> dict:
                 "all_time_pnl_usd":     round(sum((t.get("pnl_usd") or 0) for t in all_trades), 2),
                 "all_time_pnl_pct":     round(sum((t.get("pnl_pct") or 0) for t in all_trades), 2),
             }
-            return all_trades[-50:], summary
-        except Exception:
-            return [], {}
 
-    def _trades_and_summary_from_file() -> tuple[list, dict]:
-        """Fallback: read trade history from paper_portfolio.json."""
-        pf_file = _Path("../kraken-bot/paper_portfolio.json")
-        if not pf_file.exists():
-            return [], {}
-        try:
-            pf = _json.loads(pf_file.read_text())
-            all_trades = pf.get("all_trades", [])
-            wins = [t for t in all_trades if (t.get("pnl_pct") or 0) > 0]
-            summary = {
-                "starting_balance_usd": pf.get("starting_balance_usd", 100_000),
-                "cash_usd":             round(pf.get("cash_usd", 0), 2),
-                "total_trades":         len(all_trades),
-                "win_count":            len(wins),
-                "loss_count":           len(all_trades) - len(wins),
-                "all_time_pnl_usd":     round(sum((t.get("pnl_usd") or 0) for t in all_trades), 2),
-                "all_time_pnl_pct":     round(sum((t.get("pnl_pct") or 0) for t in all_trades), 2),
+            equity       = round(hb.get("equity_usd", 0), 2)
+            deployed_usd = equity - cash_usd if equity > cash_usd else 0.0
+            deployed_pct = round((deployed_usd / equity) * 100, 1) if equity > 0 else 0.0
+
+            return {
+                "bot_name":             "Davy Jones' Portfolio",
+                "paper_trading":        hb.get("paper_trading", True),
+                "bot_paused":           hb.get("bot_paused", False),
+                "status":               hb.get("status", "not_started"),
+                "last_updated":         hb.get("last_updated"),
+                "cycle_count":          hb.get("cycle_count", 0),
+                "total_equity_usd":     equity,
+                "position_count":       hb.get("position_count", 0),
+                "circuit_breaker":      hb.get("circuit_breaker") or {"active": False, "paused_until": None},
+                "error":                hb.get("error"),
+                "cash_usd":             round(cash_usd, 2),
+                "open_positions":       open_positions,
+                "deployed_usd":         round(deployed_usd, 2),
+                "deployed_pct":         deployed_pct,
+                "deployable_ceiling_pct": 80,
+                "cash_reserve_pct":     20,
+                "max_positions":        10,
+                "recent_trades":        all_trades[-50:],
+                "paper_summary":        paper_summary,
+                **_live_telemetry,
             }
-            return all_trades[-50:], summary
-        except Exception:
-            return [], {}
-
-    live = _load_live_state()
-
-    # ── Try PostgreSQL (primary path) ─────────────────────────────────────────
-    _dburl = _os.environ.get("DATABASE_URL")
-    if _dburl:
-        try:
-            _pgconn = _pg2.connect(_dburl)
-            try:
-                # Heartbeat row
-                with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _hc:
-                    _hc.execute(
-                        "SELECT * FROM kraken_heartbeat WHERE id = 1"
-                    )
-                    _hrow = _hc.fetchone()
-
-                if _hrow:
-                    hb = dict(_hrow)
-                    if hb.get("last_updated"):
-                        hb["last_updated"] = hb["last_updated"].isoformat()
-                    if isinstance(hb.get("circuit_breaker"), str):
-                        hb["circuit_breaker"] = _json.loads(hb["circuit_breaker"])
-
-                    # Trade history + summary
-                    _trades, _summary = _trades_and_summary_from_db(_pgconn)
-
-                    # Build full response (DB heartbeat fields override)
-                    response = {
-                        "bot_name":         "Davy Jones' Portfolio",
-                        "paper_trading":    hb.get("paper_trading", True),
-                        "bot_paused":       hb.get("bot_paused", False),
-                        "status":           hb.get("status", "not_started"),
-                        "last_updated":     hb.get("last_updated"),
-                        "cycle_count":      hb.get("cycle_count", 0),
-                        "total_equity_usd": round(hb.get("equity_usd", 0), 2),
-                        "position_count":   hb.get("position_count", 0),
-                        "circuit_breaker":  hb.get("circuit_breaker") or {"active": False, "paused_until": None},
-                        "error":            hb.get("error"),
-                    }
-                    # Merge live_state (signals, microstructure, etc.)
-                    for _k, _v in live.items():
-                        response.setdefault(_k, _v)
-                    response["recent_trades"] = _trades
-                    response["paper_summary"] = _summary if _summary else None
-                    return response
-            finally:
-                _pgconn.close()
-        except Exception as exc:
-            logger.warning(f"[kraken/status] DB read failed ({exc}) — falling back to files")
-
-    # ── Fallback: JSON files (DB unavailable) ─────────────────────────────────
-    _trades, _summary = _trades_and_summary_from_file()
-    if status_file.exists():
-        try:
-            heartbeat = _json.loads(status_file.read_text())
-            for _k, _v in live.items():
-                heartbeat.setdefault(_k, _v)
-            heartbeat.setdefault("recent_trades", _trades)
-            heartbeat.setdefault("paper_summary", _summary if _summary else None)
-            return heartbeat
-        except Exception as exc:
-            logger.warning(f"[kraken/status] status.json parse failed ({exc})")
-
-    # ── Empty state (neither DB nor file available) ────────────────────────────
-    return {
-        "bot_name":         "Davy Jones' Portfolio",
-        "status":           "not_started",
-        "last_updated":     None,
-        "cycle_count":      0,
-        "total_equity_usd": 0,
-        "circuit_breaker":  {"active": False, "paused_until": None},
-        "position_count":   0,
-        "error":            None,
-        **live,
-        "recent_trades":    _trades,
-        "paper_summary":    _summary if _summary else None,
-    }
+        finally:
+            _pgconn.close()
+    except Exception as exc:
+        logger.warning(f"[kraken/status] DB read failed: {exc}")
+        return {
+            "bot_name": "Davy Jones' Portfolio", "status": "db_unavailable",
+            "last_updated": None, "cycle_count": 0, "total_equity_usd": 0,
+            "circuit_breaker": {"active": False, "paused_until": None},
+            "position_count": 0, "open_positions": [], "deployed_usd": 0,
+            "deployed_pct": 0, "cash_usd": 0, "error": str(exc),
+            "recent_trades": [], "paper_summary": None, **_live_telemetry,
+        }
 
 
 # ── Kraken Bot — AI Narrative Commentary ──────────────────────────────────────
@@ -3120,46 +3109,21 @@ async def kraken_commentary(force: bool = False) -> dict:
             finally:
                 _kcpgconn.close()
         except Exception as exc:
-            logger.debug(f"Kraken commentary: DB read failed ({exc}), falling back to files")
+            logger.debug(f"Kraken commentary: DB read failed: {exc}")
 
-    # Fallback to JSON files if DB unavailable
+    # If DB returned no data, the bot hasn't run yet
     if not kdata:
-        status_file = _Path("../kraken-bot/status.json")
-        if not status_file.exists():
-            return {
-                "commentary": "Davy Jones is still getting his sea legs — bot hasn't run yet. Check back shortly.",
-                "generated_at": None,
-                "cached": False,
-                "cache_age_seconds": 0,
-                "unavailable": True,
-            }
-        try:
-            kdata = _json.loads(status_file.read_text())
-        except Exception as exc:
-            logger.warning(f"Kraken commentary: could not read status file: {exc}")
-            return {
-                "commentary": "Charts are foggy — status file temporarily unreadable. Davy Jones sails on.",
-                "generated_at": None,
-                "cached": False,
-                "cache_age_seconds": 0,
-                "error": str(exc),
-                "unavailable": True,
-            }
+        return {
+            "commentary": "Davy Jones is still getting his sea legs — bot hasn't run yet. Check back shortly.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "unavailable": True,
+        }
 
-    if not recent_trades:
-        try:
-            _pf_path = _Path("../kraken-bot/paper_portfolio.json")
-            if _pf_path.exists():
-                _pf_data = _json.loads(_pf_path.read_text())
-                recent_trades = _pf_data.get("all_trades", [])
-        except Exception:
-            pass
-    if not recent_trades:
-        recent_trades = kdata.get("recent_trades", [])
-
-    # Live state (signals, positions) from live_state.json
+    # Live telemetry (non-persistent) — signals from live_state.json
     _lsf = _Path("../kraken-bot/live_state.json")
-    _live = {}
+    _live: dict = {}
     try:
         if _lsf.exists():
             _live = _json.loads(_lsf.read_text())
@@ -3283,9 +3247,9 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
 
 # ── Kraken Bot — Performance Metrics ──────────────────────────────────────────
 # Separate from the Alpaca performance endpoints (/performance/history,
-# /performance/summary). This reads exclusively from kraken-bot/status.json
-# which is written only by kraken-bot/main.py.
-# The Alpaca trading system never touches this file.
+# /performance/summary). This reads exclusively from the kraken_trades,
+# kraken_heartbeat, and kraken_portfolio PostgreSQL tables.
+# The Alpaca trading system never touches these tables.
 
 @router.get("/kraken/auto-trading", tags=["Kraken Bot"])
 async def kraken_auto_trading_status() -> dict:
@@ -3325,7 +3289,7 @@ async def kraken_performance() -> dict:
     """
     Derive performance statistics from the Kraken bot.
 
-    DATA SOURCE: kraken_trades PostgreSQL table (primary), paper_portfolio.json (fallback).
+    DATA SOURCE: kraken_trades PostgreSQL table (only — no file fallback).
     NOT RELATED TO: /performance/history or /performance/summary (Alpaca data)
 
     Returns computed metrics over the complete trade history:
@@ -3396,31 +3360,16 @@ async def kraken_performance() -> dict:
             finally:
                 _pgconn.close()
         except Exception as exc:
-            logger.warning(f"[kraken/performance] DB read failed ({exc}) — falling back to files")
-
-    # ── Fallback: JSON files ────────────────────────────────────────────────
-    if not trades:
-        try:
-            _pf_path = _Path("../kraken-bot/paper_portfolio.json")
-            if _pf_path.exists():
-                _pf_data = _json.loads(_pf_path.read_text())
-                trades = _pf_data.get("all_trades", [])
-        except Exception:
-            pass
+            logger.warning(f"[kraken/performance] DB read failed: {exc}")
+            empty["bot_status"]     = bot_status
+            empty["current_equity"] = current_equity
+            empty["cycle_count"]    = cycle_count
+            return empty
 
     if not trades:
-        try:
-            sf = _Path("../kraken-bot/status.json")
-            if sf.exists():
-                _st = _json.loads(sf.read_text())
-                bot_status     = _st.get("status", "not_started")
-                current_equity = _st.get("total_equity_usd", 0)
-                cycle_count    = _st.get("cycle_count", 0)
-        except Exception:
-            pass
-        empty["bot_status"]    = bot_status
+        empty["bot_status"]     = bot_status
         empty["current_equity"] = current_equity
-        empty["cycle_count"]   = cycle_count
+        empty["cycle_count"]    = cycle_count
         return empty
 
     pnl_list = [t.get("pnl_pct", 0) for t in trades]
@@ -3879,37 +3828,84 @@ async def export_diagnostic_report() -> dict:
     # ─────────────────────────────────────────────────────────────────────────
     h1("SECTION 3: KRAKEN BOT — DAVY JONES' PORTFOLIO (24/7 Crypto)")
 
-    try:
-        _kraken_status_file = _Path("../kraken-bot/status.json")
-        _ks = _json.loads(_kraken_status_file.read_text()) if _kraken_status_file.exists() else {}
-    except Exception:
-        _ks = {}
+    # ── Kraken data: all persistent state from PostgreSQL (DB-only) ──────────────
+    import psycopg2 as _pg2rpt, psycopg2.extras as _pg2xrpt, os as _osrpt
+    _dburlrpt = _osrpt.environ.get("DATABASE_URL")
+    _ks:   dict = {}
+    _pf:   dict = {}
+    _pf_trades: list = []
 
+    if _dburlrpt:
+        try:
+            _rptconn = _pg2rpt.connect(_dburlrpt)
+            try:
+                with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rhc:
+                    _rhc.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
+                    _rhr = _rhc.fetchone()
+                    if _rhr:
+                        _ks = {
+                            "status":           _rhr["status"],
+                            "equity_usd":       _rhr["equity_usd"],
+                            "cycle_count":      _rhr["cycle_count"],
+                            "bot_paused":       _rhr["bot_paused"],
+                            "paper_trading":    _rhr["paper_trading"],
+                            "last_updated":     _rhr["last_updated"].isoformat() if _rhr["last_updated"] else "N/A",
+                            "position_count":   _rhr["position_count"],
+                        }
+                with _rptconn.cursor() as _rpc:
+                    _rpc.execute(
+                        "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
+                    )
+                    _rpr = _rpc.fetchone()
+                    if _rpr:
+                        _pos_raw = _rpr[2]
+                        if isinstance(_pos_raw, str):
+                            _pos_raw = _json.loads(_pos_raw)
+                        _pf = {
+                            "starting_balance_usd": float(_rpr[0] or 100_000),
+                            "cash_usd":             float(_rpr[1] or 0),
+                            "open_positions": list(_pos_raw.values()) if isinstance(_pos_raw, dict) else (_pos_raw or []),
+                        }
+                with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rtc:
+                    _rtc.execute(
+                        """
+                        SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                               fees_usd, reason, closed_at, paper
+                        FROM   kraken_trades ORDER BY closed_at ASC
+                        """
+                    )
+                    for _rtr in _rtc.fetchall():
+                        _rtd = dict(_rtr)
+                        if _rtd.get("closed_at"):
+                            _rtd["closed_at"] = _rtd["closed_at"].isoformat()
+                        _pf_trades.append(_rtd)
+            finally:
+                _rptconn.close()
+        except Exception as _rpte:
+            logger.warning(f"[performance/report] Kraken DB read failed: {_rpte}")
+
+    # Live telemetry from live_state.json (signals, microstructure, etc.)
+    _live_rpt: dict = {}
     try:
-        _pf_path = _Path("../kraken-bot/paper_portfolio.json")
-        _pf = _json.loads(_pf_path.read_text()) if _pf_path.exists() else {}
+        _lsf_rpt = _Path("../kraken-bot/live_state.json")
+        if _lsf_rpt.exists():
+            _live_rpt = _json.loads(_lsf_rpt.read_text())
     except Exception:
-        _pf = {}
+        pass
 
     k_status     = _ks.get("status", "not_started")
-    k_equity     = _ks.get("total_equity_usd", 0) or 0
-    k_deployed   = _ks.get("deployed_usd", 0) or 0
-    k_deploy_pct = _ks.get("deployed_pct", 0) or 0
+    k_equity     = _ks.get("equity_usd", 0) or 0
     k_cycles     = _ks.get("cycle_count", 0) or 0
     k_paused     = _ks.get("bot_paused", False)
     k_paper      = _ks.get("paper_trading", True)
     k_updated    = _ks.get("last_updated", "N/A")
-    k_positions  = _ks.get("open_positions", []) or []
-    k_signals    = _ks.get("signals", []) or []
-    k_cb         = _ks.get("circuit_breaker", {}) or {}
-    k_adaptive   = _ks.get("adaptive_params", {}) or {}
-    k_micro      = _ks.get("microstructure", {}) or {}
-    k_thinking   = _ks.get("thinking_text", "") or ""
-    # Trade history comes from paper_portfolio.json directly (status.json is now a
-    # slim heartbeat file — recent_trades and paper_summary removed to prevent corruption).
-    _pf_trades   = _pf.get("all_trades", []) or []
-    k_recent_trd = _pf_trades  # same source, alias for backward-compat variable name
-    # Reconstruct paper_summary stats from paper_portfolio.json data
+    k_positions  = _pf.get("open_positions", []) or []
+    k_signals    = _live_rpt.get("signals", []) or []
+    k_cb:   dict = {}
+    k_adaptive   = _live_rpt.get("adaptive_params", {}) or {}
+    k_micro      = _live_rpt.get("microstructure", {}) or {}
+    k_thinking   = _live_rpt.get("thinking_text", "") or ""
+    k_recent_trd = _pf_trades
     _pf_wins     = [t for t in _pf_trades if t.get("pnl_pct", 0) > 0]
     k_paper_summ = {
         "total_trades":      len(_pf_trades),
@@ -3918,7 +3914,10 @@ async def export_diagnostic_report() -> dict:
         "all_time_pnl_usd":  round(sum(t.get("pnl_usd", 0) for t in _pf_trades), 2),
         "all_time_pnl_pct":  round(sum(t.get("pnl_pct", 0) for t in _pf_trades), 2),
     } if _pf_trades else {}
-    k_start_bal  = _pf.get("starting_balance", 100_000)
+    k_start_bal   = _pf.get("starting_balance_usd", 100_000)
+    k_cash_usd    = _pf.get("cash_usd", 0)
+    k_deployed    = k_equity - k_cash_usd if k_equity > k_cash_usd else 0.0
+    k_deploy_pct  = round((k_deployed / k_equity) * 100, 1) if k_equity > 0 else 0.0
     k_pnl_usd_all = k_equity - k_start_bal
 
     h2("OVERVIEW")
@@ -3931,7 +3930,7 @@ async def export_diagnostic_report() -> dict:
     row("Current equity:", _c(k_equity))
     row("Total P&L (paper):", f"{_c(k_pnl_usd_all)} ({_pct((k_pnl_usd_all/k_start_bal)*100 if k_start_bal else 0)})")
     row("Deployed capital:", f"{_c(k_deployed)} ({_pct(k_deploy_pct, 1)} of equity)")
-    row("Max positions:", str(_ks.get("max_positions", 5)))
+    row("Max positions:", str(_ks.get("position_count", len(k_positions))))
     row("Open positions:", str(len(k_positions)))
 
     # ── Kraken paper summary ──
@@ -4009,7 +4008,7 @@ async def export_diagnostic_report() -> dict:
             lines.append(f"  {pair:<12} VPIN={f'{vpin:.3f}' if vpin else 'N/A'}  Spread={_pct(sprd, 3) if sprd else 'N/A'}  Imbalance={f'{imb:.3f}' if imb else 'N/A'}")
 
     # ── Kraken per-symbol performance ──
-    h2("KRAKEN PER-SYMBOL PERFORMANCE (all-time from paper_portfolio.json)")
+    h2("KRAKEN PER-SYMBOL PERFORMANCE (all-time from kraken_trades DB)")
     if _pf_trades:
         sym_stats: dict = {}
         for t in _pf_trades:
@@ -4032,10 +4031,10 @@ async def export_diagnostic_report() -> dict:
             avg = (v["pnl_pct"] / n) if n else 0
             lines.append(f"  {sym:<12} {n:>7} {_pct(wr, 1):>10} {_pct(v['pnl_pct']):>12} {_c(v['pnl_usd']):>12} {_pct(avg):>9}")
     else:
-        lines.append("  No trade data in paper_portfolio.json yet.")
+        lines.append("  No trade data in kraken_trades DB yet.")
 
     # ── Kraken recent trade history ──
-    h2("KRAKEN TRADE HISTORY (all trades from paper_portfolio.json, oldest-first)")
+    h2("KRAKEN TRADE HISTORY (all trades from kraken_trades DB, oldest-first)")
     pf_trades_sorted = list(reversed(_pf_trades))  # oldest first
     if not pf_trades_sorted and k_recent_trd:
         pf_trades_sorted = list(reversed(k_recent_trd))

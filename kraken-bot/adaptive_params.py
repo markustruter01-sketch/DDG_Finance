@@ -350,25 +350,11 @@ def _apply_rules(params: dict, m: dict) -> None:
 
 def _load_persisted() -> dict | None:
     """
-    Load previously adapted params.
-    PRIMARY: PostgreSQL kraken_adaptive_params (id=1).
-    FALLBACK: adaptive_params.json, read only if DB row is absent (startup only).
+    Load previously adapted params from PostgreSQL only.
+    PRIMARY (and only) source: kraken_adaptive_params (id=1).
+    Returns None if no row exists or DB is unavailable — caller falls back to factory defaults.
     """
-    # 1. Try PostgreSQL (primary — survives container restarts and redeploys)
-    pg = _pg_load()
-    if pg:
-        return pg
-    # 2. One-time fallback: read legacy JSON file (startup only, not written in primary path)
-    if PARAMS_FILE.exists():
-        try:
-            data = json.loads(PARAMS_FILE.read_text())
-            loaded = data.get("params")
-            if loaded:
-                logger.info("Adaptive | Loaded params from JSON file (will migrate to DB next _save)")
-            return loaded
-        except Exception:
-            pass
-    return None
+    return _pg_load()
 
 
 def _save(params: dict, metrics: dict | None) -> None:
@@ -413,24 +399,14 @@ def initialise() -> None:
 
 def _load_trades_for_adaptation() -> list[dict]:
     """
-    Load closed trade history for adaptation evaluation.
-    Tries DB first (kraken_trades), falls back to paper_portfolio.json.
+    Load closed trade history from PostgreSQL only (kraken_trades table).
+    Returns empty list if DB is unavailable — adaptation is skipped until DB recovers.
     """
-    # 1. Try PostgreSQL (primary store since Task #32 migration)
     try:
         import db as _db
-        db_trades = _db.load_all_trades()
-        if db_trades:
-            return db_trades
+        return _db.load_all_trades()
     except Exception as exc:
         logger.debug(f"Adaptive | DB trade load skipped: {exc}")
-
-    # 2. Fall back to JSON file
-    try:
-        raw = json.loads(PORTFOLIO_FILE.read_text())
-        return raw.get("all_trades", [])
-    except Exception as exc:
-        logger.warning(f"Adaptive | could not read portfolio file: {exc}")
         return []
 
 

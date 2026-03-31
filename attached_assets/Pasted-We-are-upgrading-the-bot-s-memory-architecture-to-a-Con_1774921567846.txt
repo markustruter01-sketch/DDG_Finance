@@ -1,0 +1,63 @@
+We are upgrading the bot's memory architecture to a Context-Aware Retrieval (RAG) system and adding a Deterministic Post-Mortem layer. We are moving away from a chronological (FIFO) sliding window of recent trades, as it causes the LLM to forget older, highly relevant lessons.
+
+To ensure stability and avoid breaking the current build, we will execute this in four strict phases. Do NOT write the code for all phases at once. You must only execute the code for PHASE 1, and then pause and wait for my explicit approval before moving to Phase 2.
+
+Here is the master plan for context:
+
+Phase 1: Database Schema Expansion (Data storage)
+
+Phase 2: Deterministic Post-Mortem Logging (Python risk manager)
+
+Phase 3: Context-Aware Prompt Injection (RAG-lite for the LLM)
+
+Phase 4: Thematic Rollup (Permanent hardcoded rules)
+
+Please begin by executing ONLY Phase 1:
+
+PHASE 1: Database Schema Expansion ONLY
+Update the SQLite/Postgres schema to capture exact state data for every trade, creating a permanent, queryable history.
+
+Update Trade_Journal table: Ensure it explicitly captures ticker, asset_class, regime_at_entry, conviction_score, time_in_trade_hours, exit_reason (e.g., ratchet_stop, target_hit, time_exit), realized_pnl, slippage, and the original_thesis. Write the migration to safely add these columns if they do not already exist.
+
+Create Execution_Post_Mortems table: Create a new table to store Python-generated rules. It needs columns for id, timestamp, ticker, regime, and hardcoded_lesson_text.
+
+Action required right now: Update the database schema, Pydantic models, and the basic insert functions to support these new fields. Do not change any execution logic, Alpaca broker routing, or LLM prompt injection yet. Let me know when the schema is updated so I can verify.
+
+How to proceed after Replit finishes Phase 1:
+Once Replit confirms Phase 1 is done and you ensure the database updates did not crash the app, paste these subsequent prompts one by one.
+
+Prompt for Phase 2:
+
+Proceed to PHASE 2: Deterministic Post-Mortem Logging.
+Create a new Python function that intercepts the close_position event from the Alpaca broker layer. This function must evaluate how a trade died and generate a hardcoded text string to log into the new Execution_Post_Mortems table.
+
+Logic Example A: If P&L < 0 AND exit_reason == 'ratchet_stop' AND time_in_trade_hours < 24: Generate text "[EXECUTION FAILURE] Asset: {ticker}. Regime: {regime}. Stop-loss triggered prematurely due to intraday noise. Consider widening ATR multiplier."
+
+Logic Example B: If P&L < 0 AND exit_reason == 'time_exit' (e.g., 5-day limit on 3x leveraged ETFs): Generate text "[THESIS FAILURE] Asset: {ticker}. Regime: {regime}. Directional momentum stalled. Holding period exceeded target."
+Hook this up to the execution layer so it runs automatically when a position closes. Do not touch the LLM prompt injection yet. Let me know when this is done.
+
+Prompt for Phase 3:
+
+Proceed to PHASE 3: Context-Aware Prompt Injection.
+Now update the LLM's memory window in feedback_injection.py.
+
+Remove the chronological FIFO queue (the generic "last 5 losses and 3 wins").
+
+Implement Contextual Querying: Before calling the Groq API, the Python script must query the database for the 5 most relevant recent losses and 3 recent wins where the historical regime_at_entry EXACTLY MATCHES the current market regime detected by the system.
+
+Asset Class Priority: If the LLM is actively evaluating a specific asset class (e.g., bear_hedge), the SQL query should prioritize retrieving past trades for that exact asset class under the current regime.
+
+Inject these matched trades, along with their associated Python-generated lessons from Execution_Post_Mortems, into the LLM prompt under a [Relevant Historical Context] header.
+Let me know when this is complete.
+
+Prompt for Phase 4:
+
+Proceed to PHASE 4: Permanent Hardcoded Rules.
+Create a background function (e.g., an end-of-cycle rollup) that scans the Execution_Post_Mortems table for recurring exact failures.
+
+If a specific failure occurs 3 or more times (e.g., 3 execution failures on XLF in a Sideways regime), extract this into a single, permanent rule.
+
+Example output: "RULE: Historical data shows a high failure rate shorting XLF in Sideways regimes due to stop-loss whipsawing. Abort similar setups."
+
+Append this condensed list of permanent rules directly into the foundational LLM System Prompt so it is never forgotten.
+This completes the architecture.

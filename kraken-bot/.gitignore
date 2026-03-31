@@ -1,0 +1,14 @@
+# Runtime state files — these are written each cycle and should not be tracked in git.
+# They are large, frequently-changing, and cause noisy diffs with zero code value.
+status.json
+live_state.json
+paper_portfolio.json
+adaptive_params.json
+control.json
+equity_history.json
+rag_memory/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

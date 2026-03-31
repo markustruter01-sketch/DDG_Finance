@@ -748,8 +748,8 @@ def run_cycle() -> None:
     _risk_profile = RiskProfile(
         total_equity=total_equity,
         deployed_usd=deployed_usd,
-        ring_fenced_pct=0.60,
-        deployable_pct=0.40,
+        ring_fenced_pct=0.0,
+        deployable_pct=1.0,
         max_position_pct=MAX_POSITION_FRACTION,
         daily_loss_limit_pct=0.05,
         reserve_pct=CASH_RESERVE,

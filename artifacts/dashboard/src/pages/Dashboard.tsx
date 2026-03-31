@@ -3264,7 +3264,7 @@ function CommandersLog() {
             <Zap className="h-3 w-3 text-amber-400/60" />
             <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400/50">Recent Kills</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto scrollbar-thin">
             {recentKills.map((k, i) => (
               <div key={`${k.agent}-${k.symbol}-${i}`} className="flex items-center gap-1 rounded-lg bg-slate-800/60 border border-white/5 px-2 py-1">
                 <span className="text-[10px]">{k.icon}</span>

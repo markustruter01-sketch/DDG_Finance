@@ -42,10 +42,9 @@ def _load_portfolio() -> dict:
     Order of precedence:
       1. In-memory cache (_portfolio) — already loaded this session
       2. PostgreSQL kraken_portfolio (survives restarts + redeploys)
-      3. paper_portfolio.json on disk (legacy fallback)
-      4. Fresh starting balance (truly first run)
+      3. Fresh starting balance (truly first run — DB row absent)
     """
-    from config import PAPER_PORTFOLIO_FILE, PAPER_STARTING_BALANCE
+    from config import PAPER_STARTING_BALANCE
     import db as _db
 
     global _portfolio
@@ -69,28 +68,12 @@ def _load_portfolio() -> dict:
         )
         return _portfolio
 
-    # ── 2. Try JSON file (legacy / first-boot migration) ─────────────────────
-    if os.path.exists(PAPER_PORTFOLIO_FILE):
-        try:
-            with open(PAPER_PORTFOLIO_FILE) as f:
-                _portfolio = json.load(f)
-            logger.info(
-                f"Paper | Loaded portfolio from JSON — "
-                f"Cash: ${_portfolio['cash_usd']:,.2f} (will migrate to DB)"
-            )
-            # Seed the DB from the JSON file so future restarts use DB
-            _db.save_portfolio(
-                cash_usd=_portfolio["cash_usd"],
-                positions=_portfolio.get("positions", {}),
-                starting_balance_usd=_portfolio.get("starting_balance_usd", PAPER_STARTING_BALANCE),
-            )
-            # Also seed trade history if DB is empty
-            all_trades = _portfolio.get("all_trades", [])
-            if all_trades:
-                _db.migrate_from_json(PAPER_PORTFOLIO_FILE)
-            return _portfolio
-        except Exception as exc:
-            logger.warning(f"Paper | Could not read {PAPER_PORTFOLIO_FILE}: {exc} — starting fresh")
+    # ── 2. Fresh portfolio (DB had no row — truly first run) ─────────────────
+    # JSON file fallback removed: DB row existence is authoritative.
+    # The one-time JSON migration runs on startup (db.migrate_from_json) and
+    # is gated by SELECT 1 FROM kraken_portfolio WHERE id=1, so it only fires
+    # when the table is genuinely empty. After that, DB is the sole source.
+    logger.info("Paper | No portfolio row in DB — initialising fresh $100 k account")
 
     # ── 3. Fresh portfolio ────────────────────────────────────────────────────
     _portfolio = {

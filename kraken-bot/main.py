@@ -260,21 +260,17 @@ def is_bot_paused() -> bool:
 
 def _get_persistent_trade_history() -> list[dict]:
     """
-    Return the full closed-trade history for status.json.
+    Return the full closed-trade history.
 
-    In PAPER mode: reads all_trades from paper_portfolio.json so the dashboard
-    continues to show trade history after a bot restart (the in-memory
-    recent_trades list resets on every restart by design).
-
-    In LIVE mode: falls back to the in-memory recent_trades list (capped at 20).
+    Reads from PostgreSQL kraken_trades table (DB-only, no file fallback).
+    Falls back to the in-memory recent_trades list only if DB is unavailable.
     """
-    if PAPER_TRADING:
-        try:
-            with open(PAPER_PORTFOLIO_FILE, "r") as _pf:
-                _pp = json.load(_pf)
-            return _pp.get("all_trades", [])[-50:]
-        except Exception:
-            pass
+    try:
+        db_trades = _db.load_all_trades(limit=50)
+        if db_trades is not None:
+            return db_trades
+    except Exception:
+        pass
     return recent_trades[-20:]
 
 

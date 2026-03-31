@@ -1536,7 +1536,7 @@ def _save_kraken_imported(keys: set[str]) -> None:
 
 def _sync_kraken_trades_to_journal() -> dict:
     """
-    Read all closed trades from kraken-bot/paper_portfolio.json and insert any
+    Read all closed trades from the kraken_trades PostgreSQL table and insert any
     new ones into the PostgreSQL trade journal (source='kraken_paper').
     Uses a sidecar JSON file to track already-imported trades by a composite key
     (symbol|closed_at) to prevent duplicates across postmortem runs.
@@ -1547,19 +1547,36 @@ def _sync_kraken_trades_to_journal() -> dict:
     if not is_pg_available():
         return {"imported": 0, "skipped": 0, "reason": "PostgreSQL unavailable"}
 
-    _portfolio_path = os.path.join(os.path.dirname(__file__), "..", "kraken-bot", "paper_portfolio.json")
-    if not os.path.exists(_portfolio_path):
-        return {"imported": 0, "skipped": 0, "reason": "paper_portfolio.json not found"}
-
+    # Read all_trades from kraken_trades DB table (no JSON file fallback)
+    all_trades = []
     try:
-        with open(_portfolio_path) as f:
-            portfolio = _jk.load(f)
+        with get_conn() as _kconn:
+            with _kconn.cursor() as _kc:
+                _kc.execute(
+                    """
+                    SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                           fees_usd, reason, closed_at
+                    FROM   kraken_trades ORDER BY closed_at ASC
+                    """
+                )
+                for row in _kc.fetchall():
+                    sym, side, ep, xp, pct, pusd, fees, reason, cat = row
+                    all_trades.append({
+                        "symbol":      sym,
+                        "side":        side,
+                        "entry_price": float(ep) if ep is not None else None,
+                        "exit_price":  float(xp) if xp is not None else None,
+                        "pnl_pct":     float(pct) if pct is not None else None,
+                        "pnl_usd":     float(pusd) if pusd is not None else None,
+                        "fees_usd":    float(fees) if fees is not None else None,
+                        "reason":      reason,
+                        "closed_at":   cat.isoformat() if hasattr(cat, "isoformat") else str(cat) if cat else "",
+                    })
     except Exception as exc:
-        return {"imported": 0, "skipped": 0, "error": f"Could not read portfolio: {exc}"}
+        return {"imported": 0, "skipped": 0, "error": f"Could not read kraken_trades DB: {exc}"}
 
-    all_trades = portfolio.get("all_trades", [])
     if not all_trades:
-        return {"imported": 0, "skipped": 0, "reason": "No trades in paper portfolio"}
+        return {"imported": 0, "skipped": 0, "reason": "No trades in kraken_trades table"}
 
     with _kraken_imported_lock:
         imported_keys = _load_kraken_imported()

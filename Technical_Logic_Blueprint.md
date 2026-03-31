@@ -229,30 +229,42 @@ If `Kelly_Applied ≤ 0`, the slot defaults to SGOV (negative expected value = f
 
 ---
 
-## Section III — The Learning Framework: Retrieval-Augmented Generation Loop
+## Section III — The Learning Framework: Retrieval-Augmented Generation Loop (4-Phase RAG Memory)
 
 ### Simple Explanation
 
-> **Think of it like this:** The AI keeps a diary of every trade it makes — wins and losses. Before making new trades, it reads its own diary to remind itself what worked and what didn't. If it bought GameStop last week and lost money, it'll see that in its diary and (hopefully) not do the same thing again. The more trades it makes, the smarter the diary gets. It's like getting a personalized report card every trading cycle.
+> **Think of it like this:** The AI keeps a diary of every trade it makes — wins and losses. But it doesn't just read the diary: it also writes case-study notes after each loss ("Why did this fail? What should I do differently?"), and it only reads diary entries that match the *current market regime* — so a loss in a Bear market doesn't confuse it during a Bull market. After seeing the same mistake 3 or more times, it permanently bans that setup with a rule it can never override. The system literally gets smarter every trading day it runs.
 
 ```
- THE LEARNING LOOP (runs every 15 minutes during market hours)
- ──────────────────────────────────────────────────────────────────
+ THE 4-PHASE RAG LEARNING LOOP
+ ──────────────────────────────────────────────────────────────────────
  
-  ┌──────────────┐     ┌─────────────────┐     ┌──────────────────┐
-  │  TRADE WINS  │────▶│                 │────▶│   AI BRAIN       │
-  │  (3 recent)  │     │   PROMPT        │     │   (Groq Llama)   │
-  └──────────────┘     │   BUILDER       │     │                  │
-  ┌──────────────┐     │                 │     │  "I lost 8% on   │
-  │  TRADE LOSSES│────▶│  Market data +  │     │   XLE last week  │
-  │  (5 recent)  │     │  News headlines │     │   so I'll avoid  │
-  └──────────────┘     │  + Sentiment +  │     │   energy today"  │
-                        │  Economic cal  │     └────────┬─────────┘
-                        └─────────────────┘             │
-                                                         ▼
-                                                  New Allocations
-                                                  → Executed as Orders
-                                                  → Added to Diary
+ PHASE 1 — JOURNALING        PHASE 2 — POST-MORTEM LESSONS
+ ┌─────────────────────┐     ┌──────────────────────────────────────┐
+ │ Every trade logged  │────▶│ Evening audit: why did each loss     │
+ │ to trades table +   │     │ happen? Written lessons stored in    │
+ │ outcome on close    │     │ execution_post_mortems (DB)          │
+ └─────────────────────┘     └──────────────────┬───────────────────┘
+                                                 │
+          ┌──────────────────────────────────────┤
+          ▼                                      ▼
+ PHASE 4 — PERMANENT RULES   PHASE 3 — REGIME-MATCHED RETRIEVAL
+ ┌─────────────────────────┐  ┌───────────────────────────────────┐
+ │ Same (ticker, regime,   │  │ Each cycle: 5 regime-matched      │
+ │ exit_reason) fails 3+× │  │ losses + 3 wins injected into     │
+ │ → hardcoded_rules DB   │  │ LLM prompt. Falls back to FIFO    │
+ │ → NON-NEGOTIABLE block │  │ with disclaimer if no history yet  │
+ │   injected before all  │  └───────────────────────────────────┘
+ │   other LLM context    │
+ └─────────────────────────┘
+ 
+ Prompt injection order (every 15-minute analysis cycle):
+   [1] Base system prompt
+   [2] === PERMANENT RULES === (NON-NEGOTIABLE — from hardcoded_rules)
+   [3] Live account state + positions
+   [4] [RELEVANT HISTORICAL CONTEXT] (regime-matched losses/wins)
+   [5] Slippage warnings · Sentiment · On-chain · Established learnings
+   [6] Current market data + news → Groq Llama 3.3 70B → Allocation plan
 ```
 
 ### Advanced Technical Specification
@@ -263,29 +275,59 @@ Every trade the LLM proposes is logged to the `trades` PostgreSQL table at execu
 
 On close: `update_trade_outcome()` computes realized P&L% and sets status to `Closed_Win` (P&L ≥ 0) or `Closed_Loss` (P&L < 0).
 
-#### 3.2 Phase 2: Asymmetric Retrieval
+A second table, `execution_post_mortems`, stores the evening post-mortem audit record for each closed loss: ticker, regime at entry, exit_reason, pnl_pct, lesson_text (natural language), and failure_class (EXECUTION_FAILURE, THESIS_FAILURE, EXECUTION_GAP, REGIME_MISMATCH, STOP_HUNT). This table is the source for both Phase 2 retrieval and Phase 4 rule promotion.
 
-Each analysis cycle retrieves: **5 most recent losses** (biased to prevent repeated mistakes) + **3 most recent wins** (pattern reinforcement). Retrieval is recency-based via SQL — no vector embeddings required.
+#### 3.2 Phase 2: Deterministic Post-Mortem Lesson Engine
 
-#### 3.3 Phase 3: Multi-Source Prompt Injection
+After each evening reconciliation, `analysis/post_mortem.py` runs `_generate_lessons()` for every loss closed during the session. For each loss, the engine:
 
-The LLM system prompt is enriched with:
-- **Loss block** (framed as "CRITICAL — LEARNING FROM PAST FAILURES"): ticker, P&L%, original thesis, explicit instruction to avoid repeating the logic
-- **Win block**: reinforcement of successful patterns
-- **Slippage warnings**: "worst offender" tickers where execution friction was highest
-- **Crypto/Market Fear & Greed indices** (0–100 scale, sourced from external APIs)
-- **Economic calendar** with active blackout status (FOMC, NFP, CPI events within ±30-minute window)
-- **P&L attribution** by regime and asset class
-- **Portfolio risk metrics**: Sharpe ratio, annualized volatility from performance snapshots
-- **Correlation warnings**: pairs with Pearson correlation > 0.85
+1. Classifies the failure by exit reason: `ratchet_stop` → EXECUTION FAILURE; `time_exit` → THESIS FAILURE; `algo_cover` → EXECUTION GAP; `regime_change` → REGIME MISMATCH; `stop_hunt` → STOP HUNT.
+2. Generates a deterministic lesson string: *"Ticker XYZ lost −4.2% in Sideways [THESIS FAILURE]. Original thesis: [text]. Lesson: Momentum theses in Sideways regimes frequently expire before catalysts materialize. Prefer SGOV or mean-reversion setups."*
+3. Upserts the lesson to `execution_post_mortems` via `save_post_mortem_lesson()`.
 
-#### 3.4 Phase 4: Groq LLM Inference
+Lessons are then immediately available for Phase 3 retrieval on the next cycle. No LLM call is used for lesson generation — the logic is rule-based and deterministic, preventing hallucinated self-critique.
 
-Model: **Groq Llama 3.3 70B Versatile** at temperature 0.4. Output: structured JSON allocation plan with regime label, per-slot conviction scores (0.0–1.0), take-profit and stop-loss levels, and natural-language theses.
+#### 3.3 Phase 3: Contextual Regime-Matched Retrieval and Injection
+
+Each analysis cycle, `analysis/feedback_injection.py` calls `get_contextual_losses(current_regime)` and `get_contextual_wins(current_regime)` which execute SQL ordered by: regime match (exact match first), then recency.
+
+- **Losses**: Returns up to 5 entries. SQL: `WHERE status = 'Closed_Loss' ORDER BY (regime = $1) DESC, closed_at DESC LIMIT 5`
+- **Wins**: Returns up to 3 entries with the same regime-priority ordering.
+- **Fallback**: If no regime-matched entries exist (fresh DB or new regime), falls back to recency-only FIFO with an explicit `[NOTE: Cross-regime history — treat with caution]` disclaimer in the prompt block.
+
+The injected block is labeled `[RELEVANT HISTORICAL CONTEXT]` and placed after the live account state but before slippage/sentiment data. A `regime_matched: bool` flag is returned alongside the rows to drive the disclaimer logic.
+
+#### 3.4 Phase 4: Permanent Rules Rollup Engine
+
+`analysis/rule_engine.py` implements a self-promotion engine that converts repeated observed failures into permanent, non-overridable LLM constraints.
+
+**Rollup query** (runs after every evening post-mortem cycle):
+```sql
+SELECT ticker, regime, exit_reason, COUNT(*) AS fail_count,
+       MAX(lesson_text) AS latest_lesson
+FROM execution_post_mortems
+WHERE pnl_pct < 0
+GROUP BY ticker, regime, exit_reason
+HAVING COUNT(*) >= 3   -- PROMOTION_THRESHOLD
+```
+
+Each qualifying pattern generates a rule string:
+```
+RULE [EXECUTION FAILURE]: XLF (equity) in Sideways has failed 4× due to
+stop-loss whipsawing. Abort similar setups — prefer SGOV.
+```
+
+Rules are upserted to the `hardcoded_rules` table (ON CONFLICT DO UPDATE — idempotent). The `build_permanent_rules_block(regime)` function returns a formatted `=== PERMANENT RULES (NON-NEGOTIABLE) ===` block injected immediately after the base system prompt — before any contextual data, before market data, before any soft guidance. The current-regime rules appear first, followed by cross-regime rules appended with a secondary-priority label.
+
+**Promotion threshold:** `PROMOTION_THRESHOLD = 3` (any ticker/regime/exit_reason combination with 3+ losses).
+
+#### 3.5 Groq LLM Inference
+
+Model: **Groq Llama 3.3 70B Versatile** at temperature 0.4. The model receives the fully enriched prompt (phases 1–4 above) and produces a structured JSON allocation plan with: regime label, per-slot conviction scores (0.0–1.0), take-profit and stop-loss levels, and natural-language theses.
 
 Output is validated against Pydantic schemas before any order is placed. Invalid or unparseable responses abort the cycle without executing any trades.
 
-#### 3.5 LLM Response Cache (Stage 2)
+#### 3.6 LLM Response Cache (Stage 2)
 
 To avoid redundant Groq calls on quiet days (stable signals, low news volume):
 - **Cache key:** MD5 of `(call_type + momentum fingerprint + news fingerprint)`

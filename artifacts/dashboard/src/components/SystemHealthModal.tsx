@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock } from "lucide-react";
+import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock, Brain } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +85,7 @@ const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server
   alpaca_api: { x: 70,  y: 450, icon: Wifi },
   kraken_api: { x: 640, y: 295, icon: Anchor },
   data_pipeline: { x: 540, y: 450, icon: Database },
+  rag_engine:   { x: 300, y: 420, icon: Brain },
 };
 const NODE_W = 188;
 const NODE_H = 92;
@@ -95,6 +96,8 @@ const WIRES: [string, string][] = [
   ["platform_core", "data_pipeline"],
   ["equity_manager", "alpaca_api"],
   ["data_pipeline", "kraken_api"],
+  ["platform_core", "rag_engine"],
+  ["rag_engine", "data_pipeline"],
 ];
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -103,6 +106,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   kraken_api: "Kraken Bot",
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
+  rag_engine: "RAG Learning Engine",
 };
 
 function buildExplanation(key: string, node: NodeHealth): string {
@@ -150,6 +154,11 @@ function buildExplanation(key: string, node: NodeHealth): string {
     if (detail.includes("401") || detail.includes("403")) return "Alpaca authentication failed. Verify ALPACA_API_KEY and ALPACA_SECRET_KEY are set correctly in Secrets.";
     if (detail.includes("404")) return "Alpaca returned 404 — the requested resource (account, order, position) was not found. May indicate a stale reference.";
     if (detail.includes("503") || detail.includes("timeout")) return "Alpaca API is unreachable or timing out. Could be a temporary outage — check status.alpaca.markets.";
+  }
+
+  if (key === "rag_engine") {
+    if (level === "red") return `The RAG learning engine cannot reach the PostgreSQL database. Phase 3 contextual retrieval and Phase 4 rule injection are disabled — the LLM is running without historical memory. Check DATABASE_URL and DB connectivity. Detail: ${detail}`;
+    if (level === "yellow") return "The RAG engine is online but no post-mortem lessons exist yet (fresh database). This is expected on first run. Lessons accumulate after the first losing trade is closed and the evening post-mortem cycle runs.";
   }
 
   return detail || "Status flagged — check the server logs for more detail.";
@@ -573,6 +582,7 @@ function TestControlPanel({
         kraken_api: { level: "red", detail: "HTTP 503 Service Unavailable" },
         data_pipeline: { level: "red", data_age_s: 900, detail: "All feeds stale > 600s" },
         equity_manager: { level: "red", detail: "Cannot validate — API unreachable" },
+        rag_engine: { level: "red", detail: "DB error: connection refused" },
       },
     };
     if (name === "all-green") {

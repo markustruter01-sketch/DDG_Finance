@@ -629,6 +629,50 @@ async def system_health_architecture() -> dict:
     except Exception as exc:
         nodes["equity_manager"] = {"label": "Equity Manager (15% Enforcer)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
+    # ── 6. RAG Learning Engine ───────────────────────────────────────────
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # Count post-mortems (Phase 2 lessons)
+                cur.execute("SELECT COUNT(*) FROM execution_post_mortems")
+                pm_count = cur.fetchone()[0]
+                # Count active permanent rules (Phase 4)
+                cur.execute("SELECT COUNT(*) FROM hardcoded_rules WHERE active = TRUE")
+                rule_count = cur.fetchone()[0]
+                # Count pending patterns (losses that haven't hit threshold yet)
+                cur.execute("""
+                    SELECT COUNT(*) FROM (
+                        SELECT ticker, regime, exit_reason
+                        FROM execution_post_mortems
+                        WHERE pnl_pct < 0
+                        GROUP BY ticker, regime, exit_reason
+                        HAVING COUNT(*) BETWEEN 1 AND 2
+                    ) sub
+                """)
+                pending_count = cur.fetchone()[0]
+        if pm_count == 0:
+            level = "yellow"
+            detail = f"No post-mortems yet · {rule_count} rules · awaiting first loss cycle"
+        else:
+            level = "green"
+            detail = f"{pm_count} post-mortems · {rule_count} permanent rules · {pending_count} patterns pending"
+        nodes["rag_engine"] = {
+            "label": "RAG Learning Engine (4-Phase)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": detail,
+        }
+    except Exception as exc:
+        nodes["rag_engine"] = {
+            "label": "RAG Learning Engine (4-Phase)",
+            "level": "red",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"DB error: {str(exc)[:70]}",
+        }
+
     return {
         "timestamp": now,
         "nodes": nodes,

@@ -267,6 +267,47 @@ CREATE TABLE IF NOT EXISTS hardcoded_rules (
     UNIQUE (ticker, regime, exit_reason)
 );
 CREATE INDEX IF NOT EXISTS idx_hardcoded_rules_active ON hardcoded_rules (active, regime);
+
+-- ── Kraken Bot PostgreSQL State ────────────────────────────────────────────
+-- Single-row heartbeat (id=1) upserted by the bot every cycle.
+-- The auto-heal monitor reads last_updated here; no JSON file parsing needed.
+CREATE TABLE IF NOT EXISTS kraken_heartbeat (
+    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    status          TEXT    NOT NULL DEFAULT 'not_started',
+    cycle_count     INTEGER NOT NULL DEFAULT 0,
+    equity_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    position_count  INTEGER NOT NULL DEFAULT 0,
+    paper_trading   BOOLEAN NOT NULL DEFAULT TRUE,
+    bot_paused      BOOLEAN NOT NULL DEFAULT FALSE,
+    circuit_breaker JSONB,
+    error           TEXT,
+    last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Single-row portfolio state (id=1): paper cash + open positions (JSONB).
+CREATE TABLE IF NOT EXISTS kraken_portfolio (
+    id                   INTEGER PRIMARY KEY CHECK (id = 1),
+    starting_balance_usd DOUBLE PRECISION NOT NULL DEFAULT 100000,
+    cash_usd             DOUBLE PRECISION NOT NULL DEFAULT 100000,
+    positions            JSONB NOT NULL DEFAULT '{}'
+);
+
+-- Append-only trade history for Davy Jones' Portfolio paper trades.
+CREATE TABLE IF NOT EXISTS kraken_trades (
+    id          BIGSERIAL PRIMARY KEY,
+    symbol      TEXT             NOT NULL,
+    side        TEXT             NOT NULL,
+    entry_price DOUBLE PRECISION NOT NULL,
+    exit_price  DOUBLE PRECISION NOT NULL,
+    pnl_pct     DOUBLE PRECISION NOT NULL,
+    pnl_usd     DOUBLE PRECISION NOT NULL,
+    fees_usd    DOUBLE PRECISION,
+    reason      TEXT,
+    closed_at   TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
+    paper       BOOLEAN          NOT NULL DEFAULT TRUE,
+    order_id    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

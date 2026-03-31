@@ -88,6 +88,7 @@ from config import (
 )
 
 import adaptive_params as _adaptive
+import db as _db
 
 # Import our trading logic functions (identical in both paper and live mode)
 from logic import (
@@ -135,6 +136,11 @@ logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDO
 logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
 logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active (order-book primary)")
 logger.info("=" * 65)
+
+# ── DB schema bootstrap + one-time JSON migration ─────────────────────────────
+_db.ensure_schema()
+_db.migrate_from_json(PAPER_PORTFOLIO_FILE)
+logger.info("DB | Kraken PostgreSQL tables ready")
 
 _adaptive.initialise()
 logger.info("Adaptive params initialised — self-tuning layer active (evaluates every 6h)")
@@ -293,14 +299,14 @@ def _atomic_json_write(filepath: str, payload: dict) -> None:
 
 def write_status(error: str | None = None) -> None:
     """
-    Write a pure heartbeat to STATUS_FILE (kraken-bot/status.json).
+    Write the bot heartbeat to both PostgreSQL (primary) and status.json (backup).
 
-    Contains ONLY the 9 fields required by the auto-heal monitor and the
-    health-architecture node.  Target size: ≤ 1 KB regardless of trade count.
+    PostgreSQL kraken_heartbeat is the source of truth: a single-row upsert
+    (id=1) that the FastAPI server and auto-heal monitor read directly — no
+    file parsing, no JSONDecodeError possible.
 
-    All larger live-state data (positions, signals, microstructure, adaptive
-    params, thinking_text) is written separately by write_live_state() so that
-    this file stays small.  Trade history lives in paper_portfolio.json.
+    status.json is kept as a lightweight backup so the system degrades
+    gracefully if the DB is temporarily unavailable.
     """
     global total_equity, open_positions, circuit_breaker_until, cycle_count
 
@@ -308,11 +314,30 @@ def write_status(error: str | None = None) -> None:
     cb_until  = circuit_breaker_until.isoformat() if cb_active else None
 
     paused = is_bot_paused()
+    status_str = (
+        "paused_dashboard"         if paused     else
+        "paused_circuit_breaker"   if cb_active  else
+        ("running" if not error else "error")
+    )
+
+    # Primary: PostgreSQL heartbeat
+    _db.upsert_heartbeat(
+        status=status_str,
+        cycle_count=cycle_count,
+        equity_usd=round(total_equity, 2),
+        position_count=len(open_positions),
+        paper_trading=PAPER_TRADING,
+        bot_paused=paused,
+        circuit_breaker={"active": cb_active, "paused_until": cb_until},
+        error=error,
+    )
+
+    # Backup: JSON heartbeat file (kept for graceful degradation + manual inspection)
     heartbeat = {
         "bot_name":         "Davy Jones' Portfolio",
         "paper_trading":    PAPER_TRADING,
         "bot_paused":       paused,
-        "status":           "paused_dashboard" if paused else ("paused_circuit_breaker" if cb_active else ("running" if not error else "error")),
+        "status":           status_str,
         "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
         "cycle_count":      cycle_count,
         "total_equity_usd": round(total_equity, 2),

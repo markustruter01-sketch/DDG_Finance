@@ -10,9 +10,11 @@ stop-losses — runs identically. The only difference is that orders
 are "filled" at the current live market price instead of being
 executed on the exchange.
 
-The portfolio state is saved to kraken-bot/paper_portfolio.json
-after every trade so it survives bot restarts. If the file does
-not exist yet, the engine starts with a fresh PAPER_STARTING_BALANCE.
+PRIMARY STATE: PostgreSQL (kraken_portfolio + kraken_trades tables).
+FALLBACK:      paper_portfolio.json on disk (written as backup each save).
+
+On first startup the DB tables are seeded from paper_portfolio.json if
+they are empty and the file exists, so no trade history is lost on upgrade.
 
 Fees are simulated at 0.26% per trade (Kraken's standard taker fee)
 on both entry and exit, so the numbers reflect realistic conditions.
@@ -28,42 +30,72 @@ from typing import Optional
 from loguru import logger
 
 
-# ── Internal state (loaded from disk on first call) ───────────────────────────
+# ── Internal state (lazy-loaded) ──────────────────────────────────────────────
 
-_portfolio: dict | None = None  # Lazy-loaded from PAPER_PORTFOLIO_FILE
+_portfolio: dict | None = None  # In-memory cache; DB is the source of truth
 
 
 def _load_portfolio() -> dict:
     """
-    Load the simulated portfolio from disk, or create a fresh one
-    if the file doesn't exist yet (first run).
+    Load the simulated portfolio.
+
+    Order of precedence:
+      1. In-memory cache (_portfolio) — already loaded this session
+      2. PostgreSQL kraken_portfolio (survives restarts + redeploys)
+      3. paper_portfolio.json on disk (legacy fallback)
+      4. Fresh starting balance (truly first run)
     """
-    # Import here to avoid circular imports at module load time
     from config import PAPER_PORTFOLIO_FILE, PAPER_STARTING_BALANCE
+    import db as _db
 
     global _portfolio
 
     if _portfolio is not None:
-        return _portfolio  # Already loaded this session
+        return _portfolio
 
+    # ── 1. Try PostgreSQL ────────────────────────────────────────────────────
+    pg_pf = _db.load_portfolio()
+    if pg_pf and pg_pf.get("cash_usd", 0) > 0:
+        _portfolio = pg_pf
+        # Ensure all_trades key exists for in-memory compat
+        if "all_trades" not in _portfolio:
+            _portfolio["all_trades"] = []
+        logger.info(
+            f"Paper | Loaded portfolio from PostgreSQL — "
+            f"Cash: ${_portfolio['cash_usd']:,.2f}, "
+            f"Positions: {len(_portfolio.get('positions', {}))}"
+        )
+        return _portfolio
+
+    # ── 2. Try JSON file (legacy / first-boot migration) ─────────────────────
     if os.path.exists(PAPER_PORTFOLIO_FILE):
         try:
             with open(PAPER_PORTFOLIO_FILE) as f:
                 _portfolio = json.load(f)
             logger.info(
-                f"Paper | Loaded portfolio from {PAPER_PORTFOLIO_FILE} — "
-                f"Cash: ${_portfolio['cash_usd']:,.2f}"
+                f"Paper | Loaded portfolio from JSON — "
+                f"Cash: ${_portfolio['cash_usd']:,.2f} (will migrate to DB)"
             )
+            # Seed the DB from the JSON file so future restarts use DB
+            _db.save_portfolio(
+                cash_usd=_portfolio["cash_usd"],
+                positions=_portfolio.get("positions", {}),
+                starting_balance_usd=_portfolio.get("starting_balance_usd", PAPER_STARTING_BALANCE),
+            )
+            # Also seed trade history if DB is empty
+            all_trades = _portfolio.get("all_trades", [])
+            if all_trades:
+                _db.migrate_from_json(PAPER_PORTFOLIO_FILE)
             return _portfolio
         except Exception as exc:
             logger.warning(f"Paper | Could not read {PAPER_PORTFOLIO_FILE}: {exc} — starting fresh")
 
-    # First run — initialise with the configured starting balance
+    # ── 3. Fresh portfolio ────────────────────────────────────────────────────
     _portfolio = {
         "starting_balance_usd": PAPER_STARTING_BALANCE,
         "cash_usd":             PAPER_STARTING_BALANCE,
-        "positions":            {},   # symbol → position dict
-        "all_trades":           [],   # complete trade history (all time)
+        "positions":            {},
+        "all_trades":           [],
     }
     logger.info(
         f"Paper | Fresh portfolio created — "
@@ -75,18 +107,28 @@ def _load_portfolio() -> dict:
 
 def _save_portfolio() -> None:
     """
-    Write the current portfolio state to disk so it survives restarts.
+    Persist the current in-memory portfolio to DB (primary) and JSON file (backup).
     """
     from config import PAPER_PORTFOLIO_FILE
+    import db as _db
 
     global _portfolio
     if _portfolio is None:
         return
+
+    # Primary: PostgreSQL
+    _db.save_portfolio(
+        cash_usd=_portfolio["cash_usd"],
+        positions=_portfolio.get("positions", {}),
+        starting_balance_usd=_portfolio.get("starting_balance_usd"),
+    )
+
+    # Backup: JSON file (keeps legacy consumers working; also useful for manual inspection)
     try:
         with open(PAPER_PORTFOLIO_FILE, "w") as f:
             json.dump(_portfolio, f, indent=2)
     except Exception as exc:
-        logger.warning(f"Paper | Could not save portfolio: {exc}")
+        logger.warning(f"Paper | Could not save JSON backup: {exc}")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -97,16 +139,13 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
       cash  +  current market value of all open positions.
 
     current_prices: optional dict of {symbol: current_price}.
-    If not provided, open positions are valued at their entry price
-    (slightly underestimates for longs, overestimates for shorts,
-    but accurate enough when called mid-cycle without live prices).
+    If not provided, open positions are valued at their entry price.
     """
     p = _load_portfolio()
     equity = p["cash_usd"]
 
     for sym, pos in p["positions"].items():
         price = (current_prices or {}).get(sym, pos["entry_price"])
-        # Current market value of the position
         equity += pos["size_units"] * price
 
     return equity
@@ -123,20 +162,13 @@ def paper_open_position(
 
     Deducts the position value plus the entry fee from cash.
     Returns True on success, False if there is not enough cash.
-
-    Arguments:
-      symbol        — e.g. "BTC/USD"
-      side          — "long" or "short"
-      size_usd      — how many USD to put into this position
-      current_price — the live market price used as the fill price
     """
     from config import PAPER_FEE_PCT
 
     p = _load_portfolio()
 
-    # Simulate Kraken's taker fee on entry
-    fee_usd       = size_usd * PAPER_FEE_PCT
-    total_cost    = size_usd + fee_usd
+    fee_usd    = size_usd * PAPER_FEE_PCT
+    total_cost = size_usd + fee_usd
 
     if total_cost > p["cash_usd"]:
         logger.warning(
@@ -147,10 +179,8 @@ def paper_open_position(
 
     size_units = size_usd / current_price
 
-    # Deduct cost from cash
     p["cash_usd"] -= total_cost
 
-    # Record the position
     p["positions"][symbol] = {
         "side":        side,
         "entry_price": current_price,
@@ -179,10 +209,10 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
     Adds the proceeds (minus exit fee) back to cash.
     Returns a trade result dict, or None if there is no open position.
 
-    The trade result dict matches the format used by main.py's
-    live close_position() so the dashboard sees identical data.
+    The trade is written to DB (kraken_trades) immediately.
     """
     from config import PAPER_FEE_PCT
+    import db as _db
 
     p = _load_portfolio()
 
@@ -192,29 +222,19 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
 
     pos = p["positions"][symbol]
 
-    # How much the position is worth at the current price
     exit_value = pos["size_units"] * current_price
-
-    # Simulate Kraken's taker fee on exit
     exit_fee   = exit_value * PAPER_FEE_PCT
     net_value  = exit_value - exit_fee
 
-    # Calculate P&L
     if pos["side"] == "long":
-        # For longs: profit when price goes up
         pnl_pct = ((current_price - pos["entry_price"]) / pos["entry_price"]) * 100
     else:
-        # For shorts: profit when price goes down
         pnl_pct = ((pos["entry_price"] - current_price) / pos["entry_price"]) * 100
 
-    # Gross P&L in USD (before exit fee)
     gross_pnl_usd = pos["size_usd"] * (pnl_pct / 100)
+    total_fees    = pos.get("entry_fee", 0) + exit_fee
+    net_pnl_usd   = gross_pnl_usd - total_fees
 
-    # Net P&L after both entry and exit fees
-    total_fees = pos.get("entry_fee", 0) + exit_fee
-    net_pnl_usd = gross_pnl_usd - total_fees
-
-    # Return the cash (net of fees) to the simulated account
     p["cash_usd"] += net_value
 
     trade_record = {
@@ -228,12 +248,17 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
         "reason":      reason,
         "closed_at":   datetime.now(tz=timezone.utc).isoformat(),
         "paper":       True,
+        "order_id":    pos.get("order_id"),
     }
 
-    # Add to all-time trade history on disk
+    # Persist to DB immediately (primary store)
+    _db.insert_trade(trade_record)
+
+    # Keep in-memory all_trades list for backward compat
+    if "all_trades" not in p:
+        p["all_trades"] = []
     p["all_trades"].append(trade_record)
 
-    # Remove from open positions
     del p["positions"][symbol]
 
     _save_portfolio()
@@ -250,8 +275,7 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
 def get_paper_positions() -> dict:
     """
     Return the current open positions from the paper portfolio.
-    Format matches what main.py uses for open_positions so the rest
-    of the code (position management, status writing) is unchanged.
+    Format matches what main.py uses for open_positions.
     """
     p = _load_portfolio()
     return {sym: dict(pos) for sym, pos in p["positions"].items()}
@@ -262,9 +286,18 @@ def get_paper_portfolio_summary() -> dict:
     Return a summary of the paper portfolio for the status file.
     Includes starting balance, current equity, all-time P&L, and trade count.
     """
+    import db as _db
+
     p = _load_portfolio()
-    trades = p.get("all_trades", [])
-    wins   = [t for t in trades if t.get("pnl_pct", 0) > 0]
+
+    # Load full trade history from DB (source of truth)
+    db_trades = _db.load_all_trades()
+    if db_trades:
+        trades = db_trades
+    else:
+        trades = p.get("all_trades", [])
+
+    wins = [t for t in trades if t.get("pnl_pct", 0) > 0]
 
     return {
         "starting_balance_usd": p["starting_balance_usd"],

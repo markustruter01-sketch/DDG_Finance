@@ -372,6 +372,29 @@ def initialise() -> None:
         logger.info("Adaptive | No persisted params found — starting from factory defaults")
 
 
+def _load_trades_for_adaptation() -> list[dict]:
+    """
+    Load closed trade history for adaptation evaluation.
+    Tries DB first (kraken_trades), falls back to paper_portfolio.json.
+    """
+    # 1. Try PostgreSQL (primary store since Task #32 migration)
+    try:
+        import db as _db
+        db_trades = _db.load_all_trades()
+        if db_trades:
+            return db_trades
+    except Exception as exc:
+        logger.debug(f"Adaptive | DB trade load skipped: {exc}")
+
+    # 2. Fall back to JSON file
+    try:
+        raw = json.loads(PORTFOLIO_FILE.read_text())
+        return raw.get("all_trades", [])
+    except Exception as exc:
+        logger.warning(f"Adaptive | could not read portfolio file: {exc}")
+        return []
+
+
 def maybe_adapt() -> bool:
     """
     Called from the main loop every cycle. Only does real work every
@@ -385,13 +408,7 @@ def maybe_adapt() -> bool:
 
     _last_adapted_at = now
 
-    try:
-        raw = json.loads(PORTFOLIO_FILE.read_text())
-    except Exception as exc:
-        logger.warning(f"Adaptive | could not read portfolio: {exc}")
-        return False
-
-    trades = raw.get("closed_trades", [])
+    trades = _load_trades_for_adaptation()
     if len(trades) < MIN_TRADES:
         logger.info(f"Adaptive | {len(trades)} trades (need ≥{MIN_TRADES}) — no adaptation yet")
         _save(_active, {"n": len(trades)})

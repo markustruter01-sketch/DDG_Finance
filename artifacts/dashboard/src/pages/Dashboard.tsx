@@ -15,7 +15,7 @@ import {
   useRecentTrades, useRagWinsExtended, useExportReport,
   type AllocationPlan, type AuditFinding, type LivePosition,
   type KrakenStatus, type KrakenPerformance, type KrakenSymbolStats,
-  type KrakenBotProfile,
+  type KrakenBotProfile, type RecentTradeItem,
   type LearningEntry, type DegradationEvent, type DegradationStats,
 } from "@/hooks/use-trading";
 import { CorrelationMatrix } from "@/components/CorrelationMatrix";
@@ -3136,6 +3136,8 @@ function KrakenBotCard({ botId }: { botId: string }) {
   );
 }
 
+type KrakenTradeEntry = KrakenPerformance["recent_trades"][number];
+
 function CommandersLog() {
   const { data: recentTrades } = useRecentTrades(20);
   const { data: journal } = useJournal();
@@ -3194,16 +3196,16 @@ function CommandersLog() {
 
   const recentKills = useMemo(() => {
     const kills: { agent: string; icon: string; accent: string; symbol: string; pnlPct: number; side: string; ts: string }[] = [];
-    (recentTrades?.trades ?? []).forEach((t: any) => {
+    (recentTrades?.trades ?? []).forEach((t: RecentTradeItem) => {
       if (t.pnl_pct != null && t.pnl_pct > 0) {
-        kills.push({ agent: "Oracle", icon: "🔮", accent: "#818cf8", symbol: t.symbol ?? t.ticker ?? "?", pnlPct: t.pnl_pct, side: t.side ?? "long", ts: t.closed_at ?? t.exit_time ?? "" });
+        kills.push({ agent: "Oracle", icon: "🔮", accent: "#818cf8", symbol: t.symbol ?? "?", pnlPct: t.pnl_pct, side: "long", ts: t.closed_at ?? "" });
       }
     });
     krakenBots.forEach((b) => {
       const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
-      (b.status?.recent_trades ?? []).forEach((tr: any) => {
+      (b.status?.recent_trades ?? []).forEach((tr: KrakenTradeEntry) => {
         if (tr.pnl_pct != null && tr.pnl_pct > 0) {
-          kills.push({ agent: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, symbol: tr.symbol ?? "?", pnlPct: tr.pnl_pct, side: tr.side ?? "long", ts: tr.closed_at ?? tr.exit_time ?? "" });
+          kills.push({ agent: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, symbol: tr.symbol ?? "?", pnlPct: tr.pnl_pct, side: tr.side ?? "long", ts: tr.closed_at ?? "" });
         }
       });
     });
@@ -3298,6 +3300,7 @@ function FleetPerformanceHero() {
   const { data: portfolio } = usePortfolio();
   const { data: kraken } = useKrakenStatus();
   const { data: journal } = useJournal();
+  const { data: perfHistory } = usePerformanceHistory();
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
@@ -3328,41 +3331,55 @@ function FleetPerformanceHero() {
   const bestKrakenPct = Math.max(0, ...allPerfs.map(p => p?.best_trade_pct ?? 0));
   const worstKrakenPct = Math.min(0, ...allPerfs.map(p => p?.worst_trade_pct ?? 0));
 
-  const bestPerformer = useMemo(() => {
-    let best: { name: string; icon: string; winRate: number } | null = null;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const todayPerformers = useMemo(() => {
+    type Performer = { name: string; icon: string; dailyPnl: number };
+    const results: Performer[] = [];
+
     botPerfList.forEach((b) => {
-      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
-      const wr = b.perf?.win_rate_pct ?? 0;
-      if (!best || wr > best.winRate) {
-        best = { name: b.status?.bot_name ?? b.id, icon: t.icon, winRate: wr };
-      }
+      const trades = b.perf?.recent_trades ?? [];
+      const theme = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      const todayTrades = trades.filter((t: KrakenTradeEntry) => t.closed_at?.startsWith(todayStr));
+      const dailyPnl = todayTrades.reduce((sum: number, t: KrakenTradeEntry) => sum + (t.pnl_pct ?? 0), 0);
+      results.push({ name: b.status?.bot_name ?? b.id, icon: theme.icon, dailyPnl });
     });
-    if (alpacaTotal > 0) {
-      const oracleWR = (alpacaWins / alpacaTotal) * 100;
-      if (!best || oracleWR > best.winRate) {
-        best = { name: "Oracle", icon: "🔮", winRate: oracleWR };
-      }
-    }
-    return best;
-  }, [djPerf.data, bbPerf.data, caPerf.data, alpacaWins, alpacaTotal]);
+
+    const oracleTodayTrades = journal?.trades?.filter(t => t.date?.startsWith(todayStr)) ?? [];
+    const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + (t.pnl_percentage ?? 0), 0);
+    results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
+
+    const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
+    const best = sorted[0] ?? null;
+    const worst = sorted[sorted.length - 1] ?? null;
+    return { best, worst };
+  }, [djPerf.data, bbPerf.data, caPerf.data, journal, todayStr]);
 
   const botSparklines = useMemo(() => {
-    return botPerfList.map((b) => {
+    const krakenLines = botPerfList.map((b) => {
       const trades = b.perf?.recent_trades ?? [];
-      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      const theme = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
       let cum = 0;
-      const curve = [0, ...trades.map((tr: any) => { cum += (tr.pnl_pct ?? 0); return cum; })];
-      return { id: b.id, name: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, curve };
+      const curve = [0, ...trades.map((t: KrakenTradeEntry) => { cum += (t.pnl_pct ?? 0); return cum; })];
+      return { id: b.id, name: b.status?.bot_name ?? b.id, icon: theme.icon, accent: theme.accent, curve };
     });
-  }, [djPerf.data, bbPerf.data, caPerf.data]);
+
+    const oracleSnapshots = perfHistory?.snapshots ?? [];
+    const oracleCurve = oracleSnapshots.length > 1
+      ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
+      : [0];
+    krakenLines.unshift({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
+
+    return krakenLines;
+  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory]);
 
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: "2 exchanges" },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
     { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
-    { label: "Best Trade", value: bestKrakenPct > 0 ? `+${bestKrakenPct.toFixed(2)}%` : "—", color: "text-green-400", sub: "kraken fleet best" },
-    { label: "Worst Trade", value: worstKrakenPct < 0 ? `${worstKrakenPct.toFixed(2)}%` : "—", color: worstKrakenPct < 0 ? "text-red-400" : "text-muted-foreground", sub: "kraken fleet worst" },
-    { label: "Top Performer", value: bestPerformer ? `${bestPerformer.icon} ${bestPerformer.name}` : "—", color: "text-amber-400", sub: bestPerformer ? `${bestPerformer.winRate.toFixed(1)}% win rate` : "no trades yet" },
+    { label: "Best Today", value: todayPerformers.best ? `${todayPerformers.best.icon} ${todayPerformers.best.name}` : "—", color: "text-green-400", sub: todayPerformers.best ? `${todayPerformers.best.dailyPnl >= 0 ? "+" : ""}${todayPerformers.best.dailyPnl.toFixed(2)}% daily P&L` : "no trades today" },
+    { label: "Worst Today", value: todayPerformers.worst ? `${todayPerformers.worst.icon} ${todayPerformers.worst.name}` : "—", color: todayPerformers.worst && todayPerformers.worst.dailyPnl < 0 ? "text-red-400" : "text-muted-foreground", sub: todayPerformers.worst ? `${todayPerformers.worst.dailyPnl >= 0 ? "+" : ""}${todayPerformers.worst.dailyPnl.toFixed(2)}% daily P&L` : "no trades today" },
+    { label: "Best/Worst Trade", value: bestKrakenPct > 0 || worstKrakenPct < 0 ? `+${bestKrakenPct.toFixed(1)}% / ${worstKrakenPct.toFixed(1)}%` : "—", color: "text-amber-400", sub: "fleet all-time extremes" },
   ];
 
   return (
@@ -7083,17 +7100,17 @@ export default function Dashboard() {
             <SafeSection label="System Overrides">
               <SystemOverridesPanel />
             </SafeSection>
+            <SafeSection label="Learning Context">
+              <LearningContextSection />
+            </SafeSection>
           </motion.div>
         </div>
 
-        {/* ROW 5: LLM Journal + Learning (2/3) | System Health + Degradation (1/3) */}
+        {/* ROW 5: LLM Journal (2/3) | System Health + Degradation (1/3) */}
         <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
           <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
             <SafeSection label="LLM Learning Journal">
               <LLMJournalSection />
-            </SafeSection>
-            <SafeSection label="Learning Context">
-              <LearningContextSection />
             </SafeSection>
           </motion.div>
           <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>

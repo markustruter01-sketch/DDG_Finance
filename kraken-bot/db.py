@@ -154,14 +154,15 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
         logger.warning(f"DB | migration_from_json: could not read {paper_portfolio_path}: {exc}")
         return False
 
-    # Check if portfolio row already has data
+    # Check if portfolio row already exists — row existence is authoritative.
+    # Do NOT gate on cash_usd > 0: a zero-cash (fully-deployed) row is valid state.
     try:
         with _conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT cash_usd FROM kraken_portfolio WHERE id = 1")
+                cur.execute("SELECT 1 FROM kraken_portfolio WHERE id = 1")
                 row = cur.fetchone()
-                if row and row[0] > 0:
-                    logger.debug("DB | Portfolio already seeded — skipping JSON migration")
+                if row is not None:
+                    logger.debug("DB | Portfolio row already exists — skipping JSON migration")
                     return False
     except Exception:
         pass

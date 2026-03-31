@@ -54,8 +54,10 @@ def _load_portfolio() -> dict:
         return _portfolio
 
     # ── 1. Try PostgreSQL ────────────────────────────────────────────────────
+    # Row existence is the authoritative signal — not cash amount.
+    # A zero-cash portfolio (fully deployed, edge state) is still valid state.
     pg_pf = _db.load_portfolio()
-    if pg_pf and pg_pf.get("cash_usd", 0) > 0:
+    if pg_pf is not None:
         _portfolio = pg_pf
         # Ensure all_trades key exists for in-memory compat
         if "all_trades" not in _portfolio:

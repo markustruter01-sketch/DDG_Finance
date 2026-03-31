@@ -31,6 +31,11 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from loguru import logger
+from analysis.post_mortem_lessons import (
+    generate_lesson,
+    _load_regime_from_file,
+    compute_hours_since,
+)
 
 # 3× inverse ETFs subject to 5-trading-day max hold
 _BEAR_HEDGE_3X: frozenset[str] = frozenset({"SPXS", "SQQQ", "SRTY"})
@@ -174,9 +179,48 @@ def check_time_exits(
 
         try:
             from execution.broker import close_position
+
+            # Capture entry timestamp BEFORE deletion for lesson generation
+            _entry_ts_iso: str | None = None
+            try:
+                from db.postgres import get_position_entry_times
+                _entry_ts_iso = get_position_entry_times().get(symbol)
+            except Exception:
+                pass
+
             close_position(symbol)
             logger.warning(f"TimeExit | {symbol} force-closed (5-day 3× inverse ETF rule)")
             exited.append(symbol)
+
+            # ── RAG Memory Phase 2: generate and persist time-exit lesson ──
+            try:
+                _pnl_pct = (
+                    float(pos.get("unrealized_plpc") or 0.0) * 100.0
+                )
+                _hours = compute_hours_since(_entry_ts_iso)
+                _regime = _load_regime_from_file()
+                _lesson = generate_lesson(
+                    ticker=symbol,
+                    regime=_regime,
+                    pnl_pct=_pnl_pct,
+                    exit_reason="time_exit",
+                    time_in_trade_hours=_hours,
+                    asset_class="bear_hedge",
+                )
+                from analysis.trade_journal import log_post_mortem
+                log_post_mortem(
+                    ticker=symbol,
+                    regime=_regime,
+                    hardcoded_lesson_text=_lesson,
+                    asset_class="bear_hedge",
+                    exit_reason="time_exit",
+                    pnl_pct=_pnl_pct,
+                    time_in_trade_hours=_hours,
+                )
+                logger.debug(f"TimeExit | Post-mortem logged for {symbol}: {_lesson[:80]}")
+            except Exception as _pm_exc:
+                logger.debug(f"TimeExit | Post-mortem logging failed for {symbol}: {_pm_exc}")
+
             # Clear entry timestamp so a future re-open gets a fresh timestamp
             # and is NOT prematurely force-exited on the next cycle.
             try:

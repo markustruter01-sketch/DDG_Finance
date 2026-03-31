@@ -477,6 +477,14 @@ def _try_exit_short(
         _algo_short_state.pop(ticker, None)
         return {"action": "short_exit", "ticker": ticker, "reason": reason, "dry_run": True}
 
+    # Capture entry timestamp BEFORE deletion (needed for time-in-trade calc)
+    _entry_ts_iso: str | None = None
+    try:
+        from db.postgres import get_position_entry_times as _get_pet
+        _entry_ts_iso = _get_pet().get(ticker)
+    except Exception:
+        pass
+
     try:
         from execution.broker import buy_to_cover
         from execution.ratchet_stop import delete_stop
@@ -486,6 +494,39 @@ def _try_exit_short(
         delete_position_entry(ticker)   # Remove entry timestamp; fresh ts on next open
         _algo_short_state.pop(ticker, None)
         logger.info(f"ShortScanner | {ticker} covered: {reason}")
+
+        # ── RAG Memory Phase 2: generate and persist algo-cover lesson ─────
+        try:
+            from analysis.post_mortem_lessons import (
+                generate_lesson as _gen_lesson,
+                _load_regime_from_file,
+                compute_hours_since,
+            )
+            from analysis.trade_journal import log_post_mortem as _log_pm
+            entry_price = float(pos.get("avg_entry_price") or current_price)
+            _pnl_pct = (entry_price - current_price) / entry_price * 100 if entry_price > 0 else 0.0
+            _hours    = compute_hours_since(_entry_ts_iso)
+            _regime   = _load_regime_from_file()
+            _lesson   = _gen_lesson(
+                ticker=ticker,
+                regime=_regime,
+                pnl_pct=_pnl_pct,
+                exit_reason="algo_cover",
+                time_in_trade_hours=_hours,
+                asset_class="direct_short",
+            )
+            _log_pm(
+                ticker=ticker,
+                regime=_regime,
+                hardcoded_lesson_text=_lesson,
+                asset_class="direct_short",
+                exit_reason="algo_cover",
+                pnl_pct=_pnl_pct,
+                time_in_trade_hours=_hours,
+            )
+            logger.debug(f"ShortScanner | Post-mortem logged for {ticker}: {_lesson[:80]}")
+        except Exception as _pm_exc:
+            logger.debug(f"ShortScanner | Post-mortem logging failed for {ticker}: {_pm_exc}")
 
         # Journal log the exit
         try:

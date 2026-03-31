@@ -1,16 +1,16 @@
 {
   "history": [
-    "failure",
     "success",
     "success",
     "failure",
     "failure",
     "success",
+    "failure",
     "failure",
     "failure",
     "failure",
     "failure"
   ],
-  "saved_at": 1774899976.8164039,
+  "saved_at": 1774922026.7862222,
   "window_size": 10
 }

@@ -8,9 +8,16 @@ Logic:
   1. Pull all FILLED orders from the Alpaca paper account.
   2. For each filled order that has a corresponding 'Active' journal entry,
      compute the realised P&L vs the journal's entry price.
-  3. Calculate slippage between intended_price and actual_fill_price.
-  4. Call update_trade_outcome() to stamp the trade Closed_Win / Closed_Loss.
-  5. Fetch current account equity and save a performance_snapshots row.
+  3. Determine exit_reason:
+       • order_type == "stop"  → ratchet_stop   (GTC stop triggered by Alpaca)
+       • otherwise             → "unknown"       (allocation sell / other)
+  4. Compute time_in_trade_hours from position_entry_times (PostgreSQL).
+  5. Call close_trade() to stamp the trade Closed_Win / Closed_Loss and
+     persist all Phase 1 RAG fields (exit_reason, time_in_trade_hours, etc.).
+  6. Generate a deterministic lesson string via generate_lesson().
+  7. Persist the lesson via log_post_mortem() → execution_post_mortems table.
+  8. Fetch current account equity and save a performance_snapshots row.
+  9. Clean up position_entry_times for the reconciled symbol.
 """
 
 import asyncio
@@ -21,11 +28,17 @@ from loguru import logger
 
 from analysis.trade_journal import (
     get_all_active_trades,
-    update_trade_outcome,
     update_trade_fill_price,
+    close_trade,
+    log_post_mortem,
     get_journal_summary,
     save_performance_snapshot,
     get_performance_snapshots,
+)
+from analysis.post_mortem_lessons import (
+    generate_lesson,
+    _load_regime_from_file,
+    compute_hours_since,
 )
 from config.settings import settings
 
@@ -53,12 +66,19 @@ async def _fetch_closed_orders() -> list[dict[str, Any]]:
         result = []
         for order in orders:
             if order.filled_avg_price is not None:
+                order_type = "unknown"
+                try:
+                    raw = order.type
+                    order_type = raw.value if hasattr(raw, "value") else str(raw)
+                except Exception:
+                    pass
                 result.append({
-                    "order_id": str(order.id),
-                    "ticker": order.symbol,
-                    "side": order.side.value,
+                    "order_id":   str(order.id),
+                    "ticker":     order.symbol,
+                    "side":       order.side.value,
+                    "order_type": order_type,
                     "exit_price": float(order.filled_avg_price),
-                    "filled_at": str(order.filled_at),
+                    "filled_at":  str(order.filled_at),
                 })
         return result
 
@@ -85,8 +105,8 @@ async def run_post_mortem() -> dict[str, Any]:
     Daily post-mortem reconciliation.
 
     Matches Alpaca closed orders against active journal entries, computes
-    realised P&L and slippage, updates journal status, then saves a
-    performance snapshot.
+    realised P&L and slippage, updates journal status, generates RAG lessons,
+    then saves a performance snapshot.
     """
     logger.info("Post-mortem | Starting daily reconciliation...")
 
@@ -99,6 +119,18 @@ async def run_post_mortem() -> dict[str, Any]:
     active_by_id = {t["trade_id"]: t for t in active_trades}
     logger.info(f"Post-mortem | {len(active_trades)} active journal entries to check")
 
+    # ── Load position entry timestamps and regime once ─────────────────────
+    entry_times: dict[str, str] = {}
+    try:
+        from db.postgres import get_position_entry_times, delete_position_entry
+        entry_times = get_position_entry_times()
+        logger.debug(f"Post-mortem | Loaded {len(entry_times)} position entry timestamps")
+    except Exception as _et_exc:
+        logger.warning(f"Post-mortem | Could not load entry timestamps: {_et_exc}")
+
+    regime = _load_regime_from_file()
+    logger.debug(f"Post-mortem | Current regime for lessons: {regime}")
+
     try:
         closed_orders = await _fetch_closed_orders()
     except Exception as exc:
@@ -110,26 +142,26 @@ async def run_post_mortem() -> dict[str, Any]:
     wins = losses = skipped = 0
     total_slippage_pct = 0.0
     slippage_count = 0
+    lessons_logged = 0
 
     for order in closed_orders:
-        order_id = order["order_id"]
+        order_id   = order["order_id"]
+        ticker     = order["ticker"]
+        order_type = order.get("order_type", "unknown")
+
         if order_id not in active_by_id:
             continue
 
         journal_entry = active_by_id[order_id]
-        exit_price = order["exit_price"]
+        exit_price    = order["exit_price"]
 
-        if journal_entry.get("actual_fill_price") is None:
-            update_trade_fill_price(order_id, exit_price)
-
-        actual_fill = journal_entry.get("actual_fill_price")
+        actual_fill      = journal_entry.get("actual_fill_price")
         intended_price: float | None = journal_entry.get("intended_price")
-
         entry_price: float | None = actual_fill or intended_price or journal_entry.get("entry_price")
 
         if not entry_price:
             logger.warning(
-                f"Post-mortem | {order['ticker']}: no entry_price in journal — skipping"
+                f"Post-mortem | {ticker}: no entry_price in journal — skipping"
             )
             skipped += 1
             continue
@@ -142,39 +174,106 @@ async def run_post_mortem() -> dict[str, Any]:
             total_slippage_pct += abs(slippage_pct)
             slippage_count += 1
 
-        update_trade_outcome(order_id, pnl_pct)
+        # ── Determine exit reason from Alpaca order type ───────────────────
+        if order_type == "stop":
+            exit_reason = "ratchet_stop"
+        elif order_type in ("trailing_stop",):
+            exit_reason = "ratchet_stop"
+        else:
+            exit_reason = "unknown"
+
+        # ── Compute time in trade ──────────────────────────────────────────
+        entry_ts_iso     = entry_times.get(ticker)
+        time_in_hours    = compute_hours_since(entry_ts_iso)
+
+        # ── Close trade with all Phase 1 RAG fields ────────────────────────
+        # Replaces update_trade_fill_price() + update_trade_outcome() with
+        # a single atomic call that also stores exit_reason / time / slippage.
+        try:
+            close_trade(
+                trade_id=order_id,
+                pnl_percentage=pnl_pct,
+                exit_reason=exit_reason,
+                time_in_trade_hours=time_in_hours,
+                close_price=exit_price,
+            )
+        except Exception as _ct_exc:
+            logger.warning(f"Post-mortem | close_trade failed for {ticker}: {_ct_exc}")
+            # Fallback to legacy update so we at least stamp status
+            try:
+                from analysis.trade_journal import update_trade_outcome
+                if actual_fill is None:
+                    update_trade_fill_price(order_id, exit_price)
+                update_trade_outcome(order_id, pnl_pct)
+            except Exception:
+                pass
+
+        # ── Generate and persist deterministic lesson ──────────────────────
+        asset_class = journal_entry.get("asset_class", "equity") or "equity"
+        try:
+            lesson = generate_lesson(
+                ticker=ticker,
+                regime=regime,
+                pnl_pct=pnl_pct,
+                exit_reason=exit_reason,
+                time_in_trade_hours=time_in_hours,
+                asset_class=asset_class,
+            )
+            log_post_mortem(
+                ticker=ticker,
+                regime=regime,
+                hardcoded_lesson_text=lesson,
+                asset_class=asset_class,
+                exit_reason=exit_reason,
+                pnl_pct=pnl_pct,
+                time_in_trade_hours=time_in_hours,
+            )
+            lessons_logged += 1
+            logger.debug(f"Post-mortem | Lesson logged for {ticker}: {lesson[:80]}")
+        except Exception as _lesson_exc:
+            logger.warning(f"Post-mortem | lesson logging failed for {ticker}: {_lesson_exc}")
+
+        # ── Clean up position_entry_times ──────────────────────────────────
+        try:
+            from db.postgres import delete_position_entry
+            delete_position_entry(ticker)
+        except Exception:
+            pass
 
         slip_str = f" | slippage={slippage_pct:+.4f}%" if slippage_pct is not None else ""
+        label    = f"[{exit_reason}]"
 
         if pnl_pct >= 0:
             wins += 1
             logger.info(
-                f"Post-mortem | WIN  {order['ticker']:8s}: "
+                f"Post-mortem | WIN  {ticker:8s}: "
                 f"entry={entry_price:.4f} exit={exit_price:.4f} "
-                f"pnl={pnl_pct:+.2f}%{slip_str}"
+                f"pnl={pnl_pct:+.2f}%{slip_str} {label}"
             )
         else:
             losses += 1
             logger.warning(
-                f"Post-mortem | LOSS {order['ticker']:8s}: "
+                f"Post-mortem | LOSS {ticker:8s}: "
                 f"entry={entry_price:.4f} exit={exit_price:.4f} "
-                f"pnl={pnl_pct:+.2f}%{slip_str}"
+                f"pnl={pnl_pct:+.2f}%{slip_str} {label}"
             )
 
     avg_slippage = total_slippage_pct / slippage_count if slippage_count > 0 else 0.0
 
     summary = {
-        "wins": wins,
-        "losses": losses,
-        "skipped": skipped,
+        "wins":          wins,
+        "losses":        losses,
+        "skipped":       skipped,
+        "lessons_logged": lessons_logged,
         "slippage_stats": {
-            "trades_with_slippage": slippage_count,
-            "avg_abs_slippage_pct": round(avg_slippage, 4),
+            "trades_with_slippage":  slippage_count,
+            "avg_abs_slippage_pct":  round(avg_slippage, 4),
         },
     }
     logger.info(
         f"Post-mortem | Complete — "
         f"Wins: {wins} | Losses: {losses} | Skipped: {skipped} | "
+        f"Lessons: {lessons_logged} | "
         f"Avg slippage: {avg_slippage:.4f}%"
     )
 
@@ -210,9 +309,9 @@ async def _save_snapshot(wins: int, losses: int) -> dict[str, Any]:
         trades_placed=trades_placed_today,
     )
     return {
-        "saved": True,
-        "date": today,
-        "equity": equity,
-        "daily_pnl_pct": daily_pnl_pct,
-        "cumulative_pnl_pct": cumulative_pnl_pct,
+        "saved":                True,
+        "date":                 today,
+        "equity":               equity,
+        "daily_pnl_pct":        daily_pnl_pct,
+        "cumulative_pnl_pct":   cumulative_pnl_pct,
     }

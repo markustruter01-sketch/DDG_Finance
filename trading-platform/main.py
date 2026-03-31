@@ -538,8 +538,17 @@ async def system_health_architecture() -> dict:
             else:
                 kage = None
             kstatus = kst.get("status", "unknown")
-            if kstatus in ("error",) or (kage and kage > 1800):
+            _mkt_open_kr = False
+            try:
+                _mkt_open_kr = is_market_open()
+            except Exception:
+                pass
+            # After hours: stale bot is expected (Replit slows overnight).
+            # Cap at yellow after hours — only escalate to red during market hours.
+            if kstatus in ("error",):
                 level = "red"
+            elif kage and kage > 1800:
+                level = "red" if _mkt_open_kr else "yellow"
             elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 600):
                 level = "yellow"
             else:
@@ -719,19 +728,27 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
         elif component == "kraken_api":
             sf = _Path("../kraken-bot/status.json")
             if sf.exists():
+                import os as _os
+                _raw = sf.read_text()
                 try:
-                    kst = _json.loads(sf.read_text())
+                    kst = _json.loads(_raw)
                     kst["heal_requested"] = True
                     kst["heal_requested_at"] = time.time()
-                    # Atomic write: write to a temp file then rename to avoid
-                    # corrupting status.json while the Kraken bot is reading it.
-                    import os as _os
-                    _tmp = str(sf) + ".tmp"
+                    # Atomic write: use a distinct .heal.tmp path so we never
+                    # race with the bot's own status.json.tmp write.
+                    _tmp = str(sf) + ".heal.tmp"
                     _Path(_tmp).write_text(_json.dumps(kst, indent=2))
                     _os.replace(_tmp, str(sf))
                     steps.append(f"Heal flag written to status.json (cycle #{kst.get('cycle_count', 0)})")
-                except Exception as exc:
-                    steps.append(f"Status write warning: {exc}")
+                except _json.JSONDecodeError as exc:
+                    # status.json is corrupt — delete it so the bot regenerates
+                    # a fresh copy on its very next write_status() call.
+                    try:
+                        sf.unlink()
+                        steps.append(f"Corrupt status.json deleted — bot will regenerate ({exc})")
+                    except Exception as del_exc:
+                        steps.append(f"Corrupt file could not be removed: {del_exc}")
+                    success = False
             else:
                 steps.append("status.json not found — start Davy Jones bot first")
             _kraken_commentary_cache.update({"text": None, "generated_at": None, "ts": 0})

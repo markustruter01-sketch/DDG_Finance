@@ -60,7 +60,7 @@ if PAPER_TRADING:
     print("  Real live prices from Kraken.  Zero real money at risk.")
     print("=" * 65 + "\n")
 
-    exchange = ccxt.kraken({"enableRateLimit": True})
+    exchange = ccxt.kraken({"enableRateLimit": True, "timeout": 10000})
 
 else:
     # Live mode — real money, real orders, requires API keys.
@@ -84,6 +84,7 @@ else:
         "apiKey":          KRAKEN_API_KEY,
         "secret":          KRAKEN_SECRET_KEY,
         "enableRateLimit": True,
+        "timeout":         10000,
     })
 
 

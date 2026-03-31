@@ -1141,6 +1141,25 @@ def run_cycle() -> None:
 # MAIN ENTRY POINT — The 24/7 Loop
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _keepalive_loop() -> None:
+    """
+    Background daemon thread — writes a DB heartbeat every 2 minutes.
+
+    Purpose: prevents the bot from appearing stale if the main trading cycle
+    takes longer than expected (e.g., slow Kraken API, rate-limit backoff,
+    or Replit container slowdown).  This thread runs independently of the
+    main cycle and guarantees the `kraken_heartbeat.last_updated` column is
+    refreshed at most 2 minutes behind real-time, well within the 30-minute
+    auto-heal threshold.
+    """
+    while not getattr(_keepalive_loop, "_stop", False):
+        try:
+            write_status()
+        except Exception as exc:
+            logger.debug(f"Keepalive | heartbeat write failed: {exc}")
+        time.sleep(120)  # 2-minute interval
+
+
 def main() -> None:
     """
     The outer execution loop. This is what runs 24/7.
@@ -1151,8 +1170,23 @@ def main() -> None:
         ├── check circuit breaker
         ├── for each symbol: evaluate signals / manage positions
         └── write_status()
+
+    Background keepalive thread writes a heartbeat every 2 min independently
+    so the health monitor never sees the bot as stale, even during slow cycles.
     """
+    import threading
     global total_equity
+
+    # ── Immediate startup heartbeat — mark ourselves "running" in DB NOW ──────
+    # This runs BEFORE any API calls (refresh_equity etc.) so the dashboard and
+    # auto-heal monitor see a fresh heartbeat within seconds of workflow restart.
+    write_status()
+    logger.info("Bot | Startup heartbeat written to DB")
+
+    # ── Background keepalive thread — prevents false-stale alerts ─────────────
+    _keepalive = threading.Thread(target=_keepalive_loop, name="keepalive", daemon=True)
+    _keepalive.start()
+    logger.info("Bot | Keepalive thread started (2-min DB heartbeat, independent of cycle)")
 
     # Do an initial equity fetch before starting the loop
     refresh_equity()
@@ -1172,6 +1206,7 @@ def main() -> None:
 
         except KeyboardInterrupt:
             logger.info("Bot | Keyboard interrupt — shutting down gracefully.")
+            _keepalive_loop._stop = True
             write_status(error="Manually stopped")
             write_live_state()
             break

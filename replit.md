@@ -116,7 +116,8 @@ Located in `artifacts/dashboard/`. Dark terminal-themed monitoring UI.
 
 ### Key Components
 - `TradeWorkflowBar.tsx` — Alpaca auto-trading toggle, Kraken bot toggle, Whitepaper, System Health Architecture button
-- `Dashboard.tsx` — Main dashboard page with all sections; AI brain = "The Degen Oracle", auditor = "Inspector Rekt". Mobile-responsive with a **sticky bottom tab bar** (`md:hidden`) with 4 tabs: Overview (portfolio metrics + live positions), Kraken (bot + crypto performance), Alpaca (Oracle + Auditor + stock performance), More (risk, calendar, tools, system health). Tab state managed via `useState<Tab>('overview')`; sections toggled via `mobileHide(tabs)` CSS helper. On desktop all sections are always rendered in the full grid layout.
+- `Dashboard.tsx` — Main dashboard page with all sections; AI brain = "The Degen Oracle", auditor = "Inspector Rekt". Mobile-responsive with a **sticky bottom tab bar** (`md:hidden`) with 4 tabs: Overview (portfolio metrics + live positions + **CombinedTradeHistorySection**), Kraken (bot + crypto performance), Alpaca (Oracle + Auditor + stock performance), More (risk, calendar, tools, system health). Tab state managed via `useState<Tab>('overview')`; sections toggled via `mobileHide(tabs)` CSS helper. On desktop all sections are always rendered in the full grid layout.
+  - **CombinedTradeHistorySection** (new, Overview tab): merges the last 50 Alpaca trades (`useRecentTrades(50)`) with the last 50 Kraken trades (`useKrakenPerformance().recent_trades`), sorts by date descending, shows top 40. Columns: Bot badge (KRK/ALP), Asset, P&L %, P&L $, Date. Header shows combined W/L/Win-rate/Total P&L. Both data sources from PostgreSQL.
 - `CorrelationMatrix.tsx` — Pearson correlation heatmap with high-correlation warnings
 - `SentimentGauges.tsx` — Dual SVG ring gauges for Crypto + Market Fear & Greed
 - `EconomicCalendarBanner.tsx` — Blackout banner (red alert) + upcoming events list

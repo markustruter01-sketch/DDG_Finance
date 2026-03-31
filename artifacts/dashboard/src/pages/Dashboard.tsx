@@ -4392,6 +4392,165 @@ function LivePositionsSection() {
   );
 }
 
+// ── Combined Trade History (both bots, Overview tab) ─────────────────────────
+
+function CombinedTradeHistorySection() {
+  const { data: alpacaData, isLoading: alpacaLoading } = useRecentTrades(50);
+  const { data: krakenPerf, isLoading: krakenLoading } = useKrakenPerformance();
+
+  const combined = useMemo(() => {
+    const alpacaRows = (alpacaData?.trades ?? []).map((t) => ({
+      source: "alpaca" as const,
+      symbol: t.symbol,
+      side: t.pnl_pct >= 0 ? "long" : "short",
+      pnl_pct: t.pnl_pct,
+      pnl_usd: t.pnl_usd,
+      closed_at: t.closed_at,
+      reason: t.exit_reason ?? "",
+      is_win: t.pnl_pct > 0,
+    }));
+    const krakenRows = (krakenPerf?.recent_trades ?? []).map((t) => ({
+      source: "kraken" as const,
+      symbol: t.symbol.replace("/USD", ""),
+      side: t.side,
+      pnl_pct: t.pnl_pct,
+      pnl_usd: t.pnl_usd,
+      closed_at: t.closed_at,
+      reason: t.reason ?? "",
+      is_win: t.pnl_pct > 0,
+    }));
+    return [...alpacaRows, ...krakenRows]
+      .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
+      .slice(0, 40);
+  }, [alpacaData, krakenPerf]);
+
+  const isLoading = alpacaLoading || krakenLoading;
+  const wins = combined.filter((t) => t.is_win).length;
+  const losses = combined.length - wins;
+  const totalPnlUsd = combined.reduce((s, t) => s + (t.pnl_usd ?? 0), 0);
+  const winRate = combined.length > 0 ? Math.round((wins / combined.length) * 100) : null;
+
+  const fmtDate = (s: string) => {
+    try {
+      const d = new Date(s);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    } catch {
+      return s.slice(0, 10);
+    }
+  };
+
+  return (
+    <Card className="border-white/5 overflow-hidden">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
+        <CardTitle className="flex flex-wrap items-center gap-2 fluid-heading">
+          <History className="h-4 w-4 text-primary" />
+          <span>Combined Trade History</span>
+          <span className="ml-1 text-[9px] font-normal text-muted-foreground/60 border border-white/10 bg-white/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+            Both Bots
+          </span>
+          {combined.length > 0 && (
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-[10px] font-mono text-green-400">{wins}W</span>
+              <span className="text-[10px] text-muted-foreground/40">/</span>
+              <span className="text-[10px] font-mono text-red-400">{losses}L</span>
+              {winRate != null && (
+                <span className={cn("text-[10px] font-mono font-bold border px-1.5 py-0.5 rounded-full",
+                  winRate >= 50 ? "text-green-400 border-green-500/20 bg-green-500/5" : "text-amber-400 border-amber-500/20 bg-amber-500/5"
+                )}>{winRate}% win</span>
+              )}
+              <span className={cn("text-xs font-mono font-semibold", totalPnlUsd >= 0 ? "text-green-400" : "text-red-400")}>
+                {totalPnlUsd >= 0 ? "+" : ""}{formatCurrency(totalPnlUsd)}
+              </span>
+            </div>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-xs text-muted-foreground/50">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            Loading trades…
+          </div>
+        ) : combined.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+            <History className="h-7 w-7 text-muted-foreground/15" />
+            <p className="text-xs text-muted-foreground/50">No closed trades yet</p>
+            <p className="text-[10px] text-muted-foreground/30">History will appear here as positions close</p>
+          </div>
+        ) : (
+          <div className="max-h-72 overflow-y-auto divide-y divide-white/5">
+            {/* Column headers */}
+            <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 px-4 py-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10">
+              <span>Bot</span>
+              <span>Asset</span>
+              <span className="text-right">P&amp;L %</span>
+              <span className="text-right hidden sm:block">P&amp;L $</span>
+              <span className="text-right">Date</span>
+            </div>
+            {combined.map((t, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 items-center px-4 py-2.5 text-[11px] transition-colors hover:bg-white/2",
+                  t.is_win ? "border-l-2 border-green-500/20" : "border-l-2 border-red-500/20"
+                )}
+              >
+                {/* Source badge */}
+                <span className={cn(
+                  "text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0",
+                  t.source === "kraken"
+                    ? "text-cyan-400 border-cyan-500/20 bg-cyan-500/5"
+                    : "text-blue-400 border-blue-500/20 bg-blue-500/5"
+                )}>
+                  {t.source === "kraken" ? "KRK" : "ALP"}
+                </span>
+
+                {/* Symbol + side */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-mono font-bold text-white/90 truncate">{t.symbol}</span>
+                  {t.source === "kraken" && (
+                    <span className={cn(
+                      "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded shrink-0",
+                      t.side === "long"
+                        ? "text-blue-400/80 bg-blue-500/10"
+                        : "text-purple-400/80 bg-purple-500/10"
+                    )}>
+                      {t.side}
+                    </span>
+                  )}
+                </div>
+
+                {/* P&L % */}
+                <span className={cn("font-mono font-bold text-right tabular-nums shrink-0",
+                  t.is_win ? "text-green-400" : "text-red-400"
+                )}>
+                  {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
+                </span>
+
+                {/* P&L $ */}
+                <span className={cn("font-mono text-right tabular-nums text-[10px] shrink-0 hidden sm:block",
+                  t.pnl_usd != null
+                    ? t.is_win ? "text-green-400/60" : "text-red-400/60"
+                    : "text-muted-foreground/30"
+                )}>
+                  {t.pnl_usd != null
+                    ? `${t.pnl_usd >= 0 ? "+" : ""}${formatCurrency(t.pnl_usd)}`
+                    : "—"}
+                </span>
+
+                {/* Date */}
+                <span className="text-[9px] text-muted-foreground/50 font-mono text-right shrink-0">
+                  {fmtDate(t.closed_at)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Performance Section ───────────────────────────────────────────────────────
 
 interface ChartPayloadEntry {
@@ -4785,7 +4944,7 @@ function KrakenPerformanceSection() {
             </span>
           )}
           <span className="text-[9px] text-cyan-500/50 border border-cyan-500/10 bg-cyan-500/5 px-2 py-0.5 rounded-full">
-            kraken-bot/status.json
+            kraken_trades · PostgreSQL
           </span>
         </div>
       </CardHeader>
@@ -4796,9 +4955,8 @@ function KrakenPerformanceSection() {
           <span className="mt-0.5 shrink-0">🔒</span>
           <span>
             <span className="font-semibold text-cyan-400/80">Data firewall:</span> all metrics below
-            are sourced exclusively from <code className="bg-cyan-950/40 px-1 rounded">kraken-bot/status.json</code>,
-            written by the Kraken bot. Alpaca trading data is stored separately in the PostgreSQL journal
-            and never mingles with crypto performance.
+            are sourced exclusively from <code className="bg-cyan-950/40 px-1 rounded">kraken_trades · PostgreSQL</code>.
+            Alpaca trading data is stored separately and never mingles with crypto performance.
           </span>
         </div>
 
@@ -4813,17 +4971,22 @@ function KrakenPerformanceSection() {
           ))}
         </div>
 
-        {!data?.has_data ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center gap-2">
+            <RefreshCw className="h-6 w-6 text-cyan-500/30 animate-spin" />
+            <p className="text-xs text-muted-foreground/60">Loading trade history…</p>
+          </div>
+        ) : !data ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <span className="text-4xl mb-3 opacity-20">⚓</span>
-            <p className="text-sm text-muted-foreground">
-              {data?.bot_status === "not_started"
-                ? "No trade history yet — start the Kraken bot to begin collecting data"
-                : "Waiting for the first completed trade..."}
-            </p>
-            <p className="text-xs text-muted-foreground/60 mt-1">
-              Add KRAKEN_API_KEY + KRAKEN_SECRET_KEY to secrets, then start the kraken-bot workflow
-            </p>
+            <p className="text-sm text-muted-foreground">Trade data temporarily unavailable</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Will retry automatically — no action needed</p>
+          </div>
+        ) : !data.has_data ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <span className="text-4xl mb-3 opacity-20">⚓</span>
+            <p className="text-sm text-muted-foreground">No closed trades yet — bot is scanning 50 pairs</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">First trade will appear here once a position closes</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -6365,6 +6528,15 @@ export default function Dashboard() {
         >
           <SafeSection label="Live Positions">
             <LivePositionsSection />
+          </SafeSection>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}
+          className={mobileHide(['overview'])}
+        >
+          <SafeSection label="Combined Trade History">
+            <CombinedTradeHistorySection />
           </SafeSection>
         </motion.div>
 

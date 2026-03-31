@@ -894,7 +894,8 @@ export function useKrakenPerformance() {
     queryKey: ["/kraken/performance"],
     queryFn: async () => (await api.get("/kraken/performance")).data,
     refetchInterval: 60_000,
-    retry: false,
+    retry: 2,
+    retryDelay: 3000,
   });
 }
 

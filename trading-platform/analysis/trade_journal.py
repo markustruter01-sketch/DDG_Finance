@@ -430,6 +430,97 @@ def get_recent_wins(limit: int = 5) -> list[dict]:
     return _query_trades("Closed_Win", limit)
 
 
+# ── Phase 3: Contextual (regime-matched) queries ────────────────────────────
+
+_CONTEXTUAL_COLS = (
+    "trade_id", "date", "ticker", "asset_class", "conviction_score",
+    "original_thesis", "pnl_percentage", "intended_price", "actual_fill_price",
+    "regime_at_entry", "exit_reason", "time_in_trade_hours",
+)
+
+
+def _contextual_query(
+    status: str,
+    regime: str,
+    priority_asset_class: str | None,
+    limit: int,
+) -> list[dict]:
+    """
+    Query trades WHERE status = status AND regime_at_entry = regime.
+    If priority_asset_class is given, those rows sort first.
+    Returns an empty list if no regime-matched rows exist (caller handles fallback).
+    """
+    cols = _CONTEXTUAL_COLS
+    pri = priority_asset_class or ""
+
+    if _use_pg():
+        from db.postgres import get_conn
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(f"""
+                        SELECT {', '.join(cols)}
+                        FROM   trades
+                        WHERE  status = %s AND regime_at_entry = %s
+                        ORDER  BY
+                            CASE WHEN asset_class = %s THEN 0 ELSE 1 END,
+                            date DESC
+                        LIMIT  %s
+                    """, (status, regime, pri, limit))
+                    rows = cur.fetchall()
+            return [_slippage(dict(zip(cols, r))) for r in rows]
+        except Exception as exc:
+            logger.warning(f"Trade journal | contextual query failed: {exc}")
+            return []
+    else:
+        try:
+            with _sqlite_conn() as conn:
+                rows = conn.execute(f"""
+                    SELECT {', '.join(cols)}
+                    FROM trades
+                    WHERE status = ? AND regime_at_entry = ?
+                    ORDER BY
+                        CASE WHEN asset_class = ? THEN 0 ELSE 1 END,
+                        date DESC
+                    LIMIT ?
+                """, (status, regime, pri, limit)).fetchall()
+            return [_slippage(dict(r)) for r in rows]
+        except Exception as exc:
+            logger.warning(f"Trade journal | contextual query (SQLite) failed: {exc}")
+            return []
+
+
+def get_contextual_losses(
+    regime: str,
+    priority_asset_class: str | None = None,
+    limit: int = 5,
+) -> tuple[list[dict], bool]:
+    """
+    Return (rows, regime_matched) where rows are losses with regime_at_entry = regime.
+    If no regime-matched rows exist, falls back to plain FIFO and sets regime_matched=False.
+    Each row has all _CONTEXTUAL_COLS plus slippage_pct.
+    """
+    rows = _contextual_query("Closed_Loss", regime, priority_asset_class, limit)
+    if rows:
+        return rows, True
+    return _query_trades("Closed_Loss", limit), False
+
+
+def get_contextual_wins(
+    regime: str,
+    priority_asset_class: str | None = None,
+    limit: int = 3,
+) -> tuple[list[dict], bool]:
+    """
+    Return (rows, regime_matched) where rows are wins with regime_at_entry = regime.
+    If no regime-matched rows exist, falls back to plain FIFO and sets regime_matched=False.
+    """
+    rows = _contextual_query("Closed_Win", regime, priority_asset_class, limit)
+    if rows:
+        return rows, True
+    return _query_trades("Closed_Win", limit), False
+
+
 def get_recent_trades_combined(limit: int = 20) -> list[dict]:
     """Last N closed trades (wins + losses combined) ordered by date DESC.
     Used by the /journal/recent endpoint for streak computation and Kill Board."""

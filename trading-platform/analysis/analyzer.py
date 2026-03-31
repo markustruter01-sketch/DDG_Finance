@@ -372,13 +372,26 @@ async def run_analysis_cycle(
     # ── Step 4: Build RAG-enhanced system prompt (sentiment already adjusted) ─
     # System prompt is built AFTER guards so the sentiment_override (if any)
     # is silently substituted before the LLM ever sees it.
+    # Phase 3: pass the cached regime so the contextual injector can query
+    # regime-matched historical trades rather than a raw chronological FIFO.
     logger.info("Step 4/5 | Building RAG-enhanced system prompt (post-guard)...")
+    _cached_regime_str: str | None = None
+    try:
+        from analysis.post_mortem_lessons import _load_regime_from_file as _load_cached_regime
+        _cached_regime_str = _load_cached_regime()
+        if crypto_only and not _cached_regime_str:
+            _cached_regime_str = "Crypto"
+        logger.debug(f"Step 4/5 | Cached regime for context injection: {_cached_regime_str!r}")
+    except Exception as _re:
+        logger.debug(f"Step 4/5 | Could not load cached regime: {_re}")
+
     system_prompt = build_system_prompt_with_feedback(
         n_losses=n_loss_feedback,
         buying_power=account_state["buying_power"],
         held_symbols=account_state["held_symbols"],
         crypto_only=crypto_only,
         sentiment_override=adjusted_sentiment,  # None = use live sentiment as-is
+        current_regime=_cached_regime_str,       # Phase 3: regime-matched context injection
     )
 
     logger.info("Step 5/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")

@@ -1,8 +1,24 @@
 """
 Feedback Injection — The Learning Loop (RAG)
 ----------------------------------------------
-Queries the trade_journal.db for recent wins/losses and injects them into
-the system prompt sent to the Groq LLM.
+Queries the trade journal for contextually relevant wins/losses and injects
+them into the system prompt sent to the Groq LLM.
+
+Phase 3 upgrade: Contextual (regime-matched) querying replaces the old
+chronological FIFO queue.  Before calling the LLM the system now:
+
+  1. Identifies the current market regime from market_regime.json.
+  2. Queries the trades table for losses/wins WHERE regime_at_entry EXACTLY
+     MATCHES the current regime (most relevant historical analogues first).
+  3. Assigns asset-class priority so bear_hedge trades surface first in Bear,
+     equity trades first in Bull, etc.
+  4. Fetches the associated Python-generated lessons from
+     execution_post_mortems (written by Phase 2 exit hooks).
+  5. Injects everything under a structured [RELEVANT HISTORICAL CONTEXT]
+     header so the LLM sees concrete regime-matched feedback, not random
+     chronological noise.
+
+Falls back to FIFO if no regime-matched history exists yet (early lifecycle).
 
 v4.3 — Bear Hedge Expansion + Short Scanner Awareness
   - Universe expanded to 22 instruments (7 equity, 4 safe havens, 2 commodities,
@@ -16,7 +32,23 @@ v4.3 — Bear Hedge Expansion + Short Scanner Awareness
 
 from loguru import logger
 
-from analysis.trade_journal import get_recent_losses, get_recent_wins, get_slippage_stats
+from analysis.trade_journal import (
+    get_contextual_losses,
+    get_contextual_wins,
+    get_post_mortems,
+    get_slippage_stats,
+)
+
+
+# ── Regime → default asset-class priority ─────────────────────────────────
+# Used when priority_asset_class is not explicitly supplied by the caller.
+_REGIME_PRIORITY_CLASS: dict[str, str] = {
+    "Bear":     "bear_hedge",
+    "Bull":     "equity",
+    "Sideways": "safe_haven",
+    "Crypto":   "crypto_spot",
+    "RISK-OFF": "safe_haven",
+}
 
 
 BASE_SYSTEM_PROMPT = """You are a Senior Quantitative Portfolio Manager running a momentum-based, regime-switching trading strategy.
@@ -208,24 +240,6 @@ Buying Power and currently held symbols are in the user prompt. Do not exceed bu
 Number slots sequentially starting at 1. Include only slots you are actually allocating to.
 """
 
-LOSS_FEEDBACK_TEMPLATE = """
-CRITICAL — LEARNING FROM PAST FAILURES:
-Review your {n} most recent failed strategies. Adjust your reasoning today to
-avoid repeating the logic that led to these losses.
-
-{loss_entries}
-
-Do NOT repeat any of the logical errors above. If you see similar conditions, choose SGOV.
-"""
-
-WIN_FEEDBACK_TEMPLATE = """
-REINFORCEMENT — WHAT WORKED RECENTLY:
-The following {n} strategies produced positive returns. When you see similar
-macro setups today, these patterns are worth repeating (at appropriate conviction).
-
-{win_entries}
-"""
-
 SLIPPAGE_WARNING_TEMPLATE = """
 SLIPPAGE ALERT — EXECUTION FRICTION DATA:
 Historical analysis of {n} executed trades:
@@ -236,9 +250,167 @@ Prefer assets with tight spreads. Reduce kelly_fraction for high-slippage ticker
 """
 
 
+# ── Formatting helpers ─────────────────────────────────────────────────────
+
+def _fmt_hours(h) -> str:
+    if h is None:
+        return "n/a"
+    h = float(h)
+    if h >= 24:
+        return f"{h/24:.1f}d"
+    return f"{h:.1f}h"
+
+
+def _fmt_exit(reason: str | None) -> str:
+    _MAP = {
+        "ratchet_stop":      "stop-loss",
+        "time_exit":         "5d-time-exit",
+        "algo_cover":        "algo-cover",
+        "short_scanner_exit":"algo-cover",
+        "allocation_sell":   "rebalance",
+        "manual":            "manual",
+        "unknown":           "unclassified",
+    }
+    return _MAP.get(reason or "unknown", reason or "n/a")
+
+
 def _format_slippage(trade: dict) -> str:
     slip = trade.get("slippage_pct")
     return f"Slippage: {slip:+.3f}%" if slip is not None else "Slippage: n/a"
+
+
+def _build_ticker_lesson_map(
+    regime: str,
+    priority_asset_class: str | None,
+) -> dict[str, str]:
+    """
+    Build {ticker: most_recent_lesson_text} from execution_post_mortems
+    filtered by the current regime.  Used to annotate historical trades.
+    """
+    try:
+        lessons = get_post_mortems(
+            regime=regime,
+            asset_class=priority_asset_class,
+            limit=30,
+        )
+        # Merge with broader regime lessons if asset_class filter was narrow
+        if priority_asset_class:
+            broader = get_post_mortems(regime=regime, limit=30)
+            seen = {e["ticker"] for e in lessons}
+            lessons += [e for e in broader if e["ticker"] not in seen]
+
+        ticker_map: dict[str, str] = {}
+        for entry in lessons:
+            t = entry.get("ticker", "")
+            if t and t not in ticker_map:
+                ticker_map[t] = entry["hardcoded_lesson_text"]
+        return ticker_map
+    except Exception as exc:
+        logger.warning(f"Feedback injection | lesson map build failed: {exc}")
+        return {}
+
+
+def _format_trade_entry(
+    idx: int,
+    trade: dict,
+    lesson_map: dict[str, str],
+    label: str,
+) -> str:
+    ticker     = trade.get("ticker", "?")
+    ac         = trade.get("asset_class", "?")
+    pnl        = trade.get("pnl_percentage", 0.0) or 0.0
+    date_str   = str(trade.get("date", "n/a"))
+    exit_r     = _fmt_exit(trade.get("exit_reason"))
+    hours_str  = _fmt_hours(trade.get("time_in_trade_hours"))
+    thesis     = trade.get("original_thesis", "n/a") or "n/a"
+    lesson     = lesson_map.get(ticker, "No lesson recorded yet for this ticker.")
+
+    return (
+        f"  {idx}. {ticker} ({ac}) | {date_str} | "
+        f"P&L: {pnl:+.2f}% | Exit: {exit_r} | Held: {hours_str}\n"
+        f"     Entry Thesis: \"{thesis[:200]}\"\n"
+        f"     Lesson: {lesson[:300]}"
+    )
+
+
+def _build_contextual_block(
+    regime: str,
+    priority_asset_class: str | None,
+    n_losses: int,
+    n_wins: int,
+) -> str:
+    """
+    Build the [RELEVANT HISTORICAL CONTEXT] prompt block.
+
+    Queries regime-matched losses and wins, attaches the most recent
+    Python-generated lesson for each ticker, and formats into a concise
+    prompt section.  Falls back to FIFO with a clear disclaimer when
+    no regime-matched records exist.
+    """
+    losses, losses_regime_matched = get_contextual_losses(
+        regime=regime,
+        priority_asset_class=priority_asset_class,
+        limit=n_losses,
+    )
+    wins, wins_regime_matched   = get_contextual_wins(
+        regime=regime,
+        priority_asset_class=priority_asset_class,
+        limit=n_wins,
+    )
+
+    if not losses and not wins:
+        return ""   # No trading history at all — omit the block entirely
+
+    # Build ticker → lesson lookup from execution_post_mortems
+    lesson_map = _build_ticker_lesson_map(regime, priority_asset_class)
+
+    regime_note = "" if (losses_regime_matched or wins_regime_matched) else (
+        "\n[NOTE: No regime-matched history yet — the trades below are from a different "
+        "regime and are for reference only. Apply reduced weight.]\n"
+    )
+
+    priority_label = priority_asset_class or "all asset classes"
+    matched_note   = (
+        f"regime={regime} exact match"
+        if (losses_regime_matched or wins_regime_matched)
+        else "cross-regime fallback"
+    )
+
+    lines = [
+        f"\n\n=== [RELEVANT HISTORICAL CONTEXT] ===",
+        f"Trades executed under regime={regime} | "
+        f"Asset-class priority: {priority_label} | Source: {matched_note}",
+        regime_note,
+    ]
+
+    if losses:
+        lines.append(f"\n▼ FAILURES TO AVOID ({len(losses)} loss{'es' if len(losses)>1 else ''}):\n")
+        for i, t in enumerate(losses, 1):
+            lines.append(_format_trade_entry(i, t, lesson_map, "LOSS"))
+            lines.append("")
+        lines.append(
+            "  → Do NOT repeat the logic above if you see similar regime conditions. "
+            "Prefer SGOV over forcing a trade in these asset classes."
+        )
+
+    if wins:
+        lines.append(f"\n▼ SUCCESSES TO REINFORCE ({len(wins)} win{'s' if len(wins)>1 else ''}):\n")
+        for i, t in enumerate(wins, 1):
+            lines.append(_format_trade_entry(i, t, lesson_map, "WIN"))
+            lines.append("")
+        lines.append(
+            "  → When you see similar conditions today, these patterns are worth repeating "
+            "at appropriate conviction."
+        )
+
+    logger.info(
+        f"Feedback injection | Context block: regime={regime} "
+        f"losses={len(losses)}({'matched' if losses_regime_matched else 'FIFO'}) "
+        f"wins={len(wins)}({'matched' if wins_regime_matched else 'FIFO'}) "
+        f"lessons_in_map={len(lesson_map)}"
+    )
+
+    return "\n".join(lines)
 
 
 def build_system_prompt_with_feedback(
@@ -248,12 +420,44 @@ def build_system_prompt_with_feedback(
     held_symbols: list[str] | None = None,
     crypto_only: bool = False,
     sentiment_override: str | None = None,
+    current_regime: str | None = None,
+    priority_asset_class: str | None = None,
 ) -> str:
-    losses = get_recent_losses(limit=n_losses)
-    wins   = get_recent_wins(limit=n_wins)
+    """
+    Build the full system prompt including the [Relevant Historical Context] block.
 
+    Parameters
+    ----------
+    n_losses            : max regime-matched losses to inject (default 5)
+    n_wins              : max regime-matched wins to inject (default 3)
+    buying_power        : live account buying power (injected as constraint)
+    held_symbols        : already-held tickers (injected as constraint)
+    crypto_only         : True → use CRYPTO_ONLY_SYSTEM_PROMPT
+    sentiment_override  : if set, overrides the market FG label in the prompt
+    current_regime      : current regime string (loaded from cache if None)
+    priority_asset_class: asset class to surface first in context queries
+                          (auto-inferred from current_regime if None)
+    """
+    # ── Auto-load regime if not supplied by caller ─────────────────────────
+    if current_regime is None:
+        try:
+            from analysis.post_mortem_lessons import _load_regime_from_file
+            current_regime = _load_regime_from_file()
+        except Exception:
+            current_regime = "unknown"
+
+    # Crypto-only mode → always treat as Crypto regime for lesson queries
+    if crypto_only and current_regime in ("unknown", ""):
+        current_regime = "Crypto"
+
+    # ── Auto-infer asset-class priority from regime ────────────────────────
+    if priority_asset_class is None:
+        priority_asset_class = _REGIME_PRIORITY_CLASS.get(current_regime)
+
+    # ── Base prompt ────────────────────────────────────────────────────────
     full_prompt = CRYPTO_ONLY_SYSTEM_PROMPT if crypto_only else BASE_SYSTEM_PROMPT
 
+    # ── Live account state ─────────────────────────────────────────────────
     if buying_power is not None:
         full_prompt += f"""
 LIVE ACCOUNT STATE (queried from Alpaca moments ago):
@@ -263,78 +467,49 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
 """
         logger.info(f"Feedback injection | Buying power: ${buying_power:,.2f}, Held: {held_symbols}")
 
-    if losses:
-        loss_entries = []
-        for i, loss in enumerate(losses, 1):
-            loss_entries.append(
-                f"  Loss #{i}: {loss['ticker']} ({loss['asset_class']}) | "
-                f"P&L: {loss['pnl_percentage']:+.2f}% | {_format_slippage(loss)} | "
-                f"Date: {loss['date']}\n"
-                f"  Failed Thesis: \"{loss['original_thesis']}\""
-            )
-        full_prompt += LOSS_FEEDBACK_TEMPLATE.format(
-            n=len(losses), loss_entries="\n\n".join(loss_entries),
+    # ── Phase 3: [Relevant Historical Context] block ───────────────────────
+    # Replaces the legacy chronological FIFO loss/win injection.
+    try:
+        context_block = _build_contextual_block(
+            regime=current_regime,
+            priority_asset_class=priority_asset_class,
+            n_losses=n_losses,
+            n_wins=n_wins,
         )
-        logger.info(f"Feedback injection | Injected {len(losses)} past losses into system prompt")
-        for loss in losses:
-            slip = loss.get("slippage_pct")
-            logger.debug(
-                f"  Loss: {loss['ticker']} {loss['pnl_percentage']:+.2f}% on {loss['date']}"
-                + (f" slip={slip:+.3f}%" if slip is not None else "")
+        if context_block:
+            full_prompt += context_block
+        else:
+            logger.info("Feedback injection | No trading history yet — clean prompt")
+    except Exception as exc:
+        logger.warning(f"Feedback injection | Contextual context block failed: {exc}")
+
+    # ── Slippage warning (kept from v4.3 — still execution-relevant) ───────
+    try:
+        slippage_stats = get_slippage_stats()
+        if (
+            slippage_stats.get("total_with_slippage", 0) >= 3
+            and slippage_stats.get("avg_slippage_pct") is not None
+        ):
+            worst_tickers = ", ".join(
+                f"{t['ticker']} ({t['slip_pct']:.3f}%)"
+                for t in slippage_stats.get("worst_slippage_tickers", [])[:5]
             )
-    else:
-        logger.info("Feedback injection | No past losses in journal")
-
-    if wins:
-        win_entries = []
-        for i, win in enumerate(wins, 1):
-            win_entries.append(
-                f"  Win #{i}: {win['ticker']} ({win['asset_class']}) | "
-                f"P&L: {win['pnl_percentage']:+.2f}% | {_format_slippage(win)} | "
-                f"Date: {win['date']}\n"
-                f"  Winning Thesis: \"{win['original_thesis']}\""
+            full_prompt += SLIPPAGE_WARNING_TEMPLATE.format(
+                n=slippage_stats["total_with_slippage"],
+                avg=slippage_stats["avg_slippage_pct"],
+                max=slippage_stats["max_slippage_pct"],
+                tickers=worst_tickers or "none",
             )
-        full_prompt += WIN_FEEDBACK_TEMPLATE.format(
-            n=len(wins), win_entries="\n\n".join(win_entries),
-        )
-        logger.info(f"Feedback injection | Injected {len(wins)} past wins into system prompt")
-        for win in wins:
-            slip = win.get("slippage_pct")
-            logger.debug(
-                f"  Win:  {win['ticker']} {win['pnl_percentage']:+.2f}% on {win['date']}"
-                + (f" slip={slip:+.3f}%" if slip is not None else "")
-            )
-    else:
-        logger.info("Feedback injection | No past wins in journal")
+    except Exception as exc:
+        logger.warning(f"Feedback injection | Slippage stats failed: {exc}")
 
-    slippage_stats = get_slippage_stats()
-    if (
-        slippage_stats.get("total_with_slippage", 0) >= 3
-        and slippage_stats.get("avg_slippage_pct") is not None
-    ):
-        worst_tickers = ", ".join(
-            f"{t['ticker']} ({t['slip_pct']:.3f}%)"
-            for t in slippage_stats.get("worst_slippage_tickers", [])[:5]
-        )
-        full_prompt += SLIPPAGE_WARNING_TEMPLATE.format(
-            n=slippage_stats["total_with_slippage"],
-            avg=slippage_stats["avg_slippage_pct"],
-            max=slippage_stats["max_slippage_pct"],
-            tickers=worst_tickers or "none",
-        )
-
-    if not losses and not wins:
-        logger.info("Feedback injection | No trading history — using clean prompt")
-
+    # ── Sentiment intelligence ─────────────────────────────────────────────
     try:
         from data.sentiment import get_sentiment_prompt_block, get_sentiment
         if sentiment_override is not None:
-            # A signal guard downgraded the sentiment band — build a patched block
-            # using the adjusted label so the LLM receives the correct (weaker) signal
-            # without any explanation of why it was adjusted.
-            raw_sent = get_sentiment()
-            crypto_fg = raw_sent.get("crypto_fear_greed", {})
-            lines = ["\n=== SENTIMENT INTELLIGENCE (FEAR & GREED INDICES) ==="]
+            raw_sent   = get_sentiment()
+            crypto_fg  = raw_sent.get("crypto_fear_greed", {})
+            lines      = ["\n=== SENTIMENT INTELLIGENCE (FEAR & GREED INDICES) ==="]
             if crypto_fg.get("value") is not None:
                 lines.append(
                     f"Crypto Fear & Greed Index: {crypto_fg['value']}/100 ({crypto_fg.get('label', 'N/A')})"
@@ -355,6 +530,7 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
     except Exception as exc:
         logger.warning(f"Feedback injection | Sentiment injection failed: {exc}")
 
+    # ── On-chain BTC intelligence (crypto-only cycles) ─────────────────────
     if crypto_only:
         try:
             from data.onchain import get_onchain_prompt_block
@@ -365,6 +541,7 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
         except Exception as exc:
             logger.warning(f"Feedback injection | On-chain injection failed: {exc}")
 
+    # ── Established learnings (learning_journal) ───────────────────────────
     try:
         from analysis.learning_journal import get_top_learnings_for_prompt
         learnings = get_top_learnings_for_prompt(limit=10, crypto_only=crypto_only)
@@ -382,7 +559,9 @@ LIVE ACCOUNT STATE (queried from Alpaca moments ago):
                     f"{entry['insight_text']} "
                     f"(confirmed {entry['confirmed_count']}x, confidence {conf_pct}%)\n"
                 )
-            logger.info(f"Feedback injection | {len(learnings)} established learning(s) injected into prompt")
+            logger.info(
+                f"Feedback injection | {len(learnings)} established learning(s) injected"
+            )
     except Exception as exc:
         logger.warning(f"Feedback injection | Learning journal injection failed: {exc}")
 

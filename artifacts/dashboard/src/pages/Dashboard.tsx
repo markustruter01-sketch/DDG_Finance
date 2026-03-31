@@ -3192,6 +3192,25 @@ function CommandersLog() {
     }),
   ];
 
+  const recentKills = useMemo(() => {
+    const kills: { agent: string; icon: string; accent: string; symbol: string; pnlPct: number; side: string; ts: string }[] = [];
+    (recentTrades?.trades ?? []).forEach((t: any) => {
+      if (t.pnl_pct != null && t.pnl_pct > 0) {
+        kills.push({ agent: "Oracle", icon: "🔮", accent: "#818cf8", symbol: t.symbol ?? t.ticker ?? "?", pnlPct: t.pnl_pct, side: t.side ?? "long", ts: t.closed_at ?? t.exit_time ?? "" });
+      }
+    });
+    krakenBots.forEach((b) => {
+      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      (b.status?.recent_trades ?? []).forEach((tr: any) => {
+        if (tr.pnl_pct != null && tr.pnl_pct > 0) {
+          kills.push({ agent: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, symbol: tr.symbol ?? "?", pnlPct: tr.pnl_pct, side: tr.side ?? "long", ts: tr.closed_at ?? tr.exit_time ?? "" });
+        }
+      });
+    });
+    kills.sort((a, b) => b.pnlPct - a.pnlPct);
+    return kills.slice(0, 8);
+  }, [recentTrades?.trades, djStatus.data, bbStatus.data, caStatus.data]);
+
   return (
     <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-r from-slate-950/90 via-amber-950/5 to-slate-950/90 p-4 shadow-[0_0_40px_rgba(245,158,11,0.04)]">
       <div className="flex items-center gap-2 mb-3">
@@ -3224,12 +3243,9 @@ function CommandersLog() {
                 </span>
               </div>
               <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: e.accent }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
+                <div
+                  className="h-full rounded-full transition-all duration-1000 ease-out"
+                  style={{ backgroundColor: e.accent, width: `${progress}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[8px] text-muted-foreground/50 font-mono">
@@ -3240,6 +3256,23 @@ function CommandersLog() {
           );
         })}
       </div>
+      {recentKills.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-amber-500/10">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="h-3 w-3 text-amber-400/60" />
+            <span className="text-[9px] uppercase font-bold tracking-wider text-amber-400/50">Recent Kills</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {recentKills.map((k, i) => (
+              <div key={`${k.agent}-${k.symbol}-${i}`} className="flex items-center gap-1 rounded-lg bg-slate-800/60 border border-white/5 px-2 py-1">
+                <span className="text-[10px]">{k.icon}</span>
+                <span className="text-[9px] font-mono text-white/70">{k.symbol.replace("/USD", "")}</span>
+                <span className="text-[9px] font-mono font-bold text-green-400">+{k.pnlPct.toFixed(2)}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3251,6 +3284,9 @@ function FleetPerformanceHero() {
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
 
   const alpacaEquity = portfolio?.account.equity ?? 0;
   const krakenEquity = kraken?.total_equity_usd ?? 0;
@@ -3259,7 +3295,12 @@ function FleetPerformanceHero() {
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
 
-  const allPerfs = [djPerf.data, bbPerf.data, caPerf.data].filter(Boolean);
+  const botPerfList = [
+    { id: "davy-jones", perf: djPerf.data, status: djStatus.data },
+    { id: "blackbeard", perf: bbPerf.data, status: bbStatus.data },
+    { id: "calypso", perf: caPerf.data, status: caStatus.data },
+  ];
+  const allPerfs = botPerfList.map(b => b.perf).filter(Boolean);
   const krakenWins = allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
   const krakenTotal = allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
 
@@ -3270,22 +3311,42 @@ function FleetPerformanceHero() {
   const bestKrakenPct = Math.max(0, ...allPerfs.map(p => p?.best_trade_pct ?? 0));
   const worstKrakenPct = Math.min(0, ...allPerfs.map(p => p?.worst_trade_pct ?? 0));
 
+  const bestPerformer = useMemo(() => {
+    let best: { name: string; icon: string; winRate: number } | null = null;
+    botPerfList.forEach((b) => {
+      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      const wr = b.perf?.win_rate_pct ?? 0;
+      if (!best || wr > best.winRate) {
+        best = { name: b.status?.bot_name ?? b.id, icon: t.icon, winRate: wr };
+      }
+    });
+    if (alpacaTotal > 0) {
+      const oracleWR = (alpacaWins / alpacaTotal) * 100;
+      if (!best || oracleWR > best.winRate) {
+        best = { name: "Oracle", icon: "🔮", winRate: oracleWR };
+      }
+    }
+    return best;
+  }, [djPerf.data, bbPerf.data, caPerf.data, alpacaWins, alpacaTotal]);
+
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: "2 exchanges" },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
     { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
     { label: "Best Trade", value: bestKrakenPct > 0 ? `+${bestKrakenPct.toFixed(2)}%` : "—", color: "text-green-400", sub: "kraken fleet best" },
+    { label: "Worst Trade", value: worstKrakenPct < 0 ? `${worstKrakenPct.toFixed(2)}%` : "—", color: worstKrakenPct < 0 ? "text-red-400" : "text-muted-foreground", sub: "kraken fleet worst" },
+    { label: "Top Performer", value: bestPerformer ? `${bestPerformer.icon} ${bestPerformer.name}` : "—", color: "text-amber-400", sub: bestPerformer ? `${bestPerformer.winRate.toFixed(1)}% win rate` : "no trades yet" },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
       {stats.map((s) => (
         <div
           key={s.label}
           className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-3"
         >
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">{s.label}</div>
-          <div className={cn("text-lg font-mono font-bold", s.color)}>{s.value}</div>
+          <div className={cn("text-base font-mono font-bold truncate", s.color)}>{s.value}</div>
           <div className="text-[8px] text-muted-foreground/40 mt-0.5">{s.sub}</div>
         </div>
       ))}
@@ -3297,11 +3358,14 @@ function FleetComparisonMini() {
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
 
   const bots = [
-    { id: "davy-jones", data: djPerf.data },
-    { id: "blackbeard", data: bbPerf.data },
-    { id: "calypso", data: caPerf.data },
+    { id: "davy-jones", data: djPerf.data, status: djStatus.data },
+    { id: "blackbeard", data: bbPerf.data, status: bbStatus.data },
+    { id: "calypso", data: caPerf.data, status: caStatus.data },
   ];
 
   const maxTrades = Math.max(1, ...bots.map(b => b.data?.total_trades ?? 0));
@@ -3312,35 +3376,38 @@ function FleetComparisonMini() {
         <Anchor className="h-3 w-3" />
         <span>Kraken Fleet</span>
       </div>
-      <div className="p-3 space-y-2">
+      <div className="p-3 space-y-3">
         {bots.map((b) => {
           const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
           const trades = b.data?.total_trades ?? 0;
           const winRate = b.data?.win_rate_pct;
           const pnl = b.data?.total_pnl_usd;
+          const equity = b.status?.total_equity_usd;
           const barW = maxTrades > 0 ? (trades / maxTrades) * 100 : 0;
           return (
-            <div key={b.id} className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 w-24 shrink-0">
-                <span className="text-xs">{t.icon}</span>
-                <span className="text-[10px] font-semibold text-white capitalize truncate">{b.id.replace("-", " ")}</span>
+            <div key={b.id} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 w-24 shrink-0">
+                  <span className="text-xs">{t.icon}</span>
+                  <span className="text-[10px] font-semibold text-white capitalize truncate">{b.id.replace("-", " ")}</span>
+                </div>
+                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-800 ease-out"
+                    style={{ backgroundColor: t.accent, width: `${barW}%` }}
+                  />
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[9px] font-mono text-muted-foreground">{trades}t</span>
+                  <span className={cn("text-[9px] font-mono font-semibold", winRate != null && winRate >= 50 ? "text-green-400" : winRate != null ? "text-red-400" : "text-muted-foreground")}>
+                    {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
+                  </span>
+                </div>
               </div>
-              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ backgroundColor: t.accent }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${barW}%` }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                />
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[9px] font-mono text-muted-foreground">{trades}t</span>
-                <span className={cn("text-[9px] font-mono font-semibold", winRate != null && winRate >= 50 ? "text-green-400" : winRate != null ? "text-red-400" : "text-muted-foreground")}>
-                  {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
-                </span>
-                <span className={cn("text-[9px] font-mono font-bold w-16 text-right", (pnl ?? 0) >= 0 ? "text-green-400" : "text-red-400")}>
-                  {pnl != null ? `${pnl >= 0 ? "+" : ""}$${Math.abs(pnl).toFixed(0)}` : "—"}
+              <div className="flex items-center gap-3 pl-8 text-[8px] font-mono text-muted-foreground/50">
+                <span>Eq: {equity != null ? formatCurrency(equity) : "—"}</span>
+                <span className={cn((pnl ?? 0) >= 0 ? "text-green-400/60" : "text-red-400/60")}>
+                  P&L: {pnl != null ? `${pnl >= 0 ? "+" : ""}$${Math.abs(pnl).toFixed(0)}` : "—"}
                 </span>
               </div>
             </div>
@@ -6958,7 +7025,7 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* ROW 4: Allocation + Journal (2/3) | Operations sidebar (1/3) */}
+        {/* ROW 4: Allocation + Journal (2/3) | Vault + Controls (1/3) */}
         <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
           <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
             <SafeSection label="Allocation Plan">
@@ -6969,9 +7036,6 @@ export default function Dashboard() {
             </SafeSection>
           </motion.div>
           <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
-            <SafeSection label="Learning Context">
-              <LearningContextSection />
-            </SafeSection>
             <SafeSection label="Vault">
               <VaultPanel />
             </SafeSection>
@@ -6984,11 +7048,14 @@ export default function Dashboard() {
           </motion.div>
         </div>
 
-        {/* ROW 5: LLM Journal (2/3) | System Health + Degradation (1/3) */}
+        {/* ROW 5: LLM Journal + Learning (2/3) | System Health + Degradation (1/3) */}
         <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+          <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
             <SafeSection label="LLM Learning Journal">
               <LLMJournalSection />
+            </SafeSection>
+            <SafeSection label="Learning Context">
+              <LearningContextSection />
             </SafeSection>
           </motion.div>
           <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>

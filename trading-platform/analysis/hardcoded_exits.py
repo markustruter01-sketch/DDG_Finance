@@ -177,6 +177,13 @@ def check_time_exits(
             close_position(symbol)
             logger.warning(f"TimeExit | {symbol} force-closed (5-day 3× inverse ETF rule)")
             exited.append(symbol)
+            # Clear entry timestamp so a future re-open gets a fresh timestamp
+            # and is NOT prematurely force-exited on the next cycle.
+            try:
+                from db.postgres import delete_position_entry
+                delete_position_entry(symbol)
+            except Exception:
+                pass  # Non-fatal
         except Exception as exc:
             logger.error(f"TimeExit | Failed to close {symbol}: {exc}")
 

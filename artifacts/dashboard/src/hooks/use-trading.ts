@@ -66,7 +66,7 @@ export interface EquitySnapshot {
 }
 
 export interface PortfolioData {
-  account: { equity: number; cash: number; buying_power: number; trading_blocked: boolean };
+  account: { equity: number; cash: number; buying_power: number; initial_margin: number; trading_blocked: boolean };
   positions: Array<{
     symbol: string;
     qty: number;

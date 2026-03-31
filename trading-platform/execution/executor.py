@@ -603,6 +603,15 @@ def _execute_slot(
         )
         logger.info(f"  → Logged to journal: trade_id={order_id}")
 
+        # Record immutable entry timestamp for 5-day inverse ETF exit rule.
+        # ON CONFLICT DO NOTHING: only the FIRST open timestamps — ratchet
+        # updates and re-runs never overwrite it.
+        try:
+            from db.postgres import record_position_entry
+            record_position_entry(ticker, entry_price=intended_price)
+        except Exception as _et_exc:
+            logger.debug(f"Executor | record_position_entry failed for {ticker}: {_et_exc}")
+
         remaining_cash -= notional_usd
 
         actual_fill_price = _poll_fill_price(order_id, ticker)

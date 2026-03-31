@@ -201,7 +201,7 @@ The trading system has a 4-phase Retrieval-Augmented Generation memory layer tha
 
 ## Kraken Bot ("Davy Jones' Portfolio")
 
-Located in `kraken-bot/`. Standalone 24/7 paper-trading crypto bot scanning 50 pairs on 1h candles.
+Located in `kraken-bot/`. Standalone 24/7 paper-trading crypto bot scanning 50 pairs on 1h candles. Runs as the third service (`kraken-bot`) in the dashboard artifact — deployed to production alongside `web` and `trading-api`. Health-check HTTP server on `$PORT` (8085) satisfies the artifact system's port requirement.
 
 ### Stack
 - **Runtime**: Python 3.11
@@ -228,7 +228,7 @@ Located in `kraken-bot/`. Standalone 24/7 paper-trading crypto bot scanning 50 p
 - 1.5% hard stop, 5% trailing profit, 0.8% min net profit gate
 - ATR-based position sizing (ATR_PERIOD=14, ATR_MULTIPLIER=1.5)
 - Circuit breaker: >10% drop in 5min → 2hr pause
-- RiskProfile reserve ceiling enforced before any entry logic
+- RiskProfile reserve ceiling enforced before any entry logic (ring_fenced_pct=0.0, deployable_pct=1.0 — no ring-fence for all-crypto bot; CASH_RESERVE handles capital protection)
 
 ## Required Secrets
 - `FRED_API_KEY` — fred.stlouisfed.org
@@ -260,7 +260,7 @@ Located in `kraken-bot/`. Standalone 24/7 paper-trading crypto bot scanning 50 p
 │   │   │   ├── components/    # UI components
 │   │   │   ├── hooks/         # React Query hooks (use-trading.ts)
 │   │   │   └── lib/           # Utils, API client
-│   │   └── .replit-artifact/  # artifact.toml (2 services: web + trading-api)
+│   │   └── .replit-artifact/  # artifact.toml (3 services: web + trading-api + kraken-bot)
 │   ├── saas/                  # AlgoEdge public SaaS platform (React/Vite)
 │   │   ├── src/
 │   │   │   ├── lib/config.ts  # BASE_URL + SAAS_API_BASE constants

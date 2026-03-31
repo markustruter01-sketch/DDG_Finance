@@ -1438,6 +1438,39 @@ def _keepalive_loop() -> None:
         time.sleep(120)  # 2-minute interval
 
 
+def _start_health_server() -> None:
+    """Start a minimal HTTP health-check server on $PORT (if set).
+
+    The artifact system expects every service to open its assigned port.
+    This lightweight server satisfies that requirement without interfering
+    with the bot's trading loop.
+    """
+    import threading
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    _port = int(os.environ.get("PORT", "0"))
+    if not _port:
+        return
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"status":"running","service":"kraken-bot"}')
+
+        def log_message(self, fmt, *args):
+            pass
+
+    def _serve():
+        srv = HTTPServer(("0.0.0.0", _port), _Handler)
+        srv.serve_forever()
+
+    t = threading.Thread(target=_serve, name="health-http", daemon=True)
+    t.start()
+    logger.info(f"Bot | Health-check server listening on :{_port}")
+
+
 def main() -> None:
     """
     The outer execution loop. This is what runs 24/7.
@@ -1455,9 +1488,8 @@ def main() -> None:
     import threading
     global total_equity
 
-    # ── Immediate startup heartbeat — mark ourselves "running" in DB NOW ──────
-    # This runs BEFORE any API calls (refresh_equity etc.) so the dashboard and
-    # auto-heal monitor see a fresh heartbeat within seconds of workflow restart.
+    _start_health_server()
+
     write_status()
     logger.info("Bot | Startup heartbeat written to DB")
 

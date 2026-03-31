@@ -52,3 +52,19 @@ path = "/trading-api/health"
 [services.env]
 PORT = "8000"
 API_PREFIX = "/trading-api"
+
+[[services]]
+name = "kraken-bot"
+paths = [ "/kraken-bot" ]
+localPort = 8085
+
+[services.development]
+run = "cd /home/runner/workspace && python3 kraken-bot/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "python3 kraken-bot/main.py"]
+
+[services.env]
+PORT = "8085"

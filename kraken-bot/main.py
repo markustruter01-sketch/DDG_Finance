@@ -152,9 +152,11 @@ logger.info("Adaptive params initialised — self-tuning layer active (evaluates
 # ══════════════════════════════════════════════════════════════════════════════
 # BOT STATE
 # All of the bot's in-memory state lives here at module level. When the bot
-# restarts after an error, this state resets — by design. The status.json file
-# is re-written each cycle so the dashboard always sees the latest state.
-# In paper mode, the portfolio itself is persisted in paper_portfolio.json.
+# restarts after an error, this state resets — by design.
+# Heartbeat and portfolio are persisted to PostgreSQL (kraken_heartbeat,
+# kraken_portfolio) so the dashboard recovers state after a restart.
+# Live telemetry (signals, microstructure, thinking_text, open_positions with
+# enriched price/P&L fields) is written to live_state.json each cycle.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # Dict of currently open positions, keyed by symbol.
@@ -254,24 +256,12 @@ def is_bot_paused() -> bool:
 
 
 # STATUS FILE WRITER
-# After every cycle, we write a JSON snapshot of the bot's current state.
-# The FastAPI server reads this file to power the dashboard card.
+# After every cycle, we write:
+#   - kraken_heartbeat (DB)     — persistent state (status, equity, positions)
+#   - live_state.json           — live telemetry (signals, microstructure, thinking)
+# The FastAPI server reads kraken_heartbeat (DB) + live_state.json for the dashboard.
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _get_persistent_trade_history() -> list[dict]:
-    """
-    Return the full closed-trade history.
-
-    Reads from PostgreSQL kraken_trades table (DB-only, no file fallback).
-    Falls back to the in-memory recent_trades list only if DB is unavailable.
-    """
-    try:
-        db_trades = _db.load_all_trades(limit=50)
-        if db_trades is not None:
-            return db_trades
-    except Exception:
-        pass
-    return recent_trades[-20:]
 
 
 def _atomic_json_write(filepath: str, payload: dict) -> None:
@@ -298,14 +288,11 @@ def _atomic_json_write(filepath: str, payload: dict) -> None:
 
 def write_status(error: str | None = None) -> None:
     """
-    Write the bot heartbeat to both PostgreSQL (primary) and status.json (backup).
+    Write the bot heartbeat to PostgreSQL (kraken_heartbeat, id=1).
 
-    PostgreSQL kraken_heartbeat is the source of truth: a single-row upsert
-    (id=1) that the FastAPI server and auto-heal monitor read directly — no
-    file parsing, no JSONDecodeError possible.
-
-    status.json is kept as a lightweight backup so the system degrades
-    gracefully if the DB is temporarily unavailable.
+    PostgreSQL is the sole persistent store: a single-row upsert that the
+    FastAPI server and auto-heal monitor read directly — no file parsing,
+    no JSONDecodeError possible.
     """
     global total_equity, open_positions, circuit_breaker_until, cycle_count
 
@@ -593,7 +580,7 @@ def run_cycle() -> None:
                                          break-even threshold the position is held so
                                          the fee cost isn't locked in as a loss.
          e. If no position and slots are free → evaluate RSI + z-score entry signals
-      4. Write status.json for the dashboard
+      4. Write heartbeat (DB) and live_state.json (live telemetry)
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
     global latest_signals, thinking_text, latest_microstructure
@@ -603,7 +590,7 @@ def run_cycle() -> None:
 
     cycle_count += 1
 
-    # ── Heartbeat — always write status.json at the start of every cycle ─────
+    # ── Heartbeat — write DB heartbeat + live_state at start of every cycle ──
     # This guarantees the timestamp is fresh even if the cycle exits early or
     # the workflow was paused between cycles by the hosting environment.
     write_status()

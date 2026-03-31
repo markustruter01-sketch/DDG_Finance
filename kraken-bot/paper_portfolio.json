@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 88984.32371153466,
+  "cash_usd": 79093.50426953466,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -11,6 +11,16 @@
       "best_price": 1.34148,
       "entry_fee": 25.6065,
       "order_id": "PAPER-XRPUSD-1774836493"
+    },
+    "ATOM/USD": {
+      "side": "short",
+      "entry_price": 1.704,
+      "size_usd": 9865.17,
+      "size_units": 5789.419014084508,
+      "entry_time": "2026-03-31T08:26:13.900862+00:00",
+      "best_price": 1.704,
+      "entry_fee": 25.6494,
+      "order_id": "PAPER-ATOMUSD-1774945573"
     }
   },
   "all_trades": [

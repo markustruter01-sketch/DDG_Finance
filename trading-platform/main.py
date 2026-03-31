@@ -892,25 +892,42 @@ async def _auto_heal_check() -> None:
     try:
         sf = _Path("../kraken-bot/status.json")
         if sf.exists():
-            kst = _json.loads(sf.read_text())
-            last_upd = kst.get("last_updated")
-            if last_upd:
-                from datetime import datetime as _dt
-                kage = now - _dt.fromisoformat(last_upd).timestamp()
-                kstatus = kst.get("status", "unknown")
-                if kstatus == "error" or kage > 1800:
-                    logger.warning(f"[AUTO-HEAL] kraken_api stale/error: status={kstatus}, age={kage:.0f}s")
-                    record_degradation(
-                        component="kraken_api",
-                        severity="critical" if kstatus == "error" else "warning",
-                        error_type="error_state" if kstatus == "error" else "stale",
-                        message=f"Kraken bot {kstatus}: status file is {kage:.0f}s old (threshold 1800s)",
-                        detail=f"status.json last_updated={last_upd}, bot_status={kstatus}",
-                    )
-                    await _remediate_component("kraken_api", triggered_by="auto_heal")
-                else:
-                    mark_resolved("kraken_api", "stale")
-                    mark_resolved("kraken_api", "error_state")
+            try:
+                kst = _json.loads(sf.read_text())
+            except _json.JSONDecodeError as _jde:
+                # Corrupt status.json — trigger remediation immediately so the
+                # file is deleted and the bot regenerates a clean copy.
+                logger.warning(
+                    f"[AUTO-HEAL] kraken_api: status.json is corrupt ({_jde}) — triggering remediation"
+                )
+                record_degradation(
+                    component="kraken_api",
+                    severity="error",
+                    error_type="error_state",
+                    message=f"status.json corrupt: {_jde}",
+                    detail="JSONDecodeError in _auto_heal_check; remediation triggered",
+                )
+                await _remediate_component("kraken_api", triggered_by="auto_heal")
+                kst = None  # skip age check — remediation already fired
+            if kst is not None:
+                last_upd = kst.get("last_updated")
+                if last_upd:
+                    from datetime import datetime as _dt
+                    kage = now - _dt.fromisoformat(last_upd).timestamp()
+                    kstatus = kst.get("status", "unknown")
+                    if kstatus == "error" or kage > 1800:
+                        logger.warning(f"[AUTO-HEAL] kraken_api stale/error: status={kstatus}, age={kage:.0f}s")
+                        record_degradation(
+                            component="kraken_api",
+                            severity="critical" if kstatus == "error" else "warning",
+                            error_type="error_state" if kstatus == "error" else "stale",
+                            message=f"Kraken bot {kstatus}: status file is {kage:.0f}s old (threshold 1800s)",
+                            detail=f"status.json last_updated={last_upd}, bot_status={kstatus}",
+                        )
+                        await _remediate_component("kraken_api", triggered_by="auto_heal")
+                    else:
+                        mark_resolved("kraken_api", "stale")
+                        mark_resolved("kraken_api", "error_state")
     except Exception as exc:
         logger.debug(f"[AUTO-HEAL] kraken_api check skipped: {exc}")
 
@@ -1412,7 +1429,7 @@ async def manual_postmortem() -> dict:
             _k_equity = 0.0
             if _sp2.exists():
                 _bs2 = _j2.loads(_sp2.read_text())
-                _k_equity = float((_bs2.get("paper_summary") or {}).get("total_equity_usd", 0) or 0)
+                _k_equity = float(_bs2.get("total_equity_usd", 0) or 0)
             try:
                 from execution.broker import get_account as _ga2
                 _a_equity = float(_ga2().get("equity", 0) or 0)
@@ -2800,10 +2817,40 @@ async def kraken_status() -> dict:
             "recent_trades":    [],
             "error":            None,
         }
+    def _load_paper_portfolio_trades() -> tuple[list, dict]:
+        """Read trade history and paper_summary from paper_portfolio.json (separate file)."""
+        pf_file = _Path("../kraken-bot/paper_portfolio.json")
+        if not pf_file.exists():
+            return [], {}
+        try:
+            pf = _json.loads(pf_file.read_text())
+            all_trades = pf.get("all_trades", [])
+            wins = [t for t in all_trades if t.get("pnl_pct", 0) > 0]
+            summary = {
+                "starting_balance_usd": pf.get("starting_balance_usd", 100_000),
+                "cash_usd":             round(pf.get("cash_usd", 0), 2),
+                "total_trades":         len(all_trades),
+                "win_count":            len(wins),
+                "loss_count":           len(all_trades) - len(wins),
+                "all_time_pnl_usd":     round(sum(t.get("pnl_usd", 0) for t in all_trades), 2),
+                "all_time_pnl_pct":     round(sum(t.get("pnl_pct", 0) for t in all_trades), 2),
+            }
+            return all_trades[-50:], summary
+        except Exception:
+            return [], {}
+
     try:
-        return _json.loads(status_file.read_text())
+        raw = _json.loads(status_file.read_text())
+        # Enrich slim heartbeat with trade history sourced from paper_portfolio.json.
+        # recent_trades and paper_summary are no longer embedded in status.json
+        # (they caused file growth → corruption); read them separately here.
+        _trades, _summary = _load_paper_portfolio_trades()
+        raw.setdefault("recent_trades", _trades)
+        raw.setdefault("paper_summary", _summary if _summary else None)
+        return raw
     except Exception as exc:
         logger.warning(f"[kraken/status] Could not parse status.json ({exc}) — returning empty state")
+        _trades, _summary = _load_paper_portfolio_trades()
         return {
             "bot_name":         "Davy Jones' Portfolio",
             "status":           "not_started",
@@ -2818,7 +2865,8 @@ async def kraken_status() -> dict:
             "position_count":   0,
             "max_positions":    3,
             "circuit_breaker":  {"active": False, "paused_until": None},
-            "recent_trades":    [],
+            "recent_trades":    _trades,
+            "paper_summary":    _summary if _summary else None,
             "error":            f"status.json parse error: {exc}",
         }
 
@@ -2894,8 +2942,20 @@ async def kraken_commentary(force: bool = False) -> dict:
             "unavailable": True,
         }
 
+    # Trade history is in paper_portfolio.json, not status.json (status.json is now a
+    # slim heartbeat to prevent corruption).  Fall back to status.json field for compat.
+    recent_trades: list[dict] = []
+    try:
+        _pf_path = _Path("../kraken-bot/paper_portfolio.json")
+        if _pf_path.exists():
+            _pf_data = _json.loads(_pf_path.read_text())
+            recent_trades = _pf_data.get("all_trades", [])
+    except Exception:
+        pass
+    if not recent_trades:
+        recent_trades = kdata.get("recent_trades", [])
+
     positions     = kdata.get("open_positions", [])
-    recent_trades = kdata.get("recent_trades", [])
     signals       = kdata.get("signals", [])
     wins          = [t for t in recent_trades if t.get("pnl_pct", 0) > 0]
     losses        = [t for t in recent_trades if t.get("pnl_pct", 0) <= 0]
@@ -3097,7 +3157,19 @@ async def kraken_performance() -> dict:
         logger.warning(f"[kraken/performance] Could not parse status.json ({exc}) — returning empty state")
         return empty
 
-    trades: list[dict] = status.get("recent_trades", [])
+    # Trade history is stored in paper_portfolio.json (not status.json, which is
+    # now a slim heartbeat file to prevent corruption via large JSON writes).
+    trades: list[dict] = []
+    try:
+        _pf_path = _Path("../kraken-bot/paper_portfolio.json")
+        if _pf_path.exists():
+            _pf_data = _json.loads(_pf_path.read_text())
+            trades = _pf_data.get("all_trades", [])
+    except Exception:
+        pass
+    # Fall back to status.json if paper_portfolio.json is unavailable (legacy compat)
+    if not trades:
+        trades = status.get("recent_trades", [])
 
     if not trades:
         empty["bot_status"]    = status.get("status", "not_started")
@@ -3588,11 +3660,19 @@ async def export_diagnostic_report() -> dict:
     k_adaptive   = _ks.get("adaptive_params", {}) or {}
     k_micro      = _ks.get("microstructure", {}) or {}
     k_thinking   = _ks.get("thinking_text", "") or ""
-    k_recent_trd = _ks.get("recent_trades", []) or []
-    k_paper_summ = _ks.get("paper_summary", {}) or {}
-
-    # From paper_portfolio.json
+    # Trade history comes from paper_portfolio.json directly (status.json is now a
+    # slim heartbeat file — recent_trades and paper_summary removed to prevent corruption).
     _pf_trades   = _pf.get("all_trades", []) or []
+    k_recent_trd = _pf_trades  # same source, alias for backward-compat variable name
+    # Reconstruct paper_summary stats from paper_portfolio.json data
+    _pf_wins     = [t for t in _pf_trades if t.get("pnl_pct", 0) > 0]
+    k_paper_summ = {
+        "total_trades":      len(_pf_trades),
+        "win_count":         len(_pf_wins),
+        "loss_count":        len(_pf_trades) - len(_pf_wins),
+        "all_time_pnl_usd":  round(sum(t.get("pnl_usd", 0) for t in _pf_trades), 2),
+        "all_time_pnl_pct":  round(sum(t.get("pnl_pct", 0) for t in _pf_trades), 2),
+    } if _pf_trades else {}
     k_start_bal  = _pf.get("starting_balance", 100_000)
     k_pnl_usd_all = k_equity - k_start_bal
 

@@ -321,9 +321,6 @@ def write_status(error: str | None = None) -> None:
             "best_price":          round(best, 4),
         })
 
-    # Paper-mode extra fields for the dashboard
-    paper_summary = get_paper_portfolio_summary() if PAPER_TRADING else None
-
     paused = is_bot_paused()
     state = {
         "bot_name":         "Davy Jones' Portfolio",
@@ -341,8 +338,11 @@ def write_status(error: str | None = None) -> None:
         "position_count":   len(open_positions),
         "max_positions":    MAX_POSITIONS,
         "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
-        "recent_trades":    _get_persistent_trade_history(),  # persists across restarts
-        "paper_summary":    paper_summary,        # None in live mode
+        # NOTE: recent_trades and paper_summary are intentionally omitted here.
+        # They are read directly from paper_portfolio.json by the FastAPI /kraken/status
+        # and /kraken/performance endpoints.  Keeping them out of status.json prevents
+        # the file from growing beyond ~1 KB regardless of trade count, which is the
+        # root cause of the JSON corruption issue that stalled the bot in production.
         "signals":          latest_signals,       # per-symbol RSI / z-score scan
         "microstructure":   latest_microstructure,
         "thinking_text":    thinking_text,        # plain-English reasoning for dashboard

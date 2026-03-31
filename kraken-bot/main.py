@@ -94,6 +94,9 @@ import db as _db
 from logic import (
     calculate_rsi,
     calculate_zscore,
+    calculate_atr,
+    get_atr_stop_price,
+    build_tranche_orders,
     get_position_size,
     check_circuit_breaker,
     check_stops,
@@ -106,6 +109,7 @@ from paper_engine import (
     get_paper_positions,
     get_paper_portfolio_summary,
     paper_open_position,
+    paper_scale_in_position,
     paper_close_position,
 )
 
@@ -163,6 +167,12 @@ logger.info("Adaptive params initialised — self-tuning layer active (evaluates
 # In paper mode: populated from paper_engine's persistent state on startup.
 # In live mode:  populated as orders fill.
 open_positions: dict[str, dict] = {}
+
+# Pending tranche orders — keyed by symbol, holds T2 and T3 dicts that have
+# not yet been executed.  Populated when a new position is opened (T1 fires).
+# Each cycle, the bot checks whether price has reached the next tranche level.
+# Cleared automatically when the position is closed.
+_pending_tranches: dict[str, list[dict]] = {}
 
 # A deque that stores recent price observations for the circuit breaker.
 price_history: dict[str, deque] = {
@@ -557,6 +567,86 @@ def close_position(symbol: str, reason: str) -> None:
         except Exception as exc:
             logger.error(f"Close | Failed to close {symbol}: {exc}")
 
+    # Tranche cleanup: when a position closes, all its pending tranches are cancelled
+    if symbol in _pending_tranches:
+        remaining = [t for t in _pending_tranches[symbol] if not t["filled"]]
+        if remaining:
+            logger.info(
+                f"Tranches | {symbol}: {len(remaining)} pending tranche(s) cancelled "
+                f"(position closed by {reason})"
+            )
+        del _pending_tranches[symbol]
+
+
+def scale_into_position(symbol: str, tranche: dict, current_price: float) -> bool:
+    """
+    Execute a pending scale-in tranche (T2 or T3) for an existing position.
+
+    Called when the market price has reached the next tranche's target level.
+    Updates the position's size and weighted-average entry price in-place.
+
+    PAPER mode → calls paper_engine.paper_scale_in_position()
+    LIVE mode  → places a real additional market order via ccxt
+
+    Args:
+        symbol:        The trading pair.
+        tranche:       The tranche dict from build_tranche_orders() for this level.
+        current_price: The current market price (used as simulated fill).
+
+    Returns:
+        True if the scale-in was executed, False if it failed.
+    """
+    global open_positions
+
+    if symbol not in open_positions:
+        logger.warning(f"Tranches | Scale-in {symbol} T{tranche['tranche']}: no open position")
+        return False
+
+    add_size_usd = tranche["size_usd"]
+
+    if PAPER_TRADING:
+        success = paper_scale_in_position(symbol, add_size_usd, current_price)
+        if success:
+            open_positions = get_paper_positions()
+        return success
+
+    else:
+        # Live mode: place an additional market order in the same direction
+        try:
+            pos       = open_positions[symbol]
+            side      = pos["side"]
+            add_units = add_size_usd / current_price
+            order_side = "buy" if side == "long" else "sell"
+
+            order = exchange.create_market_order(
+                symbol=symbol,
+                side=order_side,
+                amount=add_units,
+            )
+            _penalty_tracker.record_placement()
+            fill_price = float(order.get("average") or order.get("price") or current_price)
+
+            # Weighted average entry update
+            old_size  = pos["size_usd"]
+            old_entry = pos["entry_price"]
+            new_size  = old_size + add_size_usd
+            new_entry = (old_size * old_entry + add_size_usd * fill_price) / new_size
+
+            pos["entry_price"] = round(new_entry, 8)
+            pos["size_usd"]    = round(new_size, 2)
+            pos["size_units"]  = round(pos["size_units"] + add_units, 8)
+
+            logger.success(
+                f"Tranches | Scaled into {side.upper()} {symbol} (T{tranche['tranche']}) @ "
+                f"${fill_price:,.4f} | Added ${add_size_usd:,.2f} | "
+                f"New avg entry: ${new_entry:,.4f} | Total size: ${new_size:,.2f}"
+            )
+            return True
+
+        except Exception as exc:
+            logger.error(f"Tranches | Scale-in {symbol} T{tranche['tranche']} failed: {exc}")
+            return False
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SINGLE TRADING CYCLE — run once per LOOP_SLEEP_SECONDS
@@ -710,10 +800,15 @@ def run_cycle() -> None:
                 continue
 
             closes        = [c[4] for c in candles]
+            highs         = [c[2] for c in candles]
+            lows          = [c[3] for c in candles]
             current_price = closes[-1]
 
             # Cache the latest price (used by paper equity calculation)
             latest_prices[symbol] = current_price
+
+            # ATR — volatility-adjusted risk management
+            sym_atr = calculate_atr(highs, lows, closes)
 
             # Pre-compute indicators once — used in both position mgmt and entry signals
             sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
@@ -782,6 +877,32 @@ def run_cycle() -> None:
                 else:
                     pos["best_price"] = min(pos["best_price"], current_price)
 
+                # ── Pending tranche check (T2 / T3 scale-ins) ─────────────────
+                # Before evaluating exits, check whether the current price has
+                # reached the next pending tranche target.  We only try one
+                # tranche per cycle so the bot doesn't overshoot.
+                if symbol in _pending_tranches:
+                    for _t in _pending_tranches[symbol]:
+                        if _t.get("filled"):
+                            continue
+                        _t_side   = _t["side"]
+                        _t_target = _t["target_price"]
+                        # For longs T2/T3 are lower (dip-buy); for shorts they are higher
+                        _triggered = (
+                            (current_price <= _t_target) if _t_side == "long"
+                            else (current_price >= _t_target)
+                        )
+                        if _triggered:
+                            ok = scale_into_position(symbol, _t, current_price)
+                            if ok:
+                                _t["filled"]    = True
+                                _t["fill_price"] = current_price
+                                logger.info(
+                                    f"Tranches | {symbol} T{_t['tranche']} filled @ ${current_price:,.4f} "
+                                    f"(target was ${_t_target:,.4f})"
+                                )
+                            break  # only one tranche per cycle
+
                 # Check if we should exit via stop-loss or trailing take-profit
                 exit_reason = check_stops(
                     side=pos["side"],
@@ -790,6 +911,7 @@ def run_cycle() -> None:
                     best_price=pos["best_price"],
                     stop_loss_pct=_stop_loss_pct,
                     trail_pct=_trail_pct,
+                    atr_stop_price=pos.get("atr_stop_price"),
                 )
 
                 if exit_reason:
@@ -951,7 +1073,7 @@ def run_cycle() -> None:
 
             # LONG signal: price is unusually low + RSI is oversold
             if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
-                size_usd = get_position_size(
+                size_usd, _vol_tier, _eff_stop = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
@@ -959,6 +1081,7 @@ def run_cycle() -> None:
                     stop_loss_pct=_stop_loss_pct,
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
+                    atr=sym_atr,
                 )
                 if size_usd >= 10.0:
                     # ── Microstructure entry filter (long) ────────────────────
@@ -974,6 +1097,10 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
+                    # ATR-derived stop price and T1 tranche size (= size_usd)
+                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr)
+                    _tranches  = build_tranche_orders("long", current_price, size_usd, sym_atr)
+                    _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(
@@ -986,16 +1113,31 @@ def run_cycle() -> None:
                     _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
-                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
+                        f"[{_vol_tier}] | ATR stop: ${_atr_stop:,.4f} | "
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
-                    if open_position(symbol, "long", size_usd, current_price):
-                        deployed_usd += size_usd
+                    if open_position(symbol, "long", _t1_size, current_price):
+                        deployed_usd += _t1_size
+                        # Store ATR stop price in the position for check_stops()
+                        if symbol in open_positions:
+                            open_positions[symbol]["atr_stop_price"]    = _atr_stop
+                            open_positions[symbol]["vol_tier"]          = _vol_tier
+                            open_positions[symbol]["tranches_filled"]   = 1
+                        # Register pending T2/T3 tranches (skip T1, already filled)
+                        _remaining = [t for t in _tranches if t["tranche"] > 1]
+                        if _remaining:
+                            _pending_tranches[symbol] = _remaining
+                            logger.info(
+                                f"Tranches | {symbol}: {len(_remaining)} pending "
+                                f"tranche(s) queued after T1 fill"
+                            )
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "long_entered",
-                            "has_position": True, "size_usd": round(size_usd, 2),
+                            "has_position": True, "size_usd": round(_t1_size, 2),
+                            "vol_tier": _vol_tier,
                         })
                     else:
                         cycle_signals.append({
@@ -1013,7 +1155,7 @@ def run_cycle() -> None:
 
             # SHORT signal: price is unusually high + RSI is overbought
             elif sym_z_score > _zscore_entry and sym_rsi > RSI_OVERBOUGHT:
-                size_usd = get_position_size(
+                size_usd, _vol_tier, _eff_stop = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
@@ -1021,6 +1163,7 @@ def run_cycle() -> None:
                     stop_loss_pct=_stop_loss_pct,
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
+                    atr=sym_atr,
                 )
                 if size_usd >= 10.0:
                     # ── Microstructure entry filter (short) ───────────────────
@@ -1036,6 +1179,10 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
+                    # ATR-derived stop price and T1 tranche size
+                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr)
+                    _tranches  = build_tranche_orders("short", current_price, size_usd, sym_atr)
+                    _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(
@@ -1048,16 +1195,31 @@ def run_cycle() -> None:
                     _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
-                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | Size: ${size_usd:,.2f} | "
+                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
+                        f"[{_vol_tier}] | ATR stop: ${_atr_stop:,.4f} | "
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
-                    if open_position(symbol, "short", size_usd, current_price):
-                        deployed_usd += size_usd
+                    if open_position(symbol, "short", _t1_size, current_price):
+                        deployed_usd += _t1_size
+                        # Store ATR stop price in the position for check_stops()
+                        if symbol in open_positions:
+                            open_positions[symbol]["atr_stop_price"]    = _atr_stop
+                            open_positions[symbol]["vol_tier"]          = _vol_tier
+                            open_positions[symbol]["tranches_filled"]   = 1
+                        # Register pending T2/T3 tranches (skip T1, already filled)
+                        _remaining = [t for t in _tranches if t["tranche"] > 1]
+                        if _remaining:
+                            _pending_tranches[symbol] = _remaining
+                            logger.info(
+                                f"Tranches | {symbol}: {len(_remaining)} pending "
+                                f"tranche(s) queued after T1 fill"
+                            )
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "short_entered",
-                            "has_position": True, "size_usd": round(size_usd, 2),
+                            "has_position": True, "size_usd": round(_t1_size, 2),
+                            "vol_tier": _vol_tier,
                         })
                     else:
                         cycle_signals.append({

@@ -179,6 +179,94 @@ def paper_open_position(
     return True
 
 
+def paper_scale_in_position(
+    symbol:        str,
+    add_size_usd:  float,
+    current_price: float,
+) -> bool:
+    """
+    Simulate adding a second or third tranche to an existing open position.
+
+    This is the paper-trading equivalent of "scaling in" — placing an additional
+    buy (for longs) or sell (for shorts) on top of a position we already hold,
+    at a more favourable price than our original entry.
+
+    When this executes:
+      • Cash is deducted (the new tranche cost + entry fee).
+      • The position's size_usd and size_units increase.
+      • The position's entry_price is updated to the WEIGHTED AVERAGE
+        of all tranches executed so far.
+      • The best_price is reset to current_price (the newest entry point).
+
+    Why weighted average entry?
+    Because from a P&L perspective, we care about our AVERAGE cost basis,
+    not just the first tranche's price.  The dashboard and all stop-loss
+    calculations should work from this blended entry.
+
+    Args:
+        symbol:        The trading pair (e.g. "BTC/USD").
+        add_size_usd:  The additional USD to deploy for this tranche.
+        current_price: Current market price (the simulated fill price).
+
+    Returns:
+        True if the tranche was executed successfully.
+        False if there is not enough cash or no position to add to.
+    """
+    from config import PAPER_FEE_PCT
+
+    p = _load_portfolio()
+
+    if symbol not in p["positions"]:
+        logger.warning(f"Paper | Scale-in {symbol}: no existing position to add to")
+        return False
+
+    fee_usd    = add_size_usd * PAPER_FEE_PCT
+    total_cost = add_size_usd + fee_usd
+
+    if total_cost > p["cash_usd"]:
+        logger.warning(
+            f"Paper | Scale-in {symbol}: not enough cash — "
+            f"need ${total_cost:,.2f}, have ${p['cash_usd']:,.2f}"
+        )
+        return False
+
+    pos = p["positions"][symbol]
+
+    add_units = add_size_usd / current_price
+
+    # Weighted average entry price:
+    #   new_avg = (old_size_usd × old_entry + new_size_usd × new_price)
+    #             ─────────────────────────────────────────────────────
+    #                         total_size_usd_after
+    old_size   = pos["size_usd"]
+    old_entry  = pos["entry_price"]
+    new_size   = old_size + add_size_usd
+    new_entry  = (old_size * old_entry + add_size_usd * current_price) / new_size
+
+    # Update position record in-place
+    pos["entry_price"] = round(new_entry, 8)
+    pos["size_usd"]    = round(new_size, 2)
+    pos["size_units"]  = round(pos["size_units"] + add_units, 8)
+
+    # Update best_price: for longs keep the max, for shorts keep the min
+    if pos["side"] == "long":
+        pos["best_price"] = max(pos.get("best_price", current_price), current_price)
+    else:
+        pos["best_price"] = min(pos.get("best_price", current_price), current_price)
+
+    p["cash_usd"] -= total_cost
+
+    _save_portfolio()
+
+    logger.success(
+        f"Paper | Scale-in {symbol} (T{pos.get('tranches_filled', '?')}) — "
+        f"Fill: ${current_price:,.2f} | Added: ${add_size_usd:,.2f} ({add_units:.6f} units) | "
+        f"New avg entry: ${new_entry:,.4f} | Total size: ${new_size:,.2f} | "
+        f"Fee: ${fee_usd:.2f} | Cash: ${p['cash_usd']:,.2f}"
+    )
+    return True
+
+
 def paper_close_position(symbol: str, current_price: float, reason: str) -> dict | None:
     """
     Simulate closing an open position at the current market price.

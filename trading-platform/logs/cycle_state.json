@@ -1,8 +1,8 @@
 {
   "history": [
-    "failure",
-    "failure",
     "success",
+    "failure",
+    "failure",
     "failure",
     "failure",
     "failure",
@@ -11,6 +11,6 @@
     "failure",
     "failure"
   ],
-  "saved_at": 1774975562.2106276,
+  "saved_at": 1774976465.2829685,
   "window_size": 10
 }

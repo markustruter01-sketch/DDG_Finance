@@ -50,16 +50,21 @@ def _init_sqlite() -> None:
     with _sqlite_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS trades (
-                trade_id          TEXT PRIMARY KEY,
-                date              TEXT NOT NULL,
-                ticker            TEXT NOT NULL,
-                asset_class       TEXT NOT NULL,
-                conviction_score  REAL NOT NULL,
-                original_thesis   TEXT NOT NULL,
-                pnl_percentage    REAL,
-                status            TEXT NOT NULL DEFAULT 'Active',
-                intended_price    REAL,
-                actual_fill_price REAL
+                trade_id            TEXT PRIMARY KEY,
+                date                TEXT NOT NULL,
+                ticker              TEXT NOT NULL,
+                asset_class         TEXT NOT NULL,
+                conviction_score    REAL NOT NULL,
+                original_thesis     TEXT NOT NULL,
+                pnl_percentage      REAL,
+                status              TEXT NOT NULL DEFAULT 'Active',
+                intended_price      REAL,
+                actual_fill_price   REAL,
+                regime_at_entry     TEXT,
+                time_in_trade_hours REAL,
+                exit_reason         TEXT,
+                realized_pnl        REAL,
+                slippage_pct        REAL
             )
         """)
         conn.execute("""
@@ -76,6 +81,23 @@ def _init_sqlite() -> None:
                 trades_placed      INTEGER NOT NULL DEFAULT 0
             )
         """)
+        # Phase 1: execution_post_mortems (SQLite fallback)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS execution_post_mortems (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts                    TEXT NOT NULL DEFAULT (datetime('now')),
+                ticker                TEXT NOT NULL,
+                regime                TEXT NOT NULL,
+                asset_class           TEXT,
+                exit_reason           TEXT,
+                pnl_pct               REAL,
+                time_in_trade_hours   REAL,
+                hardcoded_lesson_text TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_pm_ts ON execution_post_mortems (ts DESC)
+        """)
         _migrate_price_columns_sqlite(conn)
 
 
@@ -86,6 +108,17 @@ def _migrate_price_columns_sqlite(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE trades ADD COLUMN intended_price REAL")
     if "actual_fill_price" not in existing:
         conn.execute("ALTER TABLE trades ADD COLUMN actual_fill_price REAL")
+    # Phase 1 RAG columns
+    if "regime_at_entry" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN regime_at_entry TEXT")
+    if "time_in_trade_hours" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN time_in_trade_hours REAL")
+    if "exit_reason" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN exit_reason TEXT")
+    if "realized_pnl" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN realized_pnl REAL")
+    if "slippage_pct" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN slippage_pct REAL")
 
 
 def init_db() -> None:
@@ -112,7 +145,13 @@ def log_trade(
     original_thesis: str,
     trade_date: str | None = None,
     intended_price: float | None = None,
+    regime_at_entry: str | None = None,
 ) -> None:
+    """
+    Record a new trade entry.  `regime_at_entry` is stored for contextual
+    retrieval in Phase 3 (RAG-lite prompt injection).  All other callers that
+    omit this field continue to work unchanged.
+    """
     entry_date = trade_date or date.today().isoformat()
 
     if _use_pg():
@@ -122,23 +161,28 @@ def log_trade(
                 cur.execute("""
                     INSERT INTO trades
                         (trade_id, date, ticker, asset_class, conviction_score,
-                         original_thesis, pnl_percentage, status, intended_price)
-                    VALUES (%s, %s, %s, %s, %s, %s, NULL, 'Active', %s)
+                         original_thesis, pnl_percentage, status, intended_price,
+                         regime_at_entry)
+                    VALUES (%s, %s, %s, %s, %s, %s, NULL, 'Active', %s, %s)
                     ON CONFLICT (trade_id) DO NOTHING
                 """, (trade_id, entry_date, ticker, asset_class,
-                      conviction_score, original_thesis, intended_price))
+                      conviction_score, original_thesis, intended_price,
+                      regime_at_entry))
     else:
         with _sqlite_conn() as conn:
             conn.execute("""
                 INSERT OR IGNORE INTO trades
                     (trade_id, date, ticker, asset_class, conviction_score,
-                     original_thesis, pnl_percentage, status, intended_price)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, 'Active', ?)
+                     original_thesis, pnl_percentage, status, intended_price,
+                     regime_at_entry)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, 'Active', ?, ?)
             """, (trade_id, entry_date, ticker, asset_class,
-                  conviction_score, original_thesis, intended_price))
+                  conviction_score, original_thesis, intended_price,
+                  regime_at_entry))
 
     price_info = f" intended=${intended_price:.4f}" if intended_price else ""
-    logger.debug(f"Trade journal | Logged {ticker} [{asset_class}] conv={conviction_score:.2f}{price_info}")
+    regime_info = f" regime={regime_at_entry}" if regime_at_entry else ""
+    logger.debug(f"Trade journal | Logged {ticker} [{asset_class}] conv={conviction_score:.2f}{price_info}{regime_info}")
 
 
 # ── update_trade_fill_price ────────────────────────────────────────────────
@@ -195,6 +239,179 @@ def update_trade_outcome(trade_id: str, pnl_percentage: float) -> None:
                 logger.warning(f"Trade journal | No active trade for id={trade_id}")
             else:
                 logger.info(f"Trade journal | Closed {trade_id} → {status} ({pnl_percentage:+.2f}%)")
+
+
+# ── close_trade ────────────────────────────────────────────────────────────
+
+def close_trade(
+    trade_id: str,
+    pnl_percentage: float,
+    realized_pnl: float | None = None,
+    exit_reason: str | None = None,
+    time_in_trade_hours: float | None = None,
+    close_price: float | None = None,
+) -> None:
+    """
+    Comprehensive trade closure.  Records all RAG-phase fields alongside the
+    existing pnl_percentage / status update.
+
+    Parameters
+    ----------
+    trade_id            : must match the trade_id used in log_trade()
+    pnl_percentage      : realized P&L as a percentage (positive = win)
+    realized_pnl        : dollar amount of realized P&L (optional)
+    exit_reason         : 'ratchet_stop' | 'time_exit' | 'algo_cover' |
+                          'target_hit' | 'manual' | 'short_scanner_exit'
+    time_in_trade_hours : hours the position was held (computed by caller)
+    close_price         : fill price at close — used to compute slippage_pct
+                          relative to intended_price stored at entry
+    """
+    status = "Closed_Win" if pnl_percentage >= 0 else "Closed_Loss"
+
+    if _use_pg():
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # Fetch intended_price for slippage computation
+                cur.execute(
+                    "SELECT intended_price FROM trades WHERE trade_id = %s",
+                    (trade_id,),
+                )
+                row = cur.fetchone()
+                intended = row[0] if row else None
+                slip = None
+                if intended and close_price and intended > 0:
+                    slip = (close_price - intended) / intended * 100
+
+                cur.execute("""
+                    UPDATE trades
+                    SET pnl_percentage      = %s,
+                        status              = %s,
+                        exit_reason         = %s,
+                        realized_pnl        = %s,
+                        time_in_trade_hours = %s,
+                        actual_fill_price   = COALESCE(%s, actual_fill_price),
+                        slippage_pct        = %s
+                    WHERE trade_id = %s AND status = 'Active'
+                """, (pnl_percentage, status, exit_reason, realized_pnl,
+                      time_in_trade_hours, close_price, slip, trade_id))
+                updated = cur.rowcount
+        if updated == 0:
+            logger.warning(f"Trade journal | close_trade: no active trade for id={trade_id}")
+        else:
+            logger.info(
+                f"Trade journal | Closed {trade_id} → {status} "
+                f"({pnl_percentage:+.2f}%) via {exit_reason or 'unknown'}"
+            )
+    else:
+        with _sqlite_conn() as conn:
+            row = conn.execute(
+                "SELECT intended_price FROM trades WHERE trade_id = ?", (trade_id,)
+            ).fetchone()
+            intended = row["intended_price"] if row else None
+            slip = None
+            if intended and close_price and intended > 0:
+                slip = (close_price - intended) / intended * 100
+            cursor = conn.execute("""
+                UPDATE trades
+                SET pnl_percentage      = ?,
+                    status              = ?,
+                    exit_reason         = ?,
+                    realized_pnl        = ?,
+                    time_in_trade_hours = ?,
+                    actual_fill_price   = COALESCE(?, actual_fill_price),
+                    slippage_pct        = ?
+                WHERE trade_id = ? AND status = 'Active'
+            """, (pnl_percentage, status, exit_reason, realized_pnl,
+                  time_in_trade_hours, close_price, slip, trade_id))
+            if cursor.rowcount == 0:
+                logger.warning(f"Trade journal | close_trade: no active trade for id={trade_id}")
+            else:
+                logger.info(
+                    f"Trade journal | Closed {trade_id} → {status} "
+                    f"({pnl_percentage:+.2f}%) via {exit_reason or 'unknown'}"
+                )
+
+
+# ── log_post_mortem ────────────────────────────────────────────────────────
+
+def log_post_mortem(
+    ticker: str,
+    regime: str,
+    hardcoded_lesson_text: str,
+    asset_class: str | None = None,
+    exit_reason: str | None = None,
+    pnl_pct: float | None = None,
+    time_in_trade_hours: float | None = None,
+) -> None:
+    """
+    Write a deterministic Python-generated lesson to execution_post_mortems.
+    Phase 2 will call this immediately after every close_trade().
+    Phase 3 will query it to build context-aware LLM prompts.
+    Phase 4 will promote recurring entries to permanent system-prompt rules.
+    """
+    if _use_pg():
+        from db.postgres import insert_post_mortem
+        insert_post_mortem(
+            ticker=ticker,
+            regime=regime,
+            hardcoded_lesson_text=hardcoded_lesson_text,
+            asset_class=asset_class,
+            exit_reason=exit_reason,
+            pnl_pct=pnl_pct,
+            time_in_trade_hours=time_in_trade_hours,
+        )
+    else:
+        with _sqlite_conn() as conn:
+            conn.execute("""
+                INSERT INTO execution_post_mortems
+                    (ticker, regime, asset_class, exit_reason,
+                     pnl_pct, time_in_trade_hours, hardcoded_lesson_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (ticker, regime, asset_class, exit_reason,
+                  pnl_pct, time_in_trade_hours, hardcoded_lesson_text))
+        logger.debug(
+            f"Trade journal | Post-mortem (SQLite): {ticker} [{regime}] "
+            f"— {hardcoded_lesson_text[:80]}"
+        )
+
+
+def get_post_mortems(
+    regime: str | None = None,
+    ticker: str | None = None,
+    asset_class: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """
+    Retrieve execution post-mortems with optional regime / ticker / asset_class
+    filters.  Used by Phase 3 for context-aware prompt injection.
+    """
+    if _use_pg():
+        from db.postgres import get_post_mortems as _pg_get
+        return _pg_get(regime=regime, ticker=ticker, asset_class=asset_class, limit=limit)
+
+    # SQLite fallback
+    conditions, params = [], []
+    if regime:
+        conditions.append("regime = ?")
+        params.append(regime)
+    if ticker:
+        conditions.append("ticker = ?")
+        params.append(ticker)
+    if asset_class:
+        conditions.append("asset_class = ?")
+        params.append(asset_class)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    params.append(limit)
+    cols = ("id", "ts", "ticker", "regime", "asset_class", "exit_reason",
+            "pnl_pct", "time_in_trade_hours", "hardcoded_lesson_text")
+    with _sqlite_conn() as conn:
+        rows = conn.execute(
+            f"SELECT {', '.join(cols)} FROM execution_post_mortems "
+            f"{where} ORDER BY ts DESC LIMIT ?",
+            params,
+        ).fetchall()
+    return [dict(zip(cols, tuple(r))) for r in rows]
 
 
 # ── Queries ────────────────────────────────────────────────────────────────

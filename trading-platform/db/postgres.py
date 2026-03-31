@@ -230,13 +230,41 @@ CREATE TABLE IF NOT EXISTS llm_learnings (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_learnings_confidence ON llm_learnings (confidence_score DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_learnings_regime     ON llm_learnings (regime);
+
+-- ── Execution Post-Mortems ──────────────────────────────────────────────────
+-- Python-generated deterministic lessons written at the moment each trade
+-- closes.  Phase 2 populates rows here; Phase 3 injects them into prompts;
+-- Phase 4 promotes recurring lessons to permanent system-prompt rules.
+CREATE TABLE IF NOT EXISTS execution_post_mortems (
+    id                    BIGSERIAL PRIMARY KEY,
+    ts                    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    ticker                TEXT NOT NULL,
+    regime                TEXT NOT NULL,
+    asset_class           TEXT,
+    exit_reason           TEXT,
+    pnl_pct               DOUBLE PRECISION,
+    time_in_trade_hours   DOUBLE PRECISION,
+    hardcoded_lesson_text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_post_mortems_ts     ON execution_post_mortems (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_post_mortems_regime ON execution_post_mortems (regime, ticker);
+"""
+
+# Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
+# tables always exist first.  Each statement is idempotent (ADD COLUMN IF NOT EXISTS).
+_MIGRATION_SQL = """
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS regime_at_entry      TEXT;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS time_in_trade_hours  DOUBLE PRECISION;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS exit_reason          TEXT;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISION;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
 """
 
 
 def ensure_schema() -> None:
     """
-    Create all tables if they don't already exist.
-    Safe to call repeatedly — fully idempotent.
+    Create all tables if they don't already exist, then run safe column
+    migrations.  Fully idempotent — safe to call on every startup.
     """
     if not is_pg_available():
         logger.debug("DB | ensure_schema skipped (PostgreSQL unavailable)")
@@ -248,6 +276,108 @@ def ensure_schema() -> None:
         logger.info("DB | PostgreSQL schema verified / created")
     except Exception as exc:
         logger.error(f"DB | Schema bootstrap failed: {exc}")
+        return
+
+    # Phase 1 RAG migrations: add new columns to trades table.
+    # Each ALTER is idempotent via ADD COLUMN IF NOT EXISTS.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for stmt in _MIGRATION_SQL.strip().splitlines():
+                    stmt = stmt.strip()
+                    if stmt:
+                        cur.execute(stmt)
+        logger.info("DB | Trade journal column migrations applied")
+    except Exception as exc:
+        logger.error(f"DB | Migration failed (non-fatal): {exc}")
+
+
+def insert_post_mortem(
+    ticker: str,
+    regime: str,
+    hardcoded_lesson_text: str,
+    asset_class: str | None = None,
+    exit_reason: str | None = None,
+    pnl_pct: float | None = None,
+    time_in_trade_hours: float | None = None,
+) -> bool:
+    """
+    Insert a deterministic post-mortem lesson into execution_post_mortems.
+    Called by Phase 2 (post-mortem logger) after every trade close.
+    Returns True on success.
+    """
+    if not is_pg_available():
+        return False
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO execution_post_mortems
+                        (ticker, regime, asset_class, exit_reason,
+                         pnl_pct, time_in_trade_hours, hardcoded_lesson_text)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (ticker, regime, asset_class, exit_reason,
+                     pnl_pct, time_in_trade_hours, hardcoded_lesson_text),
+                )
+        logger.debug(f"DB | Post-mortem logged: {ticker} [{regime}] — {hardcoded_lesson_text[:80]}")
+        return True
+    except Exception as exc:
+        logger.error(f"DB | insert_post_mortem failed: {exc}")
+        return False
+
+
+def get_post_mortems(
+    regime: str | None = None,
+    ticker: str | None = None,
+    asset_class: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    """
+    Query execution_post_mortems with optional filters.
+    Used by Phase 3 (context-aware prompt injection) and Phase 4 (rollup).
+    """
+    if not is_pg_available():
+        return []
+    conditions = []
+    params: list = []
+    if regime:
+        conditions.append("regime = %s")
+        params.append(regime)
+    if ticker:
+        conditions.append("ticker = %s")
+        params.append(ticker)
+    if asset_class:
+        conditions.append("asset_class = %s")
+        params.append(asset_class)
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    params.append(limit)
+    try:
+        cols = ("id", "ts", "ticker", "regime", "asset_class", "exit_reason",
+                "pnl_pct", "time_in_trade_hours", "hardcoded_lesson_text")
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT {', '.join(cols)}
+                    FROM   execution_post_mortems
+                    {where}
+                    ORDER  BY ts DESC
+                    LIMIT  %s
+                    """,
+                    params,
+                )
+                rows = cur.fetchall()
+        result = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            d["ts"] = d["ts"].isoformat() if d["ts"] else None
+            result.append(d)
+        return result
+    except Exception as exc:
+        logger.error(f"DB | get_post_mortems failed: {exc}")
+        return []
 
 
 # ── Equity snapshots ───────────────────────────────────────────────────────

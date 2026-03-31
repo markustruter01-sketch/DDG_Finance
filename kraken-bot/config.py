@@ -196,6 +196,31 @@ TRAIL_PCT             = 0.05   # Trailing take-profit kicks in after 5% gain.
 # flow detected). Lowered from 0.70 to 0.65 for a more selective/defensive posture.
 VPIN_ENTRY_BLOCK      = 0.65
 
+# ── Dynamic VPIN Cap (Stage 3) ──────────────────────────────────────────────
+# When 24h volume is 50%+ above the trailing mean, raise the VPIN entry cap
+# to allow entries during high-volume-but-healthy markets.
+VPIN_ELEVATED_CAP     = 0.82    # Relaxed cap when volume surge detected
+VOLUME_SURGE_RATIO    = 1.50    # 24h vol must be >= 1.5x the 30-candle mean
+
+# ── Contrarian Scout (Stage 3) ──────────────────────────────────────────────
+# In Bear/RISK-OFF regime, if RSI is extremely low, allow a small contrarian
+# "Tier 1" entry instead of blocking all longs.
+CONTRARIAN_RSI_THRESH = 25      # RSI must be below this
+CONTRARIAN_EQUITY_PCT = 0.03    # 3% of equity for the scout position
+
+# ── VPIN Decay & Convergence (Stage 3.5) ────────────────────────────────────
+# If VPIN stays above threshold for N consecutive cycles while price volatility
+# is stabilizing (ATR is falling), decay the effective VPIN by 10% per cycle
+# so the bot doesn't stay permanently locked out.
+VPIN_DECAY_AFTER_CYCLES = 4     # Start decaying after this many consecutive blocks
+VPIN_DECAY_RATE         = 0.10  # 10% importance reduction per cycle
+
+# ── Deep Oversold RSI Bypass (Stage 3.5) ────────────────────────────────────
+# If RSI drops below 20, the VPIN filter is bypassed entirely for a micro-lot
+# (1% equity) to ensure we never miss the absolute bottom of a move.
+DEEP_OVERSOLD_RSI     = 20      # RSI threshold for bypass
+MICRO_LOT_EQUITY_PCT  = 0.01   # 1% of equity for the micro-lot
+
 # ── Bear-Regime Position-Sizing Overrides ────────────────────────────────────
 # Applied when the Alpaca bot's market_regime.json signals BEAR or RISK-OFF.
 BEAR_MAX_POSITIONS       = 5     # Half the normal slot count

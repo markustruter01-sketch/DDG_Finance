@@ -83,6 +83,14 @@ from config import (
     CONTROL_FILE,
     PAPER_PORTFOLIO_FILE,
     VPIN_ENTRY_BLOCK,
+    VPIN_ELEVATED_CAP,
+    VOLUME_SURGE_RATIO,
+    CONTRARIAN_RSI_THRESH,
+    CONTRARIAN_EQUITY_PCT,
+    VPIN_DECAY_AFTER_CYCLES,
+    VPIN_DECAY_RATE,
+    DEEP_OVERSOLD_RSI,
+    MICRO_LOT_EQUITY_PCT,
     BEAR_MAX_POSITIONS,
     BEAR_MAX_POSITION_FRACTION,
 )
@@ -90,7 +98,6 @@ from config import (
 import adaptive_params as _adaptive
 import db as _db
 
-# Import our trading logic functions (identical in both paper and live mode)
 from logic import (
     calculate_rsi,
     calculate_zscore,
@@ -100,6 +107,7 @@ from logic import (
     get_position_size,
     check_circuit_breaker,
     check_stops,
+    VPINDecayTracker,
 )
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
@@ -139,6 +147,8 @@ logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion e
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
 logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
 logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active (order-book primary)")
+logger.info(f"  VPIN gate     : base={VPIN_ENTRY_BLOCK} | surge_cap={VPIN_ELEVATED_CAP} | decay_after={VPIN_DECAY_AFTER_CYCLES}cyc @{VPIN_DECAY_RATE*100:.0f}%/cyc")
+logger.info(f"  Contrarian    : RSI<{CONTRARIAN_RSI_THRESH} scout={CONTRARIAN_EQUITY_PCT*100:.0f}% | RSI<{DEEP_OVERSOLD_RSI} bypass=micro-lot {MICRO_LOT_EQUITY_PCT*100:.0f}%")
 logger.info("=" * 65)
 
 # ── DB schema bootstrap + one-time JSON migration ─────────────────────────────
@@ -204,6 +214,15 @@ cycle_count: int = 0
 
 # Cache of the latest prices seen in this cycle (used for paper equity calc).
 latest_prices: dict[str, float] = {}
+
+_vpin_decay = VPINDecayTracker(
+    decay_after=VPIN_DECAY_AFTER_CYCLES,
+    decay_rate=VPIN_DECAY_RATE,
+)
+
+_volume_history: dict[str, deque] = {
+    sym: deque(maxlen=30) for sym in SYMBOLS
+}
 
 # Signal snapshot written each cycle — consumed by the dashboard thinking panel.
 # Each entry: {symbol, rsi, z_score, price, signal_type, has_position}
@@ -802,7 +821,11 @@ def run_cycle() -> None:
             closes        = [c[4] for c in candles]
             highs         = [c[2] for c in candles]
             lows          = [c[3] for c in candles]
+            volumes       = [c[5] for c in candles]
             current_price = closes[-1]
+
+            _volume_history[symbol].append(volumes[-1] if volumes else 0.0)
+            _vol_24h_sum = sum(list(volumes)[-24:]) if len(volumes) >= 24 else sum(volumes)
 
             # Cache the latest price (used by paper equity calculation)
             latest_prices[symbol] = current_price
@@ -1035,41 +1058,129 @@ def run_cycle() -> None:
                 })
                 continue
 
-            # ── VPIN toxic flow defensive gate ────────────────────────────────
-            # When VPIN > VPIN_ENTRY_BLOCK (0.65) the bot enters a defensive
-            # state: new entries are skipped but existing positions continue to
-            # run under their stops.  Threshold lowered from 0.70 to 0.65 for
-            # more selective entry during high-volatility/Bear conditions.
-            if _ms.vpin > VPIN_ENTRY_BLOCK:
+            # ── Dynamic VPIN Gate (Stages 3 & 3.5) ─────────────────────────────
+            # 1. Dynamic cap: raise threshold from 0.65→0.82 when volume surges
+            # 2. Decay: reduce effective VPIN after 4 consecutive blocks + stabilizing vol
+            # 3. Deep Oversold bypass: RSI<20 → ignore VPIN for micro-lot (1% equity)
+            _vol_hist = _volume_history.get(symbol, deque())
+            _vol_hist_list = list(_vol_hist)
+            _vol_mean_24h = (sum(_vol_hist_list[-24:]) if len(_vol_hist_list) >= 24
+                            else (sum(_vol_hist_list) if _vol_hist_list else 0.0))
+            _trailing_mean = (sum(_vol_hist_list) / len(_vol_hist_list)
+                             if len(_vol_hist_list) >= 5 else 0.0)
+            _trailing_mean_24h = _trailing_mean * min(len(_vol_hist_list), 24)
+            _volume_surge = (_trailing_mean_24h > 0
+                            and _vol_24h_sum >= _trailing_mean_24h * VOLUME_SURGE_RATIO)
+            _effective_vpin_cap = VPIN_ELEVATED_CAP if _volume_surge else VPIN_ENTRY_BLOCK
+
+            _effective_vpin = _vpin_decay.update(
+                symbol=symbol,
+                vpin=_ms.vpin,
+                threshold=_effective_vpin_cap,
+                atr=sym_atr,
+            )
+            _decay_count = _vpin_decay.get_count(symbol)
+
+            _deep_oversold = sym_rsi < DEEP_OVERSOLD_RSI
+
+            if _effective_vpin > _effective_vpin_cap and not _deep_oversold:
+                _decay_note = ""
+                if _decay_count > VPIN_DECAY_AFTER_CYCLES:
+                    _decay_note = (
+                        f" (decay active: cycle {_decay_count}, "
+                        f"raw={_ms.vpin:.3f}→eff={_effective_vpin:.3f})"
+                    )
                 logger.info(
-                    f"Signal | {symbol}: skipping entry — VPIN={_ms.vpin:.3f} > {VPIN_ENTRY_BLOCK} "
+                    f"Signal | {symbol}: skipping entry — VPIN={_effective_vpin:.3f} > "
+                    f"{_effective_vpin_cap:.2f} "
                     f"(defensive state — toxic/institutional flow detected)"
+                    f"{_decay_note}"
                 )
                 cycle_signals.append({
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "skip_vpin_defensive",
                     "has_position": False,
+                    "vpin_cap": round(_effective_vpin_cap, 2),
+                    "vpin_effective": round(_effective_vpin, 3),
+                    "vpin_decay_cycles": _decay_count,
                 })
                 continue
 
-            # ── Bear Regime LONG Filter ───────────────────────────────────────
-            # In a confirmed Bear or RISK-OFF regime (from Alpaca's analysis),
-            # all new LONG signals are blocked.  The bot remains SHORT-only
-            # until the regime clears.  Existing LONG positions are unaffected
-            # (they continue under their normal stops).
-            if _is_bear and sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+            if _deep_oversold and _ms.vpin > _effective_vpin_cap:
+                _vpin_decay.reset(symbol)
                 logger.info(
-                    f"BearRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
-                    f"RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
-                    f"Capital preserved (SHORT-only mode active)"
+                    f"Signal | {symbol}: VPIN bypass — RSI={sym_rsi:.1f} < {DEEP_OVERSOLD_RSI} "
+                    f"(Deep Oversold) | VPIN={_ms.vpin:.3f} ignored for micro-lot entry"
                 )
-                cycle_signals.append({
-                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                    "price": round(current_price, 4), "signal_type": "long_blocked_bear_regime",
-                    "has_position": False,
-                    "regime": _regime_label,
-                })
-                continue
+
+            if _effective_vpin <= _effective_vpin_cap and _ms.vpin > VPIN_ENTRY_BLOCK:
+                _reason = "volume_surge" if _volume_surge else "decay"
+                logger.info(
+                    f"Signal | {symbol}: VPIN gate relaxed ({_reason}) — "
+                    f"raw VPIN={_ms.vpin:.3f}, effective={_effective_vpin:.3f}, "
+                    f"cap={_effective_vpin_cap:.2f}"
+                )
+
+            # ── Bear Regime LONG Filter + Contrarian Scout (Stage 3) ──────────
+            # In a confirmed Bear or RISK-OFF regime, all new LONG signals are
+            # normally blocked (SHORT-only mode). EXCEPTION: if RSI is extremely
+            # low (< CONTRARIAN_RSI_THRESH), the bot opens a small 3% "scout"
+            # position as an insurance play against missing the bottom.
+            # The scout only requires RSI < 25 — no z-score/RSI_OVERSOLD gate.
+            if _is_bear:
+                if sym_rsi < CONTRARIAN_RSI_THRESH:
+                    _scout_size = total_equity * CONTRARIAN_EQUITY_PCT
+                    if _deep_oversold:
+                        _scout_size = total_equity * MICRO_LOT_EQUITY_PCT
+                        logger.info(
+                            f"ContrScout | {symbol}: DEEP OVERSOLD micro-lot — "
+                            f"RSI={sym_rsi:.1f} < {DEEP_OVERSOLD_RSI} | Bear regime "
+                            f"VPIN={_ms.vpin:.3f} | micro-lot ${_scout_size:,.2f} (1% equity)"
+                        )
+                    else:
+                        logger.info(
+                            f"ContrScout | {symbol}: Contrarian scout entry — "
+                            f"RSI={sym_rsi:.1f} < {CONTRARIAN_RSI_THRESH} | Bear regime "
+                            f"'{_regime_label}' | scout ${_scout_size:,.2f} (3% equity)"
+                        )
+                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr)
+                    if open_position(symbol, "long", _scout_size, current_price):
+                        deployed_usd += _scout_size
+                        if symbol in open_positions:
+                            open_positions[symbol]["atr_stop_price"] = _atr_stop
+                            open_positions[symbol]["vol_tier"] = "contrarian_scout"
+                            open_positions[symbol]["tranches_filled"] = 1
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1),
+                            "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4),
+                            "signal_type": "contrarian_scout_entered",
+                            "has_position": True, "size_usd": round(_scout_size, 2),
+                            "vol_tier": "contrarian_scout",
+                        })
+                    else:
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1),
+                            "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4),
+                            "signal_type": "contrarian_scout_signal",
+                            "has_position": False,
+                        })
+                    continue
+
+                if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+                    logger.info(
+                        f"BearRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
+                        f"RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
+                        f"Capital preserved (SHORT-only mode active)"
+                    )
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "long_blocked_bear_regime",
+                        "has_position": False,
+                        "regime": _regime_label,
+                    })
+                    continue
 
             # LONG signal: price is unusually low + RSI is oversold
             if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
@@ -1083,9 +1194,14 @@ def run_cycle() -> None:
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
                 )
+                if _deep_oversold and _ms.vpin > _effective_vpin_cap:
+                    size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
+                    _vol_tier = "micro_lot_vpin_bypass"
                 if size_usd >= 10.0:
-                    # ── Microstructure entry filter (long) ────────────────────
-                    _ms_allowed, _ms_reason = _ms.entry_filter(side="long")
+                    _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
+                    _ms_allowed, _ms_reason = _ms.entry_filter(
+                        side="long", vpin_block=_ms_vpin_override,
+                    )
                     if not _ms_allowed:
                         logger.info(
                             f"Signal | LONG {symbol} blocked by microstructure: {_ms_reason} "

@@ -730,3 +730,62 @@ def check_stops(
                 return "trail"
 
     return None  # Neither stop triggered — hold
+
+
+class VPINDecayTracker:
+    """
+    Track consecutive VPIN-blocked cycles per symbol and apply decay
+    when volatility is stabilizing.
+
+    After VPIN_DECAY_AFTER_CYCLES consecutive blocks where ATR is falling
+    (price stabilizing), the effective VPIN is reduced by VPIN_DECAY_RATE
+    per additional cycle.  This prevents the bot from being permanently
+    locked out by stale volume-bucket data after a crash.
+    """
+
+    def __init__(self, decay_after: int = 4, decay_rate: float = 0.10):
+        self._counts: dict[str, int] = {}
+        self._prev_atr: dict[str, float] = {}
+        self._decay_after = decay_after
+        self._decay_rate = decay_rate
+
+    def update(self, symbol: str, vpin: float, threshold: float, atr: float) -> float:
+        """
+        Call once per cycle per symbol.  Returns the effective (possibly
+        decayed) VPIN value that should be compared against the threshold.
+
+        If VPIN is below threshold this cycle, the counter resets.
+        Only counts consecutive high-VPIN cycles where volatility is
+        stabilizing (ATR <= previous ATR).  If ATR rises, the streak
+        resets to 1 (current cycle only).
+        """
+        if vpin <= threshold:
+            self._counts[symbol] = 0
+            self._prev_atr[symbol] = atr
+            return vpin
+
+        prev_atr = self._prev_atr.get(symbol, atr)
+        vol_stabilizing = atr <= prev_atr
+        self._prev_atr[symbol] = atr
+
+        if vol_stabilizing:
+            self._counts[symbol] = self._counts.get(symbol, 0) + 1
+        else:
+            self._counts[symbol] = 1
+
+        count = self._counts[symbol]
+
+        if count > self._decay_after:
+            extra_cycles = count - self._decay_after
+            decay_factor = 1.0 - (self._decay_rate * extra_cycles)
+            decay_factor = max(decay_factor, 0.30)
+            effective_vpin = vpin * decay_factor
+            return effective_vpin
+
+        return vpin
+
+    def get_count(self, symbol: str) -> int:
+        return self._counts.get(symbol, 0)
+
+    def reset(self, symbol: str) -> None:
+        self._counts[symbol] = 0

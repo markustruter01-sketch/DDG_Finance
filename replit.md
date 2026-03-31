@@ -199,6 +199,37 @@ The trading system has a 4-phase Retrieval-Augmented Generation memory layer tha
 - `analysis/post_mortem.py`: Phase 4 rollup runs automatically after every evening post-mortem cycle (non-fatal hook)
 - `analysis/feedback_injection.py`: `build_permanent_rules_block()` injected immediately after base system prompt — rules are labelled NON-NEGOTIABLE and treated with equal weight to the 10% position-sizing hard cap; regime-matched rules shown first, cross-regime rules appended
 
+## Kraken Bot ("Davy Jones' Portfolio")
+
+Located in `kraken-bot/`. Standalone 24/7 paper-trading crypto bot scanning 50 pairs on 1h candles.
+
+### Stack
+- **Runtime**: Python 3.11
+- **Exchange**: Kraken (via ccxt) — paper mode with simulated $100K balance
+- **Database**: PostgreSQL (`kraken_heartbeat`, `kraken_portfolio`, `kraken_trades`)
+- **Microstructure**: OFI + VAMP + VPIN entry filter (order-book primary)
+
+### Key Files
+- `config.py` — All tunable parameters (single source of truth)
+- `logic.py` — Pure math (RSI, Z-score, ATR, position sizing, `VPINDecayTracker`)
+- `main.py` — Trading loop, cycle logic, regime sync
+- `db.py` — PostgreSQL schema and CRUD
+- `paper_engine.py` — Paper trading simulator
+
+### Dynamic VPIN Scaling (Stages 3 & 3.5)
+- **Dynamic VPIN cap**: When 24h volume > 1.5× trailing 30-candle mean, VPIN entry threshold relaxes from 0.65 → 0.82
+- **VPIN Decay**: `VPINDecayTracker` in `logic.py` — after 4 consecutive high-VPIN cycles with stabilizing ATR (current ≤ previous), decays effective VPIN by 10%/cycle, floor at 30%
+- **Contrarian Scout**: RSI < 25 in Bear/RISK-OFF regime allows 3% equity Tier 1 entry despite VPIN block
+- **Deep Oversold Bypass**: RSI < 20 bypasses VPIN entirely for 1% equity micro-lot
+- **Volume history**: Module-level `dict[str, deque(maxlen=30)]` in `main.py` tracks per-symbol candle volumes
+
+### Risk Management
+- 20% cash reserve, 10% max per position (7.5% in Bear), 10 max positions (5 in Bear)
+- 1.5% hard stop, 5% trailing profit, 0.8% min net profit gate
+- ATR-based position sizing (ATR_PERIOD=14, ATR_MULTIPLIER=1.5)
+- Circuit breaker: >10% drop in 5min → 2hr pause
+- RiskProfile reserve ceiling enforced before any entry logic
+
 ## Required Secrets
 - `FRED_API_KEY` — fred.stlouisfed.org
 - `NEWS_API_KEY` — newsapi.org

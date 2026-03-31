@@ -232,7 +232,7 @@ def save_stop(
 ) -> None:
     today = date.today().isoformat()
     try:
-        from db.postgres import get_conn, is_pg_available
+        from db.postgres import get_conn, is_pg_available, record_position_entry
         if is_pg_available():
             with get_conn() as conn:
                 _ensure_table_pg(conn)
@@ -249,6 +249,8 @@ def save_stop(
                             last_updated   = EXCLUDED.last_updated
                     """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today))
                 conn.commit()
+            # Record immutable entry timestamp (ON CONFLICT DO NOTHING keeps the FIRST open time)
+            record_position_entry(symbol, entry_price=fill_price)
             logger.debug(f"Ratchet | Saved stop for {symbol}: ${stop_price:.4f} mult={atr_multiplier}× side={side} (pg)")
             return
     except Exception as exc:

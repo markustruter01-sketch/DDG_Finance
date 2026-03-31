@@ -1429,15 +1429,17 @@ function CombinedPortfolioSummary() {
   };
 
   // ── Alpaca values ────────────────────────────────────────────────────────────
-  const alpacaEquity  = portfolio?.account.equity       ?? 0;
-  const alpacaCash    = portfolio?.account.cash         ?? 0;
-  const alpacaBuying  = portfolio?.account.buying_power ?? 0;
-  const alpacaStart   = 100_000;
-  const alpacaPnl     = alpacaEquity - alpacaStart;
-  const alpacaPnlPct  = (alpacaPnl / alpacaStart) * 100;
-  const alpacaProfit  = alpacaPnl >= 0;
+  const alpacaEquity        = portfolio?.account.equity          ?? 0;
+  const alpacaCash          = portfolio?.account.cash            ?? 0;
+  const alpacaBuying        = portfolio?.account.buying_power    ?? 0;
+  const alpacaInitialMargin = portfolio?.account.initial_margin  ?? 0;
+  const alpacaStart         = 100_000;
+  const alpacaPnl           = alpacaEquity - alpacaStart;
+  const alpacaPnlPct        = (alpacaPnl / alpacaStart) * 100;
+  const alpacaProfit        = alpacaPnl >= 0;
 
   // ── Direct Shorts (algo short scanner) ───────────────────────────────────────
+  const SHORT_MARGIN_CAP_PCT = 35;    // mirrors MAX_SHORT_EXPOSURE_PCT in short_scanner.py
   const directShortPositions = positions?.positions?.filter(
     p => String(p.side ?? "long").toLowerCase() === "short" &&
          ["SPY","QQQ","XLK","XLF","XLE","IWM"].includes(p.symbol)
@@ -1446,8 +1448,12 @@ function CombinedPortfolioSummary() {
   const shortExposure  = directShortPositions.reduce(
     (sum, p) => sum + Math.abs(Number(p.market_value ?? 0)), 0
   );
-  const shortExposurePct = alpacaEquity > 0 ? (shortExposure / alpacaEquity) * 100 : 0;
-  const shortPnl       = directShortPositions.reduce(
+  // initial_margin from Alpaca = actual margin required for all short positions.
+  // This is the authoritative deployment metric for the 35% cap check.
+  const shortMarginUsed    = alpacaInitialMargin;
+  const shortMarginPct     = alpacaEquity > 0 ? (shortMarginUsed / alpacaEquity) * 100 : 0;
+  const shortMarginCapUsed = Math.min(shortMarginPct / SHORT_MARGIN_CAP_PCT * 100, 100);
+  const shortPnl           = directShortPositions.reduce(
     (sum, p) => sum + Number(p.unrealized_pl ?? 0), 0
   );
 
@@ -1676,10 +1682,31 @@ function CombinedPortfolioSummary() {
                     )}>
                       {shortPnl >= 0 ? "+" : ""}{formatCurrency(shortPnl)}
                     </div>
-                    <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
-                      <span className="text-purple-400/60 font-mono">
-                        {shortExposurePct.toFixed(1)}% exposure · {formatCurrency(shortExposure)}
-                      </span>
+                    <div className="text-[10px] text-muted-foreground mt-1.5 space-y-0.5">
+                      <div className="flex items-center gap-1 font-mono">
+                        <span className="text-purple-400/70">
+                          Margin: {formatCurrency(shortMarginUsed)} ({shortMarginPct.toFixed(1)}% of equity)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden max-w-[60px]">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              shortMarginCapUsed >= 90 ? "bg-red-400" :
+                              shortMarginCapUsed >= 70 ? "bg-amber-400" : "bg-purple-400"
+                            )}
+                            style={{ width: `${shortMarginCapUsed}%` }}
+                          />
+                        </div>
+                        <span className={cn(
+                          "text-[9px] font-mono tabular-nums",
+                          shortMarginCapUsed >= 90 ? "text-red-400" :
+                          shortMarginCapUsed >= 70 ? "text-amber-400" : "text-purple-400/60"
+                        )}>
+                          {shortMarginCapUsed.toFixed(0)}% of {SHORT_MARGIN_CAP_PCT}% cap
+                        </span>
+                      </div>
                     </div>
                   </>
                 ) : (

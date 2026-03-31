@@ -151,6 +151,14 @@ CREATE TABLE IF NOT EXISTS ratchet_stops (
     last_updated  DATE NOT NULL
 );
 
+-- Position entry timestamps (immutable — written once per symbol when first opened,
+-- never updated on ratchet/stop changes; used by 5-day 3× inverse ETF forced-exit)
+CREATE TABLE IF NOT EXISTS position_entry_times (
+    symbol       TEXT PRIMARY KEY,
+    entry_ts     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    entry_price  DOUBLE PRECISION
+);
+
 -- Equity snapshots (time-series portfolio value for equity curve chart)
 CREATE TABLE IF NOT EXISTS equity_snapshots (
     id             BIGSERIAL PRIMARY KEY,
@@ -309,3 +317,56 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
     except Exception as exc:
         logger.error(f"DB | get_equity_curve failed: {exc}")
         return []
+
+
+def record_position_entry(symbol: str, entry_price: float | None = None) -> None:
+    """
+    Persist an immutable entry timestamp for *symbol*.
+    Uses INSERT ... ON CONFLICT DO NOTHING so only the FIRST call records
+    the timestamp — subsequent ratchet updates never overwrite it.
+    Call this once when a new position is opened (bear_hedge buy or algo short).
+    """
+    if not is_pg_available():
+        return  # SQLite fallback: skip (time-exit will gracefully return 0 days)
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO position_entry_times (symbol, entry_price)
+                    VALUES (%s, %s)
+                    ON CONFLICT (symbol) DO NOTHING
+                    """,
+                    (symbol, entry_price),
+                )
+    except Exception as exc:
+        logger.warning(f"DB | record_position_entry failed for {symbol}: {exc}")
+
+
+def get_position_entry_times() -> dict[str, str]:
+    """
+    Returns {symbol: entry_ts_iso_string} for all symbols in position_entry_times.
+    entry_ts is a TIMESTAMPTZ stored as UTC; returned as ISO-8601 string.
+    """
+    if not is_pg_available():
+        return {}
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT symbol, entry_ts AT TIME ZONE 'UTC' FROM position_entry_times")
+                return {row[0]: row[1].isoformat() for row in cur.fetchall()}
+    except Exception as exc:
+        logger.warning(f"DB | get_position_entry_times failed: {exc}")
+        return {}
+
+
+def delete_position_entry(symbol: str) -> None:
+    """Remove entry timestamp when a position is fully closed."""
+    if not is_pg_available():
+        return
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM position_entry_times WHERE symbol = %s", (symbol,))
+    except Exception as exc:
+        logger.warning(f"DB | delete_position_entry failed for {symbol}: {exc}")

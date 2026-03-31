@@ -203,18 +203,41 @@ def _compute_short_size(equity: float, price: float, atr: float) -> int:
 
 # ── Double-dip prevention ────────────────────────────────────────────────────
 
-def _check_double_dip(ticker: str, llm_tickers: set[str]) -> bool:
+def _check_double_dip(
+    ticker: str,
+    llm_tickers: set[str],
+    held_symbols: set[str] | None = None,
+) -> bool:
     """
     Returns True if shorting *ticker* would double-dip with an inverse ETF
-    already held by the LLM portfolio.
+    held in EITHER the current LLM allocation OR the live Alpaca account.
+
+    Parameters
+    ----------
+    ticker       : Symbol the scanner wants to short (e.g. QQQ)
+    llm_tickers  : Tickers from the current LLM cycle allocation
+    held_symbols : All symbols currently held in Alpaca (from get_positions())
+                   — checked in addition to llm_tickers to handle portfolio drift
+                   (partial fills, manual trades, latency between cycles)
     """
     inverse = _DOUBLE_DIP_MAP.get(ticker)
-    if inverse and inverse in llm_tickers:
+    if not inverse:
+        return False
+
+    if inverse in llm_tickers:
         logger.info(
-            f"ShortScanner | Skipping SHORT {ticker} — LLM holds {inverse} "
+            f"ShortScanner | Skipping SHORT {ticker} — LLM allocated {inverse} "
             f"(double-dip prevention)"
         )
         return True
+
+    if held_symbols and inverse in held_symbols:
+        logger.info(
+            f"ShortScanner | Skipping SHORT {ticker} — {inverse} currently held "
+            f"in Alpaca account (double-dip prevention; portfolio may have drifted from LLM allocation)"
+        )
+        return True
+
     return False
 
 
@@ -242,6 +265,7 @@ def _try_enter_short(
     equity: float,
     positions: list[dict],
     llm_tickers: set[str],
+    held_symbols: set[str] | None = None,
     dry_run: bool = False,
 ) -> Optional[dict]:
     """
@@ -260,8 +284,8 @@ def _try_enter_short(
         logger.debug(f"ShortScanner | {ticker} already held short — skipping re-entry")
         return None
 
-    # Guard: double-dip
-    if _check_double_dip(ticker, llm_tickers):
+    # Guard: double-dip (checks both LLM allocation AND actual held positions)
+    if _check_double_dip(ticker, llm_tickers, held_symbols=held_symbols):
         return None
 
     # Guard: max short exposure
@@ -456,8 +480,10 @@ def _try_exit_short(
     try:
         from execution.broker import buy_to_cover
         from execution.ratchet_stop import delete_stop
+        from db.postgres import delete_position_entry
         order = buy_to_cover(ticker, qty)
         delete_stop(ticker)
+        delete_position_entry(ticker)   # Remove entry timestamp; fresh ts on next open
         _algo_short_state.pop(ticker, None)
         logger.info(f"ShortScanner | {ticker} covered: {reason}")
 
@@ -554,6 +580,11 @@ def run_scan(
         logger.warning("ShortScanner | Equity too low — scanner skipped")
         return result
 
+    # held_symbols = ALL symbols currently held in Alpaca (long OR short).
+    # Used by double-dip guard to catch portfolio drift from current LLM allocation
+    # (e.g. partial fills, ratchet-triggered exits, latency between cycles).
+    held_symbols: set[str] = {p["symbol"] for p in positions}
+
     logger.info(
         f"ShortScanner | equity=${equity:,.0f} | "
         f"scanning {len(SHORT_UNIVERSE)} tickers: {SHORT_UNIVERSE}"
@@ -587,7 +618,8 @@ def run_scan(
             # ── Entry check ───────────────────────────────────────────────────
             if signals["entry_signal"]:
                 entry_result = _try_enter_short(
-                    ticker, signals, equity, positions, llm_tickers, dry_run=dry_run
+                    ticker, signals, equity, positions, llm_tickers,
+                    held_symbols=held_symbols, dry_run=dry_run
                 )
                 if entry_result is not None:
                     result["entries"].append(entry_result)

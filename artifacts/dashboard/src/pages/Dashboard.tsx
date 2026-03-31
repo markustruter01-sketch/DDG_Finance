@@ -3277,6 +3277,23 @@ function CommandersLog() {
   );
 }
 
+function MiniSparkline({ data, color, w = 60, h = 20 }: { data: number[]; color: string; w?: number; h?: number }) {
+  if (data.length < 2) return <div style={{ width: w, height: h }} className="rounded bg-slate-800/40" />;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / range) * (h - 2) - 1;
+    return `${x},${y}`;
+  }).join(" ");
+  return (
+    <svg width={w} height={h} className="shrink-0">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+    </svg>
+  );
+}
+
 function FleetPerformanceHero() {
   const { data: portfolio } = usePortfolio();
   const { data: kraken } = useKrakenStatus();
@@ -3329,6 +3346,16 @@ function FleetPerformanceHero() {
     return best;
   }, [djPerf.data, bbPerf.data, caPerf.data, alpacaWins, alpacaTotal]);
 
+  const botSparklines = useMemo(() => {
+    return botPerfList.map((b) => {
+      const trades = b.perf?.recent_trades ?? [];
+      const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
+      let cum = 0;
+      const curve = [0, ...trades.map((tr: any) => { cum += (tr.pnl_pct ?? 0); return cum; })];
+      return { id: b.id, name: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, curve };
+    });
+  }, [djPerf.data, bbPerf.data, caPerf.data]);
+
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: "2 exchanges" },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
@@ -3339,17 +3366,28 @@ function FleetPerformanceHero() {
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-      {stats.map((s) => (
-        <div
-          key={s.label}
-          className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-3"
-        >
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">{s.label}</div>
-          <div className={cn("text-base font-mono font-bold truncate", s.color)}>{s.value}</div>
-          <div className="text-[8px] text-muted-foreground/40 mt-0.5">{s.sub}</div>
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="rounded-xl border border-white/5 bg-gradient-to-br from-slate-900/80 to-slate-950/60 p-3"
+          >
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground/60 mb-1">{s.label}</div>
+            <div className={cn("text-base font-mono font-bold truncate", s.color)}>{s.value}</div>
+            <div className="text-[8px] text-muted-foreground/40 mt-0.5">{s.sub}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-4 px-1">
+        <span className="text-[8px] uppercase font-bold tracking-wider text-muted-foreground/30">Equity Trend</span>
+        {botSparklines.map((b) => (
+          <div key={b.id} className="flex items-center gap-1.5">
+            <span className="text-[10px]">{b.icon}</span>
+            <MiniSparkline data={b.curve} color={b.accent} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -78,6 +78,16 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
     order_id    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
+
+-- Single-row adaptive params (id=1) upserted by adaptive_params.py every adaptation cycle.
+CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    params      JSONB NOT NULL DEFAULT '{}',
+    metrics     JSONB,
+    reasons     JSONB,
+    adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    lookback_n  INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -212,6 +222,63 @@ def migrate_from_json(paper_portfolio_path: str) -> bool:
 
     except Exception as exc:
         logger.error(f"DB | Migration from JSON failed: {exc}")
+        return False
+
+
+def migrate_heartbeat_from_json(status_file_path: str) -> bool:
+    """
+    Seed kraken_heartbeat (id=1) from status.json if the DB row is absent.
+    Only runs when the heartbeat row does not yet exist.
+    Returns True if migration was performed, False if skipped.
+    """
+    if not _is_available():
+        return False
+    if not os.path.exists(status_file_path):
+        return False
+    # Only seed if row is absent
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT status FROM kraken_heartbeat WHERE id = 1")
+                if cur.fetchone():
+                    logger.debug("DB | kraken_heartbeat row exists — skipping heartbeat migration")
+                    return False
+    except Exception:
+        return False
+    # Read status.json
+    try:
+        with open(status_file_path) as f:
+            st = json.load(f)
+    except Exception as exc:
+        logger.warning(f"DB | migrate_heartbeat_from_json: could not read {status_file_path}: {exc}")
+        return False
+    try:
+        cb = st.get("circuit_breaker") or {"active": False, "paused_until": None}
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO kraken_heartbeat
+                        (id, status, cycle_count, equity_usd, position_count,
+                         paper_trading, bot_paused, circuit_breaker, error, last_updated)
+                    VALUES (1, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        st.get("status", "not_started"),
+                        st.get("cycle_count", 0),
+                        st.get("total_equity_usd", 0),
+                        st.get("position_count", 0),
+                        st.get("paper_trading", True),
+                        st.get("bot_paused", False),
+                        json.dumps(cb),
+                        st.get("error"),
+                    ),
+                )
+        logger.info(f"DB | Migrated heartbeat from {status_file_path} to PostgreSQL")
+        return True
+    except Exception as exc:
+        logger.error(f"DB | migrate_heartbeat_from_json failed: {exc}")
         return False
 
 

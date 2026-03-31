@@ -2,9 +2,9 @@
 adaptive_params.py — Self-tuning parameter layer for Davy Jones' Portfolio.
 
 Every ADAPT_EVERY_HOURS hours (default: 6), this module reads the closed-trade
-history from paper_portfolio.json, computes performance metrics over the last
-LOOKBACK_TRADES trades, and nudges the active trading parameters within their
-safe bounds.
+history from kraken_trades (PostgreSQL), computes performance metrics over the
+last LOOKBACK_TRADES trades, and nudges the active trading parameters within
+their safe bounds.
 
 Parameters that adapt:
   ZSCORE_ENTRY       — Entry sensitivity (raise if win rate poor, lower if strong)
@@ -16,8 +16,9 @@ Parameters that adapt:
 All parameters stay within ±40% of their factory defaults and always above the
 minimum fee floor so the bot never exits at a guaranteed loss.
 
-The current adapted values are written to adaptive_params.json after each
-evaluation so they survive restarts and are visible on the dashboard.
+PRIMARY STATE: PostgreSQL kraken_adaptive_params table (single-row, id=1 UPSERT).
+FALLBACK LOAD: adaptive_params.json — read ONCE at startup migration only, then
+               the file is no longer written or read in the primary code path.
 """
 
 import json
@@ -28,12 +29,12 @@ from pathlib import Path
 
 logger = logging.getLogger("kraken_adaptive")
 
-# ── PostgreSQL helpers (optional — gracefully absent if DB not available) ─────
+# ── PostgreSQL helpers ────────────────────────────────────────────────────────
 
 def _pg_save(payload: dict) -> None:
-    """Write adaptive params to PostgreSQL kraken_adaptive_params table."""
+    """Upsert adaptive params into the single-row kraken_adaptive_params table (id=1)."""
     try:
-        import psycopg2, psycopg2.extras
+        import psycopg2
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return
@@ -42,22 +43,15 @@ def _pg_save(payload: dict) -> None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
-                        id          SERIAL PRIMARY KEY,
-                        params      JSONB NOT NULL,
-                        metrics     JSONB,
-                        reasons     JSONB,
-                        adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        lookback_n  INTEGER NOT NULL DEFAULT 0
-                    )
-                    """
-                )
-                cur.execute("DELETE FROM kraken_adaptive_params")
-                cur.execute(
-                    """
                     INSERT INTO kraken_adaptive_params
-                        (params, metrics, reasons, adapted_at, lookback_n)
-                    VALUES (%s, %s, %s, NOW(), %s)
+                        (id, params, metrics, reasons, adapted_at, lookback_n)
+                    VALUES (1, %s, %s, %s, NOW(), %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        params     = EXCLUDED.params,
+                        metrics    = EXCLUDED.metrics,
+                        reasons    = EXCLUDED.reasons,
+                        adapted_at = NOW(),
+                        lookback_n = EXCLUDED.lookback_n
                     """,
                     (
                         json.dumps(payload.get("params", {})),
@@ -74,9 +68,9 @@ def _pg_save(payload: dict) -> None:
 
 
 def _pg_load() -> dict | None:
-    """Load adaptive params from PostgreSQL if a row exists with n > 0."""
+    """Load adaptive params from the single-row kraken_adaptive_params table."""
     try:
-        import psycopg2, psycopg2.extras
+        import psycopg2
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return None
@@ -85,9 +79,9 @@ def _pg_load() -> dict | None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT params, metrics, reasons, adapted_at, lookback_n
-                    FROM kraken_adaptive_params
-                    ORDER BY id DESC LIMIT 1
+                    SELECT params, metrics, lookback_n
+                    FROM   kraken_adaptive_params
+                    WHERE  id = 1
                     """
                 )
                 row = cur.fetchone()
@@ -95,9 +89,9 @@ def _pg_load() -> dict | None:
             conn.close()
         if not row:
             return None
-        params  = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+        params  = row[0] if isinstance(row[0], dict) else json.loads(row[0] or "{}")
         metrics = row[1] if isinstance(row[1], dict) else json.loads(row[1] or "{}")
-        n = (metrics or {}).get("n", row[4] or 0)
+        n = (metrics or {}).get("n", row[2] or 0)
         if n == 0:
             return None
         logger.info(f"Adaptive | Loaded params from PostgreSQL (n={n})")
@@ -105,6 +99,47 @@ def _pg_load() -> dict | None:
     except Exception as exc:
         logger.debug(f"Adaptive | pg_load skipped: {exc}")
         return None
+
+
+def migrate_adaptive_from_json(params_file: "str | Path") -> None:
+    """
+    One-time bootstrap: seed kraken_adaptive_params from adaptive_params.json
+    if the DB row is missing and the file exists.  Called once at bot startup.
+    """
+    params_file = Path(params_file)
+    if not params_file.exists():
+        return
+    # Only migrate if DB row is absent
+    try:
+        import psycopg2
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT lookback_n FROM kraken_adaptive_params WHERE id = 1")
+                existing = cur.fetchone()
+        finally:
+            conn.close()
+        if existing and existing[0] and existing[0] > 0:
+            logger.debug("Adaptive | migrate_adaptive_from_json: DB row exists — skipping")
+            return
+    except Exception:
+        return
+    # Seed from JSON
+    try:
+        data = json.loads(params_file.read_text())
+        payload = {
+            "params":    data.get("params", {}),
+            "metrics":   data.get("metrics"),
+            "reasons":   data.get("reasons", {}),
+            "lookback_n": (data.get("metrics") or {}).get("n", 0),
+        }
+        _pg_save(payload)
+        logger.info(f"Adaptive | Migrated adaptive params from {params_file} to PostgreSQL")
+    except Exception as exc:
+        logger.warning(f"Adaptive | migrate_adaptive_from_json failed: {exc}")
 
 # ── Defaults (mirrors config.py) ──────────────────────────────────────────────
 DEFAULTS = {
@@ -314,21 +349,30 @@ def _apply_rules(params: dict, m: dict) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _load_persisted() -> dict | None:
-    # 1. Try PostgreSQL first (survives container restarts and redeploys)
+    """
+    Load previously adapted params.
+    PRIMARY: PostgreSQL kraken_adaptive_params (id=1).
+    FALLBACK: adaptive_params.json, read only if DB row is absent (startup only).
+    """
+    # 1. Try PostgreSQL (primary — survives container restarts and redeploys)
     pg = _pg_load()
     if pg:
         return pg
-    # 2. Fall back to JSON file
+    # 2. One-time fallback: read legacy JSON file (startup only, not written in primary path)
     if PARAMS_FILE.exists():
         try:
             data = json.loads(PARAMS_FILE.read_text())
-            return data.get("params")
+            loaded = data.get("params")
+            if loaded:
+                logger.info("Adaptive | Loaded params from JSON file (will migrate to DB next _save)")
+            return loaded
         except Exception:
             pass
     return None
 
 
 def _save(params: dict, metrics: dict | None) -> None:
+    """Persist adapted params to PostgreSQL (primary). JSON file is NOT written."""
     payload = {
         "params":       params,
         "defaults":     DEFAULTS,
@@ -338,11 +382,6 @@ def _save(params: dict, metrics: dict | None) -> None:
         "adapted_at":   datetime.now(timezone.utc).isoformat(),
         "lookback_n":   metrics["n"] if metrics else 0,
     }
-    try:
-        PARAMS_FILE.write_text(json.dumps(payload, indent=2))
-    except Exception as exc:
-        logger.warning(f"Adaptive | could not save params file: {exc}")
-    # Also persist to PostgreSQL so redeploys can recover adapted values
     _pg_save(payload)
 
 

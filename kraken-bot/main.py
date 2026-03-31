@@ -139,9 +139,12 @@ logger.info("=" * 65)
 
 # ── DB schema bootstrap + one-time JSON migration ─────────────────────────────
 _db.ensure_schema()
+_db.migrate_heartbeat_from_json(STATUS_FILE)
 _db.migrate_from_json(PAPER_PORTFOLIO_FILE)
 logger.info("DB | Kraken PostgreSQL tables ready")
 
+# One-time migration: seed kraken_adaptive_params from legacy JSON file if DB row absent
+_adaptive.migrate_adaptive_from_json("kraken-bot/adaptive_params.json")
 _adaptive.initialise()
 logger.info("Adaptive params initialised — self-tuning layer active (evaluates every 6h)")
 
@@ -332,20 +335,10 @@ def write_status(error: str | None = None) -> None:
         error=error,
     )
 
-    # Backup: JSON heartbeat file (kept for graceful degradation + manual inspection)
-    heartbeat = {
-        "bot_name":         "Davy Jones' Portfolio",
-        "paper_trading":    PAPER_TRADING,
-        "bot_paused":       paused,
-        "status":           status_str,
-        "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
-        "cycle_count":      cycle_count,
-        "total_equity_usd": round(total_equity, 2),
-        "position_count":   len(open_positions),
-        "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
-        "error":            error,
-    }
-    _atomic_json_write(STATUS_FILE, heartbeat)
+    # status.json is no longer written in the primary path.
+    # PostgreSQL kraken_heartbeat is the sole persistent store for the heartbeat.
+    # The _atomic_json_write + STATUS_FILE infrastructure is retained for the
+    # one-time bootstrap migration only (see migrate_from_json in db.py).
 
 
 def write_live_state() -> None:

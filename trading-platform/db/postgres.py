@@ -308,6 +308,16 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
     order_id    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
+
+-- Single-row adaptive params (id=1) upserted by adaptive_params.py every adaptation cycle.
+CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    params      JSONB NOT NULL DEFAULT '{}',
+    metrics     JSONB,
+    reasons     JSONB,
+    adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    lookback_n  INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

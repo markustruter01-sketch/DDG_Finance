@@ -107,28 +107,20 @@ def _load_portfolio() -> dict:
 
 def _save_portfolio() -> None:
     """
-    Persist the current in-memory portfolio to DB (primary) and JSON file (backup).
+    Persist the current in-memory portfolio to PostgreSQL (primary).
+    JSON file is NOT written in the primary path — DB is the sole persistent store.
     """
-    from config import PAPER_PORTFOLIO_FILE
     import db as _db
 
     global _portfolio
     if _portfolio is None:
         return
 
-    # Primary: PostgreSQL
     _db.save_portfolio(
         cash_usd=_portfolio["cash_usd"],
         positions=_portfolio.get("positions", {}),
         starting_balance_usd=_portfolio.get("starting_balance_usd"),
     )
-
-    # Backup: JSON file (keeps legacy consumers working; also useful for manual inspection)
-    try:
-        with open(PAPER_PORTFOLIO_FILE, "w") as f:
-            json.dump(_portfolio, f, indent=2)
-    except Exception as exc:
-        logger.warning(f"Paper | Could not save JSON backup: {exc}")
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

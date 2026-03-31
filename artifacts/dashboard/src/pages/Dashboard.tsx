@@ -1437,6 +1437,20 @@ function CombinedPortfolioSummary() {
   const alpacaPnlPct  = (alpacaPnl / alpacaStart) * 100;
   const alpacaProfit  = alpacaPnl >= 0;
 
+  // ── Direct Shorts (algo short scanner) ───────────────────────────────────────
+  const directShortPositions = positions?.positions?.filter(
+    p => String(p.side ?? "long").toLowerCase() === "short" &&
+         ["SPY","QQQ","XLK","XLF","XLE","IWM"].includes(p.symbol)
+  ) ?? [];
+  const shortCount     = directShortPositions.length;
+  const shortExposure  = directShortPositions.reduce(
+    (sum, p) => sum + Math.abs(Number(p.market_value ?? 0)), 0
+  );
+  const shortExposurePct = alpacaEquity > 0 ? (shortExposure / alpacaEquity) * 100 : 0;
+  const shortPnl       = directShortPositions.reduce(
+    (sum, p) => sum + Number(p.unrealized_pl ?? 0), 0
+  );
+
   const vaultSymbol  = vault?.vault_symbol    ?? "JEPQ";
   const totalVaulted = vault?.total_vaulted_usd ?? 0;
   const vaultPos     = positions?.positions?.find(p => p.symbol === vaultSymbol);
@@ -1513,7 +1527,7 @@ function CombinedPortfolioSummary() {
             <span className="text-[9px] uppercase tracking-widest text-blue-400/60 font-semibold">Alpaca · US Equities</span>
             <div className="h-px flex-1 bg-blue-500/10" />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
 
             {/* Total Equity */}
             <Card className={cn(
@@ -1629,6 +1643,49 @@ function CombinedPortfolioSummary() {
                   <>
                     <div className="fluid-metric font-mono font-bold text-muted-foreground/40 tracking-tight">$0.00</div>
                     <div className="text-[10px] text-muted-foreground/50 mt-1.5">{vault?.initialised ? `No ${vaultSymbol} position yet` : "Awaiting first sweep"}</div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Direct Shorts */}
+            <Card className={cn(
+              "bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 transition-all duration-500 relative overflow-hidden",
+              shortCount > 0
+                ? "border-purple-500/30 hover:border-purple-500/50"
+                : "hover:border-purple-500/10"
+            )}>
+              {shortCount > 0 && (
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
+              )}
+              <CardContent className="p-4">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <TrendingDown className="h-3 w-3 text-purple-400/70" />
+                  Direct Shorts
+                  {shortCount > 0 && (
+                    <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                      {shortCount}
+                    </span>
+                  )}
+                </div>
+                {shortCount > 0 ? (
+                  <>
+                    <div className={cn(
+                      "fluid-metric font-mono font-bold tracking-tight",
+                      shortPnl > 0 ? "text-green-400" : shortPnl < 0 ? "text-red-400" : "text-purple-400"
+                    )}>
+                      {shortPnl >= 0 ? "+" : ""}{formatCurrency(shortPnl)}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                      <span className="text-purple-400/60 font-mono">
+                        {shortExposurePct.toFixed(1)}% exposure · {formatCurrency(shortExposure)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="fluid-metric font-mono font-bold text-purple-400/20 tracking-tight">—</div>
+                    <div className="text-[10px] text-muted-foreground/40 mt-1.5">Scanner inactive</div>
                   </>
                 )}
               </CardContent>

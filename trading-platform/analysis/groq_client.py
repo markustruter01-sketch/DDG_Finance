@@ -160,13 +160,21 @@ def build_user_prompt(
             lines.append("  Active algo shorts (do NOT buy these ETFs as longs):")
             for s in open_shorts:
                 sym   = s.get("symbol", "?")
-                price = s.get("current_price", 0.0)
+                qty   = s.get("qty", 0)
+                ep    = s.get("entry_price", 0.0)
+                cp    = s.get("current_price", 0.0)
                 pl    = s.get("unrealized_pl", 0.0)
-                lines.append(f"    SHORT {sym}: price=${price:.2f} unrealized_pl=${pl:+.2f}")
+                plpc  = s.get("unrealized_plpc", 0.0)
+                exp   = s.get("exposure_pct", 0.0)
+                lines.append(
+                    f"    SHORT {sym}: qty={qty} entry=${ep:.2f} now=${cp:.2f} "
+                    f"P&L=${pl:+.2f} ({plpc:+.1f}%) exposure={exp:.1f}%"
+                )
         else:
             lines.append("  No active algo short positions at this time.")
+        exp_usd = algo_short_context.get("short_exposure_usd", 0.0)
         exp_pct = algo_short_context.get("short_exposure_pct", 0.0)
-        lines.append(f"  Total short exposure: {exp_pct:.1f}% of equity")
+        lines.append(f"  Total short exposure: ${exp_usd:,.0f} ({exp_pct:.1f}% of equity)")
         lines.append(
             "  NOTE: The short scanner runs INDEPENDENTLY. "
             "Do not include SPY/QQQ/XLK/XLF/XLE/IWM as direct short allocations — "

@@ -190,15 +190,15 @@ def _compute_short_size(equity: float, price: float, atr: float) -> int:
     Risk-based position sizing for a short entry.
     Risk per trade = 1% of equity.
     Stop distance = 2× ATR (the buy-to-cover stop is placed 2× ATR above fill).
-    Returns whole number of shares (math.floor), minimum 1.
+    Returns whole number of shares (math.floor).
+    Returns 0 if floor(notional/price) < 1 — caller must skip the entry.
     """
     stop_distance = max(2.0 * atr, price * 0.01)   # guard: at least 1% of price
     risk_dollars = equity * RISK_PER_TRADE_PCT
     notional = risk_dollars / (stop_distance / price)  # notional = risk / (stop_pct)
     max_notional = equity * MAX_POSITION_PCT
     notional = min(notional, max_notional)
-    qty = math.floor(notional / price)
-    return max(1, qty)
+    return math.floor(notional / price)  # returns 0 if floor < 1 — caller skips
 
 
 # ── Double-dip prevention ────────────────────────────────────────────────────
@@ -283,10 +283,18 @@ def _try_enter_short(
         )
         return None
 
+    # Sizing: skip if floor(notional/price) < 1 share
+    qty = _compute_short_size(equity, price, atr)
+    if qty < 1:
+        logger.info(
+            f"ShortScanner | {ticker} — qty < 1 share at current sizing "
+            f"(equity=${equity:,.0f}, price=${price:.2f}) — skipping"
+        )
+        return None
+
     # Margin check
     acct = get_account()
     buying_power = float(acct.get("buying_power", 0.0))
-    qty = _compute_short_size(equity, price, atr)
     notional_required = qty * price
     if buying_power < notional_required:
         logger.warning(
@@ -452,6 +460,26 @@ def _try_exit_short(
         delete_stop(ticker)
         _algo_short_state.pop(ticker, None)
         logger.info(f"ShortScanner | {ticker} covered: {reason}")
+
+        # Journal log the exit
+        try:
+            entry_price = float(pos.get("avg_entry_price") or current_price)
+            notional_closed = qty * current_price
+            pl = float(pos.get("unrealized_pl", 0.0))
+            from analysis.trade_journal import log_trade
+            log_trade(
+                ticker=ticker,
+                asset_class="direct_short",
+                conviction_score=0.0,
+                kelly_fraction=0.0,
+                fill_price=current_price,
+                intended_price=current_price,
+                notional_usd=notional_closed,
+                thesis=f"Algo short EXIT: {reason} | entry=${entry_price:.2f} pl=${pl:+.2f}",
+            )
+        except Exception as _log_exc:
+            logger.debug(f"ShortScanner | Exit journal log failed for {ticker}: {_log_exc}")
+
         return {
             "action":  "short_exit",
             "ticker":  ticker,
@@ -574,7 +602,26 @@ def run_scan(
                         except Exception:
                             pass
                 else:
-                    result["skips"].append({"ticker": ticker, "reason": "entry blocked"})
+                    skip_reason = "entry blocked"
+                    result["skips"].append({"ticker": ticker, "reason": skip_reason})
+                    # Journal-log entry-signal skips (borrow/margin/exposure blocks)
+                    try:
+                        from analysis.trade_journal import log_trade
+                        log_trade(
+                            ticker=ticker,
+                            asset_class="direct_short",
+                            conviction_score=0.0,
+                            kelly_fraction=0.0,
+                            fill_price=signals["close"],
+                            intended_price=signals["close"],
+                            notional_usd=0.0,
+                            thesis=(
+                                f"Algo short SKIP ({skip_reason}): "
+                                f"Z={signals['zscore']:.2f} RSI={signals['rsi']:.1f}"
+                            ),
+                        )
+                    except Exception:
+                        pass
             else:
                 result["skips"].append({
                     "ticker": ticker,
@@ -582,6 +629,10 @@ def run_scan(
                     "z":      signals["zscore"],
                     "rsi":    signals["rsi"],
                 })
+                logger.debug(
+                    f"ShortScanner | SCAN {ticker}: "
+                    f"Z={signals['zscore']:.2f} RSI={signals['rsi']:.1f} — signal not met"
+                )
 
         except Exception as exc:
             logger.error(f"ShortScanner | Unexpected error on {ticker}: {exc}")

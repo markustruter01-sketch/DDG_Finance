@@ -386,23 +386,41 @@ async def run_analysis_cycle(
     _algo_short_ctx: dict | None = None
     if not crypto_only:
         try:
-            from execution.short_scanner import get_algo_short_state
             from execution.broker import get_positions as _gpos_llm
-            _short_state = get_algo_short_state()
-            if _short_state:
-                _positions_now = _gpos_llm()
-                _open_shorts = [
-                    p for p in _positions_now
-                    if str(p.get("side", "long")).lower() == "short"
-                    and p["symbol"] in _short_state
-                ]
+            _positions_now = _gpos_llm()
+            # Source of truth: all short-side positions in the account (survives restarts)
+            _open_shorts_raw = [
+                p for p in _positions_now
+                if str(p.get("side", "long")).lower() == "short"
+                and p.get("symbol") in {"SPY", "QQQ", "XLK", "XLF", "XLE", "IWM"}
+            ]
+            if _open_shorts_raw:
+                _equity_now = float(account_state.get("equity", 1.0)) or 1.0
+                _total_short_usd = sum(abs(float(p.get("market_value", 0.0))) for p in _open_shorts_raw)
+                _open_shorts_fmt = []
+                for _p in _open_shorts_raw:
+                    _ep  = float(_p.get("avg_entry_price") or _p.get("current_price", 0.0))
+                    _cp  = float(_p.get("current_price", 0.0))
+                    _qty = abs(float(_p.get("qty", 0.0)))
+                    _pl  = float(_p.get("unrealized_pl", 0.0))
+                    _plpc = float(_p.get("unrealized_plpc", 0.0)) * 100
+                    _mv  = abs(float(_p.get("market_value", 0.0)))
+                    _open_shorts_fmt.append({
+                        "symbol":        _p.get("symbol"),
+                        "side":          "short",
+                        "qty":           _qty,
+                        "entry_price":   round(_ep, 4),
+                        "current_price": round(_cp, 4),
+                        "unrealized_pl": round(_pl, 2),
+                        "unrealized_plpc": round(_plpc, 2),
+                        "market_value":  round(_mv, 2),
+                        "exposure_pct":  round(_mv / _equity_now * 100, 2),
+                    })
                 _algo_short_ctx = {
                     "activated":          True,
-                    "open_shorts":        _open_shorts,
-                    "short_exposure_pct": sum(
-                        abs(float(p.get("market_value", 0.0)))
-                        for p in _open_shorts
-                    ) / max(float(account_state.get("equity", 1.0)), 1.0) * 100,
+                    "open_shorts":        _open_shorts_fmt,
+                    "short_exposure_usd": round(_total_short_usd, 2),
+                    "short_exposure_pct": round(_total_short_usd / _equity_now * 100, 2),
                 }
         except Exception as _ctx_exc:
             logger.debug(f"Analyzer | Algo short context build failed (non-fatal): {_ctx_exc}")

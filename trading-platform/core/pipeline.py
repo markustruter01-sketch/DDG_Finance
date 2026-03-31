@@ -459,8 +459,10 @@ async def _run_pipeline_inner(
         kraken_equity = 0.0
         if _status_path.exists():
             _bot_state = _j.loads(_status_path.read_text())
-            _ps = _bot_state.get("paper_summary") or {}
-            kraken_equity = float(_ps.get("total_equity_usd", 0.0) or 0.0)
+            kraken_equity = float(_bot_state.get("total_equity_usd", 0.0) or 0.0)
+            if kraken_equity == 0.0:
+                _ps = _bot_state.get("paper_summary") or {}
+                kraken_equity = float(_ps.get("total_equity_usd", 0.0) or 0.0)
         alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
         regime = _state.get("last_regime")
         insert_equity_snapshot(

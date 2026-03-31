@@ -532,7 +532,7 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
                 cur.execute(f"""
                     SELECT {', '.join(cols)}
                     FROM   trades
-                    WHERE  status IN ('Closed_Win', 'Closed_Loss')
+                    WHERE  status IN ('Closed_Win', 'Closed_Loss', 'Closed')
                     ORDER  BY date DESC
                     LIMIT  %s
                 """, (limit,))
@@ -542,7 +542,7 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
         with _sqlite_conn() as conn:
             rows = conn.execute(f"""
                 SELECT {', '.join(cols)}
-                FROM trades WHERE status IN ('Closed_Win', 'Closed_Loss')
+                FROM trades WHERE status IN ('Closed_Win', 'Closed_Loss', 'Closed')
                 ORDER BY date DESC LIMIT ?
             """, (limit,)).fetchall()
         raw = [dict(r) for r in rows]
@@ -551,14 +551,21 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
     # symbol / pnl_pct / pnl_usd / exit_reason / closed_at
     result = []
     for r in raw:
+        status = r["status"]
+        pnl = r["pnl_percentage"]
+        if status == "Closed":
+            if pnl is not None:
+                status = "Closed_Win" if pnl > 0 else "Closed_Loss"
+            else:
+                continue
         result.append({
             "trade_id":    r["trade_id"],
             "symbol":      r["ticker"],
-            "pnl_pct":     r["pnl_percentage"],
-            "pnl_usd":     None,          # not stored in Alpaca journal (no position size)
-            "exit_reason": None,          # not stored in Alpaca journal schema
+            "pnl_pct":     pnl,
+            "pnl_usd":     None,
+            "exit_reason": None,
             "closed_at":   str(r["date"]),
-            "status":      r["status"],
+            "status":      status,
         })
     return result
 
@@ -643,8 +650,8 @@ def get_journal_summary() -> dict:
                     SELECT
                         COUNT(*)                                           AS total,
                         SUM(CASE WHEN status = 'Active'      THEN 1 END)  AS active,
-                        SUM(CASE WHEN status = 'Closed_Win'  THEN 1 END)  AS wins,
-                        SUM(CASE WHEN status = 'Closed_Loss' THEN 1 END)  AS losses,
+                        SUM(CASE WHEN status = 'Closed_Win' OR (status = 'Closed' AND pnl_percentage > 0) THEN 1 END) AS wins,
+                        SUM(CASE WHEN status = 'Closed_Loss' OR (status = 'Closed' AND pnl_percentage <= 0) THEN 1 END) AS losses,
                         AVG(CASE WHEN status != 'Active' THEN pnl_percentage END) AS avg_pnl
                     FROM trades
                 """)
@@ -656,8 +663,8 @@ def get_journal_summary() -> dict:
             row = conn.execute("""
                 SELECT COUNT(*) AS total,
                     SUM(CASE WHEN status='Active' THEN 1 END) AS active,
-                    SUM(CASE WHEN status='Closed_Win' THEN 1 END) AS wins,
-                    SUM(CASE WHEN status='Closed_Loss' THEN 1 END) AS losses,
+                    SUM(CASE WHEN status='Closed_Win' OR (status='Closed' AND pnl_percentage > 0) THEN 1 END) AS wins,
+                    SUM(CASE WHEN status='Closed_Loss' OR (status='Closed' AND pnl_percentage <= 0) THEN 1 END) AS losses,
                     AVG(CASE WHEN status!='Active' THEN pnl_percentage END) AS avg_pnl
                 FROM trades
             """).fetchone()

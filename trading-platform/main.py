@@ -1155,19 +1155,20 @@ async def journal() -> dict:
     summary = get_journal_summary()
     alpaca_trades = get_all_trades()
     kraken_trades = _load_kraken_journal_trades()
-    # Merge and sort by date descending (newest first)
-    all_trades = alpaca_trades + kraken_trades
+    alpaca_only = [t for t in alpaca_trades if not t.get("trade_id", "").startswith("KRK-")]
+    all_trades = alpaca_only + kraken_trades
     try:
         all_trades.sort(key=lambda t: (t.get("date") or ""), reverse=True)
     except Exception:
         pass
-    # Update summary totals to include Kraken
-    k_wins  = sum(1 for t in kraken_trades if t.get("pnl_percentage", 0) > 0)
-    k_total = len(kraken_trades)
-    combined_wins  = (summary.get("wins", 0)  or 0) + k_wins
-    combined_total = (summary.get("total", 0) or 0) + k_total
-    combined_losses = combined_total - combined_wins
-    # Recalculate avg_pnl across all trades
+    closed_alpaca = [t for t in alpaca_only if t.get("status", "").startswith("Closed")]
+    a_wins  = sum(1 for t in closed_alpaca if t.get("status") == "Closed_Win" or (t.get("status") == "Closed" and (t.get("pnl_percentage") or 0) > 0))
+    a_losses = sum(1 for t in closed_alpaca if t.get("status") == "Closed_Loss" or (t.get("status") == "Closed" and (t.get("pnl_percentage") or 0) <= 0 and t.get("pnl_percentage") is not None))
+    k_wins  = sum(1 for t in kraken_trades if (t.get("pnl_percentage") or 0) > 0)
+    k_losses = sum(1 for t in kraken_trades if t.get("pnl_percentage") is not None and (t.get("pnl_percentage") or 0) <= 0)
+    combined_wins  = a_wins + k_wins
+    combined_losses = a_losses + k_losses
+    combined_total = combined_wins + combined_losses
     all_pnl = [
         t.get("pnl_percentage")
         for t in all_trades

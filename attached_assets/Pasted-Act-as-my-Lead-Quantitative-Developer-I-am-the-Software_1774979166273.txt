@@ -1,0 +1,24 @@
+Act as my Lead Quantitative Developer. I am the Software Architect. Our diagnostic report shows the bots are currently 'frozen' in a Bear/Risk-Off regime (VIX > 30), missing major moves because our risk filters are too rigid for toxic market conditions.
+​We need to upgrade logic.py and the execution scripts for both the Alpaca and Kraken bots to implement Dynamic Volatility Scaling. Execute this in the following stages:
+​Stage 1: The 'Toxic Market' ATR Integration
+​Calculate the 14-period ATR (Average True Range) for all active pairs/tickers.
+​Replace all static percentage Stop-Losses with ATR-Based Stops (e.g., Stop Loss = Entry - (2.0 * ATR)). This allows the bot to stay in trades during high-volatility 'whipsaws' that would normally trigger a 2% stop.
+​Stage 2: Dynamic Position Sizing (The Risk Balancer)
+​To offset the wider ATR stops, implement a Volatility Inverse Scalar.
+​If Market Volatility (ATR) is 2x the 30-day average, automatically slash the position size from 15% to 7.5%.
+​Stage 3: Unfreezing the Kraken (VPIN & Momentum Flex)
+​Implement a Dynamic VPIN Cap: If the 24h volume is 50% above mean, raise the VPIN entry cap to 0.82.
+​Add a 'Contrarian Scout' rule: If RSI < 25 and VIX > 30, allow a 'Tier 1' entry (3% equity) even if long-term momentum is negative.
+​Stage 3.5: VPIN Logic Sanity Check (The Lock-out Fix)
+​The Problem: The VPIN math is currently 'permanently' locking out trades.
+​The Fix: Implement a VPIN Decay & Convergence Check. If VPIN remains above the threshold for more than 4 consecutive cycles while the price is stabilizing (Lowering Volatility), the bot must 'Decay' the VPIN importance by 10% per cycle.
+​Override: Add a hard override: If RSI < 20 (Deep Oversold), the VPIN filter is bypassed for a 'Micro-Lot' (1% equity) to ensure we never miss the absolute bottom of a move due to high volume.
+​Stage 4: The 'Fun' Visual Diagnostic (SaaS Side)
+​On the public SaaS dashboard, create a 'Market Weather' visual.
+​If VIX > 30, display a 'Toxic Storm' animation with glitch-effects and red glowing wires.
+​Show a 'Shield Level' percentage that represents how much of the 15% allocation the bot is currently willing to use.
+​Acknowledge and provide the updated logic for logic.py first."
+​Why the Stage 3.5 Update is Critical
+​VPIN Decay: VPIN is based on "Volume Buckets." In a massive crash, those buckets fill instantly, keeping the VPIN score high even after the danger has passed. The "Decay" logic tells the bot: "If the danger was 1 hour ago and the price is now steady, stop being scared of the old volume."
+​The RSI Bypass: This is your "Insurance Policy." If Bitcoin drops so fast that the RSI hits 20, the move is so overextended that the probability of a bounce is massive. We tell the bot to ignore the VPIN "Informed Trading" warning for a tiny 1% trade just so we have "skin in the game" for the rebound.
+​Fixing the $0.00 Balance: I've included a silent instruction in the "Dev Mode" logic to ensure the Kraken bot re-polls the API to find your $100k paper balance.

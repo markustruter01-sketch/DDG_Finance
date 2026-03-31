@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-31T09:03:05.738500+00:00",
+  "last_updated": "2026-03-31T09:07:50.800900+00:00",
   "deployed_usd": 19713.81,
   "deployed_pct": 24.9,
   "deployable_ceiling_pct": 80.0,
@@ -11,112 +11,112 @@
       "side": "short",
       "qty": 7341.622685,
       "entry_price": 1.3415,
-      "current_price": 1.3121,
+      "current_price": 1.3145,
       "size_usd": 9848.64,
-      "unrealized_pnl_usd": 215.48,
-      "unrealized_pnl_pct": 2.1879,
+      "unrealized_pnl_usd": 198.0,
+      "unrealized_pnl_pct": 2.0105,
       "stop_loss_price": 1.3683,
-      "take_profit_price": 1.3777,
+      "take_profit_price": 1.3802,
       "entry_time": "2026-03-30T02:08:13.927310+00:00",
-      "best_price": 1.3121
+      "best_price": 1.3145
     },
     {
       "symbol": "ATOM/USD",
       "side": "short",
       "qty": 5789.419014,
       "entry_price": 1.704,
-      "current_price": 1.6908,
+      "current_price": 1.6971,
       "size_usd": 9865.17,
-      "unrealized_pnl_usd": 76.42,
-      "unrealized_pnl_pct": 0.7746,
+      "unrealized_pnl_usd": 39.95,
+      "unrealized_pnl_pct": 0.4049,
       "stop_loss_price": 1.7381,
-      "take_profit_price": 1.7753,
+      "take_profit_price": 1.782,
       "entry_time": "2026-03-31T08:26:13.900862+00:00",
-      "best_price": 1.6908
+      "best_price": 1.6971
     }
   ],
   "signals": [
     {
       "symbol": "BTC/USD",
-      "rsi": 41.4,
-      "z_score": -1.061,
-      "price": 66650.4,
+      "rsi": 43.7,
+      "z_score": -0.779,
+      "price": 66796.8,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "ETH/USD",
-      "rsi": 45.7,
-      "z_score": -0.703,
-      "price": 2035.64,
+      "rsi": 47.7,
+      "z_score": -0.46,
+      "price": 2040.3,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "SOL/USD",
-      "rsi": 40.2,
-      "z_score": -1.514,
-      "price": 82.13,
+      "rsi": 41.7,
+      "z_score": -1.328,
+      "price": 82.28,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "XRP/USD",
-      "rsi": 34.9,
-      "z_score": -1.652,
-      "price": 1.3121,
+      "rsi": 37.0,
+      "z_score": -1.439,
+      "price": 1.3145,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 2.19,
+      "pnl_pct": 2.01,
       "side": "short"
     },
     {
       "symbol": "ADA/USD",
-      "rsi": 38.8,
-      "z_score": -1.747,
-      "price": 0.2413,
+      "rsi": 40.3,
+      "z_score": -1.518,
+      "price": 0.2419,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "AVAX/USD",
-      "rsi": 43.6,
-      "z_score": -1.033,
-      "price": 8.8,
+      "rsi": 44.3,
+      "z_score": -0.917,
+      "price": 8.81,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "LINK/USD",
-      "rsi": 44.1,
-      "z_score": -1.041,
-      "price": 8.6267,
+      "rsi": 45.0,
+      "z_score": -0.946,
+      "price": 8.6346,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "DOT/USD",
-      "rsi": 40.1,
-      "z_score": -1.252,
-      "price": 1.2381,
+      "rsi": 40.6,
+      "z_score": -1.16,
+      "price": 1.239,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     },
     {
       "symbol": "ATOM/USD",
-      "rsi": 55.0,
-      "z_score": 0.649,
-      "price": 1.6908,
+      "rsi": 59.0,
+      "z_score": 1.116,
+      "price": 1.6971,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 0.77,
+      "pnl_pct": 0.4,
       "side": "short"
     },
     {
       "symbol": "LTC/USD",
-      "rsi": 47.7,
-      "z_score": -0.119,
-      "price": 53.6,
+      "rsi": 48.5,
+      "z_score": 0.009,
+      "price": 53.63,
       "signal_type": "skip_vpin_defensive",
       "has_position": false
     }
@@ -124,66 +124,66 @@
   "microstructure": {
     "BTC/USD": {
       "symbol": "BTC/USD",
-      "ofi": -0.2567,
-      "vamp": 66647.911969,
-      "vpin": 0.9421
+      "ofi": -0.4382,
+      "vamp": 66795.393802,
+      "vpin": 0.9764
     },
     "ETH/USD": {
       "symbol": "ETH/USD",
-      "ofi": 0.7986,
-      "vamp": 2035.8257,
-      "vpin": 0.8469
+      "ofi": -0.5111,
+      "vamp": 2039.163458,
+      "vpin": 0.8982
     },
     "SOL/USD": {
       "symbol": "SOL/USD",
-      "ofi": 0.2054,
-      "vamp": 82.175601,
-      "vpin": 0.9831
+      "ofi": 0.0889,
+      "vamp": 82.266974,
+      "vpin": 0.9654
     },
     "XRP/USD": {
       "symbol": "XRP/USD",
-      "ofi": -0.2901,
-      "vamp": 1.312169,
-      "vpin": 0.9006
+      "ofi": 0.3238,
+      "vamp": 1.31427,
+      "vpin": 0.8976
     },
     "ADA/USD": {
       "symbol": "ADA/USD",
-      "ofi": -0.6093,
-      "vamp": 0.241638,
-      "vpin": 0.719
+      "ofi": -0.2176,
+      "vamp": 0.242028,
+      "vpin": 0.7461
     },
     "AVAX/USD": {
       "symbol": "AVAX/USD",
-      "ofi": 0.1698,
-      "vamp": 8.796079,
-      "vpin": 0.7206
+      "ofi": 0.1485,
+      "vamp": 8.806107,
+      "vpin": 0.7453
     },
     "LINK/USD": {
       "symbol": "LINK/USD",
-      "ofi": -0.3214,
-      "vamp": 8.627371,
-      "vpin": 0.7836
+      "ofi": -0.0601,
+      "vamp": 8.626851,
+      "vpin": 0.7995
     },
     "DOT/USD": {
       "symbol": "DOT/USD",
-      "ofi": -0.6462,
-      "vamp": 1.239427,
-      "vpin": 0.6724
+      "ofi": 0.3087,
+      "vamp": 1.240724,
+      "vpin": 0.69
     },
     "ATOM/USD": {
       "symbol": "ATOM/USD",
-      "ofi": 0.6359,
-      "vamp": 1.692193,
-      "vpin": 0.5674
+      "ofi": -0.3559,
+      "vamp": 1.693873,
+      "vpin": 0.5054
     },
     "LTC/USD": {
       "symbol": "LTC/USD",
-      "ofi": -0.6407,
-      "vamp": 53.584487,
-      "vpin": 0.8625
+      "ofi": -0.018,
+      "vamp": 53.606729,
+      "vpin": 0.8444
     }
   },
-  "thinking_text": "\u2693 SHORT XRP +2.19% \u00b7 Z=-1.65 \u00b7 SHORT ATOM +0.77% \u00b7 Z=+0.65",
+  "thinking_text": "\u2693 SHORT XRP +2.01% \u00b7 Z=-1.44 \u00b7 SHORT ATOM +0.40% \u00b7 Z=+1.12",
   "adaptive_params": {
     "active": {
       "ZSCORE_ENTRY": 1.0,
@@ -201,6 +201,6 @@
     },
     "reasons": {},
     "adapted_at": "2026-03-31T08:54:33.489998+00:00",
-    "next_adapt_in_hours": 5.9
+    "next_adapt_in_hours": 5.8
   }
 }

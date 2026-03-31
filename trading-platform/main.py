@@ -2884,12 +2884,16 @@ async def kraken_status() -> dict:
     live_state_file = _Path("../kraken-bot/live_state.json")
 
     # ── Live telemetry (non-persistent) — always from live_state.json ──────────
+    # live_state.json is ALLOWED for: signals, microstructure, adaptive_params,
+    # thinking_text, AND open_positions (enriched with current_price / unrealized
+    # P&L / stop/tp prices — fields that only exist while the bot is running).
     _live_telemetry: dict = {
-        "signals":       [],
+        "signals":        [],
         "microstructure": {},
-        "thinking_text": "",
+        "thinking_text":  "",
         "adaptive_params": {},
     }
+    _live_open_positions: list = []
     try:
         if live_state_file.exists():
             _ls = _json.loads(live_state_file.read_text())
@@ -2897,6 +2901,8 @@ async def kraken_status() -> dict:
             _live_telemetry["microstructure"]  = _ls.get("microstructure", {})
             _live_telemetry["thinking_text"]   = _ls.get("thinking_text", "")
             _live_telemetry["adaptive_params"] = _ls.get("adaptive_params", {})
+            # open_positions from live_state: enriched with current_price, P&L, stop/tp
+            _live_open_positions = _ls.get("open_positions", [])
     except Exception:
         pass
 
@@ -2939,7 +2945,7 @@ async def kraken_status() -> dict:
             # ── 2. Portfolio (cash + open positions) ────────────────────────
             cash_usd      = 0.0
             starting      = 100_000.0
-            open_positions: list = []
+            _db_positions: list = []
             with _pgconn.cursor() as _pc:
                 _pc.execute(
                     "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
@@ -2949,11 +2955,18 @@ async def kraken_status() -> dict:
                     starting, cash_usd, _pos_raw = _pr
                     if isinstance(_pos_raw, str):
                         _pos_raw = _json.loads(_pos_raw)
-                    # positions is a JSONB dict {symbol: {...}} — convert to list for dashboard
+                    # positions is a JSONB dict {symbol: {...}} — inject symbol key and convert to list
                     if isinstance(_pos_raw, dict):
-                        open_positions = list(_pos_raw.values())
+                        for _sym, _pdata in _pos_raw.items():
+                            _entry = dict(_pdata)
+                            _entry.setdefault("symbol", _sym)
+                            _db_positions.append(_entry)
                     elif isinstance(_pos_raw, list):
-                        open_positions = _pos_raw
+                        _db_positions = _pos_raw
+
+            # Prefer live_state positions (enriched: current_price, P&L, stop/tp)
+            # Fall back to DB positions (which include symbol from key, but lack live fields)
+            open_positions: list = _live_open_positions if _live_open_positions else _db_positions
 
             # ── 3. Trades + paper_summary ────────────────────────────────────
             with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
@@ -3861,10 +3874,18 @@ async def export_diagnostic_report() -> dict:
                         _pos_raw = _rpr[2]
                         if isinstance(_pos_raw, str):
                             _pos_raw = _json.loads(_pos_raw)
+                        _db_pos_list = []
+                        if isinstance(_pos_raw, dict):
+                            for _s, _pd in _pos_raw.items():
+                                _ep = dict(_pd)
+                                _ep.setdefault("symbol", _s)
+                                _db_pos_list.append(_ep)
+                        elif isinstance(_pos_raw, list):
+                            _db_pos_list = _pos_raw
                         _pf = {
                             "starting_balance_usd": float(_rpr[0] or 100_000),
                             "cash_usd":             float(_rpr[1] or 0),
-                            "open_positions": list(_pos_raw.values()) if isinstance(_pos_raw, dict) else (_pos_raw or []),
+                            "open_positions": _db_pos_list,
                         }
                 with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rtc:
                     _rtc.execute(
@@ -3899,7 +3920,9 @@ async def export_diagnostic_report() -> dict:
     k_paused     = _ks.get("bot_paused", False)
     k_paper      = _ks.get("paper_trading", True)
     k_updated    = _ks.get("last_updated", "N/A")
-    k_positions  = _pf.get("open_positions", []) or []
+    # Prefer live_state positions (enriched: current_price, P&L, stop/tp); fall back to DB
+    _live_rpt_positions = _live_rpt.get("open_positions", [])
+    k_positions  = _live_rpt_positions if _live_rpt_positions else (_pf.get("open_positions", []) or [])
     k_signals    = _live_rpt.get("signals", []) or []
     k_cb:   dict = {}
     k_adaptive   = _live_rpt.get("adaptive_params", {}) or {}

@@ -1,6 +1,6 @@
 {
   "starting_balance_usd": 100000.0,
-  "cash_usd": 78956.9480785732,
+  "cash_usd": 88984.32371153466,
   "positions": {
     "XRP/USD": {
       "side": "short",
@@ -11,16 +11,6 @@
       "best_price": 1.34148,
       "entry_fee": 25.6065,
       "order_id": "PAPER-XRPUSD-1774836493"
-    },
-    "ATOM/USD": {
-      "side": "short",
-      "entry_price": 1.6708,
-      "size_usd": 9846.08,
-      "size_units": 5893.03327747187,
-      "entry_time": "2026-03-30T02:46:31.656925+00:00",
-      "best_price": 1.6708,
-      "entry_fee": 25.5998,
-      "order_id": "PAPER-ATOMUSD-1774838791"
     }
   },
   "all_trades": [
@@ -370,6 +360,18 @@
       "fees_usd": 50.8969,
       "reason": "mean_reversion_complete",
       "closed_at": "2026-03-31T05:31:11.905021+00:00",
+      "paper": true
+    },
+    {
+      "symbol": "ATOM/USD",
+      "side": "short",
+      "entry_price": 1.6708,
+      "exit_price": 1.706,
+      "pnl_pct": -2.11,
+      "pnl_usd": -259.17,
+      "fees_usd": 51.7389,
+      "reason": "stop",
+      "closed_at": "2026-03-31T08:21:28.959661+00:00",
       "paper": true
     }
   ]

@@ -79,6 +79,7 @@ from config import (
     CB_WINDOW_MINUTES,
     CB_PAUSE_HOURS,
     STATUS_FILE,
+    LIVE_STATE_FILE,
     CONTROL_FILE,
     PAPER_PORTFOLIO_FILE,
     VPIN_ENTRY_BLOCK,
@@ -268,21 +269,78 @@ def _get_persistent_trade_history() -> list[dict]:
     return recent_trades[-20:]
 
 
+def _atomic_json_write(filepath: str, payload: dict) -> None:
+    """
+    Atomically write a JSON payload to filepath using a tmp-then-rename pattern.
+    Validates the tmp file before replacing the live copy so a failed write
+    never corrupts the live file.
+    """
+    _tmp = filepath + ".tmp"
+    try:
+        with open(_tmp, "w") as _f:
+            json.dump(payload, _f, indent=2, default=str)
+        # Validate before rename — protects against mid-stream failures.
+        try:
+            with open(_tmp) as _vf:
+                json.load(_vf)
+        except Exception as _ve:
+            logger.warning(f"Status | {filepath} tmp validation failed — aborting replace: {_ve}")
+            return
+        os.replace(_tmp, filepath)
+    except Exception as exc:
+        logger.warning(f"Status | Could not write {filepath}: {exc}")
+
+
 def write_status(error: str | None = None) -> None:
     """
-    Serialise the bot's current state to STATUS_FILE (kraken-bot/status.json).
-    The 'paper_trading' field lets the dashboard show a clear PAPER badge.
-    Positions are enriched with live P&L, stop/TP prices, and qty for the dashboard table.
+    Write a pure heartbeat to STATUS_FILE (kraken-bot/status.json).
+
+    Contains ONLY the 9 fields required by the auto-heal monitor and the
+    health-architecture node.  Target size: ≤ 1 KB regardless of trade count.
+
+    All larger live-state data (positions, signals, microstructure, adaptive
+    params, thinking_text) is written separately by write_live_state() so that
+    this file stays small.  Trade history lives in paper_portfolio.json.
     """
-    global total_equity, open_positions, circuit_breaker_until, recent_trades, cycle_count
-    global latest_signals, thinking_text, latest_microstructure
+    global total_equity, open_positions, circuit_breaker_until, cycle_count
+
+    cb_active = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
+    cb_until  = circuit_breaker_until.isoformat() if cb_active else None
+
+    paused = is_bot_paused()
+    heartbeat = {
+        "bot_name":         "Davy Jones' Portfolio",
+        "paper_trading":    PAPER_TRADING,
+        "bot_paused":       paused,
+        "status":           "paused_dashboard" if paused else ("paused_circuit_breaker" if cb_active else ("running" if not error else "error")),
+        "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
+        "cycle_count":      cycle_count,
+        "total_equity_usd": round(total_equity, 2),
+        "position_count":   len(open_positions),
+        "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
+        "error":            error,
+    }
+    _atomic_json_write(STATUS_FILE, heartbeat)
+
+
+def write_live_state() -> None:
+    """
+    Write the larger live trading state to LIVE_STATE_FILE (kraken-bot/live_state.json).
+
+    This file is NOT monitored by the auto-heal check; it holds data that
+    the dashboard panels need but that is too large for the heartbeat file:
+      - open_positions (enriched with live P&L, stop/TP prices)
+      - signals        (per-symbol RSI / z-score scan)
+      - microstructure (OFI / VAMP / VPIN per symbol)
+      - thinking_text  (plain-English reasoning from the LLM)
+      - adaptive_params (self-tuning parameter snapshot)
+      - deployment metrics (deployed_usd, deployed_pct, etc.)
+    """
+    global total_equity, open_positions, latest_signals, thinking_text, latest_microstructure
 
     deployed_usd  = sum(p["size_usd"] for p in open_positions.values())
     deployable    = total_equity * (1.0 - CASH_RESERVE)
     deployed_pct  = (deployed_usd / deployable * 100) if deployable > 0 else 0.0
-
-    cb_active = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
-    cb_until  = circuit_breaker_until.isoformat() if cb_active else None
 
     positions_list = []
     for sym, pos in open_positions.items():
@@ -292,7 +350,6 @@ def write_status(error: str | None = None) -> None:
         size          = pos["size_usd"]
         side          = pos["side"]
 
-        # Compute unrealised P&L (use live adaptive params for stop/TP prices)
         _ap = _adaptive.get_active_params()
         if side == "long":
             pnl_usd        = (current_price - entry) / entry * size
@@ -321,51 +378,20 @@ def write_status(error: str | None = None) -> None:
             "best_price":          round(best, 4),
         })
 
-    paused = is_bot_paused()
-    state = {
-        "bot_name":         "Davy Jones' Portfolio",
-        "paper_trading":    PAPER_TRADING,       # ← dashboard reads this for the PAPER badge
-        "bot_paused":       paused,              # ← dashboard toggle writes control.json
-        "status":           "paused_dashboard" if paused else ("paused_circuit_breaker" if cb_active else ("running" if not error else "error")),
-        "last_updated":     datetime.now(tz=timezone.utc).isoformat(),
-        "cycle_count":      cycle_count,
-        "total_equity_usd": round(total_equity, 2),
-        "deployed_usd":     round(deployed_usd, 2),
-        "deployed_pct":     round(deployed_pct, 1),
+    live_state = {
+        "last_updated":           datetime.now(tz=timezone.utc).isoformat(),
+        "deployed_usd":           round(deployed_usd, 2),
+        "deployed_pct":           round(deployed_pct, 1),
         "deployable_ceiling_pct": round((1.0 - CASH_RESERVE) * 100, 0),
-        "cash_reserve_pct": CASH_RESERVE * 100,
-        "open_positions":   positions_list,
-        "position_count":   len(open_positions),
-        "max_positions":    MAX_POSITIONS,
-        "circuit_breaker":  {"active": cb_active, "paused_until": cb_until},
-        # NOTE: recent_trades and paper_summary are intentionally omitted here.
-        # They are read directly from paper_portfolio.json by the FastAPI /kraken/status
-        # and /kraken/performance endpoints.  Keeping them out of status.json prevents
-        # the file from growing beyond ~1 KB regardless of trade count, which is the
-        # root cause of the JSON corruption issue that stalled the bot in production.
-        "signals":          latest_signals,       # per-symbol RSI / z-score scan
-        "microstructure":   latest_microstructure,
-        "thinking_text":    thinking_text,        # plain-English reasoning for dashboard
-        "adaptive_params":  _adaptive.status_snapshot(),
-        "error":            error,
+        "cash_reserve_pct":       CASH_RESERVE * 100,
+        "max_positions":          MAX_POSITIONS,
+        "open_positions":         positions_list,
+        "signals":                latest_signals,
+        "microstructure":         latest_microstructure,
+        "thinking_text":          thinking_text,
+        "adaptive_params":        _adaptive.status_snapshot(),
     }
-
-    try:
-        _tmp_status = STATUS_FILE + ".tmp"
-        with open(_tmp_status, "w") as f:
-            json.dump(state, f, indent=2, default=str)
-        # Validate the written file before atomically replacing the live copy.
-        # If the tmp file is corrupt (e.g. mid-stream failure), we keep the
-        # last-good status.json rather than clobbering it with garbage.
-        try:
-            with open(_tmp_status) as _vf:
-                json.load(_vf)
-        except Exception as _ve:
-            logger.warning(f"Status | Tmp file failed validation — aborting replace: {_ve}")
-        else:
-            os.replace(_tmp_status, STATUS_FILE)
-    except Exception as exc:
-        logger.warning(f"Status | Could not write {STATUS_FILE}: {exc}")
+    _atomic_json_write(LIVE_STATE_FILE, live_state)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -567,11 +593,13 @@ def run_cycle() -> None:
     # This guarantees the timestamp is fresh even if the cycle exits early or
     # the workflow was paused between cycles by the hosting environment.
     write_status()
+    write_live_state()
 
     # ── Pause check — dashboard can pause the bot without stopping the workflow ─
     if is_bot_paused():
         logger.info("Cycle | Bot is PAUSED by dashboard — skipping signal processing")
         write_status()
+        write_live_state()
         return
 
     # ── Step 1: Refresh equity if it's been more than 60 minutes ─────────────
@@ -582,6 +610,7 @@ def run_cycle() -> None:
     if total_equity <= 0:
         logger.warning("Cycle | Total equity is zero or unavailable — skipping cycle")
         write_status(error="Could not determine account balance")
+        write_live_state()
         return
 
     # In paper mode, resync positions from the persistent paper state each cycle
@@ -595,6 +624,7 @@ def run_cycle() -> None:
         remaining = (circuit_breaker_until - now_utc).seconds // 60
         logger.warning(f"Cycle | Circuit breaker active — {remaining}min remaining, all trading paused")
         write_status()
+        write_live_state()
         return
 
     # ── Step 3: Process each symbol ──────────────────────────────────────────
@@ -738,6 +768,7 @@ def run_cycle() -> None:
                     f"in {CB_WINDOW_MINUTES}min — ALL trading paused until {pause_until.strftime('%H:%M UTC')}"
                 )
                 write_status()
+                write_live_state()
                 return
 
             # ── 3d. Manage existing position (if we have one) ─────────────────
@@ -1095,6 +1126,7 @@ def run_cycle() -> None:
 
     # ── Step 5: Write status for the dashboard ────────────────────────────────
     write_status()
+    write_live_state()
     logger.debug(
         f"Cycle #{cycle_count} complete | "
         f"{'PAPER' if PAPER_TRADING else 'LIVE'} | "
@@ -1140,11 +1172,13 @@ def main() -> None:
         except KeyboardInterrupt:
             logger.info("Bot | Keyboard interrupt — shutting down gracefully.")
             write_status(error="Manually stopped")
+            write_live_state()
             break
 
         except Exception as exc:
             logger.error(f"Bot | Unexpected error: {exc} — restarting in {RESTART_SLEEP_SECONDS}s")
             write_status(error=str(exc))
+            write_live_state()
             time.sleep(RESTART_SLEEP_SECONDS)
 
 

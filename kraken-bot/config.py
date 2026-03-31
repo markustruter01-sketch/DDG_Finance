@@ -188,5 +188,10 @@ CB_PAUSE_HOURS    = 2
 # PAPER_PORTFOLIO_FILE so it survives bot restarts.
 
 STATUS_FILE           = "kraken-bot/status.json"
+# Live trading state (positions, signals, microstructure, thinking_text) is written
+# to LIVE_STATE_FILE separately so that STATUS_FILE stays a tiny heartbeat (≤1 KB).
+# STATUS_FILE is what the auto-heal monitor checks; LIVE_STATE_FILE is what the
+# dashboard panels read for real-time position/signal data.
+LIVE_STATE_FILE       = "kraken-bot/live_state.json"
 PAPER_PORTFOLIO_FILE  = "kraken-bot/paper_portfolio.json"
 CONTROL_FILE          = "kraken-bot/control.json"

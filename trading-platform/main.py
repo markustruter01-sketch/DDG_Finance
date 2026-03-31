@@ -2791,34 +2791,34 @@ async def data_snapshot() -> dict:
 @router.get("/kraken/status", tags=["Kraken Bot"])
 async def kraken_status() -> dict:
     """
-    Read and return the Kraken bot's status.json file.
-    Written by kraken-bot/main.py after every trading cycle.
-    Returns a safe empty-state if the bot hasn't run yet.
+    Read and return the Kraken bot's full runtime state for the dashboard.
+
+    status.json is now a pure heartbeat (≤1 KB).  The larger live fields
+    (positions, signals, microstructure, adaptive_params, thinking_text, deploy
+    metrics) come from live_state.json.  Trade history comes from
+    paper_portfolio.json.  This endpoint merges all three sources.
     """
     import json as _json
     from pathlib import Path as _Path
 
-    status_file = _Path("../kraken-bot/status.json")  # server cwd = trading-platform/
-    if not status_file.exists():
-        return {
-            "bot_name":         "Davy Jones' Portfolio",
-            "status":           "not_started",
-            "last_updated":     None,
-            "cycle_count":      0,
-            "total_equity_usd": 0,
-            "deployed_usd":     0,
-            "deployed_pct":     0,
-            "deployable_ceiling_pct": 80,
-            "cash_reserve_pct": 20,
-            "open_positions":   [],
-            "position_count":   0,
-            "max_positions":    3,
-            "circuit_breaker":  {"active": False, "paused_until": None},
-            "recent_trades":    [],
-            "error":            None,
-        }
+    status_file     = _Path("../kraken-bot/status.json")
+    live_state_file = _Path("../kraken-bot/live_state.json")
+
+    _EMPTY_LIVE = {
+        "deployed_usd":           0,
+        "deployed_pct":           0,
+        "deployable_ceiling_pct": 80,
+        "cash_reserve_pct":       20,
+        "max_positions":          3,
+        "open_positions":         [],
+        "signals":                [],
+        "microstructure":         {},
+        "thinking_text":          "",
+        "adaptive_params":        {},
+    }
+
     def _load_paper_portfolio_trades() -> tuple[list, dict]:
-        """Read trade history and paper_summary from paper_portfolio.json (separate file)."""
+        """Read trade history and compute paper_summary from paper_portfolio.json."""
         pf_file = _Path("../kraken-bot/paper_portfolio.json")
         if not pf_file.exists():
             return [], {}
@@ -2839,17 +2839,17 @@ async def kraken_status() -> dict:
         except Exception:
             return [], {}
 
-    try:
-        raw = _json.loads(status_file.read_text())
-        # Enrich slim heartbeat with trade history sourced from paper_portfolio.json.
-        # recent_trades and paper_summary are no longer embedded in status.json
-        # (they caused file growth → corruption); read them separately here.
-        _trades, _summary = _load_paper_portfolio_trades()
-        raw.setdefault("recent_trades", _trades)
-        raw.setdefault("paper_summary", _summary if _summary else None)
-        return raw
-    except Exception as exc:
-        logger.warning(f"[kraken/status] Could not parse status.json ({exc}) — returning empty state")
+    def _load_live_state() -> dict:
+        """Read live_state.json (positions, signals, microstructure, etc.)."""
+        if not live_state_file.exists():
+            return _EMPTY_LIVE.copy()
+        try:
+            return _json.loads(live_state_file.read_text())
+        except Exception:
+            return _EMPTY_LIVE.copy()
+
+    if not status_file.exists():
+        live = _load_live_state()
         _trades, _summary = _load_paper_portfolio_trades()
         return {
             "bot_name":         "Davy Jones' Portfolio",
@@ -2857,14 +2857,37 @@ async def kraken_status() -> dict:
             "last_updated":     None,
             "cycle_count":      0,
             "total_equity_usd": 0,
-            "deployed_usd":     0,
-            "deployed_pct":     0,
-            "deployable_ceiling_pct": 80,
-            "cash_reserve_pct": 20,
-            "open_positions":   [],
-            "position_count":   0,
-            "max_positions":    3,
             "circuit_breaker":  {"active": False, "paused_until": None},
+            "position_count":   0,
+            "error":            None,
+            **live,
+            "recent_trades":    _trades,
+            "paper_summary":    _summary if _summary else None,
+        }
+
+    _trades, _summary = _load_paper_portfolio_trades()
+    live = _load_live_state()
+    try:
+        heartbeat = _json.loads(status_file.read_text())
+        # Merge live_state fields into the heartbeat response.
+        # live_state.json holds all the large fields removed from status.json.
+        for _k, _v in live.items():
+            heartbeat.setdefault(_k, _v)
+        # Trade history comes from paper_portfolio.json (not status.json).
+        heartbeat.setdefault("recent_trades", _trades)
+        heartbeat.setdefault("paper_summary", _summary if _summary else None)
+        return heartbeat
+    except Exception as exc:
+        logger.warning(f"[kraken/status] Could not parse status.json ({exc}) — returning empty state")
+        return {
+            "bot_name":         "Davy Jones' Portfolio",
+            "status":           "not_started",
+            "last_updated":     None,
+            "cycle_count":      0,
+            "total_equity_usd": 0,
+            "circuit_breaker":  {"active": False, "paused_until": None},
+            "position_count":   0,
+            **live,
             "recent_trades":    _trades,
             "paper_summary":    _summary if _summary else None,
             "error":            f"status.json parse error: {exc}",

@@ -67,6 +67,7 @@ def _save_portfolio() -> None:
 
 
 def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
+    from config import USD_BASE_PAIRS
     p = _load_portfolio()
     equity = p["cash_usd"]
 
@@ -76,6 +77,8 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
             pnl = (price - pos["entry_price"]) * pos["units"]
         else:
             pnl = (pos["entry_price"] - price) * pos["units"]
+        if pair in USD_BASE_PAIRS and price > 0:
+            pnl = pnl / price
         equity += pos["size_usd"] + pnl
 
     return equity
@@ -151,7 +154,7 @@ def paper_open_position(
 
 
 def paper_close_position(pair: str, current_price: float, reason: str) -> dict | None:
-    from config import PAPER_SPREAD_COST_PCT, PIP_SIZE
+    from config import PAPER_SPREAD_COST_PCT, PIP_SIZE, USD_BASE_PAIRS
     import db as _db
 
     p = _load_portfolio()
@@ -171,7 +174,10 @@ def paper_close_position(pair: str, current_price: float, reason: str) -> dict |
     else:
         pnl_raw = (entry - current_price) * units
 
-    exit_spread = abs(current_price * units) * PAPER_SPREAD_COST_PCT
+    if pair in USD_BASE_PAIRS and current_price > 0:
+        pnl_raw = pnl_raw / current_price
+
+    exit_spread = size_usd * PAPER_SPREAD_COST_PCT
     net_pnl = pnl_raw - exit_spread
     total_fees = pos.get("spread_cost", 0) + exit_spread
 

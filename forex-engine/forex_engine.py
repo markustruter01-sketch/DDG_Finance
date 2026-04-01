@@ -35,7 +35,7 @@ if _ENGINE_DIR not in sys.path:
 
 from config import (
     PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
-    PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, PIP_SIZE,
+    PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, USD_BASE_PAIRS, PIP_SIZE,
     RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
     SL_ATR_MULT, TP_ATR_MULT, MAX_RISK_PER_TRADE_PCT,
     MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
@@ -231,7 +231,7 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
     if sl_pips <= 0:
         return 0
 
-    if pair in JPY_PAIRS:
+    if pair in USD_BASE_PAIRS:
         pip_value_per_unit = pip_size / entry_price if entry_price > 0 else 0
     else:
         pip_value_per_unit = pip_size
@@ -242,8 +242,9 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
     units = risk_amount / (sl_pips * pip_value_per_unit)
 
     max_size = equity * MAX_POSITION_SIZE_PCT
-    if pair in JPY_PAIRS:
-        max_units = max_size * entry_price if entry_price > 0 else 0
+    if pair in USD_BASE_PAIRS:
+        max_units = max_size / pip_value_per_unit if pip_value_per_unit > 0 else 0
+        max_units = min(max_units, max_size / (pip_size / entry_price) if entry_price > 0 else 0)
     else:
         max_units = max_size / entry_price if entry_price > 0 else 0
     units = min(units, max_units)
@@ -425,8 +426,8 @@ def run_cycle() -> dict:
                     scan_results.append(scan_entry)
                     continue
 
-                if pair in JPY_PAIRS:
-                    size_usd = units / current_price
+                if pair in USD_BASE_PAIRS:
+                    size_usd = units
                 else:
                     size_usd = units * current_price
 

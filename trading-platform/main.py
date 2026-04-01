@@ -357,8 +357,9 @@ async def lifespan(app: FastAPI):
         name="Forex Navigator 4h Cycle",
         replace_existing=True,
         misfire_grace_time=600,
+        next_run_time=__import__("datetime").datetime.now(),
     )
-    logger.info("Forex Navigator registered (4-hour interval)")
+    logger.info("Forex Navigator registered (4-hour interval, first run immediate)")
 
     yield
 

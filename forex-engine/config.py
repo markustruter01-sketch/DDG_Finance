@@ -28,6 +28,8 @@ PAIR_DIRECTIONS = {
 
 JPY_PAIRS = {"JPY=X"}
 
+USD_BASE_PAIRS = {k for k, v in PAIR_DIRECTIONS.items() if v == "base_usd"}
+
 PIP_SIZE = {
     "EURUSD=X": 0.0001,
     "GBPUSD=X": 0.0001,

@@ -4699,10 +4699,7 @@ export default function Dashboard() {
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-  // Returns 'hidden' when the current tab is NOT in the provided list.
-  // Now universal — applies on all screen sizes since the tab bar is always visible.
-  const mobileHide = (tabs: Tab[]) =>
-    !tabs.includes(activeTab) ? 'hidden' : '';
+  const isTab = (tabs: Tab[]) => tabs.includes(activeTab);
 
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -4719,7 +4716,6 @@ export default function Dashboard() {
 
       <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20">
 
-        {/* ═══ ALWAYS VISIBLE: trading controls bar ═══ */}
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <SafeSection label="Trade Controls">
             <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-4 sm:px-7 py-4 sm:py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
@@ -4729,252 +4725,235 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
-        {/* ═══ OVERVIEW TAB — Commander's Log + Fleet Hero + portfolio + positions ═══ */}
+        {isTab(['overview']) && (
+          <>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <SafeSection label="Commander's Log">
+                <CommandersLog />
+              </SafeSection>
+            </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
-          className={mobileHide(['overview'])}
-        >
-          <SafeSection label="Commander's Log">
-            <CommandersLog />
-          </SafeSection>
-        </motion.div>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
+              <SafeSection label="Fleet Performance">
+                <FleetPerformanceHero />
+              </SafeSection>
+            </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}
-          className={mobileHide(['overview'])}
-        >
-          <SafeSection label="Fleet Performance">
-            <FleetPerformanceHero />
-          </SafeSection>
-        </motion.div>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
+              <SafeSection label="Portfolio Metrics">
+                <CombinedPortfolioSummary />
+              </SafeSection>
+            </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}
-          className={mobileHide(['overview'])}
-        >
-          <SafeSection label="Portfolio Metrics">
-            <CombinedPortfolioSummary />
-          </SafeSection>
-        </motion.div>
-
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['overview']))}>
-          <motion.div className="lg:col-span-2"
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
-          >
-            <SafeSection label="Live Positions">
-              <LivePositionsSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
-          >
-            <SafeSection label="Kraken Fleet Overview">
-              <FleetComparisonMini />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}
-          className={mobileHide(['overview'])}
-        >
-          <SafeSection label="Combined Trade History">
-            <CombinedTradeHistorySection />
-          </SafeSection>
-        </motion.div>
-
-        {/* ═══ AI AGENTS ROW — Oracle + Auditor (Alpaca) · Davy Jones (Kraken) ═══
-            Mobile: Oracle + Auditor appear under Alpaca tab; Davy Jones under Kraken tab.
-            Desktop: all three in a 3-col grid.                                      */}
-        <div className={cn(
-          "grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch",
-          mobileHide(['kraken', 'alpaca'])
-        )}>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-            className={cn("flex flex-col", mobileHide(['alpaca']))}
-          >
-            <SafeSection label="The Degen Oracle">
-              <AIBrainSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}
-            className={cn("flex flex-col", mobileHide(['alpaca']))}
-          >
-            <SafeSection label="Inspector Rekt">
-              <AuditorAgentSection />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
-          className={mobileHide(['kraken'])}
-        >
-          <SafeSection label="Kraken Fleet">
-            <KrakenFleetSection />
-          </SafeSection>
-        </motion.div>
-
-        {/* ═══ OPTIONS TAB — Apex Predator Engine ═══════════════════════════════════ */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
-          className={mobileHide(['options'])}
-        >
-          <SafeSection label="Apex Predator Options Engine">
-            <OptionsSection />
-          </SafeSection>
-        </motion.div>
-
-        {/* ═══ FOREX TAB — The Navigator Engine ═══════════════════════════════════ */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}
-          className={mobileHide(['forex'])}
-        >
-          <SafeSection label="The Navigator Forex Engine">
-            <ForexSection />
-          </SafeSection>
-        </motion.div>
-
-        {/* ═══ MORE TAB — COMPACT GRID LAYOUT ═══════════════════════════════════════ */}
-
-        {/* ROW 1: Risk | Sentiment | Correlation (3-col, analytics overview) */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
-            <SafeSection label="Risk Metrics (Both Bots)">
-              <RiskMetricsPanel />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            <SafeSection label="Market Sentiment">
-              <SentimentGauges />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
-            <SafeSection label="Correlation Matrix">
-              <CorrelationMatrix />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ROW 2: Equity Curve (2/3) | Best Win + Biggest Loss (1/3) */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-            <SafeSection label="Live Portfolio Equity Curve">
-              <LiveEquityCurveSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <SafeSection label="Best & Worst Trades (Both Bots)">
-              <BestTradeHero />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ROW 3: Backtester (2/3) | Economic Calendar (1/3) */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.20 }}>
-            <SafeSection label="Backtester">
-              <BacktesterPanel />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
-            <SafeSection label="Economic Calendar">
-              <EconomicCalendarPanel />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ROW 4: Allocation + Journal (2/3) | Vault + Controls (1/3) */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
-            <SafeSection label="Allocation Plan">
-              <AllocationSection />
-            </SafeSection>
-            <SafeSection label="Trade Journal">
-              <JournalSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
-            <SafeSection label="Vault">
-              <VaultPanel />
-            </SafeSection>
-            <SafeSection label="Controls">
-              <ControlPanel />
-            </SafeSection>
-            <SafeSection label="System Overrides">
-              <SystemOverridesPanel />
-            </SafeSection>
-            <SafeSection label="Learning Context">
-              <LearningContextSection />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ROW 5: LLM Journal (2/3) | System Health + Degradation (1/3) */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['more']))}>
-          <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
-            <SafeSection label="LLM Learning Journal">
-              <LLMJournalSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>
-            <SafeSection label="System Health">
-              <SystemHealthCard />
-            </SafeSection>
-            <SafeSection label="Trade Alerts">
-              <AlertSettingsPanel />
-            </SafeSection>
-            <SafeSection label="Degradation Log">
-              <SystemDegradationSection />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ═══ ALPACA TAB — stock performance + attribution ═══ */}
-        <div className={cn("grid grid-cols-1 lg:grid-cols-3 gap-4", mobileHide(['alpaca']))}>
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-            <SafeSection label="Alpaca Stock Performance">
-              <PerformanceSection />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <SafeSection label="P&L Attribution">
-              <AttributionPanel />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        {/* ═══ KRAKEN TAB — performance + attribution ═══ */}
-        <div className={cn("relative", mobileHide(['kraken']))}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/30 text-[10px] text-cyan-400/70 font-semibold uppercase tracking-widest">
-              <span>⚓</span>
-              <span className="hidden sm:inline">Kraken Crypto Bot — Separate Exchange · Separate Capital</span>
-              <span className="sm:hidden">Kraken Crypto Bot</span>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2"
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+              >
+                <SafeSection label="Live Positions">
+                  <LivePositionsSection />
+                </SafeSection>
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}
+              >
+                <SafeSection label="Kraken Fleet Overview">
+                  <FleetComparisonMini />
+                </SafeSection>
+              </motion.div>
             </div>
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}>
+              <SafeSection label="Combined Trade History">
+                <CombinedTradeHistorySection />
+              </SafeSection>
+            </motion.div>
+          </>
+        )}
+
+        {isTab(['kraken', 'alpaca']) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+            {isTab(['alpaca']) && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                  className="flex flex-col"
+                >
+                  <SafeSection label="The Degen Oracle">
+                    <AIBrainSection />
+                  </SafeSection>
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}
+                  className="flex flex-col"
+                >
+                  <SafeSection label="Inspector Rekt">
+                    <AuditorAgentSection />
+                  </SafeSection>
+                </motion.div>
+              </>
+            )}
           </div>
+        )}
+
+        {isTab(['kraken']) && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <SafeSection label="Kraken Fleet">
+              <KrakenFleetSection />
+            </SafeSection>
+          </motion.div>
+        )}
+
+        {isTab(['options']) && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <SafeSection label="Apex Predator Options Engine">
+              <OptionsSection />
+            </SafeSection>
+          </motion.div>
+        )}
+
+        {isTab(['forex']) && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+            <SafeSection label="The Navigator Forex Engine">
+              <ForexSection />
+            </SafeSection>
+          </motion.div>
+        )}
+
+        {isTab(['more']) && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
+                <SafeSection label="Risk Metrics (Both Bots)">
+                  <RiskMetricsPanel />
+                </SafeSection>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                <SafeSection label="Market Sentiment">
+                  <SentimentGauges />
+                </SafeSection>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
+                <SafeSection label="Correlation Matrix">
+                  <CorrelationMatrix />
+                </SafeSection>
+              </motion.div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+                <SafeSection label="Live Portfolio Equity Curve">
+                  <LiveEquityCurveSection />
+                </SafeSection>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+                <SafeSection label="Best & Worst Trades (Both Bots)">
+                  <BestTradeHero />
+                </SafeSection>
+              </motion.div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.20 }}>
+                <SafeSection label="Backtester">
+                  <BacktesterPanel />
+                </SafeSection>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}>
+                <SafeSection label="Economic Calendar">
+                  <EconomicCalendarPanel />
+                </SafeSection>
+              </motion.div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
+                <SafeSection label="Allocation Plan">
+                  <AllocationSection />
+                </SafeSection>
+                <SafeSection label="Trade Journal">
+                  <JournalSection />
+                </SafeSection>
+              </motion.div>
+              <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.26 }}>
+                <SafeSection label="Vault">
+                  <VaultPanel />
+                </SafeSection>
+                <SafeSection label="Controls">
+                  <ControlPanel />
+                </SafeSection>
+                <SafeSection label="System Overrides">
+                  <SystemOverridesPanel />
+                </SafeSection>
+                <SafeSection label="Learning Context">
+                  <LearningContextSection />
+                </SafeSection>
+              </motion.div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2 space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}>
+                <SafeSection label="LLM Learning Journal">
+                  <LLMJournalSection />
+                </SafeSection>
+              </motion.div>
+              <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>
+                <SafeSection label="System Health">
+                  <SystemHealthCard />
+                </SafeSection>
+                <SafeSection label="Trade Alerts">
+                  <AlertSettingsPanel />
+                </SafeSection>
+                <SafeSection label="Degradation Log">
+                  <SystemDegradationSection />
+                </SafeSection>
+              </motion.div>
+            </div>
+          </>
+        )}
+
+        {isTab(['alpaca']) && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
-              <SafeSection label="Kraken Crypto Performance">
-                <KrakenPerformanceSection />
+            <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+              <SafeSection label="Alpaca Stock Performance">
+                <PerformanceSection />
               </SafeSection>
             </motion.div>
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.21 }}>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <SafeSection label="P&L Attribution">
-                <KrakenAttributionPanel />
+                <AttributionPanel />
               </SafeSection>
             </motion.div>
           </div>
-        </div>
+        )}
+
+        {isTab(['kraken']) && (
+          <div className="relative">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-cyan-500/20 bg-cyan-950/30 text-[10px] text-cyan-400/70 font-semibold uppercase tracking-widest">
+                <span>⚓</span>
+                <span className="hidden sm:inline">Kraken Crypto Bot — Separate Exchange · Separate Capital</span>
+                <span className="sm:hidden">Kraken Crypto Bot</span>
+              </div>
+              <div className="h-px flex-1 bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent" />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
+                <SafeSection label="Kraken Crypto Performance">
+                  <KrakenPerformanceSection />
+                </SafeSection>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.21 }}>
+                <SafeSection label="P&L Attribution">
+                  <KrakenAttributionPanel />
+                </SafeSection>
+              </motion.div>
+            </div>
+          </div>
+        )}
 
       </main>
 
-      {/* Sticky bottom tab bar — mobile only */}
       <MobileTabBar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );

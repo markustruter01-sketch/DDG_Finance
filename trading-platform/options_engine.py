@@ -749,6 +749,12 @@ def approve_trade(trade_id: str) -> dict:
                 logger.info("Options | Circuit breaker RESET — next trading day reached (at approve)")
 
         positions = _get_positions()
+        if positions:
+            try:
+                update_position_values()
+                positions = _get_positions()
+            except Exception:
+                pass
         deployed = sum(p.get("total_cost", 0) for p in positions)
         if not state.get("circuit_breaker_active"):
             _check_options_circuit_breaker(state, positions, deployed)

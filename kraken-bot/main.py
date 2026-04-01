@@ -200,7 +200,9 @@ _pending_tranches: dict[str, list[dict]] = {}
 
 
 def _persist_tranches() -> None:
+    total = sum(len(v) for v in _pending_tranches.values())
     _db.save_pending_tranches(_pending_tranches)
+    logger.debug(f"Tranches | Persisted {total} tranche(s) across {len(_pending_tranches)} symbol(s)")
 
 # A deque that stores recent price observations for the circuit breaker.
 price_history: dict[str, deque] = {

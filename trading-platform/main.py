@@ -4765,6 +4765,14 @@ async def options_state():
 @router.get("/options/positions")
 async def options_positions():
     positions = _opts._get_positions()
+    for pos in positions:
+        pos["max_loss_pct"] = _opts.MAX_LOSS_PCT
+        pos["profit_target_pct"] = _opts.PROFIT_TARGET_PCT
+        expiry = (pos.get("call") or {}).get("expiry") or (pos.get("put") or {}).get("expiry")
+        pos["dte_remaining"] = _opts._compute_dte(expiry) if expiry else None
+        tc = pos.get("total_cost", 0)
+        cv = pos.get("current_value", tc)
+        pos["unrealized_pnl_pct"] = ((cv - tc) / tc * 100) if tc > 0 else 0.0
     return {"positions": positions, "count": len(positions)}
 
 @router.get("/options/pending")

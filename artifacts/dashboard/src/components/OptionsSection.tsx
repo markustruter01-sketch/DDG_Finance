@@ -8,7 +8,7 @@ import {
 import { Card, CardContent } from "@/components/ui";
 import {
   Crosshair, Play, Pause, Search, AlertTriangle,
-  ThumbsUp, ThumbsDown, ShieldAlert,
+  ThumbsUp, ThumbsDown, ShieldAlert, Clock,
 } from "lucide-react";
 
 export function OptionsSection() {
@@ -244,22 +244,60 @@ export function OptionsSection() {
               Open Straddle Positions — {positions.length}
             </div>
             <div className="space-y-3">
-              {positions.map((pos: OptionsPosition) => (
+              {positions.map((pos: OptionsPosition) => {
+                const pnlPct = pos.unrealized_pnl_pct ?? 0;
+                const maxLoss = (pos.max_loss_pct ?? 0.5) * 100;
+                const profitTarget = (pos.profit_target_pct ?? 1.0) * 100;
+                const barRange = maxLoss + profitTarget;
+                const barOffset = ((pnlPct + maxLoss) / barRange) * 100;
+                const clampedOffset = Math.max(0, Math.min(100, barOffset));
+                const dte = pos.dte_remaining;
+                const dteUrgent = dte != null && dte <= 7;
+                const dteWarning = dte != null && dte <= 14 && !dteUrgent;
+                return (
                 <div key={pos.id} className="rounded-lg border border-white/5 bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-mono font-bold text-white">{pos.symbol}</span>
                       <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-red-500/10 text-red-400/70 uppercase">Straddle</span>
                       <span className={cn("text-[9px] font-mono px-1.5 py-0.5 rounded", pos.unrealized_pnl >= 0 ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400")}>
-                        {pos.unrealized_pnl >= 0 ? "+" : ""}{formatCcy(pos.unrealized_pnl)} ({pos.unrealized_pnl_pct?.toFixed(1) ?? "0.0"}%)
+                        {pos.unrealized_pnl >= 0 ? "+" : ""}{formatCcy(pos.unrealized_pnl)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
                       </span>
+                      {dte != null && (
+                        <span className={cn(
+                          "text-[9px] font-mono px-1.5 py-0.5 rounded flex items-center gap-1",
+                          dteUrgent ? "bg-red-500/20 text-red-400 animate-pulse border border-red-500/40" :
+                          dteWarning ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
+                          "bg-white/5 text-muted-foreground/60"
+                        )}>
+                          <Clock className="h-2.5 w-2.5" />
+                          {dte}d
+                        </span>
+                      )}
                     </div>
                     <button onClick={() => closePosition.mutate(pos.id)} disabled={closePosition.isPending} className="text-[10px] font-mono px-2 py-1 rounded border border-red-500/20 text-red-400/60 hover:bg-red-500/10 transition-all">Close</button>
                   </div>
+
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between text-[9px] font-mono text-muted-foreground/40 mb-1">
+                      <span>-{maxLoss.toFixed(0)}% stop</span>
+                      <span>0%</span>
+                      <span>+{profitTarget.toFixed(0)}% target</span>
+                    </div>
+                    <div className="relative h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div className="absolute left-0 top-0 h-full bg-gradient-to-r from-red-500/30 to-red-500/10" style={{ width: `${(maxLoss / barRange) * 100}%` }} />
+                      <div className="absolute right-0 top-0 h-full bg-gradient-to-l from-green-500/30 to-green-500/10" style={{ width: `${(profitTarget / barRange) * 100}%` }} />
+                      <div
+                        className={cn("absolute top-0 w-0.5 h-full rounded-full transition-all duration-500", pnlPct >= 0 ? "bg-green-400" : "bg-red-400")}
+                        style={{ left: `${clampedOffset}%` }}
+                      />
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 text-[10px] font-mono">
                     <div><div className="text-muted-foreground/50 mb-0.5">Call Strike</div><div className="text-green-400">${pos.call.strike.toFixed(2)}</div></div>
                     <div><div className="text-muted-foreground/50 mb-0.5">Put Strike</div><div className="text-red-400">${pos.put.strike.toFixed(2)}</div></div>
-                    <div><div className="text-muted-foreground/50 mb-0.5">Expiry</div><div className="text-white">{pos.call.expiry} ({pos.call.dte}d)</div></div>
+                    <div><div className="text-muted-foreground/50 mb-0.5">Expiry</div><div className={cn("text-white", dteUrgent && "text-red-400")}>{pos.call.expiry} ({dte ?? pos.call.dte}d)</div></div>
                     <div><div className="text-muted-foreground/50 mb-0.5">Contracts</div><div className="text-white">{pos.contracts}</div></div>
                     <div><div className="text-muted-foreground/50 mb-0.5">Entry Cost</div><div className="text-amber-400">{formatCcy(pos.total_cost)}</div></div>
                     <div><div className="text-muted-foreground/50 mb-0.5">Current Value</div><div className="text-white">{formatCcy(pos.current_value)}</div></div>
@@ -273,7 +311,8 @@ export function OptionsSection() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -295,7 +334,7 @@ export function OptionsSection() {
             <div className="space-y-1"><div className="text-[9px] text-red-400/50 uppercase font-semibold">Strategy</div><div>Long Straddle (ATM Call + Put)</div><div>30-45 DTE contracts</div></div>
             <div className="space-y-1"><div className="text-[9px] text-red-400/50 uppercase font-semibold">Entry Signal</div><div>IVR &lt; 20 (cheap options)</div><div>BB Squeeze (6-month low)</div></div>
             <div className="space-y-1"><div className="text-[9px] text-red-400/50 uppercase font-semibold">Sizing</div><div>Half-Kelly Criterion</div><div>f* = [p(b+1)-1] / 2b</div></div>
-            <div className="space-y-1"><div className="text-[9px] text-red-400/50 uppercase font-semibold">Capital</div><div>5% fence of total equity</div><div>100% LLM-free engine</div></div>
+            <div className="space-y-1"><div className="text-[9px] text-red-400/50 uppercase font-semibold">Auto-Exit</div><div>-50% stop · +100% target</div><div>Close at 7 DTE</div></div>
           </div>
         </CardContent>
       </Card>

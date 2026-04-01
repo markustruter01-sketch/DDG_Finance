@@ -75,6 +75,10 @@ DEFAULT_RISK_PCT = 0.01
 EXECUTION_HOUR_ET = 15
 EXECUTION_MINUTE_ET = 30
 
+MAX_LOSS_PCT = 0.50
+PROFIT_TARGET_PCT = 1.00
+MIN_DTE_EXIT = 7
+
 PAPER_MODE = True
 PAPER_CAPITAL = 100_000.00
 
@@ -145,7 +149,8 @@ def _init_trades_db():
             pnl_pct REAL,
             status TEXT DEFAULT 'open',
             entry_ivr REAL,
-            entry_bandwidth REAL
+            entry_bandwidth REAL,
+            exit_reason TEXT
         )
     """)
     conn.commit()
@@ -153,6 +158,16 @@ def _init_trades_db():
 
 
 _init_trades_db()
+
+try:
+    _conn = sqlite3.connect(str(TRADES_DB))
+    _cols = [r[1] for r in _conn.execute("PRAGMA table_info(options_trades)").fetchall()]
+    if "exit_reason" not in _cols:
+        _conn.execute("ALTER TABLE options_trades ADD COLUMN exit_reason TEXT")
+        _conn.commit()
+    _conn.close()
+except Exception:
+    pass
 
 
 def _load_json(path: Path, default=None):
@@ -861,7 +876,7 @@ def reject_trade(trade_id: str) -> dict:
         return {"status": "rejected", "trade_id": trade_id}
 
 
-def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -> dict:
+def close_position_by_id(position_id: str, exit_value: Optional[float] = None, exit_reason: Optional[str] = None) -> dict:
     with _lock:
         positions = _get_positions()
         pos = None
@@ -898,13 +913,14 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
         conn = sqlite3.connect(str(TRADES_DB))
         conn.execute("""
             UPDATE options_trades
-            SET status = 'closed', exit_date = ?, exit_value = ?, pnl = ?, pnl_pct = ?
+            SET status = 'closed', exit_date = ?, exit_value = ?, pnl = ?, pnl_pct = ?, exit_reason = ?
             WHERE call_symbol = ? AND status = 'open'
         """, (
             datetime.now(timezone.utc).isoformat(),
             exit_value,
             pnl,
             pnl_pct,
+            exit_reason or "manual",
             pos["call"]["symbol"],
         ))
         conn.commit()
@@ -918,7 +934,8 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
             state["paper_equity"] = state.get("paper_equity", PAPER_CAPITAL) + exit_value
         _save_state(state)
 
-        logger.info(f"Options | Position CLOSED: {pos['symbol']} PnL=${pnl:,.2f} ({pnl_pct:+.1f}%) ({'PAPER' if PAPER_MODE else 'LIVE'})")
+        reason_tag = f" [{exit_reason}]" if exit_reason else ""
+        logger.info(f"Options | Position CLOSED{reason_tag}: {pos['symbol']} PnL=${pnl:,.2f} ({pnl_pct:+.1f}%) ({'PAPER' if PAPER_MODE else 'LIVE'})")
 
         if pnl > 0:
             try:
@@ -934,6 +951,49 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
                 pass
 
         return {"status": "closed", "pnl": pnl, "pnl_pct": pnl_pct}
+
+
+def _compute_dte(expiry_str: str) -> int:
+    try:
+        expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
+        today = datetime.now(timezone.utc).date()
+        return (expiry_date - today).days
+    except Exception:
+        return 999
+
+
+def _check_exits():
+    positions = _get_positions()
+    if not positions:
+        return
+
+    for pos in list(positions):
+        pos_id = pos.get("id")
+        total_cost = pos.get("total_cost", 0)
+        current_value = pos.get("current_value", total_cost)
+
+        if total_cost <= 0:
+            continue
+
+        loss_pct = (total_cost - current_value) / total_cost
+        if loss_pct >= MAX_LOSS_PCT:
+            logger.warning(f"Options | STOP-LOSS triggered for {pos['symbol']}: lost {loss_pct*100:.1f}% (threshold {MAX_LOSS_PCT*100:.0f}%)")
+            close_position_by_id(pos_id, exit_value=current_value, exit_reason="stop-loss")
+            continue
+
+        gain_pct = (current_value - total_cost) / total_cost
+        if gain_pct >= PROFIT_TARGET_PCT:
+            logger.info(f"Options | PROFIT-TARGET triggered for {pos['symbol']}: gained {gain_pct*100:.1f}% (threshold {PROFIT_TARGET_PCT*100:.0f}%)")
+            close_position_by_id(pos_id, exit_value=current_value, exit_reason="profit-target")
+            continue
+
+        expiry = pos.get("call", {}).get("expiry") or pos.get("put", {}).get("expiry")
+        if expiry:
+            dte = _compute_dte(expiry)
+            if dte <= MIN_DTE_EXIT:
+                logger.info(f"Options | DTE-EXPIRY exit for {pos['symbol']}: {dte} DTE remaining (threshold {MIN_DTE_EXIT})")
+                close_position_by_id(pos_id, exit_value=current_value, exit_reason="dte-expiry")
+                continue
 
 
 def update_position_values():
@@ -978,6 +1038,8 @@ def update_position_values():
             logger.warning(f"Options | Error updating position {pos.get('symbol', '?')}: {e}")
 
     _save_positions(positions)
+
+    _check_exits()
 
 
 def toggle_pause() -> dict:

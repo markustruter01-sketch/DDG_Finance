@@ -1231,6 +1231,9 @@ export interface OptionsPosition {
   current_value: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
+  max_loss_pct?: number;
+  profit_target_pct?: number;
+  dte_remaining?: number | null;
 }
 
 export interface OptionsPendingTrade extends OptionsPosition {

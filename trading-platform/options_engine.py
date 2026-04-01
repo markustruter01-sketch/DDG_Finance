@@ -765,6 +765,20 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
         _save_state(state)
 
         logger.info(f"Options | Position CLOSED: {pos['symbol']} PnL=${pnl:,.2f} ({pnl_pct:+.1f}%) ({'PAPER' if PAPER_MODE else 'LIVE'})")
+
+        if pnl > 0:
+            try:
+                from notifications.alert_manager import enqueue_profitable_trade
+                enqueue_profitable_trade(
+                    bot_name="Apex Predator (Options)",
+                    symbol=pos["symbol"],
+                    pnl_pct=pnl_pct,
+                    pnl_usd=pnl,
+                    reason="straddle_exit",
+                )
+            except Exception:
+                pass
+
         return {"status": "closed", "pnl": pnl, "pnl_pct": pnl_pct}
 
 

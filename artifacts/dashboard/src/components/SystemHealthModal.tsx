@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock, Brain } from "lucide-react";
+import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock, Brain, Globe, Target, Bell } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
@@ -80,24 +80,32 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
 };
 
 const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server }> = {
-  platform_core: { x: 400, y: 120, icon: Server },
-  equity_manager: { x: 160, y: 295, icon: Shield },
-  alpaca_api: { x: 70,  y: 450, icon: Wifi },
-  kraken_api: { x: 640, y: 295, icon: Anchor },
-  data_pipeline: { x: 540, y: 450, icon: Database },
-  rag_engine:   { x: 300, y: 420, icon: Brain },
+  platform_core:  { x: 400, y: 80,  icon: Server },
+  equity_manager: { x: 140, y: 230, icon: Shield },
+  alpaca_api:     { x: 140, y: 400, icon: Wifi },
+  kraken_api:     { x: 400, y: 230, icon: Anchor },
+  options_bot:    { x: 660, y: 230, icon: Target },
+  forex_bot:      { x: 660, y: 400, icon: Globe },
+  data_pipeline:  { x: 400, y: 400, icon: Database },
+  rag_engine:     { x: 140, y: 530, icon: Brain },
+  alert_system:   { x: 660, y: 530, icon: Bell },
 };
-const NODE_W = 188;
-const NODE_H = 92;
+const NODE_W = 170;
+const NODE_H = 86;
 
-const WIRES: [string, string][] = [
-  ["platform_core", "equity_manager"],
-  ["platform_core", "kraken_api"],
-  ["platform_core", "data_pipeline"],
-  ["equity_manager", "alpaca_api"],
-  ["data_pipeline", "kraken_api"],
-  ["platform_core", "rag_engine"],
-  ["rag_engine", "data_pipeline"],
+type WireSpec = { from: string; to: string; bend?: "h-first" | "v-first" };
+
+const WIRES: WireSpec[] = [
+  { from: "platform_core",  to: "equity_manager", bend: "v-first" },
+  { from: "platform_core",  to: "kraken_api",     bend: "v-first" },
+  { from: "platform_core",  to: "options_bot",    bend: "v-first" },
+  { from: "equity_manager", to: "alpaca_api",     bend: "v-first" },
+  { from: "kraken_api",     to: "data_pipeline",  bend: "v-first" },
+  { from: "options_bot",    to: "forex_bot",      bend: "v-first" },
+  { from: "data_pipeline",  to: "rag_engine",     bend: "h-first" },
+  { from: "data_pipeline",  to: "forex_bot",      bend: "h-first" },
+  { from: "data_pipeline",  to: "alert_system",   bend: "h-first" },
+  { from: "rag_engine",     to: "alpaca_api",     bend: "v-first" },
 ];
 
 const COMPONENT_LABELS: Record<string, string> = {
@@ -107,6 +115,9 @@ const COMPONENT_LABELS: Record<string, string> = {
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
+  options_bot: "Apex Predator",
+  forex_bot: "The Navigator",
+  alert_system: "Alert System",
 };
 
 function buildExplanation(key: string, node: NodeHealth): string {
@@ -161,49 +172,62 @@ function buildExplanation(key: string, node: NodeHealth): string {
     if (level === "yellow") return "The RAG engine is online but no post-mortem lessons exist yet (fresh database). This is expected on first run. Lessons accumulate after the first losing trade is closed and the evening post-mortem cycle runs.";
   }
 
+  if (key === "options_bot") {
+    if (level === "yellow") return "The Apex Predator options engine is in standby or encountered an initialization issue. It scans for volatility squeezes daily at 3:30 PM ET — no action needed outside that window.";
+  }
+
+  if (key === "forex_bot") {
+    if (level === "red") return `The Navigator forex engine is offline or encountered an error. Check trading-api logs. Detail: ${detail}`;
+    if (level === "yellow") return detail.includes("Paused") ? "The forex engine is paused — either manually from the dashboard or by the system. Resume via the FOREX tab." : "The forex engine is loading or has not completed its first cycle yet.";
+  }
+
+  if (key === "alert_system") {
+    if (level === "yellow") return "No notification channels configured. Set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID or DISCORD_WEBHOOK_URL in Secrets to receive profitable trade alerts.";
+  }
+
   return detail || "Status flagged — check the server logs for more detail.";
 }
 
-function GlowingWire({ x1, y1, x2, y2, level, id }: { x1: number; y1: number; x2: number; y2: number; level: Level; id: string }) {
+function GlowingWire({ x1, y1, x2, y2, bend, level, id }: { x1: number; y1: number; x2: number; y2: number; bend: "h-first" | "v-first"; level: Level; id: string }) {
   const colors = LEVEL_COLORS[level];
-  const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  const mx = bend === "h-first" ? x2 : x1;
+  const my = bend === "h-first" ? y1 : y2;
+  const pathD = `M ${x1} ${y1} L ${mx} ${my} L ${x2} ${y2}`;
+  const seg1 = Math.abs(bend === "h-first" ? x2 - x1 : y2 - y1);
+  const seg2 = Math.abs(bend === "h-first" ? y2 - y1 : x2 - x1);
+  const totalLen = seg1 + seg2;
   const dur  = level === "red" ? "0.7s" : level === "yellow" ? "1.6s" : "2.8s";
   const dur2 = level === "red" ? "0.9s" : level === "yellow" ? "2.2s" : "4s";
 
+  const kf1 = totalLen > 0 ? seg1 / totalLen : 0.5;
+
   return (
     <g>
-      {/* Wide glow underlay */}
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.wire} strokeWidth={8} opacity={0.06} />
-      {/* Dim track */}
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
-      {/* Lit wire */}
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={colors.wire} strokeWidth={1.5} opacity={0.3} />
-      {/* Primary pulse */}
-      <line
-        x1={x1} y1={y1} x2={x2} y2={y2}
+      <path d={pathD} fill="none" stroke={colors.wire} strokeWidth={8} opacity={0.06} />
+      <path d={pathD} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+      <path d={pathD} fill="none" stroke={colors.wire} strokeWidth={1.5} opacity={0.3} />
+      <path
+        d={pathD} fill="none"
         stroke={colors.wire} strokeWidth={3} opacity={0.95}
-        strokeDasharray={`12 ${length}`} strokeLinecap="round"
+        strokeDasharray={`12 ${totalLen}`} strokeLinecap="round"
       >
-        <animate attributeName="stroke-dashoffset" from={length + 12} to={-(length)} dur={dur} repeatCount="indefinite" />
-      </line>
-      {/* Secondary pulse */}
-      <line
-        x1={x1} y1={y1} x2={x2} y2={y2}
+        <animate attributeName="stroke-dashoffset" from={totalLen + 12} to={-(totalLen)} dur={dur} repeatCount="indefinite" />
+      </path>
+      <path
+        d={pathD} fill="none"
         stroke={colors.wire} strokeWidth={2} opacity={0.5}
-        strokeDasharray={`6 ${length}`} strokeLinecap="round"
+        strokeDasharray={`6 ${totalLen}`} strokeLinecap="round"
       >
-        <animate attributeName="stroke-dashoffset" from={length + 6} to={-(length)} dur={dur2} repeatCount="indefinite" />
-      </line>
-      {/* Data-packet dot #1 */}
+        <animate attributeName="stroke-dashoffset" from={totalLen + 6} to={-(totalLen)} dur={dur2} repeatCount="indefinite" />
+      </path>
       <circle cx={x1} cy={y1} r={level === "red" ? 5 : 4} fill={colors.wire} opacity={0.95}>
-        <animate attributeName="cx" from={x1} to={x2} dur={dur} repeatCount="indefinite" />
-        <animate attributeName="cy" from={y1} to={y2} dur={dur} repeatCount="indefinite" />
+        <animate attributeName="cx" values={`${x1};${mx};${x2}`} keyTimes={`0;${kf1.toFixed(3)};1`} dur={dur} repeatCount="indefinite" />
+        <animate attributeName="cy" values={`${y1};${my};${y2}`} keyTimes={`0;${kf1.toFixed(3)};1`} dur={dur} repeatCount="indefinite" />
         <animate attributeName="opacity" values="0;0.95;0.95;0" keyTimes="0;0.1;0.9;1" dur={dur} repeatCount="indefinite" />
       </circle>
-      {/* Data-packet dot #2 (offset) */}
       <circle cx={x1} cy={y1} r={3} fill={colors.wire} opacity={0.6}>
-        <animate attributeName="cx" from={x1} to={x2} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
-        <animate attributeName="cy" from={y1} to={y2} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
+        <animate attributeName="cx" values={`${x1};${mx};${x2}`} keyTimes={`0;${kf1.toFixed(3)};1`} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
+        <animate attributeName="cy" values={`${y1};${my};${y2}`} keyTimes={`0;${kf1.toFixed(3)};1`} dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
         <animate attributeName="opacity" values="0;0.6;0.6;0" keyTimes="0;0.1;0.9;1" dur={dur2} begin={`${parseFloat(dur2) * 0.45}s`} repeatCount="indefinite" />
       </circle>
     </g>
@@ -577,12 +601,15 @@ function TestControlPanel({
         equity_manager: { level: "red", detail: "BREACH: single position 18.4% > 15.00% limit" },
       },
       "total-failure": {
-        platform_core: { level: "red", detail: "Scheduler crashed — 0/8 jobs" },
+        platform_core: { level: "red", detail: "Scheduler crashed — 0/10 jobs" },
         alpaca_api: { level: "red", latency_ms: 5000, detail: "Connection timeout (5000ms)" },
         kraken_api: { level: "red", detail: "HTTP 503 Service Unavailable" },
         data_pipeline: { level: "red", data_age_s: 900, detail: "All feeds stale > 600s" },
         equity_manager: { level: "red", detail: "Cannot validate — API unreachable" },
         rag_engine: { level: "red", detail: "DB error: connection refused" },
+        options_bot: { level: "red", detail: "Options engine crashed — no heartbeat" },
+        forex_bot: { level: "red", detail: "Forex engine unreachable — import error" },
+        alert_system: { level: "red", detail: "Alert dispatch failed — queue overflow" },
       },
     };
     if (name === "all-green") {
@@ -870,7 +897,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
               </div>
 
               {/* SVG Diagram */}
-              <svg viewBox="0 0 800 530" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+              <svg viewBox="0 0 800 620" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
                 <defs>
                   {/* Dot grid */}
                   <pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
@@ -882,34 +909,37 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                     <stop offset="100%" stopColor="white" stopOpacity="0" />
                   </radialGradient>
                   <mask id="gridMask">
-                    <rect width="800" height="530" fill="url(#gridFade)" />
+                    <rect width="800" height="620" fill="url(#gridFade)" />
                   </mask>
                 </defs>
 
                 {/* Grid background */}
-                <rect width="800" height="530" fill="url(#dots)" mask="url(#gridMask)" />
+                <rect width="800" height="620" fill="url(#dots)" mask="url(#gridMask)" />
 
                 {/* Horizontal scan line */}
                 <line x1="0" y1="0" x2="800" y2="0" stroke={overallColors.wire} strokeWidth="1.5" opacity="0.12">
-                  <animate attributeName="y1" values="0;530;0" dur="5s" repeatCount="indefinite" />
-                  <animate attributeName="y2" values="0;530;0" dur="5s" repeatCount="indefinite" />
+                  <animate attributeName="y1" values="0;620;0" dur="5s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="0;620;0" dur="5s" repeatCount="indefinite" />
                 </line>
 
                 {/* Wires (drawn first, under nodes) */}
-                {WIRES.map(([from, to], i) => {
-                  const fromPos = NODE_POSITIONS[from];
-                  const toPos = NODE_POSITIONS[to];
-                  const fromNode = mergedNodes[from];
-                  const toNode = mergedNodes[to];
-                  if (!fromPos || !toPos || !fromNode || !toNode) return null;
+                {WIRES.map((wire, i) => {
+                  const fromPos = NODE_POSITIONS[wire.from];
+                  const toPos = NODE_POSITIONS[wire.to];
+                  const fromNode = mergedNodes[wire.from];
+                  const toNode = mergedNodes[wire.to];
+                  if (!fromPos || !toPos) return null;
+                  const fromLevel = fromNode?.level ?? "green";
+                  const toLevel = toNode?.level ?? "green";
                   const worstLevel: Level =
-                    fromNode.level === "red" || toNode.level === "red" ? "red"
-                    : fromNode.level === "yellow" || toNode.level === "yellow" ? "yellow"
+                    fromLevel === "red" || toLevel === "red" ? "red"
+                    : fromLevel === "yellow" || toLevel === "yellow" ? "yellow"
                     : "green";
                   return (
                     <GlowingWire key={i}
                       x1={fromPos.x} y1={fromPos.y}
                       x2={toPos.x}   y2={toPos.y}
+                      bend={wire.bend ?? "v-first"}
                       level={worstLevel} id={`wire-${i}`} />
                   );
                 })}

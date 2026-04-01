@@ -281,6 +281,23 @@ def _check_open_positions():
                         )
                     except Exception:
                         pass
+                    _pnl_usd = result.get("pnl_usd", 0)
+                    if _pnl_usd > 0:
+                        try:
+                            import sys as _sys, os as _os
+                            _tp_root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "trading-platform")
+                            if _tp_root not in _sys.path:
+                                _sys.path.insert(0, _tp_root)
+                            from notifications.alert_manager import enqueue_profitable_trade
+                            enqueue_profitable_trade(
+                                bot_name="The Navigator (Forex)",
+                                symbol=PAIR_LABELS.get(p, p),
+                                pnl_pct=result.get("pnl_pct", 0),
+                                pnl_usd=_pnl_usd,
+                                reason=reason,
+                            )
+                        except Exception:
+                            pass
                 return result
 
             if direction == "long":

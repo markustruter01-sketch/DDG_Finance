@@ -94,6 +94,26 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Data Sources**: FRED API, Alpaca Market Data, NewsAPI, yfinance, Fear & Greed Index, on-chain BTC data, economic calendar.
 - **LLM**: Groq (specifically Llama 3.3 70B Versatile).
 - **Database**: PostgreSQL, SQLite.
-- **Notifications**: Discord webhooks.
+- **Notifications**: Discord webhooks, Telegram Bot API (configurable alert digests for profitable trades).
 - **Crypto Exchange**: Kraken (via ccxt library).
 - **Scheduling**: APScheduler.
+
+## Alert Notification System
+
+- **Files**: `trading-platform/notifications/telegram.py`, `trading-platform/notifications/alert_manager.py`, `trading-platform/notifications/discord.py`
+- **Channels**: Telegram Bot API + Discord webhooks (both optional, independent)
+- **Queue**: JSON-persisted batched queue (`data/alert_queue.json`) with configurable digest interval (5min–24hr)
+- **Config**: `data/alert_config.json` — `enabled`, `interval_minutes`, `min_pnl_usd`, `telegram_enabled`, `discord_enabled`
+- **API Endpoints**: GET `/alerts/config`, `/alerts/status`; POST `/alerts/config`, `/alerts/test`, `/alerts/flush`
+- **Dashboard**: AlertSettingsPanel component in More tab — toggle, frequency grid, min P&L input, test/flush buttons
+- **Bot Hooks**: All bots call `enqueue_profitable_trade()` on profitable close (Kraken, Forex, Options)
+- **Durability**: Queue only cleared after at least one channel successfully dispatches
+- **Setup**: User must set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` in Secrets for Telegram; `DISCORD_WEBHOOK_URL` for Discord
+
+## System Health Architecture (9-Node Diagram)
+
+- **Component**: `artifacts/dashboard/src/components/SystemHealthModal.tsx`
+- **Nodes**: platform_core, alpaca_api, kraken_api, data_pipeline, equity_manager, rag_engine, options_bot, forex_bot, alert_system
+- **Wires**: Orthogonal (L-shaped) SVG paths with animated data-packet dots
+- **Test Controls**: 8 scenario presets including "Total Failure" (all 9 nodes red)
+- **API**: GET `/system/health-architecture` returns real-time health for all 9 nodes

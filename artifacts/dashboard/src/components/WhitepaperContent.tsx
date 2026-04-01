@@ -7,7 +7,7 @@ export function WhitepaperContent() {
         </h1>
         <div className="h-px w-32 mx-auto bg-indigo-500/50 my-6" />
         <p className="text-sm text-slate-400 italic max-w-2xl mx-auto">
-          A full-system architecture document covering every algorithm, risk system, data flow, and design decision across the AI-driven quantitative trading ecosystem. Hybrid Agentic Architecture — Stages 0–4. March 2026.
+          A full-system architecture document covering every algorithm, risk system, data flow, and design decision across the AI-driven quantitative trading ecosystem. Hybrid Agentic Architecture — Stages 0–4. Six autonomous bots across equities, crypto, options, and forex. April 2026.
         </p>
         <div className="mt-6 p-4 bg-slate-800/60 border border-indigo-500/20 rounded-lg text-xs text-slate-400 text-left">
           <span className="text-indigo-300 font-semibold">Audit Notice: </span>
@@ -18,29 +18,37 @@ export function WhitepaperContent() {
       {/* Section 0 — System Map */}
       <Section title="System Architecture Overview">
         <SimpleBox>
-          <p>Think of this like a two-robot team with a shared toolbox and a control room:</p>
+          <p>Think of this like a six-robot fleet with a shared toolbox, a control room, and a notification system that texts you when they make money:</p>
           <AsciiDiagram>{`
-  🤖 ROBOT 1 (Alpaca Bot)        🤖 ROBOT 2 (Davy Jones - Kraken)
-  Trades stocks + crypto 9-4 PM  Trades crypto 24/7 on its own
+  🤖 BOT 1 (Alpaca)           🤖 BOT 2 (Davy Jones)    🤖 BOT 3 (Blackbeard)
+  Stocks + Crypto 9-4 PM      24/7 Crypto Kraken        24/7 Crypto Kraken
 
-  Both share ──▶  🔧 Shared Safety Tools  ◀── (circuit breakers, risk rules)
+  🤖 BOT 4 (Calypso)          🤖 BOT 5 (Apex Predator)  🤖 BOT 6 (Navigator)
+  24/7 Crypto Kraken           Options 3:30 PM Daily     Forex H4 Swing Trading
+
+  All share ──▶  🔧 Shared Safety + Alert System  ◀── (circuit breakers, risk)
                          │
               ┌──────────┼──────────┐
               ▼          ▼          ▼
-         📊 Database  🖥 Dashboard  🌐 AlgoEdge SaaS
-          (trade log)  (you see it)  (public product)
+         📊 Database  🖥 Dashboard  📱 Telegram/Discord Alerts
+          (trade log)  (you see it)  (profit notifications)
           `}</AsciiDiagram>
         </SimpleBox>
 
-        <p>The ecosystem consists of two autonomous trading engines sharing a common risk infrastructure, a PostgreSQL database, a React dashboard, and the public AlgoEdge SaaS product:</p>
+        <p>The ecosystem consists of six autonomous trading engines across four asset classes, sharing a common risk infrastructure, a PostgreSQL database, a React dashboard, and a real-time alert notification system:</p>
         <Table
           headers={["Component", "Purpose", "Technology"]}
           rows={[
-            ["Alpaca AI Platform", "Equities + crypto, LLM-driven regime allocation", "Python / FastAPI / Groq Llama 3.3 70B"],
-            ["Davy Jones (Kraken)", "24/7 crypto mean-reversion with microstructure alpha", "Python / ccxt / Kraken Pro"],
-            ["Shared Core Library", "RiskProfile, ExitBracket, CircuitBreaker, VaR — used by both bots", "Pure Python (shared/)"],
-            ["PostgreSQL", "Trade journal, vault ledger, ratchet stops, degradation log", "psycopg2 ThreadedConnectionPool"],
-            ["React Dashboard", "Real-time monitoring, HITL controls, dual-agent UI", "React 19 / Vite / TanStack Query"],
+            ["Alpaca AI Platform (Bot #1)", "Equities + crypto, LLM-driven regime allocation", "Python / FastAPI / Groq Llama 3.3 70B"],
+            ["Davy Jones (Bot #2)", "24/7 crypto mean-reversion with microstructure alpha", "Python / ccxt / Kraken Pro"],
+            ["Blackbeard (Bot #3)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
+            ["Calypso (Bot #4)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
+            ["Apex Predator (Bot #5)", "Options volatility squeeze — pure quant, zero LLM", "Python / Alpaca Options API"],
+            ["The Navigator (Bot #6)", "Forex H4 swing trading — 5 major pairs", "Python / yfinance / OANDA-ready"],
+            ["Shared Core Library", "RiskProfile, ExitBracket, CircuitBreaker, VaR — used by all bots", "Pure Python (shared/)"],
+            ["PostgreSQL + SQLite", "Trade journals, vault ledgers, ratchet stops, degradation log", "psycopg2 + sqlite3"],
+            ["React Dashboard", "Real-time monitoring, HITL controls, 6-tab multi-bot UI", "React 19 / Vite / TanStack Query"],
+            ["Alert System", "Batched profitable trade notifications with configurable frequency", "Telegram Bot API / Discord Webhooks"],
             ["AlgoEdge SaaS", "Public Trading-as-a-Service product with paper portfolio", "FastAPI port 8099 / React / Stripe"],
           ]}
         />
@@ -565,7 +573,159 @@ export function WhitepaperContent() {
         </SubSection>
       </Section>
 
-      {/* Section 11 — Groq / Hardware */}
+      {/* Section 11 — Bot #5: Apex Predator Options */}
+      <Section title="Bot #5: Apex Predator — Pure Quant Options Engine">
+        <SimpleBox>
+          <p>A 100% math-driven options bot with zero AI involvement. It watches four highly liquid stocks (SPY, QQQ, NVDA, TSLA) and waits for a rare moment when volatility is compressed AND prices are coiling in a tight range. When both conditions align, it buys a "straddle" — betting that a big move is coming, without needing to know the direction.</p>
+          <AsciiDiagram>{`
+  VOLATILITY SQUEEZE STRATEGY
+  ──────────────────────────────────────────────────────────────
+   NORMAL: Bollinger Bands wide, IV high
+           → No trade. Wait.
+
+   SQUEEZE DETECTED:
+   ┌─────────────────────────────────────────┐
+   │ IVR < 20    (implied vol at yearly low)  │
+   │ BB Width at 6-month minimum (coiling)    │
+   │ BOTH must be true simultaneously         │
+   └─────────────────────────────────────────┘
+           → BUY Long Straddle (ATM Call + ATM Put, 30-45 DTE)
+
+   Capital fence: 5% of total account equity
+   Execution: Once daily at 3:30 PM ET
+   100% paper trading — real Alpaca market data
+          `}</AsciiDiagram>
+        </SimpleBox>
+
+        <SubSection title="Strategy: Volatility Squeeze Detection">
+          <p><strong>Implied Volatility Rank (IVR):</strong></p>
+          <Formula>IVR = (IV_current − IV_52w_low) / (IV_52w_high − IV_52w_low) × 100</Formula>
+          <p>Entry gate: <Mono>IVR &lt; 20</Mono> — current implied volatility must be in the bottom 20% of its yearly range. This means options are "cheap" relative to recent history.</p>
+          <p><strong>Bollinger Band Squeeze:</strong></p>
+          <Formula>BB_Width = (Upper_Band − Lower_Band) / SMA_20</Formula>
+          <p>Entry gate: Current <Mono>BB_Width</Mono> must be at or below its 126-day (6-month) minimum. This detects price compression — the coiling spring before a breakout.</p>
+        </SubSection>
+
+        <SubSection title="Trade Construction">
+          <Table
+            headers={["Parameter", "Value", "Rationale"]}
+            rows={[
+              ["Structure", "Long Straddle (ATM Call + ATM Put)", "Profits from any large move regardless of direction"],
+              ["DTE Target", "30–45 days", "Enough time for the squeeze to resolve without excessive theta decay"],
+              ["Watchlist", "SPY, QQQ, NVDA, TSLA", "Highest options liquidity — tight spreads, deep order books"],
+              ["Capital Fence", "5% of total equity", "Hard isolation from the rest of the portfolio"],
+              ["Sizing", "Half-Kelly Criterion", "Uses historical win/loss ratio after 10+ completed trades"],
+              ["Execution", "3:30 PM ET daily scan", "APScheduler CronTrigger — captures end-of-day volatility compression"],
+            ]}
+          />
+        </SubSection>
+
+        <SubSection title="Paper Trading Simulation">
+          <p>Starting capital: <Mono>$100,000</Mono> (isolated paper account). All trades simulated with real-time Alpaca options chain data. State persisted to <Mono>_options_state/</Mono> directory: positions, pending approvals, and SQLite trade journal.</p>
+          <p>Position management includes unrealized P&amp;L tracking via live option snapshot prices and manual close capability from the dashboard.</p>
+        </SubSection>
+      </Section>
+
+      {/* Section 12 — Bot #6: The Navigator Forex */}
+      <Section title="Bot #6: The Navigator — Forex Swing-Trading Engine">
+        <SimpleBox>
+          <p>A Groq-assisted forex swing trader that holds positions for hours to days across five major currency pairs. It uses RSI and ATR indicators on 4-hour candles, combined with an AI "Compass" that reads macro news to determine directional bias. The vault system automatically sweeps 20% of profits above the high-water mark into a separate reserve.</p>
+          <AsciiDiagram>{`
+  FOREX SWING STRATEGY (4-hour cycle)
+  ──────────────────────────────────────────────────────────────
+   5 Major Pairs: EUR/USD  GBP/USD  USD/JPY  AUD/USD  USD/CHF
+
+   ENTRY CONDITIONS:
+   ┌──────────────────────────────────────────┐
+   │ RSI(14) < 30  →  Oversold → BUY         │
+   │ RSI(14) > 70  →  Overbought → SELL      │
+   │ Groq Compass bias must AGREE             │
+   │ Max 5 positions open simultaneously      │
+   └──────────────────────────────────────────┘
+
+   RISK MANAGEMENT:
+   Stop Loss:  1.5 × ATR(14)
+   Take Profit: 3.0 × ATR(14)    (2:1 reward-risk ratio)
+   Max risk per trade: 1.5% of equity
+   Max position size: 10% of equity
+
+   VAULT: 20% of new profits above HWM → swept to reserve
+          `}</AsciiDiagram>
+        </SimpleBox>
+
+        <SubSection title="Currency Pair Configuration">
+          <Table
+            headers={["yfinance Symbol", "Label", "Quote Convention", "Pip Size"]}
+            rows={[
+              ["EURUSD=X", "EUR/USD", "Counter-USD (price = USD per EUR)", "0.0001"],
+              ["GBPUSD=X", "GBP/USD", "Counter-USD", "0.0001"],
+              ["JPY=X", "USD/JPY", "Base-USD (price = JPY per USD)", "0.01"],
+              ["AUDUSD=X", "AUD/USD", "Counter-USD", "0.0001"],
+              ["CHF=X", "USD/CHF", "Base-USD", "0.0001"],
+            ]}
+          />
+          <p><strong>USD-base pair handling:</strong> For JPY=X and CHF=X, P&amp;L is calculated by dividing by the exit price to convert from the foreign currency to USD. This affects <Mono>get_positions()</Mono>, <Mono>get_paper_equity()</Mono>, and the live state writer.</p>
+        </SubSection>
+
+        <SubSection title="Groq Compass (AI Directional Bias)">
+          <p>Before scanning for entries, the engine calls Groq Llama 3.3 70B with a macro-economic prompt. The AI returns a directional bias per pair: <Mono>bullish</Mono>, <Mono>bearish</Mono>, or <Mono>neutral</Mono>. Technical RSI signals must align with the AI bias for an entry to fire.</p>
+          <p><strong>Throttle &amp; fallback:</strong> If Groq rate-limits or throws an exception, the engine falls back to the most recently cached bias. The system never blocks on a failed AI call.</p>
+        </SubSection>
+
+        <SubSection title="Risk &amp; Vault System">
+          <Table
+            headers={["Parameter", "Value"]}
+            rows={[
+              ["Max risk per trade", "1.5% of equity"],
+              ["Max position size", "10% of equity"],
+              ["Max open positions", "5 simultaneous"],
+              ["Stop loss", "1.5 × ATR(14)"],
+              ["Take profit", "3.0 × ATR(14)"],
+              ["Vault sweep", "20% of equity above HWM"],
+              ["HWM update rule", "Only after a successful vault sweep"],
+            ]}
+          />
+          <p><strong>High-Water Mark design:</strong> The HWM is never updated on every cycle — it only advances inside <Mono>perform_vault_sweep()</Mono> after profits have been swept. This is the standard hedge fund HWM pattern that prevents phantom sweeps on volatile equity curves.</p>
+        </SubSection>
+
+        <SubSection title="Journal &amp; Persistence">
+          <p>Trade journal in SQLite (<Mono>forex_journal.db</Mono>) with two tables: <Mono>trades</Mono> (ticket_id PK, pair, direction, entry/exit prices, P&amp;L in pips and USD) and <Mono>withdrawable_vault</Mono> (total swept, sweep count, last sweep timestamp). Paper positions persisted to <Mono>navigator_live_state.json</Mono>.</p>
+        </SubSection>
+      </Section>
+
+      {/* Section 13 — Notification Alert System */}
+      <Section title="Trade Alert Notification System">
+        <SimpleBox>
+          <p>When any bot closes a profitable trade, it gets queued into a notification system that batches alerts and sends them to your phone via Telegram (or Discord). You can control how often you get alerts — from every 5 minutes to once a day — directly from the dashboard.</p>
+        </SimpleBox>
+
+        <SubSection title="Architecture">
+          <p>Every bot hooks into the <Mono>alert_manager</Mono> on profitable trade close. Alerts are queued to <Mono>data/alert_queue.json</Mono> and flushed on a configurable timer (default: 60 minutes). Both Telegram Bot API and Discord webhooks are supported simultaneously.</p>
+          <Table
+            headers={["Channel", "Setup", "Cost"]}
+            rows={[
+              ["Telegram", "@BotFather → create bot → set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID", "Free forever"],
+              ["Discord", "Server Settings → Webhooks → copy URL → set DISCORD_WEBHOOK_URL", "Free forever"],
+            ]}
+          />
+        </SubSection>
+
+        <SubSection title="Configurable Parameters">
+          <Table
+            headers={["Setting", "Default", "Range"]}
+            rows={[
+              ["Alert interval", "60 minutes", "5 min – 24 hours"],
+              ["Min P&L % filter", "0%", "0–100%"],
+              ["Min P&L $ filter", "$0", "$0–$10,000"],
+              ["Telegram toggle", "Enabled", "On/Off"],
+              ["Discord toggle", "Enabled", "On/Off"],
+            ]}
+          />
+          <p>All settings adjustable via <Mono>POST /trading-api/alerts/config</Mono> or the dashboard Alerts panel. Test connection: <Mono>POST /trading-api/alerts/test</Mono>.</p>
+        </SubSection>
+      </Section>
+
+      {/* Section 14 — Groq / Hardware */}
       <Section title="AI Inference: Groq LPU &amp; Llama 3.3 70B">
         <SimpleBox>
           <p>The AI runs on Groq's special chip, which is purpose-built for AI reasoning. It's dramatically faster than traditional AI hardware. This matters because market windows are short — a slow AI means stale decisions.</p>
@@ -677,7 +837,7 @@ export function WhitepaperContent() {
           <p>Primary: PostgreSQL (<Mono>psycopg2</Mono> ThreadedConnectionPool, min=1, max=8). Fallback: SQLite (identical function signatures, transparent switch via <Mono>is_pg_available()</Mono>).</p>
         </SubSection>
 
-        <SubSection title="APScheduler Jobs">
+        <SubSection title="APScheduler Jobs (10 Registered)">
           <Table
             headers={["Job", "Schedule", "Action"]}
             rows={[
@@ -686,6 +846,11 @@ export function WhitepaperContent() {
               ["Post-mortem", "16:10 ET weekdays", "Close positions, P&L, journal update, profit sweep"],
               ["Daily auditor", "16:30 ET weekdays", "Inspector Rekt full audit"],
               ["Gemini self-critic", "04:15 AM ET", "Pre-market audit, veto_conditions.json write"],
+              ["Auto-heal monitor", "Every 2min, always active", "Self-healing for degraded components"],
+              ["Learning snapshot", "Every 6 hours", "Export learning data for cross-restart seeding"],
+              ["Equity heartbeat", "Every 1 hour", "Combined equity snapshot (Alpaca + Kraken + Forex)"],
+              ["Apex Predator scan", "3:30 PM ET daily", "Options volatility squeeze scan → long straddle"],
+              ["Forex Navigator cycle", "Every 4 hours (immediate first)", "Forex pair scan → RSI + Groq → entry/exit"],
             ]}
           />
           <p>All jobs paused by default on startup. Operator must explicitly enable auto-trading. The system never starts trading autonomously on launch.</p>
@@ -761,7 +926,7 @@ export function WhitepaperContent() {
 
         <div className="mt-4 p-4 bg-indigo-950/40 border border-indigo-500/20 rounded-lg text-xs text-slate-400">
           <span className="text-indigo-300 font-semibold">System Status: </span>
-          Hybrid Agentic Architecture Stages 0–4 complete. 317 tests passing. Both bots operational. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor.
+          Hybrid Agentic Architecture Stages 0–4 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Telegram/Discord alert system active with configurable frequency.
         </div>
       </Section>
 

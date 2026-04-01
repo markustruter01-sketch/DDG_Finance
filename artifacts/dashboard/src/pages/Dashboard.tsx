@@ -37,6 +37,7 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, PnlText, PnlValue } fr
 import { ControlPanel } from "@/components/ControlPanel";
 import { EmergencyControls, EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
+import { AlertSettingsPanel } from "@/components/AlertSettingsPanel";
 import {
   Activity, ShieldAlert, History, TrendingDown, TrendingUp,
   LayoutList, WifiOff, AlertTriangle, Target, BarChart3,
@@ -7899,6 +7900,9 @@ export default function Dashboard() {
           <motion.div className="space-y-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>
             <SafeSection label="System Health">
               <SystemHealthCard />
+            </SafeSection>
+            <SafeSection label="Trade Alerts">
+              <AlertSettingsPanel />
             </SafeSection>
             <SafeSection label="Degradation Log">
               <SystemDegradationSection />

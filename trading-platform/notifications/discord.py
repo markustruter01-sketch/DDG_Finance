@@ -97,6 +97,8 @@ def notify_position_closed(
     symbol: str,
     reason: str,
     pnl_pct: float | None = None,
+    pnl_usd: float | None = None,
+    bot_name: str = "Alpaca Bot",
 ) -> None:
     color = COLOR_GREEN if pnl_pct and pnl_pct > 0 else COLOR_RED
     emoji = "\u2705" if pnl_pct and pnl_pct > 0 else "\u274c"
@@ -107,6 +109,19 @@ def notify_position_closed(
     if pnl_pct is not None:
         fields.append({"name": "P&L", "value": f"{pnl_pct:+.2f}%", "inline": True})
     _send_async({"embeds": [_embed(f"{emoji} Position Closed: {symbol}", reason, color, fields)]})
+
+    if pnl_pct is not None and pnl_pct > 0:
+        try:
+            from notifications.alert_manager import enqueue_profitable_trade
+            enqueue_profitable_trade(
+                bot_name=bot_name,
+                symbol=symbol,
+                pnl_pct=pnl_pct,
+                pnl_usd=pnl_usd or 0.0,
+                reason=reason,
+            )
+        except Exception:
+            pass
 
 
 def notify_kill_switch(drawdown_pct: float, equity: float) -> None:

@@ -543,14 +543,26 @@ def close_position(symbol: str, reason: str) -> None:
         trade_record  = paper_close_position(symbol, current_price, reason)
         if trade_record:
             recent_trades.append(trade_record)
-            # Growth Vault sweep: 20% of gross profit → JEPQ (paper entry)
             _pnl = trade_record.get("pnl_usd", 0)
+            _pnl_pct = trade_record.get("pnl_pct", 0)
             if _pnl > 0:
                 try:
                     from execution.profit_sweep import record_kraken_vault_contribution
                     record_kraken_vault_contribution(_pnl)
                 except Exception as _ve:
                     logger.warning(f"Vault | Kraken sweep failed: {_ve}")
+                try:
+                    from notifications.alert_manager import enqueue_profitable_trade
+                    _bot_label = os.environ.get("BOT_DISPLAY_NAME", BOT_DISPLAY_NAME)
+                    enqueue_profitable_trade(
+                        bot_name=f"Kraken {_bot_label}",
+                        symbol=symbol,
+                        pnl_pct=_pnl_pct,
+                        pnl_usd=_pnl,
+                        reason=reason,
+                    )
+                except Exception:
+                    pass
         # Sync in-memory state from the paper engine
         open_positions = get_paper_positions()
 

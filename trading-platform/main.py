@@ -30,7 +30,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter
+from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter, Request
 from pydantic import BaseModel
 from loguru import logger
 
@@ -360,6 +360,13 @@ async def lifespan(app: FastAPI):
         next_run_time=__import__("datetime").datetime.now(),
     )
     logger.info("Forex Navigator registered (4-hour interval, first run immediate)")
+
+    try:
+        from notifications.alert_manager import start_alert_scheduler
+        start_alert_scheduler()
+        logger.info("Alert manager started (batched Telegram/Discord notifications)")
+    except Exception as _alert_err:
+        logger.warning(f"Alert manager startup failed (non-fatal): {_alert_err}")
 
     yield
 
@@ -787,6 +794,68 @@ async def system_health_architecture() -> dict:
             "data_age_s": None,
             "detail": f"DB error: {str(exc)[:70]}",
         }
+
+    # ── 7. Options Bot (Apex Predator) ──────────────────────────────────
+    try:
+        import options_engine as _opts_h
+        _opts_state = _opts_h._get_state()
+        _opts_enabled = not _opts_state.get("paused", False)
+        _opts_equity = _opts_state.get("paper_equity", _opts_h.PAPER_CAPITAL)
+        _opts_positions = _opts_h._load_json(_opts_h.POSITIONS_FILE, [])
+        _opts_open = len([p for p in _opts_positions if p.get("status") == "open"]) if _opts_positions else 0
+        nodes["options_bot"] = {
+            "label": "Apex Predator (Options Bot #5)",
+            "level": "green",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"{'Enabled' if _opts_enabled else 'Standby'} · ${_opts_equity:,.0f} · {_opts_open} open",
+        }
+    except Exception as exc:
+        nodes["options_bot"] = {"label": "Apex Predator (Options Bot #5)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    # ── 8. Forex Bot (The Navigator) ──────────────────────────────────
+    try:
+        _fx_h = _get_forex_engine()
+        if _fx_h:
+            _fx_state = _fx_h.get_state()
+            _fx_equity = _fx_state.get("paper_equity", 0)
+            _fx_positions = _fx_state.get("position_count", 0)
+            _fx_paused = _fx_state.get("paused", False)
+            _fx_level = "yellow" if _fx_paused else "green"
+            nodes["forex_bot"] = {
+                "label": "The Navigator (Forex Bot #6)",
+                "level": _fx_level,
+                "latency_ms": None,
+                "data_age_s": None,
+                "detail": f"{'Paused' if _fx_paused else 'Active'} · ${_fx_equity:,.0f} · {_fx_positions} positions",
+            }
+        else:
+            nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": "Engine not loaded"}
+    except Exception as exc:
+        nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    # ── 9. Alert System ──────────────────────────────────────────────
+    try:
+        from notifications.telegram import is_configured as _tg_ok
+        from notifications.discord import is_configured as _dc_ok
+        from notifications.alert_manager import get_queue_status as _aq_status
+        _alert_st = _aq_status()
+        _tg = _alert_st.get("telegram_configured", False)
+        _dc = _alert_st.get("discord_configured", False)
+        _q_size = _alert_st.get("queue_size", 0)
+        _channels = []
+        if _tg: _channels.append("TG")
+        if _dc: _channels.append("DC")
+        _ch_str = "+".join(_channels) if _channels else "No channels"
+        nodes["alert_system"] = {
+            "label": "Alert System (Telegram/Discord)",
+            "level": "green" if _channels else "yellow",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"{_ch_str} · {_q_size} queued · {_alert_st['config'].get('interval_minutes', 60)}min interval",
+        }
+    except Exception as exc:
+        nodes["alert_system"] = {"label": "Alert System", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     return {
         "timestamp": now,
@@ -4670,6 +4739,49 @@ async def forex_manual_scan(background_tasks: BackgroundTasks):
         raise HTTPException(status_code=503, detail="Forex engine not loaded")
     background_tasks.add_task(fx.run_cycle)
     return {"status": "forex_scan_queued"}
+
+# ── Alert Notification System ──────────────────────────────────────────────────
+from notifications import alert_manager as _alert_mgr
+
+@router.get("/alerts/config")
+async def alerts_config():
+    return _alert_mgr.get_config()
+
+@router.post("/alerts/config")
+async def alerts_config_update(request: Request):
+    body = await request.json()
+    return _alert_mgr.save_config(body)
+
+@router.get("/alerts/status")
+async def alerts_status():
+    return _alert_mgr.get_queue_status()
+
+@router.post("/alerts/test")
+async def alerts_test():
+    from notifications.telegram import send_test_message, is_configured as tg_ok
+    from notifications.discord import is_configured as dc_ok, _send_async, _embed, COLOR_PURPLE
+    tg_result = False
+    dc_result = False
+    if tg_ok():
+        tg_result = send_test_message()
+    if dc_ok():
+        try:
+            _send_async({"embeds": [_embed("\U0001f514 Alert Test", "This is a test notification from AlgoEdge.", COLOR_PURPLE)]})
+            dc_result = True
+        except Exception:
+            dc_result = False
+    return {
+        "telegram_configured": tg_ok(),
+        "telegram_sent": tg_result,
+        "discord_configured": dc_ok(),
+        "discord_sent": dc_result,
+        "detail": f"TG={'sent' if tg_result else 'skip'} DC={'sent' if dc_result else 'skip'}",
+    }
+
+@router.post("/alerts/flush")
+async def alerts_flush():
+    count = _alert_mgr.flush_alerts()
+    return {"flushed": count}
 
 app.include_router(router)
 

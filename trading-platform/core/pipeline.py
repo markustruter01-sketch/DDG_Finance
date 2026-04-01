@@ -553,11 +553,29 @@ async def _run_pipeline_inner(
         kraken_equity = get_kraken_equity()
         alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
         regime = _state.get("last_regime")
+        options_eq = 0.0
+        try:
+            import importlib as _il_snap
+            _opts_snap = _il_snap.import_module("options_engine")
+            _opts_st = _opts_snap.get_state()
+            options_eq = float(_opts_st.get("paper_equity", 0))
+        except Exception:
+            pass
+        forex_eq = 0.0
+        try:
+            from routes._deps import _get_forex_engine as _gfx_snap
+            _fx_snap = _gfx_snap()
+            if _fx_snap:
+                forex_eq = float(_fx_snap.get_state().get("paper_equity", 0))
+        except Exception:
+            pass
         insert_equity_snapshot(
             alpaca_equity=alpaca_equity,
             kraken_equity=kraken_equity,
             regime=regime,
             source="pipeline",
+            options_equity=options_eq,
+            forex_equity=forex_eq,
         )
     except Exception as _snap_exc:
         logger.warning(f"Pipeline | Equity snapshot write failed (non-fatal): {_snap_exc}")

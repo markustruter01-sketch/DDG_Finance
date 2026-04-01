@@ -127,6 +127,14 @@ async def lifespan(app: FastAPI):
                     _eqconn.close()
         except Exception:
             kraken_eq = 0.0
+        options_eq = 0.0
+        try:
+            import importlib
+            opts = importlib.import_module("options_engine")
+            opts_state = opts.get_state()
+            options_eq = float(opts_state.get("paper_equity", 0))
+        except Exception:
+            options_eq = 0.0
         forex_eq = 0.0
         try:
             fx = _get_forex_engine()
@@ -135,7 +143,10 @@ async def lifespan(app: FastAPI):
                 forex_eq = float(fx_state.get("paper_equity", 0))
         except Exception:
             forex_eq = 0.0
-        insert_equity_snapshot(alpaca_eq, kraken_eq + forex_eq, "LIVE", "hourly_heartbeat")
+        insert_equity_snapshot(
+            alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat",
+            options_equity=options_eq, forex_equity=forex_eq,
+        )
 
     def _equity_heartbeat_sync():
         import asyncio as _aio

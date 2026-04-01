@@ -328,6 +328,8 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS time_in_trade_hours  DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS exit_reason          TEXT;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISION;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
+ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS options_equity DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS forex_equity   DOUBLE PRECISION NOT NULL DEFAULT 0;
 """
 
 
@@ -543,7 +545,7 @@ def get_kraken_equity() -> float:
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
                 row = cur.fetchone()
                 return float(row[0]) if row else 0.0
     except Exception as exc:
@@ -558,6 +560,8 @@ def insert_equity_snapshot(
     kraken_equity: float = 0.0,
     regime: str | None = None,
     source: str = "pipeline",
+    options_equity: float = 0.0,
+    forex_equity: float = 0.0,
 ) -> bool:
     """
     Insert a portfolio equity snapshot for the equity curve chart.
@@ -565,20 +569,21 @@ def insert_equity_snapshot(
     """
     if not is_pg_available():
         return False
-    total = alpaca_equity + kraken_equity
+    total = alpaca_equity + kraken_equity + options_equity + forex_equity
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO equity_snapshots
-                        (alpaca_equity, kraken_equity, total_equity, regime, source)
-                    VALUES (%s, %s, %s, %s, %s)
+                        (alpaca_equity, kraken_equity, options_equity, forex_equity, total_equity, regime, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (alpaca_equity, kraken_equity, total, regime, source),
+                    (alpaca_equity, kraken_equity, options_equity, forex_equity, total, regime, source),
                 )
         logger.debug(
             f"DB | Equity snapshot: alpaca={alpaca_equity:.2f} kraken={kraken_equity:.2f} "
+            f"options={options_equity:.2f} forex={forex_equity:.2f} "
             f"total={total:.2f} regime={regime} source={source}"
         )
         return True
@@ -600,7 +605,10 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
                 cur.execute(
                     """
                     SELECT id, ts AT TIME ZONE 'UTC' AS ts,
-                           alpaca_equity, kraken_equity, total_equity, regime, source
+                           alpaca_equity, kraken_equity,
+                           COALESCE(options_equity, 0) AS options_equity,
+                           COALESCE(forex_equity, 0) AS forex_equity,
+                           total_equity, regime, source
                     FROM equity_snapshots
                     ORDER BY ts DESC
                     LIMIT %s
@@ -608,9 +616,9 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
                     (limit,),
                 )
                 rows = cur.fetchall()
-        cols = ["id", "ts", "alpaca_equity", "kraken_equity", "total_equity", "regime", "source"]
+        cols = ["id", "ts", "alpaca_equity", "kraken_equity", "options_equity", "forex_equity", "total_equity", "regime", "source"]
         result = []
-        for row in reversed(rows):  # reverse to get ascending order
+        for row in reversed(rows):
             d = dict(zip(cols, row))
             d["ts"] = d["ts"].isoformat()
             result.append(d)

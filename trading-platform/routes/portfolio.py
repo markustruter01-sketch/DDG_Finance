@@ -841,10 +841,13 @@ def _build_synthetic_equity_curve() -> list[dict]:
         a_eq += alpaca_daily_pnl.get(d, 0)
         k_eq += kraken_daily_pnl.get(d, 0)
         curve.append({
-            "date": d,
+            "ts": f"{d}T12:00:00",
             "alpaca_equity": round(a_eq, 2),
             "kraken_equity": round(k_eq, 2),
+            "options_equity": 0,
+            "forex_equity": 0,
             "total_equity": round(a_eq + k_eq, 2),
+            "regime": None,
             "source": "synthetic",
         })
     return curve

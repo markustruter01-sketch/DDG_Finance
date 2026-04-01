@@ -74,6 +74,8 @@ export interface EquitySnapshot {
   ts: string;
   alpaca_equity: number;
   kraken_equity: number;
+  options_equity: number;
+  forex_equity: number;
   total_equity: number;
   regime: string | null;
   source: string;
@@ -1129,9 +1131,12 @@ export function useExportReport() {
 }
 
 export function useEquityCurve(limit = 500) {
-  return useQuery<{ count: number; snapshots: EquitySnapshot[] }>({
+  return useQuery<{ count: number; source: string; snapshots: EquitySnapshot[] }>({
     queryKey: ["/performance/equity-curve", limit],
-    queryFn: async () => (await api.get(`/performance/equity-curve?limit=${limit}`)).data,
+    queryFn: async () => {
+      const res = (await api.get(`/performance/equity-curve?limit=${limit}`)).data;
+      return { count: res.count, source: res.source, snapshots: res.curve ?? [] };
+    },
     refetchInterval: useVisibleInterval(60_000),
     retry: false,
     staleTime: 30_000,

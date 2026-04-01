@@ -61,6 +61,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
+  ComposedChart, Area,
 } from "recharts";
 
 
@@ -2912,11 +2913,23 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
 };
 
 // ── Live Equity Curve (from equity_snapshots table) ───────────────────────────
-function LiveEquityCurveSection() {
-  const { data, isLoading } = useEquityCurve(500);
-  const snapshots = data?.snapshots ?? [];
 
-  // Compute drawdown from peak
+const FLEET_BASELINE = 600_000;
+type EquityRange = "24h" | "7d" | "30d" | "all";
+
+function LiveEquityCurveSection() {
+  const { data, isLoading } = useEquityCurve(2000);
+  const allSnapshots = data?.snapshots ?? [];
+  const [range, setRange] = useState<EquityRange>("all");
+
+  const snapshots = useMemo(() => {
+    if (range === "all" || !allSnapshots.length) return allSnapshots;
+    const now = Date.now();
+    const cutoff = range === "24h" ? now - 86_400_000 : range === "7d" ? now - 7 * 86_400_000 : now - 30 * 86_400_000;
+    const filtered = allSnapshots.filter((s) => new Date(s.ts).getTime() >= cutoff);
+    return filtered.length >= 2 ? filtered : allSnapshots.slice(-2);
+  }, [allSnapshots, range]);
+
   const { peak, drawdownPct } = useMemo(() => {
     if (!snapshots.length) return { peak: 0, drawdownPct: 0 };
     let pk = -Infinity;
@@ -2926,13 +2939,19 @@ function LiveEquityCurveSection() {
     return { peak: pk, drawdownPct: dd };
   }, [snapshots]);
 
-  const chartData = useMemo(() => snapshots.map((s) => ({
-    ts: new Date(s.ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-    total: s.total_equity,
-    alpaca: s.alpaca_equity,
-    kraken: s.kraken_equity,
-    regime: s.regime,
-  })), [snapshots]);
+  const chartData = useMemo(() => snapshots.map((s) => {
+    const total = s.total_equity;
+    return {
+      ts: new Date(s.ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      total,
+      alpaca: s.alpaca_equity,
+      kraken: s.kraken_equity,
+      options: s.options_equity ?? 0,
+      forex: s.forex_equity ?? 0,
+      drawdown: Math.min(total, peak),
+      regime: s.regime,
+    };
+  }), [snapshots, peak]);
 
   const last = snapshots[snapshots.length - 1];
   const first = snapshots[0];
@@ -2942,30 +2961,54 @@ function LiveEquityCurveSection() {
 
   const EquityTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload?.length) return null;
+    const d = payload[0]?.payload;
     return (
       <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
         <p className="text-muted-foreground mb-1">{label}</p>
-        {payload.map((p: any) => (
-          <p key={p.dataKey} style={{ color: p.color }} className="font-mono">
-            {p.name}: {formatCurrency(p.value)}
-          </p>
-        ))}
-        {payload[0]?.payload?.regime && (
-          <p className="text-slate-500 mt-1">Regime: {payload[0].payload.regime}</p>
+        <p className="font-mono text-white font-semibold">Total: {formatCurrency(d?.total ?? 0)}</p>
+        <p className="font-mono text-emerald-400">Alpaca: {formatCurrency(d?.alpaca ?? 0)}</p>
+        <p className="font-mono text-amber-400">Kraken: {formatCurrency(d?.kraken ?? 0)}</p>
+        <p className="font-mono text-red-400">Options: {formatCurrency(d?.options ?? 0)}</p>
+        <p className="font-mono text-teal-400">Forex: {formatCurrency(d?.forex ?? 0)}</p>
+        {d?.regime && (
+          <p className="text-slate-500 mt-1">Regime: {d.regime}</p>
         )}
       </div>
     );
   };
+
+  const rangeButtons: { label: string; value: EquityRange }[] = [
+    { label: "24h", value: "24h" },
+    { label: "7d", value: "7d" },
+    { label: "30d", value: "30d" },
+    { label: "All", value: "all" },
+  ];
 
   return (
     <Card className="border-white/5 overflow-hidden mb-4">
       <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
         <CardTitle className="flex items-center gap-2 fluid-heading">
           <TrendingUp className="h-4 w-4 text-primary" />
-          <span>Live Portfolio Equity Curve</span>
-          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Alpaca + Kraken</span>
+          <span>Fleet Equity Curve</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">6 Bots · 4 Pools</span>
         </CardTitle>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-slate-800/60 rounded-md p-0.5 gap-0.5">
+            {rangeButtons.map((b) => (
+              <button
+                key={b.value}
+                onClick={() => setRange(b.value)}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] rounded font-mono transition-colors",
+                  range === b.value
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
           {last && (
             <span className="text-xs font-mono text-white">{formatCurrency(last.total_equity)}</span>
           )}
@@ -2983,36 +3026,53 @@ function LiveEquityCurveSection() {
       </CardHeader>
       <CardContent className="p-4">
         {isLoading ? (
-          <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">Loading equity data…</div>
+          <div className="h-52 flex items-center justify-center text-xs text-muted-foreground">Loading equity data…</div>
         ) : snapshots.length < 2 ? (
-          <div className="h-40 flex flex-col items-center justify-center gap-1">
+          <div className="h-52 flex flex-col items-center justify-center gap-1">
             <TrendingUp className="h-6 w-6 text-muted-foreground/30" />
             <p className="text-xs text-muted-foreground">No equity history yet</p>
             <p className="text-[10px] text-muted-foreground/50">Data is recorded after each completed trading cycle</p>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={chartData} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+              <defs>
+                <linearGradient id="drawdownFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="ts" tick={{ fontSize: 9, fill: "#64748b" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
               <YAxis
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`}
                 tick={{ fontSize: 9, fill: "#64748b" }}
                 tickLine={false}
                 axisLine={false}
-                width={42}
+                width={48}
               />
               <Tooltip content={<EquityTooltip />} />
-              <Line type="monotone" dataKey="total" name="Total" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
-              <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1} dot={false} strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1} dot={false} strokeDasharray="4 2" />
-            </LineChart>
+              <ReferenceLine y={FLEET_BASELINE} stroke="#64748b" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: "$600k baseline", position: "insideBottomRight", fill: "#64748b", fontSize: 9 }} />
+              {peak > 0 && (
+                <ReferenceLine y={peak} stroke="#3b82f6" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: `HWM $${(peak / 1000).toFixed(0)}k`, position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
+              )}
+              {drawdownPct < -0.01 && (
+                <Area type="monotone" dataKey="drawdown" stroke="none" fill="url(#drawdownFill)" fillOpacity={1} isAnimationActive={false} />
+              )}
+              <Line type="monotone" dataKey="total" name="Total Fleet" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
+              <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="options" name="Options" stroke="#ef4444" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="forex" name="Forex" stroke="#14b8a6" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
-        <div className="flex items-center gap-4 mt-2 justify-end">
-          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-blue-500 rounded" /><span className="text-[9px] text-muted-foreground">Total</span></div>
+        <div className="flex items-center gap-4 mt-2 justify-end flex-wrap">
+          <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 bg-blue-500 rounded" /><span className="text-[9px] text-muted-foreground">Total Fleet</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-green-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Alpaca</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-amber-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Kraken</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-red-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Options</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-teal-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Forex</span></div>
         </div>
       </CardContent>
     </Card>

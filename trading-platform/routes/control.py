@@ -95,8 +95,26 @@ async def manual_postmortem() -> dict:
                 _a_equity = float(_ga2().get("equity", 0) or 0)
             except Exception:
                 _a_equity = 0.0
-            _ins_snap(alpaca_equity=_a_equity, kraken_equity=_k_equity, source="postmortem")
-            logger.info(f"Postmortem equity snapshot: alpaca={_a_equity:.2f} kraken={_k_equity:.2f}")
+            _o_equity = 0.0
+            try:
+                import importlib as _il_pm
+                _opts_pm = _il_pm.import_module("options_engine")
+                _o_equity = float(_opts_pm.get_state().get("paper_equity", 0))
+            except Exception:
+                pass
+            _f_equity = 0.0
+            try:
+                from routes._deps import _get_forex_engine as _gfx_pm
+                _fx_pm = _gfx_pm()
+                if _fx_pm:
+                    _f_equity = float(_fx_pm.get_state().get("paper_equity", 0))
+            except Exception:
+                pass
+            _ins_snap(
+                alpaca_equity=_a_equity, kraken_equity=_k_equity, source="postmortem",
+                options_equity=_o_equity, forex_equity=_f_equity,
+            )
+            logger.info(f"Postmortem equity snapshot: alpaca={_a_equity:.2f} kraken={_k_equity:.2f} options={_o_equity:.2f} forex={_f_equity:.2f}")
     except Exception as _snap2_exc:
         logger.warning(f"Postmortem equity snapshot failed (non-fatal): {_snap2_exc}")
 

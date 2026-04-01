@@ -96,20 +96,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: crypto_cycle (every 15 min, 24/7, fires when market closed)")
 
-    scheduler.add_job(
-        func=_daily_audit_job,
-        trigger=CronTrigger(
-            day_of_week="mon-fri",
-            hour=16,
-            minute=30,
-            timezone="America/New_York",
-        ),
-        id="daily_audit",
-        name="HITL Auditor Agent Daily Report",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
-    logger.info("Scheduler | Registered: daily_audit (Mon–Fri 16:30 ET — 20 min after post-mortem)")
+    logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
 
     scheduler.add_job(
         func=_gemini_self_critic_job,
@@ -203,6 +190,8 @@ async def _evening_postmortem() -> None:
             f"Scheduler | evening_postmortem complete: "
             f"status={result['status']} updated={result.get('updated_count', 0)}"
         )
+        logger.info("Scheduler | Chaining daily_audit after postmortem completion")
+        await _daily_audit_job()
     except Exception as exc:
         logger.error(f"Scheduler | evening_postmortem CRASHED: {exc}")
 
@@ -210,8 +199,8 @@ async def _evening_postmortem() -> None:
 async def _daily_audit_job() -> None:
     """
     Run the HITL Auditor Agent daily report.
-    Scheduled at 4:30 PM ET (20 minutes after evening_postmortem) so that
-    the audit always sees the day's fully reconciled trade outcomes.
+    Chained from evening_postmortem on completion so the audit always sees
+    the day's fully reconciled trade outcomes.
     Runs in a thread executor to avoid blocking the asyncio event loop.
     """
     logger.info("Scheduler | JOB STARTING: daily_audit (HITL Auditor Agent)")

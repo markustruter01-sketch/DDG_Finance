@@ -18,6 +18,7 @@ import os
 import sys
 import json
 import time
+import threading
 from datetime import datetime, timezone, timedelta
 
 from loguru import logger
@@ -53,6 +54,8 @@ from paper_engine import (
 )
 import forex_nav_db as _db
 import journal as _journal
+
+_cycle_lock = threading.Lock()
 
 _state = {
     "status": "idle",
@@ -431,6 +434,19 @@ def _check_vault_sweep():
 
 
 def run_cycle() -> dict:
+    global _state
+
+    if not _cycle_lock.acquire(blocking=False):
+        logger.warning("Forex | Cycle already in progress — skipping concurrent invocation")
+        return _state
+
+    try:
+        return _run_cycle_inner()
+    finally:
+        _cycle_lock.release()
+
+
+def _run_cycle_inner() -> dict:
     global _state
 
     if is_bot_paused():

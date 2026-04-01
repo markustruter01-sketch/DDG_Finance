@@ -184,6 +184,10 @@ def _get_state() -> dict:
         "total_wins": 0,
         "total_pnl": 0.0,
         "error": None,
+        "circuit_breaker_active": False,
+        "circuit_breaker_reason": None,
+        "circuit_breaker_tripped_at": None,
+        "circuit_breaker_resets_at": None,
     }
     return _load_json(STATE_FILE, default)
 

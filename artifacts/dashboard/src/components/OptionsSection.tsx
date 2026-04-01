@@ -50,6 +50,7 @@ export function OptionsSection() {
           <span>Apex Predator — Options Engine</span>
           <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30">BOT #5</span>
           {paperMode && <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">PAPER</span>}
+          {optState?.circuit_breaker_active && <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse">CIRCUIT BREAKER</span>}
         </div>
         <div className="h-px flex-1 bg-gradient-to-r from-transparent via-red-500/20 to-transparent" />
       </div>

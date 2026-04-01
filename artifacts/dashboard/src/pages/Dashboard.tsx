@@ -6889,6 +6889,8 @@ function OptionsSection() {
 
   const status = optState?.status ?? "loading";
   const paused = optState?.paused ?? false;
+  const paperMode = optState?.paper_mode ?? true;
+  const paperEquity = optState?.paper_equity ?? 100000;
   const fencedCapital = optState?.fenced_capital ?? 0;
   const deployed = optState?.deployed_capital ?? 0;
   const totalEquity = optState?.total_equity ?? 0;
@@ -6916,6 +6918,7 @@ function OptionsSection() {
           <Crosshair className="h-3 w-3" />
           <span>Apex Predator — Options Engine</span>
           <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30">BOT #5</span>
+          {paperMode && <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">PAPER</span>}
         </div>
         <div className="h-px flex-1 bg-gradient-to-r from-transparent via-red-500/20 to-transparent" />
       </div>
@@ -6949,7 +6952,14 @@ function OptionsSection() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-red-500/20 transition-all">
+          <CardContent className="p-3">
+            <div className="text-[10px] font-medium text-muted-foreground mb-1">{paperMode ? "Paper Equity" : "Account Equity"}</div>
+            <div className="text-sm font-mono font-bold text-white">{formatCcy(totalEquity)}</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-1">{paperMode ? "simulated $100k" : "live account"}</div>
+          </CardContent>
+        </Card>
         <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-red-500/20 transition-all">
           <CardContent className="p-3">
             <div className="text-[10px] font-medium text-muted-foreground mb-1">Fenced Capital</div>

@@ -1133,6 +1133,8 @@ export interface OptionsState {
   capital_fence_pct: number;
   fenced_capital: number;
   total_equity: number;
+  paper_mode: boolean;
+  paper_equity: number;
   cycle_count: number;
   total_trades: number;
   total_wins: number;

@@ -58,6 +58,9 @@ DEFAULT_RISK_PCT = 0.01
 EXECUTION_HOUR_ET = 15
 EXECUTION_MINUTE_ET = 30
 
+PAPER_MODE = True
+PAPER_CAPITAL = 100_000.00
+
 STATE_DIR = Path(__file__).parent / "_options_state"
 STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "state.json"
@@ -155,6 +158,8 @@ def _get_state() -> dict:
         "capital_fence_pct": CAPITAL_FENCE_PCT,
         "fenced_capital": 0.0,
         "total_equity": 0.0,
+        "paper_mode": PAPER_MODE,
+        "paper_equity": PAPER_CAPITAL if PAPER_MODE else 0.0,
         "cycle_count": 0,
         "total_trades": 0,
         "total_wins": 0,
@@ -186,8 +191,38 @@ def _save_pending(pending: list):
 
 @alpaca_retry
 def _fetch_account_equity() -> float:
+    if PAPER_MODE:
+        state = _load_json(STATE_FILE, {})
+        equity = state.get("paper_equity", PAPER_CAPITAL)
+        return float(equity)
     acct = _get_trading_client().get_account()
     return float(acct.equity)
+
+
+def _submit_option_order(option_symbol: str, qty: int, side: OrderSide) -> dict | None:
+    if PAPER_MODE:
+        logger.info(f"Options | PAPER ORDER: {side.name} {qty}x {option_symbol}")
+        return {"paper": True, "symbol": option_symbol, "qty": qty, "side": side.name}
+    try:
+        client = _get_trading_client()
+        order_req = MarketOrderRequest(
+            symbol=option_symbol,
+            qty=qty,
+            side=side,
+            time_in_force=TimeInForce.DAY,
+        )
+        order = client.submit_order(order_req)
+        logger.info(f"Options | LIVE ORDER submitted: {side.name} {qty}x {option_symbol} → {order.id}")
+        return {
+            "order_id": str(order.id),
+            "symbol": option_symbol,
+            "qty": qty,
+            "side": side.name,
+            "status": str(order.status),
+        }
+    except Exception as e:
+        logger.error(f"Options | ORDER FAILED: {side.name} {qty}x {option_symbol}: {e}")
+        return None
 
 
 @alpaca_retry
@@ -603,6 +638,17 @@ def approve_trade(trade_id: str) -> dict:
 
         _save_pending(remaining)
 
+        call_order = _submit_option_order(
+            trade["call"]["symbol"], trade["contracts"], OrderSide.BUY
+        )
+        put_order = _submit_option_order(
+            trade["put"]["symbol"], trade["contracts"], OrderSide.BUY
+        )
+
+        if not PAPER_MODE and (call_order is None or put_order is None):
+            _save_pending(pending)
+            return {"error": "Order submission failed — trade returned to pending queue"}
+
         position = {
             **trade,
             "status": "open",
@@ -610,6 +656,8 @@ def approve_trade(trade_id: str) -> dict:
             "current_value": trade["total_cost"],
             "unrealized_pnl": 0.0,
             "unrealized_pnl_pct": 0.0,
+            "call_order": call_order,
+            "put_order": put_order,
         }
 
         positions = _get_positions()
@@ -641,9 +689,11 @@ def approve_trade(trade_id: str) -> dict:
 
         state = _get_state()
         state["total_trades"] = state.get("total_trades", 0) + 1
+        if PAPER_MODE:
+            state["paper_equity"] = state.get("paper_equity", PAPER_CAPITAL) - trade["total_cost"]
         _save_state(state)
 
-        logger.info(f"Options | Trade APPROVED: {trade['symbol']} straddle @ ${trade['total_cost']:,.2f}")
+        logger.info(f"Options | Trade APPROVED: {trade['symbol']} straddle @ ${trade['total_cost']:,.2f} ({'PAPER' if PAPER_MODE else 'LIVE'})")
         return {"status": "approved", "position": position}
 
 
@@ -670,6 +720,17 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
 
         if not pos:
             return {"error": f"Position {position_id} not found"}
+
+        contracts = pos.get("contracts", 1)
+        call_close = _submit_option_order(
+            pos["call"]["symbol"], contracts, OrderSide.SELL
+        )
+        put_close = _submit_option_order(
+            pos["put"]["symbol"], contracts, OrderSide.SELL
+        )
+
+        if not PAPER_MODE and (call_close is None or put_close is None):
+            return {"error": "Close order submission failed — position remains open"}
 
         _save_positions(remaining)
 
@@ -699,9 +760,11 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None) -
         state["total_pnl"] = state.get("total_pnl", 0) + pnl
         if pnl > 0:
             state["total_wins"] = state.get("total_wins", 0) + 1
+        if PAPER_MODE:
+            state["paper_equity"] = state.get("paper_equity", PAPER_CAPITAL) + exit_value
         _save_state(state)
 
-        logger.info(f"Options | Position CLOSED: {pos['symbol']} PnL=${pnl:,.2f} ({pnl_pct:+.1f}%)")
+        logger.info(f"Options | Position CLOSED: {pos['symbol']} PnL=${pnl:,.2f} ({pnl_pct:+.1f}%) ({'PAPER' if PAPER_MODE else 'LIVE'})")
         return {"status": "closed", "pnl": pnl, "pnl_pct": pnl_pct}
 
 
@@ -770,6 +833,11 @@ def get_full_state() -> dict:
     state["deployed_capital"] = deployed
     state["current_value"] = current_value
     state["unrealized_pnl"] = unrealized_pnl
+    state["paper_mode"] = PAPER_MODE
+    if PAPER_MODE:
+        state["paper_equity"] = state.get("paper_equity", PAPER_CAPITAL)
+        state["total_equity"] = state["paper_equity"]
+        state["fenced_capital"] = state["total_equity"] * CAPITAL_FENCE_PCT
 
     return state
 

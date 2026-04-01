@@ -9,7 +9,7 @@ import {
   useAuditorPerformance, useTriggerPerformanceAnalysis,
   useLearningSnapshotInfo, useSyncLearningSnapshot,
   useForceRebalance, useCloseAndReallocate, useKrakenStatus, useKrakenPerformance,
-  useKrakenCommentary, useRefreshKrakenCommentary, useKrakenBots, useEquityCurve,
+  useKrakenCommentary, useRefreshKrakenCommentary, useKrakenBots, useEquityCurve, useKrakenFleetSummary,
   useLearningJournal, useAttribution,
   useDegradationLog, useDegradationReport, useDegradationHealth,
   useRecentTrades, useRagWinsExtended, useExportReport,
@@ -1409,6 +1409,7 @@ function CombinedPortfolioSummary() {
   const { data: vault }     = useVault();
   const { data: positions } = useLivePositions();
   const { data: kraken }    = useKrakenStatus();
+  const { data: fleetSummary } = useKrakenFleetSummary();
   const exportReport        = useExportReport();
   const { toast }           = useToast();
 
@@ -1464,22 +1465,21 @@ function CombinedPortfolioSummary() {
   const vaultValue   = vaultPos?.market_value ?? totalVaulted;
   const vaultPnl     = vaultPos?.unrealized_pl ?? 0;
 
-  // ── Kraken values ─────────────────────────────────────────────────────────────
+  // ── Kraken values (fleet-wide from fleet summary, single-bot from status) ────
   const krakenReady       = !!kraken && kraken.status !== "not_started";
   const krakenBotPaused   = kraken?.bot_paused ?? false;
-  const krakenEquity      = kraken?.total_equity_usd ?? 0;
+  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? kraken?.total_equity_usd ?? 0;
   const krakenDeployed    = kraken?.deployed_pct ?? 0;
   const krakenPaper       = kraken?.paper_trading ?? true;
-  const krakenPaperSumm   = kraken?.paper_summary;
-  const krakenPnl         = krakenPaperSumm?.all_time_pnl_usd ?? 0;
-  const krakenTrades      = krakenPaperSumm?.total_trades ?? 0;
-  const krakenWins        = krakenPaperSumm?.win_count ?? 0;
-  const krakenStart       = krakenPaperSumm?.starting_balance_usd ?? 100_000;
+  const krakenPnl         = fleetSummary?.total_pnl_usd ?? kraken?.paper_summary?.all_time_pnl_usd ?? 0;
+  const krakenTrades      = fleetSummary?.total_trades ?? kraken?.paper_summary?.total_trades ?? 0;
+  const krakenWins        = fleetSummary?.total_wins ?? kraken?.paper_summary?.win_count ?? 0;
+  const krakenStart       = fleetSummary?.total_starting_usd ?? 300_000;
   const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
   // ── Grand total (informational only — two separate capital pools) ─────────────
-  const grandTotal = alpacaEquity + (krakenReady ? krakenEquity : 0);
+  const grandTotal = alpacaEquity + (krakenReady || fleetSummary ? krakenFleetEquity : 0);
 
   return (
     <div className="space-y-3">
@@ -1490,7 +1490,7 @@ function CombinedPortfolioSummary() {
             Total Portfolio
           </span>
           <span className="text-[9px] font-mono text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded">
-            2 exchanges
+            alpaca + {fleetSummary?.bot_count ?? 3} kraken bots
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -1725,7 +1725,7 @@ function CombinedPortfolioSummary() {
         {/* ── RIGHT: Kraken Crypto Bot ─────────────────────────────────────── */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-widest text-cyan-400/60 font-semibold">⚓ Kraken · Crypto Bot</span>
+            <span className="text-[9px] uppercase tracking-widest text-cyan-400/60 font-semibold">⚓ Kraken · Crypto Fleet ({fleetSummary?.bot_count ?? 3} bots)</span>
             {krakenPaper && (
               <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide">
                 Paper
@@ -1755,10 +1755,10 @@ function CombinedPortfolioSummary() {
                 <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
                   {krakenPaper ? "Paper Equity" : "Live Equity"}
                 </div>
-                {krakenReady ? (
+                {(krakenReady || fleetSummary) ? (
                   <>
                     <AnimatedCurrency
-                      value={krakenEquity}
+                      value={krakenFleetEquity}
                       className={cn("fluid-metric font-mono font-bold tracking-tight", krakenPnl >= 0 ? "text-cyan-400" : "text-red-400")}
                     />
                     <div className={cn("text-xs mt-1.5 flex items-center gap-1 font-medium", krakenPnl >= 0 ? "text-cyan-400/70" : "text-red-400/70")}>
@@ -1816,7 +1816,7 @@ function CombinedPortfolioSummary() {
                   Win Rate
                   <Trophy className="h-3 w-3 text-yellow-400/50" />
                 </div>
-                {krakenReady && krakenWinRate !== null ? (
+                {(krakenReady || fleetSummary) && krakenWinRate !== null ? (
                   <>
                     <div className="fluid-metric font-mono font-bold text-white tracking-tight">
                       {krakenWinRate.toFixed(0)}<span className="text-xs text-muted-foreground font-normal">%</span>
@@ -3298,7 +3298,7 @@ function MiniSparkline({ data, color, w = 60, h = 20 }: { data: number[]; color:
 
 function FleetPerformanceHero() {
   const { data: portfolio } = usePortfolio();
-  const { data: kraken } = useKrakenStatus();
+  const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
   const djPerf = useKrakenPerformance("davy-jones");
@@ -3309,8 +3309,8 @@ function FleetPerformanceHero() {
   const caStatus = useKrakenStatus("calypso");
 
   const alpacaEquity = portfolio?.account.equity ?? 0;
-  const krakenEquity = kraken?.total_equity_usd ?? 0;
-  const grandTotal = alpacaEquity + krakenEquity;
+  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
+  const grandTotal = alpacaEquity + krakenFleetEquity;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -3374,7 +3374,7 @@ function FleetPerformanceHero() {
   }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory]);
 
   const stats = [
-    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: "2 exchanges" },
+    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `alpaca + ${fleetSummary?.bot_count ?? 3} kraken bots` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
     { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
     { label: "Best Today", value: todayPerformers.best ? `${todayPerformers.best.icon} ${todayPerformers.best.name}` : "—", color: "text-green-400", sub: todayPerformers.best ? `${todayPerformers.best.dailyPnl >= 0 ? "+" : ""}${todayPerformers.best.dailyPnl.toFixed(2)}% daily P&L` : "no trades today" },

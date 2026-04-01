@@ -851,6 +851,38 @@ export function useKrakenStatus(botId?: string) {
   });
 }
 
+// ── Kraken Fleet Summary (combined equity across all bots) ────────────────────
+
+export interface KrakenFleetSummary {
+  total_equity_usd: number;
+  total_cash_usd: number;
+  total_starting_usd: number;
+  total_trades: number;
+  total_wins: number;
+  total_pnl_usd: number;
+  bot_count: number;
+  bots: Array<{
+    bot_id: string;
+    display_name: string;
+    equity_usd: number;
+    cash_usd: number;
+    starting_balance_usd: number;
+    trades: number;
+    wins: number;
+    pnl_usd: number;
+  }>;
+}
+
+export function useKrakenFleetSummary() {
+  return useQuery<KrakenFleetSummary>({
+    queryKey: ["/kraken/fleet-summary"],
+    queryFn: async () => (await api.get("/kraken/fleet-summary")).data,
+    refetchInterval: 30_000,
+    retry: 2,
+    retryDelay: 3000,
+  });
+}
+
 // ── Kraken AI Commentary ──────────────────────────────────────────────────────
 
 export interface KrakenCommentary {

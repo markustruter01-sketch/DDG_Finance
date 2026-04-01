@@ -1508,7 +1508,7 @@ async def manual_postmortem() -> dict:
                     _pmconn = _pg2pm.connect(_dburlpm)
                     try:
                         with _pmconn.cursor() as _pmc:
-                            _pmc.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 1")
+                            _pmc.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
                             _pmrow = _pmc.fetchone()
                             if _pmrow:
                                 _k_equity = float(_pmrow[0] or 0)
@@ -2747,9 +2747,10 @@ def _build_synthetic_equity_curve() -> list[dict]:
     from datetime import datetime, timedelta
 
     alpaca_start = 100_000.0
-    kraken_start = 100_000.0
+    kraken_start = 0.0
 
     # --- Kraken trades (from kraken_trades + kraken_portfolio PostgreSQL tables) ---
+    # Sum starting balances across ALL bots
     kraken_daily_pnl: dict = defaultdict(float)
     try:
         import psycopg2 as _pg2sc, os as _ossc
@@ -2758,10 +2759,10 @@ def _build_synthetic_equity_curve() -> list[dict]:
             _scconn = _pg2sc.connect(_dburlsc)
             try:
                 with _scconn.cursor() as _scc:
-                    _scc.execute("SELECT starting_balance_usd FROM kraken_portfolio WHERE id = 1")
+                    _scc.execute("SELECT COALESCE(SUM(starting_balance_usd), 0) FROM kraken_portfolio")
                     _scr = _scc.fetchone()
                     if _scr:
-                        kraken_start = float(_scr[0] or 100_000.0)
+                        kraken_start = float(_scr[0] or 300_000.0)
                     _scc.execute("SELECT pnl_usd, closed_at FROM kraken_trades WHERE pnl_usd IS NOT NULL ORDER BY closed_at ASC")
                     for _tr in _scc.fetchall():
                         _d = (_tr[1].isoformat() if _tr[1] else "")[:10]
@@ -2770,7 +2771,7 @@ def _build_synthetic_equity_curve() -> list[dict]:
             finally:
                 _scconn.close()
     except Exception:
-        pass
+        kraken_start = 300_000.0
 
     # --- Alpaca trades: use pnl_percentage with 5% position sizing estimate ---
     alpaca_daily_pnl: dict = defaultdict(float)
@@ -3088,6 +3089,103 @@ async def kraken_status(bot_id: str | None = None) -> dict:
             "deployed_pct": 0, "cash_usd": 0, "error": str(exc),
             "recent_trades": [], "paper_summary": None, **_live_telemetry,
         }
+
+
+# ── Kraken Bot — Fleet Summary (combined equity across all bots) ──────────────
+
+@router.get("/kraken/fleet-summary", tags=["Kraken Bot"])
+async def kraken_fleet_summary() -> dict:
+    """
+    Return combined equity, cash, trade stats across ALL Kraken bots.
+    Used by the dashboard to show accurate fleet-wide totals.
+    """
+    import psycopg2 as _pg2fs, psycopg2.extras as _pg2fsx, os as _osfs, json as _jsonfs
+
+    _dburlfs = _osfs.environ.get("DATABASE_URL")
+    if not _dburlfs:
+        return {"total_equity_usd": 0, "total_cash_usd": 0, "total_starting_usd": 0,
+                "total_trades": 0, "total_wins": 0, "total_pnl_usd": 0, "bot_count": 0, "bots": []}
+
+    try:
+        _fsconn = _pg2fs.connect(_dburlfs)
+        try:
+            bots_out = []
+            total_equity = 0.0
+            total_cash = 0.0
+            total_starting = 0.0
+            total_trades = 0
+            total_wins = 0
+            total_pnl_usd = 0.0
+
+            for _bid, _prof in KRAKEN_BOT_PROFILES.items():
+                _dbid = _prof["db_id"]
+                eq = 0.0
+                cash = 0.0
+                starting = 100_000.0
+                trades_count = 0
+                wins_count = 0
+                pnl = 0.0
+
+                with _fsconn.cursor() as _fsc:
+                    _fsc.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = %s", (_dbid,))
+                    _hr = _fsc.fetchone()
+                    if _hr:
+                        eq = float(_hr[0] or 0)
+
+                    _fsc.execute("SELECT starting_balance_usd, cash_usd FROM kraken_portfolio WHERE id = %s", (_dbid,))
+                    _pr = _fsc.fetchone()
+                    if _pr:
+                        starting = float(_pr[0] or 100_000)
+                        cash = float(_pr[1] or 0)
+
+                    _fsc.execute(
+                        "SELECT COUNT(*), "
+                        "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
+                        "COALESCE(SUM(pnl_usd), 0) "
+                        "FROM kraken_trades WHERE bot_id = %s",
+                        (_bid,)
+                    )
+                    _tr = _fsc.fetchone()
+                    if _tr:
+                        trades_count = int(_tr[0] or 0)
+                        wins_count = int(_tr[1] or 0)
+                        pnl = float(_tr[2] or 0)
+
+                total_equity += eq
+                total_cash += cash
+                total_starting += starting
+                total_trades += trades_count
+                total_wins += wins_count
+                total_pnl_usd += pnl
+
+                bots_out.append({
+                    "bot_id": _bid,
+                    "display_name": _prof["display_name"],
+                    "equity_usd": round(eq, 2),
+                    "cash_usd": round(cash, 2),
+                    "starting_balance_usd": round(starting, 2),
+                    "trades": trades_count,
+                    "wins": wins_count,
+                    "pnl_usd": round(pnl, 2),
+                })
+
+            return {
+                "total_equity_usd": round(total_equity, 2),
+                "total_cash_usd": round(total_cash, 2),
+                "total_starting_usd": round(total_starting, 2),
+                "total_trades": total_trades,
+                "total_wins": total_wins,
+                "total_pnl_usd": round(total_pnl_usd, 2),
+                "bot_count": len(KRAKEN_BOT_PROFILES),
+                "bots": bots_out,
+            }
+        finally:
+            _fsconn.close()
+    except Exception as exc:
+        logger.warning(f"[kraken/fleet-summary] DB read failed: {exc}")
+        return {"total_equity_usd": 0, "total_cash_usd": 0, "total_starting_usd": 0,
+                "total_trades": 0, "total_wins": 0, "total_pnl_usd": 0,
+                "bot_count": 0, "bots": [], "error": str(exc)}
 
 
 # ── Kraken Bot — AI Narrative Commentary ──────────────────────────────────────

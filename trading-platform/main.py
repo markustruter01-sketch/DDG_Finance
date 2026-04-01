@@ -3799,7 +3799,10 @@ async def export_diagnostic_report() -> dict:
     lines.append(f"  Generated: {ts}")
     lines.append("  PURPOSE: Paste into Claude / Gemini / ChatGPT for strategy analysis.")
     lines.append("           Contains all trade history, AI reasoning, risk parameters,")
-    lines.append("           entry/exit conditions, and performance data for both bots.")
+    lines.append("           entry/exit conditions, and performance data for ALL 6 BOTS.")
+    lines.append("  FLEET:   #1 Oracle (Alpaca), #2 Davy Jones, #3 Blackbeard, #4 Calypso (Kraken),")
+    lines.append("           #5 Apex Predator (Options), #6 Navigator (Forex)")
+    lines.append("  CAPITAL: $600,000 total across 4 capital pools")
     lines.append(W)
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -4142,204 +4145,184 @@ async def export_diagnostic_report() -> dict:
             lines.append(f"    {regime:<12} {v.get('count',0)} trades | {_pct(v.get('win_rate',0))} win | avg {_pct(v.get('avg_pnl_pct'))}")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SECTION 3: KRAKEN BOT — DAVY JONES' PORTFOLIO
+    # SECTION 3: KRAKEN FLEET — ALL 3 CRYPTO BOTS
     # ─────────────────────────────────────────────────────────────────────────
-    h1("SECTION 3: KRAKEN BOT — DAVY JONES' PORTFOLIO (24/7 Crypto)")
+    h1("SECTION 3: KRAKEN FLEET — ALL 3 CRYPTO BOTS (24/7)")
 
-    # ── Kraken data: all persistent state from PostgreSQL (DB-only) ──────────────
     import psycopg2 as _pg2rpt, psycopg2.extras as _pg2xrpt, os as _osrpt
     _dburlrpt = _osrpt.environ.get("DATABASE_URL")
-    _ks:   dict = {}
-    _pf:   dict = {}
-    _pf_trades: list = []
 
-    if _dburlrpt:
-        try:
-            _rptconn = _pg2rpt.connect(_dburlrpt)
+    _all_kraken_equity = 0.0
+    _all_kraken_starting = 0.0
+    _all_kraken_trades_all: list = []
+    _kraken_per_bot_equity: dict = {}
+
+    for _kbid, _kprof in KRAKEN_BOT_PROFILES.items():
+        _kdbid = _kprof["db_id"]
+        _kname = _kprof["display_name"]
+        _kstrat = _kprof["strategy_label"]
+
+        h2(f"BOT #{_kdbid+1}: {_kname.upper()} (bot_id={_kbid}, strategy={_kstrat})")
+
+        _ks: dict = {}
+        _pf: dict = {}
+        _pf_trades: list = []
+
+        if _dburlrpt:
             try:
-                with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rhc:
-                    _rhc.execute("SELECT * FROM kraken_heartbeat WHERE id = 1")
-                    _rhr = _rhc.fetchone()
-                    if _rhr:
-                        _ks = {
-                            "status":           _rhr["status"],
-                            "equity_usd":       _rhr["equity_usd"],
-                            "cycle_count":      _rhr["cycle_count"],
-                            "bot_paused":       _rhr["bot_paused"],
-                            "paper_trading":    _rhr["paper_trading"],
-                            "last_updated":     _rhr["last_updated"].isoformat() if _rhr["last_updated"] else "N/A",
-                            "position_count":   _rhr["position_count"],
-                        }
-                with _rptconn.cursor() as _rpc:
-                    _rpc.execute(
-                        "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = 1"
-                    )
-                    _rpr = _rpc.fetchone()
-                    if _rpr:
-                        _pos_raw = _rpr[2]
-                        if isinstance(_pos_raw, str):
-                            _pos_raw = _json.loads(_pos_raw)
-                        _db_pos_list = []
-                        if isinstance(_pos_raw, dict):
-                            for _s, _pd in _pos_raw.items():
-                                _ep = dict(_pd)
-                                _ep.setdefault("symbol", _s)
-                                _db_pos_list.append(_ep)
-                        elif isinstance(_pos_raw, list):
-                            _db_pos_list = _pos_raw
-                        _pf = {
-                            "starting_balance_usd": float(_rpr[0] or 100_000),
-                            "cash_usd":             float(_rpr[1] or 0),
-                            "open_positions": _db_pos_list,
-                        }
-                with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rtc:
-                    _rtc.execute(
-                        """
-                        SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                               fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades ORDER BY closed_at ASC
-                        """
-                    )
-                    for _rtr in _rtc.fetchall():
-                        _rtd = dict(_rtr)
-                        if _rtd.get("closed_at"):
-                            _rtd["closed_at"] = _rtd["closed_at"].isoformat()
-                        _pf_trades.append(_rtd)
-            finally:
-                _rptconn.close()
-        except Exception as _rpte:
-            logger.warning(f"[performance/report] Kraken DB read failed: {_rpte}")
+                _rptconn = _pg2rpt.connect(_dburlrpt)
+                try:
+                    with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rhc:
+                        _rhc.execute("SELECT * FROM kraken_heartbeat WHERE id = %s", (_kdbid,))
+                        _rhr = _rhc.fetchone()
+                        if _rhr:
+                            _ks = {
+                                "status":         _rhr["status"],
+                                "equity_usd":     _rhr["equity_usd"],
+                                "cycle_count":    _rhr["cycle_count"],
+                                "bot_paused":     _rhr["bot_paused"],
+                                "paper_trading":  _rhr["paper_trading"],
+                                "last_updated":   _rhr["last_updated"].isoformat() if _rhr["last_updated"] else "N/A",
+                                "position_count": _rhr["position_count"],
+                            }
+                    with _rptconn.cursor() as _rpc:
+                        _rpc.execute(
+                            "SELECT starting_balance_usd, cash_usd, positions FROM kraken_portfolio WHERE id = %s",
+                            (_kdbid,)
+                        )
+                        _rpr = _rpc.fetchone()
+                        if _rpr:
+                            _pos_raw = _rpr[2]
+                            if isinstance(_pos_raw, str):
+                                _pos_raw = _json.loads(_pos_raw)
+                            _db_pos_list = []
+                            if isinstance(_pos_raw, dict):
+                                for _s, _pd in _pos_raw.items():
+                                    _ep = dict(_pd)
+                                    _ep.setdefault("symbol", _s)
+                                    _db_pos_list.append(_ep)
+                            elif isinstance(_pos_raw, list):
+                                _db_pos_list = _pos_raw
+                            _pf = {
+                                "starting_balance_usd": float(_rpr[0] or 100_000),
+                                "cash_usd":             float(_rpr[1] or 0),
+                                "open_positions": _db_pos_list,
+                            }
+                    with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rtc:
+                        _rtc.execute(
+                            """
+                            SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                                   fees_usd, reason, closed_at, paper
+                            FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
+                            """,
+                            (_kbid,)
+                        )
+                        for _rtr in _rtc.fetchall():
+                            _rtd = dict(_rtr)
+                            if _rtd.get("closed_at"):
+                                _rtd["closed_at"] = _rtd["closed_at"].isoformat()
+                            _pf_trades.append(_rtd)
+                finally:
+                    _rptconn.close()
+            except Exception as _rpte:
+                logger.warning(f"[report] Kraken DB read failed for {_kbid}: {_rpte}")
 
-    # Live telemetry from live_state.json (signals, microstructure, etc.)
-    _live_rpt: dict = {}
-    try:
-        _lsf_rpt = _Path("../kraken-bot/live_state.json")
-        if _lsf_rpt.exists():
-            _live_rpt = _json.loads(_lsf_rpt.read_text())
-    except Exception:
-        pass
+        _live_rpt: dict = {}
+        try:
+            _lsf_rpt = _Path(f"../kraken-bot/{_kbid}_live_state.json")
+            if _lsf_rpt.exists():
+                _live_rpt = _json.loads(_lsf_rpt.read_text())
+            elif _kbid == "davy-jones":
+                _lsf_rpt2 = _Path("../kraken-bot/live_state.json")
+                if _lsf_rpt2.exists():
+                    _live_rpt = _json.loads(_lsf_rpt2.read_text())
+        except Exception:
+            pass
 
-    k_status     = _ks.get("status", "not_started")
-    k_equity     = _ks.get("equity_usd", 0) or 0
-    k_cycles     = _ks.get("cycle_count", 0) or 0
-    k_paused     = _ks.get("bot_paused", False)
-    k_paper      = _ks.get("paper_trading", True)
-    k_updated    = _ks.get("last_updated", "N/A")
-    # Prefer live_state positions (enriched: current_price, P&L, stop/tp); fall back to DB
-    _live_rpt_positions = _live_rpt.get("open_positions", [])
-    k_positions  = _live_rpt_positions if _live_rpt_positions else (_pf.get("open_positions", []) or [])
-    k_signals    = _live_rpt.get("signals", []) or []
-    k_cb:   dict = {}
-    k_adaptive   = _live_rpt.get("adaptive_params", {}) or {}
-    k_micro      = _live_rpt.get("microstructure", {}) or {}
-    k_thinking   = _live_rpt.get("thinking_text", "") or ""
-    k_recent_trd = _pf_trades
-    _pf_wins     = [t for t in _pf_trades if t.get("pnl_pct", 0) > 0]
-    k_paper_summ = {
-        "total_trades":      len(_pf_trades),
-        "win_count":         len(_pf_wins),
-        "loss_count":        len(_pf_trades) - len(_pf_wins),
-        "all_time_pnl_usd":  round(sum(t.get("pnl_usd", 0) for t in _pf_trades), 2),
-        "all_time_pnl_pct":  round(sum(t.get("pnl_pct", 0) for t in _pf_trades), 2),
-    } if _pf_trades else {}
-    k_start_bal   = _pf.get("starting_balance_usd", 100_000)
-    k_cash_usd    = _pf.get("cash_usd", 0)
-    k_deployed    = k_equity - k_cash_usd if k_equity > k_cash_usd else 0.0
-    k_deploy_pct  = round((k_deployed / k_equity) * 100, 1) if k_equity > 0 else 0.0
-    k_pnl_usd_all = k_equity - k_start_bal
+        k_status   = _ks.get("status", "not_started")
+        k_equity   = _ks.get("equity_usd", 0) or 0
+        k_cycles   = _ks.get("cycle_count", 0) or 0
+        k_paused   = _ks.get("bot_paused", False)
+        k_paper    = _ks.get("paper_trading", True)
+        k_updated  = _ks.get("last_updated", "N/A")
+        _live_rpt_positions = _live_rpt.get("open_positions", [])
+        k_positions = _live_rpt_positions if _live_rpt_positions else (_pf.get("open_positions", []) or [])
+        k_start_bal = _pf.get("starting_balance_usd", 100_000)
+        k_cash_usd  = _pf.get("cash_usd", 0)
+        k_deployed  = k_equity - k_cash_usd if k_equity > k_cash_usd else 0.0
+        k_deploy_pct = round((k_deployed / k_equity) * 100, 1) if k_equity > 0 else 0.0
+        k_pnl_usd   = k_equity - k_start_bal
+        _k_has_data  = bool(_ks)
 
-    h2("OVERVIEW")
-    row("Capital pool:", "Crypto — Paper Trading via Kraken")
-    row("Bot status:", f"{'PAUSED' if k_paused else 'RUNNING'} ({k_status})")
-    row("Paper trading:", "YES" if k_paper else "NO — LIVE FUNDS")
-    row("Cycles completed:", str(k_cycles))
-    row("Last updated:", str(k_updated)[:19])
-    row("Starting capital:", _c(k_start_bal))
-    row("Current equity:", _c(k_equity))
-    row("Total P&L (paper):", f"{_c(k_pnl_usd_all)} ({_pct((k_pnl_usd_all/k_start_bal)*100 if k_start_bal else 0)})")
-    row("Deployed capital:", f"{_c(k_deployed)} ({_pct(k_deploy_pct, 1)} of equity)")
-    row("Max positions:", str(_ks.get("position_count", len(k_positions))))
-    row("Open positions:", str(len(k_positions)))
+        if _k_has_data:
+            _all_kraken_equity += k_equity
+            _all_kraken_starting += k_start_bal
+        else:
+            _all_kraken_starting += 100_000
+            k_equity = 0
+        _all_kraken_trades_all.extend(_pf_trades)
+        _kraken_per_bot_equity[_kbid] = k_equity
 
-    # ── Kraken paper summary ──
-    if k_paper_summ:
-        ps_trades = k_paper_summ.get("total_trades", 0)
-        ps_wins   = k_paper_summ.get("win_count", 0)
-        ps_losses = k_paper_summ.get("loss_count", 0)
-        ps_pnl_u  = k_paper_summ.get("all_time_pnl_usd", 0)
-        ps_pnl_p  = k_paper_summ.get("all_time_pnl_pct", 0)
-        ps_wr     = (ps_wins / ps_trades * 100) if ps_trades else 0
-        lines.append("")
-        row("All-time trades:", str(ps_trades))
-        row("Win / Loss:", f"{ps_wins}W / {ps_losses}L ({_pct(ps_wr, 1)} win rate)")
-        row("All-time P&L:", f"{_c(ps_pnl_u)} ({_pct(ps_pnl_p)})")
+        if not _k_has_data:
+            row("Bot status:", "DB UNAVAILABLE — no heartbeat data")
+        else:
+            row("Bot status:", f"{'PAUSED' if k_paused else 'RUNNING'} ({k_status})")
+        row("Paper trading:", "YES" if k_paper else "NO — LIVE FUNDS")
+        row("Strategy:", _kstrat)
+        row("Cycles completed:", str(k_cycles))
+        row("Last updated:", str(k_updated)[:19])
+        row("Starting capital:", _c(k_start_bal))
+        row("Current equity:", _c(k_equity))
+        row("Total P&L:", f"{_c(k_pnl_usd)} ({_pct((k_pnl_usd/k_start_bal)*100 if k_start_bal else 0)})")
+        row("Deployed capital:", f"{_c(k_deployed)} ({_pct(k_deploy_pct, 1)} of equity)")
+        row("Open positions:", str(len(k_positions)))
 
-    # ── Kraken current positions ──
-    h2("CURRENT OPEN POSITIONS (KRAKEN CRYPTO)")
-    if not k_positions:
-        lines.append("  No open positions (VPIN or reserve ceiling may be blocking entries).")
-    for pos in k_positions:
-        sym       = pos.get("symbol", "?")
-        side      = str(pos.get("side", "?")).upper()
-        qty       = pos.get("qty", 0)
-        entry     = pos.get("entry_price")
-        curr      = pos.get("current_price")
-        sz_usd    = pos.get("size_usd", 0)
-        upl_usd   = pos.get("unrealized_pnl_usd", 0)
-        upl_pct   = pos.get("unrealized_pnl_pct", 0)
-        sl        = pos.get("stop_loss_price")
-        tp        = pos.get("take_profit_price")
-        entry_t   = str(pos.get("entry_time", "?"))[:16]
-        best_px   = pos.get("best_price")
+        _pf_wins = [t for t in _pf_trades if (t.get("pnl_pct", 0) or 0) > 0]
+        if _pf_trades:
+            ps_trades = len(_pf_trades)
+            ps_wins   = len(_pf_wins)
+            ps_losses = ps_trades - ps_wins
+            ps_pnl_u  = round(sum(t.get("pnl_usd", 0) or 0 for t in _pf_trades), 2)
+            ps_wr     = (ps_wins / ps_trades * 100) if ps_trades else 0
+            row("All-time trades:", str(ps_trades))
+            row("Win / Loss:", f"{ps_wins}W / {ps_losses}L ({_pct(ps_wr, 1)} win rate)")
+            row("All-time P&L:", _c(ps_pnl_u))
 
-        lines.append(f"\n  {sym}  {side}")
-        row("Qty:", f"{qty:,.4f}", indent=2)
-        row("Entry price:", _c(entry, 4), indent=2)
-        row("Current price:", _c(curr, 4), indent=2)
-        row("Position size:", _c(sz_usd), indent=2)
-        row("Unrealized P&L:", f"{_c(upl_usd)} ({_pct(upl_pct)})", indent=2)
-        if sl:
-            sl_pct_from_entry = ((sl - entry) / entry * 100) if entry else 0
-            row("Stop loss:", f"{_c(sl, 4)} ({_pct(sl_pct_from_entry, 2)} from entry)", indent=2)
-        if tp:
-            tp_pct_from_entry = ((tp - entry) / entry * 100) if entry else 0
-            row("Take profit:", f"{_c(tp, 4)} ({_pct(tp_pct_from_entry, 2)} from entry)", indent=2)
-        row("Entry time:", entry_t + " UTC", indent=2)
-        if best_px:
-            row("Best price seen:", _c(best_px, 4), indent=2)
+        if k_positions:
+            lines.append("")
+            lines.append(f"    Open Positions:")
+            for pos in k_positions:
+                sym     = pos.get("symbol", "?")
+                side    = str(pos.get("side", "?")).upper()
+                entry   = pos.get("entry_price")
+                curr    = pos.get("current_price")
+                upl_usd = pos.get("unrealized_pnl_usd", 0)
+                upl_pct = pos.get("unrealized_pnl_pct", 0)
+                lines.append(f"      {sym:<12} {side:<6} entry={_c(entry, 4)}  now={_c(curr, 4)}  P&L={_c(upl_usd)} ({_pct(upl_pct)})")
 
-    # ── Kraken signals ──
-    h2("KRAKEN SIGNAL DASHBOARD (current pair signals)")
-    if not k_signals:
-        lines.append("  No signal data available.")
-    else:
-        lines.append(f"  {'Pair':<12} {'VPIN':>6} {'Signal':<10} {'Momentum':<12} {'Spread':>8}  Notes")
-        lines.append("  " + "-" * 70)
-        for sig in (k_signals if isinstance(k_signals, list) else []):
-            pair  = str(sig.get("symbol") or sig.get("pair", "?"))[:11]
-            vpin  = sig.get("vpin", sig.get("vpin_score"))
-            vpin_s = f"{vpin:.3f}" if vpin is not None else "N/A"
-            stype = str(sig.get("signal_type") or sig.get("signal", "none"))[:9]
-            mom   = str(sig.get("momentum_signal") or sig.get("momentum", "?"))[:11]
-            sprd  = sig.get("spread_pct")
-            sprd_s = _pct(sprd, 3) if sprd is not None else "N/A"
-            note  = "BLOCKED (VPIN>0.70)" if (vpin or 0) > 0.70 else ""
-            lines.append(f"  {pair:<12} {vpin_s:>6} {stype:<10} {mom:<12} {sprd_s:>8}  {note}")
+        if _pf_trades:
+            lines.append("")
+            lines.append(f"    Recent Trades (last 15):")
+            for t in _pf_trades[-15:]:
+                sym    = str(t.get("symbol", "?"))[:11]
+                dt     = str(t.get("closed_at") or "?")[:16]
+                side   = str(t.get("side", "?")).upper()[:5]
+                ppct   = t.get("pnl_pct") or 0
+                pusd   = t.get("pnl_usd") or 0
+                reason = str(t.get("reason") or "?")[:35]
+                lines.append(f"      {dt:<16} {sym:<12} {side:<5} {_pct(ppct):>7} {_c(pusd):>10}  {reason}")
 
-    # ── Kraken microstructure ──
-    if k_micro:
-        h2("ORDER BOOK MICROSTRUCTURE")
-        for pair, m in (k_micro.items() if isinstance(k_micro, dict) else []):
-            vpin = m.get("vpin")
-            sprd = m.get("spread_pct")
-            imb  = m.get("order_imbalance")
-            lines.append(f"  {pair:<12} VPIN={f'{vpin:.3f}' if vpin else 'N/A'}  Spread={_pct(sprd, 3) if sprd else 'N/A'}  Imbalance={f'{imb:.3f}' if imb else 'N/A'}")
+    h2("KRAKEN FLEET TOTALS")
+    _k_fleet_pnl = _all_kraken_equity - _all_kraken_starting
+    row("Fleet starting capital:", _c(_all_kraken_starting))
+    row("Fleet current equity:", _c(_all_kraken_equity))
+    row("Fleet P&L:", f"{_c(_k_fleet_pnl)} ({_pct((_k_fleet_pnl/_all_kraken_starting)*100 if _all_kraken_starting else 0)})")
+    row("Fleet total trades:", str(len(_all_kraken_trades_all)))
 
-    # ── Kraken per-symbol performance ──
-    h2("KRAKEN PER-SYMBOL PERFORMANCE (all-time from kraken_trades DB)")
-    if _pf_trades:
+    h2("KRAKEN PER-SYMBOL PERFORMANCE (all bots combined)")
+    if _all_kraken_trades_all:
         sym_stats: dict = {}
-        for t in _pf_trades:
+        for t in _all_kraken_trades_all:
             s = t.get("symbol", "UNKNOWN")
             if s not in sym_stats:
                 sym_stats[s] = {"trades": 0, "wins": 0, "pnl_pct": 0.0, "pnl_usd": 0.0}
@@ -4350,7 +4333,6 @@ async def export_diagnostic_report() -> dict:
             sym_stats[s]["pnl_usd"] += pusd
             if ppct > 0:
                 sym_stats[s]["wins"] += 1
-
         lines.append(f"  {'Symbol':<12} {'Trades':>7} {'Win Rate':>10} {'Total PnL%':>12} {'Total PnL$':>12} {'Avg PnL%':>9}")
         lines.append("  " + "-" * 68)
         for sym, v in sorted(sym_stats.items(), key=lambda x: x[1]["pnl_usd"]):
@@ -4361,90 +4343,223 @@ async def export_diagnostic_report() -> dict:
     else:
         lines.append("  No trade data in kraken_trades DB yet.")
 
-    # ── Kraken recent trade history ──
-    h2("KRAKEN TRADE HISTORY (all trades from kraken_trades DB, oldest-first)")
-    pf_trades_sorted = list(reversed(_pf_trades))  # oldest first
-    if not pf_trades_sorted and k_recent_trd:
-        pf_trades_sorted = list(reversed(k_recent_trd))
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 4: APEX PREDATOR — OPTIONS ENGINE (Bot #5)
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 4: APEX PREDATOR — OPTIONS ENGINE (Bot #5)")
 
-    if not pf_trades_sorted:
-        lines.append("  No Kraken trade history available yet.")
+    try:
+        _opts_state = _opts.get_full_state()
+        _opts_positions = _opts._get_positions()
+    except Exception:
+        _opts_state = {}
+        _opts_positions = []
+
+    _opts_equity   = _opts_state.get("paper_equity", _opts_state.get("total_equity", 100_000))
+    _opts_deployed = _opts_state.get("deployed_capital", 0)
+    _opts_unrealized = _opts_state.get("unrealized_pnl", 0)
+    _opts_trades   = _opts_state.get("total_trades", 0)
+    _opts_wins     = _opts_state.get("total_wins", 0)
+    _opts_paused   = _opts_state.get("paused", False)
+    _opts_paper    = _opts_state.get("paper_mode", True)
+    _opts_start    = 100_000.0
+    _opts_pnl      = _opts_equity - _opts_start
+
+    h2("OVERVIEW")
+    row("Capital pool:", "Options — Paper Trading (Volatility Squeeze Strategy)")
+    row("Bot status:", "PAUSED" if _opts_paused else "RUNNING")
+    row("Paper trading:", "YES" if _opts_paper else "NO — LIVE FUNDS")
+    row("Starting capital:", _c(_opts_start))
+    row("Current equity:", _c(_opts_equity))
+    row("Total P&L:", f"{_c(_opts_pnl)} ({_pct((_opts_pnl/_opts_start)*100)})")
+    row("Deployed capital:", _c(_opts_deployed))
+    row("Unrealized P&L:", _c(_opts_unrealized))
+    row("Total trades:", str(_opts_trades))
+    row("Wins:", str(_opts_wins))
+    _opts_wr = (_opts_wins / _opts_trades * 100) if _opts_trades > 0 else 0
+    row("Win rate:", _pct(_opts_wr, 1))
+
+    h2("CURRENT OPTIONS POSITIONS")
+    if not _opts_positions:
+        lines.append("  No open options positions.")
     else:
-        lines.append(f"  Total trades: {len(pf_trades_sorted)}")
-        lines.append(f"  {'#':<4} {'Date/Time':<18} {'Symbol':<12} {'Side':<6} {'Entry':>10} {'Exit':>10} {'PnL%':>7} {'PnL$':>10}  Exit Reason")
-        lines.append("  " + "-" * 88)
-        for i, t in enumerate(pf_trades_sorted, 1):
-            sym    = str(t.get("symbol", "?"))[:11]
-            dt     = str(t.get("entry_time") or t.get("timestamp") or t.get("date") or "?")[:16]
-            side   = str(t.get("side", "?")).upper()[:5]
-            entry  = t.get("entry_price") or t.get("intended_price")
-            exit_p = t.get("exit_price") or t.get("actual_fill_price")
-            ppct   = t.get("pnl_pct") or t.get("pnl_percentage", 0)
-            pusd   = t.get("pnl_usd")
-            reason = str(t.get("exit_reason") or t.get("original_thesis") or t.get("reason") or "?")[:40]
-            entry_s = _c(entry, 4) if entry else "N/A"
-            exit_s  = _c(exit_p, 4) if exit_p else "N/A"
-            ppct_s  = _pct(ppct) if ppct is not None else "N/A"
-            pusd_s  = _c(pusd) if pusd is not None else "N/A"
-            lines.append(f"  {i:<4} {dt:<18} {sym:<12} {side:<6} {entry_s:>10} {exit_s:>10} {ppct_s:>7} {pusd_s:>10}  {reason}")
+        for op in _opts_positions:
+            sym      = op.get("symbol", "?")
+            strategy = op.get("strategy", "?")
+            status   = op.get("status", "?")
+            cost     = op.get("total_cost", 0)
+            cur_val  = op.get("current_value", 0)
+            pnl_op   = cur_val - cost
+            entry_t  = str(op.get("entry_time") or op.get("opened_at") or "?")[:16]
+            lines.append(f"\n  {sym} — {strategy}")
+            row("Status:", status, indent=2)
+            row("Total cost:", _c(cost), indent=2)
+            row("Current value:", _c(cur_val), indent=2)
+            row("Unrealized P&L:", _c(pnl_op), indent=2)
+            row("Entry time:", entry_t, indent=2)
+            legs = op.get("legs", [])
+            if legs:
+                for leg in legs:
+                    leg_type = leg.get("type", "?")
+                    strike   = leg.get("strike", "?")
+                    exp      = str(leg.get("expiration", "?"))[:10]
+                    qty_l    = leg.get("quantity", 0)
+                    lines.append(f"      Leg: {leg_type} strike={strike} exp={exp} qty={qty_l}")
 
-    # ── Kraken circuit breaker ──
-    h2("CIRCUIT BREAKER STATUS")
-    if k_cb:
-        cb_trip = k_cb.get("triggered") or k_cb.get("tripped", False)
-        cb_reason = k_cb.get("reason") or k_cb.get("trigger_reason", "N/A")
-        cb_consec = k_cb.get("consecutive_losses") or k_cb.get("losses_in_a_row", 0)
-        cb_thresh = k_cb.get("threshold") or k_cb.get("max_consecutive_losses", 3)
-        row("Triggered:", "YES — bot paused" if cb_trip else "NO")
-        row("Consecutive losses:", f"{cb_consec} / {cb_thresh} threshold")
-        if cb_reason != "N/A":
-            row("Trigger reason:", str(cb_reason))
-    else:
-        lines.append("  Circuit breaker state not available.")
-
-    # ── Kraken adaptive params ──
-    if k_adaptive:
-        h2("ADAPTIVE RISK PARAMETERS (current auto-tuned values)")
-        for k, v in k_adaptive.items():
-            row(f"{k}:", str(v)[:60], indent=2)
-
-    # ── Kraken AI thinking ──
-    if k_thinking and len(k_thinking) > 20:
-        h2("LAST AI THINKING / REASONING (Kraken bot)")
-        thinking_lines = k_thinking.strip().split("\n")
-        for tl in thinking_lines[:40]:  # cap at 40 lines
-            lines.append(f"  {tl}")
-        if len(thinking_lines) > 40:
-            lines.append(f"  ... [{len(thinking_lines) - 40} more lines truncated]")
+    h2("OPTIONS STRATEGY PARAMETERS")
+    lines += [
+        "  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)",
+        "  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)",
+        "  Capital fence:     20% of equity max deployed at any time",
+        "  Entry:             Bollinger Band squeeze + low IV rank → buy ATM straddle",
+        "  Exit:              Profit target or time decay threshold",
+        "  Paper mode:        Simulated fills with real option chain data",
+    ]
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SECTION 4: COMBINED PORTFOLIO
+    # SECTION 5: THE NAVIGATOR — FOREX ENGINE (Bot #6)
     # ─────────────────────────────────────────────────────────────────────────
-    h1("SECTION 4: COMBINED PORTFOLIO OVERVIEW")
-    grand_start = 200_000.0
-    grand_now   = equity + k_equity
+    h1("SECTION 5: THE NAVIGATOR — FOREX SWING ENGINE (Bot #6)")
+
+    _fx_engine = _get_forex_engine()
+    _fx_db = _get_forex_db()
+
+    _fx_state: dict = {}
+    _fx_positions: list = []
+    _fx_trades: list = []
+    try:
+        if _fx_engine:
+            _fx_state = _fx_engine.get_state()
+            _fx_positions = _fx_engine.get_positions()
+    except Exception:
+        pass
+    try:
+        if _fx_db:
+            _fx_trades = _fx_db.load_recent_trades(limit=100)
+    except Exception:
+        pass
+
+    _fx_equity   = _fx_state.get("total_equity", _fx_state.get("paper_equity", 100_000))
+    _fx_cycles   = _fx_state.get("cycle_count", 0)
+    _fx_paused   = _fx_state.get("paused", False)
+    _fx_usd_bias = _fx_state.get("usd_bias", "NEUTRAL")
+    _fx_blackout = _fx_state.get("news_blackout", False)
+    _fx_trades_n = _fx_state.get("total_trades", 0)
+    _fx_wins     = _fx_state.get("total_wins", 0)
+    _fx_pnl_all  = _fx_state.get("total_pnl", 0)
+    _fx_hwm      = _fx_state.get("hwm_usd", 100_000)
+    _fx_vault    = _fx_state.get("vault_total_usd", 0)
+    _fx_start    = 100_000.0
+    _fx_pnl_from_start = _fx_equity - _fx_start
+
+    h2("OVERVIEW")
+    row("Capital pool:", "Forex — Paper Trading (H4 Swing Strategy)")
+    row("Bot status:", "PAUSED" if _fx_paused else ("RUNNING" if _fx_state.get("status") == "running" else _fx_state.get("status", "not_started")))
+    row("USD bias (Groq macro):", _fx_usd_bias)
+    row("News blackout:", "YES — trading paused" if _fx_blackout else "NO")
+    row("Cycles completed:", str(_fx_cycles))
+    row("Starting capital:", _c(_fx_start))
+    row("Current equity:", _c(_fx_equity))
+    row("Total P&L:", f"{_c(_fx_pnl_from_start)} ({_pct((_fx_pnl_from_start/_fx_start)*100)})")
+    row("High water mark:", _c(_fx_hwm))
+    row("Vault (profit lock):", _c(_fx_vault))
+    row("Total trades:", str(_fx_trades_n))
+    row("Wins:", str(_fx_wins))
+    _fx_wr = (_fx_wins / _fx_trades_n * 100) if _fx_trades_n > 0 else 0
+    row("Win rate:", _pct(_fx_wr, 1))
+    row("Open positions:", str(len(_fx_positions)))
+
+    h2("CURRENT FOREX POSITIONS")
+    if not _fx_positions:
+        lines.append("  No open forex positions.")
+    else:
+        for fp in _fx_positions:
+            pair    = fp.get("pair", "?")
+            dirn    = fp.get("direction", "?").upper()
+            entry   = fp.get("entry_price", 0)
+            curr    = fp.get("current_price", 0)
+            pnl_p   = fp.get("unrealized_pnl_pips", fp.get("pnl_pips", 0))
+            pnl_u   = fp.get("unrealized_pnl_usd", fp.get("pnl_usd", 0))
+            sl      = fp.get("sl_price", fp.get("stop_loss", 0))
+            tp      = fp.get("tp_price", fp.get("take_profit", 0))
+            units   = fp.get("units", 0)
+            lines.append(f"\n  {pair}  {dirn}")
+            row("Units:", f"{units:,.0f}", indent=2)
+            row("Entry:", f"{entry:.5f}", indent=2)
+            row("Current:", f"{curr:.5f}", indent=2)
+            row("P&L:", f"{_c(pnl_u)} ({pnl_p:+.1f} pips)", indent=2)
+            row("Stop loss:", f"{sl:.5f}", indent=2)
+            row("Take profit:", f"{tp:.5f}", indent=2)
+
+    h2("FOREX TRADE HISTORY (recent trades)")
+    if not _fx_trades:
+        lines.append("  No forex trade history yet.")
+    else:
+        lines.append(f"  Total recorded: {len(_fx_trades)}")
+        lines.append(f"  {'#':<4} {'Date':<18} {'Pair':<12} {'Dir':<6} {'Entry':>10} {'Exit':>10} {'PnL$':>10} {'Pips':>7}  Reason")
+        lines.append("  " + "-" * 85)
+        for i, ft in enumerate(_fx_trades[-30:], 1):
+            pair   = str(ft.get("pair", "?"))[:11]
+            dt     = str(ft.get("closed_at") or ft.get("exit_time") or "?")[:16]
+            dirn   = str(ft.get("direction", "?")).upper()[:5]
+            entry  = ft.get("entry_price", 0)
+            exit_p = ft.get("exit_price", 0)
+            pusd   = ft.get("pnl_usd", 0)
+            pips   = ft.get("pnl_pips", 0)
+            reason = str(ft.get("exit_reason") or ft.get("reason") or "?")[:30]
+            lines.append(f"  {i:<4} {dt:<18} {pair:<12} {dirn:<6} {entry:>10.5f} {exit_p:>10.5f} {_c(pusd):>10} {pips:>+7.1f}  {reason}")
+
+    h2("FOREX STRATEGY PARAMETERS")
+    lines += [
+        "  Strategy:          H4 swing — 5 major pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD)",
+        "  AI engine:         Groq Llama 3.3 70B — USD directional bias only (BULLISH/BEARISH/NEUTRAL)",
+        "  Cycle frequency:   Every 4 hours (24/7)",
+        "  Position sizing:   3% risk per trade, ATR-based stop loss",
+        "  Max positions:     5 simultaneous",
+        "  Entry:             EMA crossover + RSI + MACD confluence, filtered by USD bias",
+        "  Stop loss:         1.5× ATR from entry",
+        "  Take profit:       2.0× risk (R:R = 1:2)",
+        "  Profit vault:      10% of realized profits locked in vault",
+        "  News blackout:     Groq detects high-impact events → pauses trading",
+    ]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 6: COMBINED FLEET PORTFOLIO (ALL 6 BOTS)
+    # ─────────────────────────────────────────────────────────────────────────
+    h1("SECTION 6: COMBINED FLEET PORTFOLIO — ALL 6 BOTS")
+
+    grand_start = 600_000.0
+    grand_now   = equity + _all_kraken_equity + _opts_equity + _fx_equity
     grand_pnl   = grand_now - grand_start
     grand_pct   = (grand_pnl / grand_start) * 100 if grand_start else 0
 
-    row("Starting capital (both bots):", _c(grand_start))
-    row("Alpaca current equity:", f"{_c(equity)}  ({_pct((equity - 100_000) / 100_000 * 100)} from $100k)")
-    row("Kraken current equity:", f"{_c(k_equity)}  ({_pct((k_equity - k_start_bal) / k_start_bal * 100 if k_start_bal else 0)} from ${k_start_bal:,.0f})")
-    row("Grand total:", _c(grand_now))
-    row("Combined P&L:", f"{_c(grand_pnl)} ({_pct(grand_pct)})")
-
-    # Separate analysis of each bot
+    row("Total starting capital:", f"{_c(grand_start)} across 4 capital pools, 6 bots")
     lines.append("")
-    lines.append("  OBSERVATION: These are two completely separate capital pools:")
-    lines.append("    • Alpaca:  US equities strategy — regime-driven, long-only, Kelly-sized,")
-    lines.append("               AI allocation via Groq Llama 3.3 70B, 15-min cycles.")
-    lines.append("    • Kraken:  Crypto mean-reversion + momentum, VPIN microstructure filter,")
-    lines.append("               24/7, 10% position sizing, trailing stops, circuit breaker.")
-    lines.append("  They cannot be directly compared — different asset classes and strategies.")
+    row("Bot #1 Oracle (Alpaca):", f"{_c(equity)}  ({_pct((equity - 100_000) / 100_000 * 100)} from $100k)")
+    _k_fleet_pnl_s = _all_kraken_equity - _all_kraken_starting
+    row("Bots #2-4 Kraken Fleet:", f"{_c(_all_kraken_equity)}  ({_pct((_k_fleet_pnl_s/_all_kraken_starting)*100 if _all_kraken_starting else 0)} from {_c(_all_kraken_starting)})")
+    for _kbid2, _kprof2 in KRAKEN_BOT_PROFILES.items():
+        _kdbid2 = _kprof2["db_id"]
+        _keq2 = _kraken_per_bot_equity.get(_kbid2, 0)
+        row(f"  - {_kprof2['display_name']} (#{_kdbid2+1}):", _c(_keq2))
+    row("Bot #5 Apex Predator:", f"{_c(_opts_equity)}  ({_pct((_opts_pnl/_opts_start)*100)} from $100k)")
+    row("Bot #6 Navigator:", f"{_c(_fx_equity)}  ({_pct((_fx_pnl_from_start/_fx_start)*100)} from $100k)")
+    lines.append("")
+    row("GRAND TOTAL EQUITY:", _c(grand_now))
+    row("COMBINED P&L:", f"{_c(grand_pnl)} ({_pct(grand_pct)})")
+
+    lines.append("")
+    lines.append("  CAPITAL POOLS:")
+    lines.append("    Pool 1: Alpaca US Equities     $100k  (Bot #1 Oracle)")
+    lines.append("    Pool 2: Kraken Crypto Fleet    $300k  (Bots #2 Davy Jones, #3 Blackbeard, #4 Calypso)")
+    lines.append("    Pool 3: Options (Apex Predator) $100k (Bot #5)")
+    lines.append("    Pool 4: Forex (Navigator)       $100k (Bot #6)")
+    lines.append("  Each pool is independent — different asset classes, strategies, and risk profiles.")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SECTION 5: AI LEARNING JOURNAL
+    # SECTION 7: AI LEARNING JOURNAL
     # ─────────────────────────────────────────────────────────────────────────
-    h1("SECTION 5: AI LEARNING JOURNAL (Persistent insights across cycles)")
+    h1("SECTION 7: AI LEARNING JOURNAL (Persistent insights across cycles)")
     try:
         lj_entries = _lj(limit=50)
     except Exception:
@@ -4467,11 +4582,11 @@ async def export_diagnostic_report() -> dict:
             lines.append("")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # SECTION 6: STRATEGY PARAMETERS
+    # SECTION 8: STRATEGY PARAMETERS
     # ─────────────────────────────────────────────────────────────────────────
-    h1("SECTION 6: STRATEGY PARAMETERS (for LLM context)")
+    h1("SECTION 8: STRATEGY PARAMETERS — ALL 6 BOTS (for LLM context)")
 
-    h2("ALPACA BOT — HOW IT WORKS")
+    h2("BOT #1: ORACLE (ALPACA) — HOW IT WORKS")
     lines += [
         "  AI Engine:         Groq Llama 3.3 70B (100,000 tokens/day budget)",
         "  Execution:         Alpaca paper trading (simulated US equities)",
@@ -4497,25 +4612,45 @@ async def export_diagnostic_report() -> dict:
         "                     injected as context into future allocation calls.",
     ]
 
-    h2("KRAKEN BOT — HOW IT WORKS")
+    h2("BOTS #2-4: KRAKEN FLEET — HOW THEY WORK")
     lines += [
-        "  Name:              Davy Jones' Portfolio",
-        "  Execution:         Kraken exchange (paper trading simulation)",
+        "  Bots:              #2 Davy Jones (Conservative), #3 Blackbeard (Aggressive), #4 Calypso (Most Aggressive)",
+        "  Execution:         Kraken exchange (paper trading simulation, $100k each)",
         "  Strategy:          Mean reversion + momentum with VPIN microstructure filter",
-        "  Pairs:             BTC/USD, ETH/USD, XRP/USD, ADA/USD, SOL/USD,",
-        "                     DOT/USD, ATOM/USD, AVAX/USD, LINK/USD, MATIC/USD",
-        "  Position sizing:   10% of equity per position",
-        "  Max positions:     5 simultaneous",
+        "  Pairs:             35+ crypto pairs (BTC, ETH, XRP, SOL, BNB, ADA, DOT, AVAX, etc.)",
+        "  Position sizing:   10-15% of equity per position (varies by bot aggression)",
+        "  Max positions:     10 simultaneous per bot",
         "  VPIN filter:       Volume-synchronized Probability of Informed Trading.",
-        "                     VPIN > 0.70 on a pair blocks new entries — indicates",
-        "                     too much informed flow (insider-like activity)",
-        "  Entry conditions:  VPIN < 0.70 AND momentum signal AND spread ok",
+        "                     VPIN > 0.65-0.75 blocks entries (varies by bot)",
         "  Stop loss:         Trailing — adapts to best price seen",
         "  Take profit:       Fixed target from entry",
         "  Circuit breaker:   Pauses bot after N consecutive losses",
-        "  Capital reserve:   Cannot deploy beyond ceiling % of equity",
-        "  Cycle:             Runs 24/7 (crypto never closes)",
+        "  Cycle:             Runs 24/7 every 60s (crypto never closes)",
         "  Sides:             Both LONG and SHORT allowed",
+    ]
+
+    h2("BOT #5: APEX PREDATOR — HOW IT WORKS")
+    lines += [
+        "  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)",
+        "  Execution:         Paper trading with real options chain data",
+        "  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)",
+        "  Capital fence:     20% of equity max deployed",
+        "  Entry:             Bollinger Band squeeze + low IV rank → ATM straddle",
+        "  Exit:              Profit target or time decay threshold",
+    ]
+
+    h2("BOT #6: THE NAVIGATOR — HOW IT WORKS")
+    lines += [
+        "  Strategy:          H4 swing — 5 major forex pairs",
+        "  Pairs:             EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD",
+        "  AI engine:         Groq Llama 3.3 70B — USD directional bias only",
+        "  Cycle frequency:   Every 4 hours (24/7)",
+        "  Position sizing:   3% risk per trade, ATR-based stop loss",
+        "  Max positions:     5 simultaneous",
+        "  Stop loss:         1.5× ATR from entry",
+        "  Take profit:       2.0× risk (R:R = 1:2)",
+        "  Profit vault:      10% of realized profits locked in vault",
+        "  News blackout:     Groq detects high-impact events → pauses trading",
     ]
 
     # ─────────────────────────────────────────────────────────────────────────

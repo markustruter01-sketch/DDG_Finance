@@ -3,7 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
-  usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
+  usePlatformStatus, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
@@ -348,18 +348,24 @@ function Header() {
 // ── Portfolio Metrics ──────────────────────────────────────────────────────────
 
 function PortfolioMetrics() {
-  const { data } = usePortfolio();
+  const { data: summary } = useStatusSummary();
   const { data: vault } = useVault();
   const { data: positions } = useLivePositions();
 
-  if (!data) return (
+  const acct = summary ? {
+    equity: summary.portfolio_totals.equity,
+    cash: summary.portfolio_totals.cash,
+    buying_power: summary.portfolio_totals.buying_power,
+  } : null;
+
+  if (!acct) return (
     <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
       {[0, 1, 2, 3, 4].map(i => <div key={i} className={cn("h-24 rounded-xl bg-card/40 animate-pulse border border-border", i === 0 && "col-span-2 sm:col-span-2 lg:col-span-1")} />)}
     </div>
   );
 
-  const isProfit = data.account.equity >= 100000;
-  const pnl = data.account.equity - 100000;
+  const isProfit = acct.equity >= 100000;
+  const pnl = acct.equity - 100000;
   const pnlPct = (pnl / 100000) * 100;
 
   const vaultSymbol    = vault?.vault_symbol ?? "JEPQ";
@@ -397,7 +403,7 @@ function PortfolioMetrics() {
               </motion.span>
             )}
           </div>
-          <RollingCurrency value={data.account.equity} className={cn("fluid-equity font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
+          <RollingCurrency value={acct.equity} className={cn("fluid-equity font-mono font-bold tracking-tight", isProfit ? "text-green-400 text-glow-success-strong" : "text-red-400 text-glow-danger-strong")} />
           <div className={cn("text-xs mt-1.5 font-medium flex items-center gap-1", isProfit ? "text-green-400/70" : "text-red-400/70")}>
             {isProfit ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {isProfit ? `+${formatCurrency(pnl)}` : `${formatCurrency(pnl)}`}
@@ -409,9 +415,9 @@ function PortfolioMetrics() {
       <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-blue-500/20 transition-all duration-500">
         <CardContent className="p-4">
           <div className="text-xs font-medium text-muted-foreground mb-1.5">Available Cash</div>
-          <AnimatedCurrency value={data.account.cash} className="fluid-metric font-mono font-bold text-white tracking-tight" />
+          <AnimatedCurrency value={acct.cash} className="fluid-metric font-mono font-bold text-white tracking-tight" />
           <div className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1.5">
-            <span className="text-[9px] font-mono text-blue-400/60">{((data.account.cash / data.account.equity) * 100).toFixed(0)}% liquid</span>
+            <span className="text-[9px] font-mono text-blue-400/60">{acct.equity > 0 ? ((acct.cash / acct.equity) * 100).toFixed(0) : "0"}% liquid</span>
           </div>
         </CardContent>
       </Card>
@@ -423,7 +429,7 @@ function PortfolioMetrics() {
             Buying Power
             <Zap className="h-3 w-3 text-purple-400/60" />
           </div>
-          <AnimatedCurrency value={data.account.buying_power} className="fluid-metric font-mono font-bold text-white tracking-tight" />
+          <AnimatedCurrency value={acct.buying_power} className="fluid-metric font-mono font-bold text-white tracking-tight" />
           <div className="text-xs text-muted-foreground mt-1.5">With margin</div>
         </CardContent>
       </Card>

@@ -1,18 +1,15 @@
 import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import { RefreshCw } from "lucide-react";
+import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
-focusManager.setEventListener((handleFocus) => {
-  const handler = () => handleFocus(document.visibilityState === "visible");
-  document.addEventListener("visibilitychange", handler);
-  return () => document.removeEventListener("visibilitychange", handler);
-});
+installVisibilityListener();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -81,17 +78,21 @@ function VisibilityRefetcher() {
 }
 
 function App() {
+  const isVisible = useVisibilityProvider();
+
   return (
     <ErrorBoundary fallback={<AppCrashFallback />} label="App">
-      <QueryClientProvider client={queryClient}>
-        <VisibilityRefetcher />
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
+      <VisibilityContext.Provider value={isVisible}>
+        <QueryClientProvider client={queryClient}>
+          <VisibilityRefetcher />
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </VisibilityContext.Provider>
     </ErrorBoundary>
   );
 }

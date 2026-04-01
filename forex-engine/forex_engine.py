@@ -196,8 +196,10 @@ def _get_usd_bias() -> tuple[str, str]:
         return bias, thesis
 
     except Exception as exc:
-        logger.warning(f"Forex | Groq compass failed: {exc} — falling back to NEUTRAL")
-        return "NEUTRAL", f"Groq unavailable: {exc}"
+        logger.warning(f"Forex | Groq compass failed: {exc}")
+        cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
+        cached_thesis = _USD_BIAS_CACHE["thesis"] or f"Groq unavailable — using NEUTRAL: {exc}"
+        return cached_bias, cached_thesis
 
 
 def _filter_pairs_by_bias(bias: str) -> dict[str, str]:

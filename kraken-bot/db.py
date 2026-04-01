@@ -127,6 +127,11 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_adaptive_params' AND column_name='bot_id') THEN
         ALTER TABLE kraken_adaptive_params ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
     END IF;
+
+    -- Add pending_tranches JSONB column to kraken_portfolio
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_portfolio' AND column_name='pending_tranches') THEN
+        ALTER TABLE kraken_portfolio ADD COLUMN pending_tranches JSONB;
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
@@ -541,6 +546,50 @@ def insert_trade(trade: dict) -> bool:
     except Exception as exc:
         logger.warning(f"DB | insert_trade failed: {exc}")
         return False
+
+
+def save_pending_tranches(tranches: dict[str, list[dict]]) -> bool:
+    if not _is_available():
+        return False
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE kraken_portfolio
+                    SET    pending_tranches = %s
+                    WHERE  id = %s
+                    """,
+                    (json.dumps(tranches, default=str), db_id),
+                )
+        return True
+    except Exception as exc:
+        logger.warning(f"DB | save_pending_tranches failed: {exc}")
+        return False
+
+
+def load_pending_tranches() -> dict[str, list[dict]]:
+    if not _is_available():
+        return {}
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pending_tranches FROM kraken_portfolio WHERE id = %s",
+                    (db_id,),
+                )
+                row = cur.fetchone()
+        if not row or row[0] is None:
+            return {}
+        raw = row[0]
+        if isinstance(raw, str):
+            raw = json.loads(raw)
+        return raw if isinstance(raw, dict) else {}
+    except Exception as exc:
+        logger.warning(f"DB | load_pending_tranches failed: {exc}")
+        return {}
 
 
 def load_all_trades(limit: int | None = None) -> list[dict]:

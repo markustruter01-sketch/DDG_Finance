@@ -1,10 +1,10 @@
 {
-  "last_updated": "2026-04-01T21:32:53.356468+00:00",
+  "last_updated": "2026-04-01T21:36:42.150870+00:00",
   "status": "idle",
   "cycle_count": 1,
   "usd_bias": "USD_BULLISH",
   "news_blackout": false,
-  "equity_usd": 99876.22,
+  "equity_usd": 99874.35,
   "paper_trading": true,
   "positions": [
     {
@@ -45,7 +45,7 @@
       "pair": "USD_SGD",
       "direction": "long",
       "entry_price": 1.28313,
-      "current_price": 1.28252,
+      "current_price": 1.28254,
       "sl_price": 1.28014,
       "tp_price": 1.29157,
       "original_sl": 1.27891,
@@ -54,15 +54,15 @@
       "lowest_price": null,
       "units": 9996,
       "size_usd": 9996,
-      "unrealized_pnl_usd": -4.75,
-      "unrealized_pnl_pips": -6.1,
+      "unrealized_pnl_usd": -4.6,
+      "unrealized_pnl_pips": -5.9,
       "entry_time": "2026-04-01T20:09:56.257965+00:00"
     },
     {
       "pair": "USD_ZAR",
       "direction": "long",
       "entry_price": 16.83787,
-      "current_price": 16.797,
+      "current_price": 16.7975,
       "sl_price": 16.6999,
       "tp_price": 17.20694,
       "original_sl": 16.65334,
@@ -71,15 +71,15 @@
       "lowest_price": null,
       "units": 10000,
       "size_usd": 10000,
-      "unrealized_pnl_usd": -24.33,
-      "unrealized_pnl_pips": -408.7,
+      "unrealized_pnl_usd": -24.03,
+      "unrealized_pnl_pips": -403.7,
       "entry_time": "2026-04-01T19:58:59.894196+00:00"
     },
     {
       "pair": "EUR_CAD",
       "direction": "short",
       "entry_price": 1.60796,
-      "current_price": 1.60692,
+      "current_price": 1.60717,
       "sl_price": 1.611,
       "tp_price": 1.59664,
       "original_sl": 1.61362,
@@ -88,15 +88,15 @@
       "lowest_price": 1.60638,
       "units": 6217,
       "size_usd": 9996.69,
-      "unrealized_pnl_usd": 4.66,
-      "unrealized_pnl_pips": 10.4,
+      "unrealized_pnl_usd": 3.54,
+      "unrealized_pnl_pips": 7.9,
       "entry_time": "2026-04-01T20:09:55.454886+00:00"
     },
     {
       "pair": "EUR_JPY",
       "direction": "short",
       "entry_price": 184.028,
-      "current_price": 183.74001,
+      "current_price": 183.87,
       "sl_price": 184.17928,
       "tp_price": 182.70779,
       "original_sl": 184.68811,
@@ -105,15 +105,15 @@
       "lowest_price": 183.62,
       "units": 54,
       "size_usd": 9937.51,
-      "unrealized_pnl_usd": 0.1,
-      "unrealized_pnl_pips": 28.8,
+      "unrealized_pnl_usd": 0.05,
+      "unrealized_pnl_pips": 15.8,
       "entry_time": "2026-04-01T20:09:54.464703+00:00"
     },
     {
       "pair": "EUR_USD",
       "direction": "short",
       "entry_price": 1.15888,
-      "current_price": 1.15902,
+      "current_price": 1.15915,
       "sl_price": 1.16211,
       "tp_price": 1.14913,
       "original_sl": 1.16376,
@@ -122,33 +122,33 @@
       "lowest_price": 1.15848,
       "units": 8628,
       "size_usd": 9998.84,
-      "unrealized_pnl_usd": -1.16,
-      "unrealized_pnl_pips": -1.3,
+      "unrealized_pnl_usd": -2.32,
+      "unrealized_pnl_pips": -2.7,
       "entry_time": "2026-04-01T19:59:19.922523+00:00"
     }
   ],
   "scan_results": [
     {
       "pair": "GBP_USD",
-      "price": 1.33097,
+      "price": 1.33027,
       "atr": 0.00424,
-      "rsi": 67.7,
+      "rsi": 67.0,
       "bias_filter": "short",
       "signal": null
     },
     {
       "pair": "USD_JPY",
-      "price": 158.661,
-      "atr": 0.44379,
-      "rsi": 37.1,
+      "price": 158.72701,
+      "atr": 0.44657,
+      "rsi": 37.9,
       "bias_filter": "long",
       "signal": null
     },
     {
       "pair": "AUD_USD",
-      "price": 0.69235,
+      "price": 0.69236,
       "atr": 0.00296,
-      "rsi": 63.1,
+      "rsi": 63.2,
       "bias_filter": "short",
       "signal": null
     },
@@ -162,9 +162,9 @@
     },
     {
       "pair": "USD_CAD",
-      "price": 1.38725,
+      "price": 1.38733,
       "atr": 0.0026,
-      "rsi": 33.6,
+      "rsi": 33.8,
       "bias_filter": "long",
       "signal": null
     },
@@ -178,33 +178,33 @@
     },
     {
       "pair": "EUR_GBP",
-      "price": 0.87038,
+      "price": 0.87082,
       "atr": 0.00188,
-      "rsi": 58.2,
+      "rsi": 60.4,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "GBP_JPY",
-      "price": 211.099,
+      "price": 211.091,
       "atr": 0.61285,
-      "rsi": 59.2,
+      "rsi": 59.1,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "AUD_JPY",
-      "price": 109.807,
+      "price": 109.843,
       "atr": 0.46307,
-      "rsi": 58.8,
+      "rsi": 59.7,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "EUR_AUD",
-      "price": 1.67286,
+      "price": 1.67234,
       "atr": 0.00603,
-      "rsi": 53.2,
+      "rsi": 52.5,
       "bias_filter": "both",
       "signal": null
     },
@@ -218,73 +218,73 @@
     },
     {
       "pair": "GBP_CHF",
-      "price": 1.05579,
+      "price": 1.0557,
       "atr": 0.00304,
-      "rsi": 51.9,
+      "rsi": 51.6,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "AUD_NZD",
-      "price": 1.20186,
+      "price": 1.20343,
       "atr": 0.003,
-      "rsi": 56.6,
-      "bias_filter": "both",
-      "signal": null
-    },
-    {
-      "pair": "NZD_JPY",
-      "price": 91.226,
-      "atr": 0.34107,
-      "rsi": 52.2,
-      "bias_filter": "both",
-      "signal": null
-    },
-    {
-      "pair": "CAD_JPY",
-      "price": 114.331,
-      "atr": 0.30164,
-      "rsi": 44.4,
-      "bias_filter": "both",
-      "signal": null
-    },
-    {
-      "pair": "GBP_CAD",
-      "price": 1.84518,
-      "atr": 0.00543,
       "rsi": 63.1,
       "bias_filter": "both",
       "signal": null
     },
     {
+      "pair": "NZD_JPY",
+      "price": 91.27,
+      "atr": 0.34107,
+      "rsi": 53.3,
+      "bias_filter": "both",
+      "signal": null
+    },
+    {
+      "pair": "CAD_JPY",
+      "price": 114.37,
+      "atr": 0.30164,
+      "rsi": 45.3,
+      "bias_filter": "both",
+      "signal": null
+    },
+    {
+      "pair": "GBP_CAD",
+      "price": 1.84546,
+      "atr": 0.00543,
+      "rsi": 63.7,
+      "bias_filter": "both",
+      "signal": null
+    },
+    {
       "pair": "EUR_NZD",
-      "price": 2.01325,
+      "price": 2.01341,
       "atr": 0.00635,
-      "rsi": 62.0,
+      "rsi": 62.2,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "GBP_NZD",
-      "price": 2.31115,
+      "price": 2.31069,
       "atr": 0.00685,
-      "rsi": 54.0,
+      "rsi": 53.4,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "AUD_CAD",
-      "price": 0.95993,
+      "price": 0.96001,
       "atr": 0.00448,
-      "rsi": 59.4,
+      "rsi": 59.5,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "AUD_CHF",
-      "price": 0.54904,
+      "price": 0.54914,
       "atr": 0.00281,
-      "rsi": 52.1,
+      "rsi": 52.6,
       "bias_filter": "both",
       "signal": null
     },
@@ -298,22 +298,22 @@
     },
     {
       "pair": "NZD_CAD",
-      "price": 0.79793,
+      "price": 0.79785,
       "atr": 0.00299,
-      "rsi": 56.8,
+      "rsi": 56.6,
       "bias_filter": "both",
       "signal": null
     },
     {
       "pair": "USD_NOK",
-      "price": 9.67733,
+      "price": 9.68216,
       "atr": 0.0547,
-      "rsi": 37.7,
+      "rsi": 38.2,
       "bias_filter": "long",
       "signal": null
     }
   ],
-  "last_scan": "2026-04-01T21:32:53.351796+00:00",
+  "last_scan": "2026-04-01T21:36:42.143742+00:00",
   "summary": {
     "starting_balance_usd": 100000.0,
     "cash_usd": 30005.03,

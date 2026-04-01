@@ -194,7 +194,13 @@ open_positions: dict[str, dict] = {}
 # not yet been executed.  Populated when a new position is opened (T1 fires).
 # Each cycle, the bot checks whether price has reached the next tranche level.
 # Cleared automatically when the position is closed.
+# Persisted to PostgreSQL (kraken_portfolio.pending_tranches JSONB column)
+# so tranches survive bot restarts.
 _pending_tranches: dict[str, list[dict]] = {}
+
+
+def _persist_tranches() -> None:
+    _db.save_pending_tranches(_pending_tranches)
 
 # A deque that stores recent price observations for the circuit breaker.
 price_history: dict[str, deque] = {
@@ -620,6 +626,7 @@ def close_position(symbol: str, reason: str) -> None:
                 f"(position closed by {reason})"
             )
         del _pending_tranches[symbol]
+        _persist_tranches()
 
 
 def scale_into_position(symbol: str, tranche: dict, current_price: float) -> bool:
@@ -1011,6 +1018,7 @@ def run_cycle() -> None:
                             if ok:
                                 _t["filled"]    = True
                                 _t["fill_price"] = current_price
+                                _persist_tranches()
                                 logger.info(
                                     f"Tranches | {symbol} T{_t['tranche']} filled @ ${current_price:,.4f} "
                                     f"(target was ${_t_target:,.4f})"
@@ -1337,6 +1345,7 @@ def run_cycle() -> None:
                         _remaining = [t for t in _tranches if t["tranche"] > 1]
                         if _remaining:
                             _pending_tranches[symbol] = _remaining
+                            _persist_tranches()
                             logger.info(
                                 f"Tranches | {symbol}: {len(_remaining)} pending "
                                 f"tranche(s) queued after T1 fill"
@@ -1420,6 +1429,7 @@ def run_cycle() -> None:
                         _remaining = [t for t in _tranches if t["tranche"] > 1]
                         if _remaining:
                             _pending_tranches[symbol] = _remaining
+                            _persist_tranches()
                             logger.info(
                                 f"Tranches | {symbol}: {len(_remaining)} pending "
                                 f"tranche(s) queued after T1 fill"
@@ -1588,6 +1598,27 @@ def main() -> None:
 
     write_status()
     logger.info("Bot | Startup heartbeat written to DB")
+
+    # ── Restore pending tranches from DB ──────────────────────────────────────
+    restored = _db.load_pending_tranches()
+    if restored:
+        current_positions = get_paper_positions() if PAPER_TRADING else open_positions
+        pruned_count = 0
+        for sym in list(restored.keys()):
+            if sym not in current_positions:
+                del restored[sym]
+                pruned_count += 1
+        _pending_tranches.update(restored)
+        total_t = sum(len(v) for v in _pending_tranches.values())
+        logger.info(
+            f"Tranches | Restored {total_t} pending tranche(s) for "
+            f"{len(_pending_tranches)} position(s) from DB"
+            + (f" (pruned {pruned_count} stale symbol(s))" if pruned_count else "")
+        )
+        if pruned_count:
+            _persist_tranches()
+    else:
+        logger.debug("Tranches | No pending tranches to restore from DB")
 
     # ── Background keepalive thread — prevents false-stale alerts ─────────────
     _keepalive = threading.Thread(target=_keepalive_loop, name="keepalive", daemon=True)

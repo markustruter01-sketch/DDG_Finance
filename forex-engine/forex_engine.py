@@ -41,6 +41,7 @@ from forex_config import (
     MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
     BOT_ID, BOT_DISPLAY_NAME, BOT_DB_ID, BOT_STRATEGY_LABEL,
     CONTROL_FILE, LIVE_STATE_FILE, VAULT_SWEEP_PCT,
+    CB_DRAWDOWN_THRESHOLD, CB_COOLDOWN_HOURS,
     get_quote_to_usd,
 )
 from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
@@ -61,6 +62,10 @@ _state = {
     "last_scan_results": [],
     "error": None,
     "paused": False,
+    "circuit_breaker_active": False,
+    "circuit_breaker_reason": None,
+    "circuit_breaker_tripped_at": None,
+    "_cb_session_hwm": 0.0,
 }
 
 _latest_prices: dict[str, float] = {}
@@ -366,6 +371,45 @@ def run_cycle() -> dict:
     try:
         _check_open_positions()
 
+        if _state["circuit_breaker_active"]:
+            tripped_at = _state.get("circuit_breaker_tripped_at")
+            if tripped_at:
+                try:
+                    tripped_dt = datetime.fromisoformat(tripped_at)
+                    elapsed_hours = (datetime.now(tz=timezone.utc) - tripped_dt).total_seconds() / 3600.0
+                    if elapsed_hours >= CB_COOLDOWN_HOURS:
+                        _state["circuit_breaker_active"] = False
+                        _state["circuit_breaker_reason"] = None
+                        _state["circuit_breaker_tripped_at"] = None
+                        _state["_cb_session_hwm"] = get_paper_equity(current_prices=_latest_prices)
+                        logger.info(f"Forex | Circuit breaker RESET after {CB_COOLDOWN_HOURS}h cooldown — HWM rebased to ${_state['_cb_session_hwm']:,.2f}")
+                except Exception:
+                    pass
+
+        equity = get_paper_equity(current_prices=_latest_prices)
+
+        if _state["_cb_session_hwm"] < equity:
+            _state["_cb_session_hwm"] = equity
+
+        if _state["_cb_session_hwm"] > 0 and not _state["circuit_breaker_active"]:
+            drawdown = (_state["_cb_session_hwm"] - equity) / _state["_cb_session_hwm"]
+            if drawdown >= CB_DRAWDOWN_THRESHOLD:
+                _state["circuit_breaker_active"] = True
+                _state["circuit_breaker_reason"] = (
+                    f"Equity drawdown {drawdown:.1%} exceeds {CB_DRAWDOWN_THRESHOLD:.0%} threshold "
+                    f"(equity ${equity:,.2f} vs HWM ${_state['_cb_session_hwm']:,.2f})"
+                )
+                _state["circuit_breaker_tripped_at"] = datetime.now(tz=timezone.utc).isoformat()
+                logger.warning(f"Forex | CIRCUIT BREAKER TRIPPED — {_state['circuit_breaker_reason']}")
+
+        if _state["circuit_breaker_active"]:
+            _state["status"] = "circuit_breaker"
+            _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
+            logger.warning("Forex | Circuit breaker active — no new trades this cycle")
+            _write_heartbeat()
+            _write_live_state()
+            return _state
+
         news_blackout = _check_news_blackout()
         _state["news_blackout"] = news_blackout
 
@@ -589,6 +633,8 @@ def _write_live_state():
         "last_scan": _state.get("last_scan"),
         "summary": summary,
         "error": _state.get("error"),
+        "circuit_breaker_active": _state.get("circuit_breaker_active", False),
+        "circuit_breaker_reason": _state.get("circuit_breaker_reason"),
     }
 
     try:
@@ -623,6 +669,8 @@ def get_state() -> dict:
         "hwm_usd": summary.get("hwm_usd", PAPER_STARTING_BALANCE),
         "vault_total_usd": summary.get("vault_total_usd", 0),
         "error": _state.get("error"),
+        "circuit_breaker_active": _state.get("circuit_breaker_active", False),
+        "circuit_breaker_reason": _state.get("circuit_breaker_reason"),
     }
 
 

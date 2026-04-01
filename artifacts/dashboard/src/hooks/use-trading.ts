@@ -1204,6 +1204,8 @@ export interface OptionsState {
   deployed_capital: number;
   current_value: number;
   unrealized_pnl: number;
+  circuit_breaker_active?: boolean;
+  circuit_breaker_reason?: string | null;
 }
 
 export interface OptionsPosition {
@@ -1340,6 +1342,8 @@ export interface ForexState {
   hwm_usd: number;
   vault_total_usd: number;
   error: string | null;
+  circuit_breaker_active?: boolean;
+  circuit_breaker_reason?: string | null;
 }
 
 export interface ForexScanResult {

@@ -7,7 +7,7 @@ import {
 import { Card, CardContent } from "@/components/ui";
 import {
   Navigation, Play, Pause, Search, AlertTriangle,
-  Target, History, Vault,
+  Target, History, Vault, ShieldAlert,
 } from "lucide-react";
 
 export function ForexSection() {
@@ -55,6 +55,13 @@ export function ForexSection() {
         </div>
         <div className="h-px flex-1 bg-gradient-to-r from-transparent via-teal-500/20 to-transparent" />
       </div>
+
+      {fxState?.circuit_breaker_active && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-red-400 text-xs font-mono animate-pulse">
+          <ShieldAlert className="h-3.5 w-3.5" />
+          CIRCUIT BREAKER ACTIVE — {fxState?.circuit_breaker_reason ?? "Equity drawdown exceeded threshold. No new trades."}
+        </div>
+      )}
 
       {newsBlackout && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 text-yellow-400 text-xs font-mono">

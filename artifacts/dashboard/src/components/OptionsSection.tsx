@@ -8,7 +8,7 @@ import {
 import { Card, CardContent } from "@/components/ui";
 import {
   Crosshair, Play, Pause, Search, AlertTriangle,
-  ThumbsUp, ThumbsDown,
+  ThumbsUp, ThumbsDown, ShieldAlert,
 } from "lucide-react";
 
 export function OptionsSection() {
@@ -53,6 +53,13 @@ export function OptionsSection() {
         </div>
         <div className="h-px flex-1 bg-gradient-to-r from-transparent via-red-500/20 to-transparent" />
       </div>
+
+      {optState?.circuit_breaker_active && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-red-400 text-xs font-mono animate-pulse">
+          <ShieldAlert className="h-3.5 w-3.5" />
+          CIRCUIT BREAKER ACTIVE — {optState?.circuit_breaker_reason ?? "Premium loss exceeded threshold. No new approvals."}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 flex-wrap">
         <button

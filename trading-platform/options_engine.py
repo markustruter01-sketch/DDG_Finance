@@ -78,6 +78,9 @@ EXECUTION_MINUTE_ET = 30
 PAPER_MODE = True
 PAPER_CAPITAL = 100_000.00
 
+CB_LOSS_THRESHOLD = 0.30
+CB_COOLDOWN_HOURS = 24
+
 STATE_DIR = Path(__file__).parent / "_options_state"
 STATE_DIR.mkdir(exist_ok=True)
 STATE_FILE = STATE_DIR / "state.json"
@@ -505,10 +508,52 @@ def _compute_position_size(fenced_capital: float, premium_per_contract_usd: floa
     return contracts, total_cost
 
 
+def _check_options_circuit_breaker(state: dict, positions: list, deployed_capital: float):
+    if deployed_capital <= 0 or not positions:
+        return
+
+    current_value = sum(p.get("current_value", p.get("total_cost", 0)) for p in positions)
+    unrealized_loss = deployed_capital - current_value
+
+    if unrealized_loss > 0 and deployed_capital > 0:
+        loss_pct = unrealized_loss / deployed_capital
+        if loss_pct >= CB_LOSS_THRESHOLD:
+            state["circuit_breaker_active"] = True
+            state["circuit_breaker_reason"] = (
+                f"Unrealized loss {loss_pct:.1%} exceeds {CB_LOSS_THRESHOLD:.0%} threshold "
+                f"(deployed ${deployed_capital:,.2f}, current value ${current_value:,.2f})"
+            )
+            state["circuit_breaker_tripped_at"] = datetime.now(timezone.utc).isoformat()
+            _save_state(state)
+            logger.warning(f"Options | CIRCUIT BREAKER TRIPPED — {state['circuit_breaker_reason']}")
+
+
 def scan_for_setups() -> list[dict]:
     state = _get_state()
     if state.get("paused"):
         logger.info("Options | Bot is paused, skipping scan")
+        return []
+
+    if state.get("circuit_breaker_active"):
+        tripped_at = state.get("circuit_breaker_tripped_at")
+        if tripped_at:
+            try:
+                tripped_dt = datetime.fromisoformat(tripped_at)
+                elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
+                if elapsed_hours >= CB_COOLDOWN_HOURS:
+                    state["circuit_breaker_active"] = False
+                    state["circuit_breaker_reason"] = None
+                    state["circuit_breaker_tripped_at"] = None
+                    _save_state(state)
+                    logger.info(f"Options | Circuit breaker RESET after {CB_COOLDOWN_HOURS}h cooldown")
+            except Exception:
+                pass
+
+    if state.get("circuit_breaker_active"):
+        logger.warning("Options | Circuit breaker active — skipping scan")
+        state["status"] = "circuit_breaker"
+        state["last_scan"] = datetime.now(timezone.utc).isoformat()
+        _save_state(state)
         return []
 
     setups = []
@@ -525,6 +570,13 @@ def scan_for_setups() -> list[dict]:
         deployed_capital = sum(p.get("total_cost", 0) for p in existing_positions)
         reserved_capital = sum(p.get("total_cost", 0) for p in pending_trades)
         available_capital = fenced_capital - deployed_capital - reserved_capital
+
+        _check_options_circuit_breaker(state, existing_positions, deployed_capital)
+        if state.get("circuit_breaker_active"):
+            state["status"] = "circuit_breaker"
+            state["last_scan"] = datetime.now(timezone.utc).isoformat()
+            _save_state(state)
+            return []
 
         if available_capital <= 0:
             logger.info(f"Options | Capital fully deployed (${deployed_capital:,.2f} / ${fenced_capital:,.2f})")
@@ -632,6 +684,31 @@ def scan_for_setups() -> list[dict]:
 
 def approve_trade(trade_id: str) -> dict:
     with _lock:
+        state = _get_state()
+
+        if state.get("circuit_breaker_active"):
+            tripped_at = state.get("circuit_breaker_tripped_at")
+            if tripped_at:
+                try:
+                    tripped_dt = datetime.fromisoformat(tripped_at)
+                    elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
+                    if elapsed_hours >= CB_COOLDOWN_HOURS:
+                        state["circuit_breaker_active"] = False
+                        state["circuit_breaker_reason"] = None
+                        state["circuit_breaker_tripped_at"] = None
+                        _save_state(state)
+                        logger.info(f"Options | Circuit breaker RESET after {CB_COOLDOWN_HOURS}h cooldown (at approve)")
+                except Exception:
+                    pass
+
+        positions = _get_positions()
+        deployed = sum(p.get("total_cost", 0) for p in positions)
+        if not state.get("circuit_breaker_active"):
+            _check_options_circuit_breaker(state, positions, deployed)
+
+        if state.get("circuit_breaker_active"):
+            return {"error": "Circuit breaker is active — new trade approvals blocked"}
+
         pending = _get_pending()
         trade = None
         remaining = []
@@ -872,6 +949,9 @@ def get_full_state() -> dict:
         state["paper_equity"] = state.get("paper_equity", PAPER_CAPITAL)
         state["total_equity"] = state["paper_equity"]
         state["fenced_capital"] = state["total_equity"] * CAPITAL_FENCE_PCT
+
+    state.setdefault("circuit_breaker_active", False)
+    state.setdefault("circuit_breaker_reason", None)
 
     return state
 

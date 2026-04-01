@@ -385,15 +385,26 @@ async def _run_pipeline_inner(
         if allocation.regime != "Bear":
             logger.warning(
                 f"Pipeline | EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% — "
-                f"forcing regime from '{allocation.regime}' to 'Bear'"
+                f"forcing regime from '{allocation.regime}' to 'Bear' + re-applying defensive controls"
             )
+            from portfolio.allocator import (
+                _apply_bear_half_kelly,
+                _apply_bear_sgov_default,
+                normalise_kelly_fractions,
+            )
+            raw_allocs = [a.dict() if hasattr(a, "dict") else a.model_dump() for a in allocation.allocations]
+            raw_allocs = _apply_bear_half_kelly(raw_allocs)
+            raw_allocs = _apply_bear_sgov_default(raw_allocs)
+            raw_allocs = normalise_kelly_fractions(raw_allocs)
+            from analysis.schemas import AllocationSlot
+            allocation.allocations = [AllocationSlot.model_validate(s) for s in raw_allocs]
             allocation.regime = "Bear"
             allocation.regime_rationale = (
                 f"EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% intraday drop. "
-                f"Original regime overridden to Bear for defensive posture."
+                f"Original regime overridden to Bear with defensive controls applied."
             )
             result["errors"].append(
-                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime"
+                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime + defensive sizing"
             )
 
     # ── Build allocation summary (same path for fresh and fallback allocations) ──

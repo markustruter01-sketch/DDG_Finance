@@ -2959,17 +2959,17 @@ function LiveEquityCurveSection() {
     ? ((last.total_equity - first.total_equity) / first.total_equity) * 100
     : null;
 
-  const EquityTooltip = ({ active, payload, label }: any) => {
+  const EquityTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (!active || !payload?.length) return null;
-    const d = payload[0]?.payload;
+    const d = (payload[0] as ChartPayloadEntry & { payload?: Record<string, number | string | null> })?.payload;
     return (
       <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
         <p className="text-muted-foreground mb-1">{label}</p>
-        <p className="font-mono text-white font-semibold">Total: {formatCurrency(d?.total ?? 0)}</p>
-        <p className="font-mono text-emerald-400">Alpaca: {formatCurrency(d?.alpaca ?? 0)}</p>
-        <p className="font-mono text-amber-400">Kraken: {formatCurrency(d?.kraken ?? 0)}</p>
-        <p className="font-mono text-red-400">Options: {formatCurrency(d?.options ?? 0)}</p>
-        <p className="font-mono text-teal-400">Forex: {formatCurrency(d?.forex ?? 0)}</p>
+        <p className="font-mono text-white font-semibold">Total: {formatCurrency(Number(d?.total ?? 0))}</p>
+        <p className="font-mono text-emerald-400">Alpaca: {formatCurrency(Number(d?.alpaca ?? 0))}</p>
+        <p className="font-mono text-amber-400">Kraken: {formatCurrency(Number(d?.kraken ?? 0))}</p>
+        <p className="font-mono text-red-400">Options: {formatCurrency(Number(d?.options ?? 0))}</p>
+        <p className="font-mono text-teal-400">Forex: {formatCurrency(Number(d?.forex ?? 0))}</p>
         {d?.regime && (
           <p className="text-slate-500 mt-1">Regime: {d.regime}</p>
         )}

@@ -60,5 +60,7 @@ BOT_DISPLAY_NAME = "The Navigator"
 BOT_DB_ID = 10
 BOT_STRATEGY_LABEL = "Forex Swing (H4)"
 
-CONTROL_FILE = "forex-engine/navigator_control.json"
-LIVE_STATE_FILE = "forex-engine/navigator_live_state.json"
+import os as _os
+_CONFIG_DIR = _os.path.dirname(_os.path.abspath(__file__))
+CONTROL_FILE = _os.path.join(_CONFIG_DIR, "navigator_control.json")
+LIVE_STATE_FILE = _os.path.join(_CONFIG_DIR, "navigator_live_state.json")

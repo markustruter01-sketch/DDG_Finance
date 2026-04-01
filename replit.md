@@ -88,7 +88,7 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **DB Tables**: `forex_heartbeat` (id=10), `forex_portfolio` (id=10), `forex_trades`, `forex_vault`.
 - **Config**: `forex-engine/forex_config.py` — BOT_ID="navigator", BOT_DB_ID=10. Renamed from `config.py` to avoid shadowing by `trading-platform/config/` package.
 - **DB Module**: `forex-engine/forex_nav_db.py` — Renamed from `db.py` to avoid shadowing by `trading-platform/db/` package.
-- **Schedule**: APScheduler IntervalTrigger every 4 hours in trading-api lifespan.
+- **Schedule**: APScheduler IntervalTrigger every 4 hours in trading-api lifespan. Uses timezone-aware `datetime.now(ET)` for `next_run_time` to avoid naive-UTC-vs-ET mismatch with the AsyncIOScheduler configured for America/New_York.
 - **Trade Journal**: SQLite `forex-engine/forex_journal.db` — mirrors open/close trades for RAG loop sourcing. Preferred over PostgreSQL for loser retrieval.
 - **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/journal`, `/forex/vault`; POST `/forex/toggle`, `/forex/pause`, `/forex/resume`, `/forex/scan`.
 - **Dashboard Tab**: 6th tab "Forex" (Globe icon) with teal color scheme, 7-card metrics grid, positions table, H4 scanner results, trade history, vault sweeps.

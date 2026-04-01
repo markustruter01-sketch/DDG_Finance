@@ -1,0 +1,43 @@
+{
+  "last_updated": "2026-04-01T05:30:52.607307+00:00",
+  "status": "idle",
+  "cycle_count": 1,
+  "usd_bias": "NEUTRAL",
+  "news_blackout": false,
+  "equity_usd": 100000.0,
+  "paper_trading": true,
+  "positions": [],
+  "scan_results": [
+    {
+      "pair": "EUR_USD",
+      "status": "insufficient_data"
+    },
+    {
+      "pair": "GBP_USD",
+      "status": "insufficient_data"
+    },
+    {
+      "pair": "USD_JPY",
+      "status": "insufficient_data"
+    },
+    {
+      "pair": "AUD_USD",
+      "status": "insufficient_data"
+    },
+    {
+      "pair": "USD_CHF",
+      "status": "insufficient_data"
+    }
+  ],
+  "last_scan": "2026-04-01T05:30:52.586504+00:00",
+  "summary": {
+    "starting_balance_usd": 100000.0,
+    "cash_usd": 100000.0,
+    "total_trades": 0,
+    "win_count": 0,
+    "all_time_pnl_usd": 0,
+    "hwm_usd": 100000.0,
+    "vault_total_usd": 0.0
+  },
+  "error": null
+}

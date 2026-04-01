@@ -95,7 +95,20 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Trade Journal**: SQLite `forex-engine/forex_journal.db` — mirrors open/close trades for RAG loop sourcing. Preferred over PostgreSQL for loser retrieval.
 - **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/journal`, `/forex/vault`; POST `/forex/toggle`, `/forex/pause`, `/forex/resume`, `/forex/scan`.
 - **Dashboard Tab**: 6th tab "Forex" (Globe icon) with teal color scheme, 7-card metrics grid, positions table, H4 scanner results, trade history, vault sweeps.
-- **EXPECTED_JOB_COUNT**: 10 (5 trading + 5 startup: auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator).
+- **EXPECTED_JOB_COUNT**: 16 (5 trading + 5 startup + 6 fleet commander: auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator, fleet_commander_0415/0945/1200/1500/1700/2200).
+
+### Gemini Fleet Commander (All-Bot AI Audit)
+
+- **Files**: `trading-platform/analysis/fleet_commander.py`, `trading-platform/analysis/fleet_enforcer.py`
+- **AI Model**: Gemini Flash (`gemini-3-flash-preview`) via user's own `GOOGLE_GEMINI_API_KEY` (direct Google API, not Replit proxy)
+- **Schedule**: 6× daily via APScheduler — 04:15, 09:45, 12:00, 15:00, 17:00, 22:00 ET
+- **Scope**: Audits all 6 bots (Oracle, Davy Jones, Blackbeard, Calypso, Apex Predator, Navigator) via the full export report
+- **Enforcement**: `fleet_enforcer.py` applies Kraken param adjustments within hard BOUNDS (±1 step/cycle), writes veto conditions with 6h TTL. HOLD verdict always writes blocking veto state. Fail-open if enforcement fails.
+- **Concurrency**: Threading lock prevents duplicate simultaneous runs
+- **Token Tracking**: In-memory daily counter (prompt/completion/total tokens, call count)
+- **Persistence**: `trading-platform/logs/fleet_audit.json` (latest), `fleet_audit_history.json` (last 24 runs), `veto_conditions.json` (active vetos)
+- **API Endpoints**: GET `/admin/fleet-commander/status`, GET `/admin/fleet-commander/history`, POST `/admin/fleet-commander/run`
+- **Dashboard**: `FleetCommanderPanel.tsx` on Overview tab — verdict badges, per-bot verdicts, param adjustments with before/after, critique flags, schedule, 24h history, token counter, "Run Now" button
 
 ### Artifact Configuration
 
@@ -106,7 +119,7 @@ The project employs a monorepo structure managed by pnpm workspaces.
 
 - **Brokerage**: Alpaca API (Paper Trading)
 - **Data Sources**: FRED API, Alpaca Market Data, NewsAPI, yfinance, Fear & Greed Index, on-chain BTC data, economic calendar.
-- **LLM**: Groq (specifically Llama 3.3 70B Versatile).
+- **LLM**: Groq (Llama 3.3 70B Versatile), Google Gemini Flash (`gemini-3-flash-preview`) for Fleet Commander audits.
 - **Database**: PostgreSQL, SQLite.
 - **Notifications**: Discord webhooks, Telegram Bot API (configurable alert digests for profitable trades).
 - **Crypto Exchange**: Kraken (via ccxt library).

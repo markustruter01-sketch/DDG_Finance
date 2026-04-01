@@ -75,7 +75,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 10  # 5 trading jobs (scheduler.py) + 5 startup jobs (auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator)
+EXPECTED_JOB_COUNT = 16  # 5 trading jobs (scheduler.py) + 5 startup jobs (auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator) + 6 fleet commander cron jobs
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -369,6 +369,33 @@ async def lifespan(app: FastAPI):
         logger.info("Alert manager started (batched Telegram/Discord notifications)")
     except Exception as _alert_err:
         logger.warning(f"Alert manager startup failed (non-fatal): {_alert_err}")
+
+    def _fleet_commander_run():
+        try:
+            from analysis.fleet_commander import run_fleet_commander
+            result = run_fleet_commander()
+            logger.info(f"Fleet Commander | Scheduled run complete: verdict={result.get('overall_verdict', 'N/A')}")
+        except Exception as _fce:
+            logger.warning(f"Fleet Commander | Scheduled run failed (fail-open): {_fce}")
+
+    _fc_schedule = [
+        (4, 15, "Pre-Market 4:15 AM"),
+        (9, 45, "Post-Open 9:45 AM"),
+        (12, 0, "Midday 12:00 PM"),
+        (15, 0, "Late Session 3:00 PM"),
+        (17, 0, "Post-Close 5:00 PM"),
+        (22, 0, "Evening Crypto 10:00 PM"),
+    ]
+    for _fc_h, _fc_m, _fc_label in _fc_schedule:
+        scheduler.add_job(
+            func=_fleet_commander_run,
+            trigger=_CronTrigger(hour=_fc_h, minute=_fc_m, timezone="US/Eastern"),
+            id=f"fleet_commander_{_fc_h:02d}{_fc_m:02d}",
+            name=f"Fleet Commander ({_fc_label} ET)",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+    logger.info(f"Fleet Commander registered — {len(_fc_schedule)} daily audit runs scheduled")
 
     yield
 
@@ -2646,6 +2673,52 @@ async def trigger_gemini_audit(background_tasks: BackgroundTasks) -> dict:
     return {
         "status":  "triggered",
         "message": "Gemini self-critic auditor started — poll GET /admin/gemini-audit-status for results",
+    }
+
+
+@router.get("/admin/fleet-commander/status", tags=["Admin"])
+async def get_fleet_commander_status() -> dict:
+    from analysis.fleet_commander import get_last_fleet_audit, get_token_usage
+    from core.veto_enforcer import get_veto_status
+
+    result = get_last_fleet_audit()
+    result["token_usage_today"] = get_token_usage()
+    result["veto_status"] = get_veto_status()
+
+    scheduler = get_scheduler()
+    fc_jobs = [j for j in scheduler.get_jobs() if j.id.startswith("fleet_commander_")]
+    next_runs = []
+    for j in fc_jobs:
+        next_runs.append({
+            "id": j.id,
+            "name": j.name,
+            "next_run": j.next_run_time.isoformat() if j.next_run_time else None,
+        })
+    result["scheduled_runs"] = sorted(next_runs, key=lambda x: x.get("next_run") or "")
+    return result
+
+
+@router.get("/admin/fleet-commander/history", tags=["Admin"])
+async def get_fleet_commander_history() -> dict:
+    from analysis.fleet_commander import get_fleet_audit_history
+    history = get_fleet_audit_history()
+    return {"history": history, "count": len(history)}
+
+
+@router.post("/admin/fleet-commander/run", tags=["Admin"])
+async def trigger_fleet_commander(background_tasks: BackgroundTasks) -> dict:
+    from analysis.fleet_commander import run_fleet_commander
+
+    async def _bg():
+        import asyncio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_fleet_commander)
+        logger.info(f"Manual Fleet Commander run complete: {result.get('overall_verdict', 'N/A')}")
+
+    background_tasks.add_task(_bg)
+    return {
+        "status": "triggered",
+        "message": "Fleet Commander audit started — poll GET /admin/fleet-commander/status for results",
     }
 
 

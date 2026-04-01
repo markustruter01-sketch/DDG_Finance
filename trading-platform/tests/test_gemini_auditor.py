@@ -327,8 +327,7 @@ class TestRunDailySelfCritic(unittest.TestCase):
 
     def setUp(self):
         # Ensure env vars are available for the run
-        os.environ["AI_INTEGRATIONS_GEMINI_BASE_URL"] = "http://localhost:1106/modelfarm/gemini"
-        os.environ["AI_INTEGRATIONS_GEMINI_API_KEY"]  = "dummy-test-key"
+        os.environ["GOOGLE_GEMINI_API_KEY"] = "dummy-test-key"
 
     def _mock_fetch(self):
         """Return a minimal but realistic data dict."""
@@ -425,14 +424,14 @@ class TestRunDailySelfCritic(unittest.TestCase):
     def test_missing_env_var_skips(self):
         from analysis import gemini_auditor
 
-        saved = os.environ.pop("AI_INTEGRATIONS_GEMINI_BASE_URL", None)
+        saved = os.environ.pop("GOOGLE_GEMINI_API_KEY", None)
         try:
             result = gemini_auditor.run_daily_self_critic()
             self.assertEqual(result["status"], "skipped")
             self.assertEqual(result["reason"], "env_vars_missing")
         finally:
             if saved:
-                os.environ["AI_INTEGRATIONS_GEMINI_BASE_URL"] = saved
+                os.environ["GOOGLE_GEMINI_API_KEY"] = saved
 
     def test_invalid_gemini_json_fails_open(self):
         from analysis import gemini_auditor

@@ -429,6 +429,65 @@ export function useTriggerPerformanceAnalysis() {
   });
 }
 
+// --- Fleet Commander ---
+
+export interface FleetCommanderStatus {
+  status: string;
+  overall_verdict?: string;
+  bot_verdicts?: Record<string, string>;
+  vetoed_tickers?: string[];
+  conditions?: Array<{ type: string; value?: number | string; ticker?: string }>;
+  kraken_param_adjustments?: Array<{
+    bot_id: string;
+    ZSCORE_ENTRY?: number;
+    ZSCORE_EXIT?: number;
+    STOP_LOSS_PCT?: number;
+    TRAIL_PCT?: number;
+    MIN_NET_PROFIT_PCT?: number;
+    reasoning: string;
+  }>;
+  critique_summary?: string;
+  critique_flags?: string[];
+  generated_at?: string;
+  valid_until?: string;
+  elapsed_seconds?: number;
+  token_usage?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
+  token_usage_today?: { date: string; prompt_tokens: number; completion_tokens: number; total_tokens: number; call_count: number };
+  scheduled_runs?: Array<{ id: string; name: string; next_run: string | null }>;
+  veto_status?: Record<string, any>;
+}
+
+export function useFleetCommanderStatus() {
+  return useQuery<FleetCommanderStatus>({
+    queryKey: ["/admin/fleet-commander/status"],
+    queryFn: async () => (await api.get("/admin/fleet-commander/status")).data,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+}
+
+export function useFleetCommanderHistory() {
+  return useQuery<{ history: any[]; count: number }>({
+    queryKey: ["/admin/fleet-commander/history"],
+    queryFn: async () => (await api.get("/admin/fleet-commander/history")).data,
+    refetchInterval: 120000,
+    retry: 1,
+  });
+}
+
+export function useTriggerFleetCommander() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post("/admin/fleet-commander/run")).data,
+    onSuccess: () => {
+      setTimeout(() => {
+        qc.invalidateQueries({ queryKey: ["/admin/fleet-commander/status"] });
+        qc.invalidateQueries({ queryKey: ["/admin/fleet-commander/history"] });
+      }, 45000);
+    },
+  });
+}
+
 export function useLearningSnapshotInfo() {
   return useQuery<{
     status: string;

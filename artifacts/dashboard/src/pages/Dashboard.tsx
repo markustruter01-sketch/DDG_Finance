@@ -22,6 +22,7 @@ import { KrakenPositionCard } from "@/components/PositionCards";
 import { CombinedPortfolioSummary } from "@/components/PortfolioSummary";
 import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
 import { CommandersLog } from "@/components/CommandersLog";
+import { FleetCommanderPanel } from "@/components/FleetCommanderPanel";
 import { LivePositionsSection } from "@/components/LivePositionsSection";
 import { OptionsSection } from "@/components/OptionsSection";
 import { ForexSection } from "@/components/ForexSection";
@@ -4818,6 +4819,12 @@ export default function Dashboard() {
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
               <SafeSection label="Commander's Log">
                 <CommandersLog />
+              </SafeSection>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.055 }}>
+              <SafeSection label="Fleet Commander">
+                <FleetCommanderPanel />
               </SafeSection>
             </motion.div>
 

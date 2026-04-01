@@ -1,0 +1,76 @@
+[
+  {
+    "generated_at": "2026-04-01T10:56:50.922696+00:00",
+    "valid_until": "2026-04-01T16:56:50.922696+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CAUTION",
+      "davy_jones": "CLEAN",
+      "blackbeard": "CAUTION",
+      "calypso": "HOLD",
+      "apex_predator": "CLEAN",
+      "navigator": "CLEAN"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "SNX",
+      "ALGO",
+      "SEI",
+      "JUP"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.7
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "min_win_rate_gate",
+        "value": 0.3
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.2,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Win rate 51% is acceptable but negative PnL suggests poor risk-reward on exits; tightening entry and stop buffer."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.35,
+        "STOP_LOSS_PCT": 0.028,
+        "reasoning": "Win rate 21.4% indicates entry signal is too sensitive to noise; increasing entry threshold and stop-loss width."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.45,
+        "STOP_LOSS_PCT": 0.032,
+        "reasoning": "Win rate 14.3% is non-viable; bot is entering high-volatility traps. Demanding higher conviction for entry."
+      }
+    ],
+    "critique_summary": "The fleet is currently suffering from severe cross-bot correlation in short positions and a 'stop-loss cascade' effect on Kraken. Aggressive bots show non-viable win rates (<22%), while Oracle exhibits conviction inflation where 0.90+ scores result in significant losses (BITO -8.3%).",
+    "critique_flags": [
+      "Aggressive Kraken bots (Blackbeard/Calypso) have win rates below 22%",
+      "Excessive short-side correlation on SNX, STRK, and STX across three bots",
+      "Oracle conviction inflation on crypto-linked assets",
+      "High stop-out frequency on RENDER and ALGO suggests these assets are too volatile for current ATR settings"
+    ],
+    "token_usage": {
+      "promptTokenCount": 12745,
+      "candidatesTokenCount": 617,
+      "totalTokenCount": 14797,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 12745
+        }
+      ],
+      "thoughtsTokenCount": 1435
+    },
+    "elapsed_seconds": 13.7
+  }
+]

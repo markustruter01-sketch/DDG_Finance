@@ -1,34 +1,34 @@
 {
-  "generated_at": "2026-03-31T08:15:00.001499+00:00",
-  "valid_until": "2026-04-01T08:15:00.001499+00:00",
+  "generated_at": "2026-04-01T10:57:04.601435+00:00",
+  "valid_until": "2026-04-01T16:57:04.601435+00:00",
   "vetoed_tickers": [
-    "ETHUSD",
-    "AVAXUSD",
-    "SOLUSD",
-    "DOTUSD",
-    "ADAUSD"
+    "RENDER",
+    "SNX",
+    "ALGO",
+    "SEI",
+    "JUP"
   ],
   "conditions": [
+    {
+      "type": "vpin_threshold",
+      "value": 0.7
+    },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "system_integrity_check",
-      "value": 0.0
-    },
-    {
-      "type": "kill_switch",
-      "value": 0.05
+      "type": "min_win_rate_gate",
+      "value": 0.3
     }
   ],
-  "critique_summary": "The platform is experiencing a catastrophic failure state with 5 critical core degradations (8/8 jobs failing) within a 45-minute window. Data integrity is compromised as evidenced by out-of-bounds conviction scores (5.0) and a total mismatch between trade logs and performance summaries reporting zero activity.",
+  "critique_summary": "The fleet is currently suffering from severe cross-bot correlation in short positions and a 'stop-loss cascade' effect on Kraken. Aggressive bots show non-viable win rates (<22%), while Oracle exhibits conviction inflation where 0.90+ scores result in significant losses (BITO -8.3%).",
   "critique_flags": [
-    "Critical system degradation: 8/8 scheduler jobs failed 5x in 24 hours",
-    "Conviction score anomaly: Values recorded at 5.00 (expected range 0-1)",
-    "Wash-sale blindness: Repeated loss-to-win sequences in AVAXUSD and ETHUSD within 24 hours",
-    "Data reporting mismatch: Performance summary reports 0 trades while log shows 28+ executions",
-    "Stale equity curve: No updates recorded between 19:17 and 01:53"
+    "Aggressive Kraken bots (Blackbeard/Calypso) have win rates below 22%",
+    "Excessive short-side correlation on SNX, STRK, and STX across three bots",
+    "Oracle conviction inflation on crypto-linked assets",
+    "High stop-out frequency on RENDER and ALGO suggests these assets are too volatile for current ATR settings"
   ],
-  "overall_verdict": "HOLD"
+  "overall_verdict": "CAUTION",
+  "source": "fleet_commander"
 }

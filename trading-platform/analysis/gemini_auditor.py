@@ -174,36 +174,32 @@ Rules
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 ── Gemini REST client (direct HTTP, using Replit proxy)
+# SECTION 3 ── Gemini REST client (direct Google API, user's own key)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _gemini_base_url() -> str:
-    url = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "").rstrip("/")
-    if not url:
-        raise RuntimeError("AI_INTEGRATIONS_GEMINI_BASE_URL is not set")
-    return url
+_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 def _gemini_api_key() -> str:
-    key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", "")
+    key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
     if not key:
-        raise RuntimeError("AI_INTEGRATIONS_GEMINI_API_KEY is not set")
+        raise RuntimeError("GOOGLE_GEMINI_API_KEY is not set")
     return key
 
 
-def _call_gemini(user_payload: str) -> _GeminiAuditResponse:
+def _call_gemini(user_payload: str, system_prompt: str | None = None) -> _GeminiAuditResponse:
     """
     Send a single audit request to Gemini and return a validated response model.
 
     Raises RuntimeError on HTTP/parse errors so callers can handle fail-open.
     """
-    base_url = _gemini_base_url()
-    api_key  = _gemini_api_key()
+    api_key = _gemini_api_key()
+    prompt = system_prompt or _SYSTEM_PROMPT
 
-    url = f"{base_url}/models/{_GEMINI_MODEL}:generateContent"
+    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
     body = {
         "system_instruction": {
-            "parts": [{"text": _SYSTEM_PROMPT}]
+            "parts": [{"text": prompt}]
         },
         "contents": [
             {
@@ -226,7 +222,7 @@ def _call_gemini(user_payload: str) -> _GeminiAuditResponse:
                 "x-goog-api-key": api_key,
             },
             json=body,
-            timeout=60,
+            timeout=90,
         )
     except requests.RequestException as exc:
         raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
@@ -236,8 +232,10 @@ def _call_gemini(user_payload: str) -> _GeminiAuditResponse:
             f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}"
         )
 
+    token_usage = {}
     try:
-        data     = resp.json()
+        data = resp.json()
+        token_usage = data.get("usageMetadata", {})
         raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError, ValueError) as exc:
         raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
@@ -248,7 +246,9 @@ def _call_gemini(user_payload: str) -> _GeminiAuditResponse:
         raise RuntimeError(f"Gemini returned non-JSON: {raw_text[:200]}") from exc
 
     try:
-        return _GeminiAuditResponse(**parsed)
+        result = _GeminiAuditResponse(**parsed)
+        result._token_usage = token_usage
+        return result
     except Exception as exc:
         raise RuntimeError(f"Gemini response failed Pydantic validation: {exc}") from exc
 
@@ -478,9 +478,8 @@ def run_daily_self_critic() -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     logger.info("GeminiAuditor | Starting daily self-critic run")
 
-    # ── Guard: env vars must be set ───────────────────────────────────────────
-    if not os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL"):
-        logger.warning("GeminiAuditor | AI_INTEGRATIONS_GEMINI_BASE_URL not set — skipping")
+    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
+        logger.warning("GeminiAuditor | GOOGLE_GEMINI_API_KEY not set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     # ── Fetch DB data ─────────────────────────────────────────────────────────

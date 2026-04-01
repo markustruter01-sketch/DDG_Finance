@@ -47,13 +47,26 @@ from portfolio.allocator import process_regime_llm_output, process_crypto_llm_ou
 
 _REGIME_CACHE_FILE = Path(__file__).parent.parent / "data" / "last_regime_cache.json"
 # Max age is loaded from settings so it can be tuned via env var without code edits.
-# Default: 4 hours (see config/settings.py: regime_fallback_max_age_hours).
+# Default: 1.5 hours (see config/settings.py: regime_fallback_max_age_hours).
 from config.settings import settings as _settings
 REGIME_FALLBACK_MAX_AGE_SECONDS = int(_settings.regime_fallback_max_age_hours * 3600)
 
 # In-memory cache dict: {"regime": str, "saved_at": float, "output": {...}}
 _last_regime_cache: dict | None = None
 _last_crypto_cache: dict | None = None
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SPY EMERGENCY REGIME OVERRIDE
+# Forces Bear regime when SPY drops > 3% intraday from previous close.
+# Clears when SPY recovers above -2% (hysteresis prevents flip-flopping).
+# ══════════════════════════════════════════════════════════════════════════════
+
+SPY_EMERGENCY_THRESHOLD = -0.03
+SPY_RECOVERY_THRESHOLD = -0.02
+
+_spy_override_active: bool = False
+_spy_override_triggered_at: float | None = None
+_spy_last_change_pct: float | None = None
 
 
 def _load_regime_cache() -> None:
@@ -166,6 +179,64 @@ def get_groq_status() -> dict:
         "cache_age_min":   round(age_s / 60, 1),
         "cache_valid":     age_s < REGIME_FALLBACK_MAX_AGE_SECONDS,
         "regime":          _last_regime_cache.get("regime"),
+    }
+
+
+def emergency_regime_check() -> tuple[bool, float | None]:
+    global _spy_override_active, _spy_override_triggered_at, _spy_last_change_pct
+    try:
+        from alpaca.data.historical import StockHistoricalDataClient
+        from alpaca.data.requests import StockSnapshotRequest
+
+        client = StockHistoricalDataClient(
+            api_key=_settings.alpaca_api_key,
+            secret_key=_settings.alpaca_secret_key,
+        )
+        req = StockSnapshotRequest(symbol_or_symbols="SPY")
+        snap = client.get_stock_snapshot(req)
+        spy = snap.get("SPY")
+        if spy is None:
+            logger.warning("Emergency regime | SPY snapshot unavailable")
+            return _spy_override_active, _spy_last_change_pct
+
+        current = float(spy.latest_trade.price)
+        prev_close = float(spy.previous_daily_bar.close)
+        change_pct = (current - prev_close) / prev_close
+        _spy_last_change_pct = change_pct
+
+        if change_pct <= SPY_EMERGENCY_THRESHOLD:
+            if not _spy_override_active:
+                _spy_override_active = True
+                _spy_override_triggered_at = time.time()
+                logger.warning(
+                    f"EMERGENCY REGIME | SPY {change_pct * 100:+.1f}% (threshold {SPY_EMERGENCY_THRESHOLD * 100:.0f}%) "
+                    f"— forcing Bear override"
+                )
+            return True, change_pct
+
+        if _spy_override_active and change_pct > SPY_RECOVERY_THRESHOLD:
+            logger.info(
+                f"EMERGENCY REGIME | SPY recovered to {change_pct * 100:+.1f}% "
+                f"(above {SPY_RECOVERY_THRESHOLD * 100:.0f}% recovery threshold) — clearing override"
+            )
+            _spy_override_active = False
+            _spy_override_triggered_at = None
+            return False, change_pct
+
+        return _spy_override_active, change_pct
+
+    except Exception as exc:
+        logger.warning(f"Emergency regime | SPY check failed: {exc}")
+        return _spy_override_active, _spy_last_change_pct
+
+
+def get_emergency_regime_status() -> dict:
+    return {
+        "active": _spy_override_active,
+        "triggered_at": _spy_override_triggered_at,
+        "spy_change_pct": round(_spy_last_change_pct * 100, 2) if _spy_last_change_pct is not None else None,
+        "threshold_pct": SPY_EMERGENCY_THRESHOLD * 100,
+        "recovery_pct": SPY_RECOVERY_THRESHOLD * 100,
     }
 
 

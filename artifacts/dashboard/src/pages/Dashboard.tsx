@@ -66,12 +66,13 @@ import {
 function SystemStatusBanner() {
   const { data, isError } = usePlatformStatus();
 
-  // Three distinct states:
-  //   "offline"  — API is unreachable (genuine network/server failure) → RED
+  // Distinct states:
+  //   "offline"    — API is unreachable (genuine network/server failure) → RED
+  //   "emergency"  — SPY crash override forcing Bear regime → RED pulsing
   //   "ai_degraded" — API responded but Groq regime cache is being used → AMBER (not red)
-  //   "degraded" — API up, but pipeline/scheduler has errors → AMBER
-  //   "online"   — Everything healthy → GREEN
-  let sysStatus: "online" | "degraded" | "ai_degraded" | "offline";
+  //   "degraded"   — API up, but pipeline/scheduler has errors → AMBER
+  //   "online"     — Everything healthy → GREEN
+  let sysStatus: "online" | "degraded" | "ai_degraded" | "emergency" | "offline";
   let reason: string;
   let tradingMode: string | undefined;
 
@@ -106,8 +107,13 @@ function SystemStatusBanner() {
     const errorCount = data.last_run.error_count;
     tradingMode = data.trading_mode;
     const groqFallback = data.groq?.using_fallback ?? false;
+    const emergencyRegime = data.emergency_regime;
 
-    if (jobCount < EXPECTED_JOBS) {
+    if (emergencyRegime?.active) {
+      sysStatus = "emergency";
+      const spyPct = emergencyRegime.spy_change_pct != null ? ` (SPY ${emergencyRegime.spy_change_pct > 0 ? "+" : ""}${emergencyRegime.spy_change_pct.toFixed(1)}%)` : "";
+      reason = `EMERGENCY REGIME: BEAR${spyPct} — defensive posture forced`;
+    } else if (jobCount < EXPECTED_JOBS) {
       sysStatus = "degraded";
       reason = `Only ${jobCount}/${EXPECTED_JOBS} scheduler jobs registered`;
     } else if (["error", "analysis_failed", "execution_failed", "kill_switch_tripped"].includes(lastStatus)) {
@@ -194,6 +200,27 @@ function SystemStatusBanner() {
           <Brain className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
           <span className="text-xs text-amber-400 font-medium">AI DEGRADED</span>
           <span className="text-xs text-amber-500/70 break-words">— {reason}</span>
+          {tradingMode && (
+            <span className={cn("text-xs font-mono", tradingModeColor(tradingMode))}>
+              {tradingModeLabel(tradingMode)}
+            </span>
+          )}
+          {BudgetMeter}
+        </div>
+      </div>
+    );
+  }
+
+  if (sysStatus === "emergency") {
+    return (
+      <div className="sticky top-14 z-30 w-full bg-red-500/15 border-b border-red-500/30 backdrop-blur-md">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 min-h-[2rem] py-1.5 md:py-0 md:h-8 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="relative flex h-2 w-2 flex-shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+          </span>
+          <span className="text-xs text-red-400 font-bold tracking-wide">EMERGENCY REGIME</span>
+          <span className="text-xs text-red-500/80 break-words">— {reason}</span>
           {tradingMode && (
             <span className={cn("text-xs font-mono", tradingModeColor(tradingMode))}>
               {tradingModeLabel(tradingMode)}

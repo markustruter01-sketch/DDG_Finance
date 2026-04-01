@@ -535,7 +535,7 @@ async def status() -> dict:
     market clock, kill switch, scheduler jobs, last pipeline run, cache stats,
     and Groq regime cache status.
     """
-    from analysis.analyzer import get_groq_status as _get_groq_status
+    from analysis.analyzer import get_groq_status as _get_groq_status, get_emergency_regime_status as _get_emergency
     from analysis.groq_budget import budget as _groq_budget
     market_open = is_market_open()
     last_run = get_last_run()
@@ -563,6 +563,7 @@ async def status() -> dict:
         "blackout":       is_blackout_active(),
         "groq":           groq_status,
         "signal_guard":   _get_signal_guard_status(),
+        "emergency_regime": _get_emergency(),
     }
 
 

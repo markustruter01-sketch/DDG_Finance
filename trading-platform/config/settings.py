@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # --- Groq Fallback ---
     regime_fallback_max_age_hours: float = Field(
-        default=4.0,
+        default=1.5,
         description="How many hours a cached regime analysis remains valid for pipeline fallback when Groq is rate-limited",
     )
 

@@ -29,7 +29,7 @@ from typing import Any, Union
 
 from loguru import logger
 
-from analysis.analyzer import run_analysis_cycle, get_regime_fallback
+from analysis.analyzer import run_analysis_cycle, get_regime_fallback, emergency_regime_check
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from db.postgres import insert_equity_snapshot, get_kraken_equity
 from analysis.post_mortem import run_post_mortem
@@ -319,10 +319,30 @@ async def _run_pipeline_inner(
             _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
             return result
 
+    # ── SPY emergency regime override ─────────────────────────────────────────
+    spy_override = False
+    spy_change = None
+    if not crypto_only and allocation is not None and isinstance(allocation, RegimeAnalysisOutput):
+        spy_override, spy_change = emergency_regime_check()
+        if spy_override and allocation.regime != "Bear":
+            logger.warning(
+                f"Pipeline | EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% — "
+                f"forcing regime from '{allocation.regime}' to 'Bear'"
+            )
+            allocation.regime = "Bear"
+            allocation.regime_rationale = (
+                f"EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% intraday drop. "
+                f"Original regime overridden to Bear for defensive posture."
+            )
+            result["errors"].append(
+                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime"
+            )
+
     # ── Build allocation summary (same path for fresh and fallback allocations) ──
     if isinstance(allocation, RegimeAnalysisOutput):
         stale_tag = " [STALE — cached]" if using_fallback else ""
-        result["market_regime"] = f"{allocation.regime}{stale_tag}: {allocation.regime_rationale}"
+        override_tag = " [EMERGENCY OVERRIDE]" if spy_override else ""
+        result["market_regime"] = f"{allocation.regime}{stale_tag}{override_tag}: {allocation.regime_rationale}"
     else:
         result["market_regime"] = allocation.market_regime
     result["allocation_summary"] = [
@@ -432,17 +452,22 @@ async def _run_pipeline_inner(
             )
             _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
             _regime_path.parent.mkdir(parents=True, exist_ok=True)
-            _regime_path.write_text(_json.dumps({
+            _regime_payload = {
                 "regime":       _regime_str,
                 "written_at":   _dt.now(_tz.utc).isoformat(),
                 "cycle_number": _state["run_count"],
                 "using_fallback": using_fallback,
+                "regime_override": spy_override,
                 "rationale": (
                     allocation.regime_rationale
                     if isinstance(allocation, RegimeAnalysisOutput) and not using_fallback
                     else None
                 ),
-            }, indent=2))
+            }
+            if spy_override and spy_change is not None:
+                _regime_payload["override_reason"] = f"SPY {spy_change * 100:+.1f}% intraday"
+                _regime_payload["spy_change_pct"] = round(spy_change * 100, 2)
+            _regime_path.write_text(_json.dumps(_regime_payload, indent=2))
             logger.debug(
                 f"Pipeline | market_regime.json written: regime='{_regime_str}' "
                 f"(Kraken bot will read on next cycle)"

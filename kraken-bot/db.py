@@ -148,12 +148,7 @@ def _init_pool() -> None:
     dsn = _get_dsn()
     if not dsn:
         return
-    bot_label = "kraken"
-    try:
-        from config import BOT_ID
-        bot_label = BOT_ID
-    except Exception:
-        pass
+    bot_label = os.environ.get("BOT_ID", "kraken")
     for attempt in range(1, 4):
         try:
             _pool = _pg_pool.ThreadedConnectionPool(minconn=1, maxconn=4, dsn=dsn)

@@ -17,14 +17,18 @@ from typing import Generator
 
 from loguru import logger
 
+import time
+
 try:
     import psycopg2
     import psycopg2.extras
+    import psycopg2.pool as _pg_pool
     _PG_AVAILABLE = True
 except ImportError:
     _PG_AVAILABLE = False
     logger.warning("DB | psycopg2 not installed — Forex bot DB unavailable")
 
+_pool: "_pg_pool.ThreadedConnectionPool | None" = None
 
 _FOREX_SCHEMA = """
 CREATE TABLE IF NOT EXISTS forex_heartbeat (
@@ -84,17 +88,50 @@ def _is_available() -> bool:
     return _PG_AVAILABLE and bool(_get_dsn())
 
 
+def _init_pool() -> None:
+    global _pool
+    if not _PG_AVAILABLE:
+        return
+    dsn = _get_dsn()
+    if not dsn:
+        return
+    for attempt in range(1, 4):
+        try:
+            _pool = _pg_pool.ThreadedConnectionPool(minconn=1, maxconn=4, dsn=dsn)
+            logger.info("DB | Forex connection pool initialised (min=1, max=4)")
+            return
+        except Exception as exc:
+            logger.warning(f"DB | Forex pool init attempt {attempt}/3 failed: {exc}")
+            if attempt < 3:
+                time.sleep(2)
+    logger.error("DB | Forex pool init failed after 3 attempts — falling back to per-query connections")
+
+
+_init_pool()
+
+
 @contextmanager
 def _conn() -> "Generator[psycopg2.extensions.connection, None, None]":
-    conn = psycopg2.connect(_get_dsn())
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    if _pool is not None:
+        conn = _pool.getconn()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            _pool.putconn(conn)
+    else:
+        conn = psycopg2.connect(_get_dsn())
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 BOT_ID = "navigator"

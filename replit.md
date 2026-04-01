@@ -64,6 +64,24 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **API Endpoints**: GET `/options/state`, `/options/positions`, `/options/pending`; POST `/options/approve`, `/options/reject`, `/options/toggle`, `/options/scan`, `/options/close`.
 - **Dashboard Tab**: 5th tab "Options" (Crosshair icon) with capital fence cards, volatility scanner, pending trade approval queue, open position cards with Greeks.
 
+### Bot #6: The Navigator — Forex Swing Engine
+
+- **Directory**: `forex-engine/`
+- **Strategy**: H4 (4-hour) swing trading on 5 major FX pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF).
+- **LLM Usage**: Groq Macro Compass only — 1 call per 4h cycle for USD directional bias (USD_BULLISH/USD_BEARISH/NEUTRAL). Uses shared `groq_budget.py` singleton. All execution is 100% algorithmic.
+- **Data Source**: yfinance (OANDA-ready structure for future live trading).
+- **Entry Signals**: RSI(14) oversold (<30) or overbought (>70), filtered by USD bias directional alignment.
+- **Risk Management**: SL = 1.5× ATR(14), TP = 3.0× ATR(14) giving 1:2 R:R. Max 1.5% risk per trade, max 5 open positions, max 10% position size.
+- **Capital**: $100k paper (PostgreSQL-backed). Capital Vault sweeps 20% of profits above HWM every Friday 4PM EST.
+- **News Blackout**: Checks free economic calendar API; skips new entries if high-impact event within 4h.
+- **RAG Loop**: Injects last 5 losing trades into Groq prompt to avoid repeating mistakes.
+- **DB Tables**: `forex_heartbeat` (id=10), `forex_portfolio` (id=10), `forex_trades`, `forex_vault`.
+- **Config**: `forex-engine/config.py` — BOT_ID="navigator", BOT_DB_ID=10.
+- **Schedule**: APScheduler IntervalTrigger every 4 hours in trading-api lifespan.
+- **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/vault`; POST `/forex/toggle`, `/forex/scan`.
+- **Dashboard Tab**: 6th tab "Forex" (Globe icon) with teal color scheme, 7-card metrics grid, positions table, H4 scanner results, trade history, vault sweeps.
+- **EXPECTED_JOB_COUNT**: 10 (5 trading + 5 startup: auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator).
+
 ### Artifact Configuration
 
 - Services are defined in `artifact.toml`, including `web` (React Dashboard), `trading-api` (FastAPI), and three `kraken-bot` instances.

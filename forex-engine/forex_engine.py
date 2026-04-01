@@ -1,0 +1,619 @@
+"""
+forex_engine.py — The Navigator: Autonomous AI Forex Swing-Trading Engine (Bot #6)
+====================================================================================
+4-Hour (H4) cycle. 5 major pairs. Groq LLM = Macro Compass only.
+100% algorithmic execution. $100k paper capital.
+
+Strategy:
+  1. Check news blackout → skip if high-impact event within 4h
+  2. Groq Macro Compass → USD_BULLISH / USD_BEARISH / NEUTRAL
+  3. Technical filter → RSI extremes + ATR sizing
+  4. Dynamic lot sizing → max 1.5% risk per trade
+  5. Bracket orders → SL = 1.5×ATR, TP = 3.0×ATR (1:2 R:R)
+  6. Check open positions for SL/TP hits
+  7. Capital Vault → Friday 4PM EST sweep
+"""
+
+import os
+import sys
+import json
+import time
+from datetime import datetime, timezone, timedelta
+
+from loguru import logger
+
+_ENGINE_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.join(_ENGINE_DIR, "..")
+_TRADING_PLATFORM = os.path.join(_REPO_ROOT, "trading-platform")
+
+if _TRADING_PLATFORM not in sys.path:
+    sys.path.append(_TRADING_PLATFORM)
+if _REPO_ROOT not in sys.path:
+    sys.path.append(_REPO_ROOT)
+if _ENGINE_DIR not in sys.path:
+    sys.path.insert(0, _ENGINE_DIR)
+
+from config import (
+    PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
+    PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, PIP_SIZE,
+    RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
+    SL_ATR_MULT, TP_ATR_MULT, MAX_RISK_PER_TRADE_PCT,
+    MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
+    BOT_ID, BOT_DISPLAY_NAME, BOT_DB_ID, BOT_STRATEGY_LABEL,
+    CONTROL_FILE, LIVE_STATE_FILE, VAULT_SWEEP_PCT,
+)
+from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
+from paper_engine import (
+    get_paper_equity, get_paper_positions, get_paper_portfolio_summary,
+    paper_open_position, paper_close_position, get_available_capital,
+    update_hwm, perform_vault_sweep,
+)
+import db as _db
+
+_state = {
+    "status": "idle",
+    "cycle_count": 0,
+    "usd_bias": "NEUTRAL",
+    "news_blackout": False,
+    "last_scan": None,
+    "last_scan_results": [],
+    "error": None,
+    "paused": False,
+}
+
+_latest_prices: dict[str, float] = {}
+
+_USD_BIAS_CACHE: dict = {"bias": "NEUTRAL", "thesis": "", "cached_at": 0}
+_USD_BIAS_CACHE_TTL = 4 * 3600
+
+
+def is_bot_paused() -> bool:
+    import pathlib
+    ctrl = pathlib.Path(CONTROL_FILE)
+    if not ctrl.exists():
+        return False
+    try:
+        return bool(json.loads(ctrl.read_text()).get("bot_paused", False))
+    except Exception:
+        return False
+
+
+def _check_news_blackout() -> bool:
+    try:
+        import requests
+        url = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            logger.warning("Forex | News calendar API returned non-200 — proceeding without blackout")
+            return False
+
+        events = resp.json()
+        now = datetime.now(tz=timezone.utc)
+        blackout_window = timedelta(hours=4)
+
+        high_impact_currencies = {"USD", "EUR", "GBP", "JPY", "AUD", "CHF"}
+
+        for event in events:
+            impact = event.get("impact", "").lower()
+            if impact not in ("high", "holiday"):
+                continue
+
+            currency = event.get("country", "").upper()
+            if currency not in high_impact_currencies:
+                continue
+
+            event_date = event.get("date", "")
+            try:
+                event_dt = datetime.fromisoformat(event_date.replace("Z", "+00:00"))
+                if now <= event_dt <= now + blackout_window:
+                    logger.warning(
+                        f"Forex | NEWS BLACKOUT — High-impact {currency} event "
+                        f"'{event.get('title', '?')}' in {(event_dt - now).total_seconds() / 3600:.1f}h"
+                    )
+                    return True
+            except Exception:
+                continue
+
+        return False
+
+    except Exception as exc:
+        logger.warning(f"Forex | News blackout check failed: {exc} — proceeding (no hard block)")
+        return False
+
+
+def _get_usd_bias() -> tuple[str, str]:
+    now = time.time()
+    if now - _USD_BIAS_CACHE["cached_at"] < _USD_BIAS_CACHE_TTL and _USD_BIAS_CACHE["bias"]:
+        logger.info(f"Forex | Using cached USD bias: {_USD_BIAS_CACHE['bias']}")
+        return _USD_BIAS_CACHE["bias"], _USD_BIAS_CACHE["thesis"]
+
+    try:
+        from analysis.groq_budget import budget as groq_budget
+        from analysis.groq_client import call_groq
+
+        if not groq_budget.can_call_regime():
+            logger.info("Forex | Groq budget throttled — falling back to NEUTRAL")
+            return "NEUTRAL", "Budget throttled — defaulting to NEUTRAL (both directions)"
+
+        losing_trades = _db.load_losing_trades(limit=5)
+        rag_block = ""
+        if losing_trades:
+            rag_block = "\n\nRECENT LOSING TRADES (learn from these mistakes):\n"
+            for lt in losing_trades:
+                rag_block += (
+                    f"  - {lt.get('pair')} {lt.get('direction')}: {lt.get('pnl_pips', 0):+.1f} pips | "
+                    f"Thesis: {lt.get('llm_thesis', 'N/A')}\n"
+                )
+
+        system_prompt = (
+            "You are a Forex Macro Compass. Your ONLY job is to determine the directional bias "
+            "for the US Dollar based on central bank policy, interest rate expectations, and "
+            "macroeconomic conditions.\n\n"
+            "You must output EXACTLY one of three values in a JSON object:\n"
+            '{"bias": "USD_BULLISH", "thesis": "brief 1-sentence reason"}\n'
+            '{"bias": "USD_BEARISH", "thesis": "brief 1-sentence reason"}\n'
+            '{"bias": "NEUTRAL", "thesis": "brief 1-sentence reason"}\n\n'
+            "Do NOT output anything else. No calculations, no trade recommendations, no numbers.\n"
+            "Just the directional USD bias based on macro fundamentals."
+        )
+
+        user_prompt = (
+            f"Current date: {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+            "Based on current central bank policy stances (Fed, ECB, BOJ, BOE, RBA, SNB), "
+            "recent economic data releases, and interest rate expectations, "
+            "what is the directional bias for the US Dollar?\n\n"
+            "Consider: Fed rate path, inflation trends, employment data, "
+            "relative growth differentials, and risk sentiment.\n"
+            f"{rag_block}"
+        )
+
+        raw = call_groq(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.1,
+            max_tokens=256,
+            call_type="forex_compass",
+        )
+
+        groq_budget.record_regime_call()
+
+        result = json.loads(raw)
+        bias = result.get("bias", "NEUTRAL").upper()
+        thesis = result.get("thesis", "")
+
+        if bias not in ("USD_BULLISH", "USD_BEARISH", "NEUTRAL"):
+            bias = "NEUTRAL"
+            thesis = f"LLM returned invalid bias '{result.get('bias')}' — defaulting to NEUTRAL"
+
+        _USD_BIAS_CACHE["bias"] = bias
+        _USD_BIAS_CACHE["thesis"] = thesis
+        _USD_BIAS_CACHE["cached_at"] = now
+
+        logger.info(f"Forex | Groq USD bias: {bias} — {thesis}")
+        return bias, thesis
+
+    except Exception as exc:
+        logger.warning(f"Forex | Groq compass failed: {exc} — falling back to NEUTRAL")
+        return "NEUTRAL", f"Groq unavailable: {exc}"
+
+
+def _filter_pairs_by_bias(bias: str) -> dict[str, str]:
+    allowed = {}
+    for pair in PAIRS:
+        direction_type = PAIR_DIRECTIONS[pair]
+        label = PAIR_LABELS[pair]
+
+        if bias == "USD_BULLISH":
+            if direction_type == "counter_usd":
+                allowed[pair] = "short"
+            else:
+                allowed[pair] = "long"
+        elif bias == "USD_BEARISH":
+            if direction_type == "counter_usd":
+                allowed[pair] = "long"
+            else:
+                allowed[pair] = "short"
+        else:
+            allowed[pair] = "both"
+
+    return allowed
+
+
+def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair: str) -> float:
+    risk_amount = equity * MAX_RISK_PER_TRADE_PCT
+
+    pip_size = PIP_SIZE.get(pair, 0.0001)
+    sl_pips = sl_distance / pip_size
+
+    if sl_pips <= 0:
+        return 0
+
+    if pair in JPY_PAIRS:
+        pip_value_per_unit = pip_size / entry_price if entry_price > 0 else 0
+    else:
+        pip_value_per_unit = pip_size
+
+    if pip_value_per_unit <= 0:
+        return 0
+
+    units = risk_amount / (sl_pips * pip_value_per_unit)
+
+    max_size = equity * MAX_POSITION_SIZE_PCT
+    if pair in JPY_PAIRS:
+        max_units = max_size * entry_price if entry_price > 0 else 0
+    else:
+        max_units = max_size / entry_price if entry_price > 0 else 0
+    units = min(units, max_units)
+
+    return max(0, round(units))
+
+
+def _check_open_positions():
+    positions = get_paper_positions()
+    if not positions:
+        return
+
+    for pair, pos in list(positions.items()):
+        try:
+            candles = fetch_h4_candles(pair, count=5)
+            if candles.empty:
+                continue
+
+            current_price = float(candles.iloc[-1]["Close"])
+            _latest_prices[pair] = current_price
+
+            sl = pos["sl_price"]
+            tp = pos["tp_price"]
+            direction = pos["direction"]
+
+            if direction == "long":
+                if current_price <= sl:
+                    paper_close_position(pair, current_price, "stop_loss")
+                    logger.info(f"Forex | SL HIT on LONG {pair} @ {current_price:.5f}")
+                elif current_price >= tp:
+                    paper_close_position(pair, current_price, "take_profit")
+                    logger.info(f"Forex | TP HIT on LONG {pair} @ {current_price:.5f}")
+            else:
+                if current_price >= sl:
+                    paper_close_position(pair, current_price, "stop_loss")
+                    logger.info(f"Forex | SL HIT on SHORT {pair} @ {current_price:.5f}")
+                elif current_price <= tp:
+                    paper_close_position(pair, current_price, "take_profit")
+                    logger.info(f"Forex | TP HIT on SHORT {pair} @ {current_price:.5f}")
+
+        except Exception as exc:
+            logger.warning(f"Forex | Position check failed for {pair}: {exc}")
+
+
+def _check_vault_sweep():
+    now = datetime.now(tz=timezone.utc)
+    eastern_offset = timedelta(hours=-4)
+    eastern_now = now + eastern_offset
+
+    if eastern_now.weekday() != 4:
+        return
+    if eastern_now.hour < 16 or eastern_now.hour > 17:
+        return
+
+    equity = get_paper_equity(current_prices=_latest_prices)
+    result = perform_vault_sweep(equity)
+    if result:
+        logger.info(f"Forex | Friday vault sweep: ${result:,.2f}")
+
+
+def run_cycle() -> dict:
+    global _state
+
+    if is_bot_paused():
+        _state["status"] = "paused"
+        logger.info("Forex | Bot is paused — skipping cycle")
+        _write_heartbeat()
+        return _state
+
+    _state["status"] = "scanning"
+    _state["cycle_count"] += 1
+    _state["error"] = None
+    cycle_start = time.time()
+
+    logger.info(f"{'=' * 60}")
+    logger.info(f"  THE NAVIGATOR — Forex Cycle #{_state['cycle_count']}")
+    logger.info(f"{'=' * 60}")
+
+    try:
+        _check_open_positions()
+
+        news_blackout = _check_news_blackout()
+        _state["news_blackout"] = news_blackout
+
+        if news_blackout:
+            _state["status"] = "news_blackout"
+            _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
+            logger.warning("Forex | News blackout active — no new trades this cycle")
+            _write_heartbeat()
+            return _state
+
+        bias, thesis = _get_usd_bias()
+        _state["usd_bias"] = bias
+
+        allowed_directions = _filter_pairs_by_bias(bias)
+
+        positions = get_paper_positions()
+        if len(positions) >= MAX_OPEN_POSITIONS:
+            _state["status"] = "idle"
+            _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
+            logger.info(f"Forex | Max positions ({MAX_OPEN_POSITIONS}) reached — scan only, no new entries")
+            _write_heartbeat()
+            return _state
+
+        equity = get_paper_equity(current_prices=_latest_prices)
+        available = get_available_capital()
+
+        scan_results = []
+
+        for pair in PAIRS:
+            if pair in positions:
+                continue
+
+            label = PAIR_LABELS[pair]
+            allowed_dir = allowed_directions.get(pair, "both")
+
+            try:
+                candles = fetch_h4_candles(pair, count=100)
+                if candles.empty or len(candles) < ATR_PERIOD + 1:
+                    scan_results.append({"pair": label, "status": "insufficient_data"})
+                    continue
+
+                closes = candles["Close"].tolist()
+                highs = candles["High"].tolist()
+                lows = candles["Low"].tolist()
+                current_price = closes[-1]
+                _latest_prices[pair] = current_price
+
+                atr = calculate_atr(highs, lows, closes, ATR_PERIOD)
+                rsi = calculate_rsi(closes, RSI_PERIOD)
+
+                scan_entry = {
+                    "pair": label,
+                    "price": round(current_price, 5),
+                    "atr": round(atr, 5),
+                    "rsi": round(rsi, 1),
+                    "bias_filter": allowed_dir,
+                    "signal": None,
+                }
+
+                direction = None
+
+                if rsi < RSI_OVERSOLD and allowed_dir in ("long", "both"):
+                    direction = "long"
+                    scan_entry["signal"] = "RSI_OVERSOLD → LONG"
+                elif rsi > RSI_OVERBOUGHT and allowed_dir in ("short", "both"):
+                    direction = "short"
+                    scan_entry["signal"] = "RSI_OVERBOUGHT → SHORT"
+
+                if direction is None:
+                    scan_results.append(scan_entry)
+                    continue
+
+                sl_distance = atr * SL_ATR_MULT
+                tp_distance = atr * TP_ATR_MULT
+
+                if direction == "long":
+                    sl_price = current_price - sl_distance
+                    tp_price = current_price + tp_distance
+                else:
+                    sl_price = current_price + sl_distance
+                    tp_price = current_price - tp_distance
+
+                units = _calculate_units(equity, current_price, sl_distance, pair)
+                if units <= 0:
+                    scan_entry["signal"] += " (units=0, skipped)"
+                    scan_results.append(scan_entry)
+                    continue
+
+                if pair in JPY_PAIRS:
+                    size_usd = units / current_price
+                else:
+                    size_usd = units * current_price
+
+                size_usd = min(size_usd, available * 0.95)
+
+                if size_usd < 100:
+                    scan_entry["signal"] += " (size too small)"
+                    scan_results.append(scan_entry)
+                    continue
+
+                result = paper_open_position(
+                    pair=pair,
+                    direction=direction,
+                    size_usd=size_usd,
+                    entry_price=current_price,
+                    units=units,
+                    sl_price=sl_price,
+                    tp_price=tp_price,
+                    llm_thesis=f"{bias}: {thesis}",
+                )
+
+                if result:
+                    scan_entry["signal"] += " → FILLED"
+                    available = get_available_capital()
+                else:
+                    scan_entry["signal"] += " → REJECTED (capital)"
+
+                scan_results.append(scan_entry)
+
+            except Exception as exc:
+                logger.warning(f"Forex | Scan failed for {label}: {exc}")
+                scan_results.append({"pair": label, "status": "error", "error": str(exc)})
+
+        _state["last_scan_results"] = scan_results
+        _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
+        _state["status"] = "idle"
+
+        update_hwm(get_paper_equity(current_prices=_latest_prices))
+        _check_vault_sweep()
+
+        elapsed = time.time() - cycle_start
+        logger.info(f"Forex | Cycle #{_state['cycle_count']} complete in {elapsed:.1f}s — {len(scan_results)} pairs scanned")
+
+    except Exception as exc:
+        _state["status"] = "error"
+        _state["error"] = str(exc)
+        logger.error(f"Forex | Cycle failed: {exc}")
+
+    _write_heartbeat()
+    _write_live_state()
+    return _state
+
+
+def _write_heartbeat():
+    equity = get_paper_equity(current_prices=_latest_prices)
+    positions = get_paper_positions()
+
+    _db.upsert_heartbeat(
+        status=_state["status"],
+        cycle_count=_state["cycle_count"],
+        equity_usd=round(equity, 2),
+        position_count=len(positions),
+        paper_trading=PAPER_TRADING,
+        bot_paused=is_bot_paused(),
+        usd_bias=_state.get("usd_bias", "NEUTRAL"),
+        news_blackout=_state.get("news_blackout", False),
+        error=_state.get("error"),
+    )
+
+
+def _write_live_state():
+    equity = get_paper_equity(current_prices=_latest_prices)
+    positions = get_paper_positions()
+
+    positions_list = []
+    for pair, pos in positions.items():
+        current_price = _latest_prices.get(pair, pos["entry_price"])
+        entry = pos["entry_price"]
+        direction = pos["direction"]
+
+        if direction == "long":
+            pnl_usd = (current_price - entry) * pos.get("units", 0)
+        else:
+            pnl_usd = (entry - current_price) * pos.get("units", 0)
+
+        pip_size = PIP_SIZE.get(pair, 0.0001)
+        if direction == "long":
+            pnl_pips = (current_price - entry) / pip_size
+        else:
+            pnl_pips = (entry - current_price) / pip_size
+
+        positions_list.append({
+            "pair": PAIR_LABELS.get(pair, pair),
+            "direction": direction,
+            "entry_price": round(entry, 5),
+            "current_price": round(current_price, 5),
+            "sl_price": round(pos.get("sl_price", 0), 5),
+            "tp_price": round(pos.get("tp_price", 0), 5),
+            "units": pos.get("units", 0),
+            "size_usd": round(pos.get("size_usd", 0), 2),
+            "unrealized_pnl_usd": round(pnl_usd, 2),
+            "unrealized_pnl_pips": round(pnl_pips, 1),
+            "entry_time": pos.get("entry_time", ""),
+        })
+
+    summary = get_paper_portfolio_summary()
+
+    live_state = {
+        "last_updated": datetime.now(tz=timezone.utc).isoformat(),
+        "status": _state["status"],
+        "cycle_count": _state["cycle_count"],
+        "usd_bias": _state.get("usd_bias", "NEUTRAL"),
+        "news_blackout": _state.get("news_blackout", False),
+        "equity_usd": round(equity, 2),
+        "paper_trading": PAPER_TRADING,
+        "positions": positions_list,
+        "scan_results": _state.get("last_scan_results", []),
+        "last_scan": _state.get("last_scan"),
+        "summary": summary,
+        "error": _state.get("error"),
+    }
+
+    try:
+        tmp = LIVE_STATE_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(live_state, f, indent=2, default=str)
+        os.replace(tmp, LIVE_STATE_FILE)
+    except Exception as exc:
+        logger.warning(f"Forex | Could not write live state: {exc}")
+
+
+def get_state() -> dict:
+    equity = get_paper_equity(current_prices=_latest_prices)
+    positions = get_paper_positions()
+    summary = get_paper_portfolio_summary()
+
+    return {
+        "status": _state["status"],
+        "paused": is_bot_paused(),
+        "cycle_count": _state["cycle_count"],
+        "usd_bias": _state.get("usd_bias", "NEUTRAL"),
+        "news_blackout": _state.get("news_blackout", False),
+        "last_scan": _state.get("last_scan"),
+        "last_scan_results": _state.get("last_scan_results", []),
+        "paper_mode": PAPER_TRADING,
+        "paper_equity": round(equity, 2),
+        "total_equity": round(equity, 2),
+        "position_count": len(positions),
+        "total_trades": summary.get("total_trades", 0),
+        "total_wins": summary.get("win_count", 0),
+        "total_pnl": summary.get("all_time_pnl_usd", 0),
+        "hwm_usd": summary.get("hwm_usd", PAPER_STARTING_BALANCE),
+        "vault_total_usd": summary.get("vault_total_usd", 0),
+        "error": _state.get("error"),
+    }
+
+
+def get_positions() -> list[dict]:
+    positions = get_paper_positions()
+    result = []
+    for pair, pos in positions.items():
+        current_price = _latest_prices.get(pair, pos["entry_price"])
+        entry = pos["entry_price"]
+        direction = pos["direction"]
+
+        if direction == "long":
+            pnl_usd = (current_price - entry) * pos.get("units", 0)
+        else:
+            pnl_usd = (entry - current_price) * pos.get("units", 0)
+
+        pip_size = PIP_SIZE.get(pair, 0.0001)
+        pnl_pips = ((current_price - entry) / pip_size) if direction == "long" else ((entry - current_price) / pip_size)
+
+        result.append({
+            "pair": PAIR_LABELS.get(pair, pair),
+            "direction": direction,
+            "entry_price": round(entry, 5),
+            "current_price": round(current_price, 5),
+            "sl_price": round(pos.get("sl_price", 0), 5),
+            "tp_price": round(pos.get("tp_price", 0), 5),
+            "units": pos.get("units", 0),
+            "size_usd": round(pos.get("size_usd", 0), 2),
+            "unrealized_pnl_usd": round(pnl_usd, 2),
+            "unrealized_pnl_pips": round(pnl_pips, 1),
+            "entry_time": pos.get("entry_time", ""),
+        })
+    return result
+
+
+def pause_bot():
+    import pathlib
+    ctrl = pathlib.Path(CONTROL_FILE)
+    ctrl.parent.mkdir(parents=True, exist_ok=True)
+    ctrl.write_text(json.dumps({"bot_paused": True}))
+    _state["paused"] = True
+    logger.info("Forex | Bot PAUSED via API")
+
+
+def resume_bot():
+    import pathlib
+    ctrl = pathlib.Path(CONTROL_FILE)
+    ctrl.parent.mkdir(parents=True, exist_ok=True)
+    ctrl.write_text(json.dumps({"bot_paused": False}))
+    _state["paused"] = False
+    logger.info("Forex | Bot RESUMED via API")

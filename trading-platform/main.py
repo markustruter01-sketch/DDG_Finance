@@ -75,7 +75,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 9  # 5 trading jobs (scheduler.py) + 4 startup jobs (auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator)
+EXPECTED_JOB_COUNT = 10  # 5 trading jobs (scheduler.py) + 5 startup jobs (auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator)
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -316,6 +316,41 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=300,
     )
     logger.info("Apex Predator options scanner registered (3:30 PM ET daily)")
+
+    def _forex_navigator_cycle():
+        try:
+            fx = _get_forex_engine()
+            if fx:
+                fx.run_cycle()
+            else:
+                logger.warning("Forex Navigator | Engine not loaded — skipping cycle")
+        except Exception as _fxe:
+            logger.warning(f"Forex Navigator | Scheduled cycle failed: {_fxe}")
+
+    _FOREX_ENGINE_DIR = os.path.join(_REPO_ROOT, "forex-engine")
+    if _FOREX_ENGINE_DIR not in sys.path:
+        sys.path.append(_FOREX_ENGINE_DIR)
+
+    try:
+        import importlib.util as _ilu
+        _fx_db_spec = _ilu.spec_from_file_location("forex_db", os.path.join(_FOREX_ENGINE_DIR, "db.py"))
+        _fx_db_mod = _ilu.module_from_spec(_fx_db_spec)
+        _fx_db_spec.loader.exec_module(_fx_db_mod)
+        _fx_db_mod.ensure_schema()
+        _fx_db_mod.ensure_vault_table()
+        logger.info("Forex DB | Schema bootstrapped from trading-api lifespan")
+    except Exception as _fxdb_err:
+        logger.warning(f"Forex DB | Bootstrap failed (non-fatal): {_fxdb_err}")
+
+    scheduler.add_job(
+        func=_forex_navigator_cycle,
+        trigger=_ITrigger(hours=4),
+        id="forex_navigator",
+        name="Forex Navigator 4h Cycle",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Forex Navigator registered (4-hour interval)")
 
     yield
 
@@ -4477,6 +4512,125 @@ async def options_close_position(req: _OptionsApproveReq):
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result
+
+# ── Bot #6: The Navigator — Forex Swing Engine ──────────────────────────────────
+# H4 cycle, 5 major pairs, Groq Macro Compass for USD bias only.
+_FOREX_ENGINE_PATH = os.path.join(_REPO_ROOT, "forex-engine")
+if _FOREX_ENGINE_PATH not in sys.path:
+    sys.path.append(_FOREX_ENGINE_PATH)
+
+_forex_engine_module = None
+def _get_forex_engine():
+    global _forex_engine_module
+    if _forex_engine_module is not None:
+        return _forex_engine_module
+    try:
+        import importlib.util as _ilu3
+        _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
+        if _fx_path not in sys.path:
+            sys.path.insert(0, _fx_path)
+        spec = _ilu3.spec_from_file_location("forex_engine", os.path.join(_fx_path, "forex_engine.py"))
+        mod = _ilu3.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _forex_engine_module = mod
+        return mod
+    except Exception as exc:
+        logger.warning(f"Forex engine import failed: {exc}")
+        return None
+
+_forex_db_module = None
+def _get_forex_db():
+    global _forex_db_module
+    if _forex_db_module is not None:
+        return _forex_db_module
+    try:
+        import importlib.util as _ilu2
+        _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
+        spec = _ilu2.spec_from_file_location("forex_db", os.path.join(_fx_path, "db.py"))
+        mod = _ilu2.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _forex_db_module = mod
+        return mod
+    except Exception as exc:
+        logger.warning(f"Forex DB import failed: {exc}")
+        return None
+
+
+@router.get("/forex/state")
+async def forex_state():
+    fx = _get_forex_engine()
+    if fx is None:
+        return {
+            "status": "not_started",
+            "paused": False,
+            "cycle_count": 0,
+            "usd_bias": "NEUTRAL",
+            "news_blackout": False,
+            "paper_mode": True,
+            "paper_equity": 100000.0,
+            "total_equity": 100000.0,
+            "position_count": 0,
+            "total_trades": 0,
+            "total_wins": 0,
+            "total_pnl": 0.0,
+            "hwm_usd": 100000.0,
+            "vault_total_usd": 0.0,
+            "error": None,
+        }
+    return fx.get_state()
+
+@router.get("/forex/positions")
+async def forex_positions():
+    fx = _get_forex_engine()
+    if fx is None:
+        return {"positions": [], "count": 0}
+    positions = fx.get_positions()
+    return {"positions": positions, "count": len(positions)}
+
+@router.get("/forex/trades")
+async def forex_trades():
+    fxdb = _get_forex_db()
+    if fxdb is None:
+        return {"trades": [], "count": 0}
+    trades = fxdb.load_recent_trades(limit=50)
+    return {"trades": trades, "count": len(trades)}
+
+@router.get("/forex/vault")
+async def forex_vault():
+    fxdb = _get_forex_db()
+    if fxdb is None:
+        return {"vault_total_usd": 0, "sweeps": []}
+    try:
+        sweeps = fxdb.load_vault_history()
+    except Exception:
+        sweeps = []
+    fx = _get_forex_engine()
+    vault_total = 0
+    if fx:
+        state = fx.get_state()
+        vault_total = state.get("vault_total_usd", 0)
+    return {"vault_total_usd": vault_total, "sweeps": sweeps}
+
+@router.post("/forex/toggle")
+async def forex_toggle():
+    fx = _get_forex_engine()
+    if fx is None:
+        raise HTTPException(status_code=503, detail="Forex engine not loaded")
+    state = fx.get_state()
+    if state.get("paused"):
+        fx.resume_bot()
+        return {"paused": False, "message": "Navigator resumed"}
+    else:
+        fx.pause_bot()
+        return {"paused": True, "message": "Navigator paused"}
+
+@router.post("/forex/scan")
+async def forex_manual_scan(background_tasks: BackgroundTasks):
+    fx = _get_forex_engine()
+    if fx is None:
+        raise HTTPException(status_code=503, detail="Forex engine not loaded")
+    background_tasks.add_task(fx.run_cycle)
+    return {"status": "forex_scan_queued"}
 
 app.include_router(router)
 

@@ -44,7 +44,17 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Styling**: Tailwind CSS v4
 - **State Management**: TanStack React Query
 - **UI/UX**: Dark terminal-themed interface, mobile-responsive design with a sticky bottom tab bar for mobile. Features gamification elements for bot performance (streaks, XP, ranks, kill boards).
-- **Key Components**: `TradeWorkflowBar`, `Dashboard` (main view), `CorrelationMatrix`, `SentimentGauges`, `EconomicCalendarBanner`, `RiskMetricsPanel`, `AttributionPanel`, `BacktesterPanel`, `ControlPanel`, `SystemHealthModal` (live architecture monitoring).
+- **Key Components**: `TradeWorkflowBar`, `Dashboard` (main view ~5000 lines), `CorrelationMatrix`, `SentimentGauges`, `EconomicCalendarBanner`, `RiskMetricsPanel`, `AttributionPanel`, `BacktesterPanel`, `ControlPanel`, `SystemHealthModal` (live architecture monitoring).
+- **Extracted Components** (from Dashboard.tsx consolidation):
+  - `src/lib/dashboard-shared.tsx` — Shared utilities, gamification (streak/XP/ranks), animation helpers, market status, BOT_THEMES
+  - `src/components/PortfolioSummary.tsx` — CombinedPortfolioSummary with 4 capital pools (US Equities, Crypto Fleet, Options, Forex), grand total $600k
+  - `src/components/FleetPerformanceHero.tsx` — Fleet-wide equity/trades/win-rate hero stats including options + forex
+  - `src/components/CommandersLog.tsx` — All 6 agent cards with XP/rank/recent trades
+  - `src/components/PositionCards.tsx` — KrakenPositionCard, AlpacaPositionCard, ThesisModal
+  - `src/components/LivePositionsSection.tsx` — Combined live positions across all bots
+  - `src/components/OptionsSection.tsx` — Full options trading dashboard tab
+  - `src/components/ForexSection.tsx` — Full forex trading dashboard tab with positions/history/scanner/vault
+  - `src/components/VisualOverlays.tsx` — CRTOverlay, RegimeGlow, EquityEcho visual effects
 
 ### Kraken Bot Fleet (Multi-Bot System)
 

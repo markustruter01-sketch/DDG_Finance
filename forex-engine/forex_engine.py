@@ -41,6 +41,7 @@ from forex_config import (
     MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
     BOT_ID, BOT_DISPLAY_NAME, BOT_DB_ID, BOT_STRATEGY_LABEL,
     CONTROL_FILE, LIVE_STATE_FILE, VAULT_SWEEP_PCT,
+    get_quote_to_usd,
 )
 from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
 from paper_engine import (
@@ -205,10 +206,11 @@ def _get_usd_bias() -> tuple[str, str]:
 def _filter_pairs_by_bias(bias: str) -> dict[str, str]:
     allowed = {}
     for pair in PAIRS:
-        direction_type = PAIR_DIRECTIONS[pair]
-        label = PAIR_LABELS[pair]
+        direction_type = PAIR_DIRECTIONS.get(pair, "cross")
 
-        if bias == "USD_BULLISH":
+        if direction_type == "cross":
+            allowed[pair] = "both"
+        elif bias == "USD_BULLISH":
             if direction_type == "counter_usd":
                 allowed[pair] = "short"
             else:
@@ -225,6 +227,7 @@ def _filter_pairs_by_bias(bias: str) -> dict[str, str]:
 
 
 def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair: str) -> float:
+    from forex_config import get_quote_to_usd
     risk_amount = equity * MAX_RISK_PER_TRADE_PCT
 
     pip_size = PIP_SIZE.get(pair, 0.0001)
@@ -233,10 +236,8 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
     if sl_pips <= 0:
         return 0
 
-    if pair in USD_BASE_PAIRS:
-        pip_value_per_unit = pip_size / entry_price if entry_price > 0 else 0
-    else:
-        pip_value_per_unit = pip_size
+    conv = get_quote_to_usd(pair, entry_price, _latest_prices)
+    pip_value_per_unit = pip_size * conv
 
     if pip_value_per_unit <= 0:
         return 0
@@ -244,10 +245,8 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
     units = risk_amount / (sl_pips * pip_value_per_unit)
 
     max_size = equity * MAX_POSITION_SIZE_PCT
-    if pair in USD_BASE_PAIRS:
-        max_units = max_size
-    else:
-        max_units = max_size / entry_price if entry_price > 0 else 0
+    unit_value_usd = entry_price * conv if entry_price > 0 else 1
+    max_units = max_size / unit_value_usd if unit_value_usd > 0 else 0
     units = min(units, max_units)
 
     return max(0, round(units))
@@ -272,7 +271,7 @@ def _check_open_positions():
             direction = pos["direction"]
 
             def _close_and_journal(p, cp, reason):
-                result = paper_close_position(p, cp, reason)
+                result = paper_close_position(p, cp, reason, latest_prices=_latest_prices)
                 if result:
                     try:
                         _journal.log_trade_close(
@@ -455,10 +454,8 @@ def run_cycle() -> dict:
                     scan_results.append(scan_entry)
                     continue
 
-                if pair in USD_BASE_PAIRS:
-                    size_usd = units
-                else:
-                    size_usd = units * current_price
+                conv = get_quote_to_usd(pair, current_price, _latest_prices)
+                size_usd = units * current_price * conv
 
                 cap = available * 0.95
                 if size_usd > cap:
@@ -550,12 +547,12 @@ def _write_live_state():
         direction = pos["direction"]
 
         if direction == "long":
-            pnl_usd = (current_price - entry) * pos.get("units", 0)
+            pnl_raw = (current_price - entry) * pos.get("units", 0)
         else:
-            pnl_usd = (entry - current_price) * pos.get("units", 0)
+            pnl_raw = (entry - current_price) * pos.get("units", 0)
 
-        if pair in USD_BASE_PAIRS and current_price > 0:
-            pnl_usd = pnl_usd / current_price
+        conv = get_quote_to_usd(pair, current_price, _latest_prices)
+        pnl_usd = pnl_raw * conv
 
         pip_size = PIP_SIZE.get(pair, 0.0001)
         if direction == "long":
@@ -638,12 +635,12 @@ def get_positions() -> list[dict]:
         direction = pos["direction"]
 
         if direction == "long":
-            pnl_usd = (current_price - entry) * pos.get("units", 0)
+            pnl_raw = (current_price - entry) * pos.get("units", 0)
         else:
-            pnl_usd = (entry - current_price) * pos.get("units", 0)
+            pnl_raw = (entry - current_price) * pos.get("units", 0)
 
-        if pair in USD_BASE_PAIRS and current_price > 0:
-            pnl_usd = pnl_usd / current_price
+        conv = get_quote_to_usd(pair, current_price, _latest_prices)
+        pnl_usd = pnl_raw * conv
 
         pip_size = PIP_SIZE.get(pair, 0.0001)
         pnl_pips = ((current_price - entry) / pip_size) if direction == "long" else ((entry - current_price) / pip_size)

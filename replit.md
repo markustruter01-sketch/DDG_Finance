@@ -70,7 +70,9 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **File**: `trading-platform/options_engine.py`
 - **Strategy**: 100% LLM-free pure quant options engine using Alpaca Options API.
 - **Signals**: IVR (Implied Volatility Rank) < 20 threshold + Bollinger Band squeeze detection (20-day, 6-month low bandwidth).
-- **Trades**: ATM Long Straddle construction (30-45 DTE) on watchlist (SPY, QQQ, NVDA, TSLA).
+- **Trades**: ATM Long Straddle construction (30-45 DTE) on 106-ticker watchlist (ETFs, mega-cap tech, financials, healthcare, energy, industrials, consumer, commodities).
+- **Data Feed**: Uses `feed='iex'` for Alpaca paper trading (SIP requires paid subscription).
+- **Rate Limiting**: 1.5s pause every 5 tickers to avoid Alpaca API rate limits. Full scan ~15 minutes.
 - **Sizing**: Half-Kelly position sizing with 5% capital fence of total account equity.
 - **Schedule**: APScheduler CronTrigger at 3:30 PM ET daily.
 - **State**: SQLite persistence in `trading-platform/_options_state/` (state.json, positions.json, pending.json, trades.db).
@@ -80,11 +82,12 @@ The project employs a monorepo structure managed by pnpm workspaces.
 ### Bot #6: The Navigator — Forex Swing Engine
 
 - **Directory**: `forex-engine/`
-- **Strategy**: H4 (4-hour) swing trading on 5 major FX pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF).
+- **Strategy**: H4 (4-hour) swing trading on 30 FX pairs (7 majors, 18 crosses, 5 exotics).
 - **LLM Usage**: Groq Macro Compass only — 1 call per 4h cycle for USD directional bias (USD_BULLISH/USD_BEARISH/NEUTRAL). Uses shared `groq_budget.py` singleton. All execution is 100% algorithmic.
 - **Data Source**: Direct Yahoo Finance API (`query1.finance.yahoo.com/v8/finance/chart/`) with yfinance fallback. Hourly bars resampled to H4.
+- **Cross-Pair USD Conversion**: Centralized `get_quote_to_usd()` in `forex_config.py`. Converts P&L from quote currency to USD for all pair types: counter_usd (1.0), base_usd (1/price), cross pairs (via `CROSS_QUOTE_USD` reference pair mapping). Used in `paper_engine.py` (equity calc, position close), `forex_engine.py` (position sizing, live state display, size_usd calc).
 - **Entry Signals**: RSI(14) oversold (<30) or overbought (>70), filtered by USD bias directional alignment.
-- **Risk Management**: SL = 1.5× ATR(14), TP = 3.0× ATR(14) giving 1:2 R:R. Max 1.5% risk per trade, max 5 open positions, max 10% position size.
+- **Risk Management**: SL = 1.5× ATR(14), TP = 3.0× ATR(14) giving 1:2 R:R. Max 1.5% risk per trade, max 10 open positions, max 10% position size.
 - **Capital**: $100k paper (PostgreSQL-backed). Capital Vault sweeps 20% of profits above HWM every Friday 4PM EST.
 - **News Blackout**: Checks free economic calendar API; skips new entries if high-impact event within 4h.
 - **RAG Loop**: Injects last 5 losing trades into Groq prompt to avoid repeating mistakes.

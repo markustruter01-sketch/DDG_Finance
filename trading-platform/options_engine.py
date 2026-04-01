@@ -45,7 +45,24 @@ from alpaca.data.timeframe import TimeFrame
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 
-WATCHLIST = ["SPY", "QQQ", "NVDA", "TSLA"]
+WATCHLIST = [
+    "SPY", "QQQ", "IWM", "DIA",
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO",
+    "AMD", "NFLX", "CRM", "ORCL", "ADBE", "INTC", "MU", "QCOM",
+    "CSCO", "TXN", "AMAT", "LRCX", "KLAC", "MRVL", "SNPS", "CDNS",
+    "ARM", "PLTR", "COIN", "SHOP", "SNOW", "CRWD", "DDOG", "NET",
+    "PANW", "ZS", "FTNT", "UBER", "ABNB", "DASH", "RBLX", "SPOT",
+    "JPM", "BAC", "GS", "MS", "C", "WFC", "SCHW", "BLK",
+    "V", "MA", "AXP", "PYPL",
+    "JNJ", "UNH", "LLY", "PFE", "ABBV", "MRK", "TMO", "ABT",
+    "AMGN", "GILD", "MRNA", "BIIB", "REGN", "VRTX", "ISRG", "MDT",
+    "XOM", "CVX", "COP", "SLB", "OXY", "EOG", "MPC", "PSX",
+    "FSLR", "ENPH",
+    "BA", "CAT", "DE", "GE", "HON", "RTX", "LMT", "MMM",
+    "WMT", "COST", "HD", "LOW", "TGT", "NKE", "SBUX", "MCD",
+    "DIS", "CMCSA", "T", "VZ",
+    "GLD", "SLV", "USO", "TLT",
+]
 CAPITAL_FENCE_PCT = 0.05
 IVR_THRESHOLD = 20
 BB_PERIOD = 20
@@ -516,9 +533,11 @@ def scan_for_setups() -> list[dict]:
             _save_state(state)
             return []
 
-        for symbol in WATCHLIST:
+        for idx, symbol in enumerate(WATCHLIST):
             try:
-                logger.info(f"Options | Scanning {symbol}...")
+                if idx > 0 and idx % 5 == 0:
+                    time.sleep(1.5)
+                logger.info(f"Options | Scanning {symbol} ({idx+1}/{len(WATCHLIST)})...")
 
                 bars = _fetch_stock_bars(symbol, BB_LOOKBACK_DAYS)
                 if len(bars) < BB_PERIOD:

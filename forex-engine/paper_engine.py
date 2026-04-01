@@ -67,19 +67,20 @@ def _save_portfolio() -> None:
 
 
 def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
-    from forex_config import USD_BASE_PAIRS
+    from forex_config import get_quote_to_usd
     p = _load_portfolio()
+    prices = current_prices or {}
     equity = p["cash_usd"]
 
     for pair, pos in p["positions"].items():
-        price = (current_prices or {}).get(pair, pos["entry_price"])
+        price = prices.get(pair, pos["entry_price"])
         if pos["direction"] == "long":
             pnl = (price - pos["entry_price"]) * pos["units"]
         else:
             pnl = (pos["entry_price"] - price) * pos["units"]
-        if pair in USD_BASE_PAIRS and price > 0:
-            pnl = pnl / price
-        equity += pos["size_usd"] + pnl
+        conv = get_quote_to_usd(pair, price, prices)
+        pnl_usd = pnl * conv
+        equity += pos["size_usd"] + pnl_usd
 
     return equity
 
@@ -153,8 +154,9 @@ def paper_open_position(
     return True
 
 
-def paper_close_position(pair: str, current_price: float, reason: str) -> dict | None:
-    from forex_config import PAPER_SPREAD_COST_PCT, PIP_SIZE, USD_BASE_PAIRS
+def paper_close_position(pair: str, current_price: float, reason: str,
+                         latest_prices: dict | None = None) -> dict | None:
+    from forex_config import PAPER_SPREAD_COST_PCT, PIP_SIZE, get_quote_to_usd
     import forex_nav_db as _db
 
     p = _load_portfolio()
@@ -174,8 +176,10 @@ def paper_close_position(pair: str, current_price: float, reason: str) -> dict |
     else:
         pnl_raw = (entry - current_price) * units
 
-    if pair in USD_BASE_PAIRS and current_price > 0:
-        pnl_raw = pnl_raw / current_price
+    prices = latest_prices or {}
+    prices[pair] = current_price
+    conv = get_quote_to_usd(pair, current_price, prices)
+    pnl_raw = pnl_raw * conv
 
     exit_spread = size_usd * PAPER_SPREAD_COST_PCT
     net_pnl = pnl_raw - exit_spread

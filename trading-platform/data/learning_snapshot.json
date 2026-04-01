@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-03-29T23:38:23.904431+00:00",
+  "exported_at": "2026-04-01T20:30:00.272128+00:00",
   "llm_learnings": [
     {
       "insight_text": "Tech sector momentum has been consistently positive, supporting SPY and QQQ allocation.",
@@ -9,15 +9,6 @@
       "last_seen": "2026-03-29T07:32:03.265586+00:00",
       "confirmed_count": 2,
       "confidence_score": 0.4333
-    },
-    {
-      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
-      "regime": "Bear",
-      "category": "macro",
-      "first_seen": "2026-03-29T07:32:03.242208+00:00",
-      "last_seen": "2026-03-29T07:32:03.242208+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
     },
     {
       "insight_text": "GLD and TLT both show positive momentum on 3-month and 6-month moving averages in this regime.",
@@ -54,6 +45,42 @@
       "last_seen": "2026-03-29T07:32:03.262095+00:00",
       "confirmed_count": 1,
       "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Crypto market with low momentum, cautious approach.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.501165+00:00",
+      "last_seen": "2026-04-01T09:11:51.501165+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Ethereum shows positive momentum on the 3-month signal and a relatively better performance compared to Bitcoin, making it a preferable choice for allocation.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.544452+00:00",
+      "last_seen": "2026-04-01T09:11:51.544452+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.242208+00:00",
+      "last_seen": "2026-03-29T07:32:03.242208+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Given the cautious market regime and the lack of strong positive momentum in Bitcoin, allocating a significant portion to cash (SGOV) seems prudent to preserve capital.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.548489+00:00",
+      "last_seen": "2026-04-01T09:11:51.548489+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
     }
   ],
   "kraken_adaptive_params": {
@@ -67,7 +94,7 @@
     "defaults": {
       "ZSCORE_ENTRY": 1.0,
       "ZSCORE_EXIT": 0.3,
-      "STOP_LOSS_PCT": 0.02,
+      "STOP_LOSS_PCT": 0.015,
       "TRAIL_PCT": 0.05,
       "MIN_NET_PROFIT_PCT": 0.008
     },
@@ -81,7 +108,7 @@
         0.55
       ],
       "STOP_LOSS_PCT": [
-        0.01,
+        0.008,
         0.04
       ],
       "TRAIL_PCT": [
@@ -97,7 +124,7 @@
     "metrics": {
       "n": 0
     },
-    "adapted_at": "2026-03-29T18:27:03.934691+00:00",
+    "adapted_at": "2026-03-31T08:36:19.183687+00:00",
     "lookback_n": 0
   }
 }

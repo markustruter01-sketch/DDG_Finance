@@ -64,14 +64,8 @@ import {
 
 
 function SystemStatusBanner() {
-  const { data, isError } = usePlatformStatus();
+  const { data, isError, isLoading } = usePlatformStatus();
 
-  // Distinct states:
-  //   "offline"    — API is unreachable (genuine network/server failure) → RED
-  //   "emergency"  — SPY crash override forcing Bear regime → RED pulsing
-  //   "ai_degraded" — API responded but Groq regime cache is being used → AMBER (not red)
-  //   "degraded"   — API up, but pipeline/scheduler has errors → AMBER
-  //   "online"     — Everything healthy → GREEN
   let sysStatus: "online" | "degraded" | "ai_degraded" | "emergency" | "offline";
   let reason: string;
   let tradingMode: string | undefined;
@@ -97,6 +91,10 @@ function SystemStatusBanner() {
       ? `${Math.round(groqRemaining / 1000)}k left`
       : `${groqRemaining} left`;
   const showBudgetMeter = data?.groq != null;
+
+  if (isLoading && !data) {
+    return null;
+  }
 
   if (isError || !data) {
     sysStatus = "offline";

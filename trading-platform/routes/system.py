@@ -1,0 +1,745 @@
+"""System routes: health, status, health-architecture, degradations, remediation."""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from loguru import logger
+
+from core.pipeline import get_last_run, reset_error_state
+from core.scheduler import get_job_status, get_scheduler
+from core.market_clock import is_market_open, get_next_open
+from data.cache import get_cache_stats
+from data.economic_calendar import is_blackout_active
+from execution.broker import get_account, get_positions
+from execution.kill_switch import get_state as ks_get_state
+
+from routes._deps import (
+    EXPECTED_JOB_COUNT,
+    _commentary_cache,
+    _kraken_commentary_cache,
+    _heal_log,
+    _heal_lock,
+    _add_heal_entry,
+    _get_forex_engine,
+)
+
+system_router = APIRouter(tags=["System"])
+
+
+@system_router.get("/health")
+async def health() -> dict:
+    jobs = get_job_status()
+    last = get_last_run()
+
+    job_count = len(jobs)
+    last_status = last.get("last_run_status", "never")
+    error_count = last.get("error_count", 0)
+
+    if job_count < EXPECTED_JOB_COUNT:
+        system_status = "degraded"
+        status_reason = f"Only {job_count}/{EXPECTED_JOB_COUNT} scheduler jobs registered"
+    elif last_status in ("error", "analysis_failed", "execution_failed", "kill_switch_tripped"):
+        system_status = "degraded"
+        status_reason = f"Last run failed ({error_count} total errors)"
+    elif last_status in ("never", "never_run"):
+        system_status = "online"
+        status_reason = "Scheduler running — no analysis run yet today"
+    else:
+        system_status = "online"
+        status_reason = "All systems operational"
+
+    return {
+        "status": "ok",
+        "version": "3.0.0",
+        "system_status": system_status,
+        "status_reason": status_reason,
+        "scheduler_job_count": job_count,
+        "last_run_status": last_status,
+        "error_count": error_count,
+    }
+
+
+def _get_signal_guard_status() -> dict | None:
+    try:
+        from analysis.signal_guard import get_last_guard_result
+        return get_last_guard_result()
+    except Exception:
+        return None
+
+
+@system_router.get("/status")
+async def status() -> dict:
+    from analysis.analyzer import get_groq_status as _get_groq_status, get_emergency_regime_status as _get_emergency
+    from analysis.groq_budget import budget as _groq_budget
+    from core.market_clock import is_alpaca_maintenance_window
+    market_open = is_market_open()
+    alpaca_maintenance = is_alpaca_maintenance_window()
+    last_run = get_last_run()
+    if not is_auto_trading_enabled():
+        trading_mode = "idle"
+    elif market_open:
+        trading_mode = "full_market"
+    else:
+        trading_mode = "crypto_only"
+    groq_status = _get_groq_status()
+    groq_status["using_fallback"] = last_run.get("groq_using_fallback", False)
+    groq_status.update(_groq_budget.budget_status())
+    return {
+        "market": {
+            "is_open":   market_open,
+            "next_open": get_next_open() if not market_open else None,
+        },
+        "kill_switch":    ks_get_state(),
+        "scheduler_jobs": get_job_status(),
+        "last_run":       last_run,
+        "auto_trading":   is_auto_trading_enabled(),
+        "cycle_interval": last_run.get("cycle_interval", "15min"),
+        "trading_mode":   trading_mode,
+        "data_cache":     get_cache_stats(),
+        "blackout":       is_blackout_active(),
+        "groq":           groq_status,
+        "signal_guard":   _get_signal_guard_status(),
+        "emergency_regime": _get_emergency(),
+        "alpaca_maintenance": alpaca_maintenance,
+    }
+
+
+from core.scheduler import is_auto_trading_enabled
+
+
+@system_router.get("/system/health-architecture")
+async def system_health_architecture() -> dict:
+    import json as _json, time as _time
+    from pathlib import Path as _Path
+
+    now = _time.time()
+    nodes: dict[str, dict] = {}
+
+    try:
+        jobs = get_job_status()
+        last = get_last_run()
+        job_count = len(jobs)
+        last_status = last.get("last_run_status", "never")
+        last_ts = last.get("last_run_timestamp")
+        age_s = (now - last_ts) if last_ts else None
+        latency_ms = 0
+        _mkt_open_h = False
+        try:
+            _mkt_open_h = is_market_open()
+        except Exception:
+            pass
+        _groq_exhausted_h = False
+        try:
+            from analysis.groq_budget import budget as _gb_h
+            _groq_exhausted_h = _gb_h.budget_exhausted()
+        except Exception:
+            pass
+        if job_count < EXPECTED_JOB_COUNT:
+            level = "red"
+        elif last_status in ("error", "execution_failed"):
+            level = "red"
+        elif last_status == "analysis_failed":
+            if _groq_exhausted_h:
+                level = "yellow"
+            else:
+                level = "red" if _mkt_open_h else "yellow"
+        else:
+            level = "green"
+        nodes["platform_core"] = {
+            "label": "Main Platform Core",
+            "level": level,
+            "latency_ms": latency_ms,
+            "data_age_s": round(age_s, 1) if age_s else None,
+            "detail": f"{job_count}/{EXPECTED_JOB_COUNT} jobs · last: {last_status}",
+        }
+    except Exception as exc:
+        nodes["platform_core"] = {"label": "Main Platform Core", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)}
+
+    _acct_cache: dict | None = None
+    try:
+        t0 = _time.time()
+        _acct_cache = get_account()
+        latency = round((_time.time() - t0) * 1000)
+        if latency > 1000:
+            level = "red"
+        elif latency > 200:
+            level = "yellow"
+        else:
+            level = "green"
+        nodes["alpaca_api"] = {
+            "label": "Alpaca API (US Equities)",
+            "level": level,
+            "latency_ms": latency,
+            "data_age_s": 0,
+            "detail": f"Equity ${_acct_cache['equity']:,.2f}",
+        }
+    except Exception as exc:
+        nodes["alpaca_api"] = {"label": "Alpaca API (US Equities)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        kst: dict | None = None
+        try:
+            import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
+            _kdburl = _kos.environ.get("DATABASE_URL")
+            if _kdburl:
+                _kpgconn = _pg2.connect(_kdburl)
+                try:
+                    with _kpgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _kc:
+                        _kc.execute(
+                            "SELECT status, cycle_count, last_updated, error "
+                            "FROM kraken_heartbeat WHERE id = 1"
+                        )
+                        _kr = _kc.fetchone()
+                    if _kr:
+                        kst = {
+                            "last_updated": _kr["last_updated"].isoformat() if _kr["last_updated"] else None,
+                            "status":       _kr["status"],
+                            "cycle_count":  _kr["cycle_count"],
+                        }
+                finally:
+                    _kpgconn.close()
+        except Exception:
+            pass
+
+        if kst is not None:
+            last_upd = kst.get("last_updated")
+            kage = now - _dt.fromisoformat(last_upd).timestamp() if last_upd else None
+            kstatus = kst.get("status", "unknown")
+            _mkt_open_kr = False
+            try:
+                _mkt_open_kr = is_market_open()
+            except Exception:
+                pass
+            if kstatus in ("error",):
+                level = "red"
+            elif kage and kage > 1800:
+                level = "red" if _mkt_open_kr else "yellow"
+            elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 600):
+                level = "yellow"
+            else:
+                level = "green"
+            nodes["kraken_api"] = {
+                "label": "Kraken API (Crypto Bot)",
+                "level": level,
+                "latency_ms": None,
+                "data_age_s": round(kage, 1) if kage else None,
+                "detail": f"Status: {kstatus} · Cycle #{kst.get('cycle_count', 0)}",
+            }
+        else:
+            nodes["kraken_api"] = {
+                "label": "Kraken API (Crypto Bot)", "level": "yellow",
+                "latency_ms": None, "data_age_s": None, "detail": "Bot not started",
+            }
+    except Exception as exc:
+        nodes["kraken_api"] = {"label": "Kraken API (Crypto Bot)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        caches = get_cache_stats()
+        cached_count = sum(1 for c in caches if c.get("cached"))
+        ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
+        oldest = max(ages) if ages else None
+        _mkt_open_dp = False
+        try:
+            _mkt_open_dp = is_market_open()
+        except Exception:
+            pass
+        if oldest is not None and oldest > 1800 and _mkt_open_dp:
+            level = "red"
+        elif oldest is not None and oldest > 900:
+            level = "yellow"
+        elif cached_count == 0:
+            level = "yellow"
+        else:
+            level = "green"
+        nodes["data_pipeline"] = {
+            "label": "Data Pipeline (fetch_data)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": round(oldest, 1) if oldest else None,
+            "detail": f"{cached_count}/{len(caches)} feeds cached" if cached_count else "No data cached yet",
+        }
+    except Exception as exc:
+        nodes["data_pipeline"] = {"label": "Data Pipeline (fetch_data)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        positions = get_positions()
+        acct_dict = _acct_cache if _acct_cache is not None else get_account()
+        equity_val = float(acct_dict["equity"])
+        total_market = sum(float(p["market_value"]) for p in positions) if positions else 0
+        _EXEMPT_SYMBOLS = {"SGOV", "JEPQ"}
+        active_positions = [p for p in positions if p.get("symbol", "") not in _EXEMPT_SYMBOLS]
+        max_single = max((float(p["market_value"]) for p in active_positions), default=0)
+        if len(active_positions) == 0 or equity_val < 100:
+            level = "green"
+            max_pct = 0.0
+        else:
+            max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
+            if max_pct > 15.0:
+                level = "red"
+            elif max_pct > 12.0:
+                level = "yellow"
+            else:
+                level = "green"
+        _exempt_count = len(positions) - len(active_positions)
+        _detail_parts = [f"Max active position: {max_pct:.1f}%", f"{len(active_positions)} active holding(s)"]
+        if _exempt_count:
+            _detail_parts.append(f"{_exempt_count} exempt (SGOV/JEPQ vault)")
+        nodes["equity_manager"] = {
+            "label": "Equity Manager (15% Enforcer)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": 0,
+            "detail": " · ".join(_detail_parts),
+        }
+    except Exception as exc:
+        nodes["equity_manager"] = {"label": "Equity Manager (15% Enforcer)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM execution_post_mortems")
+                pm_count = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM hardcoded_rules WHERE active = TRUE")
+                rule_count = cur.fetchone()[0]
+                cur.execute("""
+                    SELECT COUNT(*) FROM (
+                        SELECT ticker, regime, exit_reason
+                        FROM execution_post_mortems
+                        WHERE pnl_pct < 0
+                        GROUP BY ticker, regime, exit_reason
+                        HAVING COUNT(*) BETWEEN 1 AND 2
+                    ) sub
+                """)
+                pending_count = cur.fetchone()[0]
+        if pm_count == 0:
+            level = "yellow"
+            detail = f"No post-mortems yet · {rule_count} rules · awaiting first loss cycle"
+        else:
+            level = "green"
+            detail = f"{pm_count} post-mortems · {rule_count} permanent rules · {pending_count} patterns pending"
+        nodes["rag_engine"] = {
+            "label": "RAG Learning Engine (4-Phase)",
+            "level": level,
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": detail,
+        }
+    except Exception as exc:
+        nodes["rag_engine"] = {
+            "label": "RAG Learning Engine (4-Phase)",
+            "level": "red",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"DB error: {str(exc)[:70]}",
+        }
+
+    try:
+        import options_engine as _opts_h
+        _opts_state = _opts_h._get_state()
+        _opts_enabled = not _opts_state.get("paused", False)
+        _opts_equity = _opts_state.get("paper_equity", _opts_h.PAPER_CAPITAL)
+        _opts_positions = _opts_h._load_json(_opts_h.POSITIONS_FILE, [])
+        _opts_open = len([p for p in _opts_positions if p.get("status") == "open"]) if _opts_positions else 0
+        nodes["options_bot"] = {
+            "label": "Apex Predator (Options Bot #5)",
+            "level": "green",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"{'Enabled' if _opts_enabled else 'Standby'} · ${_opts_equity:,.0f} · {_opts_open} open",
+        }
+    except Exception as exc:
+        nodes["options_bot"] = {"label": "Apex Predator (Options Bot #5)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        _fx_h = _get_forex_engine()
+        if _fx_h:
+            _fx_state = _fx_h.get_state()
+            _fx_equity = _fx_state.get("paper_equity", 0)
+            _fx_positions = _fx_state.get("position_count", 0)
+            _fx_paused = _fx_state.get("paused", False)
+            _fx_level = "yellow" if _fx_paused else "green"
+            nodes["forex_bot"] = {
+                "label": "The Navigator (Forex Bot #6)",
+                "level": _fx_level,
+                "latency_ms": None,
+                "data_age_s": None,
+                "detail": f"{'Paused' if _fx_paused else 'Active'} · ${_fx_equity:,.0f} · {_fx_positions} positions",
+            }
+        else:
+            nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": "Engine not loaded"}
+    except Exception as exc:
+        nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        from notifications.telegram import is_configured as _tg_ok
+        from notifications.discord import is_configured as _dc_ok
+        from notifications.alert_manager import get_queue_status as _aq_status
+        _alert_st = _aq_status()
+        _tg = _alert_st.get("telegram_configured", False)
+        _dc = _alert_st.get("discord_configured", False)
+        _q_size = _alert_st.get("queue_size", 0)
+        _channels = []
+        if _tg: _channels.append("TG")
+        if _dc: _channels.append("DC")
+        _ch_str = "+".join(_channels) if _channels else "No channels"
+        nodes["alert_system"] = {
+            "label": "Alert System (Telegram/Discord)",
+            "level": "green" if _channels else "yellow",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"{_ch_str} · {_q_size} queued · {_alert_st['config'].get('interval_minutes', 60)}min interval",
+        }
+    except Exception as exc:
+        nodes["alert_system"] = {"label": "Alert System", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    return {
+        "timestamp": now,
+        "nodes": nodes,
+    }
+
+
+async def _remediate_component(component: str, triggered_by: str = "manual") -> dict:
+    import json as _json
+    from pathlib import Path as _Path
+
+    steps: list[str] = []
+    success = True
+
+    try:
+        if component == "platform_core":
+            new_state = reset_error_state()
+            steps.append(f"Error state reset → {new_state.get('last_run_status', '?')}")
+            try:
+                import data.yfinance_client as _yf
+                _yf._cached_market_data = None
+                steps.append("Market data cache cleared")
+            except Exception as exc:
+                steps.append(f"Cache clear warning: {exc}")
+            _commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
+            steps.append("AI commentary cache cleared")
+            jobs = get_job_status()
+            steps.append(f"Scheduler active with {len(jobs)} job(s)")
+
+        elif component == "data_pipeline":
+            from data.cache import invalidate_all
+            invalidate_all()
+            steps.append("FRED macro + NewsAPI caches invalidated")
+            try:
+                import data.yfinance_client as _yf
+                _yf._cached_market_data = None
+                steps.append("yfinance market data cache cleared")
+            except Exception as exc:
+                steps.append(f"yfinance warning: {exc}")
+            steps.append("Fresh data will load on next cycle")
+
+        elif component == "kraken_api":
+            try:
+                import psycopg2 as _pg2r, os as _osr
+                _dburlr = _osr.environ.get("DATABASE_URL")
+                if _dburlr:
+                    _rconn = _pg2r.connect(_dburlr)
+                    try:
+                        with _rconn.cursor() as _rc:
+                            _rc.execute("SELECT status, cycle_count FROM kraken_heartbeat WHERE id = 1")
+                            _rrow = _rc.fetchone()
+                        if _rrow:
+                            steps.append(
+                                f"DB heartbeat reachable — status={_rrow[0]}, cycle #{_rrow[1]}"
+                            )
+                        else:
+                            steps.append("DB reachable but bot has not run yet (no heartbeat row)")
+                    finally:
+                        _rconn.close()
+                else:
+                    steps.append("DATABASE_URL not set — cannot verify bot state")
+                    success = False
+            except Exception as exc:
+                steps.append(f"DB health check failed: {str(exc)[:120]}")
+                success = False
+            _kraken_commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
+            steps.append("Kraken commentary cache cleared")
+
+        elif component == "alpaca_api":
+            try:
+                t0 = time.time()
+                acct = get_account()
+                latency = round((time.time() - t0) * 1000)
+                steps.append(f"API reachable — {latency}ms, equity ${float(acct['equity']):,.0f}")
+            except Exception as exc:
+                steps.append(f"Reconnect failed: {str(exc)[:80]}")
+                success = False
+
+        elif component == "equity_manager":
+            try:
+                positions = get_positions()
+                acct = get_account()
+                equity_val = float(acct["equity"])
+                max_pct = max(
+                    (float(p["market_value"]) / equity_val * 100 for p in positions),
+                    default=0.0,
+                )
+                steps.append(f"Max position at {max_pct:.1f}% — rebalance queued for next cycle")
+                steps.append(f"{len(positions)} position(s) reviewed")
+            except Exception as exc:
+                steps.append(f"Review failed: {str(exc)[:80]}")
+                success = False
+
+        else:
+            result_str = f"Unknown component: {component}"
+            entry = _add_heal_entry(component, "remediate", result_str, False, triggered_by)
+            return {"component": component, "success": False, "result": result_str, "ts": entry["ts"]}
+
+    except Exception as exc:
+        steps.append(f"Unexpected error: {str(exc)[:100]}")
+        success = False
+
+    result_str = " · ".join(steps) if steps else "No action taken"
+    logger.info(f"[HEAL] component={component} by={triggered_by} ok={success} | {result_str}")
+    entry = _add_heal_entry(component, f"remediate_{component}", result_str, success, triggered_by)
+    return {"component": component, "success": success, "result": result_str, "ts": entry["ts"]}
+
+
+async def _auto_heal_check() -> None:
+    import json as _json
+    from pathlib import Path as _Path
+
+    now = time.time()
+    logger.debug("[AUTO-HEAL] Running health check…")
+
+    from core.degradation_tracker import record_degradation, mark_resolved
+
+    try:
+        jobs = get_job_status()
+        last = get_last_run()
+        last_status = last.get("last_run_status", "never")
+        _mkt_open = False
+        try:
+            _mkt_open = is_market_open()
+        except Exception:
+            pass
+
+        _degraded = False
+        _severity = "warning"
+        if len(jobs) < EXPECTED_JOB_COUNT:
+            _degraded = True
+            _severity = "critical"
+        elif last_status in ("error", "execution_failed"):
+            _degraded = True
+            _severity = "critical"
+        elif last_status == "analysis_failed":
+            _groq_exhausted_ah = False
+            try:
+                from analysis.groq_budget import budget as _gb_ah
+                _groq_exhausted_ah = _gb_ah.budget_exhausted()
+            except Exception:
+                pass
+            if not _groq_exhausted_ah:
+                _degraded = True
+                _severity = "error"
+
+        if _degraded:
+            record_degradation(
+                component="platform_core",
+                severity=_severity,
+                error_type="auto_heal_detected",
+                message=f"Platform degraded: {last_status} ({len(jobs)}/{EXPECTED_JOB_COUNT} jobs)",
+                detail=f"Market {'OPEN' if _mkt_open else 'CLOSED'} · auto-heal attempting remediation",
+            )
+            await _remediate_component("platform_core", triggered_by="auto_heal")
+        else:
+            mark_resolved("platform_core")
+    except Exception as exc:
+        logger.warning(f"[AUTO-HEAL] Platform core check failed: {exc}")
+
+    try:
+        caches = get_cache_stats()
+        ages = [c["age_seconds"] for c in caches if c.get("cached") and c["age_seconds"] >= 0]
+        oldest = max(ages) if ages else None
+        _mkt_open_dp = False
+        try:
+            _mkt_open_dp = is_market_open()
+        except Exception:
+            pass
+        if oldest is not None and oldest > 1800 and _mkt_open_dp:
+            record_degradation(
+                component="data_pipeline",
+                severity="error",
+                error_type="stale_data",
+                message=f"Data pipeline stale: oldest cache {oldest:.0f}s during market hours",
+            )
+            await _remediate_component("data_pipeline", triggered_by="auto_heal")
+        else:
+            mark_resolved("data_pipeline")
+    except Exception as exc:
+        logger.warning(f"[AUTO-HEAL] Data pipeline check failed: {exc}")
+
+    try:
+        from datetime import datetime as _dt, timezone as _tz
+        import psycopg2 as _pg2k, os as _osk
+        _kdburl = _osk.environ.get("DATABASE_URL")
+        if _kdburl:
+            _kconn = _pg2k.connect(_kdburl)
+            try:
+                with _kconn.cursor() as _kc:
+                    _kc.execute("SELECT status, last_updated FROM kraken_heartbeat WHERE id = 1")
+                    _kr = _kc.fetchone()
+                if _kr:
+                    _kstatus = _kr[0]
+                    _klast = _kr[1]
+                    _kage = (now - _klast.timestamp()) if _klast else None
+                    if _kstatus == "error" or (_kage and _kage > 1800):
+                        record_degradation(
+                            component="kraken_api",
+                            severity="error",
+                            error_type="bot_stale" if _kage and _kage > 1800 else "bot_error",
+                            message=f"Kraken bot: status={_kstatus}, age={_kage:.0f}s" if _kage else f"Kraken bot error: {_kstatus}",
+                        )
+                        await _remediate_component("kraken_api", triggered_by="auto_heal")
+                    else:
+                        mark_resolved("kraken_api")
+            finally:
+                _kconn.close()
+    except Exception as exc:
+        logger.warning(f"[AUTO-HEAL] Kraken check failed: {exc}")
+
+
+@system_router.post("/system/remediate/{component}")
+async def remediate_component(component: str) -> dict:
+    valid = {"platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"}
+    if component not in valid:
+        raise HTTPException(status_code=400, detail=f"Unknown component. Valid: {', '.join(sorted(valid))}")
+    return await _remediate_component(component, triggered_by="manual")
+
+
+@system_router.post("/system/remediate/all")
+async def remediate_all() -> dict:
+    components = ["platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"]
+    results = []
+    for comp in components:
+        r = await _remediate_component(comp, triggered_by="heal_all")
+        results.append(r)
+    all_ok = all(r["success"] for r in results)
+    return {"success": all_ok, "results": results, "healed_count": sum(1 for r in results if r["success"])}
+
+
+@system_router.get("/system/remediate/log")
+async def get_remediation_log() -> dict:
+    with _heal_lock:
+        log_copy = list(_heal_log)
+    return {"log": log_copy, "count": len(log_copy)}
+
+
+@system_router.get("/system/degradations")
+async def system_degradations_endpoint(
+    hours: int = 48,
+    component: str | None = None,
+    unresolved_only: bool = False,
+    limit: int = 100,
+) -> dict:
+    from core.degradation_tracker import get_recent_events, get_stats
+    events = get_recent_events(limit=limit, hours=hours, component=component, unresolved_only=unresolved_only)
+    stats = get_stats(hours=hours)
+    return {
+        "window_hours": hours,
+        "total": len(events),
+        "stats": stats,
+        "events": events,
+    }
+
+
+@system_router.get("/system/degradations/report")
+async def system_degradations_report(hours: int = 48) -> dict:
+    import json as _json
+    from pathlib import Path as _Path
+    from core.degradation_tracker import build_bug_report
+
+    live_health: dict | None = None
+    groq_budget: dict | None = None
+    kraken_status: dict | None = None
+    market_open_flag: bool | None = None
+    market_next_open: str | None = None
+    heal_log_data: list[dict] | None = None
+
+    try:
+        live_health = await system_health_architecture()
+    except Exception:
+        pass
+
+    try:
+        from analysis.groq_budget import budget as _gb
+        groq_budget = _gb.budget_status()
+        groq_budget["budget_exhausted"] = _gb.budget_exhausted()
+        groq_budget["daily_limit"] = groq_budget.get("token_budget_total", 100000)
+    except Exception:
+        pass
+
+    try:
+        import psycopg2 as _pg2dr, psycopg2.extras as _pg2xdr, os as _osdr
+        _dburldr = _osdr.environ.get("DATABASE_URL")
+        if _dburldr:
+            _drconn = _pg2dr.connect(_dburldr)
+            try:
+                with _drconn.cursor(cursor_factory=_pg2xdr.RealDictCursor) as _drc:
+                    _drc.execute("SELECT status, equity_usd, cycle_count, last_updated FROM kraken_heartbeat WHERE id = 1")
+                    _drrow = _drc.fetchone()
+                    if _drrow:
+                        kraken_status = {
+                            "status":           _drrow["status"],
+                            "total_equity_usd": _drrow["equity_usd"],
+                            "cycle_count":      _drrow["cycle_count"],
+                            "last_updated":     _drrow["last_updated"].isoformat() if _drrow["last_updated"] else None,
+                        }
+            finally:
+                _drconn.close()
+    except Exception:
+        pass
+
+    try:
+        market_open_flag = is_market_open()
+        if not market_open_flag:
+            nxt = get_next_open()
+            market_next_open = str(nxt)[:19].replace("T", " ") + " UTC" if nxt else None
+    except Exception:
+        pass
+
+    try:
+        with _heal_lock:
+            heal_log_data = list(_heal_log[:20])
+    except Exception:
+        pass
+
+    report = build_bug_report(
+        hours=hours,
+        live_health=live_health,
+        groq_budget=groq_budget,
+        kraken_status=kraken_status,
+        market_open=market_open_flag,
+        market_next_open=market_next_open,
+        heal_log=heal_log_data,
+    )
+    return {"hours": hours, "report": report}
+
+
+@system_router.post("/system/degradations/record")
+async def record_manual_degradation(
+    component: str,
+    severity: str,
+    error_type: str,
+    message: str,
+    detail: str | None = None,
+) -> dict:
+    from core.degradation_tracker import record_degradation
+    ok = record_degradation(
+        component=component,
+        severity=severity,
+        error_type=error_type,
+        message=message,
+        detail=detail,
+    )
+    return {"recorded": ok}

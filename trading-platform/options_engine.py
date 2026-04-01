@@ -507,21 +507,51 @@ def _compute_position_size(fenced_capital: float, premium_per_contract_usd: floa
     return contracts, total_cost
 
 
-def _options_cb_cooldown_expired(tripped_at_iso: str) -> bool:
+def _compute_next_trading_open(after_dt: datetime) -> str | None:
     try:
-        from core.market_clock import get_next_open
-        tripped_dt = datetime.fromisoformat(tripped_at_iso)
-        next_open_str = get_next_open()
-        if next_open_str and next_open_str != "unknown":
-            next_open_dt = datetime.fromisoformat(next_open_str.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
-            if now >= next_open_dt and next_open_dt > tripped_dt:
-                return True
-        elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
-        return elapsed_hours >= 24
+        import requests, pytz
+        from config.settings import settings
+        headers = {
+            "APCA-API-KEY-ID": settings.alpaca_api_key,
+            "APCA-API-SECRET-KEY": settings.alpaca_secret_key,
+        }
+        et = pytz.timezone("America/New_York")
+        after_date = after_dt.astimezone(et).date()
+        start_date = after_date + timedelta(days=1)
+        end_date = start_date + timedelta(days=10)
+        r = requests.get(
+            "https://paper-api.alpaca.markets/v2/calendar",
+            headers=headers,
+            params={"start": start_date.isoformat(), "end": end_date.isoformat()},
+            timeout=5,
+        )
+        r.raise_for_status()
+        days = r.json()
+        if days:
+            cal_date = days[0].get("date", "")
+            cal_open = days[0].get("open", "09:30")
+            open_naive = datetime.strptime(f"{cal_date} {cal_open}", "%Y-%m-%d %H:%M")
+            open_et = et.localize(open_naive)
+            return open_et.astimezone(timezone.utc).isoformat()
+    except Exception as exc:
+        logger.warning(f"Options | Calendar lookup failed ({exc}) — using 24h fallback")
+    fallback = after_dt + timedelta(hours=24)
+    wd = fallback.weekday()
+    if wd == 5:
+        fallback += timedelta(days=2)
+    elif wd == 6:
+        fallback += timedelta(days=1)
+    return fallback.isoformat()
+
+
+def _options_cb_cooldown_expired(resets_at_iso: str | None) -> bool:
+    if not resets_at_iso:
+        return False
+    try:
+        resets_at = datetime.fromisoformat(resets_at_iso)
+        return datetime.now(timezone.utc) >= resets_at
     except Exception:
-        elapsed_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(tripped_at_iso)).total_seconds() / 3600.0
-        return elapsed_hours >= 24
+        return False
 
 
 def _check_options_circuit_breaker(state: dict, positions: list, deployed_capital: float):
@@ -534,14 +564,17 @@ def _check_options_circuit_breaker(state: dict, positions: list, deployed_capita
     if unrealized_loss > 0 and deployed_capital > 0:
         loss_pct = unrealized_loss / deployed_capital
         if loss_pct >= CB_LOSS_THRESHOLD:
+            now = datetime.now(timezone.utc)
+            resets_at = _compute_next_trading_open(now)
             state["circuit_breaker_active"] = True
             state["circuit_breaker_reason"] = (
                 f"Unrealized loss {loss_pct:.1%} exceeds {CB_LOSS_THRESHOLD:.0%} threshold "
                 f"(deployed ${deployed_capital:,.2f}, current value ${current_value:,.2f})"
             )
-            state["circuit_breaker_tripped_at"] = datetime.now(timezone.utc).isoformat()
+            state["circuit_breaker_tripped_at"] = now.isoformat()
+            state["circuit_breaker_resets_at"] = resets_at
             _save_state(state)
-            logger.warning(f"Options | CIRCUIT BREAKER TRIPPED — {state['circuit_breaker_reason']}")
+            logger.warning(f"Options | CIRCUIT BREAKER TRIPPED — {state['circuit_breaker_reason']} — resets at {resets_at}")
 
 
 def scan_for_setups() -> list[dict]:
@@ -551,11 +584,12 @@ def scan_for_setups() -> list[dict]:
         return []
 
     if state.get("circuit_breaker_active"):
-        tripped_at = state.get("circuit_breaker_tripped_at")
-        if tripped_at and _options_cb_cooldown_expired(tripped_at):
+        resets_at = state.get("circuit_breaker_resets_at")
+        if resets_at and _options_cb_cooldown_expired(resets_at):
             state["circuit_breaker_active"] = False
             state["circuit_breaker_reason"] = None
             state["circuit_breaker_tripped_at"] = None
+            state["circuit_breaker_resets_at"] = None
             _save_state(state)
             logger.info("Options | Circuit breaker RESET — next trading day reached")
 
@@ -697,11 +731,12 @@ def approve_trade(trade_id: str) -> dict:
         state = _get_state()
 
         if state.get("circuit_breaker_active"):
-            tripped_at = state.get("circuit_breaker_tripped_at")
-            if tripped_at and _options_cb_cooldown_expired(tripped_at):
+            resets_at = state.get("circuit_breaker_resets_at")
+            if resets_at and _options_cb_cooldown_expired(resets_at):
                 state["circuit_breaker_active"] = False
                 state["circuit_breaker_reason"] = None
                 state["circuit_breaker_tripped_at"] = None
+                state["circuit_breaker_resets_at"] = None
                 _save_state(state)
                 logger.info("Options | Circuit breaker RESET — next trading day reached (at approve)")
 

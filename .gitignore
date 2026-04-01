@@ -59,3 +59,7 @@ trading-platform/data/last_regime_cache.json
 trading-platform/data/kraken_imported_trades.json
 kraken-bot/adaptive_params.json
 forex-engine/forex_journal.db
+
+# Runtime state files
+navigator_live_state.json
+logs/cycle_state.json

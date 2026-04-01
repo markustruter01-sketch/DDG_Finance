@@ -46,6 +46,33 @@ from core.market_clock import is_market_open
 
 _pipeline_lock = asyncio.Lock()
 
+
+def _persist_emergency_regime(spy_override: bool, spy_change: float | None, cycle_num: int) -> None:
+    """Write market_regime.json with Bear override even when pipeline aborts early."""
+    if not spy_override:
+        return
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        from datetime import datetime as _dt, timezone as _tz
+
+        _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
+        _regime_path.parent.mkdir(parents=True, exist_ok=True)
+        _payload = {
+            "regime":         "Bear",
+            "written_at":     _dt.now(_tz.utc).isoformat(),
+            "cycle_number":   cycle_num,
+            "using_fallback": False,
+            "regime_override": True,
+            "override_reason": f"SPY {spy_change * 100:+.1f}% intraday" if spy_change is not None else "SPY emergency",
+        }
+        if spy_change is not None:
+            _payload["spy_change_pct"] = round(spy_change * 100, 2)
+        _regime_path.write_text(_json.dumps(_payload, indent=2))
+        logger.debug("Pipeline | market_regime.json written with emergency Bear override (early exit path)")
+    except Exception as _exc:
+        logger.warning(f"Pipeline | emergency regime persist failed (non-fatal): {_exc}")
+
 _state: dict[str, Any] = {
     "last_run_utc":          None,
     "last_run_status":       "never_run",
@@ -116,6 +143,20 @@ async def _run_pipeline_inner(
         "errors":      [],
     }
 
+    # ── SPY emergency regime check (runs EVERY cycle, before any early return) ────
+    spy_override = False
+    spy_change = None
+    if not crypto_only:
+        try:
+            spy_override, spy_change = emergency_regime_check()
+            if spy_override:
+                logger.warning(
+                    f"Pipeline | SPY EMERGENCY active: SPY {spy_change * 100:+.1f}% — "
+                    f"Bear override will be enforced on any allocation this cycle"
+                )
+        except Exception as _spy_exc:
+            logger.warning(f"Pipeline | SPY emergency check failed (non-fatal): {_spy_exc}")
+
     # ── Deferred emergency liquidation (set when market was closed at click-time) ──
     if is_pending_liquidation() and is_market_open():
         logger.critical(
@@ -152,6 +193,7 @@ async def _run_pipeline_inner(
         logger.warning(msg)
         result["status"] = "kill_switch_tripped"
         result["errors"].append(msg)
+        _persist_emergency_regime(spy_override, spy_change, cycle_num)
         _update_state(result, started, trading_mode="kill_switch")
         return result
 
@@ -160,6 +202,7 @@ async def _run_pipeline_inner(
         logger.info(msg)
         result["status"] = "market_closed"
         result["errors"].append(msg)
+        _persist_emergency_regime(spy_override, spy_change, cycle_num)
         _update_state(result, started)
         return result
 
@@ -213,6 +256,7 @@ async def _run_pipeline_inner(
                     result["status"] = "completed"
                     result["signal_guard_note"] = f"quarantine active: {_reason} — cached regime used"
                     result["allocation"] = _cached.dict() if hasattr(_cached, "dict") else str(_cached)
+                    _persist_emergency_regime(spy_override, spy_change, cycle_num)
                     _update_state(result, started)
                     return result
 
@@ -220,6 +264,7 @@ async def _run_pipeline_inner(
                 logger.info(msg)
                 result["status"] = "guardrail_blocked"
                 result["errors"].append(msg)
+                _persist_emergency_regime(spy_override, spy_change, cycle_num)
                 _update_state(result, started)
                 return result
         except Exception as _grd_exc:
@@ -234,6 +279,7 @@ async def _run_pipeline_inner(
             result["status"] = "blackout_active"
             result["errors"].append(msg)
             result["blackout"] = blackout
+            _persist_emergency_regime(spy_override, spy_change, cycle_num)
             _update_state(result, started)
             try:
                 from notifications.discord import notify_blackout_active
@@ -285,6 +331,7 @@ async def _run_pipeline_inner(
                 f"Pipeline | DataCircuitBreaker tripped — cycle aborted "
                 f"without LLM call. Reason: {exc}"
             )
+            _persist_emergency_regime(spy_override, spy_change, cycle_num)
             _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
             return result
 
@@ -306,25 +353,21 @@ async def _run_pipeline_inner(
                     f"Groq rate-limited ({exc.__class__.__name__}) — using cached regime '{fallback.regime}'"
                 )
             else:
-                # LLM failed AND no usable cache — abort
                 result["status"] = "analysis_failed"
                 result["errors"].append(f"Groq LLM failed, no fallback cache available: {exc}")
+                _persist_emergency_regime(spy_override, spy_change, cycle_num)
                 _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
                 return result
         else:
-            # Non-LLM failure (account fetch, data fetch, etc.) — abort as before.
-            # Do NOT silently trade on stale data when the root cause is unknown.
             result["status"] = "analysis_failed"
             result["errors"].append(f"Analysis failed: {exc}")
+            _persist_emergency_regime(spy_override, spy_change, cycle_num)
             _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
             return result
 
-    # ── SPY emergency regime override ─────────────────────────────────────────
-    spy_override = False
-    spy_change = None
-    if not crypto_only and allocation is not None and isinstance(allocation, RegimeAnalysisOutput):
-        spy_override, spy_change = emergency_regime_check()
-        if spy_override and allocation.regime != "Bear":
+    # ── SPY emergency regime override (apply to the resolved allocation) ─────
+    if spy_override and allocation is not None and isinstance(allocation, RegimeAnalysisOutput):
+        if allocation.regime != "Bear":
             logger.warning(
                 f"Pipeline | EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% — "
                 f"forcing regime from '{allocation.regime}' to 'Bear'"

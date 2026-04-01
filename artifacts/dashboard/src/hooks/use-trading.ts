@@ -53,6 +53,13 @@ export interface PlatformStatus {
     next_regime_eligible_at: string | null;
     regime_call_eligible: boolean;
   };
+  emergency_regime?: {
+    active: boolean;
+    triggered_at: string | null;
+    spy_change_pct: number | null;
+    threshold_pct: number;
+    recovery_pct: number;
+  };
 }
 
 export interface EquitySnapshot {

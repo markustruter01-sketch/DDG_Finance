@@ -56,6 +56,7 @@ from config import (
     exchange,
     PAPER_TRADING,
     PAPER_STARTING_BALANCE,
+    BLACKLIST,
     SYMBOLS,
     RSI_PERIOD,
     RSI_OVERSOLD,
@@ -70,6 +71,7 @@ from config import (
     MAX_POSITIONS,
     RISK_FRACTION,
     STOP_LOSS_PCT,
+    ATR_STOP_MULTIPLIER,
     TRAIL_PCT,
     MIN_NET_PROFIT_PCT,
     EQUITY_REFRESH_INTERVAL,
@@ -150,8 +152,9 @@ logger.info(f"  Cash reserve   : {CASH_RESERVE*100:.0f}% (always held back)")
 logger.info(f"  Max positions  : {MAX_POSITIONS}")
 logger.info(f"  Max per trade  : {MAX_POSITION_FRACTION*100:.0f}% of equity")
 logger.info(f"  Risk per trade : {RISK_FRACTION*100:.0f}% of equity")
-logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}%")
+logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}% (fallback) | ATR dynamic: {ATR_STOP_MULTIPLIER}x ATR")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
+logger.info(f"  Blacklist      : {', '.join(BLACKLIST) if BLACKLIST else 'none'}")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
 logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
@@ -390,13 +393,14 @@ def write_live_state() -> None:
         side          = pos["side"]
 
         _ap = _adaptive.get_active_params()
+        _pos_atr_stop = pos.get("atr_stop_price")
         if side == "long":
             pnl_usd        = (current_price - entry) / entry * size
-            stop_loss_px   = round(entry * (1.0 - _ap["STOP_LOSS_PCT"]), 4)
+            stop_loss_px   = round(_pos_atr_stop, 4) if _pos_atr_stop is not None else round(entry * (1.0 - _ap["STOP_LOSS_PCT"]), 4)
             take_profit_px = round(best  * (1.0 - _ap["TRAIL_PCT"]),     4)
         else:
             pnl_usd        = (entry - current_price) / entry * size
-            stop_loss_px   = round(entry * (1.0 + _ap["STOP_LOSS_PCT"]), 4)
+            stop_loss_px   = round(_pos_atr_stop, 4) if _pos_atr_stop is not None else round(entry * (1.0 + _ap["STOP_LOSS_PCT"]), 4)
             take_profit_px = round(best  * (1.0 + _ap["TRAIL_PCT"]),     4)
 
         pnl_pct = (pnl_usd / size * 100) if size > 0 else 0.0
@@ -883,7 +887,19 @@ def run_cycle() -> None:
 
     _ohlcv_cache_data: dict[str, list] = {}
 
+    _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
+    for _bl_sym in _blacklisted_open:
+        logger.warning(
+            f"Blacklist | {_bl_sym}: FORCE CLOSING open position — asset is blacklisted"
+        )
+        close_position(_bl_sym, reason="blacklisted_asset")
+        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+
     for symbol in SYMBOLS:
+        if symbol in BLACKLIST:
+            logger.debug(f"Blacklist | {symbol}: SKIPPED — blacklisted asset")
+            continue
+
         try:
             candles = _fetch_ohlcv_with_cache(symbol)
             if not candles or len(candles) < max(RSI_PERIOD, ZSCORE_WINDOW) + 2:
@@ -1218,7 +1234,7 @@ def run_cycle() -> None:
                             f"RSI={sym_rsi:.1f} < {CONTRARIAN_RSI_THRESH} | Bear regime "
                             f"'{_regime_label}' | scout ${_scout_size:,.2f} (3% equity)"
                         )
-                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr)
+                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
                     if open_position(symbol, "long", _scout_size, current_price):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
@@ -1268,6 +1284,7 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
+                    atr_multiplier=ATR_STOP_MULTIPLIER,
                 )
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
@@ -1289,7 +1306,7 @@ def run_cycle() -> None:
                         })
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size (= size_usd)
-                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr)
+                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
                     _tranches  = build_tranche_orders("long", current_price, size_usd, sym_atr)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
@@ -1355,6 +1372,7 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
+                    atr_multiplier=ATR_STOP_MULTIPLIER,
                 )
                 if size_usd >= 10.0:
                     # ── Microstructure entry filter (short) ───────────────────
@@ -1371,7 +1389,7 @@ def run_cycle() -> None:
                         })
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size
-                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr)
+                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
                     _tranches  = build_tranche_orders("short", current_price, size_usd, sym_atr)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).

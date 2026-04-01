@@ -61,6 +61,9 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - Three 24/7 paper-trading crypto bots (`davy-jones`, `blackbeard`, `calypso`) with distinct risk profiles.
 - **Stack**: Python 3.11, Kraken (via ccxt in paper mode), PostgreSQL (isolated `bot_id` columns for data).
 - **Architecture**: Configurable profiles, DB isolation, and file isolation per bot. Dynamic VPIN scaling and robust risk management specific to each bot's profile.
+- **Blacklist**: `BLACKLIST = ["ALGO/USD"]` in `kraken-bot/config.py` — skips evaluation and force-closes any open positions on blacklisted assets.
+- **ATR Dynamic Stops**: Per-bot `ATR_STOP_MULTIPLIER` (Davy Jones: 1.5x conservative, Blackbeard/Calypso: 2.0x aggressive). Used in both `get_atr_stop_price()` and `get_position_size()` for consistent risk sizing.
+- **RAG TTL Decay**: `get_top_learnings_for_prompt()` and `get_journal_entries()` filter insights to 48-hour window (`last_seen >= NOW() - INTERVAL '48 hours'`) to prevent stale/conflicting LLM context.
 
 ### Bot #5: Apex Predator Options Engine
 

@@ -247,7 +247,7 @@ def get_journal_entries(
         if not is_pg_available():
             return []
 
-        conditions = []
+        conditions = ["last_seen >= NOW() - INTERVAL '48 hours'"]
         params: list = []
         if regime:
             conditions.append("regime = %s")
@@ -256,7 +256,7 @@ def get_journal_entries(
             conditions.append("category = %s")
             params.append(category)
 
-        where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        where_clause = "WHERE " + " AND ".join(conditions)
         params.append(min(limit, 200))
 
         with get_conn() as conn:
@@ -320,6 +320,7 @@ def get_top_learnings_for_prompt(
                     FROM llm_learnings
                     WHERE {regime_filter}
                       AND confirmed_count >= 2
+                      AND last_seen >= NOW() - INTERVAL '48 hours'
                     ORDER BY confidence_score DESC, confirmed_count DESC
                     LIMIT %s
                     """,

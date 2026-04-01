@@ -29,6 +29,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.20,
         "MAX_POSITION_FRACTION": 0.10,
         "STOP_LOSS_PCT": 0.015,
+        "ATR_STOP_MULTIPLIER": 1.5,
         "VPIN_ENTRY_BLOCK": 0.65,
     },
     "blackbeard": {
@@ -41,6 +42,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.12,
         "STOP_LOSS_PCT": 0.020,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.70,
     },
     "calypso": {
@@ -53,6 +55,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.10,
         "MAX_POSITION_FRACTION": 0.15,
         "STOP_LOSS_PCT": 0.025,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.75,
     },
 }
@@ -101,6 +104,8 @@ else:
     })
 
 
+BLACKLIST = ["ALGO/USD"]
+
 SYMBOLS = [
     "BTC/USD",
     "ETH/USD",
@@ -134,7 +139,6 @@ SYMBOLS = [
     "POL/USD",
     "IMX/USD",
     "GRT/USD",
-    "ALGO/USD",
     "VET/USD",
     "HBAR/USD",
     "RUNE/USD",
@@ -172,6 +176,7 @@ MAX_POSITION_FRACTION = _profile.get("MAX_POSITION_FRACTION", 0.10)
 MAX_POSITIONS         = 10
 RISK_FRACTION         = 0.01
 STOP_LOSS_PCT         = _profile.get("STOP_LOSS_PCT", 0.015)
+ATR_STOP_MULTIPLIER   = _profile.get("ATR_STOP_MULTIPLIER", 1.5)
 TRAIL_PCT             = 0.05
 
 VPIN_ENTRY_BLOCK      = _profile.get("VPIN_ENTRY_BLOCK", 0.65)

@@ -4076,16 +4076,20 @@ async def export_diagnostic_report() -> dict:
     row("Annual volatility:", _pct(vol) if vol is not None else "N/A")
 
     # ── Alpaca trade history ──
-    h2("ALPACA TRADE HISTORY (all trades, chronological oldest-first)")
+    h2("ALPACA TRADE HISTORY (sorted by PnL ascending — worst losses first)")
     try:
-        alpaca_trades = list(reversed(get_all_trades()))  # oldest first
+        _all_alpaca = get_all_trades()
+        alpaca_trades = sorted(
+            _all_alpaca,
+            key=lambda t: float(t.get("pnl_usd") or t.get("pnl_dollar") or 0),
+        )
     except Exception:
         alpaca_trades = []
 
     if not alpaca_trades:
         lines.append("  No Alpaca trades recorded yet.")
     else:
-        lines.append(f"  Total Alpaca trades: {len(alpaca_trades)}")
+        lines.append(f"  Total Alpaca trades: {len(alpaca_trades)} (showing worst losses first)")
         lines.append(f"  {'#':<4} {'Date':<12} {'Symbol':<10} {'Status':<16} {'PnL%':>8} {'PnL$':>12}  Thesis / Exit Reason")
         lines.append("  " + "-" * 78)
         for i, t in enumerate(alpaca_trades, 1):

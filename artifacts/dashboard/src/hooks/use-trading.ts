@@ -1,9 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
+import { useDocumentVisibility } from "@/hooks/use-visibility";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
 const api = axios.create({ baseURL: BASE });
+
+function useVisibleInterval(ms: number): number | false {
+  const visible = useDocumentVisibility();
+  return visible ? ms : false;
+}
 
 // --- Types ---
 
@@ -217,7 +223,7 @@ export function useStatusSummary() {
   return useQuery<StatusSummary>({
     queryKey: ["/status/summary"],
     queryFn: async () => (await api.get("/status/summary")).data,
-    refetchInterval: 15000,
+    refetchInterval: useVisibleInterval(15000),
     retry: 1,
     staleTime: 10_000,
   });
@@ -229,7 +235,7 @@ export function useSystemHealth() {
   return useQuery<SystemHealth>({
     queryKey: ["/health"],
     queryFn: async () => (await api.get("/health")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
     retry: 1,
   });
 }
@@ -238,7 +244,7 @@ export function usePlatformStatus() {
   return useQuery<PlatformStatus>({
     queryKey: ["/status"],
     queryFn: async () => (await api.get("/status")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
   });
 }
 
@@ -246,7 +252,7 @@ export function usePortfolio() {
   return useQuery<PortfolioData>({
     queryKey: ["/portfolio"],
     queryFn: async () => (await api.get("/portfolio")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
   });
 }
 
@@ -254,7 +260,7 @@ export function useLivePositions() {
   return useQuery<LivePositionsData>({
     queryKey: ["/positions/live"],
     queryFn: async () => (await api.get("/positions/live")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
   });
 }
 
@@ -378,7 +384,7 @@ export function useVault() {
   return useQuery<VaultState>({
     queryKey: ["/vault"],
     queryFn: async () => (await api.get("/vault")).data,
-    refetchInterval: 60000,
+    refetchInterval: useVisibleInterval(60000),
   });
 }
 
@@ -422,7 +428,7 @@ export function useAuditorReport() {
   return useQuery<AuditorResponse>({
     queryKey: ["/auditor/report"],
     queryFn: async () => (await api.get("/auditor/report")).data,
-    refetchInterval: 60000,
+    refetchInterval: useVisibleInterval(60000),
     retry: 1,
   });
 }
@@ -448,7 +454,7 @@ export function useAuditorPerformance() {
   }>({
     queryKey: ["/auditor/performance"],
     queryFn: async () => (await api.get("/auditor/performance")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
     retry: 1,
   });
 }
@@ -496,7 +502,7 @@ export function useFleetCommanderStatus() {
   return useQuery<FleetCommanderStatus>({
     queryKey: ["/admin/fleet-commander/status"],
     queryFn: async () => (await api.get("/admin/fleet-commander/status")).data,
-    refetchInterval: 60000,
+    refetchInterval: useVisibleInterval(60000),
     retry: 1,
   });
 }
@@ -505,7 +511,7 @@ export function useFleetCommanderHistory() {
   return useQuery<{ history: any[]; count: number }>({
     queryKey: ["/admin/fleet-commander/history"],
     queryFn: async () => (await api.get("/admin/fleet-commander/history")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
     retry: 1,
   });
 }
@@ -535,7 +541,7 @@ export function useLearningSnapshotInfo() {
   }>({
     queryKey: ["/admin/learning-snapshot"],
     queryFn: async () => (await api.get("/admin/learning-snapshot")).data,
-    refetchInterval: 60_000,
+    refetchInterval: useVisibleInterval(60_000),
     staleTime: 30_000,
   });
 }
@@ -624,7 +630,7 @@ export function useCorrelation() {
   return useQuery<CorrelationData>({
     queryKey: ["/correlation"],
     queryFn: async () => (await api.get("/correlation")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
     retry: 1,
   });
 }
@@ -650,7 +656,7 @@ export function useSentiment() {
   return useQuery<SentimentData>({
     queryKey: ["/sentiment"],
     queryFn: async () => (await api.get("/sentiment")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
     retry: 1,
   });
 }
@@ -682,7 +688,7 @@ export function useEconomicCalendar() {
   return useQuery<CalendarData>({
     queryKey: ["/calendar"],
     queryFn: async () => (await api.get("/calendar")).data,
-    refetchInterval: 60000,
+    refetchInterval: useVisibleInterval(60000),
   });
 }
 
@@ -725,7 +731,7 @@ export function useAttribution() {
   return useQuery<AttributionData>({
     queryKey: ["/performance/attribution"],
     queryFn: async () => (await api.get("/performance/attribution")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
   });
 }
 
@@ -747,7 +753,7 @@ export function useRiskMetrics() {
   return useQuery<RiskMetrics>({
     queryKey: ["/performance/risk-metrics"],
     queryFn: async () => (await api.get("/performance/risk-metrics")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
   });
 }
 
@@ -808,7 +814,7 @@ export function useOnChainData() {
   return useQuery<OnChainData>({
     queryKey: ["/onchain"],
     queryFn: async () => (await api.get("/onchain")).data,
-    refetchInterval: 120000,
+    refetchInterval: useVisibleInterval(120000),
     retry: 1,
   });
 }
@@ -866,7 +872,7 @@ export function useKrakenBots() {
       return Object.entries(botsObj).map(([k, v]: [string, any]) => ({ bot_id: k, ...v }));
     },
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: useVisibleInterval(60_000),
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
@@ -940,7 +946,7 @@ export function useKrakenStatus(botId?: string) {
   return useQuery<KrakenStatus>({
     queryKey: ["/kraken/status", botId ?? "default"],
     queryFn: async () => (await api.get(`/kraken/status${params}`)).data,
-    refetchInterval: 30_000,
+    refetchInterval: useVisibleInterval(30_000),
     retry: false,
   });
 }
@@ -971,7 +977,7 @@ export function useKrakenFleetSummary() {
   return useQuery<KrakenFleetSummary>({
     queryKey: ["/kraken/fleet-summary"],
     queryFn: async () => (await api.get("/kraken/fleet-summary")).data,
-    refetchInterval: 30_000,
+    refetchInterval: useVisibleInterval(30_000),
     retry: 2,
     retryDelay: 3000,
   });
@@ -1048,7 +1054,7 @@ export function useKrakenPerformance(botId?: string) {
   return useQuery<KrakenPerformance>({
     queryKey: ["/kraken/performance", botId ?? "default"],
     queryFn: async () => (await api.get(`/kraken/performance${params}`)).data,
-    refetchInterval: 60_000,
+    refetchInterval: useVisibleInterval(60_000),
     retry: 2,
     retryDelay: 3000,
   });
@@ -1061,7 +1067,7 @@ export function useKrakenAutoTrading(botId?: string) {
   return useQuery<{ bot_id?: string; bot_paused: boolean }>({
     queryKey: ["/kraken/auto-trading", botId ?? "default"],
     queryFn: async () => (await api.get(`/kraken/auto-trading${params}`)).data,
-    refetchInterval: 15_000,
+    refetchInterval: useVisibleInterval(15_000),
     retry: false,
   });
 }
@@ -1107,7 +1113,7 @@ export function useEquityCurve(limit = 500) {
   return useQuery<{ count: number; snapshots: EquitySnapshot[] }>({
     queryKey: ["/performance/equity-curve", limit],
     queryFn: async () => (await api.get(`/performance/equity-curve?limit=${limit}`)).data,
-    refetchInterval: 60_000,
+    refetchInterval: useVisibleInterval(60_000),
     retry: false,
     staleTime: 30_000,
   });
@@ -1132,7 +1138,7 @@ export function useLearningJournal(regime?: string, category?: string, limit = 5
   return useQuery<{ count: number; entries: LearningEntry[] }>({
     queryKey: ["/learning-journal", regime, category, limit],
     queryFn: async () => (await api.get(`/learning-journal?${params.toString()}`)).data,
-    refetchInterval: 120_000,
+    refetchInterval: useVisibleInterval(120_000),
     retry: false,
     staleTime: 60_000,
   });
@@ -1159,7 +1165,7 @@ export function useDegradationLog(hours = 48) {
   return useQuery<{ window_hours: number; total: number; stats: DegradationStats; events: DegradationEvent[] }>({
     queryKey: ["/system/degradations", hours],
     queryFn: async () => (await api.get(`/system/degradations?hours=${hours}&limit=100`)).data,
-    refetchInterval: 60_000,
+    refetchInterval: useVisibleInterval(60_000),
     retry: false,
     staleTime: 30_000,
   });
@@ -1178,7 +1184,7 @@ export function useDegradationHealth() {
   return useQuery<{ window_hours: number; total: number; stats: DegradationStats; events: DegradationEvent[] }>({
     queryKey: ["/system/degradations/health"],
     queryFn: async () => (await api.get("/system/degradations?hours=168&limit=500")).data,
-    refetchInterval: 120_000,
+    refetchInterval: useVisibleInterval(120_000),
     retry: false,
     staleTime: 60_000,
   });
@@ -1279,7 +1285,7 @@ export function useOptionsState() {
   return useQuery<OptionsState>({
     queryKey: ["/options/state"],
     queryFn: async () => (await api.get("/options/state")).data,
-    refetchInterval: 10_000,
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
     staleTime: 5_000,
   });
@@ -1289,7 +1295,7 @@ export function useOptionsPositions() {
   return useQuery<{ positions: OptionsPosition[]; count: number }>({
     queryKey: ["/options/positions"],
     queryFn: async () => (await api.get("/options/positions")).data,
-    refetchInterval: 10_000,
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
     staleTime: 5_000,
   });
@@ -1299,7 +1305,7 @@ export function useOptionsPending() {
   return useQuery<{ pending: OptionsPendingTrade[]; count: number }>({
     queryKey: ["/options/pending"],
     queryFn: async () => (await api.get("/options/pending")).data,
-    refetchInterval: 10_000,
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
     staleTime: 5_000,
   });
@@ -1441,7 +1447,7 @@ export function useForexState() {
   return useQuery<ForexState>({
     queryKey: ["/forex/state"],
     queryFn: async () => (await api.get("/forex/state")).data,
-    refetchInterval: 10_000,
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
     staleTime: 5_000,
   });
@@ -1451,7 +1457,7 @@ export function useForexPositions() {
   return useQuery<{ positions: ForexPosition[]; count: number }>({
     queryKey: ["/forex/positions"],
     queryFn: async () => (await api.get("/forex/positions")).data,
-    refetchInterval: 10_000,
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
     staleTime: 5_000,
   });
@@ -1461,7 +1467,7 @@ export function useForexTrades() {
   return useQuery<{ trades: ForexTrade[]; count: number }>({
     queryKey: ["/forex/trades"],
     queryFn: async () => (await api.get("/forex/trades")).data,
-    refetchInterval: 15_000,
+    refetchInterval: useVisibleInterval(15_000),
     retry: false,
     staleTime: 10_000,
   });
@@ -1471,7 +1477,7 @@ export function useForexVault() {
   return useQuery<{ vault_total_usd: number; sweeps: ForexVaultSweep[] }>({
     queryKey: ["/forex/vault"],
     queryFn: async () => (await api.get("/forex/vault")).data,
-    refetchInterval: 30_000,
+    refetchInterval: useVisibleInterval(30_000),
     retry: false,
     staleTime: 20_000,
   });
@@ -1522,7 +1528,7 @@ export function useAlertStatus() {
   return useQuery<AlertStatus>({
     queryKey: ["/alerts/status"],
     queryFn: async () => (await api.get("/alerts/status")).data,
-    refetchInterval: 30000,
+    refetchInterval: useVisibleInterval(30000),
   });
 }
 

@@ -537,6 +537,9 @@ def _write_live_state():
         else:
             pnl_usd = (entry - current_price) * pos.get("units", 0)
 
+        if pair in USD_BASE_PAIRS and current_price > 0:
+            pnl_usd = pnl_usd / current_price
+
         pip_size = PIP_SIZE.get(pair, 0.0001)
         if direction == "long":
             pnl_pips = (current_price - entry) / pip_size
@@ -621,6 +624,9 @@ def get_positions() -> list[dict]:
             pnl_usd = (current_price - entry) * pos.get("units", 0)
         else:
             pnl_usd = (entry - current_price) * pos.get("units", 0)
+
+        if pair in USD_BASE_PAIRS and current_price > 0:
+            pnl_usd = pnl_usd / current_price
 
         pip_size = PIP_SIZE.get(pair, 0.0001)
         pnl_pips = ((current_price - entry) / pip_size) if direction == "long" else ((entry - current_price) / pip_size)

@@ -314,6 +314,17 @@ def _check_vault_sweep():
     result = perform_vault_sweep(equity)
     if result:
         logger.info(f"Forex | Friday vault sweep: ${result:,.2f}")
+        try:
+            from paper_engine import _load_portfolio
+            p = _load_portfolio()
+            _journal.log_vault_sweep(
+                sweep_amount=result,
+                equity_at_sweep=equity,
+                hwm_at_sweep=p.get("hwm_usd", equity),
+                vault_total=p.get("vault_total_usd", 0),
+            )
+        except Exception:
+            pass
 
 
 def run_cycle() -> dict:

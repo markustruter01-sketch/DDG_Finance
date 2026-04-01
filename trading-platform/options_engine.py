@@ -234,6 +234,7 @@ def _fetch_stock_bars(symbol: str, days: int) -> list[dict]:
         timeframe=TimeFrame.Day,
         start=start,
         end=end,
+        feed="iex",
     )
     bars = _get_stock_client().get_stock_bars(request)
     result = []

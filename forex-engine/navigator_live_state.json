@@ -1,8 +1,8 @@
 {
-  "last_updated": "2026-04-01T10:58:07.847110+00:00",
+  "last_updated": "2026-04-01T19:52:06.302345+00:00",
   "status": "idle",
   "cycle_count": 1,
-  "usd_bias": "NEUTRAL",
+  "usd_bias": "USD_BULLISH",
   "news_blackout": false,
   "equity_usd": 100000.0,
   "paper_trading": true,
@@ -10,26 +10,46 @@
   "scan_results": [
     {
       "pair": "EUR_USD",
-      "status": "insufficient_data"
+      "price": 1.15861,
+      "atr": 0.00325,
+      "rsi": 69.3,
+      "bias_filter": "short",
+      "signal": null
     },
     {
       "pair": "GBP_USD",
-      "status": "insufficient_data"
+      "price": 1.33002,
+      "atr": 0.00458,
+      "rsi": 59.4,
+      "bias_filter": "short",
+      "signal": null
     },
     {
       "pair": "USD_JPY",
-      "status": "insufficient_data"
+      "price": 158.879,
+      "atr": 0.44479,
+      "rsi": 39.3,
+      "bias_filter": "long",
+      "signal": null
     },
     {
       "pair": "AUD_USD",
-      "status": "insufficient_data"
+      "price": 0.69242,
+      "atr": 0.00313,
+      "rsi": 63.0,
+      "bias_filter": "short",
+      "signal": null
     },
     {
       "pair": "USD_CHF",
-      "status": "insufficient_data"
+      "price": 0.7948,
+      "atr": 0.00304,
+      "rsi": 38.2,
+      "bias_filter": "long",
+      "signal": null
     }
   ],
-  "last_scan": "2026-04-01T10:58:07.825880+00:00",
+  "last_scan": "2026-04-01T19:52:06.279195+00:00",
   "summary": {
     "starting_balance_usd": 100000.0,
     "cash_usd": 100000.0,

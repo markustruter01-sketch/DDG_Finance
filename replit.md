@@ -82,7 +82,7 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Directory**: `forex-engine/`
 - **Strategy**: H4 (4-hour) swing trading on 5 major FX pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF).
 - **LLM Usage**: Groq Macro Compass only — 1 call per 4h cycle for USD directional bias (USD_BULLISH/USD_BEARISH/NEUTRAL). Uses shared `groq_budget.py` singleton. All execution is 100% algorithmic.
-- **Data Source**: yfinance (OANDA-ready structure for future live trading).
+- **Data Source**: Direct Yahoo Finance API (`query1.finance.yahoo.com/v8/finance/chart/`) with yfinance fallback. Hourly bars resampled to H4.
 - **Entry Signals**: RSI(14) oversold (<30) or overbought (>70), filtered by USD bias directional alignment.
 - **Risk Management**: SL = 1.5× ATR(14), TP = 3.0× ATR(14) giving 1:2 R:R. Max 1.5% risk per trade, max 5 open positions, max 10% position size.
 - **Capital**: $100k paper (PostgreSQL-backed). Capital Vault sweeps 20% of profits above HWM every Friday 4PM EST.

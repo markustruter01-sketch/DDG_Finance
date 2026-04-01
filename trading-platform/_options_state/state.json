@@ -1,0 +1,65 @@
+{
+  "status": "scan_complete",
+  "paused": false,
+  "last_scan": "2026-04-01T19:53:26.418507+00:00",
+  "last_scan_results": [
+    {
+      "symbol": "SPY",
+      "spot_price": 655.45,
+      "bollinger_bandwidth": 8.5163,
+      "bollinger_min_6m": 2.4172,
+      "is_squeeze": "False",
+      "ivr": 22.79,
+      "ivr_pass": "False",
+      "chain_size": 13266,
+      "signal": "False",
+      "status": "no_signal"
+    },
+    {
+      "symbol": "QQQ",
+      "spot_price": 584.58,
+      "bollinger_bandwidth": 9.9597,
+      "bollinger_min_6m": 2.9336,
+      "is_squeeze": "False",
+      "ivr": 26.14,
+      "ivr_pass": "False",
+      "chain_size": 9842,
+      "signal": "False",
+      "status": "no_signal"
+    },
+    {
+      "symbol": "NVDA",
+      "spot_price": 175.78,
+      "bollinger_bandwidth": 12.8238,
+      "bollinger_min_6m": 5.477,
+      "is_squeeze": "False",
+      "ivr": 29.64,
+      "ivr_pass": "False",
+      "chain_size": 5135,
+      "signal": "False",
+      "status": "no_signal"
+    },
+    {
+      "symbol": "TSLA",
+      "spot_price": 380.245,
+      "bollinger_bandwidth": 15.1858,
+      "bollinger_min_6m": 7.2289,
+      "is_squeeze": "False",
+      "ivr": 28.79,
+      "ivr_pass": "False",
+      "chain_size": 5896,
+      "signal": "False",
+      "status": "no_signal"
+    }
+  ],
+  "capital_fence_pct": 0.05,
+  "fenced_capital": 5000.0,
+  "total_equity": 100000.0,
+  "paper_mode": true,
+  "paper_equity": 100000.0,
+  "cycle_count": 1,
+  "total_trades": 0,
+  "total_wins": 0,
+  "total_pnl": 0.0,
+  "error": null
+}

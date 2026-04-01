@@ -48,12 +48,10 @@ def calculate_rsi(closes: list[float], period: int = 14) -> float:
 
 
 def fetch_h4_candles(symbol: str, count: int = 100) -> pd.DataFrame:
-    import yfinance as yf
-
-    ticker = yf.Ticker(symbol)
-    df = ticker.history(period="60d", interval="1h")
-
-    if df.empty:
+    df = _fetch_yahoo_direct(symbol)
+    if df is None or df.empty:
+        df = _fetch_yfinance_fallback(symbol)
+    if df is None or df.empty:
         return pd.DataFrame()
 
     df = df.reset_index()
@@ -73,3 +71,51 @@ def fetch_h4_candles(symbol: str, count: int = 100) -> pd.DataFrame:
 
     h4 = h4.reset_index()
     return h4.tail(count)
+
+
+def _fetch_yahoo_direct(symbol: str) -> pd.DataFrame | None:
+    import requests as _req
+    from datetime import datetime, timezone
+
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    params = {"range": "60d", "interval": "1h"}
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    try:
+        resp = _req.get(url, params=params, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        result = data.get("chart", {}).get("result")
+        if not result:
+            return None
+
+        r = result[0]
+        timestamps = r.get("timestamp", [])
+        quotes = r.get("indicators", {}).get("quote", [{}])[0]
+
+        if not timestamps or not quotes:
+            return None
+
+        df = pd.DataFrame({
+            "Date": pd.to_datetime(timestamps, unit="s", utc=True),
+            "Open": quotes.get("open", []),
+            "High": quotes.get("high", []),
+            "Low": quotes.get("low", []),
+            "Close": quotes.get("close", []),
+            "Volume": quotes.get("volume", [0] * len(timestamps)),
+        })
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
+        return df if not df.empty else None
+    except Exception:
+        return None
+
+
+def _fetch_yfinance_fallback(symbol: str) -> pd.DataFrame | None:
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period="60d", interval="1h")
+        return df if not df.empty else None
+    except Exception:
+        return None

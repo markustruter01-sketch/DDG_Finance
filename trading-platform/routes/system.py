@@ -821,6 +821,18 @@ async def status_summary() -> dict:
     except Exception:
         pass
 
+    market_open = False
+    try:
+        market_open = is_market_open()
+    except Exception:
+        pass
+
+    ks = {"tripped": False}
+    try:
+        ks = ks_get_state()
+    except Exception:
+        pass
+
     return {
         "system_health": {
             "system_status": system_status,
@@ -832,4 +844,6 @@ async def status_summary() -> dict:
         "position_count": position_count,
         "bot_statuses": bot_statuses,
         "alert_queue_size": alert_queue_size,
+        "market_open": market_open,
+        "kill_switch_tripped": ks.get("tripped", False),
     }

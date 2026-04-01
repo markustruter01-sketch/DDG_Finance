@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
+  useStatusSummary,
   usePlatformStatus, usePortfolio, useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
@@ -260,7 +261,7 @@ function SystemStatusBanner() {
 // ── Header ────────────────────────────────────────────────────────────────────
 
 function Header() {
-  const { data: status } = usePlatformStatus();
+  const { data: summary } = useStatusSummary();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-950/90 backdrop-blur-md border-b border-white/5">
@@ -276,7 +277,6 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* AlgoEdge SaaS switcher */}
           <a
             href="/saas/"
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 text-xs font-semibold hover:bg-indigo-500/20 hover:border-indigo-500/60 transition-all select-none"
@@ -294,7 +294,7 @@ function Header() {
           <div className="hidden md:flex items-center gap-5">
             <div className="flex flex-col items-end">
               <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Market</span>
-              {status?.market.is_open ? (
+              {summary?.market_open ? (
                 <span className="flex items-center gap-1 text-xs font-semibold text-green-400">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
@@ -312,7 +312,7 @@ function Header() {
             <div className="h-6 w-px bg-white/8" />
             <div className="flex flex-col items-end">
               <span className="text-[9px] uppercase text-muted-foreground font-semibold tracking-wider">Kill Switch</span>
-              {status?.kill_switch.tripped ? (
+              {summary?.kill_switch_tripped ? (
                 <span className="text-xs font-semibold text-red-400 flex items-center gap-1">
                   <ShieldAlert className="h-3 w-3" /> TRIPPED
                 </span>
@@ -324,9 +324,8 @@ function Header() {
             </div>
           </div>
 
-          {/* Mobile: compact market + kill switch indicators */}
           <div className="flex md:hidden items-center gap-1.5">
-            {status?.market.is_open ? (
+            {summary?.market_open ? (
               <span className="relative flex h-2 w-2" title="Market Open">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
@@ -334,7 +333,7 @@ function Header() {
             ) : (
               <span className="inline-flex rounded-full h-2 w-2 bg-slate-600" title="Market Closed" />
             )}
-            {status?.kill_switch.tripped ? (
+            {summary?.kill_switch_tripped ? (
               <span title="Kill Switch Tripped"><ShieldAlert className="h-3.5 w-3.5 text-red-400" /></span>
             ) : (
               <span title="Kill Switch Armed"><ShieldAlert className="h-3.5 w-3.5 text-green-400/60" /></span>

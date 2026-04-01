@@ -209,6 +209,8 @@ export interface StatusSummary {
   position_count: number;
   bot_statuses: Record<string, { display_name: string; status: string }>;
   alert_queue_size: number;
+  market_open: boolean;
+  kill_switch_tripped: boolean;
 }
 
 export function useStatusSummary() {

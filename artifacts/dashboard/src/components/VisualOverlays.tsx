@@ -1,5 +1,5 @@
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useLatestAllocation, usePortfolio } from "@/hooks/use-trading";
+import { useLatestAllocation, useStatusSummary } from "@/hooks/use-trading";
 import { motion } from "framer-motion";
 
 export function CRTOverlay() {
@@ -47,10 +47,11 @@ export function RegimeGlow() {
 
 export function EquityEcho() {
   const isMobile = useIsMobile();
-  const { data } = usePortfolio();
+  const { data } = useStatusSummary();
   if (isMobile || !data) return null;
-  const isProfit = data.account.equity >= 100000;
-  const magnitude = Math.min(Math.abs(data.account.equity - 100000) / 20000, 1);
+  const equity = data.portfolio_totals.equity;
+  const isProfit = equity >= 100000;
+  const magnitude = Math.min(Math.abs(equity - 100000) / 20000, 1);
   const baseAlpha = 0.035 + magnitude * 0.055;
   return (
     <motion.div

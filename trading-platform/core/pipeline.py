@@ -48,9 +48,12 @@ _pipeline_lock = asyncio.Lock()
 
 
 def _persist_emergency_regime(spy_override: bool, spy_change: float | None, cycle_num: int) -> None:
-    """Write market_regime.json with Bear override even when pipeline aborts early."""
-    if not spy_override:
-        return
+    """Write market_regime.json on early-exit paths to keep override state in sync.
+
+    When spy_override is True: writes regime=Bear with override metadata.
+    When spy_override is False: updates existing file to clear regime_override
+    (prevents stale override=True from lingering after SPY recovers).
+    """
     try:
         import json as _json
         from pathlib import Path as _Path
@@ -58,18 +61,30 @@ def _persist_emergency_regime(spy_override: bool, spy_change: float | None, cycl
 
         _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
         _regime_path.parent.mkdir(parents=True, exist_ok=True)
-        _payload = {
-            "regime":         "Bear",
-            "written_at":     _dt.now(_tz.utc).isoformat(),
-            "cycle_number":   cycle_num,
-            "using_fallback": False,
-            "regime_override": True,
-            "override_reason": f"SPY {spy_change * 100:+.1f}% intraday" if spy_change is not None else "SPY emergency",
-        }
-        if spy_change is not None:
-            _payload["spy_change_pct"] = round(spy_change * 100, 2)
-        _regime_path.write_text(_json.dumps(_payload, indent=2))
-        logger.debug("Pipeline | market_regime.json written with emergency Bear override (early exit path)")
+
+        if spy_override:
+            _payload = {
+                "regime":         "Bear",
+                "written_at":     _dt.now(_tz.utc).isoformat(),
+                "cycle_number":   cycle_num,
+                "using_fallback": False,
+                "regime_override": True,
+                "override_reason": f"SPY {spy_change * 100:+.1f}% intraday" if spy_change is not None else "SPY emergency",
+            }
+            if spy_change is not None:
+                _payload["spy_change_pct"] = round(spy_change * 100, 2)
+            _regime_path.write_text(_json.dumps(_payload, indent=2))
+            logger.debug("Pipeline | market_regime.json written with emergency Bear override (early exit path)")
+        elif _regime_path.exists():
+            _existing = _json.loads(_regime_path.read_text())
+            if _existing.get("regime_override"):
+                _existing["regime_override"] = False
+                _existing.pop("override_reason", None)
+                _existing.pop("spy_change_pct", None)
+                _existing["written_at"] = _dt.now(_tz.utc).isoformat()
+                _existing["cycle_number"] = cycle_num
+                _regime_path.write_text(_json.dumps(_existing, indent=2))
+                logger.debug("Pipeline | market_regime.json: cleared stale regime_override (early exit path)")
     except Exception as _exc:
         logger.warning(f"Pipeline | emergency regime persist failed (non-fatal): {_exc}")
 

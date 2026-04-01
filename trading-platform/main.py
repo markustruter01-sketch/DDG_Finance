@@ -75,7 +75,7 @@ from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
 from analysis.backtester import run_backtest
 
-EXPECTED_JOB_COUNT = 8  # 5 trading jobs (scheduler.py) + 3 startup jobs (auto_heal, learning_snapshot, equity_heartbeat)
+EXPECTED_JOB_COUNT = 9  # 5 trading jobs (scheduler.py) + 4 startup jobs (auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator)
 COMMENTARY_TTL_SECONDS = 1800  # 30-minute cache
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
@@ -304,6 +304,18 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=300,
     )
     logger.info("Equity curve heartbeat registered (1-hour interval)")
+
+    from apscheduler.triggers.cron import CronTrigger as _CronTrigger
+    from options_engine import run_scheduled_scan as _options_scan
+    scheduler.add_job(
+        func=_options_scan,
+        trigger=_CronTrigger(hour=15, minute=30, timezone="US/Eastern"),
+        id="options_apex_predator",
+        name="Apex Predator Options Scan (3:30 PM ET)",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Apex Predator options scanner registered (3:30 PM ET daily)")
 
     yield
 
@@ -4414,6 +4426,57 @@ async def export_diagnostic_report() -> dict:
         "line_count":   len(lines),
     }
 
+
+# ── Bot #5: Apex Predator — Options Engine ────────────────────────────────────
+# Pure quant, 100% LLM-free. Volatility Squeeze → Long Straddle.
+import options_engine as _opts
+
+@router.get("/options/state")
+async def options_state():
+    return _opts.get_full_state()
+
+@router.get("/options/positions")
+async def options_positions():
+    positions = _opts._get_positions()
+    return {"positions": positions, "count": len(positions)}
+
+@router.get("/options/pending")
+async def options_pending():
+    pending = _opts._get_pending()
+    return {"pending": pending, "count": len(pending)}
+
+class _OptionsApproveReq(BaseModel):
+    trade_id: str
+
+@router.post("/options/approve")
+async def options_approve(req: _OptionsApproveReq):
+    result = _opts.approve_trade(req.trade_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@router.post("/options/reject")
+async def options_reject(req: _OptionsApproveReq):
+    result = _opts.reject_trade(req.trade_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+@router.post("/options/toggle")
+async def options_toggle():
+    return _opts.toggle_pause()
+
+@router.post("/options/scan")
+async def options_manual_scan(background_tasks: BackgroundTasks):
+    background_tasks.add_task(_opts.scan_for_setups)
+    return {"status": "scan_queued"}
+
+@router.post("/options/close")
+async def options_close_position(req: _OptionsApproveReq):
+    result = _opts.close_position_by_id(req.trade_id)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 app.include_router(router)
 

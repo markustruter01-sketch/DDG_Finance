@@ -52,6 +52,18 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Stack**: Python 3.11, Kraken (via ccxt in paper mode), PostgreSQL (isolated `bot_id` columns for data).
 - **Architecture**: Configurable profiles, DB isolation, and file isolation per bot. Dynamic VPIN scaling and robust risk management specific to each bot's profile.
 
+### Bot #5: Apex Predator Options Engine
+
+- **File**: `trading-platform/options_engine.py`
+- **Strategy**: 100% LLM-free pure quant options engine using Alpaca Options API.
+- **Signals**: IVR (Implied Volatility Rank) < 20 threshold + Bollinger Band squeeze detection (20-day, 6-month low bandwidth).
+- **Trades**: ATM Long Straddle construction (30-45 DTE) on watchlist (SPY, QQQ, NVDA, TSLA).
+- **Sizing**: Half-Kelly position sizing with 5% capital fence of total account equity.
+- **Schedule**: APScheduler CronTrigger at 3:30 PM ET daily.
+- **State**: SQLite persistence in `trading-platform/_options_state/` (state.json, positions.json, pending.json, trades.db).
+- **API Endpoints**: GET `/options/state`, `/options/positions`, `/options/pending`; POST `/options/approve`, `/options/reject`, `/options/toggle`, `/options/scan`, `/options/close`.
+- **Dashboard Tab**: 5th tab "Options" (Crosshair icon) with capital fence cards, volatility scanner, pending trade approval queue, open position cards with Greeks.
+
 ### Artifact Configuration
 
 - Services are defined in `artifact.toml`, including `web` (React Dashboard), `trading-api` (FastAPI), and three `kraken-bot` instances.

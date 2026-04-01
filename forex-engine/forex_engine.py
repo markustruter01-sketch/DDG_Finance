@@ -46,7 +46,7 @@ from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
 from paper_engine import (
     get_paper_equity, get_paper_positions, get_paper_portfolio_summary,
     paper_open_position, paper_close_position, get_available_capital,
-    update_hwm, perform_vault_sweep,
+    perform_vault_sweep,
 )
 import db as _db
 import journal as _journal
@@ -475,7 +475,6 @@ def run_cycle() -> dict:
         _state["status"] = "idle"
 
         _check_vault_sweep()
-        update_hwm(get_paper_equity(current_prices=_latest_prices))
 
         elapsed = time.time() - cycle_start
         logger.info(f"Forex | Cycle #{_state['cycle_count']} complete in {elapsed:.1f}s — {len(scan_results)} pairs scanned")

@@ -33,7 +33,7 @@ PIP_SIZE = {
     "GBPUSD=X": 0.0001,
     "JPY=X":    0.01,
     "AUDUSD=X": 0.0001,
-    "CHF=X":    0.01,
+    "CHF=X":    0.0001,
 }
 
 RSI_PERIOD = 14

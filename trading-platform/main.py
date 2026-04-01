@@ -271,7 +271,15 @@ async def lifespan(app: FastAPI):
                     _eqconn.close()
         except Exception:
             kraken_eq = 0.0
-        insert_equity_snapshot(alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat")
+        forex_eq = 0.0
+        try:
+            fx = _get_forex_engine()
+            if fx:
+                fx_state = fx.get_state()
+                forex_eq = float(fx_state.get("paper_equity", 0))
+        except Exception:
+            forex_eq = 0.0
+        insert_equity_snapshot(alpaca_eq, kraken_eq + forex_eq, "LIVE", "hourly_heartbeat")
 
     def _equity_heartbeat_sync():
         import asyncio as _aio
@@ -4594,6 +4602,20 @@ async def forex_trades():
         return {"trades": [], "count": 0}
     trades = fxdb.load_recent_trades(limit=50)
     return {"trades": trades, "count": len(trades)}
+
+@router.get("/forex/journal")
+async def forex_journal():
+    try:
+        import importlib.util as _ilu_j
+        _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
+        spec = _ilu_j.spec_from_file_location("forex_journal", os.path.join(_fx_path, "journal.py"))
+        mod = _ilu_j.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        entries = mod.get_journal_entries(limit=50)
+        stats = mod.get_journal_stats()
+        return {"entries": entries, "stats": stats, "count": len(entries)}
+    except Exception:
+        return {"entries": [], "stats": {"total": 0, "wins": 0, "losses": 0, "total_pnl": 0, "avg_pips": 0}, "count": 0}
 
 @router.get("/forex/vault")
 async def forex_vault():

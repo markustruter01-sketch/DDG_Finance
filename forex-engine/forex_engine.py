@@ -49,6 +49,7 @@ from paper_engine import (
     update_hwm, perform_vault_sweep,
 )
 import db as _db
+import journal as _journal
 
 _state = {
     "status": "idle",
@@ -132,10 +133,12 @@ def _get_usd_bias() -> tuple[str, str]:
         from analysis.groq_client import call_groq
 
         if not groq_budget.can_call_regime():
-            logger.info("Forex | Groq budget throttled — falling back to NEUTRAL")
-            return "NEUTRAL", "Budget throttled — defaulting to NEUTRAL (both directions)"
+            cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
+            cached_thesis = _USD_BIAS_CACHE["thesis"] or "Budget throttled — using last known bias"
+            logger.info(f"Forex | Groq budget throttled — using cached bias: {cached_bias}")
+            return cached_bias, cached_thesis
 
-        losing_trades = _db.load_losing_trades(limit=5)
+        losing_trades = _journal.get_recent_losers(limit=5) or _db.load_losing_trades(limit=5)
         rag_block = ""
         if losing_trades:
             rag_block = "\n\nRECENT LOSING TRADES (learn from these mistakes):\n"
@@ -266,19 +269,31 @@ def _check_open_positions():
             tp = pos["tp_price"]
             direction = pos["direction"]
 
+            def _close_and_journal(p, cp, reason):
+                result = paper_close_position(p, cp, reason)
+                if result:
+                    try:
+                        _journal.log_trade_close(
+                            pair=PAIR_LABELS.get(p, p), exit_price=cp,
+                            pnl_pips=result.get("pnl_pips", 0), pnl_usd=result.get("pnl_usd", 0),
+                        )
+                    except Exception:
+                        pass
+                return result
+
             if direction == "long":
                 if current_price <= sl:
-                    paper_close_position(pair, current_price, "stop_loss")
+                    _close_and_journal(pair, current_price, "stop_loss")
                     logger.info(f"Forex | SL HIT on LONG {pair} @ {current_price:.5f}")
                 elif current_price >= tp:
-                    paper_close_position(pair, current_price, "take_profit")
+                    _close_and_journal(pair, current_price, "take_profit")
                     logger.info(f"Forex | TP HIT on LONG {pair} @ {current_price:.5f}")
             else:
                 if current_price >= sl:
-                    paper_close_position(pair, current_price, "stop_loss")
+                    _close_and_journal(pair, current_price, "stop_loss")
                     logger.info(f"Forex | SL HIT on SHORT {pair} @ {current_price:.5f}")
                 elif current_price <= tp:
-                    paper_close_position(pair, current_price, "take_profit")
+                    _close_and_journal(pair, current_price, "take_profit")
                     logger.info(f"Forex | TP HIT on SHORT {pair} @ {current_price:.5f}")
 
         except Exception as exc:
@@ -436,6 +451,15 @@ def run_cycle() -> dict:
                 if result:
                     scan_entry["signal"] += " → FILLED"
                     available = get_available_capital()
+                    try:
+                        _journal.log_trade_open(
+                            pair=PAIR_LABELS.get(pair, pair), direction=direction,
+                            entry_price=current_price, sl_price=sl_price, tp_price=tp_price,
+                            units=units, llm_thesis=f"{bias}: {thesis}",
+                            usd_bias=bias, rsi_at_entry=rsi, atr_at_entry=atr,
+                        )
+                    except Exception:
+                        pass
                 else:
                     scan_entry["signal"] += " → REJECTED (capital)"
 
@@ -449,8 +473,8 @@ def run_cycle() -> dict:
         _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
         _state["status"] = "idle"
 
-        update_hwm(get_paper_equity(current_prices=_latest_prices))
         _check_vault_sweep()
+        update_hwm(get_paper_equity(current_prices=_latest_prices))
 
         elapsed = time.time() - cycle_start
         logger.info(f"Forex | Cycle #{_state['cycle_count']} complete in {elapsed:.1f}s — {len(scan_results)} pairs scanned")

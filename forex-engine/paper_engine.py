@@ -17,8 +17,8 @@ _portfolio: dict | None = None
 
 
 def _load_portfolio() -> dict:
-    from config import PAPER_STARTING_BALANCE
-    import db as _db
+    from forex_config import PAPER_STARTING_BALANCE
+    import forex_nav_db as _db
 
     global _portfolio
 
@@ -50,7 +50,7 @@ def _load_portfolio() -> dict:
 
 
 def _save_portfolio() -> None:
-    import db as _db
+    import forex_nav_db as _db
 
     global _portfolio
     if _portfolio is None:
@@ -67,7 +67,7 @@ def _save_portfolio() -> None:
 
 
 def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
-    from config import USD_BASE_PAIRS
+    from forex_config import USD_BASE_PAIRS
     p = _load_portfolio()
     equity = p["cash_usd"]
 
@@ -100,8 +100,8 @@ def paper_open_position(
     tp_price: float,
     llm_thesis: str = "",
 ) -> Optional[int]:
-    from config import PAPER_SPREAD_COST_PCT
-    import db as _db
+    from forex_config import PAPER_SPREAD_COST_PCT
+    import forex_nav_db as _db
 
     p = _load_portfolio()
 
@@ -154,8 +154,8 @@ def paper_open_position(
 
 
 def paper_close_position(pair: str, current_price: float, reason: str) -> dict | None:
-    from config import PAPER_SPREAD_COST_PCT, PIP_SIZE, USD_BASE_PAIRS
-    import db as _db
+    from forex_config import PAPER_SPREAD_COST_PCT, PIP_SIZE, USD_BASE_PAIRS
+    import forex_nav_db as _db
 
     p = _load_portfolio()
 
@@ -229,7 +229,7 @@ def get_paper_positions() -> dict:
 
 
 def get_paper_portfolio_summary() -> dict:
-    import db as _db
+    import forex_nav_db as _db
 
     p = _load_portfolio()
     trades = _db.load_recent_trades(limit=500)
@@ -255,8 +255,8 @@ def update_hwm(equity: float) -> None:
 
 
 def perform_vault_sweep(equity: float) -> float | None:
-    from config import VAULT_SWEEP_PCT
-    import db as _db
+    from forex_config import VAULT_SWEEP_PCT
+    import forex_nav_db as _db
 
     p = _load_portfolio()
     hwm = p.get("hwm_usd", p["starting_balance_usd"])

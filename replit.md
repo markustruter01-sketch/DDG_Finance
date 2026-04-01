@@ -86,7 +86,8 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **News Blackout**: Checks free economic calendar API; skips new entries if high-impact event within 4h.
 - **RAG Loop**: Injects last 5 losing trades into Groq prompt to avoid repeating mistakes.
 - **DB Tables**: `forex_heartbeat` (id=10), `forex_portfolio` (id=10), `forex_trades`, `forex_vault`.
-- **Config**: `forex-engine/config.py` — BOT_ID="navigator", BOT_DB_ID=10.
+- **Config**: `forex-engine/forex_config.py` — BOT_ID="navigator", BOT_DB_ID=10. Renamed from `config.py` to avoid shadowing by `trading-platform/config/` package.
+- **DB Module**: `forex-engine/forex_nav_db.py` — Renamed from `db.py` to avoid shadowing by `trading-platform/db/` package.
 - **Schedule**: APScheduler IntervalTrigger every 4 hours in trading-api lifespan.
 - **Trade Journal**: SQLite `forex-engine/forex_journal.db` — mirrors open/close trades for RAG loop sourcing. Preferred over PostgreSQL for loser retrieval.
 - **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/journal`, `/forex/vault`; POST `/forex/toggle`, `/forex/pause`, `/forex/resume`, `/forex/scan`.

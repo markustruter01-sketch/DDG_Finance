@@ -33,7 +33,7 @@ if _REPO_ROOT not in sys.path:
 if _ENGINE_DIR not in sys.path:
     sys.path.insert(0, _ENGINE_DIR)
 
-from config import (
+from forex_config import (
     PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
     PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, USD_BASE_PAIRS, PIP_SIZE,
     RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
@@ -48,7 +48,7 @@ from paper_engine import (
     paper_open_position, paper_close_position, get_available_capital,
     perform_vault_sweep,
 )
-import db as _db
+import forex_nav_db as _db
 import journal as _journal
 
 _state = {

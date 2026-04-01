@@ -18,12 +18,12 @@ _REPO_ROOT = os.path.join(_ENGINE_DIR, "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from config import (
+from forex_config import (
     BOT_DISPLAY_NAME, BOT_ID, BOT_STRATEGY_LABEL,
     PAPER_TRADING, PAPER_STARTING_BALANCE,
     CYCLE_INTERVAL_HOURS, PAIRS, PAIR_LABELS,
 )
-import db as _db
+import forex_nav_db as _db
 from forex_engine import run_cycle
 
 CYCLE_INTERVAL_SECONDS = CYCLE_INTERVAL_HOURS * 3600

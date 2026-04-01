@@ -341,7 +341,7 @@ async def lifespan(app: FastAPI):
 
     try:
         import importlib.util as _ilu
-        _fx_db_spec = _ilu.spec_from_file_location("forex_db", os.path.join(_FOREX_ENGINE_DIR, "db.py"))
+        _fx_db_spec = _ilu.spec_from_file_location("forex_db", os.path.join(_FOREX_ENGINE_DIR, "forex_nav_db.py"))
         _fx_db_mod = _ilu.module_from_spec(_fx_db_spec)
         _fx_db_spec.loader.exec_module(_fx_db_mod)
         _fx_db_mod.ensure_schema()
@@ -4607,6 +4607,7 @@ def _get_forex_engine():
         _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
         if _fx_path not in sys.path:
             sys.path.insert(0, _fx_path)
+
         spec = _ilu3.spec_from_file_location("forex_engine", os.path.join(_fx_path, "forex_engine.py"))
         mod = _ilu3.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -4624,7 +4625,7 @@ def _get_forex_db():
     try:
         import importlib.util as _ilu2
         _fx_path = os.path.join(_REPO_ROOT, "forex-engine")
-        spec = _ilu2.spec_from_file_location("forex_db", os.path.join(_fx_path, "db.py"))
+        spec = _ilu2.spec_from_file_location("forex_db", os.path.join(_fx_path, "forex_nav_db.py"))
         mod = _ilu2.module_from_spec(spec)
         spec.loader.exec_module(mod)
         _forex_db_module = mod

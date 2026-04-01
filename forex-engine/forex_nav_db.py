@@ -113,7 +113,20 @@ _init_pool()
 @contextmanager
 def _conn() -> "Generator[psycopg2.extensions.connection, None, None]":
     if _pool is not None:
-        conn = _pool.getconn()
+        try:
+            conn = _pool.getconn()
+        except Exception as exc:
+            logger.warning(f"DB | Forex pool checkout failed (exhausted?): {exc} — falling back to direct connection")
+            conn = psycopg2.connect(_get_dsn())
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+            return
         try:
             yield conn
             conn.commit()

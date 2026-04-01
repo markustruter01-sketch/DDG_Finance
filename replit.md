@@ -79,7 +79,7 @@ The project employs a monorepo structure managed by pnpm workspaces.
 - **Config**: `forex-engine/config.py` — BOT_ID="navigator", BOT_DB_ID=10.
 - **Schedule**: APScheduler IntervalTrigger every 4 hours in trading-api lifespan.
 - **Trade Journal**: SQLite `forex-engine/forex_journal.db` — mirrors open/close trades for RAG loop sourcing. Preferred over PostgreSQL for loser retrieval.
-- **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/journal`, `/forex/vault`; POST `/forex/toggle`, `/forex/scan`.
+- **API Endpoints**: GET `/forex/state`, `/forex/positions`, `/forex/trades`, `/forex/journal`, `/forex/vault`; POST `/forex/toggle`, `/forex/pause`, `/forex/resume`, `/forex/scan`.
 - **Dashboard Tab**: 6th tab "Forex" (Globe icon) with teal color scheme, 7-card metrics grid, positions table, H4 scanner results, trade history, vault sweeps.
 - **EXPECTED_JOB_COUNT**: 10 (5 trading + 5 startup: auto_heal, learning_snapshot, equity_heartbeat, options_apex_predator, forex_navigator).
 

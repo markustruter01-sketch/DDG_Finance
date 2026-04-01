@@ -4647,6 +4647,22 @@ async def forex_toggle():
         fx.pause_bot()
         return {"paused": True, "message": "Navigator paused"}
 
+@router.post("/forex/pause")
+async def forex_pause():
+    fx = _get_forex_engine()
+    if fx is None:
+        raise HTTPException(status_code=503, detail="Forex engine not loaded")
+    fx.pause_bot()
+    return {"paused": True, "message": "Navigator paused"}
+
+@router.post("/forex/resume")
+async def forex_resume():
+    fx = _get_forex_engine()
+    if fx is None:
+        raise HTTPException(status_code=503, detail="Forex engine not loaded")
+    fx.resume_bot()
+    return {"paused": False, "message": "Navigator resumed"}
+
 @router.post("/forex/scan")
 async def forex_manual_scan(background_tasks: BackgroundTasks):
     fx = _get_forex_engine()

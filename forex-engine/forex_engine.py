@@ -243,8 +243,7 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
 
     max_size = equity * MAX_POSITION_SIZE_PCT
     if pair in USD_BASE_PAIRS:
-        max_units = max_size / pip_value_per_unit if pip_value_per_unit > 0 else 0
-        max_units = min(max_units, max_size / (pip_size / entry_price) if entry_price > 0 else 0)
+        max_units = max_size
     else:
         max_units = max_size / entry_price if entry_price > 0 else 0
     units = min(units, max_units)
@@ -431,7 +430,11 @@ def run_cycle() -> dict:
                 else:
                     size_usd = units * current_price
 
-                size_usd = min(size_usd, available * 0.95)
+                cap = available * 0.95
+                if size_usd > cap:
+                    ratio = cap / size_usd
+                    size_usd = cap
+                    units = max(1, round(units * ratio))
 
                 if size_usd < 100:
                     scan_entry["signal"] += " (size too small)"

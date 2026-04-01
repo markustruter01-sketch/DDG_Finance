@@ -27,6 +27,8 @@ import time
 from pathlib import Path
 from typing import Any, Union
 
+from datetime import datetime, timezone
+
 from loguru import logger
 
 from analysis.feedback_injection import build_system_prompt_with_feedback
@@ -65,7 +67,7 @@ SPY_EMERGENCY_THRESHOLD = -0.03
 SPY_RECOVERY_THRESHOLD = -0.02
 
 _spy_override_active: bool = False
-_spy_override_triggered_at: float | None = None
+_spy_override_triggered_at: str | None = None
 _spy_last_change_pct: float | None = None
 
 
@@ -147,7 +149,7 @@ def get_regime_fallback() -> RegimeAnalysisOutput | None:
     if age > REGIME_FALLBACK_MAX_AGE_SECONDS:
         logger.warning(
             f"Regime cache | Cache is stale ({age / 3600:.1f}h > "
-            f"{REGIME_FALLBACK_MAX_AGE_SECONDS / 3600:.0f}h limit) — rejecting fallback"
+            f"{REGIME_FALLBACK_MAX_AGE_SECONDS / 3600:.1f}h limit) — rejecting fallback"
         )
         return None
     try:
@@ -207,7 +209,7 @@ def emergency_regime_check() -> tuple[bool, float | None]:
         if change_pct <= SPY_EMERGENCY_THRESHOLD:
             if not _spy_override_active:
                 _spy_override_active = True
-                _spy_override_triggered_at = time.time()
+                _spy_override_triggered_at = datetime.now(timezone.utc).isoformat()
                 logger.warning(
                     f"EMERGENCY REGIME | SPY {change_pct * 100:+.1f}% (threshold {SPY_EMERGENCY_THRESHOLD * 100:.0f}%) "
                     f"— forcing Bear override"

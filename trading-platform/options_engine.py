@@ -165,9 +165,10 @@ try:
     if "exit_reason" not in _cols:
         _conn.execute("ALTER TABLE options_trades ADD COLUMN exit_reason TEXT")
         _conn.commit()
+        logger.info("Options | Migrated options_trades: added exit_reason column")
     _conn.close()
-except Exception:
-    pass
+except Exception as _mig_err:
+    logger.warning(f"Options | Schema migration failed: {_mig_err}")
 
 
 def _load_json(path: Path, default=None):

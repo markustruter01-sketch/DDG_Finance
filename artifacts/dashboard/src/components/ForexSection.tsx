@@ -172,20 +172,34 @@ export function ForexSection() {
                     <th className="text-left py-1.5 px-2">Dir</th>
                     <th className="text-right py-1.5 px-2">Entry</th>
                     <th className="text-right py-1.5 px-2">Current</th>
-                    <th className="text-right py-1.5 px-2">SL</th>
+                    <th className="text-right py-1.5 px-2">Orig SL</th>
+                    <th className="text-right py-1.5 px-2">Trail SL</th>
                     <th className="text-right py-1.5 px-2">TP</th>
                     <th className="text-right py-1.5 px-2">P&L (pips)</th>
                     <th className="text-right py-1.5 px-2">P&L ($)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {positions.map((pos, i) => (
+                  {positions.map((pos, i) => {
+                    const trailSl = pos.trailing_sl ?? pos.sl_price;
+                    const origSl = pos.original_sl ?? pos.sl_price;
+                    const trailMoved = pos.direction === "long"
+                      ? trailSl > origSl
+                      : trailSl < origSl;
+                    const profitLocked = pos.direction === "long"
+                      ? trailSl > pos.entry_price
+                      : trailSl < pos.entry_price;
+                    return (
                     <tr key={i} className="border-b border-white/3 hover:bg-white/2">
                       <td className="py-1.5 px-2 text-white font-bold">{pos.pair}</td>
                       <td className={cn("py-1.5 px-2 font-bold", pos.direction === "long" ? "text-green-400" : "text-red-400")}>{pos.direction.toUpperCase()}</td>
                       <td className="py-1.5 px-2 text-right text-muted-foreground">{pos.entry_price.toFixed(5)}</td>
                       <td className="py-1.5 px-2 text-right text-white">{pos.current_price.toFixed(5)}</td>
-                      <td className="py-1.5 px-2 text-right text-red-400/70">{pos.sl_price.toFixed(5)}</td>
+                      <td className="py-1.5 px-2 text-right text-red-400/30 line-through">{origSl.toFixed(5)}</td>
+                      <td className={cn("py-1.5 px-2 text-right font-bold", profitLocked ? "text-green-400" : trailMoved ? "text-teal-400" : "text-red-400/70")}>
+                        {trailSl.toFixed(5)}
+                        {profitLocked && <span className="ml-1 text-[8px] text-green-400/70">LOCKED</span>}
+                      </td>
                       <td className="py-1.5 px-2 text-right text-green-400/70">{pos.tp_price.toFixed(5)}</td>
                       <td className={cn("py-1.5 px-2 text-right font-bold", pos.unrealized_pnl_pips >= 0 ? "text-green-400" : "text-red-400")}>
                         {pos.unrealized_pnl_pips >= 0 ? "+" : ""}{pos.unrealized_pnl_pips.toFixed(1)}
@@ -194,7 +208,8 @@ export function ForexSection() {
                         {pos.unrealized_pnl_usd >= 0 ? "+" : ""}${pos.unrealized_pnl_usd.toFixed(2)}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -315,7 +330,7 @@ export function ForexSection() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[11px] font-mono text-muted-foreground">
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Timeframe</div><div>H4 Swing Trading</div><div>5 Major FX Pairs</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Entry Signal</div><div>RSI &lt; 30 (oversold)</div><div>RSI &gt; 70 (overbought)</div></div>
-            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Risk</div><div>SL = 1.5x ATR(14)</div><div>TP = 3.0x ATR (1:2 R:R)</div></div>
+            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Risk</div><div>SL = 1.5x ATR · Trail 1.2x</div><div>TP = 3.0x ATR · BE @ 1x</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Capital</div><div>1.5% risk per trade</div><div>Groq USD bias filter</div></div>
           </div>
         </CardContent>

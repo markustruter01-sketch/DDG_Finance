@@ -37,7 +37,8 @@ from forex_config import (
     PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
     PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, USD_BASE_PAIRS, PIP_SIZE,
     RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
-    SL_ATR_MULT, TP_ATR_MULT, MAX_RISK_PER_TRADE_PCT,
+    SL_ATR_MULT, TP_ATR_MULT, TRAIL_ATR_MULT, BREAKEVEN_ATR_MULT,
+    MAX_RISK_PER_TRADE_PCT,
     MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
     BOT_ID, BOT_DISPLAY_NAME, BOT_DB_ID, BOT_STRATEGY_LABEL,
     CONTROL_FILE, LIVE_STATE_FILE, VAULT_SWEEP_PCT,
@@ -262,22 +263,79 @@ def _check_open_positions():
     if not positions:
         return
 
+    from paper_engine import _save_portfolio
+
     for pair, pos in list(positions.items()):
         try:
-            candles = fetch_h4_candles(pair, count=5)
+            candles = fetch_h4_candles(pair, count=max(ATR_PERIOD + 5, 20))
             if candles.empty:
                 continue
 
             current_price = float(candles.iloc[-1]["Close"])
             _latest_prices[pair] = current_price
 
+            direction = pos["direction"]
+            entry = pos["entry_price"]
+
+            if "original_sl" not in pos:
+                pos["original_sl"] = pos["sl_price"]
+            if "trailing_sl" not in pos:
+                pos["trailing_sl"] = pos["sl_price"]
+            if direction == "long" and "highest_price" not in pos:
+                pos["highest_price"] = entry
+            if direction == "short" and "lowest_price" not in pos:
+                pos["lowest_price"] = entry
+
+            highs = candles["High"].tolist()
+            lows = candles["Low"].tolist()
+            closes = candles["Close"].tolist()
+            current_atr = calculate_atr(highs, lows, closes, period=ATR_PERIOD)
+
+            if current_atr > 0:
+                if direction == "long":
+                    if current_price > pos.get("highest_price", entry):
+                        pos["highest_price"] = current_price
+
+                    pip_size = PIP_SIZE.get(pair, 0.0001)
+                    spread_offset = pip_size * 2
+                    if (current_price - entry) >= BREAKEVEN_ATR_MULT * current_atr:
+                        be_sl = entry + spread_offset
+                        if be_sl > pos["trailing_sl"]:
+                            pos["trailing_sl"] = round(be_sl, 5)
+                            logger.info(f"Forex | BREAKEVEN lock on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
+
+                    new_trail = pos["highest_price"] - (TRAIL_ATR_MULT * current_atr)
+                    if new_trail > pos["trailing_sl"]:
+                        pos["trailing_sl"] = round(new_trail, 5)
+                        logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
+
+                else:
+                    if current_price < pos.get("lowest_price", entry):
+                        pos["lowest_price"] = current_price
+
+                    pip_size = PIP_SIZE.get(pair, 0.0001)
+                    spread_offset = pip_size * 2
+                    if (entry - current_price) >= BREAKEVEN_ATR_MULT * current_atr:
+                        be_sl = entry - spread_offset
+                        if be_sl < pos["trailing_sl"]:
+                            pos["trailing_sl"] = round(be_sl, 5)
+                            logger.info(f"Forex | BREAKEVEN lock on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
+
+                    new_trail = pos["lowest_price"] + (TRAIL_ATR_MULT * current_atr)
+                    if new_trail < pos["trailing_sl"]:
+                        pos["trailing_sl"] = round(new_trail, 5)
+                        logger.info(f"Forex | TRAIL SL ratcheted on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
+
+                pos["sl_price"] = pos["trailing_sl"]
+                _save_portfolio()
+
             sl = pos["sl_price"]
             tp = pos["tp_price"]
-            direction = pos["direction"]
 
             def _close_and_journal(p, cp, reason):
                 result = paper_close_position(p, cp, reason, latest_prices=_latest_prices)
                 if result:
+                    result["final_trailing_sl"] = pos.get("trailing_sl")
                     try:
                         _journal.log_trade_close(
                             pair=PAIR_LABELS.get(p, p), exit_price=cp,
@@ -306,15 +364,17 @@ def _check_open_positions():
 
             if direction == "long":
                 if current_price <= sl:
-                    _close_and_journal(pair, current_price, "stop_loss")
-                    logger.info(f"Forex | SL HIT on LONG {pair} @ {current_price:.5f}")
+                    reason = "trailing_stop" if sl > pos.get("original_sl", sl) else "stop_loss"
+                    _close_and_journal(pair, current_price, reason)
+                    logger.info(f"Forex | {reason.upper()} HIT on LONG {pair} @ {current_price:.5f}")
                 elif current_price >= tp:
                     _close_and_journal(pair, current_price, "take_profit")
                     logger.info(f"Forex | TP HIT on LONG {pair} @ {current_price:.5f}")
             else:
                 if current_price >= sl:
-                    _close_and_journal(pair, current_price, "stop_loss")
-                    logger.info(f"Forex | SL HIT on SHORT {pair} @ {current_price:.5f}")
+                    reason = "trailing_stop" if sl < pos.get("original_sl", sl) else "stop_loss"
+                    _close_and_journal(pair, current_price, reason)
+                    logger.info(f"Forex | {reason.upper()} HIT on SHORT {pair} @ {current_price:.5f}")
                 elif current_price <= tp:
                     _close_and_journal(pair, current_price, "take_profit")
                     logger.info(f"Forex | TP HIT on SHORT {pair} @ {current_price:.5f}")
@@ -611,6 +671,10 @@ def _write_live_state():
             "current_price": round(current_price, 5),
             "sl_price": round(pos.get("sl_price", 0), 5),
             "tp_price": round(pos.get("tp_price", 0), 5),
+            "original_sl": round(pos.get("original_sl", pos.get("sl_price", 0)), 5),
+            "trailing_sl": round(pos.get("trailing_sl", pos.get("sl_price", 0)), 5),
+            "highest_price": round(pos["highest_price"], 5) if pos.get("highest_price") is not None else None,
+            "lowest_price": round(pos["lowest_price"], 5) if pos.get("lowest_price") is not None else None,
             "units": pos.get("units", 0),
             "size_usd": round(pos.get("size_usd", 0), 2),
             "unrealized_pnl_usd": round(pnl_usd, 2),
@@ -700,6 +764,10 @@ def get_positions() -> list[dict]:
             "current_price": round(current_price, 5),
             "sl_price": round(pos.get("sl_price", 0), 5),
             "tp_price": round(pos.get("tp_price", 0), 5),
+            "original_sl": round(pos.get("original_sl", pos.get("sl_price", 0)), 5),
+            "trailing_sl": round(pos.get("trailing_sl", pos.get("sl_price", 0)), 5),
+            "highest_price": round(pos["highest_price"], 5) if pos.get("highest_price") is not None else None,
+            "lowest_price": round(pos["lowest_price"], 5) if pos.get("lowest_price") is not None else None,
             "units": pos.get("units", 0),
             "size_usd": round(pos.get("size_usd", 0), 2),
             "unrealized_pnl_usd": round(pnl_usd, 2),

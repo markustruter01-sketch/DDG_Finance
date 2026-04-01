@@ -1367,6 +1367,10 @@ export interface ForexPosition {
   current_price: number;
   sl_price: number;
   tp_price: number;
+  original_sl?: number;
+  trailing_sl?: number;
+  highest_price?: number | null;
+  lowest_price?: number | null;
   units: number;
   size_usd: number;
   unrealized_pnl_usd: number;

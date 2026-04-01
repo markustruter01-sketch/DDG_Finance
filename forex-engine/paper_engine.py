@@ -126,6 +126,10 @@ def paper_open_position(
         "units": units,
         "sl_price": sl_price,
         "tp_price": tp_price,
+        "original_sl": sl_price,
+        "trailing_sl": sl_price,
+        "highest_price": entry_price if direction == "long" else None,
+        "lowest_price": entry_price if direction == "short" else None,
         "entry_time": datetime.now(tz=timezone.utc).isoformat(),
         "spread_cost": round(spread_cost, 4),
     }

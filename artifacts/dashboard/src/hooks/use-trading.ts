@@ -210,13 +210,32 @@ export interface StatusSummary {
     scheduler_job_count: number;
     last_run_status: string;
     error_count: number;
+    run_count: number;
   };
   portfolio_totals: { equity: number; cash: number; buying_power: number };
   position_count: number;
   bot_statuses: Record<string, { display_name: string; status: string }>;
   alert_queue_size: number;
   market_open: boolean;
+  next_market_open: string | null;
   kill_switch_tripped: boolean;
+  alpaca_maintenance: boolean;
+  trading_mode: string;
+  groq: {
+    pct_used: number;
+    tokens_used_today: number;
+    token_budget_total: number;
+    budget_exhausted: boolean;
+    using_fallback: boolean;
+    regime?: string;
+    cache_age_min?: number;
+  } | null;
+  emergency_regime: {
+    active: boolean;
+    spy_change_pct?: number;
+  } | null;
+  scheduler_jobs: { id: string; name: string; next_fire_utc: string }[];
+  auto_trading: boolean;
 }
 
 export function useStatusSummary() {

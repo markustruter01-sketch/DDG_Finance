@@ -3,7 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
-  usePlatformStatus, useLivePositions, useLatestAllocation,
+  useLivePositions, useLatestAllocation,
   useJournal, useRagLosses, useRagWins, usePerformanceHistory,
   usePerformanceSummary, useAICommentary, useRefreshCommentary,
   useVault, useManualSweep, useAuditorReport, useTriggerAudit,
@@ -65,7 +65,7 @@ import {
 
 
 function SystemStatusBanner() {
-  const { data, isError, isLoading } = usePlatformStatus();
+  const { data, isError, isLoading } = useStatusSummary();
 
   let sysStatus: "online" | "degraded" | "ai_degraded" | "emergency" | "offline";
   let reason: string;
@@ -101,9 +101,9 @@ function SystemStatusBanner() {
     sysStatus = "offline";
     reason = "Cannot reach trading API — check that the server is running";
   } else {
-    const jobCount = data.scheduler_jobs.length;
-    const lastStatus = data.last_run.last_run_status;
-    const errorCount = data.last_run.error_count;
+    const jobCount = data.system_health.scheduler_job_count;
+    const lastStatus = data.system_health.last_run_status;
+    const errorCount = data.system_health.error_count;
     tradingMode = data.trading_mode;
     const groqFallback = data.groq?.using_fallback ?? false;
     const emergencyRegime = data.emergency_regime;
@@ -122,15 +122,13 @@ function SystemStatusBanner() {
       sysStatus = "degraded";
       reason = `Last run failed (${errorCount} total error${errorCount !== 1 ? "s" : ""})`;
     } else if (groqFallback) {
-      // Groq hit its daily token limit — we're using a cached regime to keep trading.
-      // This is NOT an outage. Show amber to distinguish from genuine red failures.
       sysStatus = "ai_degraded";
       const cachedRegime = data.groq?.regime ? ` [${data.groq.regime}]` : "";
       const ageMin = data.groq?.cache_age_min != null ? ` · ${Math.round(data.groq.cache_age_min)}min ago` : "";
       reason = `Groq rate-limited — using cached regime${cachedRegime}${ageMin} · Trading continues normally`;
     } else {
       sysStatus = "online";
-      const runCount = data.last_run.run_count;
+      const runCount = data.system_health.run_count;
       const modeTag = tradingModeLabel(tradingMode);
       if (lastStatus === "never_run") {
         reason = `24/7 scheduler ready (15-min cycles) — ${modeTag} mode`;
@@ -4693,9 +4691,8 @@ function SystemDegradationSection() {
 // ── Bot #5: Apex Predator — Options Engine Section ───────────────────────────
 
 function AlpacaCountdownBanner() {
-  const { data } = usePlatformStatus();
-  const marketOpen = data?.market?.is_open;
-  const nextOpen = data?.market?.next_open;
+  const { data } = useStatusSummary();
+  const marketOpen = data?.market_open;
   const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'intraday_cycle')?.next_fire_utc;
 
   if (marketOpen) {
@@ -4714,7 +4711,7 @@ function AlpacaCountdownBanner() {
 
   return (
     <CountdownTimer
-      targetISO={nextOpen || null}
+      targetISO={data?.next_market_open || null}
       label="NYSE Market Opens In"
       sublabel="Oracle bot activates at market open (Mon–Fri 9:30 AM ET)"
       color="#10b981"
@@ -4724,7 +4721,7 @@ function AlpacaCountdownBanner() {
 }
 
 function KrakenCountdownBanner() {
-  const { data } = usePlatformStatus();
+  const { data } = useStatusSummary();
   const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'crypto_cycle')?.next_fire_utc;
 
   return (
@@ -4739,7 +4736,7 @@ function KrakenCountdownBanner() {
 }
 
 function OptionsCountdownBanner() {
-  const { data } = usePlatformStatus();
+  const { data } = useStatusSummary();
   const nextScan = data?.scheduler_jobs?.find((j: any) => j.id === 'options_apex_predator')?.next_fire_utc;
 
   return (
@@ -4754,7 +4751,7 @@ function OptionsCountdownBanner() {
 }
 
 function ForexCountdownBanner() {
-  const { data } = usePlatformStatus();
+  const { data } = useStatusSummary();
   const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'forex_navigator')?.next_fire_utc;
 
   return (

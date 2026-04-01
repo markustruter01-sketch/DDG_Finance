@@ -747,14 +747,17 @@ async def record_manual_degradation(
 
 @system_router.get("/status/summary", tags=["System"])
 async def status_summary() -> dict:
-    """Bulk endpoint returning the 5 most frequently polled data points in one call."""
+    """Bulk endpoint returning all frequently polled data points in one call."""
     from notifications import alert_manager as _alert_mgr
+    from core.market_clock import is_alpaca_maintenance_window
+    from core.scheduler import is_auto_trading_enabled
 
     jobs = get_job_status()
     last = get_last_run()
     job_count = len(jobs)
-    last_status = last.get("last_run_status", "never")
+    last_status = last.get("last_run_status", "never_run")
     error_count = last.get("error_count", 0)
+    run_count = last.get("run_count", 0)
 
     if job_count < EXPECTED_JOB_COUNT:
         system_status = "degraded"
@@ -783,11 +786,19 @@ async def status_summary() -> dict:
 
     bot_statuses = {}
     try:
-        from routes._deps import KRAKEN_BOT_PROFILES, _get_forex_engine
+        from routes._deps import KRAKEN_BOT_PROFILES
         for bot_id, profile in KRAKEN_BOT_PROFILES.items():
+            bot_status = "running"
+            try:
+                from kraken_bot.engine import get_kraken_engine
+                eng = get_kraken_engine(bot_id)
+                if eng and hasattr(eng, "paused") and eng.paused:
+                    bot_status = "paused"
+            except Exception:
+                pass
             bot_statuses[bot_id] = {
                 "display_name": profile["display_name"],
-                "status": "running",
+                "status": bot_status,
             }
     except Exception:
         pass
@@ -822,8 +833,11 @@ async def status_summary() -> dict:
         pass
 
     market_open = False
+    next_market_open = None
     try:
         market_open = is_market_open()
+        if not market_open:
+            next_market_open = get_next_open()
     except Exception:
         pass
 
@@ -833,17 +847,55 @@ async def status_summary() -> dict:
     except Exception:
         pass
 
+    alpaca_maintenance = False
+    try:
+        alpaca_maintenance = is_alpaca_maintenance_window()
+    except Exception:
+        pass
+
+    groq_info: dict[str, Any] | None = None
+    try:
+        from analysis.analyzer import get_groq_status as _get_groq_status
+        from analysis.groq_budget import budget as _groq_budget
+        groq_info = _get_groq_status()
+        groq_info["using_fallback"] = last.get("groq_using_fallback", False)
+        groq_info.update(_groq_budget.budget_status())
+    except Exception:
+        pass
+
+    emergency_regime: dict[str, Any] | None = None
+    try:
+        from analysis.analyzer import get_emergency_regime_status as _get_emergency
+        emergency_regime = _get_emergency()
+    except Exception:
+        pass
+
+    if not is_auto_trading_enabled():
+        trading_mode = "idle"
+    elif market_open:
+        trading_mode = "full_market"
+    else:
+        trading_mode = "crypto_only"
+
     return {
         "system_health": {
             "system_status": system_status,
             "scheduler_job_count": job_count,
             "last_run_status": last_status,
             "error_count": error_count,
+            "run_count": run_count,
         },
         "portfolio_totals": portfolio_totals,
         "position_count": position_count,
         "bot_statuses": bot_statuses,
         "alert_queue_size": alert_queue_size,
         "market_open": market_open,
+        "next_market_open": next_market_open,
         "kill_switch_tripped": ks.get("tripped", False),
+        "alpaca_maintenance": alpaca_maintenance,
+        "trading_mode": trading_mode,
+        "groq": groq_info,
+        "emergency_regime": emergency_regime,
+        "scheduler_jobs": jobs,
+        "auto_trading": is_auto_trading_enabled(),
     }

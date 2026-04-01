@@ -36,7 +36,7 @@ from config.settings import settings
 from core.pipeline import run_pipeline, run_postmortem
 from analysis.auditor import run_full_audit
 from analysis.gemini_auditor import run_daily_self_critic
-from core.market_clock import is_market_open, is_early_close_day
+from core.market_clock import is_market_open, is_early_close_day, is_alpaca_maintenance_window
 from execution.broker import get_account
 from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripped
 
@@ -123,6 +123,10 @@ async def _intraday_cycle() -> None:
         logger.info("Scheduler | Market closed — skipping intraday cycle")
         return
 
+    if is_alpaca_maintenance_window():
+        logger.warning("Scheduler | Alpaca monthly maintenance window (2nd Saturday 09:00–11:00 ET) — skipping intraday cycle")
+        return
+
     # ── Early-close guard ─────────────────────────────────────────────────
     # NYSE early-close days (Black Friday, Christmas Eve, NYE) end at 1 PM ET.
     # The CronTrigger fires at :01, :16, :31, :46 through hour 15, but we
@@ -161,6 +165,10 @@ async def _crypto_cycle() -> None:
 
     if is_market_open():
         logger.debug("Scheduler | Market open — skipping crypto-only cycle (intraday handles it)")
+        return
+
+    if is_alpaca_maintenance_window():
+        logger.warning("Scheduler | Alpaca monthly maintenance window — skipping crypto cycle (Alpaca API may be unavailable)")
         return
 
     logger.info("Scheduler | JOB STARTING: crypto_cycle (market closed, crypto-only mode)")

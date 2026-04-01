@@ -32,6 +32,7 @@ The project employs a monorepo structure managed by pnpm workspaces.
     - 3-step regime model (Bull/Bear/Sideways) determined by LLM based on moving averages, dictating dynamic asset allocation.
     - Variable slot count (1-6) with Python-enforced even-weight sizing. Prioritizes capital preservation by defaulting to SGOV if no high-conviction trades align.
 - **Key Features**: Dual-mode 24/7 trading (market hours and crypto-only), 15-minute intraday cycles for rapid learning, smart data caching, Groq budget guardrails, pre-LLM signal guardrails (TemporalQuarantine, MultiSourceConsensus, PriceToSentimentDivergence), and a shared risk library (`shared/`) with `RiskProfile`, `ExitBracket`, `CircuitBreaker`, and `VaRCircuitBreaker`.
+- **Alpaca Maintenance Window**: `is_alpaca_maintenance_window()` in `core/market_clock.py` detects the 2nd Saturday of each month 09:00–11:00 ET. Scheduler guards skip both intraday and crypto cycles during this window. Status endpoint exposes `alpaca_maintenance` flag; dashboard shows amber banner.
 - **RAG Memory Architecture**: A 4-phase Retrieval-Augmented Generation memory layer:
     1.  **Database Schema Expansion**: Enhanced `trades` and added `execution_post_mortems` tables.
     2.  **Deterministic Post-Mortem Logging**: Structured logging of trade outcomes and lessons.

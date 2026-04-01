@@ -113,6 +113,9 @@ function SystemStatusBanner() {
       sysStatus = "emergency";
       const spyPct = emergencyRegime.spy_change_pct != null ? ` (SPY ${emergencyRegime.spy_change_pct > 0 ? "+" : ""}${emergencyRegime.spy_change_pct.toFixed(1)}%)` : "";
       reason = `EMERGENCY REGIME: BEAR${spyPct} — defensive posture forced`;
+    } else if (data.alpaca_maintenance) {
+      sysStatus = "degraded";
+      reason = "Alpaca monthly maintenance window (2nd Saturday 09:00–11:00 ET) — Alpaca trades paused, Kraken bots unaffected";
     } else if (jobCount < EXPECTED_JOBS) {
       sysStatus = "degraded";
       reason = `Only ${jobCount}/${EXPECTED_JOBS} scheduler jobs registered`;
@@ -2770,7 +2773,7 @@ function CombinedTradeHistorySection() {
           <History className="h-4 w-4 text-primary" />
           <span>Combined Trade History</span>
           <span className="ml-1 text-[9px] font-normal text-muted-foreground/60 border border-white/10 bg-white/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-            Both Bots
+            Alpaca + Kraken
           </span>
           {combined.length > 0 && (
             <div className="flex items-center gap-2 ml-auto">

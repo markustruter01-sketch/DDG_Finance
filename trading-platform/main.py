@@ -537,7 +537,9 @@ async def status() -> dict:
     """
     from analysis.analyzer import get_groq_status as _get_groq_status, get_emergency_regime_status as _get_emergency
     from analysis.groq_budget import budget as _groq_budget
+    from core.market_clock import is_alpaca_maintenance_window
     market_open = is_market_open()
+    alpaca_maintenance = is_alpaca_maintenance_window()
     last_run = get_last_run()
     if not is_auto_trading_enabled():
         trading_mode = "idle"
@@ -564,6 +566,7 @@ async def status() -> dict:
         "groq":           groq_status,
         "signal_guard":   _get_signal_guard_status(),
         "emergency_regime": _get_emergency(),
+        "alpaca_maintenance": alpaca_maintenance,
     }
 
 

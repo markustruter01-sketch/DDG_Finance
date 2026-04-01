@@ -119,9 +119,9 @@ export function ForexSection() {
         <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/20 transition-all">
           <CardContent className="p-3">
             <div className="text-[10px] font-medium text-muted-foreground mb-1">Positions</div>
-            <div className="text-sm font-mono font-bold text-white">{posCount} / 5</div>
+            <div className="text-sm font-mono font-bold text-white">{posCount} / 10</div>
             <div className="mt-1 h-1 rounded-full bg-white/5 overflow-hidden">
-              <div className="h-full rounded-full bg-teal-500/50 transition-all duration-700" style={{ width: `${(posCount / 5) * 100}%` }} />
+              <div className="h-full rounded-full bg-teal-500/50 transition-all duration-700" style={{ width: `${(posCount / 10) * 100}%` }} />
             </div>
           </CardContent>
         </Card>
@@ -328,7 +328,7 @@ export function ForexSection() {
         <CardContent className="p-4">
           <div className="text-xs font-semibold text-teal-400/80 uppercase tracking-wider mb-3">Strategy Reference</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[11px] font-mono text-muted-foreground">
-            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Timeframe</div><div>H4 Swing Trading</div><div>5 Major FX Pairs</div></div>
+            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Timeframe</div><div>H4 Swing Trading</div><div>23 FX Pairs (Majors + EM)</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Entry Signal</div><div>RSI &lt; 30 (oversold)</div><div>RSI &gt; 70 (overbought)</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Risk</div><div>SL = 1.5x ATR · Trail 1.2x</div><div>TP = 3.0x ATR · BE @ 1x</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Capital</div><div>1.5% risk per trade</div><div>Groq USD bias filter</div></div>

@@ -300,7 +300,7 @@ export function CombinedPortfolioSummary() {
             <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/15 transition-all duration-500">
               <CardContent className="p-3">
                 <div className="text-xs font-medium text-muted-foreground mb-1.5">Positions</div>
-                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{forexPosCount} / 5</div>
+                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{forexPosCount} / 10</div>
                 <div className="text-[10px] text-muted-foreground/50 mt-1.5">{forexTrades} trades</div>
               </CardContent>
             </Card>

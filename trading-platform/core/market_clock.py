@@ -224,6 +224,33 @@ def _local_et_fallback() -> bool:
     return open_time <= now < close_time
 
 
+def is_alpaca_maintenance_window() -> bool:
+    """
+    Return True if now falls within Alpaca's scheduled monthly maintenance window.
+    Alpaca performs maintenance on the 2nd Saturday of each month, 9:00–11:00 AM EDT.
+    During this window the API may be unavailable — all Alpaca-dependent operations
+    (stock trading, account queries, crypto via Alpaca) should be paused.
+    """
+    now = datetime.now(ET)
+    if now.weekday() != 5:
+        return False
+    day = now.day
+    first_day_weekday = date(now.year, now.month, 1).weekday()
+    first_saturday = (5 - first_day_weekday) % 7 + 1
+    second_saturday = first_saturday + 7
+    if day != second_saturday:
+        return False
+    maint_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    maint_end = now.replace(hour=11, minute=0, second=0, microsecond=0)
+    in_window = maint_start <= now < maint_end
+    if in_window:
+        logger.warning(
+            f"Market clock | ALPACA MAINTENANCE WINDOW active "
+            f"(2nd Saturday {now.strftime('%Y-%m-%d')} 09:00–11:00 ET)"
+        )
+    return in_window
+
+
 def get_next_open() -> str:
     """Return the ISO timestamp of the next market open (from Alpaca clock)."""
     try:

@@ -60,6 +60,7 @@ export interface PlatformStatus {
     threshold_pct: number;
     recovery_pct: number;
   };
+  alpaca_maintenance?: boolean;
 }
 
 export interface EquitySnapshot {

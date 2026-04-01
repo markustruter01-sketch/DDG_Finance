@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils";
 import {
   useRecentTrades, useJournal,
   useKrakenStatus, useKrakenPerformance,
-  useOptionsState, useForexState,
-  type RecentTradeItem,
+  useOptionsState, useForexState, useForexTrades,
+  type RecentTradeItem, type ForexTrade,
 } from "@/hooks/use-trading";
 import {
   computeStreak, computeXP, getRank, getNextRank, StreakChip,
@@ -24,6 +24,7 @@ export function CommandersLog() {
   const caPerf = useKrakenPerformance("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { data: fxTrades } = useForexTrades();
 
   const oracleStreak = useMemo(() => computeStreak(recentTrades?.trades ?? []), [recentTrades?.trades]);
   const oracleWins = journal?.summary?.wins ?? 0;
@@ -41,13 +42,29 @@ export function CommandersLog() {
   const optionsTotal = optState?.total_trades ?? 0;
   const optionsXP = computeXP(optionsWins, optionsTotal);
   const optionsRank = getRank(optionsXP, OPTIONS_RANKS);
-  const optionsStreak = { count: 0, direction: "none" as const };
+  const optionsStreak = useMemo(() => {
+    if (optionsTotal === 0) return { count: 0, direction: "none" as const };
+    const losses = optionsTotal - optionsWins;
+    if (optionsWins > 0 && losses === 0) return { count: optionsWins, direction: "win" as const };
+    if (losses > 0 && optionsWins === 0) return { count: losses, direction: "loss" as const };
+    return { count: 1, direction: optionsWins >= losses ? "win" as const : "loss" as const };
+  }, [optionsWins, optionsTotal]);
 
   const forexWins = fxState?.total_wins ?? 0;
   const forexTotal = fxState?.total_trades ?? 0;
   const forexXP = computeXP(forexWins, forexTotal);
   const forexRank = getRank(forexXP, FOREX_RANKS);
-  const forexStreak = { count: 0, direction: "none" as const };
+  const forexStreak = useMemo(() => {
+    const closed = (fxTrades?.trades ?? [])
+      .filter((t: ForexTrade) => t.status === "closed" && t.pnl_usd != null)
+      .sort((a: ForexTrade, b: ForexTrade) => (b.exit_time ?? "").localeCompare(a.exit_time ?? ""));
+    if (closed.length === 0) return { count: 0, direction: "none" as const };
+    const mapped = closed.map((t: ForexTrade) => ({
+      pnl_pct: t.pnl_usd ?? 0,
+      status: (t.pnl_usd ?? 0) > 0 ? "Closed_Win" as const : "Closed_Loss" as const,
+    }));
+    return computeStreak(mapped);
+  }, [fxTrades?.trades]);
 
   const entries = [
     {
@@ -120,9 +137,16 @@ export function CommandersLog() {
         }
       });
     });
+    
+    (fxTrades?.trades ?? []).forEach((t: ForexTrade) => {
+      if (t.status === "closed" && (t.pnl_usd ?? 0) > 0) {
+        const pnlPct = t.entry_price > 0 && t.exit_price ? Math.abs(((t.exit_price - t.entry_price) / t.entry_price) * 100) : 0;
+        kills.push({ agent: "Navigator", icon: "🧭", accent: "#14b8a6", symbol: t.pair ?? "?", pnlPct, side: t.direction ?? "long", ts: t.exit_time ?? "" });
+      }
+    });
     kills.sort((a, b) => b.pnlPct - a.pnlPct);
     return kills.slice(0, 8);
-  }, [recentTrades?.trades, djStatus.data, bbStatus.data, caStatus.data]);
+  }, [recentTrades?.trades, djStatus.data, bbStatus.data, caStatus.data, fxTrades?.trades]);
 
   return (
     <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-r from-slate-950/90 via-amber-950/5 to-slate-950/90 p-4 shadow-[0_0_40px_rgba(245,158,11,0.04)]">

@@ -47,8 +47,16 @@ export function FleetPerformanceHero() {
   const totalTrades = alpacaTotal + krakenTotal + optionsTotal + forexTotal;
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
-  const bestKrakenPct = Math.max(0, ...allPerfs.map(p => p?.best_trade_pct ?? 0));
-  const worstKrakenPct = Math.min(0, ...allPerfs.map(p => p?.worst_trade_pct ?? 0));
+  const alpacaBestPct = journal?.trades?.length
+    ? Math.max(0, ...journal.trades.map(t => t.pnl_percentage ?? 0))
+    : 0;
+  const alpacaWorstPct = journal?.trades?.length
+    ? Math.min(0, ...journal.trades.map(t => t.pnl_percentage ?? 0))
+    : 0;
+  const krakenBestPct = Math.max(0, ...allPerfs.map(p => p?.best_trade_pct ?? 0));
+  const krakenWorstPct = Math.min(0, ...allPerfs.map(p => p?.worst_trade_pct ?? 0));
+  const bestKrakenPct = Math.max(alpacaBestPct, krakenBestPct);
+  const worstKrakenPct = Math.min(alpacaWorstPct, krakenWorstPct);
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -67,8 +75,12 @@ export function FleetPerformanceHero() {
     const oracleTodayTrades = journal?.trades?.filter(t => t.date?.startsWith(todayStr)) ?? [];
     const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + (t.pnl_percentage ?? 0), 0);
     results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
-    results.push({ name: "Apex Predator", icon: "🎯", dailyPnl: 0 });
-    results.push({ name: "Navigator", icon: "🧭", dailyPnl: 0 });
+
+    const optionsPnlToday = optState?.total_pnl ?? 0;
+    results.push({ name: "Apex Predator", icon: "🎯", dailyPnl: optionsPnlToday > 0 ? optionsPnlToday : 0 });
+
+    const forexPnlToday = fxState?.total_pnl ?? 0;
+    results.push({ name: "Navigator", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
     const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
     const best = sorted[0] ?? null;

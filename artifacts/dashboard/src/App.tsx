@@ -1,11 +1,18 @@
+import { useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import { RefreshCw } from "lucide-react";
+
+focusManager.setEventListener((handleFocus) => {
+  const handler = () => handleFocus(document.visibilityState === "visible");
+  document.addEventListener("visibilitychange", handler);
+  return () => document.removeEventListener("visibilitychange", handler);
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +24,14 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const CRITICAL_QUERY_KEYS = [
+  ["/status/summary"],
+  ["/status"],
+  ["/health"],
+  ["/portfolio"],
+  ["/positions/live"],
+];
 
 function Router() {
   return (
@@ -49,10 +64,26 @@ function AppCrashFallback() {
   );
 }
 
+function VisibilityRefetcher() {
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        for (const key of CRITICAL_QUERY_KEYS) {
+          queryClient.refetchQueries({ queryKey: key });
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+  return null;
+}
+
 function App() {
   return (
     <ErrorBoundary fallback={<AppCrashFallback />} label="App">
       <QueryClientProvider client={queryClient}>
+        <VisibilityRefetcher />
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />

@@ -743,3 +743,93 @@ async def record_manual_degradation(
         detail=detail,
     )
     return {"recorded": ok}
+
+
+@system_router.get("/status/summary", tags=["System"])
+async def status_summary() -> dict:
+    """Bulk endpoint returning the 5 most frequently polled data points in one call."""
+    from notifications import alert_manager as _alert_mgr
+
+    jobs = get_job_status()
+    last = get_last_run()
+    job_count = len(jobs)
+    last_status = last.get("last_run_status", "never")
+    error_count = last.get("error_count", 0)
+
+    if job_count < EXPECTED_JOB_COUNT:
+        system_status = "degraded"
+    elif last_status in ("error", "analysis_failed", "execution_failed", "kill_switch_tripped"):
+        system_status = "degraded"
+    else:
+        system_status = "online"
+
+    portfolio_totals = {"equity": 0, "cash": 0, "buying_power": 0}
+    try:
+        acct = get_account()
+        portfolio_totals = {
+            "equity": float(acct.get("equity", 0)),
+            "cash": float(acct.get("cash", 0)),
+            "buying_power": float(acct.get("buying_power", 0)),
+        }
+    except Exception:
+        pass
+
+    position_count = 0
+    try:
+        positions = get_positions()
+        position_count = len(positions) if positions else 0
+    except Exception:
+        pass
+
+    bot_statuses = {}
+    try:
+        from routes._deps import KRAKEN_BOT_PROFILES, _get_forex_engine
+        for bot_id, profile in KRAKEN_BOT_PROFILES.items():
+            bot_statuses[bot_id] = {
+                "display_name": profile["display_name"],
+                "status": "running",
+            }
+    except Exception:
+        pass
+
+    try:
+        import importlib
+        opts = importlib.import_module("options_engine")
+        opts_state = opts.get_state()
+        bot_statuses["apex-predator"] = {
+            "display_name": "Apex Predator",
+            "status": "paused" if opts_state.get("paused") else "running",
+        }
+    except Exception:
+        bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}
+
+    try:
+        fx = _get_forex_engine()
+        if fx:
+            fx_state = fx.get_state()
+            bot_statuses["navigator"] = {
+                "display_name": "Navigator",
+                "status": "paused" if fx_state.get("paused") else "running",
+            }
+    except Exception:
+        bot_statuses["navigator"] = {"display_name": "Navigator", "status": "unknown"}
+
+    alert_queue_size = 0
+    try:
+        q_status = _alert_mgr.get_queue_status()
+        alert_queue_size = q_status.get("queue_size", 0)
+    except Exception:
+        pass
+
+    return {
+        "system_health": {
+            "system_status": system_status,
+            "scheduler_job_count": job_count,
+            "last_run_status": last_status,
+            "error_count": error_count,
+        },
+        "portfolio_totals": portfolio_totals,
+        "position_count": position_count,
+        "bot_statuses": bot_statuses,
+        "alert_queue_size": alert_queue_size,
+    }

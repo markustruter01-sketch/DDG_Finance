@@ -196,13 +196,38 @@ export interface PerformanceSummary {
   avg_conviction: number | null;
 }
 
+// --- Bulk Status Summary ---
+
+export interface StatusSummary {
+  system_health: {
+    system_status: "online" | "degraded" | "offline";
+    scheduler_job_count: number;
+    last_run_status: string;
+    error_count: number;
+  };
+  portfolio_totals: { equity: number; cash: number; buying_power: number };
+  position_count: number;
+  bot_statuses: Record<string, { display_name: string; status: string }>;
+  alert_queue_size: number;
+}
+
+export function useStatusSummary() {
+  return useQuery<StatusSummary>({
+    queryKey: ["/status/summary"],
+    queryFn: async () => (await api.get("/status/summary")).data,
+    refetchInterval: 15000,
+    retry: 1,
+    staleTime: 10_000,
+  });
+}
+
 // --- Hooks ---
 
 export function useSystemHealth() {
   return useQuery<SystemHealth>({
     queryKey: ["/health"],
     queryFn: async () => (await api.get("/health")).data,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
     retry: 1,
   });
 }
@@ -211,7 +236,7 @@ export function usePlatformStatus() {
   return useQuery<PlatformStatus>({
     queryKey: ["/status"],
     queryFn: async () => (await api.get("/status")).data,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   });
 }
 

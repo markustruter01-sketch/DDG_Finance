@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
-  usePortfolio, useKrakenFleetSummary, useJournal, usePerformanceHistory,
+  useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useOptionsState, useForexState,
 } from "@/hooks/use-trading";
 import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
 
 export function FleetPerformanceHero() {
-  const { data: portfolio } = usePortfolio();
+  const { data: summary } = useStatusSummary();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
@@ -20,7 +20,7 @@ export function FleetPerformanceHero() {
   const bbStatus = useKrakenStatus("blackbeard");
   const caStatus = useKrakenStatus("calypso");
 
-  const alpacaEquity = portfolio?.account.equity ?? 0;
+  const alpacaEquity = summary?.portfolio_totals.equity ?? 0;
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optState?.total_equity ?? 100_000;
   const forexEquity = fxState?.total_equity ?? 100_000;

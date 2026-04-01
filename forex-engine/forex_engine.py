@@ -269,16 +269,16 @@ def _check_open_positions():
             entry = pos["entry_price"]
 
             field_updates = {}
-            if "original_sl" not in pos:
+            if not pos.get("original_sl"):
                 field_updates["original_sl"] = pos["sl_price"]
                 pos["original_sl"] = pos["sl_price"]
-            if "trailing_sl" not in pos:
+            if not pos.get("trailing_sl"):
                 field_updates["trailing_sl"] = pos["sl_price"]
                 pos["trailing_sl"] = pos["sl_price"]
-            if direction == "long" and "highest_price" not in pos:
+            if direction == "long" and not pos.get("highest_price"):
                 field_updates["highest_price"] = entry
                 pos["highest_price"] = entry
-            if direction == "short" and "lowest_price" not in pos:
+            if direction == "short" and not pos.get("lowest_price"):
                 field_updates["lowest_price"] = entry
                 pos["lowest_price"] = entry
 

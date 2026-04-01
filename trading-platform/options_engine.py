@@ -79,7 +79,6 @@ PAPER_MODE = True
 PAPER_CAPITAL = 100_000.00
 
 CB_LOSS_THRESHOLD = 0.30
-CB_COOLDOWN_HOURS = 24
 
 STATE_DIR = Path(__file__).parent / "_options_state"
 STATE_DIR.mkdir(exist_ok=True)
@@ -508,6 +507,23 @@ def _compute_position_size(fenced_capital: float, premium_per_contract_usd: floa
     return contracts, total_cost
 
 
+def _options_cb_cooldown_expired(tripped_at_iso: str) -> bool:
+    try:
+        from core.market_clock import get_next_open
+        tripped_dt = datetime.fromisoformat(tripped_at_iso)
+        next_open_str = get_next_open()
+        if next_open_str and next_open_str != "unknown":
+            next_open_dt = datetime.fromisoformat(next_open_str.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            if now >= next_open_dt and next_open_dt > tripped_dt:
+                return True
+        elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
+        return elapsed_hours >= 24
+    except Exception:
+        elapsed_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(tripped_at_iso)).total_seconds() / 3600.0
+        return elapsed_hours >= 24
+
+
 def _check_options_circuit_breaker(state: dict, positions: list, deployed_capital: float):
     if deployed_capital <= 0 or not positions:
         return
@@ -536,18 +552,12 @@ def scan_for_setups() -> list[dict]:
 
     if state.get("circuit_breaker_active"):
         tripped_at = state.get("circuit_breaker_tripped_at")
-        if tripped_at:
-            try:
-                tripped_dt = datetime.fromisoformat(tripped_at)
-                elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
-                if elapsed_hours >= CB_COOLDOWN_HOURS:
-                    state["circuit_breaker_active"] = False
-                    state["circuit_breaker_reason"] = None
-                    state["circuit_breaker_tripped_at"] = None
-                    _save_state(state)
-                    logger.info(f"Options | Circuit breaker RESET after {CB_COOLDOWN_HOURS}h cooldown")
-            except Exception:
-                pass
+        if tripped_at and _options_cb_cooldown_expired(tripped_at):
+            state["circuit_breaker_active"] = False
+            state["circuit_breaker_reason"] = None
+            state["circuit_breaker_tripped_at"] = None
+            _save_state(state)
+            logger.info("Options | Circuit breaker RESET — next trading day reached")
 
     if state.get("circuit_breaker_active"):
         logger.warning("Options | Circuit breaker active — skipping scan")
@@ -688,18 +698,12 @@ def approve_trade(trade_id: str) -> dict:
 
         if state.get("circuit_breaker_active"):
             tripped_at = state.get("circuit_breaker_tripped_at")
-            if tripped_at:
-                try:
-                    tripped_dt = datetime.fromisoformat(tripped_at)
-                    elapsed_hours = (datetime.now(timezone.utc) - tripped_dt).total_seconds() / 3600.0
-                    if elapsed_hours >= CB_COOLDOWN_HOURS:
-                        state["circuit_breaker_active"] = False
-                        state["circuit_breaker_reason"] = None
-                        state["circuit_breaker_tripped_at"] = None
-                        _save_state(state)
-                        logger.info(f"Options | Circuit breaker RESET after {CB_COOLDOWN_HOURS}h cooldown (at approve)")
-                except Exception:
-                    pass
+            if tripped_at and _options_cb_cooldown_expired(tripped_at):
+                state["circuit_breaker_active"] = False
+                state["circuit_breaker_reason"] = None
+                state["circuit_breaker_tripped_at"] = None
+                _save_state(state)
+                logger.info("Options | Circuit breaker RESET — next trading day reached (at approve)")
 
         positions = _get_positions()
         deployed = sum(p.get("total_cost", 0) for p in positions)

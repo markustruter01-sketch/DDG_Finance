@@ -265,13 +265,6 @@ def _check_open_positions():
 
     for pair, pos in list(positions.items()):
         try:
-            candles = fetch_h4_candles(pair, count=max(ATR_PERIOD + 5, 20))
-            if candles.empty:
-                continue
-
-            current_price = float(candles.iloc[-1]["Close"])
-            _latest_prices[pair] = current_price
-
             direction = pos["direction"]
             entry = pos["entry_price"]
 
@@ -288,6 +281,17 @@ def _check_open_positions():
             if direction == "short" and "lowest_price" not in pos:
                 field_updates["lowest_price"] = entry
                 pos["lowest_price"] = entry
+
+            if field_updates:
+                update_position_fields(pair, field_updates)
+                field_updates = {}
+
+            candles = fetch_h4_candles(pair, count=max(ATR_PERIOD + 5, 20))
+            if candles.empty:
+                continue
+
+            current_price = float(candles.iloc[-1]["Close"])
+            _latest_prices[pair] = current_price
 
             highs = candles["High"].tolist()
             lows = candles["Low"].tolist()

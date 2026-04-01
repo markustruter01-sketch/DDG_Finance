@@ -1,0 +1,58 @@
+Project: Autonomous AI Forex Swing-Trading Engine (OANDA v20)
+
+Role: Lead Quantitative Developer & Forex Systems Architect.
+
+Objective: Build a Python-based automated Forex trading engine using the OANDA v20 REST API (oandapyV20). The system operates on a 4-Hour (H4) cycle, utilizing a Groq-hosted LLM exclusively for macro-currency sentiment, while relying 100% on algorithmic Python logic for technical execution and risk management. State is managed via a local SQLite database for continuous RAG learning.
+
+CRITICAL ARCHITECTURE CONSTRAINT: LLM Optimization & Separation of Powers
+You must strictly minimize LLM API calls. The Groq LLM is exclusively a "Macro Compass." It runs a maximum of once every 4 hours to read central bank news and output a strict directional bias for the USD (e.g., "USD_BULLISH", "USD_BEARISH", "NEUTRAL").
+Under NO circumstances should the LLM be used to calculate lot sizes, evaluate RSI/ATR numbers, or determine exact entry/exit prices. All technical indicators, mathematical risk sizing (the 1.5% rule), and order execution logic must be handled 100% algorithmically by the Python engine.
+
+Module 1: Asset Universe & Data Ingestion
+
+Broker: Authenticate via oandapyV20 (Practice environment compatible).
+
+Universe: Major pairs only to minimize spread: EUR_USD, GBP_USD, USD_JPY, AUD_USD, USD_CHF.
+
+Data: Fetch the last 100 H4 (4-Hour) candles for each pair to calculate technical indicators.
+
+Module 2: The "News Blackout" Defense
+
+Before running any analysis, query a free Economic Calendar API (or parse ForexFactory RSS).
+
+Hard Rule: If a "High Impact" news event (e.g., FOMC, NFP, CPI) involving USD, EUR, GBP, JPY, AUD, or CHF is scheduled within the next 4 hours, the system enters a "News Blackout." It bypasses the LLM entirely, executes ZERO new trades, and holds current open positions.
+
+Module 3: AI Macro Regime & Technical Filter
+
+The Groq LLM evaluates recent central bank commentary and outputs the USD bias.
+
+Algorithmic Filter: If the LLM outputs "USD_BULLISH", the Python script may only scan for technical short setups on EUR_USD / GBP_USD, and long setups on USD_JPY.
+
+Module 4: Dynamic Risk Execution (ATR & Lot Sizing)
+
+Calculate the 14-Period H4 Average True Range (ATR) and 14-Period RSI for each pair.
+
+Position Sizing: The bot may never risk more than 1.5% of Total Account Equity on a single trade. The Python script must dynamically calculate the correct OANDA unit size based on the pip distance to the stop-loss.
+
+Execution: Fire hard-coded bracket orders.
+
+Stop_Loss = Entry +/- (1.5 * ATR)
+
+Take_Profit = Entry +/- (3.0 * ATR) (Enforces a 1:2 Risk-to-Reward).
+
+Module 5: The SQLite Trade Journal (Memory Loop)
+
+Log all executed trades into forex_journal.db (Ticket ID, Pair, Direction, Entry, SL, TP, LLM Thesis, Final PnL in Pips).
+
+RAG Loop: Before the LLM generates a new thesis, query the database for the last 5 losing trades. Inject their pairs and original theses into the prompt: "Review these recent failed setups. Adjust your current central bank bias to avoid repeating these specific miscalculations."
+
+Module 6: Capital Preservation Vault (Local Ledger)
+
+Track the High-Water Mark (HWM) of the OANDA account balance in the database.
+
+Every Friday at 4:00 PM EST, if Current_Balance > HWM, calculate Sweep = (Current_Balance - HWM) * 0.20.
+
+Log this Sweep amount into a Withdrawable_Vault table in SQLite. The Python execution script must subtract this Vault total from the Available_Margin calculation, ensuring the bot never uses secured profits as margin for future trades.
+
+Your Task:
+Write the comprehensive Python engine (forex_engine.py) that handles the OANDA v20 connection, the News Blackout API logic, the ATR/Unit sizing math, the Groq API integration, and the SQLite memory loop. Ensure all code handles Forex-specific math (Pips and Units, not Shares). Provide a requirements.txt for the necessary libraries.

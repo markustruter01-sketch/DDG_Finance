@@ -295,10 +295,12 @@ def _check_open_positions():
             current_atr = calculate_atr(highs, lows, closes, period=ATR_PERIOD)
 
             if current_atr > 0:
+                candle_high = float(candles.iloc[-1]["High"])
+                candle_low = float(candles.iloc[-1]["Low"])
                 if direction == "long":
-                    if current_price > pos.get("highest_price", entry):
-                        pos["highest_price"] = current_price
-                        field_updates["highest_price"] = current_price
+                    if candle_high > pos.get("highest_price", entry):
+                        pos["highest_price"] = candle_high
+                        field_updates["highest_price"] = candle_high
 
                     pip_size = PIP_SIZE.get(pair, 0.0001)
                     spread_offset = pip_size * 2
@@ -316,9 +318,9 @@ def _check_open_positions():
                         logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
                 else:
-                    if current_price < pos.get("lowest_price", entry):
-                        pos["lowest_price"] = current_price
-                        field_updates["lowest_price"] = current_price
+                    if candle_low < pos.get("lowest_price", entry):
+                        pos["lowest_price"] = candle_low
+                        field_updates["lowest_price"] = candle_low
 
                     pip_size = PIP_SIZE.get(pair, 0.0001)
                     spread_offset = pip_size * 2

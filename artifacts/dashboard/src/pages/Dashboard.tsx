@@ -25,6 +25,7 @@ import { CommandersLog } from "@/components/CommandersLog";
 import { LivePositionsSection } from "@/components/LivePositionsSection";
 import { OptionsSection } from "@/components/OptionsSection";
 import { ForexSection } from "@/components/ForexSection";
+import CountdownTimer from "@/components/CountdownTimer";
 import {
   computeStreak, computeXP,
   KRAKEN_RANKS, ORACLE_RANKS, XPRankBar, KillBoardPanel, StreakChip,
@@ -4657,38 +4658,125 @@ function SystemDegradationSection() {
 
 // ── Bot #5: Apex Predator — Options Engine Section ───────────────────────────
 
+function AlpacaCountdownBanner() {
+  const { data } = usePlatformStatus();
+  const marketOpen = data?.market?.is_open;
+  const nextOpen = data?.market?.next_open;
+  const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'intraday_cycle')?.next_fire_utc;
+
+  if (marketOpen) {
+    return (
+      <CountdownTimer
+        targetISO={nextCycle || null}
+        label="Next Intraday Cycle"
+        sublabel="15-min analysis & execution cycle running during NYSE hours"
+        activeLabel="NYSE Market Open — Oracle Trading Live"
+        color="#10b981"
+        icon={<TrendingUp className="w-5 h-5" style={{ color: '#10b981' }} />}
+        isActive={true}
+      />
+    );
+  }
+
+  return (
+    <CountdownTimer
+      targetISO={nextOpen || null}
+      label="NYSE Market Opens In"
+      sublabel="Oracle bot activates at market open (Mon–Fri 9:30 AM ET)"
+      color="#10b981"
+      icon={<TrendingUp className="w-5 h-5" style={{ color: '#10b981' }} />}
+    />
+  );
+}
+
+function KrakenCountdownBanner() {
+  const { data } = usePlatformStatus();
+  const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'crypto_cycle')?.next_fire_utc;
+
+  return (
+    <CountdownTimer
+      targetISO={nextCycle || null}
+      label="Next Crypto Cycle"
+      sublabel="Kraken fleet runs every 15 min (24/7) — separate 60s bot cycles also active"
+      color="#f59e0b"
+      icon={<Anchor className="w-5 h-5" style={{ color: '#f59e0b' }} />}
+    />
+  );
+}
+
+function OptionsCountdownBanner() {
+  const { data } = usePlatformStatus();
+  const nextScan = data?.scheduler_jobs?.find((j: any) => j.id === 'options_apex_predator')?.next_fire_utc;
+
+  return (
+    <CountdownTimer
+      targetISO={nextScan || null}
+      label="Apex Predator Scan"
+      sublabel="Options volatility scanner fires daily at 3:30 PM ET (Mon–Fri)"
+      color="#ef4444"
+      icon={<Crosshair className="w-5 h-5" style={{ color: '#ef4444' }} />}
+    />
+  );
+}
+
+function ForexCountdownBanner() {
+  const { data } = usePlatformStatus();
+  const nextCycle = data?.scheduler_jobs?.find((j: any) => j.id === 'forex_navigator')?.next_fire_utc;
+
+  return (
+    <CountdownTimer
+      targetISO={nextCycle || null}
+      label="Next Navigator Cycle"
+      sublabel="H4 forex swing analysis runs every 4 hours (24/7)"
+      color="#14b8a6"
+      icon={<Globe className="w-5 h-5" style={{ color: '#14b8a6' }} />}
+    />
+  );
+}
+
 type Tab = 'overview' | 'kraken' | 'alpaca' | 'options' | 'forex' | 'more';
 
 function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
-    { id: 'kraken',   label: 'Kraken',   icon: <Anchor className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
-    { id: 'alpaca',   label: 'Alpaca',   icon: <TrendingUp className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
-    { id: 'options',  label: 'Options',  icon: <Crosshair className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
-    { id: 'forex',    label: 'Forex',    icon: <Globe className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
-    { id: 'more',     label: 'More',     icon: <MoreHorizontal className="h-4 w-4 md:h-3.5 md:w-3.5" /> },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode; color: string }[] = [
+    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-6 w-6" />, color: '#3b82f6' },
+    { id: 'kraken',   label: 'Kraken',   icon: <Anchor className="h-6 w-6" />,         color: '#f59e0b' },
+    { id: 'alpaca',   label: 'Alpaca',   icon: <TrendingUp className="h-6 w-6" />,     color: '#10b981' },
+    { id: 'options',  label: 'Options',  icon: <Crosshair className="h-6 w-6" />,      color: '#ef4444' },
+    { id: 'forex',    label: 'Forex',    icon: <Globe className="h-6 w-6" />,           color: '#14b8a6' },
+    { id: 'more',     label: 'More',     icon: <MoreHorizontal className="h-6 w-6" />,  color: '#8b5cf6' },
   ];
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 backdrop-blur-md border-t border-white/8">
-      <div className="flex items-stretch justify-around h-16 md:h-11 md:max-w-none md:px-4 max-w-lg mx-auto">
-        {tabs.map(({ id, label, icon }) => (
-          <button
-            key={id}
-            onClick={() => onTabChange(id)}
-            className={cn(
-              "relative flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-1.5 flex-1 md:flex-none md:px-5 py-2 transition-all duration-200",
-              activeTab === id
-                ? "text-primary"
-                : "text-muted-foreground/60 hover:text-muted-foreground"
-            )}
-          >
-            {icon}
-            <span className="text-[9px] md:text-[10px] font-semibold tracking-wide uppercase">{label}</span>
-            {activeTab === id && (
-              <span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-8 md:w-full rounded-t-full bg-primary" />
-            )}
-          </button>
-        ))}
+    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
+      <div className="flex items-center justify-center gap-2 sm:gap-3 max-w-xl mx-auto pointer-events-auto">
+        {tabs.map(({ id, label, icon, color }) => {
+          const isActive = activeTab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => onTabChange(id)}
+              className={cn(
+                "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px]",
+                "py-2.5 px-3 sm:px-4",
+                isActive
+                  ? "shadow-lg scale-105"
+                  : "bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-white/[0.12] hover:bg-slate-800/80"
+              )}
+              style={isActive ? {
+                background: `linear-gradient(135deg, ${color}20, ${color}10)`,
+                borderWidth: 1,
+                borderStyle: 'solid',
+                borderColor: `${color}50`,
+                boxShadow: `0 4px 24px ${color}25, 0 0 0 1px ${color}15`,
+              } : undefined}
+            >
+              <span style={{ color: isActive ? color : 'rgb(148,163,184)' }}>{icon}</span>
+              <span
+                className="text-[9px] font-bold tracking-wider uppercase mt-1"
+                style={{ color: isActive ? color : 'rgb(100,116,139)' }}
+              >{label}</span>
+            </button>
+          );
+        })}
       </div>
     </nav>
   );
@@ -4714,7 +4802,7 @@ export default function Dashboard() {
       </div>
       <ActivityTicker />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-20">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-28">
 
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <SafeSection label="Trade Controls">
@@ -4770,6 +4858,10 @@ export default function Dashboard() {
           </>
         )}
 
+        {isTab(['alpaca']) && (
+          <AlpacaCountdownBanner />
+        )}
+
         {isTab(['kraken', 'alpaca']) && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
             {isTab(['alpaca']) && (
@@ -4796,27 +4888,36 @@ export default function Dashboard() {
         )}
 
         {isTab(['kraken']) && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            <SafeSection label="Kraken Fleet">
-              <KrakenFleetSection />
-            </SafeSection>
-          </motion.div>
+          <>
+            <KrakenCountdownBanner />
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+              <SafeSection label="Kraken Fleet">
+                <KrakenFleetSection />
+              </SafeSection>
+            </motion.div>
+          </>
         )}
 
         {isTab(['options']) && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            <SafeSection label="Apex Predator Options Engine">
-              <OptionsSection />
-            </SafeSection>
-          </motion.div>
+          <>
+            <OptionsCountdownBanner />
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+              <SafeSection label="Apex Predator Options Engine">
+                <OptionsSection />
+              </SafeSection>
+            </motion.div>
+          </>
         )}
 
         {isTab(['forex']) && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-            <SafeSection label="The Navigator Forex Engine">
-              <ForexSection />
-            </SafeSection>
-          </motion.div>
+          <>
+            <ForexCountdownBanner />
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+              <SafeSection label="The Navigator Forex Engine">
+                <ForexSection />
+              </SafeSection>
+            </motion.div>
+          </>
         )}
 
         {isTab(['more']) && (

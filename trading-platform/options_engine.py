@@ -615,6 +615,14 @@ def scan_for_setups() -> list[dict]:
         reserved_capital = sum(p.get("total_cost", 0) for p in pending_trades)
         available_capital = fenced_capital - deployed_capital - reserved_capital
 
+        if existing_positions:
+            try:
+                update_position_values()
+                existing_positions = _get_positions()
+                deployed_capital = sum(p.get("total_cost", 0) for p in existing_positions)
+            except Exception as exc:
+                logger.debug(f"Options | Position value refresh failed before CB check: {exc}")
+
         _check_options_circuit_breaker(state, existing_positions, deployed_capital)
         if state.get("circuit_breaker_active"):
             state["status"] = "circuit_breaker"

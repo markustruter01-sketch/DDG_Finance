@@ -2948,7 +2948,7 @@ function LiveEquityCurveSection() {
       kraken: s.kraken_equity,
       options: s.options_equity ?? 0,
       forex: s.forex_equity ?? 0,
-      drawdown: Math.min(total, peak),
+      ddBand: total < peak ? [total, peak] as [number, number] : [total, total] as [number, number],
       regime: s.regime,
     };
   }), [snapshots, peak]);
@@ -3057,7 +3057,7 @@ function LiveEquityCurveSection() {
                 <ReferenceLine y={peak} stroke="#3b82f6" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: `HWM $${(peak / 1000).toFixed(0)}k`, position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
               )}
               {drawdownPct < -0.01 && (
-                <Area type="monotone" dataKey="drawdown" stroke="none" fill="url(#drawdownFill)" fillOpacity={1} isAnimationActive={false} />
+                <Area type="monotone" dataKey="ddBand" stroke="none" fill="url(#drawdownFill)" fillOpacity={1} isAnimationActive={false} />
               )}
               <Line type="monotone" dataKey="total" name="Total Fleet" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
               <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />

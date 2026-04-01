@@ -1,0 +1,6 @@
+{
+  "65f28a7056eba3185cf681db883d1092": {
+    "raw_json": "{\n  \"market_regime\": \"Crypto market with low momentum, cautious approach\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"ETH/USD\",\n           \"asset_class\": \"crypto_spot\",\n           \"conviction_score\": 0.85,\n           \"kelly_fraction\": 0.5,\n           \"thesis\": \"Ethereum shows positive momentum on the 3-month signal and a relatively better performance compared to Bitcoin, making it a preferable choice for allocation.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       },\n       {\n           \"slot\": 2,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 0.9,\n           \"kelly_fraction\": 0.5,\n           \"thesis\": \"Given the cautious market regime and the lack of strong positive momentum in Bitcoin, allocating a significant portion to cash (SGOV) seems prudent to preserve capital.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
+    "saved_at": 1775034711.498883
+  }
+}

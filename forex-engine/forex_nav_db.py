@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS forex_trades (
     exit_time   TIMESTAMPTZ,
     pnl_pips    DOUBLE PRECISION,
     pnl_usd     DOUBLE PRECISION,
-    paper       BOOLEAN          NOT NULL DEFAULT TRUE
+    paper       BOOLEAN          NOT NULL DEFAULT TRUE,
+    final_trailing_sl DOUBLE PRECISION
 );
 CREATE INDEX IF NOT EXISTS idx_forex_trades_entry_time ON forex_trades (entry_time DESC);
 """
@@ -108,6 +109,13 @@ def ensure_schema() -> None:
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(_FOREX_SCHEMA)
+                try:
+                    cur.execute("""
+                        ALTER TABLE forex_trades
+                        ADD COLUMN IF NOT EXISTS final_trailing_sl DOUBLE PRECISION
+                    """)
+                except Exception:
+                    pass
         logger.info("DB | Forex schema verified")
     except Exception as exc:
         logger.error(f"DB | Forex schema bootstrap failed: {exc}")
@@ -283,7 +291,8 @@ def insert_trade(trade: dict) -> bool:
         return False
 
 
-def update_trade_close(trade_id: int, exit_price: float, pnl_pips: float, pnl_usd: float) -> bool:
+def update_trade_close(trade_id: int, exit_price: float, pnl_pips: float, pnl_usd: float,
+                       final_trailing_sl: float | None = None) -> bool:
     if not _is_available():
         return False
     try:
@@ -295,11 +304,12 @@ def update_trade_close(trade_id: int, exit_price: float, pnl_pips: float, pnl_us
                         exit_price = %s,
                         pnl_pips   = %s,
                         pnl_usd    = %s,
+                        final_trailing_sl = %s,
                         status     = 'closed',
                         exit_time  = NOW()
                     WHERE id = %s
                     """,
-                    (exit_price, pnl_pips, pnl_usd, trade_id),
+                    (exit_price, pnl_pips, pnl_usd, final_trailing_sl, trade_id),
                 )
         return True
     except Exception as exc:

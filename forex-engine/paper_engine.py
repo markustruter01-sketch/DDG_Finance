@@ -205,7 +205,8 @@ def paper_close_position(pair: str, current_price: float, reason: str,
             break
 
     if trade_id:
-        _db.update_trade_close(trade_id, current_price, pnl_pips, net_pnl)
+        _db.update_trade_close(trade_id, current_price, pnl_pips, net_pnl,
+                               final_trailing_sl=pos.get("trailing_sl"))
 
     trade_result = {
         "pair": pair,
@@ -234,6 +235,13 @@ def paper_close_position(pair: str, current_price: float, reason: str,
 def get_paper_positions() -> dict:
     p = _load_portfolio()
     return {pair: dict(pos) for pair, pos in p["positions"].items()}
+
+
+def update_position_fields(pair: str, updates: dict) -> None:
+    p = _load_portfolio()
+    if pair in p["positions"]:
+        p["positions"][pair].update(updates)
+        _save_portfolio()
 
 
 def get_paper_portfolio_summary() -> dict:

@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS trades (
     pnl_usd     REAL,
     usd_bias    TEXT,
     rsi_at_entry REAL,
-    atr_at_entry REAL
+    atr_at_entry REAL,
+    final_trailing_sl REAL
 );
 
 CREATE TABLE IF NOT EXISTS withdrawable_vault (
@@ -53,6 +54,11 @@ def _get_conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     if not _journal_init:
         conn.executescript(_SCHEMA)
+        try:
+            conn.execute("ALTER TABLE trades ADD COLUMN final_trailing_sl REAL")
+            conn.commit()
+        except Exception:
+            pass
         _journal_init = True
     return conn
 
@@ -82,13 +88,16 @@ def log_trade_open(
 
 def log_trade_close(
     pair: str, exit_price: float, pnl_pips: float, pnl_usd: float,
+    final_trailing_sl: float | None = None,
 ) -> bool:
     try:
         conn = _get_conn()
         conn.execute(
             """UPDATE trades SET exit_price = ?, pnl_pips = ?, pnl_usd = ?,
+               final_trailing_sl = ?,
                status = 'closed', exit_time = ? WHERE pair = ? AND status = 'open'""",
-            (exit_price, pnl_pips, pnl_usd, datetime.now(tz=timezone.utc).isoformat(), pair),
+            (exit_price, pnl_pips, pnl_usd, final_trailing_sl,
+             datetime.now(tz=timezone.utc).isoformat(), pair),
         )
         conn.commit()
         conn.close()

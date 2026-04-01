@@ -49,7 +49,7 @@ from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
 from paper_engine import (
     get_paper_equity, get_paper_positions, get_paper_portfolio_summary,
     paper_open_position, paper_close_position, get_available_capital,
-    perform_vault_sweep,
+    perform_vault_sweep, update_position_fields,
 )
 import forex_nav_db as _db
 import journal as _journal
@@ -263,8 +263,6 @@ def _check_open_positions():
     if not positions:
         return
 
-    from paper_engine import _save_portfolio
-
     for pair, pos in list(positions.items()):
         try:
             candles = fetch_h4_candles(pair, count=max(ATR_PERIOD + 5, 20))
@@ -277,13 +275,18 @@ def _check_open_positions():
             direction = pos["direction"]
             entry = pos["entry_price"]
 
+            field_updates = {}
             if "original_sl" not in pos:
+                field_updates["original_sl"] = pos["sl_price"]
                 pos["original_sl"] = pos["sl_price"]
             if "trailing_sl" not in pos:
+                field_updates["trailing_sl"] = pos["sl_price"]
                 pos["trailing_sl"] = pos["sl_price"]
             if direction == "long" and "highest_price" not in pos:
+                field_updates["highest_price"] = entry
                 pos["highest_price"] = entry
             if direction == "short" and "lowest_price" not in pos:
+                field_updates["lowest_price"] = entry
                 pos["lowest_price"] = entry
 
             highs = candles["High"].tolist()
@@ -295,6 +298,7 @@ def _check_open_positions():
                 if direction == "long":
                     if current_price > pos.get("highest_price", entry):
                         pos["highest_price"] = current_price
+                        field_updates["highest_price"] = current_price
 
                     pip_size = PIP_SIZE.get(pair, 0.0001)
                     spread_offset = pip_size * 2
@@ -302,16 +306,19 @@ def _check_open_positions():
                         be_sl = entry + spread_offset
                         if be_sl > pos["trailing_sl"]:
                             pos["trailing_sl"] = round(be_sl, 5)
+                            field_updates["trailing_sl"] = pos["trailing_sl"]
                             logger.info(f"Forex | BREAKEVEN lock on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
                     new_trail = pos["highest_price"] - (TRAIL_ATR_MULT * current_atr)
                     if new_trail > pos["trailing_sl"]:
                         pos["trailing_sl"] = round(new_trail, 5)
+                        field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
                 else:
                     if current_price < pos.get("lowest_price", entry):
                         pos["lowest_price"] = current_price
+                        field_updates["lowest_price"] = current_price
 
                     pip_size = PIP_SIZE.get(pair, 0.0001)
                     spread_offset = pip_size * 2
@@ -319,15 +326,20 @@ def _check_open_positions():
                         be_sl = entry - spread_offset
                         if be_sl < pos["trailing_sl"]:
                             pos["trailing_sl"] = round(be_sl, 5)
+                            field_updates["trailing_sl"] = pos["trailing_sl"]
                             logger.info(f"Forex | BREAKEVEN lock on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
                     new_trail = pos["lowest_price"] + (TRAIL_ATR_MULT * current_atr)
                     if new_trail < pos["trailing_sl"]:
                         pos["trailing_sl"] = round(new_trail, 5)
+                        field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
+                field_updates["sl_price"] = pos["trailing_sl"]
                 pos["sl_price"] = pos["trailing_sl"]
-                _save_portfolio()
+
+            if field_updates:
+                update_position_fields(pair, field_updates)
 
             sl = pos["sl_price"]
             tp = pos["tp_price"]
@@ -335,11 +347,13 @@ def _check_open_positions():
             def _close_and_journal(p, cp, reason):
                 result = paper_close_position(p, cp, reason, latest_prices=_latest_prices)
                 if result:
-                    result["final_trailing_sl"] = pos.get("trailing_sl")
+                    final_tsl = pos.get("trailing_sl")
+                    result["final_trailing_sl"] = final_tsl
                     try:
                         _journal.log_trade_close(
                             pair=PAIR_LABELS.get(p, p), exit_price=cp,
                             pnl_pips=result.get("pnl_pips", 0), pnl_usd=result.get("pnl_usd", 0),
+                            final_trailing_sl=final_tsl,
                         )
                     except Exception:
                         pass

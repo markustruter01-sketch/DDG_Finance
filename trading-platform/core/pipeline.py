@@ -423,6 +423,7 @@ async def _run_pipeline_inner(
         logger.warning(msg)
         result["status"] = "kill_switch_tripped"
         result["errors"].append(msg)
+        _persist_emergency_regime(spy_override, spy_change, cycle_num)
         _update_state(result, started, trading_mode="kill_switch")
         return result
 
@@ -445,6 +446,7 @@ async def _run_pipeline_inner(
         logger.error(f"Pipeline | Execution FAILED: {exc}")
         result["status"] = "execution_failed"
         result["errors"].append(f"Execution failed: {exc}")
+        _persist_emergency_regime(spy_override, spy_change, cycle_num)
         _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
         return result
 

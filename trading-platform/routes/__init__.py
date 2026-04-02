@@ -6,6 +6,7 @@ from .kraken import kraken_router
 from .options import options_router
 from .forex import forex_router
 from .alerts import alerts_router
+from .fleet_chat import fleet_chat_router
 
 ALL_ROUTERS = [
     system_router,
@@ -16,4 +17,5 @@ ALL_ROUTERS = [
     options_router,
     forex_router,
     alerts_router,
+    fleet_chat_router,
 ]

@@ -57,6 +57,7 @@ import {
   Lightbulb, Play, LogOut, ExternalLink, Copy, Bug,
   LayoutDashboard, MoreHorizontal, Anchor, Database, FileDown,
   Crosshair, Clock, Search, ThumbsUp, ThumbsDown, Pause, Globe, Navigation, Radio,
+  Bot,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -4871,6 +4872,17 @@ function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab:
             </button>
           );
         })}
+        <button
+          onClick={() => navigate('/commander')}
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-emerald-500/40 hover:bg-slate-800/80 group"
+        >
+          <span style={{ color: 'rgb(148,163,184)' }}>
+            <Bot className="h-6 w-6 group-hover:text-emerald-400 transition-colors" />
+          </span>
+          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-emerald-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
+            CMD
+          </span>
+        </button>
         <button
           onClick={() => navigate('/streaming')}
           className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-rose-500/40 hover:bg-slate-800/80 group"

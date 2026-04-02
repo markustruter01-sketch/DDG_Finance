@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import { RefreshCw } from "lucide-react";
 
 const StreamingScreen = lazy(() => import("@/pages/StreamingScreen"));
+const CommanderPage = lazy(() => import("@/pages/CommanderPage"));
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
 installVisibilityListener();
@@ -51,6 +52,11 @@ function Router() {
       <Route path="/streaming">
         <Suspense fallback={<StreamingLoader />}>
           <StreamingScreen />
+        </Suspense>
+      </Route>
+      <Route path="/commander">
+        <Suspense fallback={<StreamingLoader />}>
+          <CommanderPage />
         </Suspense>
       </Route>
       <Route component={NotFound} />

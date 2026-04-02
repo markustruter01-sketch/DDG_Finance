@@ -229,34 +229,41 @@ export function useRealCelebrations() {
     playTradeWin();
   }, []);
 
+  const realProfitsRef = useRef(realProfits);
+  realProfitsRef.current = realProfits;
+  const fleetStatsRef = useRef(fleetStats);
+  fleetStatsRef.current = fleetStats;
+  const triggerExplosionRef = useRef(triggerExplosion);
+  triggerExplosionRef.current = triggerExplosion;
+  const triggerAchievementRef = useRef(triggerAchievement);
+  triggerAchievementRef.current = triggerAchievement;
+  const cycleCount = useRef(0);
+
   useEffect(() => {
-    if (realProfits.length === 0) return;
-
-    const interval = setInterval(() => {
-      const idx = rotationIdx.current % realProfits.length;
+    const tick = () => {
+      const profits = realProfitsRef.current;
+      if (profits.length === 0) return;
+      const idx = rotationIdx.current % profits.length;
       rotationIdx.current++;
-      const entry = realProfits[idx];
-
-      const roll = Math.random();
-      if (roll < 0.35) {
-        triggerExplosion(entry);
+      const entry = profits[idx];
+      const isExplosionTurn = cycleCount.current % 2 === 0;
+      cycleCount.current++;
+      if (isExplosionTurn) {
+        triggerExplosionRef.current(entry);
       } else {
-        triggerAchievement(entry, fleetStats);
+        triggerAchievementRef.current(entry, fleetStatsRef.current);
       }
-    }, 15000);
+    };
 
-    const initTimer = setTimeout(() => {
-      if (realProfits.length > 0) {
-        triggerAchievement(realProfits[0], fleetStats);
-      }
-    }, 3000);
+    const initTimer = setTimeout(tick, 3000);
+    const interval = setInterval(tick, 15000);
 
     return () => {
       clearInterval(interval);
       clearTimeout(initTimer);
       if (explosionTimeout.current) clearTimeout(explosionTimeout.current);
     };
-  }, [realProfits, fleetStats, triggerExplosion, triggerAchievement]);
+  }, []);
 
   return { explosion, achievements };
 }

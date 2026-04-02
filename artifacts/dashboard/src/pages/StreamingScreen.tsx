@@ -96,9 +96,7 @@ export default function StreamingScreen() {
               <VaultDisplay />
             </div>
             <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
-            <div className="shrink-0">
-              <GeminiThinking />
-            </div>
+            <GeminiThinking />
           </div>
         </div>
       </div>

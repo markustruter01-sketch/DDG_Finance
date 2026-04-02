@@ -111,8 +111,8 @@ export function NerveCenter() {
           style={{
             top: `${scanY}%`,
             height: "2px",
-            background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.4), rgba(34,211,238,0.8), rgba(34,211,238,0.4), transparent)",
-            boxShadow: "0 0 8px rgba(34,211,238,0.5), 0 0 20px rgba(34,211,238,0.2)",
+            background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.2), rgba(34,211,238,0.4), rgba(34,211,238,0.2), transparent)",
+            boxShadow: "0 0 6px rgba(34,211,238,0.25), 0 0 14px rgba(34,211,238,0.1)",
             transition: "top 30ms linear",
           }}
         />
@@ -121,7 +121,7 @@ export function NerveCenter() {
           style={{
             top: `${scanY}%`,
             height: "30px",
-            background: "linear-gradient(180deg, rgba(34,211,238,0.06), transparent)",
+            background: "linear-gradient(180deg, rgba(34,211,238,0.03), transparent)",
             transform: "translateY(-100%)",
           }}
         />

@@ -147,21 +147,21 @@ export function GlobalHUD() {
                 </div>
               ) : (
                 <>
-                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
+                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
                   {"isPlatformBalance" in card && card.isPlatformBalance ? (
                     <motion.div
-                      className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
+                      className={cn("text-2xl font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
                       animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"], scale: [1, 1.02, 1] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
                       <AnimatedValue value={card.value} />
                     </motion.div>
                   ) : (
-                    <div className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
+                    <div className={cn("text-2xl font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
                       <AnimatedValue value={card.value} />
                     </div>
                   )}
-                  <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
+                  <div className="text-[11px] text-muted-foreground/50 mt-0.5 font-mono">
                     <AnimatedValue value={card.sub} />
                   </div>
                 </>
@@ -181,8 +181,8 @@ export function GlobalHUD() {
             animate="visible"
             className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-1.5"
           >
-            <div className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
-            <div className={cn("text-xs font-mono font-bold mt-0.5", m.color)}>
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
+            <div className={cn("text-sm font-mono font-bold mt-0.5", m.color)}>
               <AnimatedValue value={m.value} />
             </div>
           </motion.div>

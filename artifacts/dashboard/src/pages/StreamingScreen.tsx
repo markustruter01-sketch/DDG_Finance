@@ -2,12 +2,13 @@ import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { Scoreboard } from "@/components/streaming/Scoreboard";
 import { NerveCenter } from "@/components/streaming/NerveCenter";
 import { SignalRadar } from "@/components/streaming/SignalRadar";
+import { VaultDisplay } from "@/components/streaming/VaultDisplay";
 import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
 export default function StreamingScreen() {
-  const { trades, explosion, wins, losses } = useSimulatedFeed(20);
+  const { trades, explosion, wins, losses } = useSimulatedFeed(15);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden">
@@ -25,8 +26,9 @@ export default function StreamingScreen() {
             <NerveCenter />
           </div>
 
-          <div className="col-span-3 min-h-0 overflow-y-auto">
+          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-4">
             <SignalRadar />
+            <VaultDisplay />
           </div>
         </div>
       </div>

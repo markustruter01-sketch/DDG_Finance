@@ -10,13 +10,6 @@ import {
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
-const BOUNDS: Record<string, { min: number; max: number; step: number }> = {
-  ZSCORE_ENTRY: { min: 0.70, max: 1.50, step: 0.05 },
-  ZSCORE_EXIT: { min: 0.10, max: 0.55, step: 0.02 },
-  STOP_LOSS_PCT: { min: 0.008, max: 0.040, step: 0.002 },
-  TRAIL_PCT: { min: 0.030, max: 0.100, step: 0.005 },
-  MIN_NET_PROFIT_PCT: { min: 0.006, max: 0.020, step: 0.001 },
-};
 
 interface ChatMessage {
   id: string;
@@ -66,10 +59,11 @@ function formatParamValue(name: string, val: number): string {
   return val.toFixed(name.includes("PCT") ? 3 : 2);
 }
 
-function ParamChangeCard({ botId, params, currentParams }: {
+function ParamChangeCard({ botId, params, currentParams, bounds }: {
   botId: string;
   params: Record<string, number>;
   currentParams?: Record<string, number>;
+  bounds?: Record<string, BotParamBounds>;
 }) {
   return (
     <div className="rounded-lg border border-white/[0.08] bg-slate-900/60 p-2.5 mb-1.5">
@@ -77,7 +71,7 @@ function ParamChangeCard({ botId, params, currentParams }: {
       <div className="space-y-1">
         {Object.entries(params).map(([pname, target]) => {
           const current = currentParams?.[pname];
-          const bounds = BOUNDS[pname];
+          const b = bounds?.[pname];
           return (
             <div key={pname} className="flex items-center gap-2 text-[11px]">
               <span className="text-slate-400 font-mono w-28 flex-shrink-0">{formatParamName(pname)}</span>
@@ -90,8 +84,8 @@ function ParamChangeCard({ botId, params, currentParams }: {
               ) : (
                 <span className="font-mono text-white font-bold">{formatParamValue(pname, target)}</span>
               )}
-              {bounds && (
-                <span className="text-slate-600 text-[9px] ml-auto">[{formatParamValue(pname, bounds.min)}-{formatParamValue(pname, bounds.max)}]</span>
+              {b && (
+                <span className="text-slate-600 text-[9px] ml-auto">[{formatParamValue(pname, b.min)}-{formatParamValue(pname, b.max)}]</span>
               )}
             </div>
           );
@@ -101,12 +95,13 @@ function ParamChangeCard({ botId, params, currentParams }: {
   );
 }
 
-function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParams }: {
+function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParams, botBounds }: {
   msg: ChatMessage;
   onApprove?: (id: string) => void;
   onDecline?: (id: string) => void;
   isApproving?: boolean;
   currentBotParams?: Record<string, Record<string, number>>;
+  botBounds?: Record<string, Record<string, BotParamBounds>>;
 }) {
   const isUser = msg.role === "user";
   const meta = msg.metadata || {};
@@ -154,6 +149,7 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParam
                     botId={rec.bot_id}
                     params={rec.params || {}}
                     currentParams={currentBotParams?.[rec.bot_id]}
+                    bounds={botBounds?.[rec.bot_id]}
                   />
                 ))}
               </div>
@@ -204,7 +200,7 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParam
 }
 
 function ParamsPanel() {
-  const { data } = useQuery({
+  const { data } = useQuery<FleetParamsResponse>({
     queryKey: ["fleet-params"],
     queryFn: async () => {
       const r = await fetch(`${BASE}/fleet-commander/params`);
@@ -304,10 +300,14 @@ export default function CommanderPage() {
   });
 
   const currentBotParams: Record<string, Record<string, number>> = {};
+  const botBounds: Record<string, Record<string, BotParamBounds>> = {};
   if (paramsData?.bots) {
     for (const [botId, botData] of Object.entries(paramsData.bots) as [string, BotParamData][]) {
       if (botData.current) {
         currentBotParams[botId] = botData.current;
+      }
+      if (botData.bounds) {
+        botBounds[botId] = botData.bounds;
       }
     }
   }
@@ -448,6 +448,7 @@ export default function CommanderPage() {
                   onDecline={(id) => approveMutation.mutate({ messageId: id, approved: false })}
                   isApproving={approveMutation.isPending}
                   currentBotParams={currentBotParams}
+                  botBounds={botBounds}
                 />
               ))}
             </AnimatePresence>

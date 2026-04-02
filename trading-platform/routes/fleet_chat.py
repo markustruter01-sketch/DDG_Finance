@@ -155,28 +155,6 @@ RULES:
 """
 
 
-def _ensure_chat_table() -> None:
-    if not is_pg_available():
-        return
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS fleet_commander_chat (
-                        id          TEXT PRIMARY KEY,
-                        ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        role        TEXT NOT NULL,
-                        content     TEXT NOT NULL,
-                        source      TEXT NOT NULL DEFAULT 'user',
-                        metadata    JSONB DEFAULT '{}'
-                    );
-                    CREATE INDEX IF NOT EXISTS idx_fleet_chat_ts ON fleet_commander_chat (ts DESC);
-                """)
-    except Exception as exc:
-        logger.warning(f"FleetChat | Table creation failed: {exc}")
-
-
-_ensure_chat_table()
 
 
 def _save_message(role: str, content: str, source: str = "user", metadata: dict | None = None) -> str:

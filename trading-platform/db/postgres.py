@@ -314,6 +314,7 @@ CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
 -- Multi-bot adaptive params upserted by adaptive_params.py every adaptation cycle.
 CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
     id          INTEGER PRIMARY KEY,
+    bot_id      TEXT,
     params      JSONB NOT NULL DEFAULT '{}',
     metrics     JSONB,
     reasons     JSONB,
@@ -382,6 +383,7 @@ def ensure_schema() -> None:
                 cur.execute("ALTER TABLE kraken_trades ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id)")
                 cur.execute("ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check")
+                cur.execute("ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS bot_id TEXT")
         logger.info("DB | Kraken multi-bot migrations applied")
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   useStatusSummary, useKrakenFleetSummary, useOptionsState, useForexState,
-  useJournal, useKrakenPerformance,
+  useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
 
 const cardVariants = {
@@ -22,6 +22,9 @@ export function GlobalHUD() {
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
 
   const alpacaEquity = summary?.portfolio_totals?.equity ?? 0;
   const krakenEquity = fleet?.total_equity_usd ?? 0;
@@ -43,15 +46,21 @@ export function GlobalHUD() {
   const totalTrades = alpacaTotal + krakenTotal + optTotal + fxTotal;
   const winRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0;
 
-  const isArmed = summary?.market_open ?? false;
+  const oracleActive = !!(summary?.market_open);
+  const djActive = !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused);
+  const bbActive = !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused);
+  const caActive = !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused);
+  const apexActive = !!(optState && !optState.paused);
+  const navActive = !!(fxState && !fxState.paused);
+  const activeBots = [oracleActive, djActive, bbActive, caActive, apexActive, navActive].filter(Boolean).length;
 
   const cards = [
     {
-      label: "SYSTEM STATUS",
-      value: isArmed ? "🟢 ARMED" : "🔴 CLOSED",
-      sub: "6 bots · 4 pools",
-      glow: "from-green-500/20 via-green-500/5 to-transparent",
-      border: "border-green-500/30",
+      label: "FLEET STATUS",
+      value: `${activeBots}/6 Bots Live`,
+      sub: `${activeBots > 0 ? "actively trading" : "standing by"} · 4 capital pools`,
+      glow: activeBots > 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-amber-500/20 via-amber-500/5 to-transparent",
+      border: activeBots > 0 ? "border-green-500/30" : "border-amber-500/30",
     },
     {
       label: "COMBINED P&L",

@@ -10,8 +10,8 @@ interface ScoreboardProps {
 
 export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2">
+    <div className="flex flex-col gap-2 flex-1 min-h-0">
+      <div className="grid grid-cols-2 gap-2 shrink-0">
         <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-2 text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-t from-green-500/10 to-transparent" />
           <div className="relative">
@@ -44,11 +44,11 @@ export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0">
-        <div className="px-2.5 py-1.5 border-b border-white/5 text-[8px] uppercase font-bold tracking-widest text-muted-foreground/50">
+      <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0 flex flex-col">
+        <div className="px-2.5 py-1.5 border-b border-white/5 text-[8px] uppercase font-bold tracking-widest text-muted-foreground/50 shrink-0">
           Closed Trades Feed
         </div>
-        <div className="max-h-[180px] overflow-y-auto scrollbar-thin">
+        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
           <AnimatePresence initial={false}>
             {trades.map((trade) => (
               <motion.div

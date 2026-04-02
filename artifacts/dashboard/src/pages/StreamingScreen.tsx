@@ -11,6 +11,7 @@ import { AchievementFeed } from "@/components/streaming/AchievementFeed";
 import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
 import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
+import { SessionStats } from "@/components/streaming/SessionStats";
 import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
 function StreamingNavBar() {
@@ -72,10 +73,14 @@ export default function StreamingScreen() {
         <GlobalHUD />
 
         <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-2">
+          <div className="col-span-3 min-h-0 flex flex-col gap-2">
             <Scoreboard wins={wins} losses={losses} trades={trades} />
-            <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
-            <BotLeaderboard botStats={botStats} />
+            <div className="shrink-0">
+              <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
+            </div>
+            <div className="shrink-0">
+              <BotLeaderboard botStats={botStats} />
+            </div>
           </div>
 
           <div className="col-span-6 min-h-0 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40">
@@ -83,8 +88,13 @@ export default function StreamingScreen() {
           </div>
 
           <div className="col-span-3 min-h-0 flex flex-col gap-2">
-            <SignalRadar />
-            <VaultDisplay />
+            <div className="shrink-0">
+              <SignalRadar />
+            </div>
+            <div className="shrink-0">
+              <VaultDisplay />
+            </div>
+            <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
           </div>
         </div>
       </div>

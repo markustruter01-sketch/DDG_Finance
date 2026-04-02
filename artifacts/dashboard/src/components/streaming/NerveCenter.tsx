@@ -109,8 +109,8 @@ export function NerveCenter() {
   const { thought, key: thoughtKey } = useGeminiThinking();
 
   const cx = 200;
-  const cy = 185;
-  const radius = 145;
+  const cy = 165;
+  const radius = 115;
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
@@ -118,8 +118,8 @@ export function NerveCenter() {
     <div className="flex flex-col h-full">
       <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1">Nerve Center</div>
 
-      <div className="flex-1 flex items-center justify-center relative">
-        <svg viewBox="0 0 400 380" className="w-full h-full">
+      <div className="flex-1 flex items-center justify-center relative p-2">
+        <svg viewBox="0 0 400 360" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
               <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
@@ -140,11 +140,11 @@ export function NerveCenter() {
             </filter>
           </defs>
 
-          <circle cx={cx} cy={cy} r={95} fill="url(#brainGlow)" />
-          <circle cx={cx} cy={cy} r={60} fill="url(#brainCore)" />
+          <circle cx={cx} cy={cy} r={85} fill="url(#brainGlow)" />
+          <circle cx={cx} cy={cy} r={55} fill="url(#brainCore)" />
 
           <motion.circle
-            cx={cx} cy={cy} r={65}
+            cx={cx} cy={cy} r={58}
             fill="none"
             stroke="rgba(139,92,246,0.15)"
             strokeWidth={1}
@@ -153,7 +153,7 @@ export function NerveCenter() {
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           />
           <motion.circle
-            cx={cx} cy={cy} r={55}
+            cx={cx} cy={cy} r={48}
             fill="none"
             stroke="rgba(99,102,241,0.2)"
             strokeWidth={1}
@@ -162,7 +162,7 @@ export function NerveCenter() {
             style={{ transformOrigin: `${cx}px ${cy}px` }}
           />
           <motion.circle
-            cx={cx} cy={cy} r={48}
+            cx={cx} cy={cy} r={42}
             fill="none"
             stroke="rgba(167,139,250,0.12)"
             strokeWidth={1.5}
@@ -172,7 +172,7 @@ export function NerveCenter() {
           />
 
           <motion.circle
-            cx={cx} cy={cy} r={42}
+            cx={cx} cy={cy} r={38}
             fill="rgba(99,102,241,0.06)"
             stroke="rgba(129,140,248,0.5)"
             strokeWidth={2}
@@ -207,47 +207,53 @@ export function NerveCenter() {
             const by = cy + Math.sin(rad) * radius;
             const active = botActive[bot.id] ?? false;
 
+            const dx = bx - cx;
+            const dy = by - cy;
+            const midX = cx + dx;
+            const midY = cy;
+            const orthoPath = Math.abs(dx) > Math.abs(dy)
+              ? `M ${cx} ${cy} L ${midX} ${midY} L ${bx} ${by}`
+              : `M ${cx} ${cy} L ${cx} ${by} L ${bx} ${by}`;
+
             return (
               <g key={bot.id}>
                 {active && (
                   <>
-                    <motion.line
-                      x1={cx} y1={cy} x2={bx} y2={by}
+                    <motion.path
+                      d={orthoPath}
                       stroke={bot.color}
                       strokeWidth={2}
+                      fill="none"
                       filter="url(#neonGlow)"
                       animate={{ opacity: [0.2, 0.7, 0.2] }}
                       transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                     />
-                    <motion.g
-                      animate={{ opacity: [1, 0] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "linear", delay: Math.random() * 2 }}
+                    <motion.circle
+                      r={4}
+                      fill={bot.color}
+                      filter="url(#neonGlow)"
                     >
-                      <motion.circle
-                        cx={cx} cy={cy} r={4}
-                        fill={bot.color}
-                        filter="url(#neonGlow)"
-                        animate={{
-                          x: [0, bx - cx],
-                          y: [0, by - cy],
-                        }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear", delay: Math.random() * 2 }}
+                      <animateMotion
+                        dur="2s"
+                        repeatCount="indefinite"
+                        path={orthoPath}
                       />
-                    </motion.g>
+                    </motion.circle>
                   </>
                 )}
                 {!active && (
-                  <line
-                    x1={cx} y1={cy} x2={bx} y2={by}
+                  <path
+                    d={orthoPath}
                     stroke="rgba(100,116,139,0.35)"
                     strokeWidth={1}
                     strokeDasharray="6 4"
+                    fill="none"
                   />
                 )}
 
                 {active && (
                   <motion.circle
-                    cx={bx} cy={by} r={34}
+                    cx={bx} cy={by} r={30}
                     fill="none"
                     stroke={bot.color}
                     strokeWidth={1}
@@ -258,26 +264,26 @@ export function NerveCenter() {
                 )}
 
                 <circle
-                  cx={bx} cy={by} r={27}
+                  cx={bx} cy={by} r={24}
                   fill={active ? `${bot.color}15` : "rgba(30,30,40,0.6)"}
                   stroke={active ? bot.color : "rgba(100,116,139,0.3)"}
                   strokeWidth={active ? 2.5 : 1}
                   filter={active ? "url(#neonGlow)" : undefined}
                 />
 
-                <text x={bx} y={by - 1} textAnchor="middle" fontSize="20">{bot.icon}</text>
+                <text x={bx} y={by - 1} textAnchor="middle" fontSize="18">{bot.icon}</text>
                 <text
-                  x={bx} y={by + 17}
+                  x={bx} y={by + 16}
                   textAnchor="middle"
                   fill={active ? bot.color : "rgba(100,116,139,0.5)"}
-                  fontSize="7"
+                  fontSize="6.5"
                   fontWeight="bold"
                 >
                   {bot.name.toUpperCase()}
                 </text>
 
                 {!active && (
-                  <text x={bx + 22} y={by - 17} fontSize="12">💤</text>
+                  <text x={bx + 20} y={by - 15} fontSize="11">💤</text>
                 )}
               </g>
             );

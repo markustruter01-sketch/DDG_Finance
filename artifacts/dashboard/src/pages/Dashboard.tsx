@@ -384,11 +384,13 @@ function FleetStatusBar() {
         online: summary != null,
         status: tradingMode === "full_market" ? "running" : tradingMode === "crypto_only" ? "paused" : "idle",
         cycles: summary?.system_health?.run_count ?? 0,
+        lastCycle: summary?.system_health?.last_run?.last_run_utc ?? null,
       };
     }
     if (botDef.type === "kraken") {
       const bot = fleetSummary?.bots?.find(b => b.bot_id === botDef.id);
       const perf = botDef.id === "davy-jones" ? davyPerf : botDef.id === "blackbeard" ? bbPerf : caPerf;
+      const lastTrade = perf?.recent_trades?.[0]?.closed_at ?? null;
       return {
         equity: bot?.equity_usd ?? null,
         pnl: bot?.pnl_usd ?? null,
@@ -396,6 +398,7 @@ function FleetStatusBar() {
         online: bot != null,
         status: perf?.bot_status ?? (bot ? "running" : "offline"),
         cycles: perf?.cycle_count ?? 0,
+        lastCycle: lastTrade,
       };
     }
     if (botDef.type === "options") {
@@ -406,6 +409,7 @@ function FleetStatusBar() {
         online: optionsState?.status === "running" || optionsState?.status === "idle",
         status: optionsState?.paused ? "paused" : optionsState?.status ?? "offline",
         cycles: optionsState?.cycle_count ?? 0,
+        lastCycle: optionsState?.last_scan ?? null,
       };
     }
     return {
@@ -415,6 +419,7 @@ function FleetStatusBar() {
       online: forexState?.status === "running" || forexState?.status === "idle",
       status: forexState?.paused ? "paused" : forexState?.status ?? "offline",
       cycles: forexState?.cycle_count ?? 0,
+      lastCycle: forexState?.last_scan ?? null,
     };
   };
 
@@ -471,6 +476,11 @@ function FleetStatusBar() {
                   {normalizeStatus(d.status) === "running" ? "RUN" : normalizeStatus(d.status) === "paused" ? "PAUSE" : "OFF"}
                 </span>
                 <span className="text-[8px] text-muted-foreground/40 font-mono">c{d.cycles}</span>
+                {d.lastCycle && (
+                  <span className="text-[7px] text-muted-foreground/30 font-mono ml-auto" title={d.lastCycle}>
+                    {(() => { try { const dt = new Date(d.lastCycle); const now = Date.now(); const mins = Math.floor((now - dt.getTime()) / 60000); return mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`; } catch { return ""; } })()}
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -675,18 +685,22 @@ function CombinedTradeHistorySection() {
       botId: "oracle" as const,
       symbol: t.symbol,
       side: t.pnl_pct >= 0 ? "long" : "short",
+      entry: null as number | null,
+      exit: null as number | null,
       pnl_pct: t.pnl_pct,
       pnl_usd: t.pnl_usd,
       closed_at: t.closed_at,
       reason: t.exit_reason ?? "",
       is_win: t.pnl_pct > 0,
     }));
-    const makeKrakenRows = (trades: Array<{ symbol: string; side: string; pnl_pct: number; pnl_usd: number; reason: string; closed_at: string }> | undefined, botId: "davy-jones" | "blackbeard" | "calypso") =>
+    const makeKrakenRows = (trades: Array<{ symbol: string; side: string; entry_price: number; exit_price: number; pnl_pct: number; pnl_usd: number; reason: string; closed_at: string }> | undefined, botId: "davy-jones" | "blackbeard" | "calypso") =>
       (trades ?? []).map((t) => ({
         source: "kraken" as const,
         botId,
         symbol: t.symbol.replace("/USD", ""),
         side: t.side,
+        entry: t.entry_price as number | null,
+        exit: t.exit_price as number | null,
         pnl_pct: t.pnl_pct,
         pnl_usd: t.pnl_usd,
         closed_at: t.closed_at,
@@ -703,6 +717,8 @@ function CombinedTradeHistorySection() {
         botId: "navigator" as const,
         symbol: t.pair,
         side: t.direction,
+        entry: t.entry_price as number | null,
+        exit: t.exit_price as number | null,
         pnl_pct: t.pnl_usd != null && t.entry_price > 0 ? (t.pnl_usd / (t.units * t.entry_price)) * 100 : 0,
         pnl_usd: t.pnl_usd,
         closed_at: t.exit_time!,
@@ -803,12 +819,16 @@ function CombinedTradeHistorySection() {
             <p className="text-[10px] text-muted-foreground/30">History will appear here as positions close</p>
           </div>
         ) : (
-          <div className="max-h-72 overflow-y-auto divide-y divide-white/5">
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 px-4 py-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10">
+          <div className="max-h-80 overflow-y-auto overflow-x-auto divide-y divide-white/5">
+            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-x-2 px-4 py-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10 min-w-[640px]">
               <span>Bot</span>
               <span>Asset</span>
+              <span>Side</span>
+              <span className="text-right hidden md:block">Entry</span>
+              <span className="text-right hidden md:block">Exit</span>
               <span className="text-right">P&amp;L %</span>
               <span className="text-right hidden sm:block">P&amp;L $</span>
+              <span className="hidden lg:block">Reason</span>
               <span className="text-right">Date</span>
             </div>
             {filtered.map((t, i) => {
@@ -817,26 +837,28 @@ function CombinedTradeHistorySection() {
                 <div
                   key={i}
                   className={cn(
-                    "grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 items-center px-4 py-2.5 text-[11px] transition-colors hover:bg-white/2",
+                    "grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-x-2 items-center px-4 py-2 text-[11px] transition-colors hover:bg-white/[0.02] min-w-[640px]",
                     t.is_win ? "border-l-2 border-green-500/20" : "border-l-2 border-red-500/20"
                   )}
                 >
                   <span className={cn("text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0", sc.badgeStyle)}>
                     {sc.badge}
                   </span>
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono font-bold text-white/90 truncate">{t.symbol}</span>
-                    {t.source === "kraken" && (
-                      <span className={cn(
-                        "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded shrink-0",
-                        t.side === "long"
-                          ? "text-blue-400/80 bg-blue-500/10"
-                          : "text-purple-400/80 bg-purple-500/10"
-                      )}>
-                        {t.side}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-mono font-bold text-white/90 truncate">{t.symbol}</span>
+                  <span className={cn(
+                    "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded shrink-0",
+                    t.side === "long"
+                      ? "text-green-400/80 bg-green-500/10"
+                      : "text-red-400/80 bg-red-500/10"
+                  )}>
+                    {t.side === "long" ? "L" : "S"}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/50 text-right tabular-nums shrink-0 hidden md:block">
+                    {t.entry != null ? formatCurrency(t.entry) : "—"}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground/50 text-right tabular-nums shrink-0 hidden md:block">
+                    {t.exit != null ? formatCurrency(t.exit) : "—"}
+                  </span>
                   <span className={cn("font-mono font-bold text-right tabular-nums shrink-0",
                     t.is_win ? "text-green-400" : "text-red-400"
                   )}>
@@ -850,6 +872,9 @@ function CombinedTradeHistorySection() {
                     {t.pnl_usd != null
                       ? `${t.pnl_usd >= 0 ? "+" : ""}${formatCurrency(t.pnl_usd)}`
                       : "—"}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/40 truncate max-w-[80px] hidden lg:block" title={t.reason || undefined}>
+                    {t.reason || "—"}
                   </span>
                   <span className="text-[9px] text-muted-foreground/50 font-mono text-right shrink-0">
                     {fmtDate(t.closed_at)}

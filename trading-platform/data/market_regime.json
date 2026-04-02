@@ -1,7 +1,8 @@
 {
   "regime": "Crypto",
-  "written_at": "2026-04-01T09:26:51.722279+00:00",
-  "cycle_number": 3,
+  "written_at": "2026-04-02T01:29:44.942012+00:00",
+  "cycle_number": 4,
   "using_fallback": false,
+  "regime_override": false,
   "rationale": null
 }

@@ -62,9 +62,12 @@ QUICK_ACTIONS = {
     "best_params": {
         "label": "Activate Best Parameters",
         "prompt": (
-            "Analyze all three Kraken bots' recent performance and identify the best-performing "
-            "parameter set. Recommend applying similar parameters to the underperforming bots "
-            "(within ±1 step of their current values). Explain your analysis."
+            "Perform a full diagnostic of all three Kraken bots. For each bot: "
+            "1) Identify shortcomings (poor win rate, excessive drawdown, bad entry/exit timing). "
+            "2) Compare parameters against the best-performing bot's config. "
+            "3) Propose specific parameter fixes for underperforming bots "
+            "(within ±1 step of their current values per approval cycle). "
+            "Explain your reasoning for each proposed change."
         ),
     },
     "reset_defaults": {

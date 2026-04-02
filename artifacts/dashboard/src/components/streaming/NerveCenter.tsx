@@ -85,11 +85,11 @@ export function NerveCenter() {
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1">Nerve Center</div>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+      <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1 shrink-0">Nerve Center</div>
 
-      <div className="flex-1 flex items-center justify-center relative p-2">
-        <svg viewBox="0 0 400 380" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+      <div className="flex-1 flex items-center justify-center relative p-2 min-h-0 overflow-hidden">
+        <svg viewBox="0 0 400 380" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
               <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />

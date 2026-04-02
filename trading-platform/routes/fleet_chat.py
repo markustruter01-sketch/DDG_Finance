@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL
 from analysis.fleet_enforcer import (
-    BOUNDS, STEPS, BOT_ID_TO_DB_ID,
+    BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
 )
 from db.postgres import is_pg_available, get_conn
@@ -526,6 +526,8 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
             if cur_val is None:
                 continue
             new_val = _limit_step(cur_val, float(target), pname)
+            if pname == "MIN_NET_PROFIT_PCT" and new_val < FEE_FLOOR:
+                new_val = round(FEE_FLOOR, 6)
             new_params[pname] = new_val
             applied[pname] = {"before": cur_val, "after": new_val}
 
@@ -645,6 +647,8 @@ async def _handle_reset_defaults() -> dict:
             if cur_val is None:
                 continue
             stepped = _limit_step(cur_val, default_val, pname)
+            if pname == "MIN_NET_PROFIT_PCT" and stepped < FEE_FLOOR:
+                stepped = round(FEE_FLOOR, 6)
             if stepped != cur_val:
                 new_params[pname] = stepped
                 changes[pname] = {"before": cur_val, "after": stepped, "target_default": default_val}

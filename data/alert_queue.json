@@ -142,5 +142,14 @@
     "side": "SELL",
     "reason": "mean_reversion_complete",
     "timestamp": "2026-04-02T21:50:07.589598+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "ENA/USD",
+    "pnl_pct": 1.01,
+    "pnl_usd": 65.02,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T23:01:16.455734+00:00"
   }
 ]

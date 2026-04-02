@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-02T01:24:49.399815+00:00",
+  "last_updated": "2026-04-02T01:28:44.870252+00:00",
   "deployed_usd": 5336.69,
   "deployed_pct": 5.9,
   "deployable_ceiling_pct": 90.0,
@@ -11,10 +11,10 @@
       "side": "long",
       "qty": 0.330001,
       "entry_price": 454.09,
-      "current_price": 452.61,
+      "current_price": 452.78,
       "size_usd": 149.85,
-      "unrealized_pnl_usd": -0.49,
-      "unrealized_pnl_pct": -0.3259,
+      "unrealized_pnl_usd": -0.43,
+      "unrealized_pnl_pct": -0.2885,
       "stop_loss_price": 441.8296,
       "take_profit_price": 431.3855,
       "entry_time": "2026-04-01T22:16:45.990985+00:00",
@@ -25,14 +25,14 @@
       "side": "short",
       "qty": 0.330007,
       "entry_price": 616.32,
-      "current_price": 607.27,
+      "current_price": 605.0,
       "size_usd": 203.39,
-      "unrealized_pnl_usd": 2.99,
-      "unrealized_pnl_pct": 1.4684,
+      "unrealized_pnl_usd": 3.74,
+      "unrealized_pnl_pct": 1.8367,
       "stop_loss_price": 632.9606,
-      "take_profit_price": 637.6335,
+      "take_profit_price": 635.25,
       "entry_time": "2026-03-31T23:06:49.733767+00:00",
-      "best_price": 607.27
+      "best_price": 605.0
     },
     {
       "symbol": "DYM/USD",
@@ -67,56 +67,56 @@
       "side": "short",
       "qty": 0.3125,
       "entry_price": 0.224,
-      "current_price": 0.2225,
+      "current_price": 0.2215,
       "size_usd": 0.07,
       "unrealized_pnl_usd": 0.0,
-      "unrealized_pnl_pct": 0.6696,
+      "unrealized_pnl_pct": 1.1161,
       "stop_loss_price": 0.23,
-      "take_profit_price": 0.2336,
+      "take_profit_price": 0.2326,
       "entry_time": "2026-03-31T23:08:08.954657+00:00",
-      "best_price": 0.2225
+      "best_price": 0.2215
     },
     {
       "symbol": "TRX/USD",
       "side": "long",
       "qty": 0.318977,
       "entry_price": 0.3135,
-      "current_price": 0.3158,
+      "current_price": 0.3154,
       "size_usd": 0.1,
       "unrealized_pnl_usd": 0.0,
-      "unrealized_pnl_pct": 0.7285,
+      "unrealized_pnl_pct": 0.6115,
       "stop_loss_price": 0.305,
-      "take_profit_price": 0.3,
+      "take_profit_price": 0.2996,
       "entry_time": "2026-03-31T23:07:00.546732+00:00",
-      "best_price": 0.3158
+      "best_price": 0.3154
     },
     {
       "symbol": "AAVE/USD",
       "side": "short",
       "qty": 0.330031,
       "entry_price": 98.93,
-      "current_price": 96.7,
+      "current_price": 96.56,
       "size_usd": 32.65,
-      "unrealized_pnl_usd": 0.74,
-      "unrealized_pnl_pct": 2.2541,
+      "unrealized_pnl_usd": 0.78,
+      "unrealized_pnl_pct": 2.3956,
       "stop_loss_price": 101.6011,
-      "take_profit_price": 101.535,
+      "take_profit_price": 101.388,
       "entry_time": "2026-04-01T05:46:47.912387+00:00",
-      "best_price": 96.7
+      "best_price": 96.56
     },
     {
       "symbol": "ATOM/USD",
       "side": "short",
       "qty": 0.328465,
       "entry_price": 1.7049,
-      "current_price": 1.6712,
+      "current_price": 1.6683,
       "size_usd": 0.56,
       "unrealized_pnl_usd": 0.01,
-      "unrealized_pnl_pct": 1.9767,
+      "unrealized_pnl_pct": 2.1468,
       "stop_loss_price": 1.7509,
-      "take_profit_price": 1.7548,
+      "take_profit_price": 1.7517,
       "entry_time": "2026-03-31T23:07:36.540102+00:00",
-      "best_price": 1.6712
+      "best_price": 1.6683
     },
     {
       "symbol": "STRK/USD",
@@ -137,10 +137,10 @@
       "side": "long",
       "qty": 3949.848388,
       "entry_price": 1.2532,
-      "current_price": 1.2499,
+      "current_price": 1.2465,
       "size_usd": 4949.95,
-      "unrealized_pnl_usd": -13.03,
-      "unrealized_pnl_pct": -0.2633,
+      "unrealized_pnl_usd": -26.46,
+      "unrealized_pnl_pct": -0.5346,
       "stop_loss_price": 1.2194,
       "take_profit_price": 1.1905,
       "entry_time": "2026-04-02T01:05:56.372334+00:00",
@@ -150,77 +150,77 @@
   "signals": [
     {
       "symbol": "BTC/USD",
-      "rsi": 43.8,
-      "z_score": -2.161,
-      "price": 67707.3,
+      "rsi": 41.6,
+      "z_score": -2.576,
+      "price": 67493.7,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "ETH/USD",
-      "rsi": 48.3,
-      "z_score": -1.657,
-      "price": 2119.57,
+      "rsi": 46.7,
+      "z_score": -2.088,
+      "price": 2113.69,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "XRP/USD",
-      "rsi": 45.0,
-      "z_score": -2.559,
-      "price": 1.3395,
+      "rsi": 42.0,
+      "z_score": -3.145,
+      "price": 1.3337,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "SOL/USD",
-      "rsi": 34.3,
-      "z_score": -2.244,
-      "price": 80.3,
+      "rsi": 33.2,
+      "z_score": -2.384,
+      "price": 80.05,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "BNB/USD",
-      "rsi": 39.0,
-      "z_score": -2.662,
-      "price": 607.27,
+      "rsi": 36.1,
+      "z_score": -3.117,
+      "price": 605.0,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 1.47,
+      "pnl_pct": 1.84,
       "side": "short"
     },
     {
       "symbol": "DOGE/USD",
-      "rsi": 40.4,
-      "z_score": -2.514,
-      "price": 0.0913,
+      "rsi": 38.4,
+      "z_score": -2.856,
+      "price": 0.0909,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "ADA/USD",
-      "rsi": 44.8,
-      "z_score": -2.477,
-      "price": 0.2451,
+      "rsi": 44.1,
+      "z_score": -2.639,
+      "price": 0.2447,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "TRX/USD",
-      "rsi": 51.5,
-      "z_score": 0.579,
-      "price": 0.3158,
+      "rsi": 48.7,
+      "z_score": -0.479,
+      "price": 0.3154,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 0.73,
+      "pnl_pct": 0.61,
       "side": "long"
     },
     {
       "symbol": "AVAX/USD",
-      "rsi": 44.6,
-      "z_score": -2.224,
-      "price": 9.03,
+      "rsi": 42.9,
+      "z_score": -2.493,
+      "price": 9.0,
       "signal_type": "slots_full",
       "has_position": false
     },
@@ -234,67 +234,67 @@
     },
     {
       "symbol": "LINK/USD",
-      "rsi": 43.2,
-      "z_score": -2.956,
-      "price": 8.8374,
+      "rsi": 40.7,
+      "z_score": -3.293,
+      "price": 8.7953,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "TON/USD",
-      "rsi": 54.7,
-      "z_score": 0.734,
-      "price": 1.234,
+      "rsi": 53.6,
+      "z_score": 0.587,
+      "price": 1.233,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "UNI/USD",
-      "rsi": 39.1,
-      "z_score": -3.017,
-      "price": 3.524,
+      "rsi": 38.1,
+      "z_score": -3.154,
+      "price": 3.516,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "NEAR/USD",
-      "rsi": 40.8,
-      "z_score": -2.34,
-      "price": 1.181,
+      "rsi": 39.1,
+      "z_score": -2.589,
+      "price": 1.177,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "LTC/USD",
-      "rsi": 39.2,
-      "z_score": -3.007,
-      "price": 53.46,
+      "rsi": 37.6,
+      "z_score": -3.248,
+      "price": 53.34,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "ATOM/USD",
-      "rsi": 36.5,
-      "z_score": -1.551,
-      "price": 1.6712,
+      "rsi": 35.4,
+      "z_score": -1.681,
+      "price": 1.6683,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 1.98,
+      "pnl_pct": 2.15,
       "side": "short"
     },
     {
       "symbol": "APT/USD",
-      "rsi": 38.9,
-      "z_score": -2.337,
-      "price": 0.8848,
+      "rsi": 37.8,
+      "z_score": -2.522,
+      "price": 0.8827,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "ICP/USD",
-      "rsi": 40.7,
-      "z_score": -2.206,
-      "price": 2.265,
+      "rsi": 38.9,
+      "z_score": -2.488,
+      "price": 2.257,
       "signal_type": "slots_full",
       "has_position": false
     },
@@ -316,99 +316,99 @@
     },
     {
       "symbol": "OP/USD",
-      "rsi": 41.8,
-      "z_score": -2.4,
-      "price": 0.1093,
+      "rsi": 39.1,
+      "z_score": -2.825,
+      "price": 0.1087,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "SUI/USD",
-      "rsi": 42.8,
-      "z_score": -2.431,
-      "price": 0.8767,
+      "rsi": 39.5,
+      "z_score": -2.974,
+      "price": 0.8699,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "INJ/USD",
-      "rsi": 41.7,
-      "z_score": -1.844,
-      "price": 2.862,
+      "rsi": 35.9,
+      "z_score": -2.695,
+      "price": 2.831,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "RENDER/USD",
-      "rsi": 48.3,
-      "z_score": -1.228,
-      "price": 1.769,
+      "rsi": 44.2,
+      "z_score": -1.933,
+      "price": 1.752,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "STX/USD",
-      "rsi": 40.5,
-      "z_score": -2.094,
-      "price": 0.2225,
+      "rsi": 37.4,
+      "z_score": -2.527,
+      "price": 0.2215,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 0.67,
+      "pnl_pct": 1.12,
       "side": "short"
     },
     {
       "symbol": "TAO/USD",
-      "rsi": 49.0,
-      "z_score": -0.547,
-      "price": 311.7871,
+      "rsi": 48.3,
+      "z_score": -0.664,
+      "price": 311.1474,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "PEPE/USD",
-      "rsi": 43.7,
-      "z_score": -1.977,
+      "rsi": 42.5,
+      "z_score": -2.216,
       "price": 0.0,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "POL/USD",
-      "rsi": 37.6,
-      "z_score": -2.878,
-      "price": 0.0917,
+      "rsi": 35.8,
+      "z_score": -3.067,
+      "price": 0.0914,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "IMX/USD",
-      "rsi": 37.6,
-      "z_score": -2.181,
-      "price": 0.1383,
+      "rsi": 35.0,
+      "z_score": -2.595,
+      "price": 0.1376,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "GRT/USD",
-      "rsi": 43.8,
-      "z_score": -2.099,
-      "price": 0.0242,
+      "rsi": 41.6,
+      "z_score": -2.453,
+      "price": 0.0241,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "VET/USD",
-      "rsi": 56.6,
-      "z_score": 0.316,
+      "rsi": 50.0,
+      "z_score": -1.849,
       "price": 0.0069,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "HBAR/USD",
-      "rsi": 43.4,
-      "z_score": -2.357,
-      "price": 0.0881,
+      "rsi": 42.4,
+      "z_score": -2.524,
+      "price": 0.0879,
       "signal_type": "slots_full",
       "has_position": false
     },
@@ -440,41 +440,41 @@
     },
     {
       "symbol": "WLD/USD",
-      "rsi": 39.8,
-      "z_score": -2.806,
-      "price": 0.273,
+      "rsi": 39.7,
+      "z_score": -2.829,
+      "price": 0.2729,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "JUP/USD",
-      "rsi": 42.1,
-      "z_score": -1.213,
-      "price": 0.1562,
+      "rsi": 38.0,
+      "z_score": -1.634,
+      "price": 0.1543,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "TIA/USD",
-      "rsi": 40.0,
-      "z_score": -2.926,
-      "price": 0.294,
+      "rsi": 39.0,
+      "z_score": -3.066,
+      "price": 0.2934,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "ONDO/USD",
-      "rsi": 42.2,
-      "z_score": -2.254,
-      "price": 0.2673,
+      "rsi": 40.7,
+      "z_score": -2.528,
+      "price": 0.2664,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "SEI/USD",
-      "rsi": 46.9,
-      "z_score": -2.007,
-      "price": 0.0532,
+      "rsi": 48.5,
+      "z_score": -1.765,
+      "price": 0.0534,
       "signal_type": "slots_full",
       "has_position": false
     },
@@ -488,8 +488,8 @@
     },
     {
       "symbol": "W/USD",
-      "rsi": 46.2,
-      "z_score": -0.821,
+      "rsi": 44.2,
+      "z_score": -1.161,
       "price": 0.0146,
       "signal_type": "slots_full",
       "has_position": false
@@ -506,27 +506,27 @@
     },
     {
       "symbol": "ENA/USD",
-      "rsi": 39.5,
-      "z_score": -1.746,
-      "price": 0.0891,
+      "rsi": 36.4,
+      "z_score": -2.236,
+      "price": 0.0884,
       "signal_type": "slots_full",
       "has_position": false
     },
     {
       "symbol": "AAVE/USD",
-      "rsi": 38.9,
-      "z_score": -2.904,
-      "price": 96.7,
+      "rsi": 38.3,
+      "z_score": -2.986,
+      "price": 96.56,
       "signal_type": "hold",
       "has_position": true,
-      "pnl_pct": 2.25,
+      "pnl_pct": 2.4,
       "side": "short"
     },
     {
       "symbol": "CRV/USD",
-      "rsi": 42.0,
-      "z_score": -2.142,
-      "price": 0.2159,
+      "rsi": 41.6,
+      "z_score": -2.204,
+      "price": 0.2157,
       "signal_type": "slots_full",
       "has_position": false
     }
@@ -534,300 +534,300 @@
   "microstructure": {
     "BTC/USD": {
       "symbol": "BTC/USD",
-      "ofi": 0.9338,
-      "vamp": 67732.270181,
-      "vpin": 0.9772
+      "ofi": 0.7389,
+      "vamp": 67523.804287,
+      "vpin": 0.9612
     },
     "ETH/USD": {
       "symbol": "ETH/USD",
-      "ofi": 0.3793,
-      "vamp": 2120.610786,
-      "vpin": 0.8711
+      "ofi": 0.545,
+      "vamp": 2114.695045,
+      "vpin": 0.8832
     },
     "XRP/USD": {
       "symbol": "XRP/USD",
-      "ofi": 0.2327,
-      "vamp": 1.340546,
-      "vpin": 0.9342
+      "ofi": -0.2586,
+      "vamp": 1.334454,
+      "vpin": 0.7564
     },
     "SOL/USD": {
       "symbol": "SOL/USD",
-      "ofi": 0.7953,
-      "vamp": 80.348837,
-      "vpin": 0.8993
+      "ofi": 0.2863,
+      "vamp": 79.983801,
+      "vpin": 0.8728
     },
     "BNB/USD": {
       "symbol": "BNB/USD",
-      "ofi": -0.4427,
-      "vamp": 607.840098,
-      "vpin": 0.3478
+      "ofi": -0.8225,
+      "vamp": 606.351824,
+      "vpin": 0.4322
     },
     "DOGE/USD": {
       "symbol": "DOGE/USD",
-      "ofi": 0.4038,
-      "vamp": 0.091263,
-      "vpin": 0.94
+      "ofi": 0.1072,
+      "vamp": 0.090934,
+      "vpin": 0.9398
     },
     "ADA/USD": {
       "symbol": "ADA/USD",
-      "ofi": 0.7807,
-      "vamp": 0.24588,
-      "vpin": 0.9874
+      "ofi": 0.5503,
+      "vamp": 0.244789,
+      "vpin": 0.9825
     },
     "TRX/USD": {
       "symbol": "TRX/USD",
-      "ofi": 0.9062,
-      "vamp": 0.315769,
-      "vpin": 0.7737
+      "ofi": 0.8259,
+      "vamp": 0.315562,
+      "vpin": 0.8895
     },
     "AVAX/USD": {
       "symbol": "AVAX/USD",
-      "ofi": 0.0086,
-      "vamp": 9.060252,
-      "vpin": 0.9204
+      "ofi": 0.0148,
+      "vamp": 9.01418,
+      "vpin": 0.8944
     },
     "SHIB/USD": {
       "symbol": "SHIB/USD",
-      "ofi": 0.196,
+      "ofi": 0.066,
       "vamp": 6e-06,
-      "vpin": 0.4565
+      "vpin": 0.59
     },
     "LINK/USD": {
       "symbol": "LINK/USD",
-      "ofi": -0.2694,
-      "vamp": 8.827915,
-      "vpin": 0.9833
+      "ofi": 0.5727,
+      "vamp": 8.781404,
+      "vpin": 0.9827
     },
     "TON/USD": {
       "symbol": "TON/USD",
-      "ofi": 0.0527,
-      "vamp": 1.234069,
+      "ofi": -0.0597,
+      "vamp": 1.23112,
       "vpin": 0.6406
     },
     "DOT/USD": {
       "symbol": "DOT/USD",
-      "ofi": 0.7567,
-      "vamp": 1.249192,
-      "vpin": 0.6194
+      "ofi": 0.4995,
+      "vamp": 1.245134,
+      "vpin": 0.4389
     },
     "UNI/USD": {
       "symbol": "UNI/USD",
-      "ofi": -0.0121,
-      "vamp": 3.528254,
-      "vpin": 0.7192
+      "ofi": 0.2813,
+      "vamp": 3.522939,
+      "vpin": 0.6998
     },
     "BCH/USD": {
       "symbol": "BCH/USD",
-      "ofi": 0.2754,
-      "vamp": 453.057043,
-      "vpin": 0.6216
+      "ofi": 0.1605,
+      "vamp": 452.978353,
+      "vpin": 0.7217
     },
     "NEAR/USD": {
       "symbol": "NEAR/USD",
-      "ofi": -0.0113,
-      "vamp": 1.180637,
-      "vpin": 0.6985
+      "ofi": -0.1771,
+      "vamp": 1.176835,
+      "vpin": 0.6848
     },
     "LTC/USD": {
       "symbol": "LTC/USD",
-      "ofi": 0.4889,
-      "vamp": 53.441912,
-      "vpin": 0.656
+      "ofi": -0.0577,
+      "vamp": 53.331644,
+      "vpin": 0.7596
     },
     "ATOM/USD": {
       "symbol": "ATOM/USD",
-      "ofi": -0.5895,
-      "vamp": 1.670166,
-      "vpin": 0.4999
+      "ofi": -0.1769,
+      "vamp": 1.666078,
+      "vpin": 0.5099
     },
     "APT/USD": {
       "symbol": "APT/USD",
-      "ofi": -0.4634,
-      "vamp": 0.883568,
-      "vpin": 0.4593
+      "ofi": -0.3227,
+      "vamp": 0.88105,
+      "vpin": 0.4592
     },
     "ICP/USD": {
       "symbol": "ICP/USD",
-      "ofi": 0.304,
-      "vamp": 2.258254,
-      "vpin": 0.7257
+      "ofi": 0.2852,
+      "vamp": 2.256445,
+      "vpin": 0.7212
     },
     "FIL/USD": {
       "symbol": "FIL/USD",
-      "ofi": 0.3154,
-      "vamp": 0.828473,
-      "vpin": 0.502
+      "ofi": 0.3527,
+      "vamp": 0.824645,
+      "vpin": 0.5005
     },
     "ARB/USD": {
       "symbol": "ARB/USD",
-      "ofi": 0.1626,
-      "vamp": 0.093059,
-      "vpin": 0.7193
+      "ofi": 0.1656,
+      "vamp": 0.092674,
+      "vpin": 0.5402
     },
     "OP/USD": {
       "symbol": "OP/USD",
-      "ofi": -0.0216,
-      "vamp": 0.109344,
-      "vpin": 0.5616
+      "ofi": 0.0061,
+      "vamp": 0.108435,
+      "vpin": 0.6166
     },
     "SUI/USD": {
       "symbol": "SUI/USD",
-      "ofi": 0.4688,
-      "vamp": 0.877611,
-      "vpin": 0.8329
+      "ofi": -0.5255,
+      "vamp": 0.870255,
+      "vpin": 0.8483
     },
     "INJ/USD": {
       "symbol": "INJ/USD",
-      "ofi": 0.332,
-      "vamp": 2.850795,
-      "vpin": 0.3459
+      "ofi": -0.6438,
+      "vamp": 2.829058,
+      "vpin": 0.3061
     },
     "RENDER/USD": {
       "symbol": "RENDER/USD",
-      "ofi": 0.1617,
-      "vamp": 1.762962,
-      "vpin": 0.5723
+      "ofi": -0.2525,
+      "vamp": 1.753522,
+      "vpin": 0.6226
     },
     "STX/USD": {
       "symbol": "STX/USD",
-      "ofi": 0.433,
-      "vamp": 0.222621,
-      "vpin": 0.5938
+      "ofi": -0.1508,
+      "vamp": 0.221819,
+      "vpin": 0.5862
     },
     "TAO/USD": {
       "symbol": "TAO/USD",
-      "ofi": -0.1361,
-      "vamp": 311.180182,
-      "vpin": 0.9485
+      "ofi": 0.0771,
+      "vamp": 312.065358,
+      "vpin": 0.9221
     },
     "PEPE/USD": {
       "symbol": "PEPE/USD",
-      "ofi": -0.6233,
+      "ofi": -0.7895,
       "vamp": 3e-06,
-      "vpin": 0.977
+      "vpin": 0.9824
     },
     "POL/USD": {
       "symbol": "POL/USD",
-      "ofi": -0.3254,
-      "vamp": 0.091587,
-      "vpin": 0.4825
+      "ofi": 0.5457,
+      "vamp": 0.091554,
+      "vpin": 0.4761
     },
     "IMX/USD": {
       "symbol": "IMX/USD",
-      "ofi": -0.0644,
-      "vamp": 0.13872,
-      "vpin": 0.5314
+      "ofi": -0.1847,
+      "vamp": 0.137904,
+      "vpin": 0.5254
     },
     "GRT/USD": {
       "symbol": "GRT/USD",
-      "ofi": 0.7385,
-      "vamp": 0.024238,
-      "vpin": 0.3822
+      "ofi": 0.165,
+      "vamp": 0.024152,
+      "vpin": 0.5136
     },
     "VET/USD": {
       "symbol": "VET/USD",
-      "ofi": 0.3888,
-      "vamp": 0.006857,
-      "vpin": 0.617
+      "ofi": 0.3509,
+      "vamp": 0.006851,
+      "vpin": 0.6159
     },
     "HBAR/USD": {
       "symbol": "HBAR/USD",
-      "ofi": -0.0572,
-      "vamp": 0.088035,
-      "vpin": 0.6656
+      "ofi": 0.4176,
+      "vamp": 0.08797,
+      "vpin": 0.7038
     },
     "RUNE/USD": {
       "symbol": "RUNE/USD",
-      "ofi": 0.1388,
-      "vamp": 0.405701,
+      "ofi": 0.2092,
+      "vamp": 0.405204,
       "vpin": 0.7943
     },
     "SNX/USD": {
       "symbol": "SNX/USD",
-      "ofi": 0.2257,
-      "vamp": 0.278584,
+      "ofi": 0.8626,
+      "vamp": 0.278815,
       "vpin": 0.5765
     },
     "ENS/USD": {
       "symbol": "ENS/USD",
-      "ofi": -0.1538,
-      "vamp": 5.648968,
+      "ofi": 0.1028,
+      "vamp": 5.656823,
       "vpin": 0.5268
     },
     "WLD/USD": {
       "symbol": "WLD/USD",
-      "ofi": 0.123,
-      "vamp": 0.273383,
-      "vpin": 0.5545
+      "ofi": -0.1085,
+      "vamp": 0.272538,
+      "vpin": 0.5063
     },
     "JUP/USD": {
       "symbol": "JUP/USD",
-      "ofi": -0.6673,
-      "vamp": 0.155478,
-      "vpin": 0.5755
+      "ofi": -0.6376,
+      "vamp": 0.154923,
+      "vpin": 0.6471
     },
     "TIA/USD": {
       "symbol": "TIA/USD",
-      "ofi": -0.0342,
-      "vamp": 0.294253,
-      "vpin": 0.4262
+      "ofi": -0.054,
+      "vamp": 0.293145,
+      "vpin": 0.3472
     },
     "ONDO/USD": {
       "symbol": "ONDO/USD",
-      "ofi": 0.1796,
-      "vamp": 0.266688,
-      "vpin": 0.566
+      "ofi": 0.5322,
+      "vamp": 0.266497,
+      "vpin": 0.6867
     },
     "SEI/USD": {
       "symbol": "SEI/USD",
-      "ofi": 0.6492,
-      "vamp": 0.053225,
-      "vpin": 0.4427
+      "ofi": 0.135,
+      "vamp": 0.053341,
+      "vpin": 0.5593
     },
     "PYTH/USD": {
       "symbol": "PYTH/USD",
-      "ofi": -0.1119,
-      "vamp": 0.03881,
+      "ofi": 0.1125,
+      "vamp": 0.038766,
       "vpin": 0.3764
     },
     "W/USD": {
       "symbol": "W/USD",
-      "ofi": 0.5438,
-      "vamp": 0.014631,
-      "vpin": 0.6247
+      "ofi": -0.0411,
+      "vamp": 0.01462,
+      "vpin": 0.5682
     },
     "DYM/USD": {
       "symbol": "DYM/USD",
-      "ofi": 0.4638,
-      "vamp": 0.023766,
-      "vpin": 0.5513
+      "ofi": 0.1944,
+      "vamp": 0.023685,
+      "vpin": 0.4756
     },
     "STRK/USD": {
       "symbol": "STRK/USD",
-      "ofi": -0.5838,
-      "vamp": 0.034426,
+      "ofi": 0.0839,
+      "vamp": 0.034447,
       "vpin": 0.8446
     },
     "ENA/USD": {
       "symbol": "ENA/USD",
-      "ofi": 0.1928,
-      "vamp": 0.08838,
-      "vpin": 0.5789
+      "ofi": 0.1087,
+      "vamp": 0.088438,
+      "vpin": 0.5759
     },
     "AAVE/USD": {
       "symbol": "AAVE/USD",
-      "ofi": -0.021,
-      "vamp": 96.771407,
-      "vpin": 0.9469
+      "ofi": 0.591,
+      "vamp": 96.7146,
+      "vpin": 0.7689
     },
     "CRV/USD": {
       "symbol": "CRV/USD",
-      "ofi": 0.0611,
-      "vamp": 0.215723,
-      "vpin": 0.5627
+      "ofi": -0.1887,
+      "vamp": 0.216103,
+      "vpin": 0.6099
     }
   },
-  "thinking_text": "\u2693 SHORT BNB +1.47% \u00b7 Z=-2.66 \u00b7 LONG TRX +0.73% \u00b7 Z=+0.58 \u00b7 SHORT ATOM +1.98% \u00b7 Z=-1.55 \u00b7 SHORT STX +0.67% \u00b7 Z=-2.09 \u00b7 SHORT SNX +4.61% \u00b7 Z=-2.29 \u00b7 SHORT STRK +2.04% \u00b7 Z=-2.06 \u00b7 SHORT AAVE +2.25% \u00b7 Z=-2.90",
+  "thinking_text": "\u2693 SHORT BNB +1.84% \u00b7 Z=-3.12 \u00b7 LONG TRX +0.61% \u00b7 Z=-0.48 \u00b7 SHORT ATOM +2.15% \u00b7 Z=-1.68 \u00b7 SHORT STX +1.12% \u00b7 Z=-2.53 \u00b7 SHORT SNX +4.61% \u00b7 Z=-2.29 \u00b7 SHORT STRK +2.04% \u00b7 Z=-2.06 \u00b7 SHORT AAVE +2.40% \u00b7 Z=-2.99",
   "adaptive_params": {
     "active": {
       "ZSCORE_ENTRY": 0.75,
@@ -845,6 +845,6 @@
     },
     "reasons": {},
     "adapted_at": "2026-04-02T00:29:50.392700+00:00",
-    "next_adapt_in_hours": 5.1
+    "next_adapt_in_hours": 5.0
   }
 }

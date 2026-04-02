@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { playTradeWin, playExplosion } from "./sounds";
 
 export type SimulatedTrade = {
   id: number;
@@ -106,6 +107,7 @@ export function useSimulatedFeed(maxTrades = 15) {
 
       if (trade.isWin) {
         setWins((w) => w + 1);
+        playTradeWin();
       } else {
         setLosses((l) => l + 1);
       }
@@ -155,6 +157,7 @@ export function useSimulatedFeed(maxTrades = 15) {
       if (trade.pnlUsd > 50 && !cooldownRef.current) {
         cooldownRef.current = true;
         setExplosion(trade);
+        playExplosion();
         explosionTimeoutRef.current = setTimeout(() => {
           setExplosion(null);
           cooldownRef.current = false;

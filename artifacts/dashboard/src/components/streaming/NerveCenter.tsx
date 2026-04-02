@@ -239,9 +239,9 @@ export function NerveCenter() {
                 {!active && (
                   <line
                     x1={cx} y1={cy} x2={bx} y2={by}
-                    stroke="rgba(100,116,139,0.15)"
+                    stroke="rgba(100,116,139,0.35)"
                     strokeWidth={1}
-                    strokeDasharray="4 4"
+                    strokeDasharray="6 4"
                   />
                 )}
 

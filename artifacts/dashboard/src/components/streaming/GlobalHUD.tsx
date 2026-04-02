@@ -85,28 +85,64 @@ export function GlobalHUD() {
     },
   ];
 
+  const drawdownPct = startTotal > 0 ? Math.min(0, ((grandTotal - startTotal) / startTotal) * 100) : 0;
+  const profitFactor = totalTrades > 0 && (totalTrades - totalWins) > 0
+    ? (totalWins / (totalTrades - totalWins)).toFixed(2) : "—";
+  const avgTradeSize = totalTrades > 0
+    ? `$${Math.round(grandTotal / Math.max(totalTrades, 1)).toLocaleString()}`
+    : "—";
+  const riskLevel = Math.abs(drawdownPct) < 1 ? "LOW" : Math.abs(drawdownPct) < 3 ? "MODERATE" : "HIGH";
+  const riskColor = riskLevel === "LOW" ? "text-green-400" : riskLevel === "MODERATE" ? "text-amber-400" : "text-red-400";
+
+  const miniMetrics = [
+    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? "text-green-400" : "text-red-400" },
+    { label: "PROFIT FACTOR", value: profitFactor, color: "text-cyan-400" },
+    { label: "RISK LEVEL", value: riskLevel, color: riskColor },
+    { label: "SHARPE (EST.)", value: winRate > 50 ? ((winRate / 100 * 2 - 1) * 1.5).toFixed(2) : "0.00", color: "text-violet-400" },
+    { label: "EXPOSURE", value: `${activeBots}/6 pools`, color: "text-blue-400" },
+    { label: "AVG POSITION", value: avgTradeSize, color: "text-amber-400" },
+  ];
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      {cards.map((card, i) => (
-        <motion.div
-          key={card.label}
-          custom={i}
-          variants={cardVariants}
-          initial="hidden"
-          animate="visible"
-          className={cn(
-            "relative rounded-xl border p-4 bg-slate-900/80 overflow-hidden",
-            card.border
-          )}
-        >
-          <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
-          <div className="relative z-10">
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-2">{card.label}</div>
-            <div className="text-lg font-mono font-bold text-white tracking-tight">{card.value}</div>
-            <div className="text-[10px] text-muted-foreground/50 mt-1 font-mono">{card.sub}</div>
-          </div>
-        </motion.div>
-      ))}
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {cards.map((card, i) => (
+          <motion.div
+            key={card.label}
+            custom={i}
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            className={cn(
+              "relative rounded-xl border p-4 bg-slate-900/80 overflow-hidden",
+              card.border
+            )}
+          >
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
+            <div className="relative z-10">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-2">{card.label}</div>
+              <div className="text-lg font-mono font-bold text-white tracking-tight">{card.value}</div>
+              <div className="text-[10px] text-muted-foreground/50 mt-1 font-mono">{card.sub}</div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+        {miniMetrics.map((m, i) => (
+          <motion.div
+            key={m.label}
+            custom={i + 4}
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-3 py-2"
+          >
+            <div className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
+            <div className={cn("text-sm font-mono font-bold mt-0.5", m.color)}>{m.value}</div>
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }

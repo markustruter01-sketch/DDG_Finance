@@ -1,3 +1,6 @@
+import { useLocation } from "wouter";
+import { LayoutDashboard, Radio } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { Scoreboard } from "@/components/streaming/Scoreboard";
 import { NerveCenter } from "@/components/streaming/NerveCenter";
@@ -7,6 +10,53 @@ import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
+function StreamingNavBar() {
+  const [, navigate] = useLocation();
+  const streamColor = "#f43f5e";
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
+      <div className="flex items-center justify-center gap-2 sm:gap-3 max-w-xs mx-auto pointer-events-auto">
+        <button
+          onClick={() => navigate("/")}
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-blue-500/40 hover:bg-slate-800/80 group"
+        >
+          <span className="text-slate-400 group-hover:text-blue-400 transition-colors">
+            <LayoutDashboard className="h-6 w-6" />
+          </span>
+          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 text-slate-500 group-hover:text-blue-400 transition-colors">
+            Dashboard
+          </span>
+        </button>
+        <button
+          className={cn(
+            "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px]",
+            "py-2.5 px-3 sm:px-4 shadow-lg scale-105"
+          )}
+          style={{
+            background: `linear-gradient(135deg, ${streamColor}20, ${streamColor}10)`,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: `${streamColor}50`,
+            boxShadow: `0 4px 24px ${streamColor}25, 0 0 0 1px ${streamColor}15`,
+          }}
+        >
+          <span className="relative" style={{ color: streamColor }}>
+            <Radio className="h-6 w-6" />
+            <span
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
+              style={{ background: streamColor, boxShadow: `0 0 6px ${streamColor}` }}
+            />
+          </span>
+          <span className="text-[9px] font-bold tracking-wider uppercase mt-1" style={{ color: streamColor }}>
+            Live
+          </span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function StreamingScreen() {
   const { trades, explosion, wins, losses } = useSimulatedFeed(15);
 
@@ -14,7 +64,7 @@ export default function StreamingScreen() {
     <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden">
       <ProfitExplosion trade={explosion} />
 
-      <div className="flex-1 flex flex-col p-4 gap-4">
+      <div className="flex-1 flex flex-col p-4 gap-4 pb-20">
         <GlobalHUD />
 
         <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
@@ -34,6 +84,7 @@ export default function StreamingScreen() {
       </div>
 
       <SalesTicker />
+      <StreamingNavBar />
     </div>
   );
 }

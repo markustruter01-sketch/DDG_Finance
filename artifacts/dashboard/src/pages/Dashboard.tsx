@@ -368,26 +368,34 @@ function FleetStatusBar() {
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
+  const { data: davyPerf } = useKrakenPerformance("davy-jones");
+  const { data: bbPerf } = useKrakenPerformance("blackbeard");
+  const { data: caPerf } = useKrakenPerformance("calypso");
 
-  const alpacaEquity = summary?.portfolio_totals?.equity ?? null;
-  const alpacaPnl = null;
+  const regime = summary?.groq?.regime ?? null;
+  const tradingMode = summary?.trading_mode;
 
   const getBotData = (botDef: typeof FLEET_BOTS[number]) => {
     if (botDef.type === "alpaca") {
       return {
-        equity: alpacaEquity,
-        pnl: alpacaPnl,
+        equity: summary?.portfolio_totals?.equity ?? null,
+        pnl: null as number | null,
         positions: summary?.position_count ?? 0,
         online: summary != null,
+        status: tradingMode === "full_market" ? "running" : tradingMode === "crypto_only" ? "paused" : "idle",
+        cycles: summary?.system_health?.run_count ?? 0,
       };
     }
     if (botDef.type === "kraken") {
       const bot = fleetSummary?.bots?.find(b => b.bot_id === botDef.id);
+      const perf = botDef.id === "davy-jones" ? davyPerf : botDef.id === "blackbeard" ? bbPerf : caPerf;
       return {
         equity: bot?.equity_usd ?? null,
         pnl: bot?.pnl_usd ?? null,
         positions: bot?.trades ?? 0,
         online: bot != null,
+        status: perf?.bot_status ?? (bot ? "running" : "offline"),
+        cycles: perf?.cycle_count ?? 0,
       };
     }
     if (botDef.type === "options") {
@@ -396,6 +404,8 @@ function FleetStatusBar() {
         pnl: optionsState?.total_pnl ?? null,
         positions: optionsState?.positions_count ?? 0,
         online: optionsState?.status === "running" || optionsState?.status === "idle",
+        status: optionsState?.paused ? "paused" : optionsState?.status ?? "offline",
+        cycles: optionsState?.cycle_count ?? 0,
       };
     }
     return {
@@ -403,18 +413,47 @@ function FleetStatusBar() {
       pnl: forexState?.total_pnl ?? null,
       positions: forexState?.position_count ?? 0,
       online: forexState?.status === "running" || forexState?.status === "idle",
+      status: forexState?.paused ? "paused" : forexState?.status ?? "offline",
+      cycles: forexState?.cycle_count ?? 0,
     };
+  };
+
+  const normalizeStatus = (s: string) => {
+    if (s === "running" || s === "idle") return "running";
+    if (s.startsWith("paused")) return "paused";
+    return "offline";
+  };
+
+  const statusColor = (s: string) => {
+    const ns = normalizeStatus(s);
+    if (ns === "running") return "text-green-400";
+    if (ns === "paused") return "text-amber-400";
+    return "text-slate-500";
   };
 
   return (
     <div className="rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+      {regime && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-b border-white/5 text-[9px]">
+          <span className="text-muted-foreground/50 uppercase tracking-wider font-semibold">Regime</span>
+          <span className="font-mono text-white/70">{regime}</span>
+          {tradingMode && (
+            <>
+              <span className="text-muted-foreground/30">|</span>
+              <span className={cn("font-mono font-semibold", tradingModeColor(tradingMode))}>
+                {tradingModeLabel(tradingMode)}
+              </span>
+            </>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-white/5">
         {FLEET_BOTS.map((bot) => {
           const d = getBotData(bot);
           const pnlUp = (d.pnl ?? 0) >= 0;
           return (
             <div key={bot.id} className="px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-center gap-1.5 mb-1.5">
+              <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-xs">{bot.icon}</span>
                 <span className="text-[9px] font-bold text-white/80 truncate uppercase tracking-wider">{bot.label.split(" ")[0]}</span>
                 <span
@@ -426,6 +465,12 @@ function FleetStatusBar() {
               </div>
               <div className={cn("text-[9px] font-mono font-semibold tabular-nums", pnlUp ? "text-green-400/70" : "text-red-400/70")}>
                 {d.pnl != null ? `${pnlUp ? "+" : ""}${formatCurrency(d.pnl)}` : "—"}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className={cn("text-[8px] font-semibold uppercase tracking-wider", statusColor(d.status))}>
+                  {normalizeStatus(d.status) === "running" ? "RUN" : normalizeStatus(d.status) === "paused" ? "PAUSE" : "OFF"}
+                </span>
+                <span className="text-[8px] text-muted-foreground/40 font-mono">c{d.cycles}</span>
               </div>
             </div>
           );
@@ -613,11 +658,13 @@ function LiveEquityCurveSection() {
   );
 }
 
-type TradeFilter = "all" | "oracle" | "kraken" | "options" | "forex";
+type TradeFilter = "all" | "oracle" | "davy-jones" | "blackbeard" | "calypso" | "apex-predator" | "navigator";
 
 function CombinedTradeHistorySection() {
   const { data: alpacaData, isLoading: alpacaLoading } = useRecentTrades(50);
-  const { data: krakenPerf, isLoading: krakenLoading } = useKrakenPerformance();
+  const { data: davyPerf } = useKrakenPerformance("davy-jones");
+  const { data: bbPerf } = useKrakenPerformance("blackbeard");
+  const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: forexData, isLoading: forexLoading } = useForexTrades();
   const { data: optionsState } = useOptionsState();
   const [filter, setFilter] = useState<TradeFilter>("all");
@@ -625,6 +672,7 @@ function CombinedTradeHistorySection() {
   const combined = useMemo(() => {
     const alpacaRows = (alpacaData?.trades ?? []).map((t) => ({
       source: "oracle" as const,
+      botId: "oracle" as const,
       symbol: t.symbol,
       side: t.pnl_pct >= 0 ? "long" : "short",
       pnl_pct: t.pnl_pct,
@@ -633,20 +681,26 @@ function CombinedTradeHistorySection() {
       reason: t.exit_reason ?? "",
       is_win: t.pnl_pct > 0,
     }));
-    const krakenRows = (krakenPerf?.recent_trades ?? []).map((t) => ({
-      source: "kraken" as const,
-      symbol: t.symbol.replace("/USD", ""),
-      side: t.side,
-      pnl_pct: t.pnl_pct,
-      pnl_usd: t.pnl_usd,
-      closed_at: t.closed_at,
-      reason: t.reason ?? "",
-      is_win: t.pnl_pct > 0,
-    }));
+    const makeKrakenRows = (trades: Array<{ symbol: string; side: string; pnl_pct: number; pnl_usd: number; reason: string; closed_at: string }> | undefined, botId: "davy-jones" | "blackbeard" | "calypso") =>
+      (trades ?? []).map((t) => ({
+        source: "kraken" as const,
+        botId,
+        symbol: t.symbol.replace("/USD", ""),
+        side: t.side,
+        pnl_pct: t.pnl_pct,
+        pnl_usd: t.pnl_usd,
+        closed_at: t.closed_at,
+        reason: t.reason ?? "",
+        is_win: t.pnl_pct > 0,
+      }));
+    const davyRows = makeKrakenRows(davyPerf?.recent_trades, "davy-jones");
+    const bbRows = makeKrakenRows(bbPerf?.recent_trades, "blackbeard");
+    const caRows = makeKrakenRows(caPerf?.recent_trades, "calypso");
     const forexRows = (forexData?.trades ?? [])
       .filter(t => t.status === "closed" && t.exit_time)
       .map((t) => ({
         source: "forex" as const,
+        botId: "navigator" as const,
         symbol: t.pair,
         side: t.direction,
         pnl_pct: t.pnl_usd != null && t.entry_price > 0 ? (t.pnl_usd / (t.units * t.entry_price)) * 100 : 0,
@@ -655,13 +709,13 @@ function CombinedTradeHistorySection() {
         reason: "",
         is_win: (t.pnl_usd ?? 0) > 0,
       }));
-    return [...alpacaRows, ...krakenRows, ...forexRows]
+    return [...alpacaRows, ...davyRows, ...bbRows, ...caRows, ...forexRows]
       .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
-      .slice(0, 60);
-  }, [alpacaData, krakenPerf, forexData]);
+      .slice(0, 80);
+  }, [alpacaData, davyPerf, bbPerf, caPerf, forexData]);
 
-  const filtered = filter === "all" ? combined : combined.filter(t => t.source === filter);
-  const isLoading = alpacaLoading || krakenLoading || forexLoading;
+  const filtered = filter === "all" ? combined : combined.filter(t => t.botId === filter);
+  const isLoading = alpacaLoading || forexLoading;
   const wins = filtered.filter((t) => t.is_win).length;
   const losses = filtered.length - wins;
   const totalPnlUsd = filtered.reduce((s, t) => s + (t.pnl_usd ?? 0), 0);
@@ -677,17 +731,22 @@ function CombinedTradeHistorySection() {
   };
 
   const filterTabs: { id: TradeFilter; label: string; icon: string; color: string }[] = [
-    { id: "all",     label: "All",       icon: "",   color: "#3b82f6" },
-    { id: "oracle",  label: "Oracle",    icon: "🔮", color: "#818cf8" },
-    { id: "kraken",  label: "Kraken",    icon: "⚓", color: "#22d3ee" },
-    { id: "forex",   label: "Forex",     icon: "🧭", color: "#14b8a6" },
+    { id: "all",            label: "All",        icon: "",   color: "#3b82f6" },
+    { id: "oracle",         label: "Oracle",     icon: "🔮", color: "#818cf8" },
+    { id: "davy-jones",     label: "Davy Jones", icon: "⚓", color: "#22d3ee" },
+    { id: "blackbeard",     label: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
+    { id: "calypso",        label: "Calypso",    icon: "🌊", color: "#a855f7" },
+    { id: "apex-predator",  label: "Apex",       icon: "🎯", color: "#ef4444" },
+    { id: "navigator",      label: "Navigator",  icon: "🧭", color: "#14b8a6" },
   ];
 
   const sourceConfig: Record<string, { badge: string; badgeStyle: string }> = {
-    oracle: { badge: "ORC", badgeStyle: "text-indigo-400 border-indigo-500/20 bg-indigo-500/5" },
-    kraken: { badge: "KRK", badgeStyle: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5" },
-    forex:  { badge: "FX",  badgeStyle: "text-teal-400 border-teal-500/20 bg-teal-500/5" },
-    options:{ badge: "OPT", badgeStyle: "text-red-400 border-red-500/20 bg-red-500/5" },
+    oracle:           { badge: "ORC", badgeStyle: "text-indigo-400 border-indigo-500/20 bg-indigo-500/5" },
+    "davy-jones":     { badge: "DJ",  badgeStyle: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5" },
+    blackbeard:       { badge: "BB",  badgeStyle: "text-orange-400 border-orange-500/20 bg-orange-500/5" },
+    calypso:          { badge: "CA",  badgeStyle: "text-purple-400 border-purple-500/20 bg-purple-500/5" },
+    "apex-predator":  { badge: "APX", badgeStyle: "text-red-400 border-red-500/20 bg-red-500/5" },
+    navigator:        { badge: "NAV", badgeStyle: "text-teal-400 border-teal-500/20 bg-teal-500/5" },
   };
 
   return (
@@ -753,7 +812,7 @@ function CombinedTradeHistorySection() {
               <span className="text-right">Date</span>
             </div>
             {filtered.map((t, i) => {
-              const sc = sourceConfig[t.source] ?? sourceConfig.oracle;
+              const sc = sourceConfig[t.botId] ?? sourceConfig.oracle;
               return (
                 <div
                   key={i}

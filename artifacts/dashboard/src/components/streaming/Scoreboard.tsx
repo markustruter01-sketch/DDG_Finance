@@ -57,15 +57,13 @@ export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
                 animate={{ opacity: 1, x: 0, height: "auto" }}
                 exit={{ opacity: 0, x: 30, height: 0 }}
                 transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono",
-                  trade.isWin ? "bg-green-500/[0.03]" : "bg-red-500/[0.03]"
-                )}
+                className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono"
+                style={{ backgroundColor: trade.isWin ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)", color: trade.isWin ? "#00ff88" : "#ff4d4d" }}
               >
                 <span className="text-[10px] shrink-0">{trade.isWin ? "🚀" : "📉"}</span>
-                <span className="text-[9px]">{trade.icon}</span>
-                <span className="text-[9px] text-muted-foreground/70 truncate">{trade.bot} closed {trade.symbol}:</span>
-                <span className={cn("ml-auto text-[10px] font-bold shrink-0", trade.isWin ? "text-green-400" : "text-red-400")}>
+                <span className="text-[9px]" style={{ color: trade.isWin ? "#00ff88" : "#ff4d4d" }}>{trade.icon}</span>
+                <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>{trade.bot} closed {trade.symbol}:</span>
+                <span className="ml-auto text-[10px] font-bold shrink-0" style={{ color: trade.isWin ? "#00ff88" : "#ff4d4d" }}>
                   {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
                 </span>
               </motion.div>

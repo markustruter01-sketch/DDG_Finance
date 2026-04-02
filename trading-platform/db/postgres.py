@@ -318,6 +318,17 @@ CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
     adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     lookback_n  INTEGER NOT NULL DEFAULT 0
 );
+
+-- Fleet Commander chat history (Gemini-powered fleet management).
+CREATE TABLE IF NOT EXISTS fleet_commander_chat (
+    id          TEXT PRIMARY KEY,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    source      TEXT NOT NULL DEFAULT 'user',
+    metadata    JSONB DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_chat_ts ON fleet_commander_chat (ts DESC);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

@@ -2,12 +2,21 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
+import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft, Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
-  Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle,
+  Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+
+const BOUNDS: Record<string, { min: number; max: number; step: number }> = {
+  ZSCORE_ENTRY: { min: 0.70, max: 1.50, step: 0.05 },
+  ZSCORE_EXIT: { min: 0.10, max: 0.55, step: 0.02 },
+  STOP_LOSS_PCT: { min: 0.008, max: 0.040, step: 0.002 },
+  TRAIL_PCT: { min: 0.030, max: 0.100, step: 0.005 },
+  MIN_NET_PROFIT_PCT: { min: 0.006, max: 0.020, step: 0.001 },
+};
 
 interface ChatMessage {
   id: string;
@@ -37,11 +46,51 @@ function formatParamName(name: string): string {
   return name.replace(/_/g, " ").replace(/PCT/g, "%").replace(/MIN NET PROFIT/g, "Min Profit");
 }
 
-function MessageBubble({ msg, onApprove, onDecline, isApproving }: {
+function formatParamValue(name: string, val: number): string {
+  return val.toFixed(name.includes("PCT") ? 3 : 2);
+}
+
+function ParamChangeCard({ botId, params, currentParams }: {
+  botId: string;
+  params: Record<string, number>;
+  currentParams?: Record<string, number>;
+}) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-slate-900/60 p-2.5 mb-1.5">
+      <div className="text-xs font-bold text-amber-300 mb-1.5 font-mono">{botId}</div>
+      <div className="space-y-1">
+        {Object.entries(params).map(([pname, target]) => {
+          const current = currentParams?.[pname];
+          const bounds = BOUNDS[pname];
+          return (
+            <div key={pname} className="flex items-center gap-2 text-[11px]">
+              <span className="text-slate-400 font-mono w-28 flex-shrink-0">{formatParamName(pname)}</span>
+              {current != null ? (
+                <>
+                  <span className="font-mono text-slate-300">{formatParamValue(pname, current)}</span>
+                  <ArrowRight className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <span className="font-mono text-white font-bold">{formatParamValue(pname, target)}</span>
+                </>
+              ) : (
+                <span className="font-mono text-white font-bold">{formatParamValue(pname, target)}</span>
+              )}
+              {bounds && (
+                <span className="text-slate-600 text-[9px] ml-auto">[{formatParamValue(pname, bounds.min)}-{formatParamValue(pname, bounds.max)}]</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParams }: {
   msg: ChatMessage;
   onApprove?: (id: string) => void;
   onDecline?: (id: string) => void;
   isApproving?: boolean;
+  currentBotParams?: Record<string, Record<string, number>>;
 }) {
   const isUser = msg.role === "user";
   const meta = msg.metadata || {};
@@ -67,7 +116,13 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving }: {
               ? "bg-blue-600/20 border border-blue-500/20 text-blue-100"
               : "bg-slate-800/80 border border-white/[0.06] text-slate-200"
           }`}>
-            <div className="whitespace-pre-wrap">{msg.content}</div>
+            {isUser ? (
+              <div className="whitespace-pre-wrap">{msg.content}</div>
+            ) : (
+              <div className="prose prose-invert prose-sm max-w-none [&_p]:mb-1.5 [&_p]:leading-relaxed [&_strong]:text-white [&_code]:bg-slate-700/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-emerald-300 [&_ul]:mb-1.5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_pre]:bg-slate-900 [&_pre]:rounded-lg [&_pre]:p-2 [&_pre]:text-xs [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs">
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              </div>
+            )}
           </div>
 
           {hasRecs && !wasApproved && !wasDeclined && (
@@ -76,16 +131,21 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving }: {
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Pending Approval</span>
               </div>
-              <div className="space-y-1.5 mb-3">
+              <div className="mb-2">
                 {(meta.pending_recommendations as Recommendation[]).map((rec, i) => (
-                  <div key={i} className="text-xs text-slate-300">
-                    <span className="font-mono text-amber-300">{rec.bot_id}</span>
-                    {": "}
-                    {Object.entries(rec.params || {}).map(([k, v]) => (
-                      <span key={k} className="font-mono text-white ml-1">{k}={typeof v === 'number' ? v.toFixed(4) : v}</span>
-                    ))}
-                  </div>
+                  <ParamChangeCard
+                    key={i}
+                    botId={rec.bot_id}
+                    params={rec.params || {}}
+                    currentParams={currentBotParams?.[rec.bot_id]}
+                  />
                 ))}
+              </div>
+              <div className="flex items-start gap-2 mb-3 p-2 rounded-md bg-slate-900/40 border border-white/[0.04]">
+                <Info className="w-3.5 h-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
+                <span className="text-[10px] text-slate-400 leading-relaxed">
+                  Changes are limited to max 1 step per parameter per approval cycle. Multiple approvals may be needed to reach target values.
+                </span>
               </div>
               <div className="flex gap-2">
                 <button
@@ -174,9 +234,9 @@ function ParamsPanel() {
                     <div className="flex justify-between items-center mb-0.5">
                       <span className="text-[10px] text-slate-400 font-mono">{formatParamName(param)}</span>
                       <span className="text-[10px] font-mono text-white">
-                        {val.toFixed(param.includes("PCT") ? 3 : 2)}
+                        {formatParamValue(param, val)}
                         {!atDefault && def != null && (
-                          <span className="text-slate-600 ml-1">(def: {def.toFixed(param.includes("PCT") ? 3 : 2)})</span>
+                          <span className="text-slate-600 ml-1">(def: {formatParamValue(param, def)})</span>
                         )}
                       </span>
                     </div>
@@ -216,6 +276,25 @@ export default function CommanderPage() {
     },
     refetchInterval: 10_000,
   });
+
+  const { data: paramsData } = useQuery({
+    queryKey: ["fleet-params"],
+    queryFn: async () => {
+      const r = await fetch(`${BASE}/fleet-commander/params`);
+      if (!r.ok) throw new Error(`Params fetch failed: ${r.status}`);
+      return r.json();
+    },
+    refetchInterval: 30_000,
+  });
+
+  const currentBotParams: Record<string, Record<string, number>> = {};
+  if (paramsData?.bots) {
+    for (const [botId, botData] of Object.entries(paramsData.bots) as [string, any][]) {
+      if (botData.current) {
+        currentBotParams[botId] = botData.current;
+      }
+    }
+  }
 
   const messages: ChatMessage[] = historyData?.messages || [];
 
@@ -352,6 +431,7 @@ export default function CommanderPage() {
                   onApprove={(id) => approveMutation.mutate({ messageId: id, approved: true })}
                   onDecline={(id) => approveMutation.mutate({ messageId: id, approved: false })}
                   isApproving={approveMutation.isPending}
+                  currentBotParams={currentBotParams}
                 />
               ))}
             </AnimatePresence>

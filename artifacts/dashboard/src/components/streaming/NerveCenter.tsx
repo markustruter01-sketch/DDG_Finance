@@ -150,7 +150,15 @@ export function NerveCenter() {
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1 shrink-0">Nerve Center</div>
+      <div className="flex items-center justify-center gap-3 pt-1 shrink-0">
+        <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
+        <div className="flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-0.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-[10px] font-mono font-bold text-green-400" style={{ textShadow: "0 0 8px rgba(34,197,94,0.5)" }}>
+            {activeCount}/6 Bots Live
+          </span>
+        </div>
+      </div>
 
       <div className="flex-1 flex items-center justify-center relative p-2 min-h-0 overflow-hidden">
         <div
@@ -255,7 +263,7 @@ export function NerveCenter() {
             animate={{ opacity: [0.3, 0.7, 0.3] }}
             transition={{ duration: 1.5, repeat: Infinity }}
           >
-            {activeCount}/6 NODES ACTIVE
+            ALL NODES SYNCED
           </motion.text>
 
           {BOTS.map((bot) => {
@@ -397,7 +405,7 @@ export function NerveCenter() {
                   whiteSpace: "nowrap",
                   fontFamily: "monospace",
                   fontSize: "7px",
-                  color: "rgba(129,140,248,0.45)",
+                  color: "rgba(255,255,255,0.7)",
                   letterSpacing: "0.5px",
                 }}
               >

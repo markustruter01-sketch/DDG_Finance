@@ -1642,12 +1642,15 @@ async def export_diagnostic_report() -> dict:
             pair   = str(ft.get("pair", "?"))[:11]
             dt     = str(ft.get("closed_at") or ft.get("exit_time") or "?")[:16]
             dirn   = str(ft.get("direction", "?")).upper()[:5]
-            entry  = ft.get("entry_price", 0)
-            exit_p = ft.get("exit_price", 0)
-            pusd   = ft.get("pnl_usd", 0)
-            pips   = ft.get("pnl_pips", 0)
+            entry  = ft.get("entry_price") or 0
+            exit_p = ft.get("exit_price") or 0
+            pusd   = ft.get("pnl_usd") or 0
+            pips   = ft.get("pnl_pips") or 0
             reason = str(ft.get("exit_reason") or ft.get("reason") or "?")[:30]
-            lines.append(f"  {i:<4} {dt:<18} {pair:<12} {dirn:<6} {entry:>10.5f} {exit_p:>10.5f} {_c(pusd):>10} {pips:>+7.1f}  {reason}")
+            try:
+                lines.append(f"  {i:<4} {dt:<18} {pair:<12} {dirn:<6} {float(entry):>10.5f} {float(exit_p):>10.5f} {_c(pusd):>10} {float(pips):>+7.1f}  {reason}")
+            except (TypeError, ValueError):
+                lines.append(f"  {i:<4} {dt:<18} {pair:<12} {dirn:<6} {'N/A':>10} {'N/A':>10} {_c(pusd):>10} {'N/A':>7}  {reason}")
 
     h2("FOREX STRATEGY PARAMETERS")
     lines += [
@@ -1823,7 +1826,10 @@ async def news_feed() -> dict:
                     "url": article.get("url", ""),
                 })
         articles.sort(key=lambda a: a.get("published_at", ""), reverse=True)
+        if not articles:
+            news_cache.invalidate()
         return {"articles": articles[:25]}
     except Exception as exc:
         logger.warning(f"News feed fetch failed: {exc}")
+        news_cache.invalidate()
         return {"articles": [], "error": str(exc)}

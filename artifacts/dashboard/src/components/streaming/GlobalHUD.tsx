@@ -5,6 +5,7 @@ import {
   useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
 import { AnimatedValue } from "./AnimatedValue";
+import ddgLogo from "@assets/DDG_Logo_1775162478781.png";
 
 const cardVariants = {
   hidden: { opacity: 0, y: -20, scale: 0.95 },
@@ -23,9 +24,6 @@ export function GlobalHUD() {
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
-  const djStatus = useKrakenStatus("davy-jones");
-  const bbStatus = useKrakenStatus("blackbeard");
-  const caStatus = useKrakenStatus("calypso");
 
   const alpacaEquity = summary?.portfolio_totals?.equity ?? 0;
   const krakenEquity = fleet?.total_equity_usd ?? 0;
@@ -47,21 +45,14 @@ export function GlobalHUD() {
   const totalTrades = alpacaTotal + krakenTotal + optTotal + fxTotal;
   const winRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0;
 
-  const oracleActive = !!(summary?.market_open);
-  const djActive = !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused);
-  const bbActive = !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused);
-  const caActive = !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused);
-  const apexActive = !!(optState && !optState.paused);
-  const navActive = !!(fxState && !fxState.paused);
-  const activeBots = [oracleActive, djActive, bbActive, caActive, apexActive, navActive].filter(Boolean).length;
-
   const cards = [
     {
-      label: "FLEET STATUS",
-      value: `${activeBots}/6 Bots Live`,
-      sub: `${activeBots > 0 ? "actively trading" : "standing by"} · 4 capital pools`,
-      glow: activeBots > 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-amber-500/20 via-amber-500/5 to-transparent",
-      border: activeBots > 0 ? "border-green-500/30" : "border-amber-500/30",
+      label: "POWERED_BY_LOGO",
+      value: "",
+      sub: "",
+      glow: "from-violet-500/20 via-violet-500/5 to-transparent",
+      border: "border-violet-500/30",
+      isLogo: true,
     },
     {
       label: "COMBINED P&L",
@@ -86,6 +77,19 @@ export function GlobalHUD() {
     },
   ];
 
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
+
+  const activePools = [
+    summary?.auto_trading !== undefined,
+    djStatus.data?.is_running,
+    bbStatus.data?.is_running,
+    caStatus.data?.is_running,
+    optState !== undefined,
+    fxState !== undefined,
+  ].filter(Boolean).length;
+
   const drawdownPct = startTotal > 0 ? Math.min(0, ((grandTotal - startTotal) / startTotal) * 100) : 0;
   const profitFactor = totalTrades > 0 && (totalTrades - totalWins) > 0
     ? (totalWins / (totalTrades - totalWins)).toFixed(2) : "—";
@@ -100,7 +104,7 @@ export function GlobalHUD() {
     { label: "PROFIT FACTOR", value: profitFactor, color: "text-cyan-400" },
     { label: "RISK LEVEL", value: riskLevel, color: riskColor },
     { label: "SHARPE (EST.)", value: winRate > 50 ? ((winRate / 100 * 2 - 1) * 1.5).toFixed(2) : "0.00", color: "text-violet-400" },
-    { label: "EXPOSURE", value: `${activeBots}/6 pools`, color: "text-blue-400" },
+    { label: "EXPOSURE", value: `${activePools}/6 pools`, color: "text-blue-400" },
     { label: "AVG POSITION", value: avgTradeSize, color: "text-amber-400" },
   ];
 
@@ -121,13 +125,29 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
-              <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
-              <div className="text-base font-mono font-bold text-white tracking-tight">
-                <AnimatedValue value={card.value} />
-              </div>
-              <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
-                <AnimatedValue value={card.sub} />
-              </div>
+              {"isLogo" in card && card.isLogo ? (
+                <div className="flex items-center gap-2.5 h-full min-h-[40px]">
+                  <motion.span
+                    className="text-[15px] font-black tracking-wide uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent"
+                    style={{ textShadow: "0 0 20px rgba(139,92,246,0.5)" }}
+                    animate={{ opacity: [0.7, 1, 0.7] }}
+                    transition={{ duration: 3, repeat: Infinity }}
+                  >
+                    Powered by
+                  </motion.span>
+                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[42px] w-auto object-contain" />
+                </div>
+              ) : (
+                <>
+                  <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
+                  <div className="text-base font-mono font-bold text-white tracking-tight">
+                    <AnimatedValue value={card.value} />
+                  </div>
+                  <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
+                    <AnimatedValue value={card.sub} />
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         ))}

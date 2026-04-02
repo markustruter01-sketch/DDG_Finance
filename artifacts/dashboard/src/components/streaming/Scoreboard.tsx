@@ -53,7 +53,14 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
 
       <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0 flex flex-col">
         <div className="px-3 py-2.5 border-b border-white/10 shrink-0 flex items-center justify-between">
-          <span className="text-[13px] uppercase font-black tracking-wider text-white" style={{ textShadow: "0 0 10px rgba(255,255,255,0.15)" }}>Open Positions</span>
+          <motion.span
+            className="text-[13px] uppercase font-black tracking-wider text-white"
+            style={{ textShadow: "0 0 10px rgba(255,255,255,0.15)" }}
+            animate={{ opacity: [0.7, 1, 0.7] }}
+            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            Open Positions
+          </motion.span>
           <span className="text-[12px] font-mono font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">{openPositions.length}</span>
         </div>
         <div className="flex-1 overflow-hidden min-h-0">

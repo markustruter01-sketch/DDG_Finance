@@ -35,8 +35,8 @@ export function VaultDisplay() {
             <motion.div
               className="text-2xl font-mono font-black text-emerald-400"
               style={{ textShadow: "0 0 20px rgba(16,185,129,0.6), 0 0 40px rgba(16,185,129,0.3)" }}
-              animate={{ opacity: [0.8, 1, 0.8] }}
-              transition={{ duration: 3, repeat: Infinity }}
+              animate={{ opacity: [0.6, 1, 0.6], scale: [0.98, 1.02, 0.98] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
             >
               {formatUsd(totalVaulted)}
             </motion.div>
@@ -69,9 +69,9 @@ export function VaultDisplay() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-2.5 py-2">
-        <div className="text-[8px] font-mono text-emerald-400/40 leading-relaxed">
-          20% of realized profits are automatically swept into the <span className="text-emerald-400/70 font-bold">Growth Vault (JEPQ)</span> for compounding high-yield dividend income.
+      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-3 py-3 flex-1">
+        <div className="text-[13px] font-mono text-emerald-400/50 leading-relaxed">
+          20% of realized profits are automatically swept into the <span className="text-emerald-400/80 font-bold">Growth Vault (JEPQ)</span> for compounding high-yield dividend income.
         </div>
       </div>
     </div>

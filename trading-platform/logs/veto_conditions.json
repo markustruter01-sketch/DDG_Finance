@@ -1,32 +1,33 @@
 {
-  "generated_at": "2026-04-02T08:15:00.003453+00:00",
-  "valid_until": "2026-04-03T08:15:00.003453+00:00",
+  "generated_at": "2026-04-02T21:00:15.543571+00:00",
+  "valid_until": "2026-04-03T03:00:15.543571+00:00",
   "vetoed_tickers": [
-    "ETHUSD",
-    "DOTUSD"
+    "UNI",
+    "RENDER",
+    "ENA",
+    "BITO"
   ],
   "conditions": [
     {
+      "type": "vpin_threshold",
+      "value": 0.75
+    },
+    {
       "type": "max_conviction_cap",
-      "value": 0.85
+      "value": 0.82
     },
     {
-      "type": "heartbeat_timeout",
-      "value": 1800.0
-    },
-    {
-      "type": "pnl_volatility_cap",
-      "value": 0.05
+      "type": "min_regime_vix_threshold",
+      "value": 25.0
     }
   ],
-  "critique_summary": "The platform is in a state of catastrophic failure with 15/16 scheduler jobs failing persistently for over 12 hours. Equity data is severely corrupted, showing an impossible 152% overnight jump (196k to 496k) that contradicts the -0.15% performance report, while conviction scores are recorded at 5.00, violating the 0-1 range constraint.",
+  "critique_summary": "The fleet is currently fighting a Bear regime (VIX 24.54) with a long-biased configuration, leading to significant cross-bot correlation losses in UNI and RENDER. Oracle's conviction scores are inflated relative to its -2.19% return, and Calypso's 83% capital deployment is a critical risk violation during a risk-off environment.",
   "critique_flags": [
-    "Impossible PnL jump: Equity increased 152% between 2026-04-01T09:26 and 2026-04-02T01:29 despite a -0.15% performance log.",
-    "Data Anomaly: Conviction scores (5.00) are outside the defined 0-1 range.",
-    "System Degradation: Repeated failure of 15/16 scheduler jobs (never_run/analysis_failed) across 50+ log entries.",
-    "Stale Data: Kraken bot heartbeat is 39309s old (>10 hours), indicating total loss of crypto execution control.",
-    "Stale Equity Curve: Gap of >15 hours in equity reporting during active market cycles.",
-    "Duplicate Data: Identical equity rows detected at 2026-04-02T05:59:02."
+    "Cross-bot concentration in UNI/USD (0% win rate, -$1,145 loss)",
+    "Severe regime contradiction (Bots 2-4 are 70%+ Long in Bear regime)",
+    "Calypso over-leveraged at 83% deployment",
+    "Oracle conviction-to-performance decoupling"
   ],
-  "overall_verdict": "HOLD"
+  "overall_verdict": "CAUTION",
+  "source": "fleet_commander"
 }

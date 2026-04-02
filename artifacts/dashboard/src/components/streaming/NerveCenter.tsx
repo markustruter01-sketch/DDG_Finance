@@ -283,26 +283,29 @@ export function NerveCenter() {
             );
           })}
 
-          <AnimatePresence>
-            {algoPopups.map((popup) => (
-              <motion.text
-                key={popup.id}
-                x={popup.x}
-                y={popup.y}
-                initial={{ opacity: 0, y: popup.y + 10 }}
-                animate={{ opacity: 0.6, y: popup.y }}
-                exit={{ opacity: 0, y: popup.y - 15 }}
-                transition={{ duration: 0.8 }}
-                fill="rgba(99,220,241,0.5)"
-                fontSize="6.5"
-                fontFamily="monospace"
-                textAnchor="middle"
-              >
-                {popup.text}
-              </motion.text>
-            ))}
-          </AnimatePresence>
         </svg>
+
+        <AnimatePresence>
+          {algoPopups.map((popup) => (
+            <motion.div
+              key={popup.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.8 }}
+              className="absolute pointer-events-none font-mono font-bold text-white tracking-wide"
+              style={{
+                left: `${(popup.x / 400) * 100}%`,
+                top: `${(popup.y / 380) * 100}%`,
+                transform: "translate(-50%, -50%)",
+                fontSize: "14px",
+                textShadow: "0 0 12px rgba(99,220,241,0.8), 0 0 30px rgba(99,220,241,0.4)",
+              }}
+            >
+              {popup.text}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       <div className="px-3 pb-3">

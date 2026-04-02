@@ -7,7 +7,7 @@ import {
   ArrowLeft, Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
-import { useFleetParams, type BotParamBounds, type BotParamData, type FleetParamsResponse } from "@/hooks/use-trading";
+import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 

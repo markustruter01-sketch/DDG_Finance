@@ -37,10 +37,10 @@ const PARAM_LABELS: Record<string, { label: string; short: string; format: (v: n
 
 const PARAM_ORDER = ["ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"];
 
-const BOT_LABELS: Record<string, { name: string; color: string; glow: string }> = {
-  davy_jones: { name: "Davy Jones", color: "#f59e0b", glow: "shadow-amber-500/20" },
-  blackbeard: { name: "Blackbeard", color: "#ef4444", glow: "shadow-red-500/20" },
-  calypso: { name: "Calypso", color: "#8b5cf6", glow: "shadow-violet-500/20" },
+const BOT_LABELS: Record<string, { name: string; color: string }> = {
+  davy_jones: { name: "Davy Jones", color: "#f59e0b" },
+  blackbeard: { name: "Blackbeard", color: "#ef4444" },
+  calypso: { name: "Calypso", color: "#8b5cf6" },
 };
 
 function getAggressivenessColor(value: number, bounds: BotParamBounds, aggressive: "high" | "low"): string {
@@ -142,7 +142,7 @@ export function BotParameterSliders() {
       </div>
 
       {Object.entries(data.bots).map(([botId, botData]) => {
-        const label = BOT_LABELS[botId] || { name: botId, color: "#6b7280", glow: "" };
+        const label = BOT_LABELS[botId] || { name: botId, color: "#6b7280" };
 
         return (
           <motion.div

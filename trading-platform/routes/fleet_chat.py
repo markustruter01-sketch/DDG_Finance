@@ -13,7 +13,6 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -637,10 +636,11 @@ async def _handle_pause_losing() -> dict:
     paused = []
     for bid in losing_bots:
         try:
-            ctrl_path = Path(__file__).resolve().parent.parent.parent / "kraken-bot" / f"{bid}_control.json"
-            ctrl_path.write_text(json.dumps({"bot_paused": True}, indent=2))
+            from routes.kraken import kraken_toggle_auto_trading, KrakenControlRequest
+            req = KrakenControlRequest(bot_paused=True)
+            result = await kraken_toggle_auto_trading(req, bot_id=bid)
             paused.append(bid)
-            logger.info(f"FleetChat | Paused {bid} via control file")
+            logger.info(f"FleetChat | Paused {bid} via /kraken/auto-trading: {result}")
         except Exception as exc:
             logger.warning(f"FleetChat | pause {bid} failed: {exc}")
 

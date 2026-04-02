@@ -33,6 +33,22 @@ interface Recommendation {
   reasoning: string;
 }
 
+interface BotParamBounds {
+  min: number;
+  max: number;
+  step: number;
+}
+
+interface BotParamData {
+  current: Record<string, number>;
+  bounds: Record<string, BotParamBounds>;
+  defaults?: Record<string, number>;
+}
+
+interface FleetParamsResponse {
+  bots: Record<string, BotParamData>;
+}
+
 const QUICK_ACTIONS = [
   { id: "conservative", label: "Conservative", icon: Shield, color: "#3b82f6", desc: "Tighten entries & stops" },
   { id: "aggressive", label: "Aggressive", icon: Swords, color: "#ef4444", desc: "Loosen entries & stops" },
@@ -209,7 +225,7 @@ function ParamsPanel() {
   return (
     <div className="space-y-3">
       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">Live Parameters</h3>
-      {Object.entries(data.bots).map(([botId, botData]: [string, any]) => {
+      {Object.entries(data.bots).map(([botId, botData]: [string, BotParamData]) => {
         const label = botLabels[botId] || { name: botId, color: "#6b7280" };
         const current = botData.current || {};
         const defaults = botData.defaults || {};
@@ -222,7 +238,7 @@ function ParamsPanel() {
               <span className="text-xs font-bold text-white">{label.name}</span>
             </div>
             <div className="space-y-2">
-              {Object.entries(bounds).map(([param, b]: [string, any]) => {
+              {Object.entries(bounds).map(([param, b]: [string, BotParamBounds]) => {
                 const val = current[param];
                 const def = defaults[param];
                 if (val == null) return null;
@@ -289,7 +305,7 @@ export default function CommanderPage() {
 
   const currentBotParams: Record<string, Record<string, number>> = {};
   if (paramsData?.bots) {
-    for (const [botId, botData] of Object.entries(paramsData.bots) as [string, any][]) {
+    for (const [botId, botData] of Object.entries(paramsData.bots) as [string, BotParamData][]) {
       if (botData.current) {
         currentBotParams[botId] = botData.current;
       }

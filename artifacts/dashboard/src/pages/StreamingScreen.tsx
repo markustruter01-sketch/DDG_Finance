@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Radio } from "lucide-react";
+import { LayoutDashboard, Radio, Anchor, Globe, TrendingUp, LineChart, Settings, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { Scoreboard } from "@/components/streaming/Scoreboard";
@@ -35,50 +35,66 @@ function useViewportScale() {
   return scale;
 }
 
+const NAV_ITEMS = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#3b82f6", path: "/" },
+  { id: "kraken", label: "Kraken", icon: Anchor, color: "#22d3ee" },
+  { id: "alpaca", label: "Alpaca", icon: TrendingUp, color: "#10b981" },
+  { id: "options", label: "Options", icon: BarChart3, color: "#f59e0b" },
+  { id: "forex", label: "Forex", icon: Globe, color: "#8b5cf6" },
+  { id: "analytics", label: "Analytics", icon: LineChart, color: "#6366f1" },
+  { id: "cmd", label: "CMD", icon: Settings, color: "#64748b" },
+  { id: "live", label: "Live", icon: Radio, color: "#f43f5e", active: true },
+];
+
 function StreamingNavBar() {
   const [, navigate] = useLocation();
-  const streamColor = "#f43f5e";
 
   return (
-    <nav className="absolute bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
-      <div className="flex items-center justify-center gap-3 max-w-xs mx-auto pointer-events-auto">
-        <button
-          onClick={() => navigate("/")}
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[64px] py-2.5 px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-blue-500/40 hover:bg-slate-800/80 group"
-        >
-          <span className="text-slate-400 group-hover:text-blue-400 transition-colors">
-            <LayoutDashboard className="h-6 w-6" />
-          </span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 text-slate-500 group-hover:text-blue-400 transition-colors">
-            Dashboard
-          </span>
-        </button>
-        <button
-          className={cn(
-            "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[64px]",
-            "py-2.5 px-4 shadow-lg scale-105"
-          )}
-          style={{
-            background: `linear-gradient(135deg, ${streamColor}20, ${streamColor}10)`,
-            borderWidth: 1,
-            borderStyle: "solid",
-            borderColor: `${streamColor}50`,
-            boxShadow: `0 4px 24px ${streamColor}25, 0 0 0 1px ${streamColor}15`,
-          }}
-        >
-          <span className="relative" style={{ color: streamColor }}>
-            <Radio className="h-6 w-6" />
-            <span
-              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
-              style={{ background: streamColor, boxShadow: `0 0 6px ${streamColor}` }}
-            />
-          </span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1" style={{ color: streamColor }}>
-            Live
-          </span>
-        </button>
+    <div className="shrink-0 px-3 py-1.5">
+      <div className="flex items-center justify-center gap-1.5 mx-auto">
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const isActive = item.active;
+          const isLink = !!item.path;
+
+          return (
+            <button
+              key={item.id}
+              onClick={isLink ? () => navigate(item.path!) : undefined}
+              className={cn(
+                "relative flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[56px] py-1.5 px-3",
+                isActive
+                  ? "scale-105"
+                  : "bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] hover:border-white/10 hover:bg-slate-800/60"
+              )}
+              style={isActive ? {
+                background: `linear-gradient(135deg, ${item.color}20, ${item.color}10)`,
+                borderWidth: 1,
+                borderStyle: "solid",
+                borderColor: `${item.color}50`,
+                boxShadow: `0 2px 12px ${item.color}25, 0 0 0 1px ${item.color}15`,
+              } : undefined}
+            >
+              <span className="relative" style={{ color: isActive ? item.color : "#64748b" }}>
+                <Icon className="h-4 w-4" />
+                {isActive && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full animate-pulse"
+                    style={{ background: item.color, boxShadow: `0 0 4px ${item.color}` }}
+                  />
+                )}
+              </span>
+              <span
+                className="text-[7px] font-bold tracking-wider uppercase mt-0.5"
+                style={{ color: isActive ? item.color : "#475569" }}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
-    </nav>
+    </div>
   );
 }
 
@@ -97,7 +113,7 @@ export default function StreamingScreen() {
         }}
         className="relative flex flex-col overflow-hidden"
       >
-        <div className="flex-1 flex flex-col p-3 gap-2 pb-12 min-h-0">
+        <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
           <GlobalHUD />
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
@@ -111,25 +127,29 @@ export default function StreamingScreen() {
               </div>
             </div>
 
-            <div className="col-span-6 min-h-0 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40">
-              <NerveCenter />
+            <div className="col-span-6 min-h-0 flex flex-col gap-1.5">
+              <div className="flex-1 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0">
+                <NerveCenter />
+              </div>
+              <StreamingNavBar />
             </div>
 
-            <div className="col-span-3 min-h-0 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+            <div className="col-span-3 min-h-0 flex flex-col gap-2">
               <div className="shrink-0">
                 <SignalRadar />
               </div>
               <div className="shrink-0">
                 <VaultDisplay />
               </div>
-              <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
+              <div className="shrink-0">
+                <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
+              </div>
               <GeminiThinking />
             </div>
           </div>
         </div>
 
         <SalesTicker />
-        <StreamingNavBar />
       </div>
     </div>
   );

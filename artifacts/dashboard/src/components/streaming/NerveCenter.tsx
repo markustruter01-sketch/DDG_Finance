@@ -36,18 +36,27 @@ const ALGO_SNIPPETS = [
   "Half-Kelly sizing: $840",
 ];
 
+const CORNER_POSITIONS = [
+  { x: 12, y: 8 },
+  { x: 88, y: 8 },
+  { x: 12, y: 88 },
+  { x: 88, y: 88 },
+  { x: 12, y: 48 },
+  { x: 88, y: 48 },
+];
 
 function useAlgoPopups() {
   const [popups, setPopups] = useState<{ id: number; text: string; x: number; y: number }[]>([]);
   const nextId = useRef(0);
+  const cornerIdx = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
       const text = ALGO_SNIPPETS[Math.floor(Math.random() * ALGO_SNIPPETS.length)];
       const id = nextId.current++;
-      const x = 30 + Math.random() * 340;
-      const y = 30 + Math.random() * 340;
-      setPopups((prev) => [...prev.slice(-4), { id, text, x, y }]);
+      const corner = CORNER_POSITIONS[cornerIdx.current % CORNER_POSITIONS.length];
+      cornerIdx.current++;
+      setPopups((prev) => [...prev.slice(-3), { id, text, x: corner.x, y: corner.y }]);
       setTimeout(() => {
         setPopups((prev) => prev.filter((p) => p.id !== id));
       }, 2800);
@@ -77,6 +86,14 @@ export function NerveCenter() {
   };
 
   const algoPopups = useAlgoPopups();
+  const [scanY, setScanY] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setScanY((prev) => (prev >= 100 ? 0 : prev + 0.5));
+    }, 30);
+    return () => clearInterval(interval);
+  }, []);
 
   const cx = 200;
   const cy = 160;
@@ -89,6 +106,26 @@ export function NerveCenter() {
       <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1 shrink-0">Nerve Center</div>
 
       <div className="flex-1 flex items-center justify-center relative p-2 min-h-0 overflow-hidden">
+        <div
+          className="absolute left-0 right-0 pointer-events-none z-20"
+          style={{
+            top: `${scanY}%`,
+            height: "2px",
+            background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.4), rgba(34,211,238,0.8), rgba(34,211,238,0.4), transparent)",
+            boxShadow: "0 0 8px rgba(34,211,238,0.5), 0 0 20px rgba(34,211,238,0.2)",
+            transition: "top 30ms linear",
+          }}
+        />
+        <div
+          className="absolute left-0 right-0 pointer-events-none z-20"
+          style={{
+            top: `${scanY}%`,
+            height: "30px",
+            background: "linear-gradient(180deg, rgba(34,211,238,0.06), transparent)",
+            transform: "translateY(-100%)",
+          }}
+        />
+
         <svg viewBox="0 0 400 380" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
@@ -265,17 +302,18 @@ export function NerveCenter() {
           {algoPopups.map((popup) => (
             <motion.div
               key={popup.id}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.8 }}
               className="absolute pointer-events-none font-mono font-bold text-white tracking-wide"
               style={{
-                left: `${(popup.x / 400) * 100}%`,
-                top: `${(popup.y / 380) * 100}%`,
+                left: `${popup.x}%`,
+                top: `${popup.y}%`,
                 transform: "translate(-50%, -50%)",
-                fontSize: "14px",
+                fontSize: "11px",
                 textShadow: "0 0 12px rgba(99,220,241,0.8), 0 0 30px rgba(99,220,241,0.4)",
+                whiteSpace: "nowrap",
               }}
             >
               {popup.text}

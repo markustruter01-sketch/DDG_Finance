@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { useState, useEffect, useCallback } from "react";
 import { LayoutDashboard, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GlobalHUD } from "@/components/streaming/GlobalHUD";
@@ -15,16 +16,37 @@ import { SessionStats } from "@/components/streaming/SessionStats";
 import { GeminiThinking } from "@/components/streaming/GeminiThinking";
 import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
+const REF_W = 1920;
+const REF_H = 1080;
+
+function useViewportScale() {
+  const getScale = useCallback(() => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return Math.min(w / REF_W, h / REF_H);
+  }, []);
+
+  const [scale, setScale] = useState(getScale);
+
+  useEffect(() => {
+    const onResize = () => setScale(getScale());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [getScale]);
+
+  return scale;
+}
+
 function StreamingNavBar() {
   const [, navigate] = useLocation();
   const streamColor = "#f43f5e";
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
-      <div className="flex items-center justify-center gap-2 sm:gap-3 max-w-xs mx-auto pointer-events-auto">
+    <nav className="absolute bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
+      <div className="flex items-center justify-center gap-3 max-w-xs mx-auto pointer-events-auto">
         <button
           onClick={() => navigate("/")}
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-blue-500/40 hover:bg-slate-800/80 group"
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[64px] py-2.5 px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-blue-500/40 hover:bg-slate-800/80 group"
         >
           <span className="text-slate-400 group-hover:text-blue-400 transition-colors">
             <LayoutDashboard className="h-6 w-6" />
@@ -35,8 +57,8 @@ function StreamingNavBar() {
         </button>
         <button
           className={cn(
-            "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px]",
-            "py-2.5 px-3 sm:px-4 shadow-lg scale-105"
+            "relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[64px]",
+            "py-2.5 px-4 shadow-lg scale-105"
           )}
           style={{
             background: `linear-gradient(135deg, ${streamColor}20, ${streamColor}10)`,
@@ -64,45 +86,56 @@ function StreamingNavBar() {
 
 export default function StreamingScreen() {
   const { trades, explosion, wins, losses, botStats, achievements, tradesPerHour } = useSimulatedFeed(15);
+  const scale = useViewportScale();
 
   return (
-    <div className="h-screen bg-slate-950 flex flex-col overflow-hidden">
-      <ProfitExplosion trade={explosion} />
-      <AchievementFeed achievements={achievements} />
+    <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
+      <div
+        style={{
+          width: REF_W,
+          height: REF_H,
+          transform: `scale(${scale})`,
+          transformOrigin: "center center",
+        }}
+        className="relative flex flex-col overflow-hidden"
+      >
+        <ProfitExplosion trade={explosion} />
+        <AchievementFeed achievements={achievements} />
 
-      <div className="flex-1 flex flex-col p-3 gap-2 pb-12 min-h-0">
-        <GlobalHUD />
+        <div className="flex-1 flex flex-col p-3 gap-2 pb-12 min-h-0">
+          <GlobalHUD />
 
-        <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-          <div className="col-span-3 min-h-0 flex flex-col gap-2">
-            <Scoreboard wins={wins} losses={losses} trades={trades} />
-            <div className="shrink-0">
-              <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
+          <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
+            <div className="col-span-3 min-h-0 flex flex-col gap-2">
+              <Scoreboard wins={wins} losses={losses} trades={trades} />
+              <div className="shrink-0">
+                <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
+              </div>
+              <div className="shrink-0">
+                <BotLeaderboard botStats={botStats} />
+              </div>
             </div>
-            <div className="shrink-0">
-              <BotLeaderboard botStats={botStats} />
-            </div>
-          </div>
 
-          <div className="col-span-6 min-h-0 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40">
-            <NerveCenter />
-          </div>
+            <div className="col-span-6 min-h-0 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40">
+              <NerveCenter />
+            </div>
 
-          <div className="col-span-3 min-h-0 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-            <div className="shrink-0">
-              <SignalRadar />
+            <div className="col-span-3 min-h-0 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+              <div className="shrink-0">
+                <SignalRadar />
+              </div>
+              <div className="shrink-0">
+                <VaultDisplay />
+              </div>
+              <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
+              <GeminiThinking />
             </div>
-            <div className="shrink-0">
-              <VaultDisplay />
-            </div>
-            <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
-            <GeminiThinking />
           </div>
         </div>
-      </div>
 
-      <SalesTicker />
-      <StreamingNavBar />
+        <SalesTicker />
+        <StreamingNavBar />
+      </div>
     </div>
   );
 }

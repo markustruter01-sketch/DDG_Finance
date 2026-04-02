@@ -211,7 +211,7 @@ export function useRealCelebrations() {
     playExplosion();
 
     if (explosionTimeout.current) clearTimeout(explosionTimeout.current);
-    explosionTimeout.current = setTimeout(() => setExplosion(null), 5000);
+    explosionTimeout.current = setTimeout(() => setExplosion(null), 3000);
   }, []);
 
   const triggerAchievement = useCallback((entry: RealProfitEntry, stats: FleetStats) => {

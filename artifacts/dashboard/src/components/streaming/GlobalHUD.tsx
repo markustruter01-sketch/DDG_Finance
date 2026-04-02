@@ -25,15 +25,16 @@ export function GlobalHUD() {
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
 
-  const rawAlpacaEquity = summary?.portfolio_totals?.equity ?? 0;
-  const alpacaEquity = rawAlpacaEquity > 0 ? rawAlpacaEquity : 200_000;
+  const alpacaEquity = summary?.portfolio_totals?.equity != null
+    ? summary.portfolio_totals.equity
+    : 100_000;
 
-  const rawKrakenEquity = fleet?.total_equity_usd ?? 0;
-  const krakenStarting = fleet?.total_starting_usd ?? 300_000;
-  const krakenEquity = rawKrakenEquity > 0 ? rawKrakenEquity : krakenStarting;
+  const krakenEquity = fleet?.total_equity_usd != null && fleet.total_equity_usd > 0
+    ? fleet.total_equity_usd
+    : (fleet?.total_starting_usd ?? 300_000);
 
-  const optionsEquity = (optState?.total_equity ?? 0) > 0 ? optState!.total_equity : 100_000;
-  const forexEquity = (fxState?.total_equity ?? 0) > 0 ? fxState!.total_equity : 100_000;
+  const optionsEquity = optState?.total_equity != null ? optState.total_equity : 100_000;
+  const forexEquity = fxState?.total_equity != null ? fxState.total_equity : 100_000;
   const grandTotal = alpacaEquity + krakenEquity + optionsEquity + forexEquity;
   const startTotal = 600_000;
   const grandPnlPct = startTotal > 0 ? ((grandTotal - startTotal) / startTotal) * 100 : 0;

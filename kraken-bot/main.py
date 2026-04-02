@@ -916,9 +916,19 @@ def run_cycle() -> None:
     _regime_label = _regime_data.get("regime", "unknown")
     _is_bear      = _regime_data.get("is_bear", False)
 
+    _vix_value = _regime_data.get("vix")
+    _vix_elevated = isinstance(_vix_value, (int, float)) and _vix_value > 25
+    _effective_atr_stop_mult = 2.0 if _vix_elevated else ATR_STOP_MULTIPLIER
+
     # Apply bear-regime sizing overrides
     _effective_max_positions       = BEAR_MAX_POSITIONS       if _is_bear else MAX_POSITIONS
     _effective_max_position_frac   = BEAR_MAX_POSITION_FRACTION if _is_bear else MAX_POSITION_FRACTION
+
+    if _vix_elevated:
+        logger.info(
+            f"RegimeSync | VIX={_vix_value:.1f} > 25 — ATR stop multiplier widened to "
+            f"{_effective_atr_stop_mult}× (defensive stops)"
+        )
 
     if _is_bear:
         logger.info(
@@ -1282,7 +1292,7 @@ def run_cycle() -> None:
                             f"RSI={sym_rsi:.1f} < {CONTRARIAN_RSI_THRESH} | Bear regime "
                             f"'{_regime_label}' | scout ${_scout_size:,.2f} (3% equity)"
                         )
-                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
+                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
                     if open_position(symbol, "long", _scout_size, current_price):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
@@ -1332,7 +1342,7 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=ATR_STOP_MULTIPLIER,
+                    atr_multiplier=_effective_atr_stop_mult,
                 )
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
@@ -1354,7 +1364,7 @@ def run_cycle() -> None:
                         })
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size (= size_usd)
-                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
+                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
                     _tranches  = build_tranche_orders("long", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
@@ -1421,7 +1431,7 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=ATR_STOP_MULTIPLIER,
+                    atr_multiplier=_effective_atr_stop_mult,
                 )
                 if size_usd >= MIN_POSITION_USD:
                     # ── Microstructure entry filter (short) ───────────────────
@@ -1438,7 +1448,7 @@ def run_cycle() -> None:
                         })
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size
-                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
+                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
                     _tranches  = build_tranche_orders("short", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).

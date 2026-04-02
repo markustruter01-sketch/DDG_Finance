@@ -324,6 +324,15 @@ def _check_open_positions():
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
+                    if pair == "ZAR=X":
+                        unrealized_gain = current_price - entry
+                        if unrealized_gain > 0:
+                            gain_lock_sl = round(entry + (unrealized_gain * 0.50), 5)
+                            if gain_lock_sl > pos["trailing_sl"]:
+                                pos["trailing_sl"] = gain_lock_sl
+                                field_updates["trailing_sl"] = pos["trailing_sl"]
+                                logger.info(f"Forex | USD/ZAR 50% gain-lock ratchet on LONG — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
+
                 else:
                     if candle_low < pos.get("lowest_price", entry):
                         pos["lowest_price"] = candle_low
@@ -343,6 +352,15 @@ def _check_open_positions():
                         pos["trailing_sl"] = round(new_trail, 5)
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
+
+                    if pair == "ZAR=X":
+                        unrealized_gain = entry - current_price
+                        if unrealized_gain > 0:
+                            gain_lock_sl = round(entry - (unrealized_gain * 0.50), 5)
+                            if gain_lock_sl < pos["trailing_sl"]:
+                                pos["trailing_sl"] = gain_lock_sl
+                                field_updates["trailing_sl"] = pos["trailing_sl"]
+                                logger.info(f"Forex | USD/ZAR 50% gain-lock ratchet on SHORT — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
                 field_updates["sl_price"] = pos["trailing_sl"]
                 pos["sl_price"] = pos["trailing_sl"]

@@ -538,6 +538,15 @@ async def _run_pipeline_inner(
             if spy_override and spy_change is not None:
                 _regime_payload["override_reason"] = f"SPY {spy_change * 100:+.1f}% intraday"
                 _regime_payload["spy_change_pct"] = round(spy_change * 100, 2)
+            try:
+                from data.fred_client import fetch_macro_data as _fetch_macro_vix
+                _vix_data = await _fetch_macro_vix(lookback_days=5)
+                _vix_entry = _vix_data.get("VIXCLS", {})
+                _vix_val = _vix_entry.get("value")
+                if _vix_val is not None:
+                    _regime_payload["vix"] = round(float(_vix_val), 2)
+            except Exception:
+                pass
             _regime_path.write_text(_json.dumps(_regime_payload, indent=2))
             logger.debug(
                 f"Pipeline | market_regime.json written: regime='{_regime_str}' "

@@ -1811,7 +1811,7 @@ async def news_feed() -> dict:
     from data.cache import news_cache
 
     try:
-        raw = await news_cache.get_or_fetch(fetch_news, lookback_days=2)
+        raw = await news_cache.get_or_fetch(fetch_news, lookback_days=1)
         articles = []
         for cat, cat_data in raw.get("by_category", {}).items():
             for article in cat_data.get("articles", []):

@@ -58,7 +58,7 @@ export function NewsIntelligence() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px]">📡</span>
-          <span className="text-[9px] uppercase tracking-widest text-cyan-400/50 font-bold">News Intelligence</span>
+          <span className="text-[9px] uppercase tracking-widest text-cyan-400/50 font-bold">News & Macro Intelligence</span>
         </div>
         <span className="text-[8px] font-mono text-cyan-400/30">{articles.length} feeds</span>
       </div>

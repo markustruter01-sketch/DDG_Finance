@@ -79,7 +79,7 @@ export function SignalRadar() {
   ];
 
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex flex-col gap-1.5">
       <div className="text-[9px] uppercase tracking-widest text-cyan-400/50 font-bold">Signal Radar</div>
       {slots.map((slot, i) => (
         <motion.div
@@ -89,26 +89,26 @@ export function SignalRadar() {
           initial="hidden"
           animate="visible"
           className={cn(
-            "rounded-xl border p-3 transition-all",
+            "rounded-lg border px-2.5 py-1.5 transition-all",
             slot.active
               ? "border-white/10 bg-slate-900/80"
               : "border-white/5 bg-slate-950/60 opacity-50"
           )}
         >
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm">{slot.icon}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs">{slot.icon}</span>
             <span className="text-[10px] font-bold text-white uppercase tracking-wide">{slot.name}</span>
+            <span className={cn("text-[9px] font-mono ml-auto truncate max-w-[55%] text-right", slot.active ? "text-muted-foreground/60" : "text-muted-foreground/30")}>
+              {slot.active ? slot.signal : `💤 Sleeping`}
+            </span>
             {slot.active && (
               <motion.div
-                className="ml-auto h-2 w-2 rounded-full"
+                className="h-1.5 w-1.5 rounded-full shrink-0"
                 style={{ backgroundColor: slot.color }}
                 animate={{ opacity: [0.4, 1, 0.4], scale: [0.9, 1.1, 0.9] }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
               />
             )}
-          </div>
-          <div className={cn("text-[10px] font-mono", slot.active ? "text-muted-foreground/70" : "text-muted-foreground/30")}>
-            {slot.active ? slot.signal : `💤 ${slot.name}: Sleeping`}
           </div>
         </motion.div>
       ))}

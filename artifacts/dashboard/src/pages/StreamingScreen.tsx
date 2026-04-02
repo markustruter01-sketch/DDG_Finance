@@ -68,11 +68,11 @@ export default function StreamingScreen() {
       <ProfitExplosion trade={explosion} />
       <AchievementFeed achievements={achievements} />
 
-      <div className="flex-1 flex flex-col p-3 gap-3 pb-16 min-h-0">
+      <div className="flex-1 flex flex-col p-3 gap-2 pb-12 min-h-0">
         <GlobalHUD />
 
-        <div className="flex-1 grid grid-cols-12 gap-3 min-h-0">
-          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-3">
+        <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
+          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-2">
             <Scoreboard wins={wins} losses={losses} trades={trades} />
             <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
             <BotLeaderboard botStats={botStats} />
@@ -82,7 +82,7 @@ export default function StreamingScreen() {
             <NerveCenter />
           </div>
 
-          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-3">
+          <div className="col-span-3 min-h-0 flex flex-col gap-2">
             <SignalRadar />
             <VaultDisplay />
           </div>

@@ -13,9 +13,9 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
 
   if (sorted.length === 0) {
     return (
-      <div className="rounded-xl border border-white/5 bg-slate-900/60 p-3">
-        <div className="text-[9px] uppercase tracking-widest text-amber-400/50 font-bold mb-2">Bot Leaderboard</div>
-        <div className="text-[10px] text-muted-foreground/30 font-mono text-center py-3">Waiting for trades...</div>
+      <div className="rounded-lg border border-white/5 bg-slate-900/60 px-2.5 py-2">
+        <div className="text-[8px] uppercase tracking-widest text-amber-400/50 font-bold mb-1">Bot Leaderboard</div>
+        <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-2">Waiting for trades...</div>
       </div>
     );
   }
@@ -23,9 +23,9 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
   const medals = ["🥇", "🥈", "🥉", "4th", "5th", "6th"];
 
   return (
-    <div className="rounded-xl border border-white/5 bg-slate-900/60 p-3">
-      <div className="text-[9px] uppercase tracking-widest text-amber-400/50 font-bold mb-2">Bot Leaderboard</div>
-      <div className="flex flex-col gap-1.5">
+    <div className="rounded-lg border border-white/5 bg-slate-900/60 px-2.5 py-2">
+      <div className="text-[8px] uppercase tracking-widest text-amber-400/50 font-bold mb-1">Bot Leaderboard</div>
+      <div className="flex flex-col gap-1">
         <AnimatePresence initial={false}>
           {sorted.map((bot, i) => {
             const winRate = bot.trades > 0 ? ((bot.wins / bot.trades) * 100).toFixed(0) : "0";
@@ -38,7 +38,7 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg px-2.5 py-1.5 font-mono",
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 font-mono",
                   i === 0 ? "bg-amber-500/10 border border-amber-500/20" : "bg-slate-800/40"
                 )}
               >

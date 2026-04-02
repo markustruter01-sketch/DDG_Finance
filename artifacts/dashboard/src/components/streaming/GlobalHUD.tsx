@@ -104,8 +104,8 @@ export function GlobalHUD() {
   ];
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
         {cards.map((card, i) => (
           <motion.div
             key={card.label}
@@ -128,7 +128,7 @@ export function GlobalHUD() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-1.5">
         {miniMetrics.map((m, i) => (
           <motion.div
             key={m.label}
@@ -136,10 +136,10 @@ export function GlobalHUD() {
             variants={cardVariants}
             initial="hidden"
             animate="visible"
-            className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-3 py-2"
+            className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-1.5"
           >
             <div className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
-            <div className={cn("text-sm font-mono font-bold mt-0.5", m.color)}>{m.value}</div>
+            <div className={cn("text-xs font-mono font-bold mt-0.5", m.color)}>{m.value}</div>
           </motion.div>
         ))}
       </div>

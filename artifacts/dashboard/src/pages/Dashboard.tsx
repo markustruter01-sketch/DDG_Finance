@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
@@ -55,7 +56,7 @@ import {
   Shield, Eye, CheckCircle2, XCircle, AlertOctagon, Lock,
   Lightbulb, Play, LogOut, ExternalLink, Copy, Bug,
   LayoutDashboard, MoreHorizontal, Anchor, Database, FileDown,
-  Crosshair, Clock, Search, ThumbsUp, ThumbsDown, Pause, Globe, Navigation,
+  Crosshair, Clock, Search, ThumbsUp, ThumbsDown, Pause, Globe, Navigation, Radio,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -4828,6 +4829,7 @@ function ForexCountdownBanner() {
 type Tab = 'overview' | 'kraken' | 'alpaca' | 'options' | 'forex' | 'more';
 
 function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab: Tab) => void }) {
+  const [, navigate] = useLocation();
   const tabs: { id: Tab; label: string; icon: React.ReactNode; color: string }[] = [
     { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="h-6 w-6" />, color: '#3b82f6' },
     { id: 'kraken',   label: 'Kraken',   icon: <Anchor className="h-6 w-6" />,         color: '#f59e0b' },
@@ -4836,6 +4838,7 @@ function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab:
     { id: 'forex',    label: 'Forex',    icon: <Globe className="h-6 w-6" />,           color: '#14b8a6' },
     { id: 'more',     label: 'More',     icon: <MoreHorizontal className="h-6 w-6" />,  color: '#8b5cf6' },
   ];
+  const streamColor = '#f43f5e';
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
       <div className="flex items-center justify-center gap-2 sm:gap-3 max-w-xl mx-auto pointer-events-auto">
@@ -4868,6 +4871,21 @@ function TabBar({ activeTab, onTabChange }: { activeTab: Tab; onTabChange: (tab:
             </button>
           );
         })}
+        <button
+          onClick={() => navigate('/streaming')}
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-rose-500/40 hover:bg-slate-800/80 group"
+        >
+          <span className="relative" style={{ color: 'rgb(148,163,184)' }}>
+            <Radio className="h-6 w-6 group-hover:text-rose-400 transition-colors" />
+            <span
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
+              style={{ background: streamColor, boxShadow: `0 0 6px ${streamColor}` }}
+            />
+          </span>
+          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-rose-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
+            Live
+          </span>
+        </button>
       </div>
     </nav>
   );

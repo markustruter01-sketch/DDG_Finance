@@ -1,0 +1,71 @@
+The "Live Streaming" Screen — Gamified Audience View & Profit Explosion
+
+Role: Act as a Lead UI/UX Motion Designer specializing in Gamified Dashboards, Twitch Overlays, and High-Adrenaline Visual Feedback Loops.
+
+Objective: We are building a new route (/streaming) designed specifically for public broadcasting. We need a "candy floss" approach: highly visual, exciting, easy to understand, and heavily focused on gamification psychology. Abandon standard, static data tables for this specific page.
+
+Design Language & Stack:
+
+Background: Deep dark mode (bg-slate-950).
+
+Animations & Particle Effects: You MUST use framer-motion for complex entries, exits, particle physics (explosions), and staggered animations.
+
+Vibe: Fun, colorful, high-engagement. Neon accents (Green for profit, Red for losses, Cyan for educational sales). Use relevant emojis strategically.
+
+Screen Architecture (Build this dynamic 3-Column layout with Overlay):
+
+1. The Global HUD (Top Stats - Clean & Crisp)
+
+Replace the old noisy top bar with 4 distinct metric cards using glowing borders:
+
+SYSTEM STATUS: (e.g., 🟢 ARMED / CLOSED | 6 bots - 4 pools)
+
+COMBINED P&L: (e.g., -1.27% fleet total)
+
+VAULT BALANCE: (e.g., $3,278.79 available cash)
+
+TRADE ANALYTICS: (e.g., 104 Trades Total | 45.2% Win Rate)
+
+2. Left Column: Scoreboard & Highlight Reel (col-span-3)
+
+Massive visual counters for "WINS" (Neon Green) and "LOSSES" (Neon Red).
+
+Closed Trades List: A smooth, vertically scrolling list of recently closed trades. Use green rows for wins (🚀 Davy Jones closed BTC/USD: +$120.50) and red for losses (📉 Blackbeard closed ALGO/USD: -$15.00).
+
+3. Center Column: The Nerve Center (col-span-6)
+
+A "Glowing Node Network" using Framer Motion. A central brain node connected to 6 bot avatars. Dim the idle bots and make the active bots pulse brightly.
+
+4. Right Column: The 6-Slot Signal Radar (col-span-3)
+
+6 permanent slots, one for each bot by name. This is non-negotiable.
+
+Active bots show vibrant, pulsing signals (⚡ Oracle spots a dip in SPY).
+
+Inactive bots show grayed-out "Sleeping" icons (💤 Apex Predator: Awaiting 3:30 PM).
+
+5. The Gamification Overlay: Profit Explosion (Triggered Component)
+
+Implement a React component that is hidden by default.
+
+The Visual: When triggered, a massive overlay dominates the entire screen. A thick, pulsing neon green border frames the view. Behind the text, simulate an "explosive" burst of green confetti, glowing dollar sign particles, and a rising neon fog using Framer Motion particle variants.
+
+The Text: Large, bold celebratory text at the top reads "🎉 VICTORY! QUANT FLEET PROFIT LOCKED IN! 🎉"
+
+The Amount: Below that, a giant, pulsing, neon-green number displaying the exact amount made (e.g., +$210.00 USD).
+
+6. The Sales Ticker Footer (Bottom Ticker)
+
+Exact Text: Want the quantitative and algorithmic math behind this system? Learn to build your *own* system with our complete educational PDF blueprint, covering math, risk metrics, models, and white paper for $49.99 USD. Join the Discord for community discussions, check the links in the stream description for the guide.
+
+Your Task (Logic & Plumbin):
+
+Create the StreamingScreen.jsx component.
+
+Implement the full layout.
+
+Use setInterval to generate fake, continuous data flow for the stream.
+
+Logic Implementation: Within the setInterval loop that updates the "Closed Trades List," program a function that occasionally simulates a "Win" with significant profit (e.g., >$50).
+
+When a Simulated Win occurs, trigger the Profit Explosion Overlay, pass the amount to it, and use setTimeout to automatically hide the overlay after exactly 5 seconds. Prioritize complex, staggered framer-motion animations for the explosion for maximum "excitement" on screen.

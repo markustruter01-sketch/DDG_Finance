@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import { RefreshCw } from "lucide-react";
+
+const StreamingScreen = lazy(() => import("@/pages/StreamingScreen"));
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
 installVisibilityListener();
@@ -31,10 +33,26 @@ const CRITICAL_QUERY_KEYS = [
   ["/positions/live"],
 ];
 
+function StreamingLoader() {
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="text-center">
+        <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <div className="text-xs text-muted-foreground font-mono">Loading Streaming View...</div>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/streaming">
+        <Suspense fallback={<StreamingLoader />}>
+          <StreamingScreen />
+        </Suspense>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

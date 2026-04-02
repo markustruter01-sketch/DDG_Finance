@@ -26,8 +26,10 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 -   **Framework**: React 19 + Vite
 -   **Styling**: Tailwind CSS v4
 -   **State Management**: TanStack React Query
+-   **Routing**: wouter v3 (lightweight)
 -   **UI/UX**: Dark terminal-themed, mobile-responsive interface with gamification elements for bot performance.
 -   **Key Components**: `TradeWorkflowBar`, `Dashboard`, `CorrelationMatrix`, `SentimentGauges`, `EconomicCalendarBanner`, `RiskMetricsPanel`, `AttributionPanel`, `BacktesterPanel`, `ControlPanel`, `SystemHealthModal` (live architecture monitoring).
+-   **Streaming Page** (`/streaming`): Gamified broadcast overlay for Twitch/YouTube streaming. Lazy-loaded via React.lazy(). Features: Global HUD (4 glowing metric cards), Win/Loss scoreboard with scrolling trade feed, Nerve Center bot network visualization, 6-slot Signal Radar, Profit Explosion overlay (triggered on >$50 wins), and Sales Ticker footer. Components in `src/components/streaming/`.
 
 ## Kraken Bot Fleet (Multi-Bot System)
 

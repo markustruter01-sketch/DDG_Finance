@@ -13,6 +13,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -247,8 +248,8 @@ async def _get_fleet_context() -> str:
                         if r.get("closed_at"):
                             r["closed_at"] = r["closed_at"].isoformat()
                     raw_data["recent_kraken_trades"] = rows
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: kraken_trades query failed: {exc}")
 
     try:
         with get_conn() as conn:
@@ -263,8 +264,8 @@ async def _get_fleet_context() -> str:
                         raw_data[f"kraken_{bot_id}_heartbeat"] = {
                             "equity": hb[0], "positions": hb[1], "cycles": hb[2], "status": hb[3],
                         }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: kraken_heartbeat query failed: {exc}")
 
     try:
         with get_conn() as conn:
@@ -281,8 +282,8 @@ async def _get_fleet_context() -> str:
                         if r.get("closed_at"):
                             r["closed_at"] = r["closed_at"].isoformat()
                     raw_data["recent_equity_trades"] = rows
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: trade_journal query failed: {exc}")
 
     try:
         from forex_db import get_conn as forex_conn
@@ -297,14 +298,16 @@ async def _get_fleet_context() -> str:
                 rows = [dict(zip(cols, r)) for r in cur.fetchall()]
                 if rows:
                     raw_data["forex_open_positions"] = rows
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: forex_positions query failed: {exc}")
 
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT total_equity, alpaca_equity, kraken_equity, ts
+                    """SELECT total_equity, alpaca_equity, kraken_equity,
+                              COALESCE(options_equity, 0) AS options_equity,
+                              COALESCE(forex_equity, 0) AS forex_equity, ts
                        FROM equity_curve ORDER BY ts DESC LIMIT 1"""
                 )
                 row = cur.fetchone()
@@ -313,10 +316,18 @@ async def _get_fleet_context() -> str:
                         "total": float(row[0]) if row[0] else None,
                         "alpaca": float(row[1]) if row[1] else None,
                         "kraken": float(row[2]) if row[2] else None,
-                        "ts": row[3].isoformat() if row[3] else None,
+                        "options": float(row[3]) if row[3] else None,
+                        "forex": float(row[4]) if row[4] else None,
+                        "ts": row[5].isoformat() if row[5] else None,
                     }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: equity_curve query failed: {exc}")
+
+    context_blocks = ["kraken_trades", "kraken_heartbeat", "equity_trades", "forex", "equity_snapshot"]
+    missing = [b for b in context_blocks if not any(b.replace("_", "") in k.replace("_", "") for k in raw_data)]
+    if missing:
+        raw_data["_context_missing"] = missing
+        logger.info(f"FleetChat | context assembly: missing blocks: {missing}")
 
     if not raw_data:
         return "No fleet data available."
@@ -382,6 +393,35 @@ def _extract_recommendations(text: str) -> list[dict] | None:
         return None
 
 
+def _build_param_snippet() -> str:
+    """Build compact per-bot param + W/L snippet for quick-action prompts."""
+    lines = []
+    for bot_key, db_id in BOT_ID_TO_DB_ID.items():
+        params = _load_current_kraken_params(db_id)
+        if not params:
+            continue
+        bot_name = bot_key.replace("_", "-")
+        param_str = " ".join(f"{k}={v:.3f}" if "PCT" in k else f"{k}={v:.2f}" for k, v in sorted(params.items()))
+        wl_str = ""
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """SELECT COUNT(*) FILTER (WHERE pnl_pct > 0),
+                                  COUNT(*) FILTER (WHERE pnl_pct <= 0),
+                                  COALESCE(SUM(pnl_usd), 0)
+                           FROM kraken_trades WHERE bot_id = %s
+                           AND closed_at > NOW() - INTERVAL '24 hours'""",
+                        (bot_name,),
+                    )
+                    w, l, pnl = cur.fetchone()
+                    wl_str = f" | 24h: W={w} L={l} PnL=${pnl:.2f}"
+        except Exception:
+            pass
+        lines.append(f"  {bot_name}: {param_str}{wl_str}")
+    return "\n".join(lines) if lines else "No bot data available."
+
+
 class ChatRequest(BaseModel):
     message: str = ""
     quick_action: str | None = None
@@ -405,7 +445,8 @@ async def fleet_chat(request: ChatRequest) -> dict:
         if request.quick_action == "reset_defaults":
             return await _handle_reset_defaults()
 
-        user_text = f"[Quick Action: {action['label']}]\n{action['prompt']}"
+        param_snippet = _build_param_snippet()
+        user_text = f"[Quick Action: {action['label']}]\n{action['prompt']}\n\nCurrent per-bot snapshot:\n{param_snippet}"
     elif request.message.strip():
         user_text = request.message.strip()
     else:
@@ -596,15 +637,10 @@ async def _handle_pause_losing() -> dict:
     paused = []
     for bid in losing_bots:
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(
-                    f"http://localhost:8000/trading-api/kraken/auto-trading?bot_id={bid}",
-                    json={"bot_paused": True},
-                )
-                if resp.status_code == 200:
-                    paused.append(bid)
-                else:
-                    logger.warning(f"FleetChat | pause {bid} returned {resp.status_code}")
+            ctrl_path = Path(__file__).resolve().parent.parent.parent / "kraken-bot" / f"{bid}_control.json"
+            ctrl_path.write_text(json.dumps({"bot_paused": True}, indent=2))
+            paused.append(bid)
+            logger.info(f"FleetChat | Paused {bid} via control file")
         except Exception as exc:
             logger.warning(f"FleetChat | pause {bid} failed: {exc}")
 

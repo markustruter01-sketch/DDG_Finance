@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFleetCommanderStatus, useFleetCommanderHistory, useTriggerFleetCommander } from "@/hooks/use-trading";
 import { Shield, Play, Clock, AlertTriangle, CheckCircle2, XCircle, Zap, Bot, ChevronDown, ChevronUp } from "lucide-react";
+import { BotParameterSliders } from "./BotParameterSliders";
 
 const verdictConfig: Record<string, { color: string; bg: string; icon: typeof CheckCircle2 }> = {
   CLEAN: { color: "text-emerald-400", bg: "bg-emerald-500/10", icon: CheckCircle2 },
@@ -100,10 +101,13 @@ export function FleetCommanderPanel() {
 
       <div className="p-6">
         {notRun ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Fleet Commander hasn't run yet</p>
-            <p className="text-xs mt-1">Click "Run Now" to trigger the first audit, or it will start automatically on schedule</p>
+          <div className="space-y-5">
+            <div className="text-center py-4 text-muted-foreground">
+              <Shield className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Fleet Commander hasn't run yet</p>
+              <p className="text-xs mt-1">Click "Run Now" to trigger the first audit, or it will start automatically on schedule</p>
+            </div>
+            <BotParameterSliders />
           </div>
         ) : (
           <div className="space-y-5">
@@ -186,6 +190,8 @@ export function FleetCommanderPanel() {
                 </div>
               </div>
             )}
+
+            <BotParameterSliders />
 
             {flags.length > 0 && (
               <div>

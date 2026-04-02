@@ -539,6 +539,32 @@ export function useFleetCommanderHistory() {
   });
 }
 
+export interface BotParamBounds {
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface BotParamData {
+  current: Record<string, number>;
+  bounds: Record<string, BotParamBounds>;
+  defaults?: Record<string, number>;
+}
+
+export interface FleetParamsResponse {
+  bots: Record<string, BotParamData>;
+}
+
+export function useFleetParams() {
+  return useQuery<FleetParamsResponse>({
+    queryKey: ["fleet-commander-params"],
+    queryFn: async () => (await api.get("/fleet-commander/params")).data,
+    refetchInterval: useVisibleInterval(30_000),
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
 export function useTriggerFleetCommander() {
   const qc = useQueryClient();
   return useMutation({

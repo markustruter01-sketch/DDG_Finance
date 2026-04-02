@@ -74,6 +74,7 @@ from config import (
     ATR_STOP_MULTIPLIER,
     TRAIL_PCT,
     MIN_NET_PROFIT_PCT,
+    MIN_POSITION_USD,
     EQUITY_REFRESH_INTERVAL,
     LOOP_SLEEP_SECONDS,
     RESTART_SLEEP_SECONDS,
@@ -155,6 +156,7 @@ logger.info(f"  Risk per trade : {RISK_FRACTION*100:.0f}% of equity")
 logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}% (fallback) | ATR dynamic: {ATR_STOP_MULTIPLIER}x ATR")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Blacklist      : {', '.join(BLACKLIST) if BLACKLIST else 'none'}")
+logger.info(f"  Min position   : ${MIN_POSITION_USD:,.0f} (trades below this are rejected)")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
 logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
@@ -1299,7 +1301,7 @@ def run_cycle() -> None:
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
-                if size_usd >= 10.0:
+                if size_usd >= MIN_POSITION_USD:
                     _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
                     _ms_allowed, _ms_reason = _ms.entry_filter(
                         side="long", vpin_block=_ms_vpin_override,
@@ -1385,7 +1387,7 @@ def run_cycle() -> None:
                     atr=sym_atr,
                     atr_multiplier=ATR_STOP_MULTIPLIER,
                 )
-                if size_usd >= 10.0:
+                if size_usd >= MIN_POSITION_USD:
                     # ── Microstructure entry filter (short) ───────────────────
                     _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
                     if not _ms_allowed:

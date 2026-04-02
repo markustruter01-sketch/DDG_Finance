@@ -327,11 +327,11 @@ def _check_force_reload() -> bool:
 def _do_force_reload() -> None:
     """Reload portfolio from DB, replacing all in-memory state."""
     global open_positions, total_equity
-    from paper_engine import reload_portfolio_from_db, get_paper_positions, get_paper_summary
+    from paper_engine import reload_portfolio_from_db, get_paper_positions, get_paper_portfolio_summary
     reload_portfolio_from_db()
     open_positions = get_paper_positions()
-    summary = get_paper_summary()
-    total_equity = summary.get("equity_usd", total_equity)
+    summary = get_paper_portfolio_summary()
+    total_equity = summary.get("cash_usd", total_equity)
     _pending_tranches.clear()
     logger.warning(
         f"FORCE RELOAD | Portfolio reloaded from DB — "

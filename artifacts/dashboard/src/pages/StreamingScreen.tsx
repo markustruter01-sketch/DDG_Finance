@@ -99,7 +99,7 @@ function StreamingNavBar() {
 }
 
 export default function StreamingScreen() {
-  const { trades, wins, losses, botStats, totalTrades } = useRealFeed(20);
+  const { trades, wins, losses, botStats, totalTrades, openPositions } = useRealFeed(20);
   const scale = useViewportScale();
 
   return (
@@ -118,7 +118,7 @@ export default function StreamingScreen() {
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
             <div className="col-span-3 min-h-0 flex flex-col gap-2">
-              <Scoreboard wins={wins} losses={losses} trades={trades} />
+              <Scoreboard wins={wins} losses={losses} openPositions={openPositions} />
               <div className="shrink-0">
                 <TradeSpeedometer totalTrades={totalTrades} />
               </div>

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import {
   useJournal, useKrakenPerformance, useOptionsState, useForexState,
+  useKrakenStatus, useLivePositions, useForexPositions,
 } from "@/hooks/use-trading";
 
 export type RealTrade = {
@@ -11,6 +12,17 @@ export type RealTrade = {
   pnlPct: number;
   isWin: boolean;
   date: string;
+};
+
+export type OpenPosition = {
+  id: string;
+  bot: string;
+  icon: string;
+  symbol: string;
+  side: string;
+  pnlPct: number;
+  pnlUsd: number;
+  sizeUsd: number;
 };
 
 export type BotStats = {
@@ -29,6 +41,11 @@ export function useRealFeed(maxTrades = 20) {
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
+  const djStatus = useKrakenStatus("davy-jones");
+  const bbStatus = useKrakenStatus("blackbeard");
+  const caStatus = useKrakenStatus("calypso");
+  const { data: livePositions } = useLivePositions();
+  const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
 
@@ -169,5 +186,68 @@ export function useRealFeed(maxTrades = 20) {
 
   const totalTrades = wins + losses;
 
-  return { trades, wins, losses, botStats, totalTrades };
+  const openPositions: OpenPosition[] = useMemo(() => {
+    const all: OpenPosition[] = [];
+
+    const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
+      { data: djStatus.data, bot: "Davy Jones", icon: "⚓" },
+      { data: bbStatus.data, bot: "Blackbeard", icon: "🏴‍☠️" },
+      { data: caStatus.data, bot: "Calypso", icon: "🌊" },
+    ];
+    for (const { data, bot, icon } of krakenBots) {
+      if (!data?.open_positions) continue;
+      for (const p of data.open_positions) {
+        const entry = p.entry_price ?? 0;
+        const current = p.best_price ?? entry;
+        const pnlPct = entry > 0
+          ? ((current - entry) / entry) * 100 * (p.side === "short" ? -1 : 1)
+          : 0;
+        const pnlUsd = entry > 0 && p.size_units
+          ? (current - entry) * p.size_units * (p.side === "short" ? -1 : 1)
+          : 0;
+        all.push({
+          id: `${bot}-${p.symbol}`,
+          bot, icon,
+          symbol: p.symbol,
+          side: p.side,
+          pnlPct,
+          pnlUsd,
+          sizeUsd: p.size_usd,
+        });
+      }
+    }
+
+    if (livePositions?.positions) {
+      for (const p of livePositions.positions) {
+        all.push({
+          id: `oracle-${p.symbol}`,
+          bot: "Oracle", icon: "🔮",
+          symbol: p.symbol,
+          side: p.side,
+          pnlPct: (p.unrealized_plpc ?? 0) * 100,
+          pnlUsd: p.unrealized_pl ?? 0,
+          sizeUsd: Math.abs(p.market_value),
+        });
+      }
+    }
+
+    if (fxPositions?.positions) {
+      for (const p of fxPositions.positions) {
+        const pnlPct = p.size_usd > 0 ? (p.unrealized_pnl_usd / p.size_usd) * 100 : 0;
+        all.push({
+          id: `nav-${p.pair}`,
+          bot: "Navigator", icon: "🧭",
+          symbol: p.pair.replace("_", "/"),
+          side: p.direction,
+          pnlPct,
+          pnlUsd: p.unrealized_pnl_usd,
+          sizeUsd: p.size_usd,
+        });
+      }
+    }
+
+    return all.sort((a, b) => b.pnlPct - a.pnlPct);
+  }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions]);
+
+  return { trades, wins, losses, botStats, totalTrades, openPositions };
 }

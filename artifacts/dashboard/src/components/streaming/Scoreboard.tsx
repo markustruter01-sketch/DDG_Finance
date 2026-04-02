@@ -1,14 +1,14 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import type { RealTrade } from "./useRealFeed";
+import type { OpenPosition } from "./useRealFeed";
 
 interface ScoreboardProps {
   wins: number;
   losses: number;
-  trades: RealTrade[];
+  openPositions: OpenPosition[];
 }
 
-export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
+export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
       <div className="grid grid-cols-2 gap-2 shrink-0">
@@ -45,32 +45,34 @@ export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
       </div>
 
       <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0 flex flex-col">
-        <div className="px-2.5 py-1.5 border-b border-white/5 text-[8px] uppercase font-bold tracking-widest text-muted-foreground/50 shrink-0">
-          Closed Trades Feed
+        <div className="px-2.5 py-1.5 border-b border-white/5 text-[8px] uppercase font-bold tracking-widest text-muted-foreground/50 shrink-0 flex items-center justify-between">
+          <span>Open Positions</span>
+          <span className="text-cyan-400/60">{openPositions.length}</span>
         </div>
-        <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0">
-          <AnimatePresence initial={false}>
-            {trades.map((trade) => (
-              <motion.div
-                key={trade.id}
-                initial={{ opacity: 0, x: -30, height: 0 }}
-                animate={{ opacity: 1, x: 0, height: "auto" }}
-                exit={{ opacity: 0, x: 30, height: 0 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        <div className="flex-1 overflow-hidden min-h-0">
+          {openPositions.map((pos) => {
+            const isUp = pos.pnlPct >= 0;
+            return (
+              <div
+                key={pos.id}
                 className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono"
-                style={{ backgroundColor: trade.isWin ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)", color: trade.isWin ? "#00ff88" : "#ff4d4d" }}
+                style={{ backgroundColor: isUp ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)" }}
               >
-                <span className="text-[10px] shrink-0">{trade.isWin ? "🚀" : "📉"}</span>
-                <span className="text-[9px]" style={{ color: trade.isWin ? "#00ff88" : "#ff4d4d" }}>{trade.icon}</span>
-                <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>{trade.bot} closed {trade.symbol}:</span>
-                <span className="ml-auto text-[10px] font-bold shrink-0" style={{ color: trade.isWin ? "#00ff88" : "#ff4d4d" }}>
-                  {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
+                <span className="text-[10px] shrink-0">{pos.icon}</span>
+                <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
+                  {pos.side.toUpperCase()} {pos.symbol}
                 </span>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {trades.length === 0 && (
-            <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-4">No closed trades yet...</div>
+                <span
+                  className="ml-auto text-[10px] font-bold shrink-0"
+                  style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+                >
+                  {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                </span>
+              </div>
+            );
+          })}
+          {openPositions.length === 0 && (
+            <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-4">No open positions</div>
           )}
         </div>
       </div>

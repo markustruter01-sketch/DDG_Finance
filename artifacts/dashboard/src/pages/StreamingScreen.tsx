@@ -107,7 +107,6 @@ export default function StreamingScreen() {
 
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
-      <ProfitExplosion trade={celebrations.explosion} />
       <AchievementFeed achievements={celebrations.achievements} />
       <div
         style={{
@@ -133,8 +132,9 @@ export default function StreamingScreen() {
             </div>
 
             <div className="col-span-6 min-h-0 flex flex-col gap-1.5">
-              <div className="flex-1 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0">
+              <div className="flex-1 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0 relative">
                 <NerveCenter />
+                <ProfitExplosion trade={celebrations.explosion} />
               </div>
               <StreamingNavBar />
             </div>

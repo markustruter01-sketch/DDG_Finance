@@ -45,30 +45,6 @@ export function VaultDisplay() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5">
-        <div className="rounded-lg border border-yellow-500/15 bg-yellow-950/10 px-2 py-1.5">
-          <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-[9px]">🔮</span>
-            <span className="text-[7px] uppercase tracking-widest text-yellow-400/50 font-bold">Oracle</span>
-          </div>
-          <div className="text-[11px] font-mono font-bold text-yellow-400/80">{formatUsd(oracleVault)}</div>
-        </div>
-        <div className="rounded-lg border border-cyan-500/15 bg-cyan-950/10 px-2 py-1.5">
-          <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-[9px]">⚓</span>
-            <span className="text-[7px] uppercase tracking-widest text-cyan-400/50 font-bold">Crypto</span>
-          </div>
-          <div className="text-[11px] font-mono font-bold text-cyan-400/80">{formatUsd(cryptoVault)}</div>
-        </div>
-        <div className="rounded-lg border border-teal-500/15 bg-teal-950/10 px-2 py-1.5">
-          <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-[9px]">🧭</span>
-            <span className="text-[7px] uppercase tracking-widest text-teal-400/50 font-bold">Forex</span>
-          </div>
-          <div className="text-[11px] font-mono font-bold text-teal-400/80">{formatUsd(forexVault)}</div>
-        </div>
-      </div>
-
       <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-3 py-3 flex-1">
         <div className="text-[13px] font-mono text-emerald-400/50 leading-relaxed">
           20% of realized profits are automatically swept into the <span className="text-emerald-400/80 font-bold">Growth Vault (JEPQ)</span> for compounding high-yield dividend income. This passive dividend income is then re-invested into the platform in order to accelerate exponential growth.

@@ -307,7 +307,7 @@ export function NerveCenter() {
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
-  const formulaText = FORMULA_SNIPPETS.join("   ·   ");
+  const formulaText = FORMULA_SNIPPETS.map((f) => `  ${f}  `).join("  │  ");
   const formulaY = 340;
 
   return (
@@ -364,7 +364,7 @@ export function NerveCenter() {
                 <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
               </filter>
               <clipPath id="formulaClip">
-                <rect x="20" y={formulaY - 2} width="360" height="16" />
+                <rect x="20" y={formulaY - 16} width="360" height="36" />
               </clipPath>
             </defs>
 
@@ -525,27 +525,33 @@ export function NerveCenter() {
               );
             })}
 
-            <foreignObject x="20" y={formulaY} width="360" height="16" clipPath="url(#formulaClip)">
-              <div
-                style={{
-                  overflow: "hidden",
-                  width: "360px",
-                  height: "16px",
-                }}
-              >
+            <foreignObject x="20" y={formulaY - 14} width="360" height="34">
+              <div style={{ overflow: "hidden", width: "360px", height: "34px" }}>
+                <div style={{
+                  fontFamily: "monospace",
+                  fontSize: "7px",
+                  fontWeight: 800,
+                  color: "rgba(129,140,248,0.5)",
+                  letterSpacing: "2px",
+                  textTransform: "uppercase",
+                  marginBottom: "3px",
+                }}>
+                  Our Algorithms
+                </div>
                 <div
                   className="formula-ticker"
                   style={{
                     display: "flex",
                     whiteSpace: "nowrap",
                     fontFamily: "monospace",
-                    fontSize: "7px",
-                    color: "rgba(255,255,255,0.7)",
-                    letterSpacing: "0.5px",
+                    fontSize: "9px",
+                    fontWeight: 700,
+                    color: "rgba(255,255,255,0.85)",
+                    letterSpacing: "0.8px",
                   }}
                 >
-                  <span style={{ paddingRight: "40px" }}>{formulaText}</span>
-                  <span style={{ paddingRight: "40px" }}>{formulaText}</span>
+                  <span style={{ paddingRight: "60px" }}>{formulaText}</span>
+                  <span style={{ paddingRight: "60px" }}>{formulaText}</span>
                 </div>
               </div>
             </foreignObject>

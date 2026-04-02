@@ -256,7 +256,7 @@ export function useRealCelebrations() {
     };
 
     const initTimer = setTimeout(tick, 3000);
-    const interval = setInterval(tick, 15000);
+    const interval = setInterval(tick, 5000);
 
     return () => {
       clearInterval(interval);

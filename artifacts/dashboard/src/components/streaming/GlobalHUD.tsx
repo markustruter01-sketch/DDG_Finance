@@ -4,6 +4,7 @@ import {
   useStatusSummary, useKrakenFleetSummary, useOptionsState, useForexState,
   useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
+import { AnimatedValue } from "./AnimatedValue";
 
 const cardVariants = {
   hidden: { opacity: 0, y: -20, scale: 0.95 },
@@ -121,8 +122,12 @@ export function GlobalHUD() {
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
               <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
-              <div className="text-base font-mono font-bold text-white tracking-tight">{card.value}</div>
-              <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">{card.sub}</div>
+              <div className="text-base font-mono font-bold text-white tracking-tight">
+                <AnimatedValue value={card.value} />
+              </div>
+              <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
+                <AnimatedValue value={card.sub} />
+              </div>
             </div>
           </motion.div>
         ))}
@@ -139,7 +144,9 @@ export function GlobalHUD() {
             className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-1.5"
           >
             <div className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
-            <div className={cn("text-xs font-mono font-bold mt-0.5", m.color)}>{m.value}</div>
+            <div className={cn("text-xs font-mono font-bold mt-0.5", m.color)}>
+              <AnimatedValue value={m.value} />
+            </div>
           </motion.div>
         ))}
       </div>

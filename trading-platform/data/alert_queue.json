@@ -1,0 +1,11 @@
+[
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "USD_SGD",
+    "pnl_pct": 0,
+    "pnl_usd": 0.74,
+    "side": "SELL",
+    "reason": "trailing_stop",
+    "timestamp": "2026-04-02T20:45:49.233752+00:00"
+  }
+]

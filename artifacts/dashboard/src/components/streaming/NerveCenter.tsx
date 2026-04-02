@@ -45,6 +45,26 @@ const CORNER_POSITIONS = [
   { x: 88, y: 48 },
 ];
 
+const FORMULA_SNIPPETS = [
+  "f* = (bp − q) / b",
+  "σ = √(Σ(xᵢ − μ)² / N)",
+  "VPIN = |Vᴮ − Vˢ| / V",
+  "RSI = 100 − 100/(1+RS)",
+  "Sharpe = (Rₚ − Rᶠ) / σₚ",
+  "Z = (x − μ) / σ",
+  "ATR = (1/n)Σ TRᵢ",
+  "BB = μ ± kσ",
+  "EMA = α·Pₜ + (1−α)·EMAₜ₋₁",
+  "Sortino = (Rₚ − Rᶠ) / σ_d",
+  "OFI = ΔBidᵥ − ΔAskᵥ",
+  "ρ = Σ(xᵢyᵢ) / √(Σxᵢ²·Σyᵢ²)",
+  "Δ = ∂V/∂S",
+  "Θ = −∂V/∂t",
+  "Γ = ∂²V/∂S²",
+  "VaR₉₅ = μ − 1.645σ",
+  "H = −Σ pᵢ log(pᵢ)",
+];
+
 function useAlgoPopups() {
   const [popups, setPopups] = useState<{ id: number; text: string; x: number; y: number }[]>([]);
   const nextId = useRef(0);
@@ -124,6 +144,9 @@ export function NerveCenter() {
   const algoLabelY = 318;
   const row1Y = algoLabelY + 14;
   const row2Y = row1Y + 20;
+  const formulaY = row2Y + 24;
+
+  const formulaText = FORMULA_SNIPPETS.join("   ·   ");
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -150,7 +173,7 @@ export function NerveCenter() {
           }}
         />
 
-        <svg viewBox="0 0 400 380" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 400 400" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
               <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
@@ -169,6 +192,9 @@ export function NerveCenter() {
               <feGaussianBlur stdDeviation="8" result="blur" />
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
+            <clipPath id="formulaClip">
+              <rect x="20" y={formulaY - 2} width="360" height="16" />
+            </clipPath>
           </defs>
 
           <circle cx={cx} cy={cy} r={85} fill="url(#brainGlow)" />
@@ -355,6 +381,32 @@ export function NerveCenter() {
             );
           })}
 
+          <foreignObject x="20" y={formulaY} width="360" height="16" clipPath="url(#formulaClip)">
+            <div
+              xmlns="http://www.w3.org/1999/xhtml"
+              style={{
+                overflow: "hidden",
+                width: "360px",
+                height: "16px",
+              }}
+            >
+              <div
+                className="formula-ticker"
+                style={{
+                  display: "flex",
+                  whiteSpace: "nowrap",
+                  fontFamily: "monospace",
+                  fontSize: "7px",
+                  color: "rgba(129,140,248,0.45)",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                <span style={{ paddingRight: "40px" }}>{formulaText}</span>
+                <span style={{ paddingRight: "40px" }}>{formulaText}</span>
+              </div>
+            </div>
+          </foreignObject>
+
         </svg>
 
         <AnimatePresence>
@@ -381,6 +433,15 @@ export function NerveCenter() {
         </AnimatePresence>
       </div>
 
+      <style>{`
+        .formula-ticker {
+          animation: formulaScroll 45s linear infinite;
+        }
+        @keyframes formulaScroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
     </div>
   );
 }

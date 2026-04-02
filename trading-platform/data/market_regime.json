@@ -1,8 +1,8 @@
 {
-  "regime": "Bear",
-  "written_at": "2026-04-02T19:31:36.483664+00:00",
-  "cycle_number": 44,
+  "regime": "Crypto",
+  "written_at": "2026-04-02T20:39:10.793601+00:00",
+  "cycle_number": 48,
   "using_fallback": false,
   "regime_override": false,
-  "rationale": "The current regime is classified as Bear due to the elevated VIX (24.54), which indicates a high level of market volatility and fear. Additionally, the available data on equities such as QQQ and XLK show negative momentum, further supporting the Bear regime classification. The lack of positive momentum in most assets and the overall macroeconomic indicators, such as the Federal Funds Rate and Unemployment Rate, also align with a Bear market environment."
+  "rationale": null
 }

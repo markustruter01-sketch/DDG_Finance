@@ -1617,3 +1617,26 @@ export function useFlushAlerts() {
     },
   });
 }
+
+export interface NewsFeedArticle {
+  title: string;
+  source: string;
+  category: string;
+  published_at: string;
+  url: string;
+}
+
+export interface NewsFeedData {
+  articles: NewsFeedArticle[];
+  error?: string;
+}
+
+export function useNewsFeed() {
+  return useQuery<NewsFeedData>({
+    queryKey: ["/portfolio/news-feed"],
+    queryFn: async () => (await api.get("/portfolio/news-feed")).data,
+    refetchInterval: useVisibleInterval(300_000),
+    retry: 1,
+    staleTime: 240_000,
+  });
+}

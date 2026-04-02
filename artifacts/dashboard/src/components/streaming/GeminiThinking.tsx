@@ -62,9 +62,17 @@ export function GeminiThinking() {
 
   return (
     <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-4 relative overflow-hidden flex-1 flex flex-col min-h-0">
-      <div className="flex items-center gap-2 mb-3 shrink-0">
-        <span className="text-sm">✨</span>
-        <span className="text-[10px] uppercase tracking-widest text-violet-400/70 font-bold">Gemini Fleet Commander — Thinking</span>
+      <div className="flex items-center gap-2 mb-1 shrink-0">
+        <span className="text-lg">🧠</span>
+        <div className="flex flex-col">
+          <span
+            className="text-[15px] uppercase tracking-wider font-black text-white"
+            style={{ textShadow: "0 0 20px rgba(167,139,250,0.6), 0 0 40px rgba(139,92,246,0.3)" }}
+          >
+            Gemini Fleet Commander
+          </span>
+          <span className="text-[8px] uppercase tracking-widest text-violet-400/50 font-bold -mt-0.5">AI Orchestrator · Quant Brain</span>
+        </div>
         <motion.div
           className="ml-auto flex gap-0.5"
           animate={{ opacity: [0.3, 1, 0.3] }}

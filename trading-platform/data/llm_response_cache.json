@@ -6,5 +6,9 @@
   "843f7aef58ca4e46b0ea8b4ea87c67e3": {
     "raw_json": "{\n  \"regime\": \"Bear\",\n   \"regime_rationale\": \"The current regime is classified as Bear due to the elevated VIX (24.54), which indicates a high level of market volatility and fear. Additionally, the available data on equities such as QQQ and XLK show negative momentum, further supporting the Bear regime classification. The lack of positive momentum in most assets and the overall macroeconomic indicators, such as the Federal Funds Rate and Unemployment Rate, also align with a Bear market environment.\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Given the Bear regime and lack of positive momentum in most assets, the best course of action is to prioritize capital preservation by allocating 100% to SGOV, a cash equivalent that provides a safe haven in such market conditions.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
     "saved_at": 1775158277.9938715
+  },
+  "e5b75ab03c04e6d655342f56934d0cfc": {
+    "raw_json": "{\n  \"market_regime\": \"Extreme Fear\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
+    "saved_at": 1775162349.5221505
   }
 }

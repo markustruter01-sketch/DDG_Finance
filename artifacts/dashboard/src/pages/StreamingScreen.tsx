@@ -5,12 +5,11 @@ import { cn } from "@/lib/utils";
 import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { Scoreboard } from "@/components/streaming/Scoreboard";
 import { NerveCenter } from "@/components/streaming/NerveCenter";
-import { SignalRadar } from "@/components/streaming/SignalRadar";
+import { NewsIntelligence } from "@/components/streaming/NewsIntelligence";
 import { VaultDisplay } from "@/components/streaming/VaultDisplay";
 import { BotLeaderboard } from "@/components/streaming/BotLeaderboard";
 import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
-import { SessionStats } from "@/components/streaming/SessionStats";
 import { GeminiThinking } from "@/components/streaming/GeminiThinking";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 
@@ -136,14 +135,9 @@ export default function StreamingScreen() {
 
             <div className="col-span-3 min-h-0 flex flex-col gap-2">
               <div className="shrink-0">
-                <SignalRadar />
+                <NewsIntelligence />
               </div>
-              <div className="shrink-0">
-                <VaultDisplay />
-              </div>
-              <div className="shrink-0">
-                <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
-              </div>
+              <VaultDisplay />
               <GeminiThinking />
             </div>
           </div>

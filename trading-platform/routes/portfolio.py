@@ -1803,3 +1803,37 @@ async def export_diagnostic_report() -> dict:
         "char_count":   len(report_text),
         "line_count":   len(lines),
     }
+
+
+_news_feed_cache: dict | None = None
+_news_feed_ts: float = 0.0
+_NEWS_FEED_TTL = 3600
+
+@portfolio_router.get("/portfolio/news-feed", tags=["Portfolio"])
+async def news_feed() -> dict:
+    global _news_feed_cache, _news_feed_ts
+    from data.news_client import fetch_news
+
+    if _news_feed_cache is not None and (time.time() - _news_feed_ts) < _NEWS_FEED_TTL:
+        return _news_feed_cache
+
+    try:
+        raw = await fetch_news(lookback_days=2)
+        articles = []
+        for cat, cat_data in raw.get("by_category", {}).items():
+            for article in cat_data.get("articles", []):
+                articles.append({
+                    "title": article.get("title", ""),
+                    "source": article.get("source", "Unknown"),
+                    "category": cat,
+                    "published_at": article.get("published_at", ""),
+                    "url": article.get("url", ""),
+                })
+        articles.sort(key=lambda a: a.get("published_at", ""), reverse=True)
+        result = {"articles": articles[:25]}
+        _news_feed_cache = result
+        _news_feed_ts = time.time()
+        return result
+    except Exception as exc:
+        logger.warning(f"News feed fetch failed: {exc}")
+        return {"articles": [], "error": str(exc)}

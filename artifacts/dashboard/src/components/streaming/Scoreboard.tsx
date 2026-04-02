@@ -8,6 +8,13 @@ interface ScoreboardProps {
   openPositions: OpenPosition[];
 }
 
+function formatPnlUsd(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1000) return `${v >= 0 ? "+" : "-"}$${(abs / 1000).toFixed(1)}k`;
+  if (abs >= 100) return `${v >= 0 ? "+" : "-"}$${abs.toFixed(0)}`;
+  return `${v >= 0 ? "+" : "-"}$${abs.toFixed(2)}`;
+}
+
 export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
@@ -45,9 +52,9 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
       </div>
 
       <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0 flex flex-col">
-        <div className="px-2.5 py-1.5 border-b border-white/5 text-[8px] uppercase font-bold tracking-widest text-muted-foreground/50 shrink-0 flex items-center justify-between">
-          <span>Open Positions</span>
-          <span className="text-cyan-400/60">{openPositions.length}</span>
+        <div className="px-3 py-2.5 border-b border-white/10 shrink-0 flex items-center justify-between">
+          <span className="text-[13px] uppercase font-black tracking-wider text-white" style={{ textShadow: "0 0 10px rgba(255,255,255,0.15)" }}>Open Positions</span>
+          <span className="text-[12px] font-mono font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">{openPositions.length}</span>
         </div>
         <div className="flex-1 overflow-hidden min-h-0">
           {openPositions.map((pos) => {
@@ -63,11 +70,19 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
                 <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
                   {pos.side.toUpperCase()} {pos.symbol}
                 </span>
-                <span
-                  className="ml-auto text-[10px] font-bold shrink-0"
-                  style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
-                >
-                  {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                  <span
+                    className="text-[9px] font-bold"
+                    style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+                  >
+                    {formatPnlUsd(pos.pnlUsd)}
+                  </span>
+                  <span
+                    className="text-[9px] opacity-60"
+                    style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+                  >
+                    {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                  </span>
                 </span>
               </div>
             );

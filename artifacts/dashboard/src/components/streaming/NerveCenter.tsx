@@ -38,18 +38,16 @@ const ALGO_SNIPPETS = [
 ];
 
 const GEMINI_THOUGHTS = [
-  "Analyzing cross-asset correlation matrix for regime shift signals...",
-  "Reviewing 48hr RAG window: 3 losing BTC shorts → adjusting bias...",
-  "Fleet capital allocation within risk bounds. No parameter adjustments needed.",
-  "Detected elevated VPIN on ETH/USD — flagging for Davy Jones review...",
-  "Running post-mortem on Navigator's GBP/USD short: SL hit at 1.5×ATR...",
-  "Macro Compass update: USD weakening — bullish bias for EUR, AUD pairs...",
-  "Checking Apex Predator capital fence: 3.2% utilized of 5% max...",
-  "Oracle regime classification: SIDEWAYS → reducing equity allocation 40%...",
-  "Blackbeard momentum scan: SOL/USD Z-score +2.8 → potential entry...",
-  "Evaluating fleet-wide drawdown: -0.56% — well within tolerance...",
-  "Cross-referencing Fear & Greed Index (42) with BTC on-chain data...",
-  "Calypso ATR-based stop recalc: tightening from 2.1× to 1.8× on ARB...",
+  "Detected a recurring pattern of losing BTC/USD shorts in the last 48 hours across Davy Jones and Blackbeard. Injecting RAG context into both bots' next analysis cycle to bias away from counter-trend shorts until momentum confirms a reversal.",
+  "Navigator's GBP/USD short hit its stop-loss at 1.5× ATR — the third consecutive loss on GBP pairs this week. Tightening the news blackout window from 4 hours to 6 hours around Bank of England announcements to reduce exposure to high-impact volatility.",
+  "Cross-asset correlation matrix shows ρ=0.87 between BTC and ETH positions held by Davy Jones and Calypso simultaneously. Flagging concentration risk and recommending Calypso rotate into lower-correlation alts like ATOM/USD and ARB/USD next cycle.",
+  "Apex Predator's capital fence is at 3.2% of the 5% max allocation. IVR readings across the watchlist are still elevated above 20, so no new straddle entries are warranted. Holding current positions and letting theta decay work in our favor.",
+  "Oracle's regime model has shifted from BULL to SIDEWAYS based on declining SPY momentum and flattening yield curve data. Reducing equity allocation by 40% and rotating freed capital into TLT and GLD as defensive hedges.",
+  "Fleet-wide drawdown currently at -0.56%, well within the 3% tolerance threshold. All risk parameters are nominal. No parameter adjustments needed — letting all six bots continue operating with current configurations.",
+  "Blackbeard's SOL/USD Z-score spiked to +2.8, triggering a potential momentum entry signal. Validating against VPIN data and on-chain flow metrics before allowing execution — false breakouts on SOL have cost us 3 trades this month.",
+  "Macro Compass update from Groq indicates USD weakening on soft NFP expectations. Adjusting Navigator's directional bias to favor long EUR/USD and AUD/USD setups while reducing conviction on USD/JPY longs until data confirms.",
+  "Calypso's ATR-based stops on ARB/USD are too wide at 2.1× given current low-volatility conditions. Tightening to 1.8× ATR to protect unrealized gains and reduce risk-per-trade from 1.4% back down to the target 1.0%.",
+  "Fear & Greed Index dropped to 42 (Fear zone) while BTC on-chain accumulation addresses are rising. This divergence historically precedes a 5-10% rally — flagging as a high-conviction long setup for Davy Jones to evaluate next cycle.",
 ];
 
 function useAlgoPopups() {

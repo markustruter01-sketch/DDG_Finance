@@ -18,6 +18,9 @@ export function VaultDisplay() {
   return (
     <div className="flex flex-col gap-2">
       <div className="text-[9px] uppercase tracking-widest text-emerald-400/50 font-bold">Capital Vault</div>
+      <div className="text-[9px] text-emerald-400/30 font-mono leading-relaxed mb-1">
+        A portion of all trading profits are automatically swept into the vault, compounding passive returns to fuel future trading capital.
+      </div>
       <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/10 p-3 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
         <div className="relative">

@@ -80,8 +80,8 @@ from portfolio.var_calculator import compute_daily_var
 
 logger.info(f"Executor | DRIP_ENABLED={DRIP_ENABLED} (vault dividends accumulate as cash)")
 
-MIN_NOTIONAL_USD    = 100.0
-MIN_NOTIONAL_CRYPTO = 25.0
+MIN_NOTIONAL_USD    = 500.0
+MIN_NOTIONAL_CRYPTO = 500.0
 CASH_TICKER         = "SGOV"
 VAULT_TICKER        = "JEPQ"
 

@@ -603,7 +603,7 @@ def _run_cycle_inner() -> dict:
                     size_usd = cap
                     units = max(1, round(units * ratio))
 
-                if size_usd < 100:
+                if size_usd < 200:
                     scan_entry["signal"] += " (size too small)"
                     scan_results.append(scan_entry)
                     continue

@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
-import type { SimulatedTrade } from "./useSimulatedFeed";
+import type { CelebrationTrade } from "./useRealCelebrations";
 
 interface ProfitExplosionProps {
-  trade: SimulatedTrade | null;
+  trade: CelebrationTrade | null;
 }
 
 function Particle({ index, total }: { index: number; total: number }) {

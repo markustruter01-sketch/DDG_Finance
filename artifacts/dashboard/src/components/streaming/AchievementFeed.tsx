@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Achievement } from "./useSimulatedFeed";
+import type { Achievement } from "./useRealCelebrations";
 import { playAchievement } from "./sounds";
 
 interface AchievementFeedProps {

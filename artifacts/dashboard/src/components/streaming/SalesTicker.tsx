@@ -13,7 +13,7 @@ export function SalesTicker() {
         className="flex whitespace-nowrap font-mono"
         style={{ fontSize: "15px" }}
         animate={{ x: ["0%", "-50%"] }}
-        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
+        transition={{ duration: 28, repeat: Infinity, ease: "linear" }}
       >
         <span className="text-cyan-400/80 px-8">📘 {TICKER_TEXT}</span>
         <span className="text-yellow-400/60 px-6">|</span>

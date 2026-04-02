@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-02T05:46:43.083762+00:00",
+  "last_updated": "2026-04-02T05:47:43.115498+00:00",
   "deployed_usd": 3961.73,
   "deployed_pct": 4.7,
   "deployable_ceiling_pct": 85.0,
@@ -867,6 +867,6 @@
       "ZSCORE_ENTRY": "at bound (1.5000)  [low win rate 27% + profit factor 0.21 \u2014 require stronger divergence]"
     },
     "adapted_at": "2026-04-02T05:20:12.379532+00:00",
-    "next_adapt_in_hours": 5.6
+    "next_adapt_in_hours": 5.5
   }
 }

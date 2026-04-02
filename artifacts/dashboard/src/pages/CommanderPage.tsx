@@ -7,6 +7,7 @@ import {
   ArrowLeft, Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
+import { useFleetParams, type BotParamBounds, type BotParamData, type FleetParamsResponse } from "@/hooks/use-trading";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
@@ -24,22 +25,6 @@ interface Recommendation {
   bot_id: string;
   params: Record<string, number>;
   reasoning: string;
-}
-
-interface BotParamBounds {
-  min: number;
-  max: number;
-  step: number;
-}
-
-interface BotParamData {
-  current: Record<string, number>;
-  bounds: Record<string, BotParamBounds>;
-  defaults?: Record<string, number>;
-}
-
-interface FleetParamsResponse {
-  bots: Record<string, BotParamData>;
 }
 
 const QUICK_ACTIONS = [
@@ -200,15 +185,7 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParam
 }
 
 function ParamsPanel() {
-  const { data } = useQuery<FleetParamsResponse>({
-    queryKey: ["fleet-params"],
-    queryFn: async () => {
-      const r = await fetch(`${BASE}/fleet-commander/params`);
-      if (!r.ok) throw new Error(`Params fetch failed: ${r.status}`);
-      return r.json();
-    },
-    refetchInterval: 30_000,
-  });
+  const { data } = useFleetParams();
 
   if (!data?.bots) return null;
 
@@ -289,15 +266,7 @@ export default function CommanderPage() {
     refetchInterval: 10_000,
   });
 
-  const { data: paramsData } = useQuery({
-    queryKey: ["fleet-params"],
-    queryFn: async () => {
-      const r = await fetch(`${BASE}/fleet-commander/params`);
-      if (!r.ok) throw new Error(`Params fetch failed: ${r.status}`);
-      return r.json();
-    },
-    refetchInterval: 30_000,
-  });
+  const { data: paramsData } = useFleetParams();
 
   const currentBotParams: Record<string, Record<string, number>> = {};
   const botBounds: Record<string, Record<string, BotParamBounds>> = {};

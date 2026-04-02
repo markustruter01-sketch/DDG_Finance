@@ -73,8 +73,9 @@ function ParamSlider({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] font-mono text-slate-500 w-7 text-right flex-shrink-0">{config.short}</span>
-      <div className="flex-1 relative h-4 group">
+      <span className="text-[10px] font-mono text-slate-400 w-16 text-right flex-shrink-0">{config.label}</span>
+      <span className="text-[8px] font-mono text-slate-600 w-8 text-right flex-shrink-0">{config.format(bounds.min)}</span>
+      <div className="flex-1 relative h-4">
         <div className="absolute inset-0 rounded-full bg-white/[0.04] border border-white/[0.06] overflow-hidden">
           <motion.div
             className="absolute inset-y-0 left-0 rounded-full"
@@ -91,24 +92,8 @@ function ParamSlider({
           animate={{ left: `calc(${clampedPct}% - 5px)` }}
           transition={{ type: "spring", stiffness: 120, damping: 20 }}
         />
-        <div
-          className="absolute top-0 left-0 h-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-          style={{ width: "100%" }}
-        >
-          <span
-            className="absolute -top-0.5 text-[8px] font-mono text-slate-600"
-            style={{ left: 0 }}
-          >
-            {config.format(bounds.min)}
-          </span>
-          <span
-            className="absolute -top-0.5 text-[8px] font-mono text-slate-600"
-            style={{ right: 0 }}
-          >
-            {config.format(bounds.max)}
-          </span>
-        </div>
       </div>
+      <span className="text-[8px] font-mono text-slate-600 w-8 flex-shrink-0">{config.format(bounds.max)}</span>
       <motion.span
         className="text-[10px] font-mono font-semibold w-12 text-right flex-shrink-0"
         style={{ color: fillColor }}

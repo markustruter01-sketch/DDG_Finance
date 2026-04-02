@@ -557,7 +557,7 @@ export interface FleetParamsResponse {
 
 export function useFleetParams() {
   return useQuery<FleetParamsResponse>({
-    queryKey: ["fleet-commander-params"],
+    queryKey: ["fleet-params"],
     queryFn: async () => (await api.get("/fleet-commander/params")).data,
     refetchInterval: useVisibleInterval(30_000),
     staleTime: 15_000,

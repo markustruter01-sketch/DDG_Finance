@@ -141,10 +141,10 @@ export function NerveCenter() {
   const totalW2 = row2.length * badgeW + (row2.length - 1) * gap;
   const startX1 = cx - totalW1 / 2;
   const startX2 = cx - totalW2 / 2;
-  const algoLabelY = 318;
+  const formulaY = 310;
+  const algoLabelY = formulaY + 20;
   const row1Y = algoLabelY + 14;
   const row2Y = row1Y + 20;
-  const formulaY = row2Y + 24;
 
   const formulaText = FORMULA_SNIPPETS.join("   ·   ");
 

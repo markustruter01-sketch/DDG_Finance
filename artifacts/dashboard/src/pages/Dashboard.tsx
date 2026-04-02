@@ -2,9 +2,10 @@ import { useMemo, useRef, useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
-  useStatusSummary,
+  useStatusSummary, usePlatformStatus,
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useOptionsState, useForexState,
+  useOptionsPositions, useForexPositions,
   useJournal, useRecentTrades, useForexTrades,
   useVault, useManualSweep, useEquityCurve,
   type LivePosition,
@@ -12,7 +13,6 @@ import {
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
 import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
 import { FleetCommanderPanel } from "@/components/FleetCommanderPanel";
-import { LivePositionsSection } from "@/components/LivePositionsSection";
 import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
 import { BlackoutBanner } from "@/components/EconomicCalendarBanner";
 import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
@@ -30,7 +30,7 @@ import {
   RefreshCw, History,
   Vault, ArrowUpRight, Coins, Target,
   ExternalLink, Radio, Bot,
-  LayoutDashboard,
+  LayoutDashboard, ArrowUp, ArrowDown, ArrowUpDown, Layers,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -365,6 +365,7 @@ const FLEET_BOTS = [
 
 function FleetStatusBar() {
   const { data: summary } = useStatusSummary();
+  const { data: platformStatus } = usePlatformStatus();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
@@ -384,7 +385,7 @@ function FleetStatusBar() {
         online: summary != null,
         status: tradingMode === "full_market" ? "running" : tradingMode === "crypto_only" ? "paused" : "idle",
         cycles: summary?.system_health?.run_count ?? 0,
-        lastCycle: summary?.system_health?.last_run?.last_run_utc ?? null,
+        lastCycle: platformStatus?.last_run?.last_run_utc ?? null,
       };
     }
     if (botDef.type === "kraken") {
@@ -665,6 +666,245 @@ function LiveEquityCurveSection() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+type PositionSortKey = "bot" | "pnl" | "size" | "symbol";
+type SortDir = "asc" | "desc";
+
+interface UnifiedPosition {
+  id: string;
+  bot: string;
+  botLabel: string;
+  botColor: string;
+  symbol: string;
+  side: string;
+  qty: number;
+  entryPrice: number;
+  currentPrice: number;
+  sizeUsd: number;
+  pnlUsd: number;
+  pnlPct: number;
+}
+
+const BOT_COLORS: Record<string, string> = {
+  oracle: "#f59e0b",
+  "davy-jones": "#3b82f6",
+  blackbeard: "#a855f7",
+  calypso: "#ec4899",
+  "apex-predator": "#ef4444",
+  navigator: "#14b8a6",
+};
+
+function ConsolidatedPositionsTable() {
+  const { data: alpacaData } = useLivePositions();
+  const { data: davyStatus } = useKrakenStatus("davy-jones");
+  const { data: bbStatus } = useKrakenStatus("blackbeard");
+  const { data: caStatus } = useKrakenStatus("calypso");
+  const { data: optionsData } = useOptionsPositions();
+  const { data: forexData } = useForexPositions();
+
+  const [sortKey, setSortKey] = useState<PositionSortKey>("pnl");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [filterBot, setFilterBot] = useState<string>("all");
+
+  const positions = useMemo<UnifiedPosition[]>(() => {
+    const rows: UnifiedPosition[] = [];
+
+    for (const p of alpacaData?.positions ?? []) {
+      rows.push({
+        id: `oracle-${p.symbol}`,
+        bot: "oracle",
+        botLabel: "Oracle #1",
+        botColor: BOT_COLORS.oracle,
+        symbol: p.symbol,
+        side: p.side === "long" ? "L" : "S",
+        qty: p.qty,
+        entryPrice: p.avg_entry_price,
+        currentPrice: p.current_price,
+        sizeUsd: p.market_value,
+        pnlUsd: p.unrealized_pl,
+        pnlPct: p.unrealized_plpc * 100,
+      });
+    }
+
+    const krakenSources: [string, string, typeof davyStatus][] = [
+      ["davy-jones", "Davy Jones #2", davyStatus],
+      ["blackbeard", "Blackbeard #3", bbStatus],
+      ["calypso", "Calypso #4", caStatus],
+    ];
+    for (const [botId, label, status] of krakenSources) {
+      for (const p of status?.open_positions ?? []) {
+        rows.push({
+          id: `${botId}-${p.symbol}`,
+          bot: botId,
+          botLabel: label,
+          botColor: BOT_COLORS[botId],
+          symbol: p.symbol,
+          side: p.side === "long" ? "L" : "S",
+          qty: p.qty,
+          entryPrice: p.entry_price,
+          currentPrice: p.current_price,
+          sizeUsd: p.size_usd,
+          pnlUsd: p.unrealized_pnl_usd,
+          pnlPct: p.unrealized_pnl_pct * 100,
+        });
+      }
+    }
+
+    for (const p of optionsData?.positions ?? []) {
+      rows.push({
+        id: `apex-${p.id}`,
+        bot: "apex-predator",
+        botLabel: "Apex #5",
+        botColor: BOT_COLORS["apex-predator"],
+        symbol: `${p.symbol} ${p.strategy}`,
+        side: "L",
+        qty: p.contracts,
+        entryPrice: p.premium_per_contract,
+        currentPrice: p.current_value / Math.max(p.contracts, 1),
+        sizeUsd: p.total_cost,
+        pnlUsd: p.unrealized_pnl,
+        pnlPct: p.unrealized_pnl_pct * 100,
+      });
+    }
+
+    for (const p of forexData?.positions ?? []) {
+      rows.push({
+        id: `nav-${p.pair}`,
+        bot: "navigator",
+        botLabel: "Navigator #6",
+        botColor: BOT_COLORS.navigator,
+        symbol: p.pair,
+        side: p.direction === "long" ? "L" : "S",
+        qty: p.units,
+        entryPrice: p.entry_price,
+        currentPrice: p.current_price,
+        sizeUsd: p.size_usd,
+        pnlUsd: p.unrealized_pnl_usd,
+        pnlPct: (p.unrealized_pnl_usd / Math.max(p.size_usd, 1)) * 100,
+      });
+    }
+
+    return rows;
+  }, [alpacaData, davyStatus, bbStatus, caStatus, optionsData, forexData]);
+
+  const filtered = filterBot === "all" ? positions : positions.filter(p => p.bot === filterBot);
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDir === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      switch (sortKey) {
+        case "bot": return dir * a.botLabel.localeCompare(b.botLabel);
+        case "symbol": return dir * a.symbol.localeCompare(b.symbol);
+        case "pnl": return dir * (a.pnlUsd - b.pnlUsd);
+        case "size": return dir * (a.sizeUsd - b.sizeUsd);
+        default: return 0;
+      }
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const toggleSort = (key: PositionSortKey) => {
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const sortIcon = (key: PositionSortKey) => {
+    if (sortKey !== key) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
+    return sortDir === "asc"
+      ? <ArrowUp className="h-3 w-3 text-amber-400" />
+      : <ArrowDown className="h-3 w-3 text-amber-400" />;
+  };
+
+  const activeBots = [...new Set(positions.map(p => p.bot))];
+
+  return (
+    <div className="bg-[#0d1117] border border-white/8 rounded-lg overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Layers className="h-4 w-4 text-amber-400" />
+          <h3 className="text-sm font-semibold text-white/90">Live Open Positions</h3>
+          <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-mono">{positions.length}</span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          <button
+            onClick={() => setFilterBot("all")}
+            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors ${filterBot === "all" ? "bg-amber-500/20 text-amber-400" : "bg-white/5 text-white/40 hover:text-white/60"}`}
+          >All</button>
+          {activeBots.map(botId => {
+            const def = FLEET_BOTS.find(b => b.id === botId);
+            return (
+              <button
+                key={botId}
+                onClick={() => setFilterBot(botId)}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors ${filterBot === botId ? "bg-amber-500/20 text-amber-400" : "bg-white/5 text-white/40 hover:text-white/60"}`}
+              >{def?.icon} {def?.label.split(" ")[0] ?? botId}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {sorted.length === 0 ? (
+        <div className="py-10 text-center text-white/30 text-xs font-mono">No open positions</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase text-white/40 tracking-wider">
+                <th className="text-left px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("bot")}>
+                  <span className="flex items-center gap-1">Bot {sortIcon("bot")}</span>
+                </th>
+                <th className="text-left px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("symbol")}>
+                  <span className="flex items-center gap-1">Symbol {sortIcon("symbol")}</span>
+                </th>
+                <th className="text-center px-3 py-2">Side</th>
+                <th className="text-right px-3 py-2">Qty</th>
+                <th className="text-right px-3 py-2">Entry</th>
+                <th className="text-right px-3 py-2">Current</th>
+                <th className="text-right px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("size")}>
+                  <span className="flex items-center gap-1 justify-end">Size {sortIcon("size")}</span>
+                </th>
+                <th className="text-right px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
+                  <span className="flex items-center gap-1 justify-end">P&L {sortIcon("pnl")}</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(pos => (
+                <tr key={pos.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: pos.botColor }} />
+                      <span className="text-white/70 font-medium">{pos.botLabel}</span>
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-white/90 font-semibold">{pos.symbol}</td>
+                  <td className="px-3 py-2 text-center">
+                    <span className={`font-mono font-semibold ${pos.side === "L" ? "text-green-400" : "text-red-400"}`}>{pos.side}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-white/70">{pos.qty.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right font-mono text-white/60">${pos.entryPrice.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-white/80">${pos.currentPrice.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-white/70">${pos.sizeUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex flex-col items-end">
+                      <span className={`font-mono font-semibold ${pos.pnlUsd >= 0 ? "text-green-400" : "text-red-400"}`}>
+                        {pos.pnlUsd >= 0 ? "+" : ""}{pos.pnlUsd.toFixed(2)}
+                      </span>
+                      <span className={`text-[10px] ${pos.pnlPct >= 0 ? "text-green-400/60" : "text-red-400/60"}`}>
+                        {pos.pnlPct >= 0 ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1114,7 +1354,7 @@ export default function Dashboard() {
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
           <SafeSection label="Live Positions">
-            <LivePositionsSection />
+            <ConsolidatedPositionsTable />
           </SafeSection>
         </motion.div>
 

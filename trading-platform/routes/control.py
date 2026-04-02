@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import os
+from datetime import datetime, timezone
+from pathlib import Path as _Path
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
@@ -30,6 +33,139 @@ from routes._deps import (
 )
 
 control_router = APIRouter()
+
+KRAKEN_FEE_PCT = 0.0026
+
+_KRAKEN_BOTS = {
+    "davy-jones": 1,
+    "blackbeard": 2,
+    "calypso":    3,
+}
+
+
+def _liquidate_kraken_positions() -> dict:
+    from db.postgres import get_conn, is_pg_available
+
+    if not is_pg_available():
+        return {"closed": [], "errors": [{"bot": "all", "error": "database_unavailable"}]}
+
+    live_prices: dict[str, float] = {}
+    for bid in _KRAKEN_BOTS:
+        lsf = _Path(f"../kraken-bot/{bid}_live_state.json")
+        if not lsf.exists() and bid == "davy-jones":
+            lsf = _Path("../kraken-bot/live_state.json")
+        try:
+            if lsf.exists():
+                ls = _json.loads(lsf.read_text())
+                for op in ls.get("open_positions", []):
+                    sym = op.get("symbol")
+                    price = op.get("current_price") or op.get("mark_price")
+                    if sym and price:
+                        live_prices[sym] = float(price)
+        except Exception:
+            pass
+
+    closed = []
+    errors = []
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for bot_text_id, db_id in _KRAKEN_BOTS.items():
+                    cur.execute(
+                        "SELECT cash_usd, positions FROM kraken_portfolio WHERE id = %s",
+                        (db_id,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        continue
+
+                    cash_usd, pos_raw = row
+                    if isinstance(pos_raw, str):
+                        pos_raw = _json.loads(pos_raw)
+                    if not isinstance(pos_raw, dict) or not pos_raw:
+                        continue
+
+                    symbols_to_close = list(pos_raw.keys())
+                    for symbol in symbols_to_close:
+                        pos = pos_raw[symbol]
+                        try:
+                            entry_price = float(pos.get("entry_price", 0))
+                            size_units = float(pos.get("size_units", 0))
+                            size_usd = float(pos.get("size_usd", 0))
+                            side = pos.get("side", "long")
+                            entry_fee = float(pos.get("entry_fee", 0))
+
+                            current_price = live_prices.get(symbol, entry_price)
+
+                            exit_value = size_units * current_price
+                            exit_fee = exit_value * KRAKEN_FEE_PCT
+                            net_value = exit_value - exit_fee
+
+                            if side == "long":
+                                pnl_pct = ((current_price - entry_price) / entry_price) * 100 if entry_price else 0
+                            else:
+                                pnl_pct = ((entry_price - current_price) / entry_price) * 100 if entry_price else 0
+
+                            gross_pnl_usd = size_usd * (pnl_pct / 100)
+                            total_fees = entry_fee + exit_fee
+                            net_pnl_usd = gross_pnl_usd - total_fees
+
+                            cash_usd += net_value
+
+                            now_iso = datetime.now(tz=timezone.utc).isoformat()
+                            cur.execute(
+                                """
+                                INSERT INTO kraken_trades
+                                    (bot_id, symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                                     fees_usd, reason, closed_at, paper, order_id)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+                                """,
+                                (
+                                    bot_text_id,
+                                    symbol,
+                                    side,
+                                    entry_price,
+                                    current_price,
+                                    round(pnl_pct, 2),
+                                    round(net_pnl_usd, 2),
+                                    round(total_fees, 4),
+                                    "rebalance_liquidation",
+                                    now_iso,
+                                    pos.get("order_id"),
+                                ),
+                            )
+
+                            del pos_raw[symbol]
+
+                            closed.append({
+                                "bot": bot_text_id,
+                                "symbol": symbol,
+                                "side": side,
+                                "pnl_pct": round(pnl_pct, 2),
+                                "pnl_usd": round(net_pnl_usd, 2),
+                            })
+
+                            logger.info(
+                                f"Rebalance | Kraken {bot_text_id} closed {side.upper()} {symbol} "
+                                f"@ ${current_price:,.4f} | P&L: {pnl_pct:+.2f}% (${net_pnl_usd:+,.2f})"
+                            )
+
+                        except Exception as exc:
+                            logger.error(f"Rebalance | Failed to close Kraken {bot_text_id} {symbol}: {exc}")
+                            errors.append({"bot": bot_text_id, "symbol": symbol, "error": str(exc)})
+
+                    cur.execute(
+                        "UPDATE kraken_portfolio SET cash_usd = %s, positions = %s, pending_tranches = '{}' WHERE id = %s",
+                        (cash_usd, _json.dumps(pos_raw, default=str), db_id),
+                    )
+
+    except Exception as exc:
+        logger.error(f"Rebalance | Kraken liquidation DB error: {exc}")
+        errors.append({"bot": "all", "error": str(exc)})
+
+    logger.info(f"Rebalance | Kraken: closed {len(closed)} positions, {len(errors)} errors")
+    return {"closed": closed, "errors": errors}
 
 
 class RunRequest(BaseModel):
@@ -151,9 +287,13 @@ async def force_rebalance() -> dict:
             logger.error(f"Rebalance | Failed to close {sym}: {exc}")
             errors.append({"symbol": sym, "error": str(exc)})
 
+    kraken_result = _liquidate_kraken_positions()
+    kraken_closed = kraken_result.get("closed", [])
+    kraken_errors = kraken_result.get("errors", [])
+
     logger.info(
-        f"Rebalance | Closed {len(closed)} positions, "
-        f"held {len(held)}, errors {len(errors)}"
+        f"Rebalance | Alpaca: closed {len(closed)}, held {len(held)}, errors {len(errors)} | "
+        f"Kraken: closed {len(kraken_closed)}, errors {len(kraken_errors)}"
     )
 
     crypto_only = not market_open
@@ -164,6 +304,8 @@ async def force_rebalance() -> dict:
         "closed": closed,
         "held": held,
         "errors": errors,
+        "kraken_closed": kraken_closed,
+        "kraken_errors": kraken_errors,
         "market_open": market_open,
         "pipeline": pipeline_result,
     }

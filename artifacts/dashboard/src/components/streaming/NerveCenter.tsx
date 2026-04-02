@@ -116,9 +116,9 @@ export function NerveCenter() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-2">Nerve Center</div>
+      <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1">Nerve Center</div>
 
-      <div className="flex-1 flex items-center justify-center relative">
+      <div className="flex-1 flex items-start justify-center relative pt-1">
         <svg viewBox="0 0 400 380" className="w-full max-w-md">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">

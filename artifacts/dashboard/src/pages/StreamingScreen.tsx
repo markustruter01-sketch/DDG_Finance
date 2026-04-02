@@ -64,15 +64,15 @@ export default function StreamingScreen() {
   const { trades, explosion, wins, losses, botStats, achievements, tradesPerHour } = useSimulatedFeed(15);
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col overflow-hidden">
+    <div className="h-screen bg-slate-950 flex flex-col overflow-hidden">
       <ProfitExplosion trade={explosion} />
       <AchievementFeed achievements={achievements} />
 
-      <div className="flex-1 flex flex-col p-4 gap-4 pb-20">
+      <div className="flex-1 flex flex-col p-3 gap-3 pb-16 min-h-0">
         <GlobalHUD />
 
-        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
-          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-4">
+        <div className="flex-1 grid grid-cols-12 gap-3 min-h-0">
+          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-3">
             <Scoreboard wins={wins} losses={losses} trades={trades} />
             <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
             <BotLeaderboard botStats={botStats} />
@@ -82,7 +82,7 @@ export default function StreamingScreen() {
             <NerveCenter />
           </div>
 
-          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-4">
+          <div className="col-span-3 min-h-0 overflow-y-auto flex flex-col gap-3">
             <SignalRadar />
             <VaultDisplay />
           </div>

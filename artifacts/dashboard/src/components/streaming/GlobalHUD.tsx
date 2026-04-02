@@ -114,15 +114,15 @@ export function GlobalHUD() {
             initial="hidden"
             animate="visible"
             className={cn(
-              "relative rounded-xl border p-4 bg-slate-900/80 overflow-hidden",
+              "relative rounded-xl border p-3 bg-slate-900/80 overflow-hidden",
               card.border
             )}
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
-              <div className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-2">{card.label}</div>
-              <div className="text-lg font-mono font-bold text-white tracking-tight">{card.value}</div>
-              <div className="text-[10px] text-muted-foreground/50 mt-1 font-mono">{card.sub}</div>
+              <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
+              <div className="text-base font-mono font-bold text-white tracking-tight">{card.value}</div>
+              <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">{card.sub}</div>
             </div>
           </motion.div>
         ))}

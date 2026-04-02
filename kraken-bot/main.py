@@ -1047,7 +1047,7 @@ def run_cycle() -> None:
                         if _t.get("filled"):
                             continue
                         _t_side   = _t["side"]
-                        _t_target = _t["target_price"]
+                        _t_target = _t["price_target"]
                         # For longs T2/T3 are lower (dip-buy); for shorts they are higher
                         _triggered = (
                             (current_price <= _t_target) if _t_side == "long"

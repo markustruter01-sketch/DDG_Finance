@@ -553,7 +553,7 @@ async def _auto_heal_check() -> None:
             )
             await _remediate_component("platform_core", triggered_by="auto_heal")
         else:
-            mark_resolved("platform_core")
+            mark_resolved("platform_core", "auto_heal_detected")
     except Exception as exc:
         logger.warning(f"[AUTO-HEAL] Platform core check failed: {exc}")
 
@@ -575,7 +575,7 @@ async def _auto_heal_check() -> None:
             )
             await _remediate_component("data_pipeline", triggered_by="auto_heal")
         else:
-            mark_resolved("data_pipeline")
+            mark_resolved("data_pipeline", "stale_data")
     except Exception as exc:
         logger.warning(f"[AUTO-HEAL] Data pipeline check failed: {exc}")
 
@@ -602,7 +602,7 @@ async def _auto_heal_check() -> None:
                         )
                         await _remediate_component("kraken_api", triggered_by="auto_heal")
                     else:
-                        mark_resolved("kraken_api")
+                        mark_resolved("kraken_api", "bot_stale")
             finally:
                 _kconn.close()
     except Exception as exc:

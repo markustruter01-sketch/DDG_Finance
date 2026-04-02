@@ -288,7 +288,7 @@ export function NerveCenter() {
       });
     }
 
-    return insights.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
+    return insights.filter((t) => t.pnlUsd > 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
   }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, optPositions, fxPositions]);
 
   const algoPopups = useAlgoPopups();

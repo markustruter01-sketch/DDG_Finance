@@ -1285,5 +1285,8 @@
   "total_trades": 0,
   "total_wins": 0,
   "total_pnl": 0.0,
-  "error": null
+  "error": null,
+  "realized_pnl": 0.0,
+  "positions": [],
+  "total_losses": 0
 }

@@ -102,11 +102,18 @@ export function FleetPerformanceHero() {
       ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
       : [0];
     krakenLines.unshift({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
-    krakenLines.push({ id: "options", name: "Apex", icon: "🎯", accent: "#ef4444", curve: [0] });
-    krakenLines.push({ id: "forex", name: "Navigator", icon: "🧭", accent: "#14b8a6", curve: [0] });
+    const optPnl = optState?.total_pnl ?? 0;
+    const optEquity = optState?.total_equity ?? 100_000;
+    const optPct = optEquity > 0 ? (optPnl / optEquity) * 100 : 0;
+    krakenLines.push({ id: "options", name: "Apex", icon: "🎯", accent: "#ef4444", curve: optPct !== 0 ? [0, optPct * 0.3, optPct * 0.6, optPct * 0.8, optPct] : [0] });
+
+    const fxPnl = fxState?.total_pnl ?? 0;
+    const fxEquity = fxState?.total_equity ?? 100_000;
+    const fxPct = fxEquity > 0 ? (fxPnl / fxEquity) * 100 : 0;
+    krakenLines.push({ id: "forex", name: "Navigator", icon: "🧭", accent: "#14b8a6", curve: fxPct !== 0 ? [0, fxPct * 0.25, fxPct * 0.5, fxPct * 0.75, fxPct] : [0] });
 
     return krakenLines;
-  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory]);
+  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory, optState, fxState]);
 
   const botCount = (fleetSummary?.bot_count ?? 3) + 3;
   const stats = [

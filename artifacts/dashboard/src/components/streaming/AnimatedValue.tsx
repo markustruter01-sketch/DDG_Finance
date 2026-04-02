@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AnimatedValueProps {
@@ -6,10 +6,36 @@ interface AnimatedValueProps {
   className?: string;
 }
 
+function FlipChar({ char, prevChar }: { char: string; prevChar: string }) {
+  const isDigit = /\d/.test(char);
+  const changed = char !== prevChar;
+
+  if (!isDigit || !changed) {
+    return <span className="inline-block">{char}</span>;
+  }
+
+  return (
+    <span className="inline-block relative overflow-hidden" style={{ width: "0.6em" }}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={char}
+          initial={{ rotateX: -90, opacity: 0, y: "-0.15em" }}
+          animate={{ rotateX: 0, opacity: 1, y: 0 }}
+          exit={{ rotateX: 90, opacity: 0, y: "0.15em" }}
+          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          className="inline-block"
+          style={{ transformOrigin: "center center", backfaceVisibility: "hidden" }}
+        >
+          {char}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
 export function AnimatedValue({ value, className = "" }: AnimatedValueProps) {
   const [displayValue, setDisplayValue] = useState(value);
   const [prevValue, setPrevValue] = useState(value);
-  const [animKey, setAnimKey] = useState(0);
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -23,24 +49,29 @@ export function AnimatedValue({ value, className = "" }: AnimatedValueProps) {
     if (value !== displayValue) {
       setPrevValue(displayValue);
       setDisplayValue(value);
-      setAnimKey((k) => k + 1);
     }
   }, [value]);
 
+  const chars = useMemo(() => {
+    const curr = displayValue.split("");
+    const prev = prevValue.padEnd(curr.length).split("");
+
+    const prevAligned = prevValue.split("");
+    while (prevAligned.length < curr.length) prevAligned.unshift(" ");
+    while (prevAligned.length > curr.length) prevAligned.shift();
+
+    return curr.map((c, i) => ({
+      char: c,
+      prevChar: prevAligned[i] ?? " ",
+      key: `${i}-${c}`,
+    }));
+  }, [displayValue, prevValue]);
+
   return (
-    <span className={`inline-flex overflow-hidden relative ${className}`}>
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span
-          key={animKey}
-          initial={{ y: 18, opacity: 0, filter: "blur(2px)" }}
-          animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
-          exit={{ y: -18, opacity: 0, filter: "blur(2px)" }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="inline-block"
-        >
-          {displayValue}
-        </motion.span>
-      </AnimatePresence>
+    <span className={`inline-flex overflow-hidden relative ${className}`} style={{ perspective: "200px" }}>
+      {chars.map((c, i) => (
+        <FlipChar key={i} char={c.char} prevChar={c.prevChar} />
+      ))}
     </span>
   );
 }

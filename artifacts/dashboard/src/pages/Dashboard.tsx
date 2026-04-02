@@ -31,8 +31,9 @@ import {
   Vault, ArrowUpRight, Coins, Target,
   ExternalLink, Radio, Bot,
   LayoutDashboard, ArrowUp, ArrowDown, ArrowUpDown, Layers,
+  ChevronDown, FileText,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -1282,6 +1283,72 @@ function VaultPanel() {
   );
 }
 
+function CollapsibleSection({ title, icon, defaultOpen = false, children }: { title: string; icon?: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-gradient-to-br from-slate-900/40 to-slate-950/40 overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-semibold text-white/80 tracking-wide">{title}</span>
+        </div>
+        <ChevronDown className={cn("h-4 w-4 text-muted-foreground/50 transition-transform duration-200", isOpen && "rotate-180")} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="px-1 pb-1">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ExportReportButton() {
+  const [loading, setLoading] = useState(false);
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/export/report`);
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trading-report-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Export failed — check that the trading API is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleExport}
+      disabled={loading}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-xs font-mono text-muted-foreground hover:text-white transition-all disabled:opacity-50"
+    >
+      <FileText className="h-3.5 w-3.5" />
+      {loading ? "Exporting..." : "Export Report"}
+    </button>
+  );
+}
+
 function BottomNav() {
   const [, navigate] = useLocation();
   const streamColor = '#f43f5e';
@@ -1352,7 +1419,10 @@ export default function Dashboard() {
           <SafeSection label="Trade Controls">
             <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-4 sm:px-7 py-4 sm:py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
               <div className="absolute top-0 left-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
-              <TradeWorkflowBar />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1"><TradeWorkflowBar /></div>
+                <ExportReportButton />
+              </div>
             </div>
           </SafeSection>
         </motion.div>
@@ -1377,13 +1447,17 @@ export default function Dashboard() {
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
           <SafeSection label="Live Positions">
-            <ConsolidatedPositionsTable />
+            <CollapsibleSection title="Live Open Positions" icon={<Layers className="h-4 w-4 text-blue-400/60" />} defaultOpen={false}>
+              <ConsolidatedPositionsTable />
+            </CollapsibleSection>
           </SafeSection>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
           <SafeSection label="Closed Trades">
-            <CombinedTradeHistorySection />
+            <CollapsibleSection title="Closed Trade History" icon={<History className="h-4 w-4 text-amber-400/60" />} defaultOpen={false}>
+              <CombinedTradeHistorySection />
+            </CollapsibleSection>
           </SafeSection>
         </motion.div>
 

@@ -202,8 +202,8 @@ export function useRealFeed(maxTrades = 20) {
         const pnlPct = entry > 0
           ? ((current - entry) / entry) * 100 * (p.side === "short" ? -1 : 1)
           : 0;
-        const pnlUsd = entry > 0 && p.size_units
-          ? (current - entry) * p.size_units * (p.side === "short" ? -1 : 1)
+        const pnlUsd = entry > 0 && p.size_usd
+          ? (current - entry) / entry * p.size_usd * (p.side === "short" ? -1 : 1)
           : 0;
         all.push({
           id: `${bot}-${p.symbol}`,

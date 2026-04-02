@@ -74,6 +74,7 @@ export function GlobalHUD() {
       glow: "from-green-500/20 via-green-500/5 to-transparent",
       border: "border-green-500/30",
       valueColor: "text-green-400",
+      isPlatformBalance: true,
     },
     {
       label: "TRADE ANALYTICS",
@@ -90,9 +91,9 @@ export function GlobalHUD() {
 
   const activePools = [
     summary?.auto_trading !== undefined,
-    djStatus.data?.is_running,
-    bbStatus.data?.is_running,
-    caStatus.data?.is_running,
+    djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused,
+    bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused,
+    caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused,
     optState !== undefined,
     fxState !== undefined,
   ].filter(Boolean).length;
@@ -135,21 +136,31 @@ export function GlobalHUD() {
               {"isLogo" in card && card.isLogo ? (
                 <div className="flex items-center justify-center gap-3 h-full min-h-[48px] w-full py-1">
                   <motion.span
-                    className="text-[11px] font-black tracking-wider uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent shrink-0 leading-tight"
+                    className="text-[22px] font-black tracking-wider uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent shrink-0 leading-tight"
                     style={{ textShadow: "0 0 20px rgba(139,92,246,0.5)" }}
                     animate={{ opacity: [0.7, 1, 0.7] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
                     Powered<br/>by
                   </motion.span>
-                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[56px] w-auto object-contain" />
+                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[62px] w-auto object-contain" />
                 </div>
               ) : (
                 <>
                   <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
-                  <div className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
-                    <AnimatedValue value={card.value} />
-                  </div>
+                  {"isPlatformBalance" in card && card.isPlatformBalance ? (
+                    <motion.div
+                      className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
+                      animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"], scale: [1, 1.02, 1] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <AnimatedValue value={card.value} />
+                    </motion.div>
+                  ) : (
+                    <div className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
+                      <AnimatedValue value={card.value} />
+                    </div>
+                  )}
                   <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">
                     <AnimatedValue value={card.sub} />
                   </div>

@@ -1,0 +1,137 @@
+[
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "AVAX/USD",
+    "pnl_pct": 1.38,
+    "pnl_usd": 33.93,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T14:36:30.767177+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "SHIB/USD",
+    "pnl_pct": 1.38,
+    "pnl_usd": 64.17,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T14:36:34.646471+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "ICP/USD",
+    "pnl_pct": 1.73,
+    "pnl_usd": 38.95,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T14:41:05.704962+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "ARB/USD",
+    "pnl_pct": 1.33,
+    "pnl_usd": 60.71,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T14:41:12.836797+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "ICP/USD",
+    "pnl_pct": 1.4,
+    "pnl_usd": 34.67,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T14:45:01.377395+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "SHIB/USD",
+    "pnl_pct": 1.2,
+    "pnl_usd": 33.41,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T15:00:07.204634+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "STRK/USD",
+    "pnl_pct": 1.41,
+    "pnl_usd": 80.47,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T15:02:16.933008+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "IMX/USD",
+    "pnl_pct": 1.26,
+    "pnl_usd": 85.21,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T16:27:43.665325+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "W/USD",
+    "pnl_pct": 1.69,
+    "pnl_usd": 46.1,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T16:40:17.392625+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "LINK/USD",
+    "pnl_pct": 1.35,
+    "pnl_usd": 32.53,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T16:46:09.185274+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "GRT/USD",
+    "pnl_pct": 1.0,
+    "pnl_usd": 64.67,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T17:03:07.341766+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "OP/USD",
+    "pnl_pct": 1.27,
+    "pnl_usd": 56.96,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T17:18:22.243568+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "OP/USD",
+    "pnl_pct": 1.27,
+    "pnl_usd": 86.28,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T17:18:22.376377+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "VET/USD",
+    "pnl_pct": 1.7,
+    "pnl_usd": 128.45,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T17:22:53.607246+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "VET/USD",
+    "pnl_pct": 1.61,
+    "pnl_usd": 79.35,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T17:22:53.668609+00:00"
+  }
+]

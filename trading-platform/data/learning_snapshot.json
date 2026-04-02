@@ -1,6 +1,60 @@
 {
-  "exported_at": "2026-04-01T20:30:00.272128+00:00",
+  "exported_at": "2026-04-02T20:10:01.883013+00:00",
   "llm_learnings": [
+    {
+      "insight_text": "Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-02T01:29:43.670890+00:00",
+      "last_seen": "2026-04-02T05:59:01.659753+00:00",
+      "confirmed_count": 7,
+      "confidence_score": 0.85
+    },
+    {
+      "insight_text": "Bear Regime SGOV Default: no safe-haven has positive 3-month momentum.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-04-02T14:16:20.532273+00:00",
+      "last_seen": "2026-04-02T17:46:03.447300+00:00",
+      "confirmed_count": 6,
+      "confidence_score": 0.8143
+    },
+    {
+      "insight_text": "Crypto market experiencing extreme fear with low on-chain demand.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-02T01:29:43.632646+00:00",
+      "last_seen": "2026-04-02T03:30:20.984773+00:00",
+      "confirmed_count": 4,
+      "confidence_score": 0.7
+    },
+    {
+      "insight_text": "SGOV is a cash equivalent that provides a safe haven in a Bear regime.",
+      "regime": "Bear",
+      "category": "position",
+      "first_seen": "2026-04-02T14:16:20.539194+00:00",
+      "last_seen": "2026-04-02T17:46:03.435882+00:00",
+      "confirmed_count": 3,
+      "confidence_score": 0.6
+    },
+    {
+      "insight_text": "Bear Regime capital preservation: additional 50% position-size haircut applied \u2014 excess 7.5% held as SGOV.",
+      "regime": "Bear",
+      "category": "position",
+      "first_seen": "2026-04-02T14:16:20.545809+00:00",
+      "last_seen": "2026-04-02T17:46:03.443507+00:00",
+      "confirmed_count": 3,
+      "confidence_score": 0.6
+    },
+    {
+      "insight_text": "Conviction below threshold \u2014 holding short-term US Treasury ETF as cash equivalent.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T14:16:20.536284+00:00",
+      "last_seen": "2026-04-02T17:46:03.432491+00:00",
+      "confirmed_count": 3,
+      "confidence_score": 0.6
+    },
     {
       "insight_text": "Tech sector momentum has been consistently positive, supporting SPY and QQQ allocation.",
       "regime": "Bull",
@@ -9,6 +63,132 @@
       "last_seen": "2026-03-29T07:32:03.265586+00:00",
       "confirmed_count": 2,
       "confidence_score": 0.4333
+    },
+    {
+      "insight_text": "The current regime is classified as Bear due to the elevated VIX (24.54), declining equity prices (e.g., SPY, QQQ), and rising safe-haven prices (e.g., TLT, IEF).",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T16:01:04.876387+00:00",
+      "last_seen": "2026-04-02T17:46:03.416772+00:00",
+      "confirmed_count": 2,
+      "confidence_score": 0.4333
+    },
+    {
+      "insight_text": "The current regime is classified as Bear due to the elevated VIX (24.54), negative momentum in most equity indices (SPY, QQQ, XLK, XLF, XLV, IWM), and the overall macroeconomic indicators suggesting a risk-off environment.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T14:16:20.515028+00:00",
+      "last_seen": "2026-04-02T14:16:20.515028+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The unemployment rate is at 4.4, and the 10Y-2Y Yield Spread is at 0.52, which also supports the Bear regime classification.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T14:16:20.529341+00:00",
+      "last_seen": "2026-04-02T14:16:20.529341+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "It is an attractive choice when other assets have negative momentum or high volatility.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-04-02T14:16:20.542483+00:00",
+      "last_seen": "2026-04-02T14:16:20.542483+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The unemployment rate (4.4) and CPI (327.46) also indicate a risk-off environment.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T16:01:04.974714+00:00",
+      "last_seen": "2026-04-02T16:01:04.974714+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Its momentum signals are neutral, but its use as a cash equivalent makes it a suitable choice.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-04-02T16:01:04.987970+00:00",
+      "last_seen": "2026-04-02T16:01:04.987970+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Additionally, the 10Y-2Y Yield Spread is positive (0.52), which may indicate a potential recession.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T17:46:03.421637+00:00",
+      "last_seen": "2026-04-02T17:46:03.421637+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The CBOE VIX is above 25, which is a common indicator of a risk-off environment.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T17:46:03.425041+00:00",
+      "last_seen": "2026-04-02T17:46:03.425041+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The conviction score is high due to its low-risk nature and potential for capital preservation.",
+      "regime": "Bear",
+      "category": "risk",
+      "first_seen": "2026-04-02T17:46:03.439779+00:00",
+      "last_seen": "2026-04-02T17:46:03.439779+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The current regime is classified as Bear due to the elevated VIX (24.54), which indicates a high level of market volatility and fear.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T19:31:17.996767+00:00",
+      "last_seen": "2026-04-02T19:31:17.996767+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Additionally, the available data on equities such as QQQ and XLK show negative momentum, further supporting the Bear regime classification.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-04-02T19:31:18.001032+00:00",
+      "last_seen": "2026-04-02T19:31:18.001032+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "The lack of positive momentum in most assets and the overall macroeconomic indicators, such as the Federal Funds Rate and Unemployment Rate, also align with a Bear market environment.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-04-02T19:31:18.005017+00:00",
+      "last_seen": "2026-04-02T19:31:18.005017+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.242208+00:00",
+      "last_seen": "2026-03-29T07:32:03.242208+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Given the Bear regime and lack of positive momentum in most assets, the best course of action is to prioritize capital preservation by allocating 100% to SGOV, a cash equivalent that provides a safe haven in such market conditions.",
+      "regime": "Bear",
+      "category": "momentum",
+      "first_seen": "2026-04-02T19:31:18.008763+00:00",
+      "last_seen": "2026-04-02T19:31:18.008763+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
     },
     {
       "insight_text": "GLD and TLT both show positive momentum on 3-month and 6-month moving averages in this regime.",
@@ -61,15 +241,6 @@
       "category": "crypto",
       "first_seen": "2026-04-01T09:11:51.544452+00:00",
       "last_seen": "2026-04-01T09:11:51.544452+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
-      "regime": "Bear",
-      "category": "macro",
-      "first_seen": "2026-03-29T07:32:03.242208+00:00",
-      "last_seen": "2026-03-29T07:32:03.242208+00:00",
       "confirmed_count": 1,
       "confidence_score": 0.33
     },

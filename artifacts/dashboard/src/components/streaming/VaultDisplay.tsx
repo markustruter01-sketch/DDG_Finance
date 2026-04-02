@@ -41,7 +41,11 @@ export function VaultDisplay() {
               {formatUsd(totalVaulted)}
             </motion.div>
           </div>
-          <div className="text-[9px] text-emerald-400/50 font-mono font-bold">{totalSweeps} sweeps</div>
+          <div className="text-right">
+            <div className="text-[7px] uppercase tracking-widest text-amber-400/60 font-bold">Passive Income</div>
+            <div className="text-[14px] font-mono font-bold text-amber-400/80">{formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[7px] text-amber-400/40">/mo</span></div>
+            <div className="text-[7px] text-emerald-400/50 font-mono">{totalSweeps} sweeps</div>
+          </div>
         </div>
       </div>
 

@@ -12,6 +12,9 @@ import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { GeminiThinking } from "@/components/streaming/GeminiThinking";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
+import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
+import { AchievementFeed } from "@/components/streaming/AchievementFeed";
+import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
 const REF_W = 1920;
 const REF_H = 1080;
@@ -99,10 +102,13 @@ function StreamingNavBar() {
 
 export default function StreamingScreen() {
   const { trades, wins, losses, botStats, totalTrades, openPositions } = useRealFeed(20);
+  const simulated = useSimulatedFeed(15);
   const scale = useViewportScale();
 
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
+      <ProfitExplosion trade={simulated.explosion} />
+      <AchievementFeed achievements={simulated.achievements} />
       <div
         style={{
           width: REF_W,

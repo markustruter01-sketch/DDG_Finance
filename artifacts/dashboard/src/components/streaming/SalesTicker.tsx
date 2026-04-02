@@ -27,7 +27,7 @@ export function SalesTicker() {
       </div>
       <style>{`
         .ticker-scroll {
-          animation: tickerScroll 75s linear infinite;
+          animation: tickerScroll 15s linear infinite;
         }
         @keyframes tickerScroll {
           0% { transform: translateX(0); }

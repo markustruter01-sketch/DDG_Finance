@@ -137,7 +137,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
     if (displayTrades.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % displayTrades.length);
-    }, 8000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [displayTrades.length]);
 

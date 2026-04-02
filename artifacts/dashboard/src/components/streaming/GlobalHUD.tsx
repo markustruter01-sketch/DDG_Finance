@@ -111,7 +111,7 @@ export function GlobalHUD() {
     { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? "text-green-400" : "text-red-400" },
     { label: "PROFIT FACTOR", value: profitFactor, color: "text-cyan-400" },
     { label: "RISK LEVEL", value: riskLevel, color: riskColor },
-    { label: "SHARPE (EST.)", value: winRate > 50 ? ((winRate / 100 * 2 - 1) * 1.5).toFixed(2) : "0.00", color: "text-violet-400" },
+    { label: "SHARPE (EST.)", value: totalTrades > 0 ? ((totalWins / totalTrades * 2 - 1) * 1.5).toFixed(2) : "—", color: "text-violet-400" },
     { label: "EXPOSURE", value: `${activePools}/6 pools`, color: "text-blue-400" },
     { label: "AVG POSITION", value: avgTradeSize, color: "text-amber-400" },
   ];

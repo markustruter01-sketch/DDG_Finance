@@ -266,6 +266,58 @@ async def _get_fleet_context() -> str:
     except Exception:
         pass
 
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT ticker, side, entry_price, exit_price, pnl_pct, pnl_usd, strategy, closed_at
+                       FROM trade_journal WHERE closed_at > NOW() - INTERVAL '48 hours'
+                       ORDER BY closed_at DESC LIMIT 20"""
+                )
+                cols = [d[0] for d in cur.description]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                if rows:
+                    for r in rows:
+                        if r.get("closed_at"):
+                            r["closed_at"] = r["closed_at"].isoformat()
+                    raw_data["recent_equity_trades"] = rows
+    except Exception:
+        pass
+
+    try:
+        from forex_db import get_conn as forex_conn
+        with forex_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT pair, side, entry_price, current_price, pnl_pct, status
+                       FROM forex_positions WHERE status = 'open'
+                       ORDER BY opened_at DESC LIMIT 10"""
+                )
+                cols = [d[0] for d in cur.description]
+                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                if rows:
+                    raw_data["forex_open_positions"] = rows
+    except Exception:
+        pass
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT total_equity, alpaca_equity, kraken_equity, ts
+                       FROM equity_curve ORDER BY ts DESC LIMIT 1"""
+                )
+                row = cur.fetchone()
+                if row:
+                    raw_data["latest_equity_snapshot"] = {
+                        "total": float(row[0]) if row[0] else None,
+                        "alpaca": float(row[1]) if row[1] else None,
+                        "kraken": float(row[2]) if row[2] else None,
+                        "ts": row[3].isoformat() if row[3] else None,
+                    }
+    except Exception:
+        pass
+
     if not raw_data:
         return "No fleet data available."
 
@@ -521,14 +573,13 @@ async def _handle_pause_losing() -> dict:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 for bot_name, profile_key in bot_map:
-                    db_id = BOT_ID_TO_DB_ID[profile_key]
                     cur.execute(
                         """SELECT COUNT(*) FILTER (WHERE pnl_pct > 0) AS wins,
                                   COUNT(*) FILTER (WHERE pnl_pct <= 0) AS losses,
                                   COALESCE(SUM(pnl_usd), 0) AS total_pnl
                            FROM kraken_trades WHERE bot_id = %s
                            AND closed_at > NOW() - INTERVAL '24 hours'""",
-                        (db_id,),
+                        (bot_name,),
                     )
                     row = cur.fetchone()
                     if row and row[2] < 0:

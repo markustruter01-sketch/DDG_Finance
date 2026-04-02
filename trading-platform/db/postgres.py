@@ -305,13 +305,15 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
     reason      TEXT,
     closed_at   TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
     paper       BOOLEAN          NOT NULL DEFAULT TRUE,
-    order_id    TEXT
+    order_id    TEXT,
+    bot_id      TEXT             DEFAULT 'davy-jones'
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
 
--- Single-row adaptive params (id=1) upserted by adaptive_params.py every adaptation cycle.
+-- Multi-bot adaptive params upserted by adaptive_params.py every adaptation cycle.
 CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
-    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    id          INTEGER PRIMARY KEY,
     params      JSONB NOT NULL DEFAULT '{}',
     metrics     JSONB,
     reasons     JSONB,
@@ -373,6 +375,16 @@ def ensure_schema() -> None:
         logger.info("DB | Trade journal column migrations applied")
     except Exception as exc:
         logger.error(f"DB | Migration failed (non-fatal): {exc}")
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("ALTER TABLE kraken_trades ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id)")
+                cur.execute("ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check")
+        logger.info("DB | Kraken multi-bot migrations applied")
+    except Exception as exc:
+        logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

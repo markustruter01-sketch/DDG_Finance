@@ -96,10 +96,34 @@ export function NerveCenter() {
   }, []);
 
   const cx = 200;
-  const cy = 160;
-  const radius = 110;
+  const cy = 150;
+  const radius = 105;
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
+
+  const ALGOS = [
+    { label: "VPIN", color: "#22d3ee" },
+    { label: "OFI", color: "#22d3ee" },
+    { label: "VAMP", color: "#22d3ee" },
+    { label: "Kelly f*", color: "#a78bfa" },
+    { label: "ATR Stop", color: "#f97316" },
+    { label: "Z-Score", color: "#14b8a6" },
+    { label: "RSI", color: "#facc15" },
+    { label: "Bollinger", color: "#facc15" },
+    { label: "EMA Cross", color: "#ef4444" },
+    { label: "Sharpe", color: "#a78bfa" },
+  ];
+  const row1 = ALGOS.slice(0, 5);
+  const row2 = ALGOS.slice(5);
+  const badgeW = 62;
+  const gap = 6;
+  const totalW1 = row1.length * badgeW + (row1.length - 1) * gap;
+  const totalW2 = row2.length * badgeW + (row2.length - 1) * gap;
+  const startX1 = cx - totalW1 / 2;
+  const startX2 = cx - totalW2 / 2;
+  const algoLabelY = 318;
+  const row1Y = algoLabelY + 14;
+  const row2Y = row1Y + 20;
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -300,6 +324,33 @@ export function NerveCenter() {
                 {!active && (
                   <text x={bx + 20} y={by - 15} fontSize="11">💤</text>
                 )}
+              </g>
+            );
+          })}
+
+          <text x={cx} y={algoLabelY} textAnchor="middle" fill="rgba(99,102,241,0.45)" fontSize="6" fontWeight="bold" letterSpacing={2}>
+            ACTIVE ALGORITHMS
+          </text>
+          <line x1={cx - 80} y1={algoLabelY + 4} x2={cx + 80} y2={algoLabelY + 4} stroke="rgba(99,102,241,0.15)" strokeWidth={0.5} />
+          {row1.map((a, i) => {
+            const ax = startX1 + i * (badgeW + gap);
+            return (
+              <g key={a.label}>
+                <rect x={ax} y={row1Y - 9} width={badgeW} height={14} rx={3} fill={`${a.color}10`} stroke={`${a.color}40`} strokeWidth={0.7} />
+                <text x={ax + badgeW / 2} y={row1Y + 1} textAnchor="middle" fill={`${a.color}BB`} fontSize="6" fontWeight="bold" fontFamily="monospace">
+                  {a.label}
+                </text>
+              </g>
+            );
+          })}
+          {row2.map((a, i) => {
+            const ax = startX2 + i * (badgeW + gap);
+            return (
+              <g key={a.label}>
+                <rect x={ax} y={row2Y - 9} width={badgeW} height={14} rx={3} fill={`${a.color}10`} stroke={`${a.color}40`} strokeWidth={0.7} />
+                <text x={ax + badgeW / 2} y={row2Y + 1} textAnchor="middle" fill={`${a.color}BB`} fontSize="6" fontWeight="bold" fontFamily="monospace">
+                  {a.label}
+                </text>
               </g>
             );
           })}

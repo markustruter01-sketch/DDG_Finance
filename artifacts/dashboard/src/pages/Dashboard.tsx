@@ -685,6 +685,7 @@ interface UnifiedPosition {
   sizeUsd: number;
   pnlUsd: number;
   pnlPct: number;
+  entryTime: string | null;
 }
 
 const BOT_COLORS: Record<string, string> = {
@@ -695,6 +696,18 @@ const BOT_COLORS: Record<string, string> = {
   "apex-predator": "#ef4444",
   navigator: "#14b8a6",
 };
+
+function formatTimeHeld(entryTime: string | null): string {
+  if (!entryTime) return "—";
+  const ms = Date.now() - new Date(entryTime).getTime();
+  if (ms < 0) return "—";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h`;
+}
 
 function ConsolidatedPositionsTable() {
   const { data: alpacaData } = useLivePositions();
@@ -725,6 +738,7 @@ function ConsolidatedPositionsTable() {
         sizeUsd: p.market_value,
         pnlUsd: p.unrealized_pl,
         pnlPct: p.unrealized_plpc * 100,
+        entryTime: null,
       });
     }
 
@@ -748,6 +762,7 @@ function ConsolidatedPositionsTable() {
           sizeUsd: p.size_usd,
           pnlUsd: p.unrealized_pnl_usd,
           pnlPct: p.unrealized_pnl_pct * 100,
+          entryTime: p.entry_time,
         });
       }
     }
@@ -766,6 +781,7 @@ function ConsolidatedPositionsTable() {
         sizeUsd: p.total_cost,
         pnlUsd: p.unrealized_pnl,
         pnlPct: p.unrealized_pnl_pct * 100,
+        entryTime: p.opened_at ?? p.scanned_at,
       });
     }
 
@@ -783,6 +799,7 @@ function ConsolidatedPositionsTable() {
         sizeUsd: p.size_usd,
         pnlUsd: p.unrealized_pnl_usd,
         pnlPct: (p.unrealized_pnl_usd / Math.max(p.size_usd, 1)) * 100,
+        entryTime: p.entry_time,
       });
     }
 
@@ -869,6 +886,7 @@ function ConsolidatedPositionsTable() {
                 <th className="text-right px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
                   <span className="flex items-center gap-1 justify-end">P&L {sortIcon("pnl")}</span>
                 </th>
+                <th className="text-right px-3 py-2">Held</th>
               </tr>
             </thead>
             <tbody>
@@ -898,6 +916,7 @@ function ConsolidatedPositionsTable() {
                       </span>
                     </div>
                   </td>
+                  <td className="px-3 py-2 text-right font-mono text-white/50 text-[10px]">{formatTimeHeld(pos.entryTime)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1055,8 +1074,12 @@ function CombinedTradeHistorySection() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
             <History className="h-7 w-7 text-muted-foreground/15" />
-            <p className="text-xs text-muted-foreground/50">No closed trades yet</p>
-            <p className="text-[10px] text-muted-foreground/30">History will appear here as positions close</p>
+            <p className="text-xs text-muted-foreground/50">
+              {filter === "apex-predator" ? "No trade history available" : "No closed trades yet"}
+            </p>
+            <p className="text-[10px] text-muted-foreground/30">
+              {filter === "apex-predator" ? "Apex Predator reports aggregate stats only" : "History will appear here as positions close"}
+            </p>
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto overflow-x-auto divide-y divide-white/5">

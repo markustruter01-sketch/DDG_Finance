@@ -307,7 +307,12 @@ export function NerveCenter() {
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
-  const formulaText = FORMULA_SNIPPETS.map((f) => `  ${f}  `).join("  │  ");
+  const formulaElements = FORMULA_SNIPPETS.map((f, i) => (
+    <span key={i}>
+      {i > 0 && <span style={{ color: "rgba(34,211,238,0.7)", padding: "0 6px" }}>│</span>}
+      <span>{f}</span>
+    </span>
+  ));
   const formulaY = 340;
 
   return (
@@ -550,8 +555,8 @@ export function NerveCenter() {
                     letterSpacing: "0.8px",
                   }}
                 >
-                  <span style={{ paddingRight: "60px" }}>{formulaText}</span>
-                  <span style={{ paddingRight: "60px" }}>{formulaText}</span>
+                  <span style={{ paddingRight: "60px" }}>{formulaElements}</span>
+                  <span style={{ paddingRight: "60px" }}>{formulaElements}</span>
                 </div>
               </div>
             </foreignObject>

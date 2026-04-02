@@ -59,6 +59,7 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
                 style={{ backgroundColor: isUp ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)" }}
               >
                 <span className="text-[10px] shrink-0">{pos.icon}</span>
+                <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
                 <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
                   {pos.side.toUpperCase()} {pos.symbol}
                 </span>

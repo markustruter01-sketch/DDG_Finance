@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 
-const TICKER_TEXT = "Want the quantitative and algorithmic math behind this system? Learn to build your *own* system with our complete educational PDF blueprint, covering math, risk metrics, models, and white paper for $49.99 USD. Join the Discord for community discussions, check the links in the stream description for the guide.";
+const TICKER_TEXT = "System Note: Our 6-bot fleet (Stocks, Crypto, Forex, Futures) is currently in its Self-Learning Phase. Powered by institutional algorithms and Gemini AI, the system auto-optimizes parameters every 3 hours, logging every trend and trade into a persistent neural journal to sharpen performance. Want to build this automated trading platform for yourself in 2 days? DM this channel to register interest, this will help us understand demand and create a instruction manual. No experience needed!";
 
 const WARNING_TEXT = "⚠️ WARNING: This is not financial advice, only a system demonstration. Past performance does not guarantee future results. Trade at your own risk.";
 

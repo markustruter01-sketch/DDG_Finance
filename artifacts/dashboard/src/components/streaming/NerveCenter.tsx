@@ -5,12 +5,12 @@ import {
 } from "@/hooks/use-trading";
 
 const BOTS = [
-  { id: "oracle", name: "Oracle", icon: "🔮", angle: 270, color: "#facc15" },
-  { id: "davy-jones", name: "Davy Jones", icon: "⚓", angle: 330, color: "#22d3ee" },
-  { id: "blackbeard", name: "Blackbeard", icon: "🏴‍☠️", angle: 30, color: "#f97316" },
-  { id: "calypso", name: "Calypso", icon: "🌊", angle: 90, color: "#a78bfa" },
-  { id: "apex", name: "Apex Predator", icon: "🎯", angle: 150, color: "#ef4444" },
-  { id: "navigator", name: "Navigator", icon: "🧭", angle: 210, color: "#14b8a6" },
+  { id: "oracle", name: "Oracle", subtitle: "Stocks Bot", icon: "🔮", angle: 270, color: "#facc15" },
+  { id: "davy-jones", name: "Davy Jones", subtitle: "Crypto Bot #1", icon: "⚓", angle: 330, color: "#22d3ee" },
+  { id: "blackbeard", name: "Blackbeard", subtitle: "Crypto Bot #2", icon: "🏴‍☠️", angle: 30, color: "#f97316" },
+  { id: "calypso", name: "Calypso", subtitle: "Crypto Bot #3", icon: "🌊", angle: 90, color: "#a78bfa" },
+  { id: "apex", name: "Apex Predator", subtitle: "Options Bot", icon: "🎯", angle: 150, color: "#ef4444" },
+  { id: "navigator", name: "Navigator", subtitle: "Forex Bot", icon: "🧭", angle: 210, color: "#14b8a6" },
 ];
 
 const ALGO_SNIPPETS = [
@@ -287,6 +287,14 @@ export function NerveCenter() {
                   fontWeight="bold"
                 >
                   {bot.name.toUpperCase()}
+                </text>
+                <text
+                  x={bx} y={by + 44}
+                  textAnchor="middle"
+                  fill={active ? `${bot.color}99` : "rgba(100,116,139,0.35)"}
+                  fontSize="5"
+                >
+                  ({bot.subtitle})
                 </text>
 
                 {!active && (

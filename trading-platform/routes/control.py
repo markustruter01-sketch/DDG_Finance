@@ -164,6 +164,18 @@ def _liquidate_kraken_positions() -> dict:
         logger.error(f"Rebalance | Kraken liquidation DB error: {exc}")
         errors.append({"bot": "all", "error": str(exc)})
 
+    for bid in _KRAKEN_BOTS:
+        ctrl_path = _Path(f"../kraken-bot/{bid}_control.json")
+        try:
+            ctrl_data = {}
+            if ctrl_path.exists():
+                ctrl_data = _json.loads(ctrl_path.read_text())
+            ctrl_data["force_reload"] = True
+            ctrl_path.write_text(_json.dumps(ctrl_data, indent=2))
+            logger.info(f"Rebalance | Set force_reload flag for {bid}")
+        except Exception as exc:
+            logger.warning(f"Rebalance | Could not set force_reload for {bid}: {exc}")
+
     logger.info(f"Rebalance | Kraken: closed {len(closed)} positions, {len(errors)} errors")
     return {"closed": closed, "errors": errors}
 

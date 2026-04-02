@@ -108,6 +108,25 @@ def _save_portfolio() -> None:
     )
 
 
+def reload_portfolio_from_db() -> dict:
+    """Force-reload the in-memory portfolio from the database.
+    Called by main.py when the rebalance endpoint signals a force reload."""
+    import db as _db
+
+    global _portfolio
+    pg_pf = _db.load_portfolio()
+    if pg_pf is not None:
+        _portfolio = pg_pf
+        if "all_trades" not in _portfolio:
+            _portfolio["all_trades"] = []
+        logger.warning(
+            f"Paper | FORCE RELOADED from DB — "
+            f"Cash: ${_portfolio['cash_usd']:,.2f}, "
+            f"Positions: {len(_portfolio.get('positions', {}))}"
+        )
+    return _portfolio or {}
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:

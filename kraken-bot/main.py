@@ -306,6 +306,39 @@ def is_bot_paused() -> bool:
         return False
 
 
+def _check_force_reload() -> bool:
+    """Check if the rebalance endpoint has set force_reload=true in the control file.
+    If found, clear the flag and reload portfolio from DB."""
+    import json as _json, pathlib as _pl
+    ctrl = _pl.Path(CONTROL_FILE)
+    if not ctrl.exists():
+        return False
+    try:
+        data = _json.loads(ctrl.read_text())
+        if data.get("force_reload"):
+            data["force_reload"] = False
+            ctrl.write_text(_json.dumps(data, indent=2))
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _do_force_reload() -> None:
+    """Reload portfolio from DB, replacing all in-memory state."""
+    global open_positions, total_equity
+    from paper_engine import reload_portfolio_from_db, get_paper_positions, get_paper_summary
+    reload_portfolio_from_db()
+    open_positions = get_paper_positions()
+    summary = get_paper_summary()
+    total_equity = summary.get("equity_usd", total_equity)
+    _pending_tranches.clear()
+    logger.warning(
+        f"FORCE RELOAD | Portfolio reloaded from DB — "
+        f"{len(open_positions)} positions, ${total_equity:,.2f} equity"
+    )
+
+
 # STATUS FILE WRITER
 # After every cycle, we write:
 #   - kraken_heartbeat (DB)     — persistent state (status, equity, positions)
@@ -814,8 +847,11 @@ def run_cycle() -> None:
         write_live_state()
         return
 
-    # In paper mode, resync positions from the persistent paper state each cycle
-    # so that positions survive a bot restart.
+    if _check_force_reload():
+        _do_force_reload()
+        write_status()
+        write_live_state()
+
     if PAPER_TRADING:
         open_positions = get_paper_positions()
 

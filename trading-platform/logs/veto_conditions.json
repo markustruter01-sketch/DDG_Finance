@@ -1,34 +1,32 @@
 {
-  "generated_at": "2026-04-01T10:57:04.601435+00:00",
-  "valid_until": "2026-04-01T16:57:04.601435+00:00",
+  "generated_at": "2026-04-02T08:15:00.003453+00:00",
+  "valid_until": "2026-04-03T08:15:00.003453+00:00",
   "vetoed_tickers": [
-    "RENDER",
-    "SNX",
-    "ALGO",
-    "SEI",
-    "JUP"
+    "ETHUSD",
+    "DOTUSD"
   ],
   "conditions": [
-    {
-      "type": "vpin_threshold",
-      "value": 0.7
-    },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "min_win_rate_gate",
-      "value": 0.3
+      "type": "heartbeat_timeout",
+      "value": 1800.0
+    },
+    {
+      "type": "pnl_volatility_cap",
+      "value": 0.05
     }
   ],
-  "critique_summary": "The fleet is currently suffering from severe cross-bot correlation in short positions and a 'stop-loss cascade' effect on Kraken. Aggressive bots show non-viable win rates (<22%), while Oracle exhibits conviction inflation where 0.90+ scores result in significant losses (BITO -8.3%).",
+  "critique_summary": "The platform is in a state of catastrophic failure with 15/16 scheduler jobs failing persistently for over 12 hours. Equity data is severely corrupted, showing an impossible 152% overnight jump (196k to 496k) that contradicts the -0.15% performance report, while conviction scores are recorded at 5.00, violating the 0-1 range constraint.",
   "critique_flags": [
-    "Aggressive Kraken bots (Blackbeard/Calypso) have win rates below 22%",
-    "Excessive short-side correlation on SNX, STRK, and STX across three bots",
-    "Oracle conviction inflation on crypto-linked assets",
-    "High stop-out frequency on RENDER and ALGO suggests these assets are too volatile for current ATR settings"
+    "Impossible PnL jump: Equity increased 152% between 2026-04-01T09:26 and 2026-04-02T01:29 despite a -0.15% performance log.",
+    "Data Anomaly: Conviction scores (5.00) are outside the defined 0-1 range.",
+    "System Degradation: Repeated failure of 15/16 scheduler jobs (never_run/analysis_failed) across 50+ log entries.",
+    "Stale Data: Kraken bot heartbeat is 39309s old (>10 hours), indicating total loss of crypto execution control.",
+    "Stale Equity Curve: Gap of >15 hours in equity reporting during active market cycles.",
+    "Duplicate Data: Identical equity rows detected at 2026-04-02T05:59:02."
   ],
-  "overall_verdict": "CAUTION",
-  "source": "fleet_commander"
+  "overall_verdict": "HOLD"
 }

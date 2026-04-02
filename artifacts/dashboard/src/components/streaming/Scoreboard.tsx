@@ -1,11 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import type { SimulatedTrade } from "./useSimulatedFeed";
+import type { RealTrade } from "./useRealFeed";
 
 interface ScoreboardProps {
   wins: number;
   losses: number;
-  trades: SimulatedTrade[];
+  trades: RealTrade[];
 }
 
 export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
@@ -66,11 +66,14 @@ export function Scoreboard({ wins, losses, trades }: ScoreboardProps) {
                 <span className="text-[9px]">{trade.icon}</span>
                 <span className="text-[9px] text-muted-foreground/70 truncate">{trade.bot} closed {trade.symbol}:</span>
                 <span className={cn("ml-auto text-[10px] font-bold shrink-0", trade.isWin ? "text-green-400" : "text-red-400")}>
-                  {trade.pnlUsd >= 0 ? "+" : ""}${Math.abs(trade.pnlUsd).toFixed(2)}
+                  {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
                 </span>
               </motion.div>
             ))}
           </AnimatePresence>
+          {trades.length === 0 && (
+            <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-4">No closed trades yet...</div>
+          )}
         </div>
       </div>
     </div>

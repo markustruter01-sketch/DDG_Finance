@@ -8,13 +8,11 @@ import { NerveCenter } from "@/components/streaming/NerveCenter";
 import { SignalRadar } from "@/components/streaming/SignalRadar";
 import { VaultDisplay } from "@/components/streaming/VaultDisplay";
 import { BotLeaderboard } from "@/components/streaming/BotLeaderboard";
-import { AchievementFeed } from "@/components/streaming/AchievementFeed";
 import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
-import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { SessionStats } from "@/components/streaming/SessionStats";
 import { GeminiThinking } from "@/components/streaming/GeminiThinking";
-import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
+import { useRealFeed } from "@/components/streaming/useRealFeed";
 
 const REF_W = 1920;
 const REF_H = 1080;
@@ -85,7 +83,7 @@ function StreamingNavBar() {
 }
 
 export default function StreamingScreen() {
-  const { trades, explosion, wins, losses, botStats, achievements, tradesPerHour } = useSimulatedFeed(15);
+  const { trades, wins, losses, botStats, totalTrades } = useRealFeed(20);
   const scale = useViewportScale();
 
   return (
@@ -99,9 +97,6 @@ export default function StreamingScreen() {
         }}
         className="relative flex flex-col overflow-hidden"
       >
-        <ProfitExplosion trade={explosion} />
-        <AchievementFeed achievements={achievements} />
-
         <div className="flex-1 flex flex-col p-3 gap-2 pb-12 min-h-0">
           <GlobalHUD />
 
@@ -109,7 +104,7 @@ export default function StreamingScreen() {
             <div className="col-span-3 min-h-0 flex flex-col gap-2">
               <Scoreboard wins={wins} losses={losses} trades={trades} />
               <div className="shrink-0">
-                <TradeSpeedometer tradesPerHour={tradesPerHour} totalTrades={wins + losses} />
+                <TradeSpeedometer totalTrades={totalTrades} />
               </div>
               <div className="shrink-0">
                 <BotLeaderboard botStats={botStats} />

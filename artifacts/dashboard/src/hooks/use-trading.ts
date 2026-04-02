@@ -153,6 +153,7 @@ export interface TradeJournal {
     pnl_percentage: number;
     original_thesis: string;
     status: string;
+    source?: string;
   }>;
 }
 
@@ -296,6 +297,7 @@ export function useJournal() {
   return useQuery<TradeJournal>({
     queryKey: ["/journal"],
     queryFn: async () => (await api.get("/journal")).data,
+    refetchInterval: useVisibleInterval(30_000),
   });
 }
 

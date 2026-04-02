@@ -1,15 +1,13 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import type { BotStats } from "./useSimulatedFeed";
+import type { BotStats } from "./useRealFeed";
 
 interface BotLeaderboardProps {
-  botStats: Record<string, BotStats>;
+  botStats: BotStats[];
 }
 
 export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
-  const sorted = Object.values(botStats)
-    .filter((b) => b.trades > 0)
-    .sort((a, b) => b.totalPnl - a.totalPnl);
+  const sorted = botStats.filter((b) => b.trades > 0);
 
   if (sorted.length === 0) {
     return (
@@ -29,7 +27,7 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
         <AnimatePresence initial={false}>
           {sorted.map((bot, i) => {
             const winRate = bot.trades > 0 ? ((bot.wins / bot.trades) * 100).toFixed(0) : "0";
-            const streakText = bot.streak > 0 ? `🔥${bot.streak}` : bot.streak < 0 ? `❄️${Math.abs(bot.streak)}` : "";
+            const hasPnlUsd = bot.totalPnl !== 0;
             return (
               <motion.div
                 key={bot.name}
@@ -45,15 +43,17 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
                 <span className="text-sm w-6 text-center shrink-0">{i < 3 ? medals[i] : `#${i + 1}`}</span>
                 <span className="text-sm shrink-0">{bot.icon}</span>
                 <span className="text-[10px] font-bold text-white truncate flex-1">{bot.name}</span>
-                {streakText && (
-                  <span className="text-[9px] shrink-0">{streakText}</span>
-                )}
                 <span className="text-[9px] text-muted-foreground/50 shrink-0">{winRate}%</span>
                 <span className={cn(
                   "text-[11px] font-bold shrink-0 min-w-[50px] text-right",
-                  bot.totalPnl >= 0 ? "text-green-400" : "text-red-400"
+                  hasPnlUsd
+                    ? (bot.totalPnl >= 0 ? "text-green-400" : "text-red-400")
+                    : (bot.totalPnlPct >= 0 ? "text-green-400" : "text-red-400")
                 )}>
-                  {bot.totalPnl >= 0 ? "+" : ""}${Math.abs(bot.totalPnl).toFixed(0)}
+                  {hasPnlUsd
+                    ? `${bot.totalPnl >= 0 ? "+" : ""}$${Math.abs(bot.totalPnl).toFixed(0)}`
+                    : `${bot.totalPnlPct >= 0 ? "+" : ""}${bot.totalPnlPct.toFixed(1)}%`
+                  }
                 </span>
               </motion.div>
             );

@@ -25,7 +25,6 @@ export function SessionStats({ botStats, trades, wins, losses }: SessionStatsPro
     ? allBots.reduce((best, b) => b.totalPnl > best.totalPnl ? b : best, allBots[0])
     : null;
 
-  const longestStreak = allBots.reduce((max, b) => Math.max(max, b.streak), 0);
   const avgPnl = totalTrades > 0 ? totalPnl / totalTrades : 0;
 
   const rows = [
@@ -35,11 +34,10 @@ export function SessionStats({ botStats, trades, wins, losses }: SessionStatsPro
     { label: "Best Trade", value: bestTrade ? `+$${bestTrade.pnlUsd.toFixed(0)} ${bestTrade.symbol}` : "—", color: "text-emerald-400" },
     { label: "Worst Trade", value: worstTrade && worstTrade.pnlUsd < 0 ? `-$${Math.abs(worstTrade.pnlUsd).toFixed(0)} ${worstTrade.symbol}` : "—", color: "text-red-400" },
     { label: "Top Bot", value: bestBot ? `${bestBot.icon} ${bestBot.name}` : "—", color: "text-amber-400" },
-    { label: "Best Streak", value: longestStreak > 0 ? `🔥 ${longestStreak} wins` : "—", color: "text-orange-400" },
   ];
 
   return (
-    <div className="flex flex-col gap-1.5 flex-1 min-h-0">
+    <div className="flex flex-col gap-1.5 shrink-0">
       <div className="text-[9px] uppercase tracking-widest text-violet-400/50 font-bold">Session Analytics</div>
       <div className="flex-1 rounded-lg border border-white/5 bg-slate-900/60 overflow-hidden">
         {rows.map((row) => (

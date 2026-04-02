@@ -12,6 +12,7 @@ import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
 import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { SessionStats } from "@/components/streaming/SessionStats";
+import { GeminiThinking } from "@/components/streaming/GeminiThinking";
 import { useSimulatedFeed } from "@/components/streaming/useSimulatedFeed";
 
 function StreamingNavBar() {
@@ -87,7 +88,7 @@ export default function StreamingScreen() {
             <NerveCenter />
           </div>
 
-          <div className="col-span-3 min-h-0 flex flex-col gap-2">
+          <div className="col-span-3 min-h-0 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
             <div className="shrink-0">
               <SignalRadar />
             </div>
@@ -95,6 +96,9 @@ export default function StreamingScreen() {
               <VaultDisplay />
             </div>
             <SessionStats botStats={botStats} trades={trades} wins={wins} losses={losses} />
+            <div className="shrink-0">
+              <GeminiThinking />
+            </div>
           </div>
         </div>
       </div>

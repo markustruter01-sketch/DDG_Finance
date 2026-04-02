@@ -68,34 +68,34 @@ export function NewsIntelligence() {
   }, [apiArticles.length, refetch]);
 
   useEffect(() => {
-    if (articles.length <= 4) return;
+    if (articles.length <= 3) return;
     const interval = setInterval(() => {
-      setVisibleIdx((prev) => (prev + 4) % articles.length);
-    }, 6000);
+      setVisibleIdx((prev) => (prev + 3) % articles.length);
+    }, 7000);
     return () => clearInterval(interval);
   }, [articles.length]);
 
   const visibleArticles = articles.length > 0
-    ? articles.slice(visibleIdx, visibleIdx + 4).concat(
-        visibleIdx + 4 > articles.length
-          ? articles.slice(0, (visibleIdx + 4) - articles.length)
+    ? articles.slice(visibleIdx, visibleIdx + 3).concat(
+        visibleIdx + 3 > articles.length
+          ? articles.slice(0, (visibleIdx + 3) - articles.length)
           : []
       )
     : [];
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px]">📡</span>
-          <span className="text-[9px] uppercase tracking-widest text-cyan-400/50 font-bold">News & Macro Intelligence</span>
+        <div className="flex items-center gap-2">
+          <span className="text-[14px]">📡</span>
+          <span className="text-[13px] uppercase tracking-widest text-cyan-400/50 font-bold">News & Macro Intelligence</span>
         </div>
-        <span className="text-[8px] font-mono text-cyan-400/30">
+        <span className="text-[11px] font-mono text-cyan-400/30">
           {isFallback ? "market briefing" : `${articles.length} feeds`}
         </span>
       </div>
 
-      <div className="rounded-lg border border-cyan-500/15 bg-slate-900/60 overflow-hidden min-h-[120px]">
+      <div className="rounded-lg border border-cyan-500/15 bg-slate-900/60 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={visibleIdx}
@@ -105,16 +105,15 @@ export function NewsIntelligence() {
             transition={{ duration: 0.4 }}
           >
             {visibleArticles.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-6 gap-1.5">
-                <div className="text-[10px] text-muted-foreground/40 font-mono text-center">
+              <div className="flex flex-col items-center justify-center py-8 gap-2">
+                <div className="text-[14px] text-muted-foreground/40 font-mono text-center">
                   {isLoading ? "Fetching news feeds..." : isError ? "News API temporarily unavailable" : "Loading news feeds..."}
                 </div>
                 <motion.div
-                  className="h-0.5 w-16 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent rounded-full"
+                  className="h-0.5 w-20 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent rounded-full"
                   animate={{ opacity: [0.3, 0.8, 0.3] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 />
-                <div className="text-[8px] text-muted-foreground/20 font-mono">auto-retrying every 30s</div>
               </div>
             )}
             {visibleArticles.map((article, i) => {
@@ -123,26 +122,26 @@ export function NewsIntelligence() {
               return (
                 <div
                   key={`${article.title}-${i}`}
-                  className="px-2.5 py-1.5 border-b border-white/[0.03] flex items-start gap-2"
+                  className="px-3 py-2.5 border-b border-white/[0.04] flex items-start gap-2.5"
                 >
-                  <span className="text-[9px] mt-0.5 shrink-0">{meta.icon}</span>
+                  <span className="text-[14px] mt-0.5 shrink-0">{meta.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[9px] font-mono text-white/80 leading-tight line-clamp-2">
+                    <div className="text-[13px] font-mono text-white/85 leading-snug line-clamp-2">
                       {article.title}
                     </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[7px]">{srcIcon}</span>
-                      <span className="text-[7px] font-mono truncate" style={{ color: meta.color + "99" }}>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[11px]">{srcIcon}</span>
+                      <span className="text-[11px] font-mono truncate" style={{ color: meta.color + "99" }}>
                         {article.source}
                       </span>
-                      <span className="text-[7px] font-mono text-white/20">·</span>
-                      <span className="text-[7px] font-mono text-white/25 uppercase" style={{ color: meta.color + "60" }}>
+                      <span className="text-[10px] font-mono text-white/20">·</span>
+                      <span className="text-[10px] font-mono text-white/30 uppercase" style={{ color: meta.color + "60" }}>
                         {article.category}
                       </span>
                       {article.published_at && (
                         <>
-                          <span className="text-[7px] font-mono text-white/20">·</span>
-                          <span className="text-[7px] font-mono text-white/25">{timeAgo(article.published_at)}</span>
+                          <span className="text-[10px] font-mono text-white/20">·</span>
+                          <span className="text-[10px] font-mono text-white/30">{timeAgo(article.published_at)}</span>
                         </>
                       )}
                     </div>

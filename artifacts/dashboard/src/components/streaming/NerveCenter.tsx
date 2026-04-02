@@ -137,14 +137,14 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
     if (displayTrades.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % displayTrades.length);
-    }, 6000);
+    }, 8000);
     return () => clearInterval(interval);
   }, [displayTrades.length]);
 
   if (displayTrades.length === 0) {
     return (
-      <div className="flex items-center justify-center py-3">
-        <span className="text-[8px] font-mono text-white/20">No open trades to analyze</span>
+      <div className="flex items-center justify-center py-5">
+        <span className="text-[13px] font-mono text-white/20">No open trades to analyze</span>
       </div>
     );
   }
@@ -153,21 +153,21 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
   const isUp = trade.pnlUsd >= 0;
 
   return (
-    <div className="px-3 py-2">
-      <div className="flex items-center justify-between mb-1.5">
-        <div className="flex items-center gap-1">
-          <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(99,102,241,0.45)" }}>
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(99,102,241,0.55)" }}>
             Trade Insight
           </span>
-          <span className="text-[7px] font-mono text-white/20">
+          <span className="text-[11px] font-mono text-white/25">
             {currentIdx + 1}/{displayTrades.length}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {displayTrades.map((_, i) => (
             <span
               key={i}
-              className="h-1 w-1 rounded-full transition-colors duration-300"
+              className="h-1.5 w-1.5 rounded-full transition-colors duration-300"
               style={{ background: i === currentIdx ? "rgba(129,140,248,0.8)" : "rgba(129,140,248,0.15)" }}
             />
           ))}
@@ -180,30 +180,30 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.4 }}
-          className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-2"
+          className="rounded-xl border border-white/[0.08] bg-slate-900/70 px-4 py-3"
         >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px]">{trade.icon}</span>
-              <span className="text-[8px] font-bold uppercase tracking-wider" style={{ color: trade.color }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[16px]">{trade.icon}</span>
+              <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: trade.color }}>
                 {trade.bot}
               </span>
-              <span className="text-[8px] font-mono text-white/60">
+              <span className="text-[13px] font-mono text-white/60">
                 {trade.side.toUpperCase()} {trade.symbol}
               </span>
             </div>
             <span
-              className="text-[9px] font-mono font-bold"
+              className="text-[15px] font-mono font-bold"
               style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
             >
               {isUp ? "+" : ""}${trade.pnlUsd.toFixed(2)}
             </span>
           </div>
-          <div className="text-[7px] leading-relaxed text-white/50 font-mono line-clamp-3">
+          <div className="text-[11px] leading-relaxed text-white/55 font-mono">
             {trade.reason}
           </div>
           {trade.entryTime && (
-            <div className="text-[6px] text-white/20 font-mono mt-1">
+            <div className="text-[10px] text-white/25 font-mono mt-2">
               Opened: {new Date(trade.entryTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}

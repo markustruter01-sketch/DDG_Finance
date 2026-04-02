@@ -33,9 +33,18 @@ function timeAgo(iso: string): string {
 }
 
 export function NewsIntelligence() {
-  const { data } = useNewsFeed();
+  const { data, isLoading, isError, refetch } = useNewsFeed();
   const articles = data?.articles ?? [];
+  const hasError = isError || (!!(data as any)?.error && articles.length === 0);
   const [visibleIdx, setVisibleIdx] = useState(0);
+
+  useEffect(() => {
+    if (articles.length > 0) return;
+    const retryTimer = setInterval(() => {
+      refetch();
+    }, 30_000);
+    return () => clearInterval(retryTimer);
+  }, [articles.length, refetch]);
 
   useEffect(() => {
     if (articles.length <= 4) return;
@@ -73,8 +82,16 @@ export function NewsIntelligence() {
             transition={{ duration: 0.4 }}
           >
             {visibleArticles.length === 0 && (
-              <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-6">
-                Loading news feeds...
+              <div className="flex flex-col items-center justify-center py-6 gap-1.5">
+                <div className="text-[10px] text-muted-foreground/40 font-mono text-center">
+                  {isLoading ? "Fetching news feeds..." : hasError ? "News API temporarily unavailable" : "Loading news feeds..."}
+                </div>
+                <motion.div
+                  className="h-0.5 w-16 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent rounded-full"
+                  animate={{ opacity: [0.3, 0.8, 0.3] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+                <div className="text-[8px] text-muted-foreground/20 font-mono">auto-retrying every 30s</div>
               </div>
             )}
             {visibleArticles.map((article, i) => {

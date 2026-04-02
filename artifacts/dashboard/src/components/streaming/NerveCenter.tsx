@@ -141,10 +141,10 @@ export function NerveCenter() {
   const totalW2 = row2.length * badgeW + (row2.length - 1) * gap;
   const startX1 = cx - totalW1 / 2;
   const startX2 = cx - totalW2 / 2;
-  const formulaY = 310;
-  const algoLabelY = formulaY + 20;
-  const row1Y = algoLabelY + 14;
-  const row2Y = row1Y + 20;
+  const formulaY = 340;
+  const algoLabelY = formulaY + 16;
+  const row1Y = algoLabelY + 13;
+  const row2Y = row1Y + 19;
 
   const formulaText = FORMULA_SNIPPETS.join("   ·   ");
 
@@ -181,7 +181,7 @@ export function NerveCenter() {
           }}
         />
 
-        <svg viewBox="0 0 400 400" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 400 420" className="w-full h-full max-w-full max-h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
               <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />

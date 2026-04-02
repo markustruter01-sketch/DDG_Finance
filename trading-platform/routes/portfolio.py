@@ -1810,11 +1810,15 @@ async def export_diagnostic_report() -> dict:
 
 @portfolio_router.get("/portfolio/news-feed", tags=["Portfolio"])
 async def news_feed() -> dict:
+    import asyncio as _asyncio
     from data.news_client import fetch_news
     from data.cache import news_cache
 
     try:
-        raw = await news_cache.get_or_fetch(fetch_news, lookback_days=1)
+        raw = await _asyncio.wait_for(
+            news_cache.get_or_fetch(fetch_news, lookback_days=3),
+            timeout=12.0,
+        )
         articles = []
         for cat, cat_data in raw.get("by_category", {}).items():
             for article in cat_data.get("articles", []):
@@ -1829,6 +1833,10 @@ async def news_feed() -> dict:
         if not articles:
             news_cache.invalidate()
         return {"articles": articles[:25]}
+    except _asyncio.TimeoutError:
+        logger.warning("News feed fetch timed out (12s)")
+        news_cache.invalidate()
+        return {"articles": [], "error": "timeout"}
     except Exception as exc:
         logger.warning(f"News feed fetch failed: {exc}")
         news_cache.invalidate()

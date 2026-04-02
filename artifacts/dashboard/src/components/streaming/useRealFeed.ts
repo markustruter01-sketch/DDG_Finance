@@ -246,7 +246,7 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
-    return all.sort((a, b) => b.pnlPct - a.pnlPct);
+    return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
   }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions]);
 
   return { trades, wins, losses, botStats, totalTrades, openPositions };

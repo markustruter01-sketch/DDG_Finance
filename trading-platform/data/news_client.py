@@ -48,11 +48,11 @@ MAX_ARTICLES_PER_QUERY = 5
 def _make_retry_decorator():
     return retry(
         retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.RequestError)),
-        stop=stop_after_attempt(settings.max_retries),
+        stop=stop_after_attempt(2),
         wait=wait_exponential(
             multiplier=1,
-            min=settings.backoff_min_wait,
-            max=settings.backoff_max_wait,
+            min=1,
+            max=3,
         ),
         before_sleep=before_sleep_log(logging.getLogger("tenacity"), logging.WARNING),
         reraise=True,
@@ -81,7 +81,10 @@ async def _fetch_query(
             "pageSize": MAX_ARTICLES_PER_QUERY,
             "apiKey": settings.news_api_key,
         }
-        response = await client.get(NEWSAPI_BASE_URL, params=params, timeout=30.0)
+        response = await client.get(NEWSAPI_BASE_URL, params=params, timeout=8.0)
+        if response.status_code == 429:
+            logger.warning(f"NewsAPI | [{category}] rate limited (429)")
+            return {"articles": [], "totalResults": 0}
         response.raise_for_status()
         return response.json()
 

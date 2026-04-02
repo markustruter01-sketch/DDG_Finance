@@ -62,11 +62,12 @@ export function GlobalHUD() {
       border: grandPnlPct >= 0 ? "border-green-500/30" : "border-red-500/30",
     },
     {
-      label: "VAULT BALANCE",
+      label: "PLATFORM BALANCE",
       value: `$${grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-      sub: "available fleet equity",
-      glow: "from-cyan-500/20 via-cyan-500/5 to-transparent",
-      border: "border-cyan-500/30",
+      sub: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}% daily P&L`,
+      glow: "from-green-500/20 via-green-500/5 to-transparent",
+      border: "border-green-500/30",
+      valueColor: "text-green-400",
     },
     {
       label: "TRADE ANALYTICS",
@@ -126,21 +127,21 @@ export function GlobalHUD() {
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
               {"isLogo" in card && card.isLogo ? (
-                <div className="flex items-center gap-2.5 h-full min-h-[40px]">
+                <div className="flex items-center justify-center gap-3 h-full min-h-[48px] w-full py-1">
                   <motion.span
-                    className="text-[15px] font-black tracking-wide uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent"
+                    className="text-[11px] font-black tracking-wider uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent shrink-0 leading-tight"
                     style={{ textShadow: "0 0 20px rgba(139,92,246,0.5)" }}
                     animate={{ opacity: [0.7, 1, 0.7] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
-                    Powered by
+                    Powered<br/>by
                   </motion.span>
-                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[42px] w-auto object-contain" />
+                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[56px] w-auto object-contain" />
                 </div>
               ) : (
                 <>
                   <div className="text-[9px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
-                  <div className="text-base font-mono font-bold text-white tracking-tight">
+                  <div className={cn("text-base font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
                     <AnimatedValue value={card.value} />
                   </div>
                   <div className="text-[9px] text-muted-foreground/50 mt-0.5 font-mono">

@@ -133,5 +133,14 @@
     "side": "SELL",
     "reason": "mean_reversion_complete",
     "timestamp": "2026-04-02T17:22:53.668609+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "JUP/USD",
+    "pnl_pct": 1.28,
+    "pnl_usd": 37.47,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-02T21:50:07.589598+00:00"
   }
 ]

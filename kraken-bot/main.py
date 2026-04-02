@@ -1317,7 +1317,7 @@ def run_cycle() -> None:
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size (= size_usd)
                     _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
-                    _tranches  = build_tranche_orders("long", current_price, size_usd, sym_atr)
+                    _tranches  = build_tranche_orders("long", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
@@ -1401,7 +1401,7 @@ def run_cycle() -> None:
                         continue  # skip this entry
                     # ATR-derived stop price and T1 tranche size
                     _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
-                    _tranches  = build_tranche_orders("short", current_price, size_usd, sym_atr)
+                    _tranches  = build_tranche_orders("short", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.

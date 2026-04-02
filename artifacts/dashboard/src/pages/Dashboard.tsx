@@ -4947,6 +4947,12 @@ export default function Dashboard() {
               </motion.div>
             </div>
 
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.085 }}>
+              <SafeSection label="Live Portfolio Equity Curve">
+                <LiveEquityCurveSection />
+              </SafeSection>
+            </motion.div>
+
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}>
               <SafeSection label="Combined Trade History">
                 <CombinedTradeHistorySection />
@@ -5037,18 +5043,11 @@ export default function Dashboard() {
               </motion.div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-                <SafeSection label="Live Portfolio Equity Curve">
-                  <LiveEquityCurveSection />
-                </SafeSection>
-              </motion.div>
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
-                <SafeSection label="Best & Worst Trades (Both Bots)">
-                  <BestTradeHero />
-                </SafeSection>
-              </motion.div>
-            </div>
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+              <SafeSection label="Best & Worst Trades (Both Bots)">
+                <BestTradeHero />
+              </SafeSection>
+            </motion.div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.20 }}>

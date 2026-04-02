@@ -79,8 +79,8 @@ export function NerveCenter() {
   const algoPopups = useAlgoPopups();
 
   const cx = 200;
-  const cy = 165;
-  const radius = 115;
+  const cy = 160;
+  const radius = 110;
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
@@ -89,7 +89,7 @@ export function NerveCenter() {
       <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold text-center pt-1">Nerve Center</div>
 
       <div className="flex-1 flex items-center justify-center relative p-2">
-        <svg viewBox="0 0 400 360" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 400 380" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
           <defs>
             <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
               <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
@@ -241,9 +241,9 @@ export function NerveCenter() {
                   filter={active ? "url(#neonGlow)" : undefined}
                 />
 
-                <text x={bx} y={by - 1} textAnchor="middle" fontSize="18">{bot.icon}</text>
+                <text x={bx} y={by + 5} textAnchor="middle" fontSize="18">{bot.icon}</text>
                 <text
-                  x={bx} y={by + 16}
+                  x={bx} y={by + 35}
                   textAnchor="middle"
                   fill={active ? bot.color : "rgba(100,116,139,0.5)"}
                   fontSize="6.5"

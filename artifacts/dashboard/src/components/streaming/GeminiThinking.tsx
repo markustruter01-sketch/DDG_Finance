@@ -50,7 +50,7 @@ export function GeminiThinking() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.5 }}
-          className="text-[10px] font-mono text-violet-300/60 leading-relaxed"
+          className="text-[10px] font-mono text-white/90 leading-relaxed"
         >
           {thought}
         </motion.div>

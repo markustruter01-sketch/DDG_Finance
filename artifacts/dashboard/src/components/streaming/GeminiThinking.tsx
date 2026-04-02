@@ -61,18 +61,18 @@ export function GeminiThinking() {
   const thought = GEMINI_THOUGHTS[thoughtIdx];
 
   return (
-    <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-2.5 relative overflow-hidden flex-1 flex flex-col min-h-0">
-      <div className="flex items-center gap-2 mb-2 shrink-0">
-        <span className="text-xs">✨</span>
-        <span className="text-[8px] uppercase tracking-widest text-violet-400/70 font-bold">Gemini Fleet Commander — Thinking</span>
+    <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-4 relative overflow-hidden flex-1 flex flex-col min-h-0">
+      <div className="flex items-center gap-2 mb-3 shrink-0">
+        <span className="text-sm">✨</span>
+        <span className="text-[10px] uppercase tracking-widest text-violet-400/70 font-bold">Gemini Fleet Commander — Thinking</span>
         <motion.div
           className="ml-auto flex gap-0.5"
           animate={{ opacity: [0.3, 1, 0.3] }}
           transition={{ duration: 1.2, repeat: Infinity }}
         >
-          <span className="h-1 w-1 rounded-full bg-violet-400" />
-          <span className="h-1 w-1 rounded-full bg-violet-400" />
-          <span className="h-1 w-1 rounded-full bg-violet-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+          <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
         </motion.div>
       </div>
       <div className="flex-1 overflow-hidden min-h-0">
@@ -83,17 +83,17 @@ export function GeminiThinking() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.5 }}
-            className="flex flex-col gap-1.5"
+            className="flex flex-col gap-2 h-full"
           >
-            <div className="text-[11px] font-mono font-bold text-violet-300/90">{thought.title}</div>
-            <div className="text-[10px] font-mono text-white/80 leading-[1.6]">
+            <div className="text-[16px] font-mono font-bold text-violet-300/90">{thought.title}</div>
+            <div className="text-[15px] font-mono text-white/80 leading-[1.55] flex-1 overflow-hidden">
               {thought.body}
             </div>
           </motion.div>
         </AnimatePresence>
       </div>
       {auditStatus?.generated_at && (
-        <div className="text-[8px] text-violet-400/30 mt-1 font-mono shrink-0">
+        <div className="text-[9px] text-violet-400/30 mt-2 font-mono shrink-0">
           Last audit: {new Date(auditStatus.generated_at).toLocaleTimeString()}
         </div>
       )}

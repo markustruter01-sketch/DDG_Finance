@@ -35,6 +35,73 @@ const C = {
   slate300: "rgba(203,213,225,0.9)",
 };
 
+const BOT_DEFS = [
+  { name: "Oracle", icon: "🔮", color: "#8b5cf6", statusKey: "oracle" as const },
+  { name: "Davy Jones", icon: "⚓", color: "#22d3ee", statusKey: "davy-jones" as const },
+  { name: "Blackbeard", icon: "🏴‍☠️", color: "#ef4444", statusKey: "blackbeard" as const },
+  { name: "Calypso", icon: "🌊", color: "#3b82f6", statusKey: "calypso" as const },
+  { name: "Apex", icon: "🎯", color: "#f59e0b", statusKey: "apex" as const },
+  { name: "Navigator", icon: "🧭", color: "#a78bfa", statusKey: "navigator" as const },
+];
+
+function BotStatusBox({ name, icon, color, active, index }: {
+  name: string; icon: string; color: string; active: boolean; index: number;
+}) {
+  return (
+    <motion.div
+      custom={index + 4}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      className="relative rounded-lg bg-slate-900/60 overflow-hidden"
+      style={{
+        flex: "1 1 0%",
+        minWidth: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        padding: "6px 6px",
+        border: `1px solid ${active ? color + "50" : color + "40"}`,
+      }}
+    >
+      {active && (
+        <motion.div
+          className="absolute inset-0 rounded-lg"
+          style={{
+            border: `1.5px solid ${color}`,
+            borderRadius: "0.5rem",
+          }}
+          animate={{
+            opacity: [0.2, 0.7, 0.2],
+            boxShadow: [
+              `0 0 4px ${color}30, inset 0 0 4px ${color}10`,
+              `0 0 12px ${color}50, inset 0 0 8px ${color}20`,
+              `0 0 4px ${color}30, inset 0 0 4px ${color}10`,
+            ],
+          }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        />
+      )}
+      <span className="text-[14px] leading-none relative z-10">{icon}</span>
+      <span
+        className="text-[9px] font-black uppercase tracking-wider leading-none relative z-10 truncate"
+        style={{ color: active ? color : color + "80" }}
+      >
+        {name}
+      </span>
+      {active && (
+        <motion.span
+          className="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full"
+          style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }}
+          animate={{ opacity: [1, 0.3, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        />
+      )}
+    </motion.div>
+  );
+}
+
 export function GlobalHUD() {
   const { data: summary } = useStatusSummary();
   const { data: fleet } = useKrakenFleetSummary();
@@ -72,77 +139,24 @@ export function GlobalHUD() {
   const winRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0;
 
   const pnlColor = grandPnlPct >= 0 ? C.green : C.orange;
-  const pnlColorDim = grandPnlPct >= 0 ? C.greenDim : C.orangeDim;
-
-  const cards = [
-    {
-      label: "POWERED_BY_LOGO",
-      value: "",
-      sub: "",
-      glow: "from-violet-500/20 via-violet-500/5 to-transparent",
-      border: "border-violet-500/30",
-      isLogo: true,
-    },
-    {
-      label: "COMBINED P&L",
-      isCombinedPnl: true,
-      value: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`,
-      dailyPct: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`,
-      dailyUsd: `${grandTotal - startTotal >= 0 ? "+" : "-"}$${Math.abs(grandTotal - startTotal).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-      sub: "",
-      glow: grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent",
-      border: grandPnlPct >= 0 ? "border-green-500/30" : "border-orange-500/30",
-    },
-    {
-      label: "PLATFORM BALANCE",
-      value: `$${grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-      sub: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}% daily P&L`,
-      glow: "from-green-500/20 via-green-500/5 to-transparent",
-      border: "border-green-500/30",
-      isPlatformBalance: true,
-    },
-    {
-      label: "TRADE ANALYTICS",
-      value: `${totalTrades} Trades Total`,
-      sub: `${winRate.toFixed(1)}% Win Rate`,
-      glow: "from-amber-500/20 via-amber-500/5 to-transparent",
-      border: "border-amber-500/30",
-    },
-  ];
 
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
   const caStatus = useKrakenStatus("calypso");
 
-  const activePools = [
-    summary?.auto_trading !== undefined,
-    djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused,
-    bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused,
-    caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused,
-    optState !== undefined,
-    fxState !== undefined,
-  ].filter(Boolean).length;
+  const botActive = {
+    oracle: summary?.auto_trading !== undefined,
+    "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused),
+    blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused),
+    calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused),
+    apex: optState !== undefined && !optState?.paused,
+    navigator: fxState !== undefined && !fxState?.paused,
+  };
 
-  const drawdownPct = startTotal > 0 ? Math.min(0, ((grandTotal - startTotal) / startTotal) * 100) : 0;
-  const profitFactor = totalTrades > 0 && (totalTrades - totalWins) > 0
-    ? (totalWins / (totalTrades - totalWins)).toFixed(2) : "—";
-  const avgTradeSize = totalTrades > 0
-    ? `$${Math.round(grandTotal / Math.max(totalTrades, 1)).toLocaleString()}`
-    : "—";
-  const riskLevel = Math.abs(drawdownPct) < 1 ? "LOW" : Math.abs(drawdownPct) < 3 ? "MODERATE" : "HIGH";
-  const riskColorVal = riskLevel === "LOW" ? C.green : riskLevel === "MODERATE" ? C.amber : C.orange;
-
-  const miniMetrics = [
-    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? C.green : C.orange },
-    { label: "PROFIT FACTOR", value: profitFactor, color: C.cyan },
-    { label: "RISK LEVEL", value: riskLevel, color: riskColorVal },
-    { label: "SHARPE (EST.)", value: totalTrades > 0 ? ((totalWins / totalTrades * 2 - 1) * 1.5).toFixed(2) : "—", color: C.violet },
-    { label: "EXPOSURE", value: `${activePools}/6 pools`, color: C.blue },
-    { label: "AVG POSITION", value: avgTradeSize, color: C.amber },
-  ];
+  const pnlUsd = grandTotal - startTotal;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 shrink-0">
       <div className="flex gap-2">
         <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 px-4 py-2.5 flex flex-col justify-center overflow-hidden">
           <motion.div
@@ -158,108 +172,109 @@ export function GlobalHUD() {
               Welcome!
             </h2>
             <p className="text-[15px] leading-[1.5] font-medium" style={{ color: C.slate300 }}>
-              Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in{" "}
-              <span className="font-bold" style={{ color: C.yellow }}>Stocks</span>,{" "}
-              <span className="font-bold" style={{ color: C.cyan }}>Crypto</span>,{" "}
+              Experience the power of our six fully automated, AI-driven trading algorithms. From{" "}
+              <span className="font-bold" style={{ color: C.yellow }}>Stocks</span> and{" "}
+              <span className="font-bold" style={{ color: C.cyan }}>Crypto</span> to{" "}
               <span className="font-bold" style={{ color: C.violet }}>FOREX</span> and{" "}
-              <span className="font-bold" style={{ color: C.orange }}>Futures</span>. Get in contact to see how you can build your own for only{" "}
-              <span className="font-bold" style={{ color: C.emerald }}>$24.99</span>! No experience needed!
+              <span className="font-bold" style={{ color: C.orange }}>Futures</span>, our bots handle it all. Want to launch your own? Message us today—no coding or trading experience required.
             </p>
           </motion.div>
         </div>
         <div className="w-1/2 grid grid-cols-2 gap-1.5">
-        {cards.map((card, i) => (
           <motion.div
-            key={card.label}
-            custom={i}
+            custom={0}
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            className="relative rounded-xl border border-violet-500/20 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center justify-center"
+          >
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-violet-500/20 via-violet-500/5 to-transparent")} />
+            <motion.span
+              className="text-[13px] font-black tracking-widest uppercase leading-none text-center relative z-10"
+              style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
+              animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
+              transition={{ duration: 3, repeat: Infinity }}
+            >
+              Powered by:{" "}
+              <span style={{ color: "#ffffff", textShadow: "0 0 10px rgba(255,255,255,0.4)" }}>DIGITAL DYNAMICS</span>{" "}
+              <span style={{ color: C.cyan, textShadow: "0 0 10px rgba(34,211,238,0.5)" }}>Group</span>
+            </motion.span>
+          </motion.div>
+
+          <motion.div
+            custom={1}
             variants={cardVariants}
             initial="hidden"
             animate="visible"
             className={cn(
-              "relative rounded-xl border px-2 py-1.5 bg-slate-900/80 overflow-hidden",
-              card.border
+              "relative rounded-xl border px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center",
+              grandPnlPct >= 0 ? "border-green-500/30" : "border-orange-500/30"
             )}
           >
-            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
-            <div className="relative z-10 h-full">
-              {"isLogo" in card && card.isLogo ? (
-                <div className="flex items-center justify-center h-full w-full px-1">
-                  <motion.span
-                    className="text-[13px] font-black tracking-widest uppercase leading-none text-center"
-                    style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
-                    animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
-                    transition={{ duration: 3, repeat: Infinity }}
-                  >
-                    Powered by:{" "}
-                    <span style={{ color: "#ffffff", textShadow: "0 0 10px rgba(255,255,255,0.4)" }}>DIGITAL DYNAMICS</span>{" "}
-                    <span style={{ color: C.cyan, textShadow: "0 0 10px rgba(34,211,238,0.5)" }}>Group</span>
-                  </motion.span>
-                </div>
-              ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
-                <>
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: C.label }}>{card.label}</span>
-                    <span className="text-[7px] uppercase tracking-widest font-bold" style={{ color: C.labelDim }}>Daily PnL</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="text-[16px] font-mono font-bold tracking-tight leading-none" style={{ color: pnlColor }}>
-                      <AnimatedValue value={card.value} />
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-mono font-bold leading-tight" style={{ color: pnlColor }}>
-                        {card.dailyPct}
-                      </span>
-                      <span className="text-[9px] font-mono font-semibold leading-tight" style={{ color: pnlColorDim }}>
-                        {card.dailyUsd}
-                      </span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: C.label }}>{card.label}</div>
-                  {"isPlatformBalance" in card && card.isPlatformBalance ? (
-                    <motion.div
-                      className="text-[16px] font-mono font-bold tracking-tight"
-                      style={{ color: C.green }}
-                      animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"], scale: [1, 1.02, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                    >
-                      <AnimatedValue value={card.value} />
-                    </motion.div>
-                  ) : (
-                    <div className="text-[16px] font-mono font-bold tracking-tight" style={{ color: C.white }}>
-                      <AnimatedValue value={card.value} />
-                    </div>
-                  )}
-                  {card.sub && (
-                    <div className="text-[8px] font-mono" style={{ color: C.sub }}>
-                      <AnimatedValue value={card.sub} />
-                    </div>
-                  )}
-                </>
-              )}
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent")} />
+            <div className="relative z-10 flex items-center gap-2 w-full">
+              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Combined P&L:</span>
+              <span className="text-[15px] font-mono font-bold tracking-tight" style={{ color: pnlColor }}>
+                <AnimatedValue value={`${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`} />
+              </span>
+              <span className="text-[11px] font-mono font-semibold ml-auto" style={{ color: pnlColor }}>
+                {pnlUsd >= 0 ? "+" : "-"}${Math.abs(pnlUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
             </div>
           </motion.div>
-        ))}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-1.5">
-        {miniMetrics.map((m, i) => (
           <motion.div
-            key={m.label}
-            custom={i + 4}
+            custom={2}
             variants={cardVariants}
             initial="hidden"
             animate="visible"
-            className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-1.5"
+            className="relative rounded-xl border border-green-500/30 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center"
           >
-            <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: C.labelDim }}>{m.label}</div>
-            <div className="text-sm font-mono font-bold mt-0.5" style={{ color: m.color }}>
-              <AnimatedValue value={m.value} />
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-green-500/20 via-green-500/5 to-transparent")} />
+            <div className="relative z-10 flex items-center gap-2 w-full">
+              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Balance:</span>
+              <motion.span
+                className="text-[15px] font-mono font-bold tracking-tight"
+                style={{ color: C.green }}
+                animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+              >
+                <AnimatedValue value={`$${grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
+              </motion.span>
             </div>
           </motion.div>
+
+          <motion.div
+            custom={3}
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            className="relative rounded-xl border border-amber-500/30 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center"
+          >
+            <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-amber-500/20 via-amber-500/5 to-transparent")} />
+            <div className="relative z-10 flex items-center gap-2 w-full">
+              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Trades:</span>
+              <span className="text-[15px] font-mono font-bold tracking-tight" style={{ color: C.white }}>
+                <AnimatedValue value={`${totalTrades}`} />
+              </span>
+              <span className="text-[10px] font-mono font-semibold ml-auto" style={{ color: C.amber }}>
+                {winRate.toFixed(1)}% WR
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, width: "100%", position: "relative", zIndex: 10 }}>
+        {BOT_DEFS.map((bot, i) => (
+          <BotStatusBox
+            key={bot.statusKey}
+            name={bot.name}
+            icon={bot.icon}
+            color={bot.color}
+            active={botActive[bot.statusKey]}
+            index={i}
+          />
         ))}
       </div>
     </div>

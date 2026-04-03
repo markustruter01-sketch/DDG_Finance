@@ -54,7 +54,7 @@ export function GeminiThinking() {
     const interval = setInterval(() => {
       setThoughtIdx(Math.floor(Math.random() * GEMINI_THOUGHTS.length));
       setKey((k) => k + 1);
-    }, 8000);
+    }, 15000);
     return () => clearInterval(interval);
   }, []);
 

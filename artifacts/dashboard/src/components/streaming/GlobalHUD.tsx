@@ -181,7 +181,7 @@ export function GlobalHUD() {
             )}
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
-            <div className="relative z-10">
+            <div className="relative z-10 h-full">
               {"isLogo" in card && card.isLogo ? (
                 <div className="flex items-center justify-center h-full w-full px-1">
                   <motion.span

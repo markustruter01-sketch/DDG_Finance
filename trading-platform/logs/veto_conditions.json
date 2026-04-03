@@ -1,10 +1,11 @@
 {
-  "generated_at": "2026-04-03T05:45:57.200221+00:00",
-  "valid_until": "2026-04-03T11:45:57.200221+00:00",
+  "generated_at": "2026-04-03T07:15:10.377905+00:00",
+  "valid_until": "2026-04-03T13:15:10.377905+00:00",
   "vetoed_tickers": [
     "RENDER",
+    "ATOM",
     "UNI",
-    "ATOM"
+    "JPY"
   ],
   "conditions": [
     {
@@ -16,17 +17,15 @@
       "value": 0.85
     },
     {
-      "type": "cross_bot_max_exposure",
-      "value": 0.15,
-      "ticker": "IMX"
+      "type": "news_blacklist",
+      "ticker": "JPY"
     }
   ],
-  "critique_summary": "The fleet exhibits dangerous cross-bot correlation, with Davy Jones, Blackbeard, and Calypso holding identical losing positions in RENDER and ATOM. While Oracle correctly pivoted to SGOV, the Kraken bots remain over-leveraged (up to 86% deployment) against a 'Bear' regime classification. Navigator is failing significantly with a 16% win rate on JPY-short carry trades that are currently toxic.",
+  "critique_summary": "The fleet is suffering from high cross-bot correlation in failing Altcoin shorts (RENDER, ATOM) and a disastrous JPY short bias in Navigator. Oracle's defensive pivot to SGOV is currently the only effective risk mitigation, as Kraken bots are over-trading in a high-volatility regime.",
   "critique_flags": [
-    "Identical position clustering on RENDER/TIA/IMX across three bots",
-    "Navigator win rate collapse (16.7%) indicating broken H4 trend logic",
-    "Deployment-to-Regime mismatch: Kraken fleet is 68%+ deployed in a high-fear environment",
-    "RENDER/USD performance is 0% win rate over 7 trades\u2014systemic failure on this ticker"
+    "Cross-bot stop-loss clustering on RENDER/ATOM",
+    "Navigator JPY short-side over-concentration",
+    "Regime mismatch between Oracle cash-hold and Kraken active-trading"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

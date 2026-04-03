@@ -943,5 +943,79 @@
       "thoughtsTokenCount": 1497
     },
     "elapsed_seconds": 15.0
+  },
+  {
+    "generated_at": "2026-04-03T07:14:50.380856+00:00",
+    "valid_until": "2026-04-03T13:14:50.380856+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CAUTION",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "UNI",
+      "JPY"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "news_blacklist",
+        "ticker": "JPY"
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.15,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Win rate 52% but negative PnL indicates stop-outs are too frequent or slippage is high; tightening entry and widening stop slightly to filter noise."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.25,
+        "STOP_LOSS_PCT": 0.03,
+        "TRAIL_PCT": 0.06,
+        "reasoning": "Win rate 43.5% with heavy losses in RENDER and ATOM; requires higher quality entry thresholds and wider stops to survive 'Extreme Fear' volatility."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.35,
+        "STOP_LOSS_PCT": 0.034,
+        "TRAIL_PCT": 0.055,
+        "reasoning": "Most aggressive bot is hitting multiple stops (UNI, ATOM, RENDER) with PnL drags; increasing entry z-score to 1.35 to ensure mean reversion quality."
+      }
+    ],
+    "critique_summary": "The fleet is suffering from high cross-bot correlation in failing Altcoin shorts (RENDER, ATOM) and a disastrous JPY short bias in Navigator. Oracle's defensive pivot to SGOV is currently the only effective risk mitigation, as Kraken bots are over-trading in a high-volatility regime.",
+    "critique_flags": [
+      "Cross-bot stop-loss clustering on RENDER/ATOM",
+      "Navigator JPY short-side over-concentration",
+      "Regime mismatch between Oracle cash-hold and Kraken active-trading"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16677,
+      "candidatesTokenCount": 611,
+      "totalTokenCount": 19917,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16677
+        }
+      ],
+      "thoughtsTokenCount": 2629
+    },
+    "elapsed_seconds": 20.0
   }
 ]

@@ -136,7 +136,7 @@ export function GlobalHUD() {
               Welcome!
             </h2>
             <p className="text-[12px] leading-[1.4] text-slate-300/90 font-medium">
-              We created 6 AI powered automated trading bots that function off institutional grade algorithms and maths, with advanced risk metrics and market measuring conditions. Follow along to see how they perform, or get in contact with us to see how you can build your own for only{" "}
+              Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in Stocks, Crypto, FOREX and Futures. Get in contact to see how you can build your own for only{" "}
               <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
             </p>
           </motion.div>

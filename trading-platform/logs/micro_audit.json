@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-03T06:59:48.024949+00:00",
-  "elapsed_sec": 1.96,
+  "timestamp": "2026-04-03T07:15:10.381648+00:00",
+  "elapsed_sec": 21.21,
   "alerts": [
     {
       "check": "pnl_velocity",

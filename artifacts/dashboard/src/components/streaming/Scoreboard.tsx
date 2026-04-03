@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { OpenPosition } from "./useRealFeed";
 
@@ -15,7 +16,29 @@ function formatPnlUsd(v: number): string {
   return `${v >= 0 ? "+" : "-"}$${abs.toFixed(2)}`;
 }
 
+const RELOAD_INTERVAL = 15000;
+const STAGGER_DELAY = 0.07;
+
 export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
+  const [cycle, setCycle] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(openPositions.length);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisibleCount(0);
+      setCycle((c) => c + 1);
+    }, RELOAD_INTERVAL);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (visibleCount >= openPositions.length) return;
+    const timer = setTimeout(() => {
+      setVisibleCount((c) => c + 1);
+    }, STAGGER_DELAY * 1000);
+    return () => clearTimeout(timer);
+  }, [visibleCount, openPositions.length, cycle]);
+
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
       <div className="grid grid-cols-2 gap-2 shrink-0">
@@ -64,36 +87,50 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
           <span className="text-[12px] font-mono font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">{openPositions.length}</span>
         </div>
         <div className="flex-1 overflow-hidden min-h-0">
-          {openPositions.map((pos) => {
-            const isUp = pos.pnlPct >= 0;
-            return (
-              <div
-                key={pos.id}
-                className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono"
-                style={{ backgroundColor: isUp ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)" }}
-              >
-                <span className="text-[10px] shrink-0">{pos.icon}</span>
-                <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
-                <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
-                  {pos.side.toUpperCase()} {pos.symbol}
-                </span>
-                <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                  <span
-                    className="text-[9px] font-bold"
-                    style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
-                  >
-                    {formatPnlUsd(pos.pnlUsd)}
+          <AnimatePresence mode="sync">
+            {openPositions.slice(0, visibleCount).map((pos, i) => {
+              const isUp = pos.pnlPct >= 0;
+              return (
+                <motion.div
+                  key={`${cycle}-${pos.id}`}
+                  initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
+                  animate={{ opacity: 1, x: 0, scaleY: 1 }}
+                  transition={{
+                    duration: 0.25,
+                    ease: [0.22, 1, 0.36, 1],
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono origin-top"
+                  style={{ backgroundColor: isUp ? "rgba(34,197,94,0.03)" : "rgba(239,68,68,0.03)" }}
+                >
+                  <span className="text-[10px] shrink-0">{pos.icon}</span>
+                  <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
+                  <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
+                    {pos.side.toUpperCase()} {pos.symbol}
                   </span>
-                  <span
-                    className="text-[9px] opacity-60"
-                    style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
-                  >
-                    {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                    <motion.span
+                      className="text-[9px] font-bold"
+                      style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      {formatPnlUsd(pos.pnlUsd)}
+                    </motion.span>
+                    <motion.span
+                      className="text-[9px] opacity-60"
+                      style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 0.6 }}
+                      transition={{ delay: 0.15 }}
+                    >
+                      {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+                    </motion.span>
                   </span>
-                </span>
-              </div>
-            );
-          })}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
           {openPositions.length === 0 && (
             <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-4">No open positions</div>
           )}

@@ -62,8 +62,11 @@ export function GlobalHUD() {
     },
     {
       label: "COMBINED P&L",
+      isCombinedPnl: true,
       value: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`,
-      sub: `$${grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })} fleet total`,
+      dailyPct: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`,
+      dailyUsd: `${grandTotal - startTotal >= 0 ? "+" : "-"}$${Math.abs(grandTotal - startTotal).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+      sub: "",
       glow: grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-red-500/20 via-red-500/5 to-transparent",
       border: grandPnlPct >= 0 ? "border-green-500/30" : "border-red-500/30",
     },
@@ -145,6 +148,23 @@ export function GlobalHUD() {
                   </motion.span>
                   <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[74px] w-auto object-contain" />
                 </div>
+              ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
+                <>
+                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
+                  <div className="flex items-end justify-between">
+                    <div className={cn("text-2xl font-mono font-bold tracking-tight", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                      <AnimatedValue value={card.value} />
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className={cn("text-[13px] font-mono font-bold", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                        {card.dailyPct}
+                      </span>
+                      <span className={cn("text-[12px] font-mono font-semibold", grandPnlPct >= 0 ? "text-green-400/70" : "text-red-400/70")}>
+                        {card.dailyUsd}
+                      </span>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
@@ -161,9 +181,11 @@ export function GlobalHUD() {
                       <AnimatedValue value={card.value} />
                     </div>
                   )}
-                  <div className="text-[11px] text-muted-foreground/50 mt-0.5 font-mono">
-                    <AnimatedValue value={card.sub} />
-                  </div>
+                  {card.sub && (
+                    <div className="text-[11px] text-muted-foreground/50 mt-0.5 font-mono">
+                      <AnimatedValue value={card.sub} />
+                    </div>
+                  )}
                 </>
               )}
             </div>

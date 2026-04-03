@@ -39,10 +39,11 @@ export function AchievementFeed({ achievements }: AchievementFeedProps) {
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.8 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
-            className="rounded-xl border bg-slate-900 p-2.5 flex items-start gap-2.5 shadow-2xl"
+            className="rounded-xl border p-2.5 flex items-start gap-2.5 shadow-2xl"
             style={{
               borderColor: `${a.color}40`,
               boxShadow: `0 4px 24px ${a.color}20, 0 0 0 1px ${a.color}15`,
+              backgroundColor: "rgb(15,23,42)",
             }}
           >
             <span className="text-xl shrink-0 mt-0.5">{a.icon}</span>

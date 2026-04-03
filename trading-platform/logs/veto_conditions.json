@@ -1,11 +1,10 @@
 {
-  "generated_at": "2026-04-03T02:42:54.266942+00:00",
-  "valid_until": "2026-04-03T08:42:54.266942+00:00",
+  "generated_at": "2026-04-03T03:16:01.966638+00:00",
+  "valid_until": "2026-04-03T09:16:01.966638+00:00",
   "vetoed_tickers": [
-    "UNI",
     "RENDER",
-    "BITO",
-    "EUO"
+    "UNI",
+    "BCH"
   ],
   "conditions": [
     {
@@ -17,16 +16,16 @@
       "value": 0.85
     },
     {
-      "type": "regime_lock",
-      "value": "BEAR"
+      "type": "cross_bot_limit",
+      "value": 3.0
     }
   ],
-  "critique_summary": "The fleet is suffering from severe regime contradiction; Kraken bots are heavily long-biased despite the learning journal confirming a BEAR regime with VIX > 24. Cross-bot correlation is dangerously high with IMX, TIA, and ATOM held across all three Kraken portfolios. Navigator's 16.7% win rate indicates a fundamental failure in its H4 swing confluence logic.",
+  "critique_summary": "The fleet shows dangerous asset correlation across Kraken bots with identical losing positions in DYM, IMX, and RENDER. Navigator (Forex) is severely underperforming with a 16.7% win rate and extreme overconcentration in JPY shorts. Oracle is appropriately defensive in SGOV, but regime labeling (Crypto vs Bear) requires alignment.",
   "critique_flags": [
-    "Regime Contradiction (Long bias in Bear market)",
-    "Severe Cross-Bot Correlation (IMX, TIA, ATOM)",
-    "Navigator Win-Rate Collapse (16.7%)",
-    "Conviction Inflation (Oracle losses on 0.80+ scores)"
+    "Cross-bot correlation: 50% of Kraken positions are identical across 3 bots",
+    "Navigator overconcentration: 100% of open forex risk is short JPY",
+    "Negative expectancy: RENDER and UNI showing 0-14% win rates fleet-wide",
+    "Regime contradiction: Oracle identifies Crypto regime but allocates 99% to SGOV"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

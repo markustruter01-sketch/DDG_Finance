@@ -52,6 +52,41 @@ function Particle({ index, total, isWin }: { index: number; total: number; isWin
   );
 }
 
+function AtomizeParticle({ index, total }: { index: number; total: number }) {
+  const angle = (index / total) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+  const distance = 80 + Math.random() * 120;
+  const dx = Math.cos(angle) * distance;
+  const dy = Math.sin(angle) * distance;
+  const size = 1 + Math.random() * 3;
+  const delay = Math.random() * 0.4;
+
+  return (
+    <motion.div
+      className="absolute rounded-full"
+      style={{
+        left: `${20 + Math.random() * 60}%`,
+        top: `${20 + Math.random() * 60}%`,
+        width: size,
+        height: size,
+        backgroundColor: `hsl(${20 + Math.random() * 15}, 80%, ${50 + Math.random() * 30}%)`,
+        boxShadow: `0 0 ${size * 3}px hsl(25, 80%, 50%)`,
+      }}
+      initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+      animate={{
+        x: dx,
+        y: dy,
+        opacity: [1, 0.6, 0],
+        scale: [1, 0.5, 0],
+      }}
+      transition={{
+        duration: 1.5 + Math.random() * 0.5,
+        ease: "easeOut",
+        delay,
+      }}
+    />
+  );
+}
+
 export function ProfitExplosion({ trade }: ProfitExplosionProps) {
   const pos = useMemo(() => {
     if (!trade) return { x: 50, y: 50 };
@@ -80,6 +115,19 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
     ? ["0 0 10px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.15)", "0 0 10px rgba(34,197,94,0.3)"]
     : ["0 0 10px rgba(249,115,22,0.3)", "0 0 20px rgba(249,115,22,0.15)", "0 0 10px rgba(249,115,22,0.3)"];
 
+  const winExit = {
+    left: "50%",
+    top: "50%",
+    scale: 0.02,
+    opacity: 0,
+  };
+
+  const lossExit = {
+    scale: 1.08,
+    opacity: 0,
+    filter: "blur(12px)",
+  };
+
   return (
     <AnimatePresence>
       {trade && (
@@ -91,10 +139,13 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             top: `${pos.y}%`,
             transform: "translate(-50%, -50%)",
           }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, filter: "blur(0px)" }}
+          animate={{ opacity: 1, filter: "blur(0px)" }}
+          exit={isWin ? winExit : lossExit}
+          transition={{
+            duration: 0.3,
+            exit: { duration: 2, ease: "easeInOut" },
+          }}
           role="alert"
         >
           <div className="absolute inset-0 overflow-hidden" style={{ width: 200, height: 200, left: -100, top: -100 }}>
@@ -103,15 +154,29 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             ))}
           </div>
 
+          {!isWin && (
+            <motion.div
+              className="absolute inset-0 overflow-visible"
+              style={{ width: 240, height: 240, left: -120, top: -120 }}
+              initial={{ opacity: 0 }}
+              exit={{ opacity: 1 }}
+              transition={{ duration: 0.3, exit: { duration: 0.1 } }}
+            >
+              {Array.from({ length: 24 }).map((_, i) => (
+                <AtomizeParticle key={`atomize-${trade.id}-${i}`} index={i} total={24} />
+              ))}
+            </motion.div>
+          )}
+
           <motion.div
-            className={`relative z-10 rounded-xl border ${borderColor} bg-slate-950/95 backdrop-blur-xl px-5 py-4 text-center`}
+            className={`relative z-10 rounded-xl border ${borderColor} px-5 py-4 text-center`}
             style={{
               boxShadow: bgShadow,
               width: "225px",
+              backgroundColor: "rgba(2,6,23,0.95)",
             }}
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
             <motion.div

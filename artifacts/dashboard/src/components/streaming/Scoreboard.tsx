@@ -82,25 +82,19 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
       </span>
       <span className="ml-auto flex items-center gap-2 shrink-0">
         {trade.pnlUsd !== 0 && (
-          <motion.span
+          <span
             className="text-[12px] font-bold"
             style={{ color }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
           >
             {formatPnlUsd(trade.pnlUsd)}
-          </motion.span>
+          </span>
         )}
-        <motion.span
+        <span
           className="text-[12px] font-bold"
           style={{ color }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
         >
           {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
-        </motion.span>
+        </span>
         <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>
           {timeAgo(trade.date)}
         </span>

@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-03T06:01:03.213406+00:00",
-  "elapsed_sec": 1.97,
+  "timestamp": "2026-04-03T06:29:52.643025+00:00",
+  "elapsed_sec": 1.93,
   "alerts": [
     {
       "check": "pnl_velocity",
@@ -36,7 +36,7 @@
       "check": "drawdown_guard",
       "bot": "navigator",
       "severity": "HIGH",
-      "detail": "Navigator open forex drawdown $-3,256"
+      "detail": "Navigator open forex drawdown $-3,041"
     }
   ],
   "alert_count": 6,

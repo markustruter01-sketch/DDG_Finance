@@ -364,7 +364,7 @@ export function NerveCenter() {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.6, y: -10 }}
                 transition={{ duration: 0.25 }}
-                className="absolute z-30 pointer-events-none"
+                className="absolute z-50 pointer-events-none"
                 style={{ left: `${popup.x}%`, top: `${popup.y}%` }}
               >
                 <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono text-cyan-300/90 whitespace-nowrap"

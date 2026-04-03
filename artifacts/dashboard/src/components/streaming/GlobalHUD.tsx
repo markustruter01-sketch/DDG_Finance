@@ -152,8 +152,8 @@ function BotStatusBox({ name, market, icon, color, active, index, countdown }: {
         {name}
       </span>
       <span
-        className="font-semibold leading-none relative z-10"
-        style={{ fontSize: 8, color: active ? color + "90" : color + "45", flexShrink: 0 }}
+        className="font-black uppercase tracking-wider leading-none relative z-10"
+        style={{ fontSize: 11, color: active ? color + "90" : color + "55", flexShrink: 0 }}
       >
         ({market})
       </span>

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import {
   useJournal, useKrakenPerformance, useOptionsState, useForexState,
-  useKrakenStatus, useLivePositions, useForexPositions,
+  useKrakenStatus, useLivePositions, useForexPositions, useForexTrades,
 } from "@/hooks/use-trading";
 
 export type RealTrade = {
@@ -49,6 +49,7 @@ export function useRealFeed(maxTrades = 20) {
   const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { data: fxTrades } = useForexTrades();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -116,9 +117,32 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
+    if (fxTrades?.trades) {
+      const existingSymbols = new Set(all.map(t => `${t.bot}-${t.symbol}-${t.date}`));
+      for (const ft of fxTrades.trades) {
+        if (ft.status !== "closed" && ft.status !== "Closed_Win" && ft.status !== "Closed_Loss") continue;
+        if (!ft.exit_time) continue;
+        const key = `Navigator-${ft.pair}-${ft.exit_time}`;
+        if (existingSymbols.has(key)) continue;
+        const pnlPct = ft.entry_price > 0 && ft.exit_price
+          ? ((ft.exit_price - ft.entry_price) / ft.entry_price) * 100 * (ft.direction === "short" ? -1 : 1)
+          : 0;
+        all.push({
+          id: `fx-${ft.id}`,
+          bot: "Navigator",
+          icon: "🧭",
+          symbol: ft.pair.replace("_", "/"),
+          pnlPct,
+          pnlUsd: ft.pnl_usd ?? 0,
+          isWin: (ft.pnl_usd ?? 0) >= 0,
+          date: ft.exit_time,
+        });
+      }
+    }
+
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data]);
+  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, fxTrades]);
 
   const krakenWins = useMemo(() =>
     [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),

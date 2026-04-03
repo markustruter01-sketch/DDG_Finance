@@ -31,10 +31,20 @@ const RELOAD_INTERVAL = 15000;
 const STAGGER_DELAY = 0.07;
 const MAX_VISIBLE = 12;
 
+const BOT_COLORS: Record<string, string> = {
+  "Oracle": "#8b5cf6",
+  "Davy Jones": "#22d3ee",
+  "Blackbeard": "#ef4444",
+  "Calypso": "#3b82f6",
+  "Apex Predator": "#f59e0b",
+  "Navigator": "#a78bfa",
+};
+
 function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
   const isWin = trade.isWin;
   const color = isWin ? "#00ff88" : "#ff8c00";
   const bgColor = isWin ? "rgba(34,197,94,0.03)" : "rgba(249,115,22,0.03)";
+  const botColor = BOT_COLORS[trade.bot] ?? "#64748b";
 
   return (
     <motion.div
@@ -42,11 +52,26 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
       initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
       animate={{ opacity: 1, x: 0, scaleY: 1 }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono origin-top"
+      className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-white/[0.03] font-mono origin-top"
       style={{ backgroundColor: bgColor }}
     >
-      <span className="text-[10px] shrink-0">{trade.icon}</span>
-      <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{trade.bot}</span>
+      <span
+        className="shrink-0 flex items-center gap-1 rounded-md px-1.5 py-0.5"
+        style={{
+          backgroundColor: `${botColor}15`,
+          border: `1px solid ${botColor}30`,
+        }}
+      >
+        <span className="text-[11px] leading-none">{trade.icon}</span>
+        <span className="text-[7px] font-bold uppercase tracking-wide leading-none" style={{ color: botColor }}>
+          {trade.bot === "Davy Jones" ? "DJ" :
+           trade.bot === "Blackbeard" ? "BB" :
+           trade.bot === "Calypso" ? "CAL" :
+           trade.bot === "Apex Predator" ? "APEX" :
+           trade.bot === "Navigator" ? "NAV" :
+           trade.bot === "Oracle" ? "ORC" : trade.bot.slice(0, 3).toUpperCase()}
+        </span>
+      </span>
       <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
         {trade.symbol}
       </span>

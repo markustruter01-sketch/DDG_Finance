@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-03T10:20:43.417215+00:00",
-  "elapsed_sec": 1.98,
+  "timestamp": "2026-04-03T21:47:49.470445+00:00",
+  "elapsed_sec": 22.48,
   "alerts": [
     {
       "check": "pnl_velocity",
@@ -25,16 +25,10 @@
       "bot": "navigator",
       "severity": "MEDIUM",
       "detail": "Navigator win rate 16.7% (1/6) below floor"
-    },
-    {
-      "check": "drawdown_guard",
-      "bot": "navigator",
-      "severity": "HIGH",
-      "detail": "Navigator open forex drawdown $-2,742"
     }
   ],
-  "alert_count": 5,
-  "high_count": 4,
+  "alert_count": 4,
+  "high_count": 3,
   "medium_count": 1,
   "escalated_to_gemini": true,
   "status": "ALERT"

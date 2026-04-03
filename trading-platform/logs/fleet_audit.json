@@ -1,19 +1,18 @@
 {
-  "generated_at": "2026-04-03T09:50:44.562335+00:00",
-  "valid_until": "2026-04-03T15:50:44.562335+00:00",
+  "generated_at": "2026-04-03T21:47:28.329119+00:00",
+  "valid_until": "2026-04-04T03:47:28.329119+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
     "oracle": "CLEAN",
     "davy_jones": "CAUTION",
-    "blackbeard": "CAUTION",
+    "blackbeard": "CLEAN",
     "calypso": "CLEAN",
     "apex_predator": "CLEAN",
-    "navigator": "HOLD"
+    "navigator": "CAUTION"
   },
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "NEAR",
     "UNI"
   ],
   "conditions": [
@@ -26,41 +25,49 @@
       "value": 0.85
     },
     {
-      "type": "news_blacklist",
-      "ticker": "JPY"
+      "type": "regime_alignment_check",
+      "value": "required"
     }
   ],
   "kraken_param_adjustments": [
     {
       "bot_id": "davy_jones",
-      "ZSCORE_ENTRY": 1.25,
-      "STOP_LOSS_PCT": 0.016,
-      "reasoning": "Win rate 52% but net PnL negative \u2014 tighten entry threshold to filter noise and reduce stop-out frequency."
+      "ZSCORE_ENTRY": 1.2,
+      "STOP_LOSS_PCT": 0.022,
+      "reasoning": "Negative PnL despite >50% win rate suggests poor entry quality and stop-out slippage; tightening threshold."
     },
     {
       "bot_id": "blackbeard",
-      "TRAIL_PCT": 0.075,
-      "reasoning": "Low win rate (42%) with frequent stop-outs on RENDER/ATOM; increasing trail room to capture aggressive trend volatility."
+      "ZSCORE_ENTRY": 1.35,
+      "STOP_LOSS_PCT": 0.03,
+      "reasoning": "Win rate 42.6% is insufficient for aggressive deployment; tightening entry Z-score and widening stop to reduce whipsaw losses."
+    },
+    {
+      "bot_id": "calypso",
+      "ZSCORE_ENTRY": 1.3,
+      "STOP_LOSS_PCT": 0.032,
+      "reasoning": "Heavy systemic losses on RENDER and ATOM indicate entry threshold is too loose for the current high-volatility regime."
     }
   ],
-  "critique_summary": "The fleet exhibits dangerous cross-bot correlation in high-beta assets (RENDER, ATOM, NEAR) which have a combined 0-40% win rate, dragging down the Kraken segment. Navigator is in a tailspin with a 16.7% win rate due to failed JPY-short positioning. Oracle is correctly defensive in SGOV, but historical data shows conviction scores were inflated during the transition to the Bear regime.",
+  "critique_summary": "The fleet is suffering from significant cross-bot correlation in crypto (NEAR, TIA, OP) and a regime contradiction where Oracle holds 100% cash while Kraken bots are >60% deployed. RENDER and ATOM have become toxic assets with 0% win rates and must be purged.",
   "critique_flags": [
-    "RENDER/USD 0% win rate across 9 trades fleet-wide",
-    "Cross-bot correlation: 3 bots holding TIA, NEAR, and OP simultaneously",
-    "Navigator win rate collapse (16.7%)",
-    "Conviction inflation: High conviction on 2026-03-29 crypto losses"
+    "Systemic failure on RENDER/USD (0% win rate, -21.75% fleet PnL)",
+    "High cross-bot correlation in NEAR, TIA, and OP positions across Kraken fleet",
+    "Regime contradiction: Oracle Bear stance vs Kraken high deployment (>60%)",
+    "Navigator win rate divergence at 16.7% indicating H4 swing strategy failure",
+    "Oracle analysis cycle failure status detected in system logs"
   ],
   "token_usage": {
-    "promptTokenCount": 16316,
-    "candidatesTokenCount": 560,
-    "totalTokenCount": 18280,
+    "promptTokenCount": 16655,
+    "candidatesTokenCount": 618,
+    "totalTokenCount": 20111,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16316
+        "tokenCount": 16655
       }
     ],
-    "thoughtsTokenCount": 1404
+    "thoughtsTokenCount": 2838
   },
-  "elapsed_seconds": 13.4
+  "elapsed_seconds": 21.1
 }

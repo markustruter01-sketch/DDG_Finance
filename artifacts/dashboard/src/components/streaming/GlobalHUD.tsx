@@ -150,16 +150,19 @@ export function GlobalHUD() {
                 </div>
               ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
                 <>
-                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
-                  <div className="flex items-end justify-between">
-                    <div className={cn("text-2xl font-mono font-bold tracking-tight", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold">{card.label}</span>
+                    <span className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-bold">Daily PnL</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className={cn("text-[22px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
                       <AnimatedValue value={card.value} />
                     </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className={cn("text-[13px] font-mono font-bold", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                    <div className="flex flex-col items-end">
+                      <span className={cn("text-[13px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
                         {card.dailyPct}
                       </span>
-                      <span className={cn("text-[12px] font-mono font-semibold", grandPnlPct >= 0 ? "text-green-400/70" : "text-red-400/70")}>
+                      <span className={cn("text-[11px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-red-400/70")}>
                         {card.dailyUsd}
                       </span>
                     </div>

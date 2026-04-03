@@ -88,7 +88,7 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
         </div>
         <div className="flex-1 overflow-hidden min-h-0">
           <AnimatePresence mode="sync">
-            {openPositions.slice(0, visibleCount).map((pos, i) => {
+            {[...openPositions].sort((a, b) => b.pnlPct - a.pnlPct).filter(p => p.pnlPct >= 0).concat([...openPositions].sort((a, b) => b.pnlPct - a.pnlPct).filter(p => p.pnlPct < 0)).slice(0, visibleCount).map((pos, i) => {
               const isUp = pos.pnlPct >= 0;
               return (
                 <motion.div

@@ -47,8 +47,8 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
                 <span className={cn(
                   "text-[11px] font-bold shrink-0 min-w-[50px] text-right",
                   hasPnlUsd
-                    ? (bot.totalPnl >= 0 ? "text-green-400" : "text-red-400")
-                    : (bot.totalPnlPct >= 0 ? "text-green-400" : "text-red-400")
+                    ? (bot.totalPnl >= 0 ? "text-green-400" : "text-orange-400")
+                    : (bot.totalPnlPct >= 0 ? "text-green-400" : "text-orange-400")
                 )}>
                   {hasPnlUsd
                     ? `${bot.totalPnl >= 0 ? "+" : ""}$${Math.abs(bot.totalPnl).toFixed(0)}`

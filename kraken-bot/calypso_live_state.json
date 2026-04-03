@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-03T07:01:48.936376+00:00",
+  "last_updated": "2026-04-03T07:02:48.944565+00:00",
   "deployed_usd": 62750.92,
   "deployed_pct": 69.5,
   "deployable_ceiling_pct": 90.0,
@@ -843,6 +843,6 @@
     },
     "reasons": {},
     "adapted_at": "2026-04-03T06:23:45.660168+00:00",
-    "next_adapt_in_hours": 5.4
+    "next_adapt_in_hours": 5.3
   }
 }

@@ -67,8 +67,8 @@ export function GlobalHUD() {
       dailyPct: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`,
       dailyUsd: `${grandTotal - startTotal >= 0 ? "+" : "-"}$${Math.abs(grandTotal - startTotal).toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
       sub: "",
-      glow: grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-red-500/20 via-red-500/5 to-transparent",
-      border: grandPnlPct >= 0 ? "border-green-500/30" : "border-red-500/30",
+      glow: grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent",
+      border: grandPnlPct >= 0 ? "border-green-500/30" : "border-orange-500/30",
     },
     {
       label: "PLATFORM BALANCE",
@@ -108,10 +108,10 @@ export function GlobalHUD() {
     ? `$${Math.round(grandTotal / Math.max(totalTrades, 1)).toLocaleString()}`
     : "—";
   const riskLevel = Math.abs(drawdownPct) < 1 ? "LOW" : Math.abs(drawdownPct) < 3 ? "MODERATE" : "HIGH";
-  const riskColor = riskLevel === "LOW" ? "text-green-400" : riskLevel === "MODERATE" ? "text-amber-400" : "text-red-400";
+  const riskColor = riskLevel === "LOW" ? "text-green-400" : riskLevel === "MODERATE" ? "text-amber-400" : "text-orange-400";
 
   const miniMetrics = [
-    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? "text-green-400" : "text-red-400" },
+    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? "text-green-400" : "text-orange-400" },
     { label: "PROFIT FACTOR", value: profitFactor, color: "text-cyan-400" },
     { label: "RISK LEVEL", value: riskLevel, color: riskColor },
     { label: "SHARPE (EST.)", value: totalTrades > 0 ? ((totalWins / totalTrades * 2 - 1) * 1.5).toFixed(2) : "—", color: "text-violet-400" },
@@ -155,14 +155,14 @@ export function GlobalHUD() {
                     <span className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-bold">Daily PnL</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className={cn("text-[22px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                    <div className={cn("text-[22px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
                       <AnimatedValue value={card.value} />
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className={cn("text-[13px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-red-400")}>
+                      <span className={cn("text-[13px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
                         {card.dailyPct}
                       </span>
-                      <span className={cn("text-[11px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-red-400/70")}>
+                      <span className={cn("text-[11px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-orange-400/70")}>
                         {card.dailyUsd}
                       </span>
                     </div>

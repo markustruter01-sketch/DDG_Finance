@@ -195,7 +195,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
             </div>
             <span
               className="text-[15px] font-mono font-bold"
-              style={{ color: isUp ? "#00ff88" : "#ff4d4d" }}
+              style={{ color: isUp ? "#00ff88" : "#ff8c00" }}
             >
               {isUp ? "+" : ""}${trade.pnlUsd.toFixed(2)}
             </span>

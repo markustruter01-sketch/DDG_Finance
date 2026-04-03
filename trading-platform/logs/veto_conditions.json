@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-04-03T08:15:45.119484+00:00",
-  "valid_until": "2026-04-03T14:15:45.119484+00:00",
+  "generated_at": "2026-04-03T09:50:57.935380+00:00",
+  "valid_until": "2026-04-03T15:50:57.935380+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "UNI",
-    "NEAR"
+    "NEAR",
+    "UNI"
   ],
   "conditions": [
     {
@@ -17,16 +17,16 @@
       "value": 0.85
     },
     {
-      "type": "correlation_cap",
-      "value": 0.4
+      "type": "news_blacklist",
+      "ticker": "JPY"
     }
   ],
-  "critique_summary": "The fleet shows significant cross-bot correlation in the Kraken segment, specifically with NEAR and TIA positions, creating systemic risk. Navigator (Forex) is in a critical failure state with a 16.7% win rate, requiring an immediate halt. Oracle is effectively sidelined in SGOV, which is the correct defensive posture given the identified Bear regime and extreme market fear.",
+  "critique_summary": "The fleet exhibits dangerous cross-bot correlation in high-beta assets (RENDER, ATOM, NEAR) which have a combined 0-40% win rate, dragging down the Kraken segment. Navigator is in a tailspin with a 16.7% win rate due to failed JPY-short positioning. Oracle is correctly defensive in SGOV, but historical data shows conviction scores were inflated during the transition to the Bear regime.",
   "critique_flags": [
-    "High correlation: NEAR/USD short held across all three Kraken bots.",
-    "Ticker failure: RENDER/USD maintains a 0% win rate across 9 trades.",
-    "Navigator performance: Win rate of 16.7% suggests strategy-regime mismatch.",
-    "Regime Labeling: Discrepancy between 'Crypto' regime label and 'Bear/Cash' execution."
+    "RENDER/USD 0% win rate across 9 trades fleet-wide",
+    "Cross-bot correlation: 3 bots holding TIA, NEAR, and OP simultaneously",
+    "Navigator win rate collapse (16.7%)",
+    "Conviction inflation: High conviction on 2026-03-29 crypto losses"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

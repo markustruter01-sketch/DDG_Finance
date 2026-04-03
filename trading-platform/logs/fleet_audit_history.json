@@ -1304,5 +1304,71 @@
       "thoughtsTokenCount": 2213
     },
     "elapsed_seconds": 56.3
+  },
+  {
+    "generated_at": "2026-04-03T09:50:44.562335+00:00",
+    "valid_until": "2026-04-03T15:50:44.562335+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CLEAN",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "NEAR",
+      "UNI"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.7
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "news_blacklist",
+        "ticker": "JPY"
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.25,
+        "STOP_LOSS_PCT": 0.016,
+        "reasoning": "Win rate 52% but net PnL negative \u2014 tighten entry threshold to filter noise and reduce stop-out frequency."
+      },
+      {
+        "bot_id": "blackbeard",
+        "TRAIL_PCT": 0.075,
+        "reasoning": "Low win rate (42%) with frequent stop-outs on RENDER/ATOM; increasing trail room to capture aggressive trend volatility."
+      }
+    ],
+    "critique_summary": "The fleet exhibits dangerous cross-bot correlation in high-beta assets (RENDER, ATOM, NEAR) which have a combined 0-40% win rate, dragging down the Kraken segment. Navigator is in a tailspin with a 16.7% win rate due to failed JPY-short positioning. Oracle is correctly defensive in SGOV, but historical data shows conviction scores were inflated during the transition to the Bear regime.",
+    "critique_flags": [
+      "RENDER/USD 0% win rate across 9 trades fleet-wide",
+      "Cross-bot correlation: 3 bots holding TIA, NEAR, and OP simultaneously",
+      "Navigator win rate collapse (16.7%)",
+      "Conviction inflation: High conviction on 2026-03-29 crypto losses"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16316,
+      "candidatesTokenCount": 560,
+      "totalTokenCount": 18280,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16316
+        }
+      ],
+      "thoughtsTokenCount": 1404
+    },
+    "elapsed_seconds": 13.4
   }
 ]

@@ -368,7 +368,7 @@ export function NerveCenter() {
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
               />
               <text
-                x={100} y={97}
+                x={100} y={100}
                 textAnchor="middle" fontSize="33"
               >
                 🧠

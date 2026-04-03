@@ -10,6 +10,7 @@ export type RealTrade = {
   icon: string;
   symbol: string;
   pnlPct: number;
+  pnlUsd: number;
   isWin: boolean;
   date: string;
 };
@@ -50,11 +51,11 @@ export function useRealFeed(maxTrades = 20) {
   const { data: fxState } = useForexState();
 
   const trades: RealTrade[] = useMemo(() => {
-    if (!journal?.trades) return [];
-    return journal.trades
-      .filter((t) => t.status === "Closed_Win" || t.status === "Closed_Loss")
-      .slice(0, maxTrades)
-      .map((t) => {
+    const all: RealTrade[] = [];
+
+    if (journal?.trades) {
+      for (const t of journal.trades) {
+        if (t.status !== "Closed_Win" && t.status !== "Closed_Loss") continue;
         const isKraken = t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-");
         const isForex = t.asset_class === "forex" || t.source === "forex";
         const isOptions = t.asset_class === "options" || t.source === "options";
@@ -78,17 +79,46 @@ export function useRealFeed(maxTrades = 20) {
 
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
 
-        return {
+        all.push({
           id: t.trade_id,
           bot,
           icon,
           symbol: sym,
           pnlPct: t.pnl_percentage,
+          pnlUsd: 0,
           isWin: t.status === "Closed_Win",
           date: t.date,
-        };
-      });
-  }, [journal, maxTrades]);
+        });
+      }
+    }
+
+    const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
+      { data: djStatus.data, bot: "Davy Jones", icon: "⚓" },
+      { data: bbStatus.data, bot: "Blackbeard", icon: "🏴‍☠️" },
+      { data: caStatus.data, bot: "Calypso", icon: "🌊" },
+    ];
+    const journalIds = new Set(all.map(t => t.id));
+    for (const { data, bot, icon } of krakenRecent) {
+      if (!data?.recent_trades) continue;
+      for (const rt of data.recent_trades) {
+        const id = `${bot}-${rt.symbol}-${rt.closed_at}`;
+        if (journalIds.has(id)) continue;
+        all.push({
+          id,
+          bot,
+          icon,
+          symbol: rt.symbol,
+          pnlPct: rt.pnl_pct,
+          pnlUsd: rt.pnl_usd,
+          isWin: rt.pnl_pct >= 0,
+          date: rt.closed_at,
+        });
+      }
+    }
+
+    all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return all.slice(0, maxTrades);
+  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data]);
 
   const krakenWins = useMemo(() =>
     [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),

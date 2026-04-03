@@ -311,27 +311,43 @@ export function useRealCelebrations() {
   const cycleCount = useRef(0);
 
   useEffect(() => {
-    const tick = () => {
-      const trades = allTradesRef.current;
-      if (trades.length === 0) return;
-      const idx = rotationIdx.current % trades.length;
-      rotationIdx.current++;
-      const entry = trades[idx];
-      const isExplosionTurn = cycleCount.current % 2 === 0;
-      cycleCount.current++;
-      if (isExplosionTurn) {
-        triggerExplosionRef.current(entry);
-      } else {
-        triggerAchievementRef.current(entry, fleetStatsRef.current);
-      }
+    let achTimer: ReturnType<typeof setTimeout> | null = null;
+    let expTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleAchievement = () => {
+      const delay = 3000 + Math.random() * 3000;
+      achTimer = setTimeout(() => {
+        const trades = allTradesRef.current;
+        if (trades.length > 0) {
+          const idx = rotationIdx.current % trades.length;
+          rotationIdx.current++;
+          triggerAchievementRef.current(trades[idx], fleetStatsRef.current);
+        }
+        scheduleAchievement();
+      }, delay);
     };
 
-    const initTimer = setTimeout(tick, 3000);
-    const interval = setInterval(tick, 5000);
+    const scheduleExplosion = () => {
+      const delay = 8000 + Math.random() * 4000;
+      expTimer = setTimeout(() => {
+        const trades = allTradesRef.current;
+        if (trades.length > 0) {
+          const idx = rotationIdx.current % trades.length;
+          rotationIdx.current++;
+          triggerExplosionRef.current(trades[idx]);
+        }
+        scheduleExplosion();
+      }, delay);
+    };
+
+    const initAch = setTimeout(() => scheduleAchievement(), 2000);
+    const initExp = setTimeout(() => scheduleExplosion(), 5000);
 
     return () => {
-      clearInterval(interval);
-      clearTimeout(initTimer);
+      clearTimeout(initAch);
+      clearTimeout(initExp);
+      if (achTimer) clearTimeout(achTimer);
+      if (expTimer) clearTimeout(expTimer);
       if (explosionTimeout.current) clearTimeout(explosionTimeout.current);
     };
   }, []);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Achievement } from "./useRealCelebrations";
 import { playAchievement } from "./sounds";
@@ -9,22 +9,32 @@ interface AchievementFeedProps {
 
 export function AchievementFeed({ achievements }: AchievementFeedProps) {
   const [visible, setVisible] = useState<Achievement[]>([]);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     if (achievements.length === 0) return;
     const latest = achievements[0];
+
     setVisible((prev) => {
       if (prev.some((a) => a.id === latest.id)) return prev;
-      return [latest, ...prev].slice(0, 3);
+      return [latest, ...prev].slice(0, 5);
     });
 
     playAchievement();
 
     const timer = setTimeout(() => {
       setVisible((prev) => prev.filter((a) => a.id !== latest.id));
-    }, 3000);
+      timers.current.delete(latest.id);
+    }, 12000);
+    timers.current.set(latest.id, timer);
 
-    return () => clearTimeout(timer);
+    return () => {
+      const t = timers.current.get(latest.id);
+      if (t) {
+        clearTimeout(t);
+        timers.current.delete(latest.id);
+      }
+    };
   }, [achievements]);
 
   if (visible.length === 0) return null;

@@ -37,12 +37,12 @@ const C = {
 };
 
 const BOT_DEFS = [
-  { name: "Oracle", icon: "🔮", color: "#8b5cf6", statusKey: "oracle" as const },
-  { name: "Davy Jones", icon: "⚓", color: "#22d3ee", statusKey: "davy-jones" as const },
-  { name: "Blackbeard", icon: "🏴‍☠️", color: "#ef4444", statusKey: "blackbeard" as const },
-  { name: "Calypso", icon: "🌊", color: "#3b82f6", statusKey: "calypso" as const },
-  { name: "Apex", icon: "🎯", color: "#f59e0b", statusKey: "apex" as const },
-  { name: "Navigator", icon: "🧭", color: "#a78bfa", statusKey: "navigator" as const },
+  { name: "Oracle", market: "Stocks", icon: "🔮", color: "#8b5cf6", statusKey: "oracle" as const },
+  { name: "Davy Jones", market: "Crypto", icon: "⚓", color: "#22d3ee", statusKey: "davy-jones" as const },
+  { name: "Blackbeard", market: "Crypto", icon: "🏴‍☠️", color: "#ef4444", statusKey: "blackbeard" as const },
+  { name: "Calypso", market: "Crypto", icon: "🌊", color: "#3b82f6", statusKey: "calypso" as const },
+  { name: "Apex", market: "Options", icon: "🎯", color: "#f59e0b", statusKey: "apex" as const },
+  { name: "Navigator", market: "Forex", icon: "🧭", color: "#a78bfa", statusKey: "navigator" as const },
 ];
 
 function useCountdown(targetIso: string | null | undefined) {
@@ -97,8 +97,8 @@ function SleepZzz({ color }: { color: string }) {
   );
 }
 
-function BotStatusBox({ name, icon, color, active, index, countdown }: {
-  name: string; icon: string; color: string; active: boolean; index: number; countdown?: string;
+function BotStatusBox({ name, market, icon, color, active, index, countdown }: {
+  name: string; market: string; icon: string; color: string; active: boolean; index: number; countdown?: string;
 }) {
   return (
     <motion.div
@@ -111,11 +111,11 @@ function BotStatusBox({ name, icon, color, active, index, countdown }: {
         flex: "1 1 0%",
         minWidth: 0,
         display: "flex",
-        flexDirection: countdown && !active ? "column" : "row",
+        flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: countdown && !active ? 1 : 6,
-        padding: "4px 6px",
+        gap: 5,
+        padding: "6px 8px",
         overflow: "visible",
         border: `1px solid ${active ? color + "50" : color + "25"}`,
       }}
@@ -139,24 +139,28 @@ function BotStatusBox({ name, icon, color, active, index, countdown }: {
         />
       )}
       {!active && <SleepZzz color={color} />}
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span
-          className="leading-none relative z-10"
-          style={{ fontSize: 14, opacity: active ? 1 : 0.5 }}
-        >
-          {icon}
-        </span>
-        <span
-          className="font-black uppercase tracking-wider leading-none relative z-10 truncate"
-          style={{ fontSize: 9, color: active ? color : color + "60" }}
-        >
-          {name}
-        </span>
-      </div>
+      <span
+        className="leading-none relative z-10"
+        style={{ fontSize: 15, opacity: active ? 1 : 0.5, flexShrink: 0 }}
+      >
+        {icon}
+      </span>
+      <span
+        className="font-black uppercase tracking-wider leading-none truncate relative z-10"
+        style={{ fontSize: 11, color: active ? color : color + "70" }}
+      >
+        {name}
+      </span>
+      <span
+        className="font-semibold leading-none relative z-10"
+        style={{ fontSize: 8, color: active ? color + "90" : color + "45", flexShrink: 0 }}
+      >
+        ({market})
+      </span>
       {!active && countdown && (
         <span
           className="font-mono font-bold leading-none relative z-10"
-          style={{ fontSize: 9, color: color + "bb", letterSpacing: "0.02em" }}
+          style={{ fontSize: 10, color: color + "cc", letterSpacing: "0.02em", flexShrink: 0 }}
         >
           {countdown}
         </span>
@@ -352,6 +356,7 @@ export function GlobalHUD() {
           <BotStatusBox
             key={bot.statusKey}
             name={bot.name}
+            market={bot.market}
             icon={bot.icon}
             color={bot.color}
             active={botActive[bot.statusKey]}

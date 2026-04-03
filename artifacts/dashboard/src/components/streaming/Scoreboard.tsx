@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import type { RealTrade } from "./useRealFeed";
 
 interface ScoreboardProps {
@@ -51,19 +51,18 @@ function getBotAbbrev(name: string): string {
 }
 
 function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
-  const isWin = trade.isWin;
-  const color = isWin ? "#00ff88" : "#ff8c00";
-  const bgColor = isWin ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
+  const usdPositive = trade.pnlUsd >= 0;
+  const pctPositive = trade.pnlPct >= 0;
+  const usdColor = usdPositive ? "#00ff88" : "#ff8c00";
+  const pctColor = pctPositive ? "#00ff88" : "#ff8c00";
+  const rowPositive = trade.pnlUsd !== 0 ? usdPositive : pctPositive;
+  const bgColor = rowPositive ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
   const botColor = BOT_COLORS[trade.bot] ?? "#64748b";
 
   return (
-    <motion.div
-      key={`${cycle}-${trade.id}`}
-      initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
-      animate={{ opacity: 1, x: 0, scaleY: 1 }}
-      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.04] font-mono origin-top"
-      style={{ backgroundColor: bgColor }}
+    <div
+      className="flex items-center gap-2 px-3 py-2 border-b font-mono"
+      style={{ backgroundColor: bgColor, borderBottomColor: "rgba(255,255,255,0.04)" }}
     >
       <span
         className="shrink-0 flex items-center gap-1.5 rounded-lg px-2 py-1"
@@ -72,34 +71,28 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
           border: `1px solid ${botColor}35`,
         }}
       >
-        <span className="text-[14px] leading-none">{trade.icon}</span>
-        <span className="text-[10px] font-black uppercase tracking-wider leading-none" style={{ color: botColor }}>
+        <span style={{ fontSize: 14, lineHeight: 1 }}>{trade.icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: 1, color: botColor }}>
           {getBotAbbrev(trade.bot)}
         </span>
       </span>
-      <span className="text-[12px] font-semibold truncate" style={{ color: "rgba(203,213,225,0.85)" }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(203,213,225,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {trade.symbol}
       </span>
       <span className="ml-auto flex items-center gap-2 shrink-0">
         {trade.pnlUsd !== 0 && (
-          <span
-            className="text-[12px] font-bold"
-            style={{ color }}
-          >
+          <span style={{ fontSize: 12, fontWeight: 700, color: usdColor }}>
             {formatPnlUsd(trade.pnlUsd)}
           </span>
         )}
-        <span
-          className="text-[12px] font-bold"
-          style={{ color }}
-        >
-          {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
+        <span style={{ fontSize: 12, fontWeight: 700, color: pctColor }}>
+          {pctPositive ? "+" : ""}{trade.pnlPct.toFixed(2)}%
         </span>
-        <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>
+        <span style={{ fontSize: 10, color: "rgba(148,163,184,0.4)" }}>
           {timeAgo(trade.date)}
         </span>
       </span>
-    </motion.div>
+    </div>
   );
 }
 
@@ -173,11 +166,9 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
           <span className="text-[13px] font-mono font-bold px-2.5 py-0.5 rounded-md border border-cyan-400/20" style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>{recentTrades.length}</span>
         </div>
         <div className="flex-1 overflow-auto min-h-0">
-          <AnimatePresence mode="sync">
             {visible.slice(0, visibleCount).map((trade) => (
               <TradeRow key={`${cycle}-${trade.id}`} trade={trade} cycle={cycle} />
             ))}
-          </AnimatePresence>
           {recentTrades.length === 0 && (
             <div className="text-[12px] font-mono text-center py-6" style={{ color: "rgba(148,163,184,0.3)" }}>No closed trades yet</div>
           )}

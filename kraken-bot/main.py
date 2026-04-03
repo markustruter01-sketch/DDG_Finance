@@ -103,6 +103,8 @@ from config import (
     MARKET_CACHE_FILE,
     IS_PRIMARY_FETCHER,
     MARKET_CACHE_TTL,
+    STALE_EXIT_HOURS,
+    STALE_DEAD_ZONE_PCT,
 )
 
 import adaptive_params as _adaptive
@@ -162,6 +164,7 @@ logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDO
 logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttle at 80%)")
 logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active (order-book primary)")
 logger.info(f"  VPIN gate     : base={VPIN_ENTRY_BLOCK} | surge_cap={VPIN_ELEVATED_CAP} | decay_after={VPIN_DECAY_AFTER_CYCLES}cyc @{VPIN_DECAY_RATE*100:.0f}%/cyc")
+logger.info(f"  Stale exit    : after {STALE_EXIT_HOURS}h if P&L within ±{STALE_DEAD_ZONE_PCT*100:.1f}%")
 logger.info(f"  Contrarian    : RSI<{CONTRARIAN_RSI_THRESH} scout={CONTRARIAN_EQUITY_PCT*100:.0f}% | RSI<{DEEP_OVERSOLD_RSI} bypass=micro-lot {MICRO_LOT_EQUITY_PCT*100:.0f}%")
 logger.info("=" * 65)
 
@@ -1094,22 +1097,49 @@ def run_cycle() -> None:
                         "price": round(current_price, 4), "signal_type": f"exit_{exit_reason}",
                         "has_position": False,
                     })
-                # Check for mean-reversion exit (z-score returned to mean)
                 # ── Exit Conditions (in priority order) ──────────────────────
                 # 1. Hard stop loss (check_stops above) — always fires, no P&L gate.
                 # 2. Trailing take-profit (check_stops above) — always fires, no P&L gate.
-                # 3. Mean-reversion exit — fires only when BOTH:
+                # 3. Time stop (stale exit) — if position held > STALE_EXIT_HOURS
+                #    and P&L is in the dead zone (±STALE_DEAD_ZONE_PCT), close it.
+                #    Rationale: signal edge decays over time; capital locked in a
+                #    flat position has high opportunity cost.
+                # 4. Mean-reversion exit — fires only when BOTH:
                 #      a. |z-score| has returned below ZSCORE_EXIT (reversion complete), AND
                 #      b. unrealised P&L ≥ MIN_NET_PROFIT_PCT (covers 0.52% round-trip fee).
-                #    If (a) is true but (b) is not, the position continues to hold
-                #    until the trailing stop, hard stop, or enough profit accumulates.
                 elif symbol in open_positions:
-                    # Compute current unrealised P&L fraction for the fee guard
                     unrealised_pnl_pct = (
                         (current_price - pos["entry_price"]) / pos["entry_price"]
                         if pos["side"] == "long"
                         else (pos["entry_price"] - current_price) / pos["entry_price"]
                     )
+
+                    _entry_time = pos.get("entry_time")
+                    _hours_held = 0.0
+                    if _entry_time:
+                        try:
+                            _et = datetime.fromisoformat(_entry_time)
+                            _hours_held = (datetime.now(tz=timezone.utc) - _et).total_seconds() / 3600.0
+                        except Exception:
+                            pass
+
+                    if (
+                        _hours_held >= STALE_EXIT_HOURS
+                        and abs(unrealised_pnl_pct) <= STALE_DEAD_ZONE_PCT
+                    ):
+                        logger.info(
+                            f"Stale  | {pos['side'].upper()} {symbol} held {_hours_held:.1f}h | "
+                            f"P&L {unrealised_pnl_pct*100:+.2f}% in dead zone "
+                            f"(±{STALE_DEAD_ZONE_PCT*100:.1f}%) — closing to free capital"
+                        )
+                        close_position(symbol, reason="stale_exit")
+                        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "exit_stale",
+                            "has_position": False, "hours_held": round(_hours_held, 1),
+                        })
+                        continue
 
                     if abs(sym_z_score) < _zscore_exit:
                         if unrealised_pnl_pct >= _min_net_profit_pct:

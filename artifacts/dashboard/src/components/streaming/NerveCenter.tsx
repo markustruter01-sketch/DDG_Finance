@@ -357,11 +357,29 @@ export function NerveCenter() {
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "90px" }}>
             <svg viewBox="0 0 200 200" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
-              <circle
+              <defs>
+                <filter id="neonYellow">
+                  <feGaussianBlur stdDeviation="3" result="blur1" />
+                  <feGaussianBlur stdDeviation="8" result="blur2" />
+                  <feMerge>
+                    <feMergeNode in="blur2" />
+                    <feMergeNode in="blur1" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <motion.circle
                 cx={100} cy={90} r={24}
-                fill="rgba(99,102,241,0.06)"
-                stroke="rgba(129,140,248,0.5)"
-                strokeWidth={2}
+                fill="rgba(250,204,21,0.04)"
+                stroke="rgba(250,204,21,0.8)"
+                strokeWidth={2.5}
+                filter="url(#neonYellow)"
+                animate={{
+                  strokeWidth: [2, 4, 2],
+                  stroke: ["rgba(250,204,21,0.6)", "rgba(250,204,21,1)", "rgba(250,204,21,0.6)"],
+                  opacity: [0.7, 1, 0.7],
+                }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
               />
               <text
                 x={100} y={95}
@@ -371,7 +389,7 @@ export function NerveCenter() {
               </text>
               <text x={100} y={122} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
               <text
-                x={100} y={134}
+                x={100} y={131}
                 textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="6"
               >
                 ALL NODES SYNCED

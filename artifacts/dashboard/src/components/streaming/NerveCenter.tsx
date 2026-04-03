@@ -291,24 +291,25 @@ export function NerveCenter() {
     return insights.filter((t) => t.pnlUsd > 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
   }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, optPositions, fxPositions]);
 
-  const algoPopups = useAlgoPopups();
-  const [scanY, setScanY] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setScanY((prev) => (prev >= 100 ? 0 : prev + 0.5));
-    }, 30);
-    return () => clearInterval(interval);
-  }, []);
-  const cx = 200;
-  const cy = 150;
-  const radius = 105;
-  const formulaElements = FORMULA_SNIPPETS.map((f, i) => (
-    <span key={i}>
-      {i > 0 && <span style={{ color: "rgba(34,211,238,0.7)", padding: "0 6px" }}>│</span>}
-      <span>{f}</span>
-    </span>
-  ));
-  const formulaY = 340;
+  /* DEACTIVATED: SVG overlay variables — reactivate with original nerve center graphics */
+  // const algoPopups = useAlgoPopups();
+  // const [scanY, setScanY] = useState(0);
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     setScanY((prev) => (prev >= 100 ? 0 : prev + 0.5));
+  //   }, 30);
+  //   return () => clearInterval(interval);
+  // }, []);
+  // const cx = 200;
+  // const cy = 150;
+  // const radius = 105;
+  // const formulaElements = FORMULA_SNIPPETS.map((f, i) => (
+  //   <span key={i}>
+  //     {i > 0 && <span style={{ color: "rgba(34,211,238,0.7)", padding: "0 6px" }}>│</span>}
+  //     <span>{f}</span>
+  //   </span>
+  // ));
+  // const formulaY = 340;
 
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
@@ -325,286 +326,41 @@ export function NerveCenter() {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className="flex-1 flex items-center justify-center relative p-2 min-h-0 overflow-hidden">
+        <div className="flex-1 relative min-h-0 overflow-hidden p-2">
+          <motion.div
+            className="absolute inset-1 rounded-xl pointer-events-none z-10"
+            style={{
+              border: "2px solid rgba(99,102,241,0.4)",
+              boxShadow: "0 0 12px rgba(99,102,241,0.15), inset 0 0 12px rgba(99,102,241,0.05)",
+            }}
+            animate={{
+              boxShadow: [
+                "0 0 12px rgba(99,102,241,0.15), inset 0 0 12px rgba(99,102,241,0.05)",
+                "0 0 24px rgba(139,92,246,0.35), inset 0 0 20px rgba(139,92,246,0.1)",
+                "0 0 12px rgba(99,102,241,0.15), inset 0 0 12px rgba(99,102,241,0.05)",
+              ],
+              borderColor: [
+                "rgba(99,102,241,0.4)",
+                "rgba(139,92,246,0.6)",
+                "rgba(99,102,241,0.4)",
+              ],
+            }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          />
           <video
             autoPlay
             loop
             muted
             playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ opacity: 0.85 }}
+            className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-
-          <div
-            className="absolute left-0 right-0 pointer-events-none z-20"
-            style={{
-              top: `${scanY}%`,
-              height: "2px",
-              background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.2), rgba(34,211,238,0.4), rgba(34,211,238,0.2), transparent)",
-              boxShadow: "0 0 6px rgba(34,211,238,0.25), 0 0 14px rgba(34,211,238,0.1)",
-              transition: "top 30ms linear",
-            }}
-          />
-          <div
-            className="absolute left-0 right-0 pointer-events-none z-20"
-            style={{
-              top: `${scanY}%`,
-              height: "30px",
-              background: "linear-gradient(180deg, rgba(34,211,238,0.03), transparent)",
-              transform: "translateY(-100%)",
-            }}
-          />
-
-          <svg viewBox="0 0 400 360" className="w-full h-full max-w-full max-h-full relative z-10" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <radialGradient id="brainGlow" cx="50%" cy="48%" r="50%">
-                <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
-                <stop offset="50%" stopColor="rgba(139,92,246,0.08)" />
-                <stop offset="100%" stopColor="rgba(99,102,241,0)" />
-              </radialGradient>
-              <radialGradient id="brainCore" cx="50%" cy="48%" r="30%">
-                <stop offset="0%" stopColor="rgba(167,139,250,0.25)" />
-                <stop offset="100%" stopColor="rgba(99,102,241,0)" />
-              </radialGradient>
-              <filter id="neonGlow">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-              <filter id="heavyGlow">
-                <feGaussianBlur stdDeviation="8" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-
-            <circle cx={cx} cy={cy} r={85} fill="url(#brainGlow)" />
-            <circle cx={cx} cy={cy} r={55} fill="url(#brainCore)" />
-
-            <motion.circle
-              cx={cx} cy={cy} r={58}
-              fill="none"
-              stroke="rgba(139,92,246,0.15)"
-              strokeWidth={1}
-              animate={{ scale: [1, 1.36, 1], opacity: [0.3, 0, 0.3] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeOut" }}
-              style={{ transformOrigin: `${cx}px ${cy}px` }}
-            />
-            <motion.circle
-              cx={cx} cy={cy} r={48}
-              fill="none"
-              stroke="rgba(99,102,241,0.2)"
-              strokeWidth={1}
-              animate={{ scale: [1, 1.55, 1], opacity: [0.4, 0, 0.4] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeOut", delay: 1.5 }}
-              style={{ transformOrigin: `${cx}px ${cy}px` }}
-            />
-            <motion.circle
-              cx={cx} cy={cy} r={42}
-              fill="none"
-              stroke="rgba(167,139,250,0.12)"
-              strokeWidth={1.5}
-              animate={{ scale: [1, 2.25, 1], opacity: [0.2, 0, 0.2] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeOut", delay: 0.8 }}
-              style={{ transformOrigin: `${cx}px ${cy}px` }}
-            />
-
-            <motion.circle
-              cx={cx} cy={cy} r={38}
-              fill="rgba(99,102,241,0.06)"
-              stroke="rgba(129,140,248,0.5)"
-              strokeWidth={2}
-              filter="url(#heavyGlow)"
-              animate={{ opacity: [0.5, 1, 0.5], scale: [0.97, 1.03, 0.97] }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              style={{ transformOrigin: `${cx}px ${cy}px` }}
-            />
-
-            <motion.text
-              x={cx} y={cy - 5}
-              textAnchor="middle" fontSize="30"
-              animate={{ scale: [1, 1.1, 1], opacity: [0.8, 1, 0.8] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-              style={{ transformOrigin: `${cx}px ${cy - 5}px` }}
-            >
-              🧠
-            </motion.text>
-            <text x={cx} y={cy + 22} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="8" fontWeight="bold">QUANT BRAIN</text>
-            <motion.text
-              x={cx} y={cy + 33}
-              textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="7"
-              animate={{ opacity: [0.3, 0.7, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              ALL NODES SYNCED
-            </motion.text>
-
-            {BOTS.map((bot) => {
-              const rad = (bot.angle * Math.PI) / 180;
-              const bx = cx + Math.cos(rad) * radius;
-              const by = cy + Math.sin(rad) * radius;
-              const active = botActive[bot.id] ?? false;
-
-              const dx = bx - cx;
-              const dy = by - cy;
-              const midX = cx + dx;
-              const midY = cy;
-              const orthoPath = Math.abs(dx) > Math.abs(dy)
-                ? `M ${cx} ${cy} L ${midX} ${midY} L ${bx} ${by}`
-                : `M ${cx} ${cy} L ${cx} ${by} L ${bx} ${by}`;
-
-              return (
-                <g key={bot.id}>
-                  {active && (
-                    <>
-                      <motion.path
-                        d={orthoPath}
-                        stroke={bot.color}
-                        strokeWidth={2}
-                        fill="none"
-                        filter="url(#neonGlow)"
-                        animate={{ opacity: [0.2, 0.7, 0.2] }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                      />
-                      <motion.circle
-                        r={4}
-                        fill={bot.color}
-                        filter="url(#neonGlow)"
-                      >
-                        <animateMotion
-                          dur="2s"
-                          repeatCount="indefinite"
-                          path={orthoPath}
-                        />
-                      </motion.circle>
-                    </>
-                  )}
-                  {!active && (
-                    <path
-                      d={orthoPath}
-                      stroke="rgba(100,116,139,0.35)"
-                      strokeWidth={1}
-                      strokeDasharray="6 4"
-                      fill="none"
-                    />
-                  )}
-
-                  {active && (
-                    <motion.circle
-                      cx={bx} cy={by} r={30}
-                      fill="none"
-                      stroke={bot.color}
-                      strokeWidth={1}
-                      animate={{ opacity: [0.1, 0.4, 0.1], scale: [0.93, 1.14, 0.93] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      style={{ transformOrigin: `${bx}px ${by}px` }}
-                    />
-                  )}
-
-                  <circle
-                    cx={bx} cy={by} r={24}
-                    fill={active ? `${bot.color}15` : "rgba(30,30,40,0.6)"}
-                    stroke={active ? bot.color : "rgba(100,116,139,0.3)"}
-                    strokeWidth={active ? 2.5 : 1}
-                    filter={active ? "url(#neonGlow)" : undefined}
-                  />
-
-                  <text x={bx} y={by + 5} textAnchor="middle" fontSize="18">{bot.icon}</text>
-                  <text
-                    x={bx} y={by + 35}
-                    textAnchor="middle"
-                    fill={active ? bot.color : "rgba(100,116,139,0.5)"}
-                    fontSize="6.5"
-                    fontWeight="bold"
-                  >
-                    {bot.name.toUpperCase()}
-                  </text>
-                  <text
-                    x={bx} y={by + 44}
-                    textAnchor="middle"
-                    fill={active ? `${bot.color}99` : "rgba(100,116,139,0.35)"}
-                    fontSize="5"
-                  >
-                    ({bot.subtitle})
-                  </text>
-
-                  {!active && (
-                    <text x={bx + 20} y={by - 15} fontSize="11">💤</text>
-                  )}
-                </g>
-              );
-            })}
-
-            <foreignObject x="20" y={formulaY - 14} width="360" height="34">
-              <div style={{ overflow: "hidden", width: "360px", height: "34px" }}>
-                <div style={{
-                  fontFamily: "monospace",
-                  fontSize: "7px",
-                  fontWeight: 800,
-                  color: "rgba(129,140,248,0.5)",
-                  letterSpacing: "2px",
-                  textTransform: "uppercase",
-                  marginBottom: "3px",
-                }}>
-                  Our Algorithms
-                </div>
-                <div
-                  className="formula-ticker"
-                  style={{
-                    display: "flex",
-                    whiteSpace: "nowrap",
-                    fontFamily: "monospace",
-                    fontSize: "9px",
-                    fontWeight: 700,
-                    color: "rgba(255,255,255,0.85)",
-                    letterSpacing: "0.8px",
-                  }}
-                >
-                  <span style={{ paddingRight: "60px" }}>{formulaElements}</span>
-                  <span style={{ paddingRight: "60px" }}>{formulaElements}</span>
-                </div>
-              </div>
-            </foreignObject>
-
-          </svg>
-
-          <AnimatePresence>
-            {algoPopups.map((popup) => (
-              <motion.div
-                key={popup.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.8 }}
-                className="absolute pointer-events-none font-mono font-bold text-white tracking-wide z-10"
-                style={{
-                  left: `${popup.x}%`,
-                  top: `${popup.y}%`,
-                  transform: "translate(-50%, -50%)",
-                  fontSize: "11px",
-                  textShadow: "0 0 12px rgba(99,220,241,0.8), 0 0 30px rgba(99,220,241,0.4)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {popup.text}
-              </motion.div>
-            ))}
-          </AnimatePresence>
         </div>
 
         <div className="shrink-0 border-t border-white/[0.04]">
           <TradeDialogueBox trades={tradeInsights} />
         </div>
       </div>
-
-      <style>{`
-        .formula-ticker {
-          animation: formulaScroll 45s linear infinite;
-        }
-        @keyframes formulaScroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-      `}</style>
     </div>
   );
 }

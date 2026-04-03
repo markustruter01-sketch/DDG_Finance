@@ -184,7 +184,7 @@ export function GlobalHUD() {
   const caStatus = useKrakenStatus("calypso");
 
   const botActive = {
-    oracle: summary?.auto_trading !== undefined,
+    oracle: !!(summary?.auto_trading && summary?.market_open),
     "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused),
     blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused),
     calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused),

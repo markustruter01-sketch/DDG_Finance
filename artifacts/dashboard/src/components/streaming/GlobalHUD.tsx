@@ -134,7 +134,7 @@ export function GlobalHUD() {
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
               {"isLogo" in card && card.isLogo ? (
-                <div className="flex items-center justify-center gap-3 h-full min-h-[48px] w-full py-1">
+                <div className="flex items-center justify-start gap-3 h-full min-h-[48px] w-full py-1 pl-1">
                   <motion.span
                     className="text-[22px] font-black tracking-wider uppercase text-violet-200 shrink-0 leading-tight"
                     style={{ textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}

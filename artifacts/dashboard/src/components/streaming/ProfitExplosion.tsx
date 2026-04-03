@@ -133,7 +133,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
       {trade && (
         <motion.div
           key={trade.id}
-          className="absolute z-30 pointer-events-none"
+          className="absolute z-50 pointer-events-none"
           style={{ transform: "translate(-50%, -50%)" }}
           initial="enter"
           animate="visible"

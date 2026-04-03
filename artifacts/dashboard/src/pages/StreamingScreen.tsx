@@ -131,11 +131,11 @@ export default function StreamingScreen() {
               </div>
             </div>
 
-            <div className="col-span-6 min-h-0 flex flex-col gap-1.5">
-              <div className="flex-1 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0 relative">
+            <div className="col-span-6 min-h-0 flex flex-col gap-1.5 relative">
+              <div className="flex-1 overflow-hidden rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0">
                 <NerveCenter />
-                <ProfitExplosion trade={celebrations.explosion} />
               </div>
+              <ProfitExplosion trade={celebrations.explosion} />
               <StreamingNavBar />
             </div>
 

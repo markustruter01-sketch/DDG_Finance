@@ -102,12 +102,12 @@ function EnergyPulse({ parentRef }: { parentRef: React.RefObject<HTMLDivElement 
                 ? "rgba(52,211,153,0.5)"
                 : "rgba(167,243,208,0.3)",
           }}
-          initial={{ width: 4, height: 4, x: -2, y: -2, opacity: 1 }}
+          initial={{ width: 20, height: 20, x: -10, y: -10, opacity: 1 }}
           animate={{
-            width: 40 + ring * 18,
-            height: 40 + ring * 18,
-            x: -(20 + ring * 9),
-            y: -(20 + ring * 9),
+            width: 200 + ring * 90,
+            height: 200 + ring * 90,
+            x: -(100 + ring * 45),
+            y: -(100 + ring * 45),
             opacity: 0,
           }}
           transition={{ duration: 0.7, ease: "easeOut", delay: ring * 0.1 }}
@@ -116,12 +116,12 @@ function EnergyPulse({ parentRef }: { parentRef: React.RefObject<HTMLDivElement 
       <motion.div
         className="absolute rounded-full"
         style={{
-          width: 6,
-          height: 6,
-          x: -3,
-          y: -3,
+          width: 30,
+          height: 30,
+          x: -15,
+          y: -15,
           backgroundColor: "rgba(34,197,94,0.9)",
-          boxShadow: "0 0 12px rgba(34,197,94,0.8), 0 0 24px rgba(34,197,94,0.4)",
+          boxShadow: "0 0 60px rgba(34,197,94,0.8), 0 0 120px rgba(34,197,94,0.4)",
         }}
         initial={{ scale: 1, opacity: 1 }}
         animate={{ scale: [1, 2.5, 0], opacity: [1, 0.8, 0] }}

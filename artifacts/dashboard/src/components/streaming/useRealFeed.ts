@@ -186,6 +186,22 @@ export function useRealFeed(maxTrades = 20) {
 
   const totalTrades = wins + losses;
 
+  const trades24h = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    let count = 0;
+    for (const t of journal?.trades ?? []) {
+      if (t.date && new Date(t.date).getTime() >= cutoff &&
+          (t.status === "Closed_Win" || t.status === "Closed_Loss")) {
+        count++;
+      }
+    }
+    const krakenBotData = [djPerf.data, bbPerf.data, caPerf.data];
+    for (const p of krakenBotData) {
+      if (p?.has_data && p.trades_today) count += p.trades_today;
+    }
+    return count;
+  }, [journal, djPerf.data, bbPerf.data, caPerf.data]);
+
   const openPositions: OpenPosition[] = useMemo(() => {
     const all: OpenPosition[] = [];
 
@@ -249,5 +265,5 @@ export function useRealFeed(maxTrades = 20) {
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
   }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions]);
 
-  return { trades, wins, losses, botStats, totalTrades, openPositions };
+  return { trades, wins, losses, botStats, totalTrades, trades24h, openPositions };
 }

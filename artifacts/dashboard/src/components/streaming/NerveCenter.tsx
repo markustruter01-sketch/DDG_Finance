@@ -315,7 +315,7 @@ export function NerveCenter() {
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       <div className="flex items-center justify-center gap-3 pt-1 shrink-0">
-        <div className="text-[9px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
+        <div className="text-[15px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
         <div className="flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
           <span className="text-[10px] font-mono font-bold text-green-400" style={{ textShadow: "0 0 8px rgba(34,197,94,0.5)" }}>

@@ -142,5 +142,32 @@
     "side": "SELL",
     "reason": "mean_reversion_complete",
     "timestamp": "2026-04-02T21:50:07.589598+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "INJ/USD",
+    "pnl_pct": 0.98,
+    "pnl_usd": 38.46,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T01:42:50.547950+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "INJ/USD",
+    "pnl_pct": 1.39,
+    "pnl_usd": 42.93,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T01:42:53.532513+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "INJ/USD",
+    "pnl_pct": 1.39,
+    "pnl_usd": 34.35,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T01:42:53.573156+00:00"
   }
 ]

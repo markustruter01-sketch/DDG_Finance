@@ -1,31 +1,33 @@
 {
-  "generated_at": "2026-04-03T01:28:07.765836+00:00",
-  "valid_until": "2026-04-03T07:28:07.765836+00:00",
+  "generated_at": "2026-04-03T01:42:58.093631+00:00",
+  "valid_until": "2026-04-03T07:42:58.093631+00:00",
   "vetoed_tickers": [
     "UNI",
     "RENDER",
+    "BITO",
+    "ETHUSD",
     "ENA"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.75
+      "value": 0.7
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "correlation_limit",
-      "value": 0.5
+      "type": "min_regime_confidence",
+      "value": 0.75
     }
   ],
-  "critique_summary": "The fleet exhibits dangerous cross-bot correlation with identical LONG positions in W, DYM, and IMX across all Kraken bots, directly contradicting the identified BEAR regime and 24.54 VIX. UNI/USD and RENDER/USD are toxic assets with 0% win rates that have significantly eroded capital and must be purged.",
+  "critique_summary": "Fleet exhibits dangerous cross-bot correlation with 100% fail rate on UNI and RENDER across all Kraken units. Oracle bot shows conviction inflation, where high-score trades (0.80+) result in significant alpha decay, while Navigator's 16% win rate suggests the H4 swing logic is catching falling knives in JPY crosses.",
   "critique_flags": [
-    "High cross-bot correlation in Kraken crypto longs",
-    "Regime-allocation mismatch in Kraken fleet",
-    "Toxic asset performance (UNI/USD, RENDER/USD)",
-    "Oracle bot analysis cycle failure"
+    "Cross-bot correlation: 3 bots holding identical losing RENDER/UNI positions",
+    "Deployment violation: Kraken bots >50% deployed despite 'Extreme Fear' regime",
+    "Conviction inflation: Oracle crypto trades losing -8.3% despite 0.82 conviction",
+    "Forex divergence: Navigator win rate (16.7%) indicates strategy-regime mismatch"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

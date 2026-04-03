@@ -1,11 +1,10 @@
 {
-  "generated_at": "2026-04-03T02:42:54.266942+00:00",
-  "valid_until": "2026-04-03T08:42:54.266942+00:00",
+  "generated_at": "2026-04-03T02:57:53.400658+00:00",
+  "valid_until": "2026-04-03T08:57:53.400658+00:00",
   "vetoed_tickers": [
     "UNI",
     "RENDER",
-    "BITO",
-    "EUO"
+    "ENA"
   ],
   "conditions": [
     {
@@ -17,16 +16,16 @@
       "value": 0.85
     },
     {
-      "type": "regime_lock",
+      "type": "regime_override",
       "value": "BEAR"
     }
   ],
-  "critique_summary": "The fleet is suffering from severe regime contradiction; Kraken bots are heavily long-biased despite the learning journal confirming a BEAR regime with VIX > 24. Cross-bot correlation is dangerously high with IMX, TIA, and ATOM held across all three Kraken portfolios. Navigator's 16.7% win rate indicates a fundamental failure in its H4 swing confluence logic.",
+  "critique_summary": "The fleet is suffering from high cross-bot correlation in losing crypto assets, specifically UNI and RENDER, which have failed across all Kraken strategies. While the Oracle bot successfully pivoted to SGOV for capital preservation, the Kraken fleet remains over-exposed to high-volatility assets despite the Bear regime and VIX exceeding 24.",
   "critique_flags": [
-    "Regime Contradiction (Long bias in Bear market)",
-    "Severe Cross-Bot Correlation (IMX, TIA, ATOM)",
-    "Navigator Win-Rate Collapse (16.7%)",
-    "Conviction Inflation (Oracle losses on 0.80+ scores)"
+    "Cross-bot correlation risk: UNI/USD win rate 14.3% across fleet",
+    "Regime contradiction: System status 'Unknown' while learning journal confirms 'Bear'",
+    "Navigator bot critical failure: 16.7% win rate on H4 swing strategy",
+    "Data anomaly: Oracle analysis_failed status on last cycle"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

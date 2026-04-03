@@ -1,10 +1,9 @@
 {
-  "generated_at": "2026-04-02T21:00:15.543571+00:00",
-  "valid_until": "2026-04-03T03:00:15.543571+00:00",
+  "generated_at": "2026-04-03T01:13:03.049488+00:00",
+  "valid_until": "2026-04-03T07:13:03.049488+00:00",
   "vetoed_tickers": [
     "UNI",
     "RENDER",
-    "ENA",
     "BITO"
   ],
   "conditions": [
@@ -14,19 +13,19 @@
     },
     {
       "type": "max_conviction_cap",
-      "value": 0.82
+      "value": 0.85
     },
     {
-      "type": "min_regime_vix_threshold",
-      "value": 25.0
+      "type": "bear_regime_deployment_cap",
+      "value": 0.4
     }
   ],
-  "critique_summary": "The fleet is currently fighting a Bear regime (VIX 24.54) with a long-biased configuration, leading to significant cross-bot correlation losses in UNI and RENDER. Oracle's conviction scores are inflated relative to its -2.19% return, and Calypso's 83% capital deployment is a critical risk violation during a risk-off environment.",
+  "critique_summary": "The fleet is suffering from severe cross-bot correlation, specifically in UNI and RENDER, leading to clustered losses. While the Oracle bot correctly pivoted to SGOV for the BEAR regime, the Kraken fleet remains over-exposed (50-60% deployment) despite a VIX above 24. AI conviction scores are inflated relative to historical PnL, necessitating a cap on conviction-based sizing.",
   "critique_flags": [
-    "Cross-bot concentration in UNI/USD (0% win rate, -$1,145 loss)",
-    "Severe regime contradiction (Bots 2-4 are 70%+ Long in Bear regime)",
-    "Calypso over-leveraged at 83% deployment",
-    "Oracle conviction-to-performance decoupling"
+    "Cross-bot correlation risk: UNI/USD stop-outs across all Kraken bots",
+    "Conviction inflation: Oracle high-conviction trades (0.8+) showing significant historical losses",
+    "Regime contradiction: Kraken bots maintaining high deployment in a confirmed BEAR regime",
+    "Stop-loss clustering: Simultaneous exits on UNI/USD and ENA/USD"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

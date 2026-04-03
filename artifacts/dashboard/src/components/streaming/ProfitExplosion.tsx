@@ -6,13 +6,16 @@ interface ProfitExplosionProps {
   trade: CelebrationTrade | null;
 }
 
-function Particle({ index, total }: { index: number; total: number }) {
+function Particle({ index, total, isWin }: { index: number; total: number; isWin: boolean }) {
   const angle = (index / total) * Math.PI * 2;
   const distance = 20 + Math.random() * 50;
   const dx = Math.cos(angle) * distance;
   const dy = Math.sin(angle) * distance;
   const size = 2 + Math.random() * 3;
   const isDollar = index % 5 === 0;
+
+  const hueBase = isWin ? 120 : 25;
+  const hueRange = isWin ? 40 : 20;
 
   return (
     <motion.div
@@ -33,15 +36,15 @@ function Particle({ index, total }: { index: number; total: number }) {
       }}
     >
       {isDollar ? (
-        "💰"
+        isWin ? "💰" : "📊"
       ) : (
         <div
           className="rounded-full"
           style={{
             width: size,
             height: size,
-            backgroundColor: `hsl(${120 + Math.random() * 40}, 80%, ${50 + Math.random() * 30}%)`,
-            boxShadow: `0 0 ${size * 2}px hsl(${120 + Math.random() * 40}, 80%, 50%)`,
+            backgroundColor: `hsl(${hueBase + Math.random() * hueRange}, 80%, ${50 + Math.random() * 30}%)`,
+            boxShadow: `0 0 ${size * 2}px hsl(${hueBase + Math.random() * hueRange}, 80%, 50%)`,
           }}
         />
       )}
@@ -57,6 +60,25 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
       y: 10 + Math.random() * 60,
     };
   }, [trade?.id]);
+
+  const isWin = trade?.isWin ?? true;
+
+  const borderColor = isWin ? "border-green-400/50" : "border-orange-400/50";
+  const bgShadow = isWin
+    ? "0 0 24px rgba(34,197,94,0.3), 0 0 48px rgba(34,197,94,0.15)"
+    : "0 0 24px rgba(249,115,22,0.3), 0 0 48px rgba(249,115,22,0.15)";
+  const labelColor = isWin ? "text-green-400/60" : "text-orange-400/60";
+  const labelText = isWin ? "Profit Locked In" : "Loss Absorbed";
+  const amountColor = isWin ? "text-green-400" : "text-orange-400";
+  const amountShadow = isWin
+    ? "0 0 14px rgba(34,197,94,0.6), 0 0 28px rgba(34,197,94,0.3)"
+    : "0 0 14px rgba(249,115,22,0.6), 0 0 28px rgba(249,115,22,0.3)";
+  const borderAnimColor = isWin
+    ? ["rgba(34,197,94,0.4)", "rgba(34,197,94,0.15)", "rgba(34,197,94,0.4)"]
+    : ["rgba(249,115,22,0.4)", "rgba(249,115,22,0.15)", "rgba(249,115,22,0.4)"];
+  const borderAnimShadow = isWin
+    ? ["0 0 10px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.15)", "0 0 10px rgba(34,197,94,0.3)"]
+    : ["0 0 10px rgba(249,115,22,0.3)", "0 0 20px rgba(249,115,22,0.15)", "0 0 10px rgba(249,115,22,0.3)"];
 
   return (
     <AnimatePresence>
@@ -77,14 +99,14 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
         >
           <div className="absolute inset-0 overflow-hidden" style={{ width: 200, height: 200, left: -100, top: -100 }}>
             {Array.from({ length: 12 }).map((_, i) => (
-              <Particle key={`${trade.id}-${i}`} index={i} total={12} />
+              <Particle key={`${trade.id}-${i}`} index={i} total={12} isWin={isWin} />
             ))}
           </div>
 
           <motion.div
-            className="relative z-10 rounded-xl border border-green-400/50 bg-slate-950/95 backdrop-blur-xl px-5 py-4 text-center"
+            className={`relative z-10 rounded-xl border ${borderColor} bg-slate-950/95 backdrop-blur-xl px-5 py-4 text-center`}
             style={{
-              boxShadow: "0 0 24px rgba(34,197,94,0.3), 0 0 48px rgba(34,197,94,0.15)",
+              boxShadow: bgShadow,
               width: "225px",
             }}
             initial={{ scale: 0.5, opacity: 0 }}
@@ -93,14 +115,10 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
             <motion.div
-              className="absolute inset-0 rounded-xl border border-green-400/30"
+              className={`absolute inset-0 rounded-xl border ${borderColor.replace("/50", "/30")}`}
               animate={{
-                borderColor: ["rgba(34,197,94,0.4)", "rgba(34,197,94,0.15)", "rgba(34,197,94,0.4)"],
-                boxShadow: [
-                  "0 0 10px rgba(34,197,94,0.3)",
-                  "0 0 20px rgba(34,197,94,0.15)",
-                  "0 0 10px rgba(34,197,94,0.3)",
-                ],
+                borderColor: borderAnimColor,
+                boxShadow: borderAnimShadow,
               }}
               transition={{ duration: 1, repeat: Infinity }}
             />
@@ -113,8 +131,8 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
               {trade.icon}
             </motion.div>
 
-            <div className="text-[9px] uppercase tracking-[0.15em] text-green-400/60 font-bold">
-              Profit Locked In
+            <div className={`text-[9px] uppercase tracking-[0.15em] ${labelColor} font-bold`}>
+              {labelText}
             </div>
 
             <div className="text-[13px] font-bold text-white mb-1.5">
@@ -122,14 +140,12 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             </div>
 
             <motion.div
-              className="text-xl font-black font-mono text-green-400 mb-1"
-              style={{
-                textShadow: "0 0 14px rgba(34,197,94,0.6), 0 0 28px rgba(34,197,94,0.3)",
-              }}
+              className={`text-xl font-black font-mono ${amountColor} mb-1`}
+              style={{ textShadow: amountShadow }}
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
             >
-              +${Math.abs(trade.pnlUsd).toFixed(2)}
+              {isWin ? "+" : "-"}${Math.abs(trade.pnlUsd).toFixed(2)}
             </motion.div>
 
             <div className="text-[10px] text-white/50 font-mono">

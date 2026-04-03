@@ -159,6 +159,8 @@ async def _intraday_cycle() -> None:
     except Exception as exc:
         logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")
 
+    await _run_micro_audit()
+
 
 async def _crypto_cycle() -> None:
     global _last_reset_date
@@ -188,6 +190,23 @@ async def _crypto_cycle() -> None:
         logger.info(f"Scheduler | crypto_cycle complete: status={result['status']}")
     except Exception as exc:
         logger.error(f"Scheduler | crypto_cycle CRASHED: {exc}")
+
+    await _run_micro_audit()
+
+
+async def _run_micro_audit() -> None:
+    try:
+        loop = asyncio.get_event_loop()
+        from analysis.micro_auditor import run_micro_audit
+        result = await loop.run_in_executor(None, run_micro_audit)
+        if result.get("alert_count", 0) > 0:
+            logger.warning(
+                f"Scheduler | MicroAuditor: {result['alert_count']} alert(s) "
+                f"({result['high_count']} HIGH, {result['medium_count']} MED) "
+                f"escalated={result['escalated_to_gemini']}"
+            )
+    except Exception as exc:
+        logger.debug(f"Scheduler | MicroAuditor failed (non-fatal): {exc}")
 
 
 async def _evening_postmortem() -> None:

@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-04-03T01:13:03.051408+00:00",
+  "elapsed_sec": 17.14,
+  "alerts": [
+    {
+      "check": "pnl_velocity",
+      "bot": "davy-jones",
+      "severity": "HIGH",
+      "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+    },
+    {
+      "check": "correlation_alarm",
+      "bot": "fleet",
+      "severity": "HIGH",
+      "detail": "3 bots holding DYM/USD: davy-jones, blackbeard, calypso \u2014 correlated risk!"
+    },
+    {
+      "check": "correlation_alarm",
+      "bot": "fleet",
+      "severity": "HIGH",
+      "detail": "3 bots holding IMX/USD: davy-jones, blackbeard, calypso \u2014 correlated risk!"
+    },
+    {
+      "check": "correlation_alarm",
+      "bot": "fleet",
+      "severity": "HIGH",
+      "detail": "3 bots holding INJ/USD: davy-jones, blackbeard, calypso \u2014 correlated risk!"
+    },
+    {
+      "check": "correlation_alarm",
+      "bot": "fleet",
+      "severity": "HIGH",
+      "detail": "3 bots holding RENDER/USD: davy-jones, blackbeard, calypso \u2014 correlated risk!"
+    },
+    {
+      "check": "win_rate_decay",
+      "bot": "navigator",
+      "severity": "MEDIUM",
+      "detail": "Navigator win rate 16.7% (1/6) below floor"
+    }
+  ],
+  "alert_count": 6,
+  "high_count": 5,
+  "medium_count": 1,
+  "escalated_to_gemini": true,
+  "status": "ALERT"
+}

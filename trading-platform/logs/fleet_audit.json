@@ -1,19 +1,18 @@
 {
-  "generated_at": "2026-04-02T21:00:00.005255+00:00",
-  "valid_until": "2026-04-03T03:00:00.005255+00:00",
+  "generated_at": "2026-04-03T01:12:47.124669+00:00",
+  "valid_until": "2026-04-03T07:12:47.124669+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
     "oracle": "CAUTION",
     "davy_jones": "CAUTION",
     "blackbeard": "CAUTION",
-    "calypso": "HOLD",
+    "calypso": "CAUTION",
     "apex_predator": "CLEAN",
     "navigator": "CLEAN"
   },
   "vetoed_tickers": [
     "UNI",
     "RENDER",
-    "ENA",
     "BITO"
   ],
   "conditions": [
@@ -23,53 +22,51 @@
     },
     {
       "type": "max_conviction_cap",
-      "value": 0.82
+      "value": 0.85
     },
     {
-      "type": "min_regime_vix_threshold",
-      "value": 25.0
+      "type": "bear_regime_deployment_cap",
+      "value": 0.4
     }
   ],
   "kraken_param_adjustments": [
     {
       "bot_id": "davy_jones",
-      "ZSCORE_ENTRY": 1.25,
-      "STOP_LOSS_PCT": 0.024,
-      "reasoning": "Win rate 51.9% but negative PnL suggests entry noise; tightening Z-score and widening stop to 2.4% to survive VIX 24+ volatility."
+      "ZSCORE_ENTRY": 1.2,
+      "STOP_LOSS_PCT": 0.014,
+      "reasoning": "Conservative bot is over-deployed (58%) in a BEAR regime; tightening entry and stop to preserve capital."
     },
     {
       "bot_id": "blackbeard",
       "ZSCORE_ENTRY": 1.35,
-      "STOP_LOSS_PCT": 0.032,
-      "TRAIL_PCT": 0.075,
-      "reasoning": "Win rate 40.5% is failing in Bear regime; increasing entry threshold and trailing stop to capture larger mean reversion swings."
+      "TRAIL_PCT": 0.08,
+      "reasoning": "Win rate at 40.5% indicates low-quality entries; increasing threshold and loosening trail to avoid stop-hunts."
     },
     {
       "bot_id": "calypso",
-      "ZSCORE_ENTRY": 1.45,
-      "STOP_LOSS_PCT": 0.036,
-      "MIN_NET_PROFIT_PCT": 0.018,
-      "reasoning": "83% deployment in Bear regime is reckless; raising entry bar to extreme levels and increasing min profit target to compensate for high slippage."
+      "ZSCORE_ENTRY": 1.4,
+      "STOP_LOSS_PCT": 0.022,
+      "reasoning": "Clustered stop-outs on UNI/USD suggest entry criteria are too loose for current high-VIX environment."
     }
   ],
-  "critique_summary": "The fleet is currently fighting a Bear regime (VIX 24.54) with a long-biased configuration, leading to significant cross-bot correlation losses in UNI and RENDER. Oracle's conviction scores are inflated relative to its -2.19% return, and Calypso's 83% capital deployment is a critical risk violation during a risk-off environment.",
+  "critique_summary": "The fleet is suffering from severe cross-bot correlation, specifically in UNI and RENDER, leading to clustered losses. While the Oracle bot correctly pivoted to SGOV for the BEAR regime, the Kraken fleet remains over-exposed (50-60% deployment) despite a VIX above 24. AI conviction scores are inflated relative to historical PnL, necessitating a cap on conviction-based sizing.",
   "critique_flags": [
-    "Cross-bot concentration in UNI/USD (0% win rate, -$1,145 loss)",
-    "Severe regime contradiction (Bots 2-4 are 70%+ Long in Bear regime)",
-    "Calypso over-leveraged at 83% deployment",
-    "Oracle conviction-to-performance decoupling"
+    "Cross-bot correlation risk: UNI/USD stop-outs across all Kraken bots",
+    "Conviction inflation: Oracle high-conviction trades (0.8+) showing significant historical losses",
+    "Regime contradiction: Kraken bots maintaining high deployment in a confirmed BEAR regime",
+    "Stop-loss clustering: Simultaneous exits on UNI/USD and ENA/USD"
   ],
   "token_usage": {
-    "promptTokenCount": 16627,
-    "candidatesTokenCount": 701,
-    "totalTokenCount": 19121,
+    "promptTokenCount": 16644,
+    "candidatesTokenCount": 620,
+    "totalTokenCount": 19058,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16627
+        "tokenCount": 16644
       }
     ],
-    "thoughtsTokenCount": 1793
+    "thoughtsTokenCount": 1794
   },
-  "elapsed_seconds": 15.5
+  "elapsed_seconds": 15.9
 }

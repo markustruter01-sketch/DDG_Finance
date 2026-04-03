@@ -170,3 +170,46 @@ async def trigger_fleet_commander(background_tasks: BackgroundTasks) -> dict:
         "status": "triggered",
         "message": "Fleet Commander audit started — poll GET /admin/fleet-commander/status for results",
     }
+
+
+@admin_router.get("/admin/micro-auditor/status", tags=["Admin"])
+async def get_micro_auditor_status() -> dict:
+    import json
+    from pathlib import Path
+    audit_file = Path(__file__).parent.parent / "logs" / "micro_audit.json"
+    if audit_file.exists():
+        try:
+            return json.loads(audit_file.read_text())
+        except Exception:
+            pass
+    return {"status": "no_data", "alerts": [], "alert_count": 0}
+
+
+@admin_router.get("/admin/micro-auditor/history", tags=["Admin"])
+async def get_micro_auditor_history() -> dict:
+    import json
+    from pathlib import Path
+    history_file = Path(__file__).parent.parent / "logs" / "micro_audit_history.json"
+    if history_file.exists():
+        try:
+            history = json.loads(history_file.read_text())
+            return {"history": history, "count": len(history)}
+        except Exception:
+            pass
+    return {"history": [], "count": 0}
+
+
+@admin_router.post("/admin/micro-auditor/run", tags=["Admin"])
+async def trigger_micro_auditor(background_tasks: BackgroundTasks) -> dict:
+    from analysis.micro_auditor import run_micro_audit
+
+    async def _bg():
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, run_micro_audit)
+        logger.info(f"Manual MicroAuditor run complete: {result.get('alert_count', 0)} alerts")
+
+    background_tasks.add_task(_bg)
+    return {
+        "status": "triggered",
+        "message": "Micro-Auditor check started — poll GET /admin/micro-auditor/status for results",
+    }

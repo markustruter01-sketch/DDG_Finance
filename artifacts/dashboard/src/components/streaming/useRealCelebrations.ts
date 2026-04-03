@@ -23,16 +23,17 @@ export type Achievement = {
   timestamp: number;
 };
 
-type RealProfitEntry = {
+type RealTradeEntry = {
   bot: string;
   icon: string;
   symbol: string;
   pnlUsd: number;
+  isWin: boolean;
   source: string;
 };
 
-const ACHIEVEMENT_TEMPLATES: Array<{
-  fn: (e: RealProfitEntry, stats: FleetStats) => string;
+const WIN_TEMPLATES: Array<{
+  fn: (e: RealTradeEntry, stats: FleetStats) => string;
   icon: string;
   color: string;
 }> = [
@@ -78,6 +79,23 @@ const ACHIEVEMENT_TEMPLATES: Array<{
   { fn: (e) => `${e.bot}'s dynamic hedging reduced risk, profit on ${e.symbol}`, icon: "⚖️", color: "#86efac" },
 ];
 
+const LOSS_TEMPLATES: Array<{
+  fn: (e: RealTradeEntry) => string;
+  icon: string;
+  color: string;
+}> = [
+  { fn: (e) => `${e.bot} stopped out on ${e.symbol} — -$${Math.abs(e.pnlUsd).toFixed(2)} | Risk managed`, icon: "🛡️", color: "#f97316" },
+  { fn: (e) => `${e.bot} ${e.symbol} hit ATR stop — controlled exit, capital preserved`, icon: "⚠️", color: "#fb923c" },
+  { fn: (e) => `Regime friction: ${e.bot}'s ${e.symbol} thesis invalidated — loss capped`, icon: "📉", color: "#f97316" },
+  { fn: (e) => `${e.bot} cut ${e.symbol} quickly — small loss, big discipline`, icon: "✂️", color: "#fb923c" },
+  { fn: (e) => `Market noise took ${e.bot}'s ${e.symbol} — thesis was right, timing wasn't`, icon: "⏳", color: "#f97316" },
+  { fn: (e) => `${e.bot} learning from ${e.symbol} loss — neural journal updated`, icon: "📓", color: "#fb923c" },
+  { fn: (e) => `VIX volatility shook ${e.bot} out of ${e.symbol} — stop did its job`, icon: "🌪️", color: "#f97316" },
+  { fn: (e) => `${e.bot} ${e.symbol} position closed — cost of doing business in Bear regime`, icon: "🐻", color: "#fb923c" },
+  { fn: (e) => `${e.bot} accepted the ${e.symbol} loss — preserving capital for the next setup`, icon: "♟️", color: "#f97316" },
+  { fn: (e) => `Drawdown event: ${e.bot} ${e.symbol} — adjusting parameters for next cycle`, icon: "🔧", color: "#fb923c" },
+];
+
 type FleetStats = { totalPnl: number; totalTrades: number; totalWins: number; winRate: number };
 
 let nextCelebId = 1;
@@ -101,14 +119,18 @@ export function useRealCelebrations() {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const rotationIdx = useRef(0);
   const achievementIdx = useRef(0);
+  const lossAchievementIdx = useRef(0);
   const explosionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const realProfits = useMemo<RealProfitEntry[]>(() => {
-    const entries: RealProfitEntry[] = [];
+  const allTrades = useMemo<RealTradeEntry[]>(() => {
+    const wins: RealTradeEntry[] = [];
+    const losses: RealTradeEntry[] = [];
 
     if (journal?.trades) {
       for (const t of journal.trades) {
-        if (t.status !== "Closed_Win") continue;
+        const isWin = t.status === "Closed_Win";
+        const isLoss = t.status === "Closed_Loss";
+        if (!isWin && !isLoss) continue;
         const pnl = Math.abs(t.pnl_percentage * 100);
         const isKraken = t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-");
         const isForex = t.asset_class === "forex" || t.source === "forex";
@@ -122,7 +144,9 @@ export function useRealCelebrations() {
         } else if (isForex) { bot = "Navigator"; icon = "🧭"; }
         else if (isOptions) { bot = "Apex Predator"; icon = "🎯"; }
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
-        entries.push({ bot, icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, source: "journal" });
+        const entry: RealTradeEntry = { bot, icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
+        if (isWin) wins.push(entry);
+        else losses.push(entry);
       }
     }
 
@@ -138,43 +162,76 @@ export function useRealCelebrations() {
         const current = p.best_price ?? entry;
         if (entry <= 0) continue;
         const pnlPct = ((current - entry) / entry) * (p.side === "short" ? -1 : 1);
-        if (pnlPct <= 0) continue;
-        const pnlUsd = p.size_usd ? pnlPct * p.size_usd : pnlPct * 1000;
-        entries.push({ bot, icon, symbol: p.symbol, pnlUsd: Math.abs(pnlUsd), source: "kraken-open" });
+        const pnlUsd = p.size_usd ? Math.abs(pnlPct * p.size_usd) : Math.abs(pnlPct) * 1000;
+        const isWin = pnlPct > 0;
+        const arr = isWin ? wins : losses;
+        arr.push({ bot, icon, symbol: p.symbol, pnlUsd, isWin, source: "kraken-open" });
       }
     }
 
     if (livePositions?.positions) {
       for (const p of livePositions.positions) {
-        if ((p.unrealized_pl ?? 0) <= 0) continue;
-        entries.push({ bot: "Oracle", icon: "🔮", symbol: p.symbol, pnlUsd: p.unrealized_pl, source: "alpaca-open" });
+        const isWin = (p.unrealized_pl ?? 0) > 0;
+        const pnlUsd = Math.abs(p.unrealized_pl ?? 0);
+        if (pnlUsd < 0.01) continue;
+        const arr = isWin ? wins : losses;
+        arr.push({ bot: "Oracle", icon: "🔮", symbol: p.symbol, pnlUsd, isWin, source: "alpaca-open" });
       }
     }
 
     if (fxPositions?.positions) {
       for (const p of fxPositions.positions) {
-        if (p.unrealized_pnl_usd <= 0) continue;
-        entries.push({ bot: "Navigator", icon: "🧭", symbol: p.pair.replace("_", "/"), pnlUsd: p.unrealized_pnl_usd, source: "forex-open" });
+        const isWin = p.unrealized_pnl_usd > 0;
+        const pnlUsd = Math.abs(p.unrealized_pnl_usd);
+        if (pnlUsd < 0.01) continue;
+        const arr = isWin ? wins : losses;
+        arr.push({ bot: "Navigator", icon: "🧭", symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
       }
     }
 
-    if (entries.length === 0) {
-      entries.push(
-        { bot: "Oracle", icon: "🔮", symbol: "SPY", pnlUsd: 12.50, source: "placeholder" },
-        { bot: "Davy Jones", icon: "⚓", symbol: "BTC/USD", pnlUsd: 24.80, source: "placeholder" },
-        { bot: "Navigator", icon: "🧭", symbol: "EUR/USD", pnlUsd: 8.30, source: "placeholder" },
-        { bot: "Blackbeard", icon: "🏴‍☠️", symbol: "SOL/USD", pnlUsd: 15.60, source: "placeholder" },
-        { bot: "Calypso", icon: "🌊", symbol: "ETH/USD", pnlUsd: 18.20, source: "placeholder" },
-        { bot: "Apex Predator", icon: "🎯", symbol: "SPY 450C", pnlUsd: 32.00, source: "placeholder" },
+    if (wins.length === 0) {
+      wins.push(
+        { bot: "Oracle", icon: "🔮", symbol: "SPY", pnlUsd: 12.50, isWin: true, source: "placeholder" },
+        { bot: "Davy Jones", icon: "⚓", symbol: "BTC/USD", pnlUsd: 24.80, isWin: true, source: "placeholder" },
+        { bot: "Navigator", icon: "🧭", symbol: "EUR/USD", pnlUsd: 8.30, isWin: true, source: "placeholder" },
+        { bot: "Blackbeard", icon: "🏴‍☠️", symbol: "SOL/USD", pnlUsd: 15.60, isWin: true, source: "placeholder" },
+        { bot: "Calypso", icon: "🌊", symbol: "ETH/USD", pnlUsd: 18.20, isWin: true, source: "placeholder" },
+        { bot: "Apex Predator", icon: "🎯", symbol: "SPY 450C", pnlUsd: 32.00, isWin: true, source: "placeholder" },
+      );
+    }
+    if (losses.length === 0) {
+      losses.push(
+        { bot: "Navigator", icon: "🧭", symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
+        { bot: "Davy Jones", icon: "⚓", symbol: "ADA/USD", pnlUsd: 4.20, isWin: false, source: "placeholder" },
       );
     }
 
-    for (let i = entries.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [entries[i], entries[j]] = [entries[j], entries[i]];
-    }
+    const shuffle = (arr: RealTradeEntry[]) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    };
+    shuffle(wins);
+    shuffle(losses);
 
-    return entries;
+    const combined: RealTradeEntry[] = [];
+    let wi = 0, li = 0;
+    const totalSlots = wins.length + losses.length;
+    for (let slot = 0; slot < totalSlots; slot++) {
+      const wantWin = Math.random() < 0.75;
+      if (wantWin && wi < wins.length) {
+        combined.push(wins[wi++]);
+      } else if (li < losses.length) {
+        combined.push(losses[li++]);
+      } else if (wi < wins.length) {
+        combined.push(wins[wi++]);
+      }
+    }
+    while (wi < wins.length) combined.push(wins[wi++]);
+    while (li < losses.length) combined.push(losses[li++]);
+
+    return combined;
   }, [journal, djStatus.data, bbStatus.data, caStatus.data, djPerf.data, bbPerf.data, caPerf.data, livePositions, fxPositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
@@ -197,40 +254,54 @@ export function useRealCelebrations() {
     };
   }, [journal, djPerf.data, bbPerf.data, caPerf.data, optState, fxState]);
 
-  const triggerExplosion = useCallback((entry: RealProfitEntry) => {
+  const triggerExplosion = useCallback((entry: RealTradeEntry) => {
     const trade: CelebrationTrade = {
       id: nextCelebId++,
       bot: entry.bot,
       icon: entry.icon,
       symbol: entry.symbol,
-      pnlUsd: entry.pnlUsd,
-      isWin: true,
+      pnlUsd: entry.isWin ? entry.pnlUsd : -entry.pnlUsd,
+      isWin: entry.isWin,
       timestamp: Date.now(),
     };
     setExplosion(trade);
-    playExplosion();
+    if (entry.isWin) playExplosion();
 
     if (explosionTimeout.current) clearTimeout(explosionTimeout.current);
     explosionTimeout.current = setTimeout(() => setExplosion(null), 5000);
   }, []);
 
-  const triggerAchievement = useCallback((entry: RealProfitEntry, stats: FleetStats) => {
-    const templateIdx = achievementIdx.current % ACHIEVEMENT_TEMPLATES.length;
-    achievementIdx.current++;
-    const tmpl = ACHIEVEMENT_TEMPLATES[templateIdx];
-    const a: Achievement = {
-      id: nextAchId++,
-      text: tmpl.fn(entry, stats),
-      icon: tmpl.icon,
-      color: tmpl.color,
-      timestamp: Date.now(),
-    };
+  const triggerAchievement = useCallback((entry: RealTradeEntry, stats: FleetStats) => {
+    let a: Achievement;
+    if (entry.isWin) {
+      const templateIdx = achievementIdx.current % WIN_TEMPLATES.length;
+      achievementIdx.current++;
+      const tmpl = WIN_TEMPLATES[templateIdx];
+      a = {
+        id: nextAchId++,
+        text: tmpl.fn(entry, stats),
+        icon: tmpl.icon,
+        color: tmpl.color,
+        timestamp: Date.now(),
+      };
+      playTradeWin();
+    } else {
+      const templateIdx = lossAchievementIdx.current % LOSS_TEMPLATES.length;
+      lossAchievementIdx.current++;
+      const tmpl = LOSS_TEMPLATES[templateIdx];
+      a = {
+        id: nextAchId++,
+        text: tmpl.fn(entry),
+        icon: tmpl.icon,
+        color: tmpl.color,
+        timestamp: Date.now(),
+      };
+    }
     setAchievements((prev) => [a, ...prev].slice(0, 8));
-    playTradeWin();
   }, []);
 
-  const realProfitsRef = useRef(realProfits);
-  realProfitsRef.current = realProfits;
+  const allTradesRef = useRef(allTrades);
+  allTradesRef.current = allTrades;
   const fleetStatsRef = useRef(fleetStats);
   fleetStatsRef.current = fleetStats;
   const triggerExplosionRef = useRef(triggerExplosion);
@@ -241,11 +312,11 @@ export function useRealCelebrations() {
 
   useEffect(() => {
     const tick = () => {
-      const profits = realProfitsRef.current;
-      if (profits.length === 0) return;
-      const idx = rotationIdx.current % profits.length;
+      const trades = allTradesRef.current;
+      if (trades.length === 0) return;
+      const idx = rotationIdx.current % trades.length;
       rotationIdx.current++;
-      const entry = profits[idx];
+      const entry = trades[idx];
       const isExplosionTurn = cycleCount.current % 2 === 0;
       cycleCount.current++;
       if (isExplosionTurn) {

@@ -373,9 +373,9 @@ export function NerveCenter() {
               >
                 🧠
               </text>
-              <text x={100} y={122} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
+              <text x={100} y={126} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
               <text
-                x={100} y={131}
+                x={100} y={135}
                 textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="6"
               >
                 ALL NODES SYNCED

@@ -58,7 +58,7 @@ function AtomizeParticle({ index, total }: { index: number; total: number }) {
   const dx = Math.cos(angle) * distance;
   const dy = Math.sin(angle) * distance;
   const size = 1 + Math.random() * 3;
-  const delay = Math.random() * 0.4;
+  const delay = Math.random() * 0.6;
 
   return (
     <motion.div
@@ -79,7 +79,7 @@ function AtomizeParticle({ index, total }: { index: number; total: number }) {
         scale: [1, 0.5, 0],
       }}
       transition={{
-        duration: 1.5 + Math.random() * 0.5,
+        duration: 1.8 + Math.random() * 0.7,
         ease: "easeOut",
         delay,
       }}
@@ -139,12 +139,33 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             top: `${pos.y}%`,
             transform: "translate(-50%, -50%)",
           }}
-          initial={{ opacity: 0, filter: "blur(0px)" }}
-          animate={{ opacity: 1, filter: "blur(0px)" }}
-          exit={isWin ? winExit : lossExit}
-          transition={{
-            duration: 0.3,
-            exit: { duration: 2, ease: "easeInOut" },
+          initial="enter"
+          animate="visible"
+          exit="exit"
+          variants={{
+            enter: { opacity: 0, filter: "blur(0px)", scale: 1 },
+            visible: {
+              opacity: 1,
+              filter: "blur(0px)",
+              scale: 1,
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              transition: { duration: 0.3 },
+            },
+            exit: isWin
+              ? {
+                  left: "50%",
+                  top: "50%",
+                  scale: 0.02,
+                  opacity: 0,
+                  transition: { duration: 2, ease: "easeInOut" },
+                }
+              : {
+                  scale: 1.08,
+                  opacity: 0,
+                  filter: "blur(12px)",
+                  transition: { duration: 2, ease: "easeInOut" },
+                },
           }}
           role="alert"
         >

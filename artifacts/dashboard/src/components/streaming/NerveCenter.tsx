@@ -355,23 +355,29 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "10px" }}>
-            <svg viewBox="0 0 200 200" className="w-[600px] h-[420px]" preserveAspectRatio="xMidYMid meet">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "30px" }}>
+            <svg viewBox="0 0 200 200" className="w-[600px] h-[420px]" preserveAspectRatio="xMidYMid meet" style={{ overflow: "visible" }}>
               <defs>
                 <radialGradient id="brainGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
-                  <stop offset="50%" stopColor="rgba(139,92,246,0.08)" />
+                  <stop offset="0%" stopColor="rgba(99,102,241,0.14)" />
+                  <stop offset="40%" stopColor="rgba(139,92,246,0.06)" />
+                  <stop offset="70%" stopColor="rgba(99,102,241,0.02)" />
                   <stop offset="100%" stopColor="rgba(99,102,241,0)" />
                 </radialGradient>
                 <radialGradient id="brainCore" cx="50%" cy="50%" r="30%">
-                  <stop offset="0%" stopColor="rgba(167,139,250,0.25)" />
+                  <stop offset="0%" stopColor="rgba(167,139,250,0.18)" />
+                  <stop offset="70%" stopColor="rgba(99,102,241,0.04)" />
                   <stop offset="100%" stopColor="rgba(99,102,241,0)" />
                 </radialGradient>
                 <filter id="heavyGlow">
-                  <feGaussianBlur stdDeviation="8" result="blur" />
+                  <feGaussianBlur stdDeviation="6" result="blur" />
                   <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
                 </filter>
+                <clipPath id="brainClip">
+                  <circle cx="100" cy="100" r="95" />
+                </clipPath>
               </defs>
+              <g clipPath="url(#brainClip)">
               <circle cx={100} cy={90} r={55} fill="url(#brainGlow)" />
               <circle cx={100} cy={90} r={35} fill="url(#brainCore)" />
               <motion.circle
@@ -429,6 +435,7 @@ export function NerveCenter() {
               >
                 ALL NODES SYNCED
               </motion.text>
+              </g>
             </svg>
           </div>
         </div>

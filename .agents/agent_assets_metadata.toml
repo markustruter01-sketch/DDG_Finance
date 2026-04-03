@@ -6,3 +6,9 @@ id = "15P0TxQcEb7yLvxsKpkB9"
 uri = "file://Technical_Logic_Blueprint.md"
 type = "text"
 title = "Technical Logic Blueprint — AI Trading Platform"
+
+[[outputs]]
+id = "LVpR9Qre07z721iKo44v4"
+uri = "file://.local/platform_technical_overview.md"
+type = "text"
+title = "AlgoEdge Trading Platform — Complete Technical Overview"

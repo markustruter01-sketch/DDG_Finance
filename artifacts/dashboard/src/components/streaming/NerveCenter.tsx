@@ -110,8 +110,8 @@ function useAlgoPopups() {
       setPopups((prev) => [...prev.slice(-3), { id, text, x: corner.x, y: corner.y }]);
       setTimeout(() => {
         setPopups((prev) => prev.filter((p) => p.id !== id));
-      }, 950);
-    }, 600 + Math.random() * 400);
+      }, 2800);
+    }, 1800 + Math.random() * 1200);
 
     return () => clearInterval(interval);
   }, []);
@@ -138,7 +138,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
     if (displayTrades.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % displayTrades.length);
-    }, 15000);
+    }, 7500);
     return () => clearInterval(interval);
   }, [displayTrades.length]);
 
@@ -367,7 +367,7 @@ export function NerveCenter() {
                 className="absolute z-30 pointer-events-none"
                 style={{ left: `${popup.x}%`, top: `${popup.y}%` }}
               >
-                <div className="px-2 py-1 rounded-md bg-black/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300/90 whitespace-nowrap"
+                <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono text-cyan-300/90 whitespace-nowrap"
                   style={{ textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
                 >
                   {popup.text}

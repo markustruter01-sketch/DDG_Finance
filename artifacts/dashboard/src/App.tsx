@@ -50,9 +50,11 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/streaming">
-        <Suspense fallback={<StreamingLoader />}>
-          <StreamingScreen />
-        </Suspense>
+        <ErrorBoundary label="Streaming" autoRecoverMs={2000}>
+          <Suspense fallback={<StreamingLoader />}>
+            <StreamingScreen />
+          </Suspense>
+        </ErrorBoundary>
       </Route>
       <Route path="/commander">
         <Suspense fallback={<StreamingLoader />}>
@@ -105,7 +107,7 @@ function App() {
   const isVisible = useVisibilityProvider();
 
   return (
-    <ErrorBoundary fallback={<AppCrashFallback />} label="App">
+    <ErrorBoundary fallback={<AppCrashFallback />} label="App" autoRecoverMs={3000}>
       <VisibilityContext.Provider value={isVisible}>
         <QueryClientProvider client={queryClient}>
           <VisibilityRefetcher />

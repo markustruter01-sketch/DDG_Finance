@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   useKrakenStatus, useOptionsState, useForexState, useStatusSummary,
   useLivePositions, useForexPositions, useOptionsPositions,
@@ -385,7 +386,9 @@ export function NerveCenter() {
         </div>
 
         <div className="shrink-0 border-t border-white/[0.04]">
-          <TradeDialogueBox trades={tradeInsights} />
+          <ErrorBoundary label="Trade Insights" autoRecoverMs={2000}>
+            <TradeDialogueBox trades={tradeInsights} />
+          </ErrorBoundary>
         </div>
       </div>
     </div>

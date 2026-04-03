@@ -5,6 +5,7 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   label?: string;
+  autoRecoverMs?: number;
 }
 
 interface State {
@@ -13,6 +14,8 @@ interface State {
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private _recoverTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -24,9 +27,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(`[ErrorBoundary${this.props.label ? ` – ${this.props.label}` : ""}]`, error, info.componentStack);
+    if (this.props.autoRecoverMs && this.props.autoRecoverMs > 0) {
+      this._recoverTimer = setTimeout(() => {
+        this.setState({ hasError: false, error: null });
+      }, this.props.autoRecoverMs);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this._recoverTimer) clearTimeout(this._recoverTimer);
   }
 
   handleRetry = () => {
+    if (this._recoverTimer) clearTimeout(this._recoverTimer);
     this.setState({ hasError: false, error: null });
   };
 

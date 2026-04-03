@@ -315,7 +315,26 @@ export function NerveCenter() {
   const activeCount = Object.values(botActive).filter(Boolean).length;
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 relative" style={{ overflow: "visible" }}>
+      <AnimatePresence>
+        {algoPopups.map((popup) => (
+          <motion.div
+            key={popup.id}
+            initial={{ opacity: 0, scale: 0.7, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.6, y: -10 }}
+            transition={{ duration: 0.25 }}
+            className="absolute pointer-events-none"
+            style={{ left: `${popup.x}%`, top: `${popup.y}%`, zIndex: 9999 }}
+          >
+            <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono text-cyan-300/90 whitespace-nowrap"
+              style={{ textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
+            >
+              {popup.text}
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
       <div className="flex items-center justify-center gap-3 pt-1 shrink-0">
         <div className="text-[15px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
         <div className="flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-0.5">
@@ -357,25 +376,6 @@ export function NerveCenter() {
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
           <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none" />
-          <AnimatePresence>
-            {algoPopups.map((popup) => (
-              <motion.div
-                key={popup.id}
-                initial={{ opacity: 0, scale: 0.7, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.6, y: -10 }}
-                transition={{ duration: 0.25 }}
-                className="absolute z-50 pointer-events-none"
-                style={{ left: `${popup.x}%`, top: `${popup.y}%` }}
-              >
-                <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono text-cyan-300/90 whitespace-nowrap"
-                  style={{ textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
-                >
-                  {popup.text}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "120px" }}>
             <svg viewBox="-30 -10 260 240" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
               <motion.circle

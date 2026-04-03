@@ -5,7 +5,7 @@ import {
   useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
 import { AnimatedValue } from "./AnimatedValue";
-import ddgLogo from "@assets/DDG_Logo_New_1775171385235.png";
+import ddgLogo from "@assets/DDG_Logo_1775195516809.png";
 
 const cardVariants = {
   hidden: { opacity: 0, y: -20, scale: 0.95 },

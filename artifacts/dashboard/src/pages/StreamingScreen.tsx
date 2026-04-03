@@ -107,7 +107,6 @@ export default function StreamingScreen() {
 
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
-      <AchievementFeed achievements={celebrations.achievements} />
       <div
         style={{
           width: REF_W,
@@ -117,6 +116,7 @@ export default function StreamingScreen() {
         }}
         className="relative flex flex-col overflow-hidden"
       >
+        <AchievementFeed achievements={celebrations.achievements} />
         <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
           <GlobalHUD />
 

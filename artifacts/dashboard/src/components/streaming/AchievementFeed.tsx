@@ -30,7 +30,7 @@ export function AchievementFeed({ achievements }: AchievementFeedProps) {
   if (visible.length === 0) return null;
 
   return (
-    <div className="fixed bottom-16 right-4 z-40 flex flex-col-reverse gap-2 w-[290px] pointer-events-none">
+    <div className="absolute bottom-16 right-4 z-40 flex flex-col-reverse gap-2 w-[290px] pointer-events-none">
       <AnimatePresence>
         {visible.map((a) => (
           <motion.div
@@ -39,7 +39,7 @@ export function AchievementFeed({ achievements }: AchievementFeedProps) {
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 100, scale: 0.8 }}
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] as const }}
-            className="rounded-xl border bg-slate-900/95 backdrop-blur-xl p-2.5 flex items-start gap-2.5 shadow-2xl"
+            className="rounded-xl border bg-slate-900 p-2.5 flex items-start gap-2.5 shadow-2xl"
             style={{
               borderColor: `${a.color}40`,
               boxShadow: `0 4px 24px ${a.color}20, 0 0 0 1px ${a.color}15`,

@@ -44,6 +44,38 @@ const BOT_DEFS = [
   { name: "Navigator", icon: "🧭", color: "#a78bfa", statusKey: "navigator" as const },
 ];
 
+function SleepZzz({ color }: { color: string }) {
+  return (
+    <div className="absolute z-20" style={{ top: -2, right: 6, pointerEvents: "none" }}>
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="absolute font-black"
+          style={{
+            color: color + "90",
+            fontSize: [7, 9, 6][i],
+            left: [0, 8, 14][i],
+            top: 0,
+          }}
+          animate={{
+            y: [-2, -14 - i * 4],
+            x: [0, 4 + i * 3],
+            opacity: [0, 0.9, 0],
+          }}
+          transition={{
+            duration: 2.5,
+            repeat: Infinity,
+            delay: i * 0.7,
+            ease: "easeOut",
+          }}
+        >
+          z
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+
 function BotStatusBox({ name, icon, color, active, index }: {
   name: string; icon: string; color: string; active: boolean; index: number;
 }) {
@@ -53,7 +85,7 @@ function BotStatusBox({ name, icon, color, active, index }: {
       variants={cardVariants}
       initial="hidden"
       animate="visible"
-      className="relative rounded-lg bg-slate-900/60 overflow-hidden"
+      className="relative rounded-lg bg-slate-900/60"
       style={{
         flex: "1 1 0%",
         minWidth: 0,
@@ -62,7 +94,8 @@ function BotStatusBox({ name, icon, color, active, index }: {
         justifyContent: "center",
         gap: 6,
         padding: "6px 6px",
-        border: `1px solid ${active ? color + "50" : color + "40"}`,
+        overflow: "visible",
+        border: `1px solid ${active ? color + "50" : color + "25"}`,
       }}
     >
       {active && (
@@ -83,10 +116,16 @@ function BotStatusBox({ name, icon, color, active, index }: {
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         />
       )}
-      <span className="text-[14px] leading-none relative z-10">{icon}</span>
+      {!active && <SleepZzz color={color} />}
+      <span
+        className="leading-none relative z-10"
+        style={{ fontSize: 14, opacity: active ? 1 : 0.5 }}
+      >
+        {icon}
+      </span>
       <span
         className="text-[9px] font-black uppercase tracking-wider leading-none relative z-10 truncate"
-        style={{ color: active ? color : color + "80" }}
+        style={{ color: active ? color : color + "60" }}
       >
         {name}
       </span>
@@ -186,12 +225,12 @@ export function GlobalHUD() {
             variants={cardVariants}
             initial="hidden"
             animate="visible"
-            className="relative rounded-xl border border-violet-500/20 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center justify-center"
+            className="relative rounded-xl border border-violet-500/20 px-4 py-2 bg-slate-900/80 overflow-hidden flex items-center justify-center"
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-violet-500/20 via-violet-500/5 to-transparent")} />
             <motion.span
-              className="text-[13px] font-black tracking-widest uppercase leading-none text-center relative z-10"
-              style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
+              className="font-black tracking-widest uppercase leading-none text-center relative z-10"
+              style={{ fontSize: 15, color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
               animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
               transition={{ duration: 3, repeat: Infinity }}
             >
@@ -207,17 +246,17 @@ export function GlobalHUD() {
             initial="hidden"
             animate="visible"
             className={cn(
-              "relative rounded-xl border px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center",
+              "relative rounded-xl border px-4 py-2 bg-slate-900/80 overflow-hidden flex items-center",
               grandPnlPct >= 0 ? "border-green-500/30" : "border-orange-500/30"
             )}
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent")} />
-            <div className="relative z-10 flex items-center gap-2 w-full">
-              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Combined P&L:</span>
-              <span className="text-[15px] font-mono font-bold tracking-tight" style={{ color: pnlColor }}>
+            <div className="relative z-10 flex items-center gap-3 w-full">
+              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Combined P&L:</span>
+              <span className="font-mono font-bold tracking-tight" style={{ fontSize: 22, color: pnlColor }}>
                 <AnimatedValue value={`${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`} />
               </span>
-              <span className="text-[11px] font-mono font-semibold ml-auto" style={{ color: pnlColor }}>
+              <span className="font-mono font-semibold ml-auto" style={{ fontSize: 16, color: pnlColor }}>
                 {pnlUsd >= 0 ? "+" : "-"}${Math.abs(pnlUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </span>
             </div>
@@ -228,14 +267,14 @@ export function GlobalHUD() {
             variants={cardVariants}
             initial="hidden"
             animate="visible"
-            className="relative rounded-xl border border-green-500/30 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center"
+            className="relative rounded-xl border border-green-500/30 px-4 py-2 bg-slate-900/80 overflow-hidden flex items-center"
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-green-500/20 via-green-500/5 to-transparent")} />
-            <div className="relative z-10 flex items-center gap-2 w-full">
-              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Balance:</span>
+            <div className="relative z-10 flex items-center gap-3 w-full">
+              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Balance:</span>
               <motion.span
-                className="text-[15px] font-mono font-bold tracking-tight"
-                style={{ color: C.green }}
+                className="font-mono font-bold tracking-tight"
+                style={{ fontSize: 24, color: C.green }}
                 animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"] }}
                 transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
               >
@@ -249,15 +288,15 @@ export function GlobalHUD() {
             variants={cardVariants}
             initial="hidden"
             animate="visible"
-            className="relative rounded-xl border border-amber-500/30 px-3 py-2 bg-slate-900/80 overflow-hidden flex items-center"
+            className="relative rounded-xl border border-amber-500/30 px-4 py-2 bg-slate-900/80 overflow-hidden flex items-center"
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-amber-500/20 via-amber-500/5 to-transparent")} />
-            <div className="relative z-10 flex items-center gap-2 w-full">
-              <span className="text-[9px] uppercase tracking-widest font-bold shrink-0" style={{ color: C.label }}>Trades:</span>
-              <span className="text-[15px] font-mono font-bold tracking-tight" style={{ color: C.white }}>
+            <div className="relative z-10 flex items-center gap-3 w-full">
+              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Trades:</span>
+              <span className="font-mono font-bold tracking-tight" style={{ fontSize: 24, color: C.white }}>
                 <AnimatedValue value={`${totalTrades}`} />
               </span>
-              <span className="text-[10px] font-mono font-semibold ml-auto" style={{ color: C.amber }}>
+              <span className="font-mono font-semibold ml-auto" style={{ fontSize: 16, color: C.amber }}>
                 {winRate.toFixed(1)}% WR
               </span>
             </div>

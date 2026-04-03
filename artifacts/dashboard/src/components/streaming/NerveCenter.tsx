@@ -355,29 +355,15 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "90px" }}>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "150px" }}>
             <svg viewBox="-30 -10 260 240" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <filter id="neonYellow">
-                  <feGaussianBlur stdDeviation="3" result="blur1" />
-                  <feGaussianBlur stdDeviation="8" result="blur2" />
-                  <feMerge>
-                    <feMergeNode in="blur2" />
-                    <feMergeNode in="blur1" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
               <motion.circle
                 cx={100} cy={90} r={24}
-                fill="rgba(250,204,21,0.04)"
-                stroke="rgba(250,204,21,0.8)"
-                strokeWidth={2.5}
-                filter="url(#neonYellow)"
+                fill="none"
+                stroke="rgba(250,204,21,0.7)"
+                strokeWidth={2}
                 animate={{
-                  strokeWidth: [2, 4, 2],
-                  stroke: ["rgba(250,204,21,0.6)", "rgba(250,204,21,1)", "rgba(250,204,21,0.6)"],
-                  opacity: [0.7, 1, 0.7],
+                  opacity: [0.5, 1, 0.5],
                 }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
               />

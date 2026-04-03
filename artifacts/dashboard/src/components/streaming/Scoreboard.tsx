@@ -20,6 +20,49 @@ const RELOAD_INTERVAL = 15000;
 const STAGGER_DELAY = 0.07;
 const NEGATIVE_SLOTS = 5;
 
+function PositionRow({ pos, cycle }: { pos: OpenPosition; cycle: number }) {
+  const isUp = pos.pnlPct >= 0;
+  const color = isUp ? "#00ff88" : "#ff8c00";
+  const bgColor = isUp ? "rgba(34,197,94,0.03)" : "rgba(249,115,22,0.03)";
+
+  return (
+    <motion.div
+      key={`${cycle}-${pos.id}`}
+      initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
+      animate={{ opacity: 1, x: 0, scaleY: 1 }}
+      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+      className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono origin-top"
+      style={{ backgroundColor: bgColor }}
+    >
+      <span className="text-[10px] shrink-0">{pos.icon}</span>
+      <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
+      <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
+        {pos.side.toUpperCase()} {pos.symbol}
+      </span>
+      <span className="ml-auto flex items-center gap-1.5 shrink-0">
+        <motion.span
+          className="text-[9px] font-bold"
+          style={{ color }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          {formatPnlUsd(pos.pnlUsd)}
+        </motion.span>
+        <motion.span
+          className="text-[9px] opacity-60"
+          style={{ color }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.6 }}
+          transition={{ delay: 0.15 }}
+        >
+          {isUp ? "+" : ""}{pos.pnlPct.toFixed(2)}%
+        </motion.span>
+      </span>
+    </motion.div>
+  );
+}
+
 export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
   const [cycle, setCycle] = useState(0);
   const [visibleCount, setVisibleCount] = useState(openPositions.length);
@@ -42,10 +85,8 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
 
   const positivePositions = [...openPositions].filter(p => p.pnlPct >= 0).sort((a, b) => b.pnlPct - a.pnlPct);
   const negativePositions = [...openPositions].filter(p => p.pnlPct < 0).sort((a, b) => b.pnlPct - a.pnlPct);
-
-  const topSlots = positivePositions;
   const bottomSlots = negativePositions.slice(0, NEGATIVE_SLOTS);
-  const combined = [...topSlots, ...bottomSlots];
+  const combined = [...positivePositions, ...bottomSlots];
 
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
@@ -94,91 +135,12 @@ export function Scoreboard({ wins, losses, openPositions }: ScoreboardProps) {
           </motion.span>
           <span className="text-[12px] font-mono font-bold text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded-md border border-cyan-400/20">{openPositions.length}</span>
         </div>
-        <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-          <div className="flex-1 min-h-0">
-            <AnimatePresence mode="sync">
-              {topSlots.slice(0, visibleCount).map((pos, i) => (
-                <motion.div
-                  key={`${cycle}-${pos.id}`}
-                  initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
-                  animate={{ opacity: 1, x: 0, scaleY: 1 }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono origin-top"
-                  style={{ backgroundColor: "rgba(34,197,94,0.03)" }}
-                >
-                  <span className="text-[10px] shrink-0">{pos.icon}</span>
-                  <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
-                  <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
-                    {pos.side.toUpperCase()} {pos.symbol}
-                  </span>
-                  <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                    <motion.span
-                      className="text-[9px] font-bold"
-                      style={{ color: "#00ff88" }}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.1 }}
-                    >
-                      {formatPnlUsd(pos.pnlUsd)}
-                    </motion.span>
-                    <motion.span
-                      className="text-[9px] opacity-60"
-                      style={{ color: "#00ff88" }}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 0.6 }}
-                      transition={{ delay: 0.15 }}
-                    >
-                      +{pos.pnlPct.toFixed(2)}%
-                    </motion.span>
-                  </span>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          {bottomSlots.length > 0 && (
-            <div className="border-t border-orange-500/10 shrink-0">
-              <AnimatePresence mode="sync">
-                {bottomSlots.slice(0, Math.max(0, visibleCount - topSlots.length)).map((pos, i) => (
-                  <motion.div
-                    key={`${cycle}-${pos.id}`}
-                    initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
-                    animate={{ opacity: 1, x: 0, scaleY: 1 }}
-                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 border-b border-white/[0.03] font-mono origin-top"
-                    style={{ backgroundColor: "rgba(249,115,22,0.03)" }}
-                  >
-                    <span className="text-[10px] shrink-0">{pos.icon}</span>
-                    <span className="text-[8px] shrink-0 opacity-50 max-w-[52px] truncate">{pos.bot}</span>
-                    <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
-                      {pos.side.toUpperCase()} {pos.symbol}
-                    </span>
-                    <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                      <motion.span
-                        className="text-[9px] font-bold"
-                        style={{ color: "#ff8c00" }}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.1 }}
-                      >
-                        {formatPnlUsd(pos.pnlUsd)}
-                      </motion.span>
-                      <motion.span
-                        className="text-[9px] opacity-60"
-                        style={{ color: "#ff8c00" }}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 0.6 }}
-                        transition={{ delay: 0.15 }}
-                      >
-                        {pos.pnlPct.toFixed(2)}%
-                      </motion.span>
-                    </span>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-
+        <div className="flex-1 overflow-hidden min-h-0">
+          <AnimatePresence mode="sync">
+            {combined.slice(0, visibleCount).map((pos) => (
+              <PositionRow key={`${cycle}-${pos.id}`} pos={pos} cycle={cycle} />
+            ))}
+          </AnimatePresence>
           {openPositions.length === 0 && (
             <div className="text-[9px] text-muted-foreground/30 font-mono text-center py-4">No open positions</div>
           )}

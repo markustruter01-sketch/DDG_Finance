@@ -122,8 +122,26 @@ export function GlobalHUD() {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex gap-2">
-        <div className="w-1/2 rounded-xl border border-white/[0.06] bg-slate-900/60 min-h-0" />
-        <div className="w-1/2 grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 p-4 flex flex-col justify-center overflow-hidden">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="space-y-2"
+          >
+            <h2
+              className="text-[18px] font-black uppercase tracking-wide text-violet-200 leading-tight"
+              style={{ textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
+            >
+              Welcome!
+            </h2>
+            <p className="text-[11px] leading-[1.5] text-slate-300/80 font-medium">
+              We created 6 AI powered automated trading bots that function off institutional grade algorithms and maths, with advanced risk metrics and market measuring conditions. Follow along to see how they perform, or get in contact with us to see how you can build your own for only{" "}
+              <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
+            </p>
+          </motion.div>
+        </div>
+        <div className="w-1/2 grid grid-cols-2 gap-1.5">
         {cards.map((card, i) => (
           <motion.div
             key={card.label}
@@ -132,7 +150,7 @@ export function GlobalHUD() {
             initial="hidden"
             animate="visible"
             className={cn(
-              "relative rounded-xl border p-3 bg-slate-900/80 overflow-hidden",
+              "relative rounded-xl border p-2.5 bg-slate-900/80 overflow-hidden",
               card.border
             )}
           >

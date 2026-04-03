@@ -26,14 +26,14 @@ export function VaultDisplay() {
   return (
     <div className="flex flex-col gap-1.5 flex-1 min-h-0">
       <div className="text-[9px] uppercase tracking-widest text-emerald-400/50 font-bold">Growth Vault</div>
-      <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 px-3 py-3 relative overflow-hidden">
+      <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/10 px-2.5 py-2 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent" />
-        <div className="relative flex items-center gap-3">
-          <span className="text-xl">🏦</span>
+        <div className="relative flex items-center gap-2">
+          <span className="text-[14px]">🏦</span>
           <div className="flex-1">
             <div className="text-[7px] uppercase tracking-widest text-emerald-400/60 font-bold">Total Vaulted</div>
             <motion.div
-              className="text-2xl font-mono font-black text-emerald-400"
+              className="text-[18px] font-mono font-black text-emerald-400"
               style={{ textShadow: "0 0 20px rgba(16,185,129,0.6), 0 0 40px rgba(16,185,129,0.3)" }}
               animate={{ opacity: [0.6, 1, 0.6], scale: [0.98, 1.02, 0.98] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
@@ -42,22 +42,22 @@ export function VaultDisplay() {
             </motion.div>
           </div>
           <div className="text-right">
-            <div className="text-[9px] uppercase tracking-widest text-amber-400/70 font-bold">Passive Income</div>
+            <div className="text-[7px] uppercase tracking-widest text-amber-400/70 font-bold">Passive Income</div>
             <motion.div
-              className="text-xl font-mono font-black text-amber-400"
+              className="text-[16px] font-mono font-black text-amber-400"
               style={{ textShadow: "0 0 16px rgba(251,191,36,0.5), 0 0 32px rgba(251,191,36,0.25)" }}
               animate={{ opacity: [0.7, 1, 0.7], scale: [0.98, 1.02, 0.98] }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              {formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[9px] text-amber-400/50">/mo</span>
+              {formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[8px] text-amber-400/50">/mo</span>
             </motion.div>
-            <div className="text-[9px] text-emerald-400/60 font-mono font-bold">{totalSweeps} sweeps</div>
+            <div className="text-[7px] text-emerald-400/60 font-mono font-bold">{totalSweeps} sweeps</div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-3 py-3 flex-1">
-        <div className="text-[13px] font-mono text-emerald-400/50 leading-relaxed">
+      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-2.5 py-2 flex-1">
+        <div className="text-[10px] font-mono text-emerald-400/50 leading-relaxed">
           20% of realized profits are automatically swept into the <span className="text-emerald-400/80 font-bold">Growth Vault (JEPQ)</span> for compounding high-yield dividend income. This passive dividend income is then re-invested into the platform in order to accelerate exponential growth.
         </div>
       </div>

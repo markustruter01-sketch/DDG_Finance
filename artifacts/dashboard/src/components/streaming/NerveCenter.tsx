@@ -356,86 +356,26 @@ export function NerveCenter() {
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "30px" }}>
-            <svg viewBox="0 0 200 200" className="w-[600px] h-[420px]" preserveAspectRatio="xMidYMid meet" style={{ overflow: "visible" }}>
-              <defs>
-                <radialGradient id="brainGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="rgba(99,102,241,0.14)" />
-                  <stop offset="40%" stopColor="rgba(139,92,246,0.06)" />
-                  <stop offset="70%" stopColor="rgba(99,102,241,0.02)" />
-                  <stop offset="100%" stopColor="rgba(99,102,241,0)" />
-                </radialGradient>
-                <radialGradient id="brainCore" cx="50%" cy="50%" r="30%">
-                  <stop offset="0%" stopColor="rgba(167,139,250,0.18)" />
-                  <stop offset="70%" stopColor="rgba(99,102,241,0.04)" />
-                  <stop offset="100%" stopColor="rgba(99,102,241,0)" />
-                </radialGradient>
-                <filter id="heavyGlow">
-                  <feGaussianBlur stdDeviation="6" result="blur" />
-                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
-                <clipPath id="brainClip">
-                  <circle cx="100" cy="100" r="95" />
-                </clipPath>
-              </defs>
-              <g clipPath="url(#brainClip)">
-              <circle cx={100} cy={90} r={55} fill="url(#brainGlow)" />
-              <circle cx={100} cy={90} r={35} fill="url(#brainCore)" />
-              <motion.circle
-                cx={100} cy={90} r={38}
-                fill="none"
-                stroke="rgba(139,92,246,0.15)"
-                strokeWidth={1}
-                animate={{ scale: [1, 1.36, 1], opacity: [0.3, 0, 0.3] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeOut" }}
-                style={{ transformOrigin: "100px 90px" }}
-              />
-              <motion.circle
-                cx={100} cy={90} r={30}
-                fill="none"
-                stroke="rgba(99,102,241,0.2)"
-                strokeWidth={1}
-                animate={{ scale: [1, 1.55, 1], opacity: [0.4, 0, 0.4] }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeOut", delay: 1.5 }}
-                style={{ transformOrigin: "100px 90px" }}
-              />
-              <motion.circle
-                cx={100} cy={90} r={26}
-                fill="none"
-                stroke="rgba(167,139,250,0.12)"
-                strokeWidth={1.5}
-                animate={{ scale: [1, 2.25, 1], opacity: [0.2, 0, 0.2] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "easeOut", delay: 0.8 }}
-                style={{ transformOrigin: "100px 90px" }}
-              />
-              <motion.circle
+            <svg viewBox="0 0 200 200" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
+              <circle
                 cx={100} cy={90} r={24}
                 fill="rgba(99,102,241,0.06)"
                 stroke="rgba(129,140,248,0.5)"
                 strokeWidth={2}
-                filter="url(#heavyGlow)"
-                animate={{ opacity: [0.5, 1, 0.5], scale: [0.97, 1.03, 0.97] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                style={{ transformOrigin: "100px 90px" }}
               />
-              <motion.text
+              <text
                 x={100} y={95}
                 textAnchor="middle" fontSize="24"
-                animate={{ scale: [1, 1.1, 1], opacity: [0.8, 1, 0.8] }}
-                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                style={{ transformOrigin: "100px 90px" }}
               >
                 🧠
-              </motion.text>
+              </text>
               <text x={100} y={115} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
-              <motion.text
+              <text
                 x={100} y={127}
                 textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="6"
-                animate={{ opacity: [0.3, 0.7, 0.3] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
               >
                 ALL NODES SYNCED
-              </motion.text>
-              </g>
+              </text>
             </svg>
           </div>
         </div>

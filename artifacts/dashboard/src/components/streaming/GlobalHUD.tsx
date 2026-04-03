@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
@@ -44,6 +45,25 @@ const BOT_DEFS = [
   { name: "Navigator", icon: "🧭", color: "#a78bfa", statusKey: "navigator" as const },
 ];
 
+function useCountdown(targetIso: string | null | undefined) {
+  const [remaining, setRemaining] = useState("");
+  useEffect(() => {
+    if (!targetIso) { setRemaining(""); return; }
+    const tick = () => {
+      const diff = new Date(targetIso).getTime() - Date.now();
+      if (diff <= 0) { setRemaining(""); return; }
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      const s = Math.floor((diff % 60_000) / 1000);
+      setRemaining(`${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [targetIso]);
+  return remaining;
+}
+
 function SleepZzz({ color }: { color: string }) {
   return (
     <div className="absolute z-20" style={{ top: -4, right: 4, pointerEvents: "none" }}>
@@ -77,8 +97,8 @@ function SleepZzz({ color }: { color: string }) {
   );
 }
 
-function BotStatusBox({ name, icon, color, active, index }: {
-  name: string; icon: string; color: string; active: boolean; index: number;
+function BotStatusBox({ name, icon, color, active, index, countdown }: {
+  name: string; icon: string; color: string; active: boolean; index: number; countdown?: string;
 }) {
   return (
     <motion.div
@@ -91,10 +111,11 @@ function BotStatusBox({ name, icon, color, active, index }: {
         flex: "1 1 0%",
         minWidth: 0,
         display: "flex",
+        flexDirection: countdown && !active ? "column" : "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: 6,
-        padding: "6px 6px",
+        gap: countdown && !active ? 1 : 6,
+        padding: "4px 6px",
         overflow: "visible",
         border: `1px solid ${active ? color + "50" : color + "25"}`,
       }}
@@ -118,18 +139,28 @@ function BotStatusBox({ name, icon, color, active, index }: {
         />
       )}
       {!active && <SleepZzz color={color} />}
-      <span
-        className="leading-none relative z-10"
-        style={{ fontSize: 14, opacity: active ? 1 : 0.5 }}
-      >
-        {icon}
-      </span>
-      <span
-        className="text-[9px] font-black uppercase tracking-wider leading-none relative z-10 truncate"
-        style={{ color: active ? color : color + "60" }}
-      >
-        {name}
-      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <span
+          className="leading-none relative z-10"
+          style={{ fontSize: 14, opacity: active ? 1 : 0.5 }}
+        >
+          {icon}
+        </span>
+        <span
+          className="font-black uppercase tracking-wider leading-none relative z-10 truncate"
+          style={{ fontSize: 9, color: active ? color : color + "60" }}
+        >
+          {name}
+        </span>
+      </div>
+      {!active && countdown && (
+        <span
+          className="font-mono font-bold leading-none relative z-10"
+          style={{ fontSize: 9, color: color + "bb", letterSpacing: "0.02em" }}
+        >
+          {countdown}
+        </span>
+      )}
       {active && (
         <motion.span
           className="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full"
@@ -195,6 +226,17 @@ export function GlobalHUD() {
 
   const pnlUsd = grandTotal - startTotal;
 
+  const nyseCountdown = useCountdown(!summary?.market_open ? summary?.next_market_open : null);
+
+  const botCountdowns: Record<string, string | undefined> = {
+    oracle: nyseCountdown || undefined,
+    "davy-jones": undefined,
+    blackbeard: undefined,
+    calypso: undefined,
+    apex: nyseCountdown || undefined,
+    navigator: undefined,
+  };
+
   return (
     <div className="flex flex-col gap-1.5 shrink-0">
       <div className="flex gap-2">
@@ -253,7 +295,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Combined P&L:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: "rgba(203,213,225,0.85)" }}>Combined P&L:</span>
               <span className="font-mono font-bold tracking-tight" style={{ fontSize: 22, color: pnlColor }}>
                 <AnimatedValue value={`${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`} />
               </span>
@@ -272,7 +314,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-green-500/20 via-green-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Balance:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: "rgba(203,213,225,0.85)" }}>Balance:</span>
               <motion.span
                 className="font-mono font-bold tracking-tight"
                 style={{ fontSize: 24, color: C.green }}
@@ -293,7 +335,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-amber-500/20 via-amber-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Trades:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: "rgba(203,213,225,0.85)" }}>Trades:</span>
               <span className="font-mono font-bold tracking-tight" style={{ fontSize: 24, color: C.white }}>
                 <AnimatedValue value={`${totalTrades}`} />
               </span>
@@ -314,6 +356,7 @@ export function GlobalHUD() {
             color={bot.color}
             active={botActive[bot.statusKey]}
             index={i}
+            countdown={botCountdowns[bot.statusKey]}
           />
         ))}
       </div>

@@ -184,9 +184,9 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
   const bgShadow = isWin
     ? "0 0 24px rgba(34,197,94,0.3), 0 0 48px rgba(34,197,94,0.15)"
     : "0 0 24px rgba(249,115,22,0.3), 0 0 48px rgba(249,115,22,0.15)";
-  const labelColor = isWin ? "text-green-400/60" : "text-orange-400/60";
+  const labelColorVal = isWin ? "rgba(74,222,128,0.6)" : "rgba(251,146,60,0.6)";
   const labelText = isWin ? "Profit Locked In" : "Loss Absorbed";
-  const amountColor = isWin ? "text-green-400" : "text-orange-400";
+  const amountColorVal = isWin ? "#4ade80" : "#fb923c";
   const amountShadow = isWin
     ? "0 0 14px rgba(34,197,94,0.6), 0 0 28px rgba(34,197,94,0.3)"
     : "0 0 14px rgba(249,115,22,0.6), 0 0 28px rgba(249,115,22,0.3)";
@@ -287,7 +287,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
                 {trade.icon}
               </motion.div>
 
-              <div className={`text-[9px] uppercase tracking-[0.15em] ${labelColor} font-bold`}>
+              <div className="text-[9px] uppercase tracking-[0.15em] font-bold" style={{ color: labelColorVal }}>
                 {labelText}
               </div>
 
@@ -296,15 +296,15 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
               </div>
 
               <motion.div
-                className={`text-xl font-black font-mono ${amountColor} mb-1`}
-                style={{ textShadow: amountShadow }}
+                className="text-xl font-black font-mono mb-1"
+                style={{ color: amountColorVal, textShadow: amountShadow }}
                 animate={{ scale: [1, 1.05, 1] }}
                 transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
               >
                 {isWin ? "+" : "-"}${Math.abs(trade.pnlUsd).toFixed(2)}
               </motion.div>
 
-              <div className="text-[10px] text-white/50 font-mono">
+              <div className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,0.5)" }}>
                 {trade.symbol}
               </div>
             </div>

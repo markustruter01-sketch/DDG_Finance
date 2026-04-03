@@ -1,74 +1,73 @@
 {
-  "generated_at": "2026-04-03T07:14:50.380856+00:00",
-  "valid_until": "2026-04-03T13:14:50.380856+00:00",
+  "generated_at": "2026-04-03T07:29:49.206866+00:00",
+  "valid_until": "2026-04-03T13:29:49.206866+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
     "oracle": "CLEAN",
     "davy_jones": "CAUTION",
-    "blackbeard": "CAUTION",
-    "calypso": "CAUTION",
+    "blackbeard": "CLEAN",
+    "calypso": "CLEAN",
     "apex_predator": "CLEAN",
     "navigator": "HOLD"
   },
   "vetoed_tickers": [
     "RENDER",
-    "ATOM",
     "UNI",
-    "JPY"
+    "ATOM",
+    "GBPJPY"
   ],
   "conditions": [
-    {
-      "type": "vpin_threshold",
-      "value": 0.75
-    },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "news_blacklist",
-      "ticker": "JPY"
+      "type": "vpin_threshold",
+      "value": 0.72
+    },
+    {
+      "type": "max_correlation_overlap",
+      "value": 2.0
     }
   ],
   "kraken_param_adjustments": [
     {
       "bot_id": "davy_jones",
-      "ZSCORE_ENTRY": 1.15,
-      "STOP_LOSS_PCT": 0.022,
-      "reasoning": "Win rate 52% but negative PnL indicates stop-outs are too frequent or slippage is high; tightening entry and widening stop slightly to filter noise."
+      "ZSCORE_ENTRY": 1.25,
+      "STOP_LOSS_PCT": 0.018,
+      "reasoning": "Negative P&L with frequent stop-outs on RENDER and ATOM; tightening entry to filter noise in high-fear regime."
     },
     {
       "bot_id": "blackbeard",
-      "ZSCORE_ENTRY": 1.25,
-      "STOP_LOSS_PCT": 0.03,
-      "TRAIL_PCT": 0.06,
-      "reasoning": "Win rate 43.5% with heavy losses in RENDER and ATOM; requires higher quality entry thresholds and wider stops to survive 'Extreme Fear' volatility."
+      "ZSCORE_ENTRY": 1.15,
+      "TRAIL_PCT": 0.055,
+      "reasoning": "Win rate below 45%; increasing entry threshold and trailing stop distance to improve capture of aggressive swings."
     },
     {
       "bot_id": "calypso",
-      "ZSCORE_ENTRY": 1.35,
-      "STOP_LOSS_PCT": 0.034,
-      "TRAIL_PCT": 0.055,
-      "reasoning": "Most aggressive bot is hitting multiple stops (UNI, ATOM, RENDER) with PnL drags; increasing entry z-score to 1.35 to ensure mean reversion quality."
+      "ZSCORE_ENTRY": 1.1,
+      "ZSCORE_EXIT": 0.26,
+      "reasoning": "Despite positive P&L, win rate is sub-50% with high correlation to Davy Jones' losing positions; tightening entry."
     }
   ],
-  "critique_summary": "The fleet is suffering from high cross-bot correlation in failing Altcoin shorts (RENDER, ATOM) and a disastrous JPY short bias in Navigator. Oracle's defensive pivot to SGOV is currently the only effective risk mitigation, as Kraken bots are over-trading in a high-volatility regime.",
+  "critique_summary": "The fleet is suffering from high cross-bot correlation in the Kraken segment, specifically on toxic assets RENDER and ATOM. Navigator is in a performance collapse with a 16.7% win rate and dangerous JPY short overconcentration, while Oracle's pivot to SGOV is the only effective risk-off move currently active.",
   "critique_flags": [
-    "Cross-bot stop-loss clustering on RENDER/ATOM",
-    "Navigator JPY short-side over-concentration",
-    "Regime mismatch between Oracle cash-hold and Kraken active-trading"
+    "High cross-bot correlation on RENDER, ATOM, and UNI",
+    "Navigator win rate collapse (16.7%)",
+    "JPY short overconcentration in Bot #6",
+    "Conviction inflation in historical Oracle crypto trades"
   ],
   "token_usage": {
-    "promptTokenCount": 16677,
-    "candidatesTokenCount": 611,
-    "totalTokenCount": 19917,
+    "promptTokenCount": 16674,
+    "candidatesTokenCount": 609,
+    "totalTokenCount": 20192,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16677
+        "tokenCount": 16674
       }
     ],
-    "thoughtsTokenCount": 2629
+    "thoughtsTokenCount": 2909
   },
-  "elapsed_seconds": 20.0
+  "elapsed_seconds": 28.8
 }

@@ -145,7 +145,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
   if (displayTrades.length === 0) {
     return (
       <div className="flex items-center justify-center py-5">
-        <span className="text-[13px] font-mono text-white/20">No open trades to analyze</span>
+        <span className="text-[13px] font-mono" style={{ color: "rgba(255,255,255,0.2)" }}>No open trades to analyze</span>
       </div>
     );
   }
@@ -160,7 +160,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
           <span className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(129,140,248,0.8)" }}>
             Trade Insight
           </span>
-          <span className="text-[11px] font-mono text-white/25">
+          <span className="text-[11px] font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>
             {currentIdx + 1}/{displayTrades.length}
           </span>
         </div>
@@ -189,7 +189,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
               <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: trade.color }}>
                 {trade.bot}
               </span>
-              <span className="text-[13px] font-mono text-white/80">
+              <span className="text-[13px] font-mono" style={{ color: "rgba(255,255,255,0.8)" }}>
                 {trade.side.toUpperCase()} {trade.symbol}
               </span>
             </div>
@@ -200,11 +200,11 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
               {isUp ? "+" : ""}${trade.pnlUsd.toFixed(2)}
             </span>
           </div>
-          <div className="text-[11px] leading-relaxed text-white/80 font-mono">
+          <div className="text-[11px] leading-relaxed font-mono" style={{ color: "rgba(255,255,255,0.8)" }}>
             {trade.reason}
           </div>
           {trade.entryTime && (
-            <div className="text-[10px] text-white/25 font-mono mt-2">
+            <div className="text-[10px] font-mono mt-2" style={{ color: "rgba(255,255,255,0.25)" }}>
               Opened: {new Date(trade.entryTime).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </div>
           )}
@@ -332,8 +332,8 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
             className="absolute pointer-events-none"
             style={{ left: `${popup.x}%`, top: `${popup.y}%`, zIndex: 9999 }}
           >
-            <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono text-cyan-300/90 whitespace-nowrap"
-              style={{ textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
+            <div className="px-3 py-1.5 rounded-md bg-black/70 border border-cyan-500/30 text-[15px] font-mono whitespace-nowrap"
+              style={{ color: "rgba(103,232,249,0.9)", textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
             >
               {popup.text}
             </div>
@@ -343,19 +343,19 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
       <div className="flex items-center justify-between pt-1 px-2 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-md border border-green-500/20 bg-green-500/5 px-1.5 py-0.5">
-            <span className="text-[9px] font-mono font-bold text-green-400">W</span>
-            <span className="text-[11px] font-mono font-black text-green-400">{wins24h}</span>
+            <span className="text-[9px] font-mono font-bold" style={{ color: "#4ade80" }}>W</span>
+            <span className="text-[11px] font-mono font-black" style={{ color: "#4ade80" }}>{wins24h}</span>
           </div>
           <div className="flex items-center gap-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-1.5 py-0.5">
-            <span className="text-[9px] font-mono font-bold text-orange-400">L</span>
-            <span className="text-[11px] font-mono font-black text-orange-400">{losses24h}</span>
+            <span className="text-[9px] font-mono font-bold" style={{ color: "#fb923c" }}>L</span>
+            <span className="text-[11px] font-mono font-black" style={{ color: "#fb923c" }}>{losses24h}</span>
           </div>
-          <span className="text-[8px] uppercase tracking-widest text-white/20 font-bold">24h</span>
+          <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(255,255,255,0.2)" }}>24h</span>
         </div>
-        <div className="text-[13px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
+        <div className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(129,140,248,0.5)" }}>Nerve Center</div>
         <div className="flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-[10px] font-mono font-bold text-green-400" style={{ textShadow: "0 0 8px rgba(34,197,94,0.5)" }}>
+          <span className="text-[10px] font-mono font-bold" style={{ color: "#4ade80", textShadow: "0 0 8px rgba(34,197,94,0.5)" }}>
             {activeCount}/6 Bots Live
           </span>
         </div>

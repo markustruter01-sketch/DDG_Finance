@@ -88,9 +88,9 @@ export function NewsIntelligence() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-[14px]">📡</span>
-          <span className="text-[13px] uppercase tracking-widest text-cyan-400/50 font-bold">News & Macro Intelligence</span>
+          <span className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(34,211,238,0.5)" }}>News & Macro Intelligence</span>
         </div>
-        <span className="text-[11px] font-mono text-cyan-400/30">
+        <span className="text-[11px] font-mono" style={{ color: "rgba(34,211,238,0.3)" }}>
           {isFallback ? "market briefing" : `${articles.length} feeds`}
         </span>
       </div>
@@ -106,7 +106,7 @@ export function NewsIntelligence() {
           >
             {visibleArticles.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 gap-2">
-                <div className="text-[14px] text-muted-foreground/40 font-mono text-center">
+                <div className="text-[14px] font-mono text-center" style={{ color: "rgba(148,163,184,0.4)" }}>
                   {isLoading ? "Fetching news feeds..." : isError ? "News API temporarily unavailable" : "Loading news feeds..."}
                 </div>
                 <motion.div
@@ -126,7 +126,7 @@ export function NewsIntelligence() {
                 >
                   <span className="text-[14px] mt-0.5 shrink-0">{meta.icon}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-mono text-white/85 leading-snug line-clamp-2">
+                    <div className="text-[13px] font-mono leading-snug line-clamp-2" style={{ color: "rgba(255,255,255,0.85)" }}>
                       {article.title}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
@@ -134,14 +134,14 @@ export function NewsIntelligence() {
                       <span className="text-[11px] font-mono truncate" style={{ color: meta.color + "99" }}>
                         {article.source}
                       </span>
-                      <span className="text-[10px] font-mono text-white/20">·</span>
-                      <span className="text-[10px] font-mono text-white/30 uppercase" style={{ color: meta.color + "60" }}>
+                      <span className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+                      <span className="text-[10px] font-mono uppercase" style={{ color: meta.color + "60" }}>
                         {article.category}
                       </span>
                       {article.published_at && (
                         <>
-                          <span className="text-[10px] font-mono text-white/20">·</span>
-                          <span className="text-[10px] font-mono text-white/30">{timeAgo(article.published_at)}</span>
+                          <span className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+                          <span className="text-[10px] font-mono" style={{ color: "rgba(255,255,255,0.3)" }}>{timeAgo(article.published_at)}</span>
                         </>
                       )}
                     </div>

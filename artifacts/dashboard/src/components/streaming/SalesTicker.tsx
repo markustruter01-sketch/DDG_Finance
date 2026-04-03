@@ -3,12 +3,12 @@ const TICKER_TEXT = "System Note: Our 6-bot fleet (Stocks, Crypto, Forex, Future
 function TickerBlock() {
   return (
     <>
-      <span className="text-cyan-400/80 px-8">{TICKER_TEXT}</span>
-      <span className="text-yellow-400/60 px-6">|</span>
-      <span className="text-orange-400/90 px-8 font-bold">
-        <span className="text-yellow-400">WARNING</span>: This is not financial advice, only a system demonstration. Past performance does not guarantee future results. Trade at your own risk.
+      <span className="px-8" style={{ color: "rgba(34,211,238,0.8)" }}>{TICKER_TEXT}</span>
+      <span className="px-6" style={{ color: "rgba(250,204,21,0.6)" }}>|</span>
+      <span className="px-8 font-bold" style={{ color: "rgba(251,146,60,0.9)" }}>
+        <span style={{ color: "#facc15" }}>WARNING</span>: This is not financial advice, only a system demonstration. Past performance does not guarantee future results. Trade at your own risk.
       </span>
-      <span className="text-cyan-400/40 px-6">|</span>
+      <span className="px-6" style={{ color: "rgba(34,211,238,0.4)" }}>|</span>
     </>
   );
 }

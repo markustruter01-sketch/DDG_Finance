@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import type { BotStats, RealTrade } from "./useRealFeed";
 
 interface SessionStatsProps {
@@ -32,22 +31,22 @@ export function SessionStats({ botStats, trades, wins, losses }: SessionStatsPro
   const avgPnl = totalTrades > 0 ? totalPnl / totalTrades : 0;
 
   const rows = [
-    { label: "Win Rate", value: `${winRate}%`, color: Number(winRate) >= 50 ? "text-green-400" : "text-orange-400" },
-    { label: "Total P&L", value: totalPnl !== 0 ? `${totalPnl >= 0 ? "+" : ""}$${Math.abs(totalPnl).toFixed(0)}` : "—", color: totalPnl >= 0 ? "text-green-400" : "text-orange-400" },
-    { label: "Avg Trade", value: avgPnl !== 0 ? `${avgPnl >= 0 ? "+" : ""}$${Math.abs(avgPnl).toFixed(2)}` : "—", color: avgPnl >= 0 ? "text-green-400" : "text-orange-400" },
-    { label: "Best Trade", value: bestTrade ? `+${bestTrade.pnlPct.toFixed(2)}% ${bestTrade.symbol}` : "—", color: "text-emerald-400" },
-    { label: "Worst Trade", value: worstTrade && worstTrade.pnlPct < 0 ? `${worstTrade.pnlPct.toFixed(2)}% ${worstTrade.symbol}` : "—", color: "text-orange-400" },
-    { label: "Top Bot", value: bestBot ? `${bestBot.icon} ${bestBot.name}` : "—", color: "text-amber-400" },
+    { label: "Win Rate", value: `${winRate}%`, color: Number(winRate) >= 50 ? "#4ade80" : "#fb923c" },
+    { label: "Total P&L", value: totalPnl !== 0 ? `${totalPnl >= 0 ? "+" : ""}$${Math.abs(totalPnl).toFixed(0)}` : "—", color: totalPnl >= 0 ? "#4ade80" : "#fb923c" },
+    { label: "Avg Trade", value: avgPnl !== 0 ? `${avgPnl >= 0 ? "+" : ""}$${Math.abs(avgPnl).toFixed(2)}` : "—", color: avgPnl >= 0 ? "#4ade80" : "#fb923c" },
+    { label: "Best Trade", value: bestTrade ? `+${bestTrade.pnlPct.toFixed(2)}% ${bestTrade.symbol}` : "—", color: "#34d399" },
+    { label: "Worst Trade", value: worstTrade && worstTrade.pnlPct < 0 ? `${worstTrade.pnlPct.toFixed(2)}% ${worstTrade.symbol}` : "—", color: "#fb923c" },
+    { label: "Top Bot", value: bestBot ? `${bestBot.icon} ${bestBot.name}` : "—", color: "#fbbf24" },
   ];
 
   return (
     <div className="flex flex-col gap-1.5 shrink-0">
-      <div className="text-[9px] uppercase tracking-widest text-violet-400/50 font-bold">Session Analytics</div>
+      <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(167,139,250,0.5)" }}>Session Analytics</div>
       <div className="flex-1 rounded-lg border border-white/5 bg-slate-900/60 overflow-hidden">
         {rows.map((row) => (
           <div key={row.label} className="flex items-center justify-between px-2.5 py-[5px] border-b border-white/[0.03] last:border-b-0">
-            <span className="text-[9px] text-muted-foreground/50 font-mono">{row.label}</span>
-            <span className={cn("text-[10px] font-mono font-bold", row.color)}>{row.value}</span>
+            <span className="text-[9px] font-mono" style={{ color: "rgba(148,163,184,0.5)" }}>{row.label}</span>
+            <span className="text-[10px] font-mono font-bold" style={{ color: row.color }}>{row.value}</span>
           </div>
         ))}
       </div>

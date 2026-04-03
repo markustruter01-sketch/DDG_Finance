@@ -71,7 +71,7 @@ export function GeminiThinking() {
           >
             Gemini Fleet Commander
           </span>
-          <span className="text-[8px] uppercase tracking-widest text-violet-400/50 font-bold -mt-0.5">AI Orchestrator · Quant Brain</span>
+          <span className="text-[8px] uppercase tracking-widest font-bold -mt-0.5" style={{ color: "rgba(167,139,250,0.5)" }}>AI Orchestrator · Quant Brain</span>
         </div>
         <motion.div
           className="ml-auto flex gap-0.5"
@@ -93,15 +93,15 @@ export function GeminiThinking() {
             transition={{ duration: 0.5 }}
             className="flex flex-col gap-2 h-full"
           >
-            <div className="text-[16px] font-mono font-bold text-violet-300/90">{thought.title}</div>
-            <div className="text-[15px] font-mono text-white/80 leading-[1.55] flex-1 overflow-hidden">
+            <div className="text-[16px] font-mono font-bold" style={{ color: "rgba(196,181,253,0.9)" }}>{thought.title}</div>
+            <div className="text-[15px] font-mono leading-[1.55] flex-1 overflow-hidden" style={{ color: "rgba(255,255,255,0.8)" }}>
               {thought.body}
             </div>
           </motion.div>
         </AnimatePresence>
       </div>
       {auditStatus?.generated_at && (
-        <div className="text-[9px] text-violet-400/30 mt-2 font-mono shrink-0">
+        <div className="text-[9px] mt-2 font-mono shrink-0" style={{ color: "rgba(167,139,250,0.3)" }}>
           Last audit: {new Date(auditStatus.generated_at).toLocaleTimeString()}
         </div>
       )}

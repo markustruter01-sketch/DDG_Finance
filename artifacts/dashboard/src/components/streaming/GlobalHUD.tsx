@@ -15,6 +15,26 @@ const cardVariants = {
   }),
 };
 
+const C = {
+  green: "#4ade80",
+  greenDim: "rgba(74,222,128,0.7)",
+  orange: "#fb923c",
+  orangeDim: "rgba(251,146,60,0.7)",
+  cyan: "#22d3ee",
+  violet: "#a78bfa",
+  violetLight: "#ddd6fe",
+  amber: "#fbbf24",
+  blue: "#60a5fa",
+  emerald: "#34d399",
+  yellow: "#facc15",
+  white: "#ffffff",
+  label: "rgba(148,163,184,0.6)",
+  labelDim: "rgba(148,163,184,0.4)",
+  labelDimmer: "rgba(148,163,184,0.5)",
+  sub: "rgba(148,163,184,0.5)",
+  slate300: "rgba(203,213,225,0.9)",
+};
+
 export function GlobalHUD() {
   const { data: summary } = useStatusSummary();
   const { data: fleet } = useKrakenFleetSummary();
@@ -51,6 +71,9 @@ export function GlobalHUD() {
   const totalTrades = alpacaTotal + krakenTotal + optTotal + fxTotal;
   const winRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0;
 
+  const pnlColor = grandPnlPct >= 0 ? C.green : C.orange;
+  const pnlColorDim = grandPnlPct >= 0 ? C.greenDim : C.orangeDim;
+
   const cards = [
     {
       label: "POWERED_BY_LOGO",
@@ -76,7 +99,6 @@ export function GlobalHUD() {
       sub: `${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}% daily P&L`,
       glow: "from-green-500/20 via-green-500/5 to-transparent",
       border: "border-green-500/30",
-      valueColor: "text-green-400",
       isPlatformBalance: true,
     },
     {
@@ -108,15 +130,15 @@ export function GlobalHUD() {
     ? `$${Math.round(grandTotal / Math.max(totalTrades, 1)).toLocaleString()}`
     : "—";
   const riskLevel = Math.abs(drawdownPct) < 1 ? "LOW" : Math.abs(drawdownPct) < 3 ? "MODERATE" : "HIGH";
-  const riskColor = riskLevel === "LOW" ? "text-green-400" : riskLevel === "MODERATE" ? "text-amber-400" : "text-orange-400";
+  const riskColorVal = riskLevel === "LOW" ? C.green : riskLevel === "MODERATE" ? C.amber : C.orange;
 
   const miniMetrics = [
-    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? "text-green-400" : "text-orange-400" },
-    { label: "PROFIT FACTOR", value: profitFactor, color: "text-cyan-400" },
-    { label: "RISK LEVEL", value: riskLevel, color: riskColor },
-    { label: "SHARPE (EST.)", value: totalTrades > 0 ? ((totalWins / totalTrades * 2 - 1) * 1.5).toFixed(2) : "—", color: "text-violet-400" },
-    { label: "EXPOSURE", value: `${activePools}/6 pools`, color: "text-blue-400" },
-    { label: "AVG POSITION", value: avgTradeSize, color: "text-amber-400" },
+    { label: "MAX DRAWDOWN", value: `${drawdownPct.toFixed(2)}%`, color: drawdownPct === 0 ? C.green : C.orange },
+    { label: "PROFIT FACTOR", value: profitFactor, color: C.cyan },
+    { label: "RISK LEVEL", value: riskLevel, color: riskColorVal },
+    { label: "SHARPE (EST.)", value: totalTrades > 0 ? ((totalWins / totalTrades * 2 - 1) * 1.5).toFixed(2) : "—", color: C.violet },
+    { label: "EXPOSURE", value: `${activePools}/6 pools`, color: C.blue },
+    { label: "AVG POSITION", value: avgTradeSize, color: C.amber },
   ];
 
   return (
@@ -130,18 +152,18 @@ export function GlobalHUD() {
             className="space-y-1.5"
           >
             <h2
-              className="text-[15px] font-black uppercase tracking-wide text-violet-200 leading-tight"
-              style={{ textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
+              className="text-[15px] font-black uppercase tracking-wide leading-tight"
+              style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
             >
               Welcome!
             </h2>
-            <p className="text-[12px] leading-[1.4] text-slate-300/90 font-medium">
+            <p className="text-[12px] leading-[1.4] font-medium" style={{ color: C.slate300 }}>
               Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in{" "}
-              <span className="text-yellow-400 font-bold">Stocks</span>,{" "}
-              <span className="text-cyan-400 font-bold">Crypto</span>,{" "}
-              <span className="text-violet-400 font-bold">FOREX</span> and{" "}
-              <span className="text-orange-400 font-bold">Futures</span>. Get in contact to see how you can build your own for only{" "}
-              <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
+              <span className="font-bold" style={{ color: C.yellow }}>Stocks</span>,{" "}
+              <span className="font-bold" style={{ color: C.cyan }}>Crypto</span>,{" "}
+              <span className="font-bold" style={{ color: C.violet }}>FOREX</span> and{" "}
+              <span className="font-bold" style={{ color: C.orange }}>Futures</span>. Get in contact to see how you can build your own for only{" "}
+              <span className="font-bold" style={{ color: C.emerald }}>$24.99</span>! No experience needed!
             </p>
           </motion.div>
         </div>
@@ -163,8 +185,8 @@ export function GlobalHUD() {
               {"isLogo" in card && card.isLogo ? (
                 <div className="flex items-center justify-between h-full w-full">
                   <motion.span
-                    className="text-[14px] font-black tracking-wider uppercase text-violet-200 shrink-0 leading-tight"
-                    style={{ textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
+                    className="text-[14px] font-black tracking-wider uppercase shrink-0 leading-tight"
+                    style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
                     animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
@@ -175,18 +197,18 @@ export function GlobalHUD() {
               ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
                 <>
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[8px] uppercase tracking-widest text-muted-foreground/60 font-bold">{card.label}</span>
-                    <span className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">Daily PnL</span>
+                    <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: C.label }}>{card.label}</span>
+                    <span className="text-[7px] uppercase tracking-widest font-bold" style={{ color: C.labelDim }}>Daily PnL</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className={cn("text-[16px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
+                    <div className="text-[16px] font-mono font-bold tracking-tight leading-none" style={{ color: pnlColor }}>
                       <AnimatedValue value={card.value} />
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className={cn("text-[10px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
+                      <span className="text-[10px] font-mono font-bold leading-tight" style={{ color: pnlColor }}>
                         {card.dailyPct}
                       </span>
-                      <span className={cn("text-[9px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-orange-400/70")}>
+                      <span className="text-[9px] font-mono font-semibold leading-tight" style={{ color: pnlColorDim }}>
                         {card.dailyUsd}
                       </span>
                     </div>
@@ -194,22 +216,23 @@ export function GlobalHUD() {
                 </>
               ) : (
                 <>
-                  <div className="text-[8px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-0.5">{card.label}</div>
+                  <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: C.label }}>{card.label}</div>
                   {"isPlatformBalance" in card && card.isPlatformBalance ? (
                     <motion.div
-                      className={cn("text-[16px] font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
+                      className="text-[16px] font-mono font-bold tracking-tight"
+                      style={{ color: C.green }}
                       animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"], scale: [1, 1.02, 1] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
                       <AnimatedValue value={card.value} />
                     </motion.div>
                   ) : (
-                    <div className={cn("text-[16px] font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
+                    <div className="text-[16px] font-mono font-bold tracking-tight" style={{ color: C.white }}>
                       <AnimatedValue value={card.value} />
                     </div>
                   )}
                   {card.sub && (
-                    <div className="text-[8px] text-muted-foreground/50 font-mono">
+                    <div className="text-[8px] font-mono" style={{ color: C.sub }}>
                       <AnimatedValue value={card.sub} />
                     </div>
                   )}
@@ -231,8 +254,8 @@ export function GlobalHUD() {
             animate="visible"
             className="rounded-lg border border-white/[0.06] bg-slate-900/60 px-2.5 py-1.5"
           >
-            <div className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-bold">{m.label}</div>
-            <div className={cn("text-sm font-mono font-bold mt-0.5", m.color)}>
+            <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: C.labelDim }}>{m.label}</div>
+            <div className="text-sm font-mono font-bold mt-0.5" style={{ color: m.color }}>
               <AnimatedValue value={m.value} />
             </div>
           </motion.div>

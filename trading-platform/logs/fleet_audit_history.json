@@ -1017,5 +1017,78 @@
       "thoughtsTokenCount": 2629
     },
     "elapsed_seconds": 20.0
+  },
+  {
+    "generated_at": "2026-04-03T07:29:49.206866+00:00",
+    "valid_until": "2026-04-03T13:29:49.206866+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CLEAN",
+      "calypso": "CLEAN",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "UNI",
+      "ATOM",
+      "GBPJPY"
+    ],
+    "conditions": [
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "vpin_threshold",
+        "value": 0.72
+      },
+      {
+        "type": "max_correlation_overlap",
+        "value": 2.0
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.25,
+        "STOP_LOSS_PCT": 0.018,
+        "reasoning": "Negative P&L with frequent stop-outs on RENDER and ATOM; tightening entry to filter noise in high-fear regime."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.15,
+        "TRAIL_PCT": 0.055,
+        "reasoning": "Win rate below 45%; increasing entry threshold and trailing stop distance to improve capture of aggressive swings."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.1,
+        "ZSCORE_EXIT": 0.26,
+        "reasoning": "Despite positive P&L, win rate is sub-50% with high correlation to Davy Jones' losing positions; tightening entry."
+      }
+    ],
+    "critique_summary": "The fleet is suffering from high cross-bot correlation in the Kraken segment, specifically on toxic assets RENDER and ATOM. Navigator is in a performance collapse with a 16.7% win rate and dangerous JPY short overconcentration, while Oracle's pivot to SGOV is the only effective risk-off move currently active.",
+    "critique_flags": [
+      "High cross-bot correlation on RENDER, ATOM, and UNI",
+      "Navigator win rate collapse (16.7%)",
+      "JPY short overconcentration in Bot #6",
+      "Conviction inflation in historical Oracle crypto trades"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16674,
+      "candidatesTokenCount": 609,
+      "totalTokenCount": 20192,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16674
+        }
+      ],
+      "thoughtsTokenCount": 2909
+    },
+    "elapsed_seconds": 28.8
   }
 ]

@@ -80,7 +80,7 @@ export function SignalRadar() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-[9px] uppercase tracking-widest text-cyan-400/50 font-bold">Signal Radar</div>
+      <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(34,211,238,0.5)" }}>Signal Radar</div>
       {slots.map((slot, i) => (
         <motion.div
           key={slot.name}
@@ -98,7 +98,7 @@ export function SignalRadar() {
           <div className="flex items-center gap-2">
             <span className="text-xs">{slot.icon}</span>
             <span className="text-[10px] font-bold text-white uppercase tracking-wide">{slot.name}</span>
-            <span className={cn("text-[9px] font-mono ml-auto truncate max-w-[55%] text-right", slot.active ? "text-muted-foreground/60" : "text-muted-foreground/30")}>
+            <span className="text-[9px] font-mono ml-auto truncate max-w-[55%] text-right" style={{ color: slot.active ? "rgba(148,163,184,0.6)" : "rgba(148,163,184,0.3)" }}>
               {slot.active ? slot.signal : `💤 Sleeping`}
             </span>
             {slot.active && (

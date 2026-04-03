@@ -1,31 +1,32 @@
 {
-  "generated_at": "2026-04-03T07:15:10.377905+00:00",
-  "valid_until": "2026-04-03T13:15:10.377905+00:00",
+  "generated_at": "2026-04-03T07:30:17.998899+00:00",
+  "valid_until": "2026-04-03T13:30:17.998899+00:00",
   "vetoed_tickers": [
     "RENDER",
-    "ATOM",
     "UNI",
-    "JPY"
+    "ATOM",
+    "GBPJPY"
   ],
   "conditions": [
-    {
-      "type": "vpin_threshold",
-      "value": 0.75
-    },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "news_blacklist",
-      "ticker": "JPY"
+      "type": "vpin_threshold",
+      "value": 0.72
+    },
+    {
+      "type": "max_correlation_overlap",
+      "value": 2.0
     }
   ],
-  "critique_summary": "The fleet is suffering from high cross-bot correlation in failing Altcoin shorts (RENDER, ATOM) and a disastrous JPY short bias in Navigator. Oracle's defensive pivot to SGOV is currently the only effective risk mitigation, as Kraken bots are over-trading in a high-volatility regime.",
+  "critique_summary": "The fleet is suffering from high cross-bot correlation in the Kraken segment, specifically on toxic assets RENDER and ATOM. Navigator is in a performance collapse with a 16.7% win rate and dangerous JPY short overconcentration, while Oracle's pivot to SGOV is the only effective risk-off move currently active.",
   "critique_flags": [
-    "Cross-bot stop-loss clustering on RENDER/ATOM",
-    "Navigator JPY short-side over-concentration",
-    "Regime mismatch between Oracle cash-hold and Kraken active-trading"
+    "High cross-bot correlation on RENDER, ATOM, and UNI",
+    "Navigator win rate collapse (16.7%)",
+    "JPY short overconcentration in Bot #6",
+    "Conviction inflation in historical Oracle crypto trades"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

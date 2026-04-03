@@ -21,7 +21,7 @@ export function TradeSpeedometer({ totalTrades, trades24h }: TradeSpeedometerPro
       <div className="flex gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[8px] uppercase tracking-widest text-blue-400/50 font-bold">Total Trades</span>
+            <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(96,165,250,0.5)" }}>Total Trades</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1">
@@ -50,7 +50,7 @@ export function TradeSpeedometer({ totalTrades, trades24h }: TradeSpeedometerPro
 
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[8px] uppercase tracking-widest text-cyan-400/50 font-bold">24h Trades</span>
+            <span className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(34,211,238,0.5)" }}>24h Trades</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1">

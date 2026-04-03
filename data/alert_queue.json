@@ -241,5 +241,14 @@
     "side": "SELL",
     "reason": "mean_reversion_complete",
     "timestamp": "2026-04-03T06:37:11.676137+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "IMX/USD",
+    "pnl_pct": 0.92,
+    "pnl_usd": 55.93,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T06:37:17.226767+00:00"
   }
 ]

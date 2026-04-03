@@ -147,19 +147,81 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
     return equity
 
 
+def compute_dynamic_slippage(
+    size_usd: float,
+    current_price: float,
+    atr: float = 0.0,
+) -> float:
+    """
+    Stage 4: Dynamic Slippage — penalizes paper fills based on trade size and ATR.
+
+    Real-world fills always suffer slippage.  Larger orders eat deeper into the
+    order book, and volatile markets have wider spreads.  This model approximates
+    the execution reality gap:
+
+      slippage_pct = base_slippage + size_impact + volatility_impact
+
+    Where:
+      base_slippage     = 0.01% (1 bps) — minimum market-maker spread
+      size_impact       = 0 to 0.05% based on notional vs. $50k reference
+      volatility_impact = 0 to 0.10% based on ATR% of price
+
+    Returns the slippage as a fraction of the fill price (e.g., 0.0003 = 3 bps).
+    The caller applies this to move the fill price adversely.
+    """
+    base_bps = 0.0001
+
+    size_ref = 50_000.0
+    size_factor = min(size_usd / size_ref, 1.0)
+    size_bps = size_factor * 0.0005
+
+    vol_bps = 0.0
+    if atr > 0 and current_price > 0:
+        atr_pct = atr / current_price
+        vol_bps = min(atr_pct * 0.025, 0.0010)
+
+    return base_bps + size_bps + vol_bps
+
+
+def _apply_slippage(
+    price: float,
+    side: str,
+    size_usd: float,
+    atr: float = 0.0,
+) -> tuple[float, float]:
+    """
+    Apply dynamic slippage to a fill price.
+
+    For LONG entries: fill price is HIGHER (worse)
+    For SHORT entries: fill price is LOWER (worse)
+    For closing: fill price is adverse to the position direction
+
+    Returns: (adjusted_price, slippage_pct)
+    """
+    slip_pct = compute_dynamic_slippage(size_usd, price, atr)
+    if side == "long":
+        adjusted = price * (1 + slip_pct)
+    else:
+        adjusted = price * (1 - slip_pct)
+    return (round(adjusted, 8), slip_pct)
+
+
 def paper_open_position(
     symbol: str,
     side: str,
     size_usd: float,
     current_price: float,
+    atr: float = 0.0,
 ) -> bool:
     """
-    Simulate opening a position at the current market price.
+    Simulate opening a position at the current market price with dynamic slippage.
 
     Deducts the position value plus the entry fee from cash.
     Returns True on success, False if there is not enough cash.
     """
     from config import PAPER_FEE_PCT
+
+    fill_price, slip_pct = _apply_slippage(current_price, side, size_usd, atr)
 
     p = _load_portfolio()
 
@@ -173,26 +235,29 @@ def paper_open_position(
         )
         return False
 
-    size_units = size_usd / current_price
+    size_units = size_usd / fill_price
 
     p["cash_usd"] -= total_cost
 
     p["positions"][symbol] = {
         "side":        side,
-        "entry_price": current_price,
+        "entry_price": fill_price,
         "size_usd":    size_usd,
         "size_units":  size_units,
         "entry_time":  datetime.now(tz=timezone.utc).isoformat(),
-        "best_price":  current_price,
+        "best_price":  fill_price,
         "entry_fee":   round(fee_usd, 4),
+        "slippage_pct": round(slip_pct * 100, 4),
         "order_id":    f"PAPER-{symbol.replace('/', '')}-{int(datetime.now().timestamp())}",
     }
 
     _save_portfolio()
 
+    _slip_note = f" | Slippage: {slip_pct*100:.2f}%" if slip_pct > 0.0001 else ""
     logger.success(
         f"Paper | Opened {side.upper()} {symbol} — "
-        f"Fill: ${current_price:,.2f} | Size: ${size_usd:,.2f} ({size_units:.6f} units) | "
+        f"Fill: ${fill_price:,.2f} (mkt ${current_price:,.2f}){_slip_note} | "
+        f"Size: ${size_usd:,.2f} ({size_units:.6f} units) | "
         f"Fee: ${fee_usd:.2f} | Cash remaining: ${p['cash_usd']:,.2f}"
     )
     return True
@@ -202,6 +267,7 @@ def paper_scale_in_position(
     symbol:        str,
     add_size_usd:  float,
     current_price: float,
+    atr:           float = 0.0,
 ) -> bool:
     """
     Simulate adding a second or third tranche to an existing open position.
@@ -251,46 +317,43 @@ def paper_scale_in_position(
 
     pos = p["positions"][symbol]
 
-    add_units = add_size_usd / current_price
+    fill_price, slip_pct = _apply_slippage(current_price, pos["side"], add_size_usd, atr)
+    add_units = add_size_usd / fill_price
 
-    # Weighted average entry price:
-    #   new_avg = (old_size_usd × old_entry + new_size_usd × new_price)
-    #             ─────────────────────────────────────────────────────
-    #                         total_size_usd_after
     old_size   = pos["size_usd"]
     old_entry  = pos["entry_price"]
     new_size   = old_size + add_size_usd
-    new_entry  = (old_size * old_entry + add_size_usd * current_price) / new_size
+    new_entry  = (old_size * old_entry + add_size_usd * fill_price) / new_size
 
-    # Update position record in-place
     pos["entry_price"] = round(new_entry, 8)
     pos["size_usd"]    = round(new_size, 2)
     pos["size_units"]  = round(pos["size_units"] + add_units, 8)
 
-    # Update best_price: for longs keep the max, for shorts keep the min
     if pos["side"] == "long":
-        pos["best_price"] = max(pos.get("best_price", current_price), current_price)
+        pos["best_price"] = max(pos.get("best_price", fill_price), fill_price)
     else:
-        pos["best_price"] = min(pos.get("best_price", current_price), current_price)
+        pos["best_price"] = min(pos.get("best_price", fill_price), fill_price)
 
     p["cash_usd"] -= total_cost
 
     _save_portfolio()
 
+    _slip_note = f" | Slippage: {slip_pct*100:.2f}%" if slip_pct > 0.0001 else ""
     logger.success(
         f"Paper | Scale-in {symbol} (T{pos.get('tranches_filled', '?')}) — "
-        f"Fill: ${current_price:,.2f} | Added: ${add_size_usd:,.2f} ({add_units:.6f} units) | "
+        f"Fill: ${fill_price:,.2f} (mkt ${current_price:,.2f}){_slip_note} | "
+        f"Added: ${add_size_usd:,.2f} ({add_units:.6f} units) | "
         f"New avg entry: ${new_entry:,.4f} | Total size: ${new_size:,.2f} | "
         f"Fee: ${fee_usd:.2f} | Cash: ${p['cash_usd']:,.2f}"
     )
     return True
 
 
-def paper_close_position(symbol: str, current_price: float, reason: str) -> dict | None:
+def paper_close_position(symbol: str, current_price: float, reason: str, atr: float = 0.0) -> dict | None:
     """
-    Simulate closing an open position at the current market price.
+    Simulate closing an open position at the current market price with dynamic slippage.
 
-    Adds the proceeds (minus exit fee) back to cash.
+    Adds the proceeds (minus exit fee and slippage) back to cash.
     Returns a trade result dict, or None if there is no open position.
 
     The trade is written to DB (kraken_trades) immediately.
@@ -306,14 +369,18 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
 
     pos = p["positions"][symbol]
 
-    exit_value = pos["size_units"] * current_price
+    exit_side = "short" if pos["side"] == "long" else "long"
+    exit_value_notional = pos["size_units"] * current_price
+    fill_price, slip_pct = _apply_slippage(current_price, exit_side, exit_value_notional, atr)
+
+    exit_value = pos["size_units"] * fill_price
     exit_fee   = exit_value * PAPER_FEE_PCT
     net_value  = exit_value - exit_fee
 
     if pos["side"] == "long":
-        pnl_pct = ((current_price - pos["entry_price"]) / pos["entry_price"]) * 100
+        pnl_pct = ((fill_price - pos["entry_price"]) / pos["entry_price"]) * 100
     else:
-        pnl_pct = ((pos["entry_price"] - current_price) / pos["entry_price"]) * 100
+        pnl_pct = ((pos["entry_price"] - fill_price) / pos["entry_price"]) * 100
 
     gross_pnl_usd = pos["size_usd"] * (pnl_pct / 100)
     total_fees    = pos.get("entry_fee", 0) + exit_fee
@@ -325,10 +392,11 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
         "symbol":      symbol,
         "side":        pos["side"],
         "entry_price": pos["entry_price"],
-        "exit_price":  current_price,
+        "exit_price":  fill_price,
         "pnl_pct":     round(pnl_pct, 2),
         "pnl_usd":     round(net_pnl_usd, 2),
         "fees_usd":    round(total_fees, 4),
+        "slippage_pct": round(slip_pct * 100, 4),
         "reason":      reason,
         "closed_at":   datetime.now(tz=timezone.utc).isoformat(),
         "paper":       True,
@@ -347,8 +415,9 @@ def paper_close_position(symbol: str, current_price: float, reason: str) -> dict
 
     _save_portfolio()
 
+    _slip_note = f" (mkt ${current_price:,.2f}, slip {slip_pct*100:.2f}%)" if slip_pct > 0.0001 else ""
     logger.info(
-        f"Paper | Closed {pos['side'].upper()} {symbol} @ ${current_price:,.2f} | "
+        f"Paper | Closed {pos['side'].upper()} {symbol} @ ${fill_price:,.2f}{_slip_note} | "
         f"Reason: {reason} | P&L: {pnl_pct:+.2f}% (${net_pnl_usd:+,.2f} after fees) | "
         f"Cash: ${p['cash_usd']:,.2f}"
     )

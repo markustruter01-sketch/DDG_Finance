@@ -93,6 +93,15 @@ from shared.circuit_breaker import check_circuit_breaker as _shared_check_circui
 ATR_PERIOD:          int   = 14     # Standard Wilder ATR look-back
 ATR_MULTIPLIER:      float = 2.5    # Stop = entry ± (ATR_MULTIPLIER × ATR)  [STORM MODE: 1.5→2.5 Wide-Lung ATR]
 
+ATR_SHORT_PERIOD:    int   = 10     # Fast ATR for Volatility State Indicator (Stage 4)
+ATR_LONG_PERIOD:     int   = 50     # Slow ATR for Volatility State Indicator (Stage 4)
+
+VOL_STATE_HIGH_RATIO:    float = 1.3   # ATR(10)/ATR(50) > 1.3 → High Volatility
+VOL_STATE_EXTREME_RATIO: float = 1.8   # ATR(10)/ATR(50) > 1.8 → Extreme Volatility
+
+VOL_STATE_HIGH_ATR_MULT:    float = 2.5   # ATR stop multiplier in High Volatility
+VOL_STATE_EXTREME_ATR_MULT: float = 3.0   # ATR stop multiplier in Extreme Volatility
+
 # Volatility tier thresholds (ATR as % of price)
 VOL_TIER_HIGH_PCT:    float = 0.02  # 2%  → transition NORMAL → HIGH
 VOL_TIER_EXTREME_PCT: float = 0.04  # 4%  → transition HIGH   → EXTREME
@@ -329,6 +338,81 @@ def get_volatility_tier(
     else:
         # EXTREME: panic / mania — reduce position to one-third of normal
         return ("extreme", VOL_TIER_EXTREME_MAX_FRAC, atr_pct)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 4B. Volatility State Indicator — ATR(10)/ATR(50) Ratio  (Stage 4)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def compute_volatility_state(
+    highs:  list[float],
+    lows:   list[float],
+    closes: list[float],
+) -> tuple[str, float, float, float]:
+    """
+    Compute the Volatility State Indicator: ratio of fast ATR(10) to slow ATR(50).
+
+    When short-term volatility is expanding relative to the long-term baseline,
+    it signals a regime change — the market is moving faster than its own norm.
+
+    Returns:
+        (state, ratio, atr_short, atr_long) where:
+          state     → "normal", "high", or "extreme"
+          ratio     → ATR(10) / ATR(50)
+          atr_short → ATR(10) value
+          atr_long  → ATR(50) value
+
+    The state drives adaptive stop-loss multipliers:
+      normal  → use default ATR_MULTIPLIER (2.5×)
+      high    → expand to VOL_STATE_HIGH_ATR_MULT (2.5×)
+      extreme → expand to VOL_STATE_EXTREME_ATR_MULT (3.0×)
+    """
+    atr_short = calculate_atr(highs, lows, closes, period=ATR_SHORT_PERIOD)
+    atr_long  = calculate_atr(highs, lows, closes, period=ATR_LONG_PERIOD)
+
+    if atr_long <= 0 or atr_short <= 0:
+        return ("normal", 1.0, atr_short, atr_long)
+
+    ratio = atr_short / atr_long
+
+    if ratio >= VOL_STATE_EXTREME_RATIO:
+        return ("extreme", round(ratio, 3), atr_short, atr_long)
+    elif ratio >= VOL_STATE_HIGH_RATIO:
+        return ("high", round(ratio, 3), atr_short, atr_long)
+    else:
+        return ("normal", round(ratio, 3), atr_short, atr_long)
+
+
+def get_adaptive_atr_multiplier(vol_state: str, base_multiplier: float = ATR_MULTIPLIER) -> float:
+    """
+    Return the ATR stop multiplier adjusted for the current volatility state.
+
+    In high/extreme volatility, stops are widened to avoid whipsaw exits.
+    Position sizes are proportionally reduced by the caller to keep dollar-risk constant.
+    """
+    if vol_state == "extreme":
+        return VOL_STATE_EXTREME_ATR_MULT
+    elif vol_state == "high":
+        return max(base_multiplier, VOL_STATE_HIGH_ATR_MULT)
+    return base_multiplier
+
+
+def get_vol_state_size_scale(vol_state: str, base_multiplier: float, adaptive_multiplier: float) -> float:
+    """
+    Compute the position-size scale factor to keep dollar-risk constant
+    when the ATR stop multiplier is widened.
+
+    If we widen the stop from 2.5× to 3.0× ATR, dollar-risk per unit increases
+    by 3.0/2.5 = 1.2×. To compensate, we scale position size by 2.5/3.0 = 0.833.
+
+    Returns:
+        Scale factor in (0, 1]. 1.0 means no adjustment.
+    """
+    if adaptive_multiplier <= 0 or base_multiplier <= 0:
+        return 1.0
+    if adaptive_multiplier <= base_multiplier:
+        return 1.0
+    return round(base_multiplier / adaptive_multiplier, 4)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

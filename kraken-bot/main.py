@@ -120,6 +120,9 @@ from logic import (
     check_circuit_breaker,
     check_stops,
     VPINDecayTracker,
+    compute_volatility_state,
+    get_adaptive_atr_multiplier,
+    get_vol_state_size_scale,
 )
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
@@ -629,7 +632,7 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
             return False
 
 
-def close_position(symbol: str, reason: str) -> None:
+def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
     """
     Close an open position — simulated (paper mode) or real (live mode).
 
@@ -644,9 +647,8 @@ def close_position(symbol: str, reason: str) -> None:
     pos = open_positions[symbol]
 
     if PAPER_TRADING:
-        # ── Paper: simulate the fill at the last seen price ───────────────────
         current_price = latest_prices.get(symbol, pos["entry_price"])
-        trade_record  = paper_close_position(symbol, current_price, reason)
+        trade_record  = paper_close_position(symbol, current_price, reason, atr=atr)
         if trade_record:
             recent_trades.append(trade_record)
             _pnl = trade_record.get("pnl_usd", 0)
@@ -1062,6 +1064,23 @@ def run_cycle() -> None:
             # ATR — volatility-adjusted risk management
             sym_atr = calculate_atr(highs, lows, closes)
 
+            # ── Stage 4: Volatility State Indicator — ATR(10)/ATR(50) ratio ────
+            _vol_state, _vol_ratio, _atr_short, _atr_long = compute_volatility_state(
+                highs, lows, closes
+            )
+            _sym_atr_mult = get_adaptive_atr_multiplier(_vol_state, _effective_atr_stop_mult)
+            _vol_size_scale = get_vol_state_size_scale(
+                _vol_state, _effective_atr_stop_mult, _sym_atr_mult
+            )
+
+            if _vol_state != "normal":
+                logger.info(
+                    f"VolState | {symbol}: {_vol_state.upper()} — "
+                    f"ATR(10)/ATR(50)={_vol_ratio:.2f} | "
+                    f"stop mult {_effective_atr_stop_mult:.1f}×→{_sym_atr_mult:.1f}× | "
+                    f"size scale {_vol_size_scale:.2%}"
+                )
+
             # Pre-compute indicators once — used in both position mgmt and entry signals
             sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
             sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
@@ -1168,7 +1187,7 @@ def run_cycle() -> None:
                 )
 
                 if exit_reason:
-                    close_position(symbol, reason=exit_reason)
+                    close_position(symbol, reason=exit_reason, atr=sym_atr)
                     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
                     cycle_signals.append({
                         "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1210,7 +1229,7 @@ def run_cycle() -> None:
                             f"P&L {unrealised_pnl_pct*100:+.2f}% in dead zone "
                             f"(±{STALE_DEAD_ZONE_PCT*100:.1f}%) — closing to free capital"
                         )
-                        close_position(symbol, reason="stale_exit")
+                        close_position(symbol, reason="stale_exit", atr=sym_atr)
                         deployed_usd = sum(p["size_usd"] for p in open_positions.values())
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1222,7 +1241,7 @@ def run_cycle() -> None:
                     if abs(sym_z_score) < _zscore_exit:
                         if unrealised_pnl_pct >= _min_net_profit_pct:
                             # Both conditions met — take the mean-reversion exit
-                            close_position(symbol, reason="mean_reversion_complete")
+                            close_position(symbol, reason="mean_reversion_complete", atr=sym_atr)
                             deployed_usd = sum(p["size_usd"] for p in open_positions.values())
                             cycle_signals.append({
                                 "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1400,7 +1419,7 @@ def run_cycle() -> None:
                             f"RSI={sym_rsi:.1f} < {CONTRARIAN_RSI_THRESH} | Bear regime "
                             f"'{_regime_label}' | scout ${_scout_size:,.2f} (3% equity)"
                         )
-                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
+                    _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
                     if open_position(symbol, "long", _scout_size, current_price):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
@@ -1450,8 +1469,9 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=_effective_atr_stop_mult,
+                    atr_multiplier=_sym_atr_mult,
                 )
+                size_usd *= _vol_size_scale
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
@@ -1471,8 +1491,7 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
-                    # ATR-derived stop price and T1 tranche size (= size_usd)
-                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
+                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
                     _tranches  = build_tranche_orders("long", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
@@ -1539,10 +1558,10 @@ def run_cycle() -> None:
                     max_position_fraction=_effective_max_position_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=_effective_atr_stop_mult,
+                    atr_multiplier=_sym_atr_mult,
                 )
+                size_usd *= _vol_size_scale
                 if size_usd >= MIN_POSITION_USD:
-                    # ── Microstructure entry filter (short) ───────────────────
                     _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
                     if not _ms_allowed:
                         logger.info(
@@ -1555,8 +1574,7 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
-                    # ATR-derived stop price and T1 tranche size
-                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=_effective_atr_stop_mult)
+                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=_sym_atr_mult)
                     _tranches  = build_tranche_orders("short", size_usd, current_price)
                     _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).

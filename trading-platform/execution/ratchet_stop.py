@@ -46,8 +46,8 @@ from typing import Optional
 import numpy as np
 from loguru import logger
 
-ATR_MULTIPLIER:           float = 2.0   # Standard multiplier for all tickers
-LEVERAGED_ATR_MULTIPLIER: float = 1.5   # Tighter multiplier for leveraged ETFs
+ATR_MULTIPLIER:           float = 2.5   # Standard multiplier for all tickers  [STORM MODE: 2.0→2.5 Wide-Lung ATR]
+LEVERAGED_ATR_MULTIPLIER: float = 2.0   # Tighter multiplier for leveraged ETFs  [STORM MODE: 1.5→2.0]
 ATR_PERIOD:               int   = 14
 ATR_LOOKBACK_DAYS:        int   = 30     # yfinance fetch window (extra buffer)
 FALLBACK_STOP_PCT:        float = 0.02   # 2% static fallback if ATR unavailable

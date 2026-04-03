@@ -1227,6 +1227,7 @@ def run_cycle() -> None:
                 vpin=_ms.vpin,
                 threshold=_effective_vpin_cap,
                 atr=sym_atr,
+                rsi=sym_rsi,
             )
             _decay_count = _vpin_decay.get_count(symbol)
 

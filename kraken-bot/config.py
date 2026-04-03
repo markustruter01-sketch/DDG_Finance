@@ -29,8 +29,8 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.20,
         "MAX_POSITION_FRACTION": 0.10,
         "STOP_LOSS_PCT": 0.015,
-        "ATR_STOP_MULTIPLIER": 1.5,
-        "VPIN_ENTRY_BLOCK": 0.65,
+        "ATR_STOP_MULTIPLIER": 2.5,
+        "VPIN_ENTRY_BLOCK": 0.82,
     },
     "blackbeard": {
         "display_name": "Blackbeard's Fleet",
@@ -42,8 +42,8 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.12,
         "STOP_LOSS_PCT": 0.020,
-        "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.70,
+        "ATR_STOP_MULTIPLIER": 2.5,
+        "VPIN_ENTRY_BLOCK": 0.82,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
@@ -55,8 +55,8 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.10,
         "MAX_POSITION_FRACTION": 0.15,
         "STOP_LOSS_PCT": 0.025,
-        "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.75,
+        "ATR_STOP_MULTIPLIER": 2.5,
+        "VPIN_ENTRY_BLOCK": 0.82,
     },
 }
 
@@ -181,7 +181,7 @@ TRAIL_PCT             = 0.05
 
 VPIN_ENTRY_BLOCK      = _profile.get("VPIN_ENTRY_BLOCK", 0.65)
 
-VPIN_ELEVATED_CAP     = 0.82
+VPIN_ELEVATED_CAP     = 0.90
 VOLUME_SURGE_RATIO    = 1.50
 
 CONTRARIAN_RSI_THRESH = 25

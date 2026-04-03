@@ -44,8 +44,8 @@ OFI_SHORT_MAX  = -0.02
 VAMP_LONG_MIN  = -0.005
 VAMP_SHORT_MAX =  0.005
 
-VPIN_HIGH_THRESH  = 0.65
-VPIN_BLOCK_THRESH = 0.80
+VPIN_HIGH_THRESH  = 0.72
+VPIN_BLOCK_THRESH = 0.82
 
 # ── Order-book / trade-bucket defaults ───────────────────────────────────────
 _DEFAULT_OB_LEVELS    = 5

@@ -324,14 +324,15 @@ def _check_open_positions():
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
-                    if pair == "ZAR=X":
+                    _GAIN_LOCK_PAIRS = {"ZAR=X", "EURUSD=X"}
+                    if pair in _GAIN_LOCK_PAIRS:
                         unrealized_gain = current_price - entry
                         if unrealized_gain > 0:
                             gain_lock_sl = round(entry + (unrealized_gain * 0.50), 5)
                             if gain_lock_sl > pos["trailing_sl"]:
                                 pos["trailing_sl"] = gain_lock_sl
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
-                                logger.info(f"Forex | USD/ZAR 50% gain-lock ratchet on LONG — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
+                                logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on LONG — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
                 else:
                     if candle_low < pos.get("lowest_price", entry):
@@ -353,14 +354,15 @@ def _check_open_positions():
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
-                    if pair == "ZAR=X":
+                    _GAIN_LOCK_PAIRS_SHORT = {"ZAR=X", "EURUSD=X"}
+                    if pair in _GAIN_LOCK_PAIRS_SHORT:
                         unrealized_gain = entry - current_price
                         if unrealized_gain > 0:
                             gain_lock_sl = round(entry - (unrealized_gain * 0.50), 5)
                             if gain_lock_sl < pos["trailing_sl"]:
                                 pos["trailing_sl"] = gain_lock_sl
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
-                                logger.info(f"Forex | USD/ZAR 50% gain-lock ratchet on SHORT — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
+                                logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on SHORT — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
                 field_updates["sl_price"] = pos["trailing_sl"]
                 pos["sl_price"] = pos["trailing_sl"]

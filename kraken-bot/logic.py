@@ -91,7 +91,7 @@ from shared.circuit_breaker import check_circuit_breaker as _shared_check_circui
 # meaningful distinctions between calm, elevated, and panic regimes.
 
 ATR_PERIOD:          int   = 14     # Standard Wilder ATR look-back
-ATR_MULTIPLIER:      float = 1.5    # Stop = entry ± (ATR_MULTIPLIER × ATR)
+ATR_MULTIPLIER:      float = 2.5    # Stop = entry ± (ATR_MULTIPLIER × ATR)  [STORM MODE: 1.5→2.5 Wide-Lung ATR]
 
 # Volatility tier thresholds (ATR as % of price)
 VOL_TIER_HIGH_PCT:    float = 0.02  # 2%  → transition NORMAL → HIGH
@@ -749,7 +749,7 @@ class VPINDecayTracker:
         self._decay_after = decay_after
         self._decay_rate = decay_rate
 
-    def update(self, symbol: str, vpin: float, threshold: float, atr: float) -> float:
+    def update(self, symbol: str, vpin: float, threshold: float, atr: float, rsi: float = 50.0) -> float:
         """
         Call once per cycle per symbol.  Returns the effective (possibly
         decayed) VPIN value that should be compared against the threshold.
@@ -758,6 +758,11 @@ class VPINDecayTracker:
         Only counts consecutive high-VPIN cycles where volatility is
         stabilizing (ATR <= previous ATR).  If ATR rises, the streak
         resets to 1 (current cycle only).
+
+        STORM MODE enhancement: When RSI < 30 (oversold), decay starts
+        immediately at cycle 1 (bypasses decay_after wait) at an
+        accelerated 10% per cycle. This prevents VPIN from locking
+        out entries during major rebound opportunities.
         """
         if vpin <= threshold:
             self._counts[symbol] = 0
@@ -775,8 +780,11 @@ class VPINDecayTracker:
 
         count = self._counts[symbol]
 
-        if count > self._decay_after:
-            extra_cycles = count - self._decay_after
+        rsi_oversold = rsi < 30.0
+        effective_decay_after = 0 if rsi_oversold else self._decay_after
+
+        if count > effective_decay_after:
+            extra_cycles = count - effective_decay_after
             decay_factor = 1.0 - (self._decay_rate * extra_cycles)
             decay_factor = max(decay_factor, 0.30)
             effective_vpin = vpin * decay_factor

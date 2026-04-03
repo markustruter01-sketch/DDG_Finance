@@ -219,5 +219,77 @@
       "thoughtsTokenCount": 1794
     },
     "elapsed_seconds": 15.9
+  },
+  {
+    "generated_at": "2026-04-03T01:27:39.685373+00:00",
+    "valid_until": "2026-04-03T07:27:39.685373+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CAUTION",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CLEAN",
+      "apex_predator": "CLEAN",
+      "navigator": "CAUTION"
+    },
+    "vetoed_tickers": [
+      "UNI",
+      "RENDER",
+      "ENA"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "correlation_limit",
+        "value": 0.5
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.25,
+        "STOP_LOSS_PCT": 0.018,
+        "reasoning": "Win rate of 52% is offset by outsized losses in UNI and slippage; tightening entry to filter for higher probability mean-reversion setups."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.35,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Win rate of 40% indicates aggressive entry is catching falling knives in the current Bear regime; tightening entry and stops to preserve capital."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_EXIT": 0.24,
+        "TRAIL_PCT": 0.045,
+        "reasoning": "Highest exposure bot (64.5% deployed) needs more aggressive trailing stops to lock in gains and mitigate correlation risk across shared holdings."
+      }
+    ],
+    "critique_summary": "The fleet exhibits dangerous cross-bot correlation with identical LONG positions in W, DYM, and IMX across all Kraken bots, directly contradicting the identified BEAR regime and 24.54 VIX. UNI/USD and RENDER/USD are toxic assets with 0% win rates that have significantly eroded capital and must be purged.",
+    "critique_flags": [
+      "High cross-bot correlation in Kraken crypto longs",
+      "Regime-allocation mismatch in Kraken fleet",
+      "Toxic asset performance (UNI/USD, RENDER/USD)",
+      "Oracle bot analysis cycle failure"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16688,
+      "candidatesTokenCount": 581,
+      "totalTokenCount": 21304,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16688
+        }
+      ],
+      "thoughtsTokenCount": 4035
+    },
+    "elapsed_seconds": 28.1
   }
 ]

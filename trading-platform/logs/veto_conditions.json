@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-04-03T01:13:03.049488+00:00",
-  "valid_until": "2026-04-03T07:13:03.049488+00:00",
+  "generated_at": "2026-04-03T01:28:07.765836+00:00",
+  "valid_until": "2026-04-03T07:28:07.765836+00:00",
   "vetoed_tickers": [
     "UNI",
     "RENDER",
-    "BITO"
+    "ENA"
   ],
   "conditions": [
     {
@@ -16,16 +16,16 @@
       "value": 0.85
     },
     {
-      "type": "bear_regime_deployment_cap",
-      "value": 0.4
+      "type": "correlation_limit",
+      "value": 0.5
     }
   ],
-  "critique_summary": "The fleet is suffering from severe cross-bot correlation, specifically in UNI and RENDER, leading to clustered losses. While the Oracle bot correctly pivoted to SGOV for the BEAR regime, the Kraken fleet remains over-exposed (50-60% deployment) despite a VIX above 24. AI conviction scores are inflated relative to historical PnL, necessitating a cap on conviction-based sizing.",
+  "critique_summary": "The fleet exhibits dangerous cross-bot correlation with identical LONG positions in W, DYM, and IMX across all Kraken bots, directly contradicting the identified BEAR regime and 24.54 VIX. UNI/USD and RENDER/USD are toxic assets with 0% win rates that have significantly eroded capital and must be purged.",
   "critique_flags": [
-    "Cross-bot correlation risk: UNI/USD stop-outs across all Kraken bots",
-    "Conviction inflation: Oracle high-conviction trades (0.8+) showing significant historical losses",
-    "Regime contradiction: Kraken bots maintaining high deployment in a confirmed BEAR regime",
-    "Stop-loss clustering: Simultaneous exits on UNI/USD and ENA/USD"
+    "High cross-bot correlation in Kraken crypto longs",
+    "Regime-allocation mismatch in Kraken fleet",
+    "Toxic asset performance (UNI/USD, RENDER/USD)",
+    "Oracle bot analysis cycle failure"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

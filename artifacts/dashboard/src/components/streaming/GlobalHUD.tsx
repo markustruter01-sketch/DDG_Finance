@@ -5,7 +5,7 @@ import {
   useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
 import { AnimatedValue } from "./AnimatedValue";
-import ddgLogo from "@assets/DDG_Logo_1775195516809.png";
+
 
 const cardVariants = {
   hidden: { opacity: 0, y: -20, scale: 0.95 },
@@ -183,16 +183,15 @@ export function GlobalHUD() {
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
               {"isLogo" in card && card.isLogo ? (
-                <div className="flex items-center justify-between h-full w-full">
+                <div className="flex items-center h-full w-full">
                   <motion.span
-                    className="text-[14px] font-black tracking-wider uppercase shrink-0 leading-tight"
+                    className="text-[11px] font-black tracking-wider uppercase leading-tight whitespace-nowrap"
                     style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
                     animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
-                    Powered<br/>by
+                    Powered by: <span style={{ color: "#ffffff", textShadow: "0 0 10px rgba(255,255,255,0.4)" }}>DIGITAL DYNAMICS</span> <span style={{ color: C.cyan, textShadow: "0 0 10px rgba(34,211,238,0.5)" }}>Group</span>
                   </motion.span>
-                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[42px] w-auto object-contain" />
                 </div>
               ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
                 <>

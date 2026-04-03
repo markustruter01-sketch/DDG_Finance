@@ -56,8 +56,8 @@ export function VaultDisplay() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-2.5 py-2 flex-1">
-        <div className="text-[10px] font-mono leading-relaxed" style={{ color: "rgba(52,211,153,0.5)" }}>
+      <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-3 py-2.5 flex-1 flex items-center">
+        <div className="text-[13px] font-mono leading-[1.6]" style={{ color: "rgba(52,211,153,0.5)" }}>
           20% of realized profits are automatically swept into the <span className="font-bold" style={{ color: "rgba(52,211,153,0.8)" }}>Growth Vault (JEPQ)</span> for compounding high-yield dividend income. This passive dividend income is then re-invested into the platform in order to accelerate exponential growth.
         </div>
       </div>

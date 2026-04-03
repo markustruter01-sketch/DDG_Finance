@@ -355,7 +355,7 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "10px" }}>
             <svg viewBox="0 0 200 200" className="w-[600px] h-[420px]" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <radialGradient id="brainGlow" cx="50%" cy="50%" r="50%">

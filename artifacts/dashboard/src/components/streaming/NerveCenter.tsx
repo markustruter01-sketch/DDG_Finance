@@ -356,7 +356,7 @@ export function NerveCenter() {
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "90px" }}>
-            <svg viewBox="0 0 200 200" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
+            <svg viewBox="-30 -10 260 240" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <filter id="neonYellow">
                   <feGaussianBlur stdDeviation="3" result="blur1" />

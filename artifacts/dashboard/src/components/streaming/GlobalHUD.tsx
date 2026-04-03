@@ -122,20 +122,20 @@ export function GlobalHUD() {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex gap-2">
-        <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 p-4 flex flex-col justify-center overflow-hidden">
+        <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 px-3 py-2 flex flex-col justify-center overflow-hidden">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="space-y-2"
+            className="space-y-1"
           >
             <h2
-              className="text-[18px] font-black uppercase tracking-wide text-violet-200 leading-tight"
+              className="text-[13px] font-black uppercase tracking-wide text-violet-200 leading-tight"
               style={{ textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
             >
               Welcome!
             </h2>
-            <p className="text-[11px] leading-[1.5] text-slate-300/80 font-medium">
+            <p className="text-[9px] leading-[1.45] text-slate-300/80 font-medium">
               We created 6 AI powered automated trading bots that function off institutional grade algorithms and maths, with advanced risk metrics and market measuring conditions. Follow along to see how they perform, or get in contact with us to see how you can build your own for only{" "}
               <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
             </p>
@@ -150,39 +150,39 @@ export function GlobalHUD() {
             initial="hidden"
             animate="visible"
             className={cn(
-              "relative rounded-xl border p-2.5 bg-slate-900/80 overflow-hidden",
+              "relative rounded-xl border px-2 py-1.5 bg-slate-900/80 overflow-hidden",
               card.border
             )}
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", card.glow)} />
             <div className="relative z-10">
               {"isLogo" in card && card.isLogo ? (
-                <div className="flex items-center justify-between h-full min-h-[48px] w-full py-1 pl-1 pr-1">
+                <div className="flex items-center justify-between h-full w-full">
                   <motion.span
-                    className="text-[22px] font-black tracking-wider uppercase text-violet-200 shrink-0 leading-tight"
+                    className="text-[14px] font-black tracking-wider uppercase text-violet-200 shrink-0 leading-tight"
                     style={{ textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
                     animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
                     Powered<br/>by
                   </motion.span>
-                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[74px] w-auto object-contain" />
+                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[42px] w-auto object-contain" />
                 </div>
               ) : "isCombinedPnl" in card && card.isCombinedPnl ? (
                 <>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold">{card.label}</span>
-                    <span className="text-[9px] uppercase tracking-widest text-muted-foreground/40 font-bold">Daily PnL</span>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-[8px] uppercase tracking-widest text-muted-foreground/60 font-bold">{card.label}</span>
+                    <span className="text-[7px] uppercase tracking-widest text-muted-foreground/40 font-bold">Daily PnL</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className={cn("text-[22px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
+                    <div className={cn("text-[16px] font-mono font-bold tracking-tight leading-none", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
                       <AnimatedValue value={card.value} />
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className={cn("text-[13px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
+                      <span className={cn("text-[10px] font-mono font-bold leading-tight", grandPnlPct >= 0 ? "text-green-400" : "text-orange-400")}>
                         {card.dailyPct}
                       </span>
-                      <span className={cn("text-[11px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-orange-400/70")}>
+                      <span className={cn("text-[9px] font-mono font-semibold leading-tight", grandPnlPct >= 0 ? "text-green-400/70" : "text-orange-400/70")}>
                         {card.dailyUsd}
                       </span>
                     </div>
@@ -190,22 +190,22 @@ export function GlobalHUD() {
                 </>
               ) : (
                 <>
-                  <div className="text-[11px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-1">{card.label}</div>
+                  <div className="text-[8px] uppercase tracking-widest text-muted-foreground/60 font-bold mb-0.5">{card.label}</div>
                   {"isPlatformBalance" in card && card.isPlatformBalance ? (
                     <motion.div
-                      className={cn("text-2xl font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
+                      className={cn("text-[16px] font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}
                       animate={{ textShadow: ["0 0 8px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.6)", "0 0 8px rgba(34,197,94,0.3)"], scale: [1, 1.02, 1] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                     >
                       <AnimatedValue value={card.value} />
                     </motion.div>
                   ) : (
-                    <div className={cn("text-2xl font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
+                    <div className={cn("text-[16px] font-mono font-bold tracking-tight", "valueColor" in card && card.valueColor ? card.valueColor : "text-white")}>
                       <AnimatedValue value={card.value} />
                     </div>
                   )}
                   {card.sub && (
-                    <div className="text-[11px] text-muted-foreground/50 mt-0.5 font-mono">
+                    <div className="text-[8px] text-muted-foreground/50 font-mono">
                       <AnimatedValue value={card.sub} />
                     </div>
                   )}

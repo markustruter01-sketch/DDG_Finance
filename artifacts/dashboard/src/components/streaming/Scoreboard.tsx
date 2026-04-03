@@ -28,8 +28,8 @@ function timeAgo(dateStr: string): string {
 }
 
 const RELOAD_INTERVAL = 15000;
-const STAGGER_DELAY = 0.07;
-const MAX_VISIBLE = 12;
+const STAGGER_DELAY = 0.06;
+const MAX_VISIBLE = 20;
 
 const BOT_COLORS: Record<string, string> = {
   "Oracle": "#8b5cf6",
@@ -40,10 +40,20 @@ const BOT_COLORS: Record<string, string> = {
   "Navigator": "#a78bfa",
 };
 
+function getBotAbbrev(name: string): string {
+  if (name === "Davy Jones") return "DJ";
+  if (name === "Blackbeard") return "BB";
+  if (name === "Calypso") return "CAL";
+  if (name === "Apex Predator") return "APEX";
+  if (name === "Navigator") return "NAV";
+  if (name === "Oracle") return "ORC";
+  return name.slice(0, 3).toUpperCase();
+}
+
 function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
   const isWin = trade.isWin;
   const color = isWin ? "#00ff88" : "#ff8c00";
-  const bgColor = isWin ? "rgba(34,197,94,0.03)" : "rgba(249,115,22,0.03)";
+  const bgColor = isWin ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
   const botColor = BOT_COLORS[trade.bot] ?? "#64748b";
 
   return (
@@ -52,33 +62,28 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
       initial={{ opacity: 0, x: -30, scaleY: 0.6 }}
       animate={{ opacity: 1, x: 0, scaleY: 1 }}
       transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-white/[0.03] font-mono origin-top"
+      className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.04] font-mono origin-top"
       style={{ backgroundColor: bgColor }}
     >
       <span
-        className="shrink-0 flex items-center gap-1 rounded-md px-1.5 py-0.5"
+        className="shrink-0 flex items-center gap-1.5 rounded-lg px-2 py-1"
         style={{
-          backgroundColor: `${botColor}15`,
-          border: `1px solid ${botColor}30`,
+          backgroundColor: `${botColor}18`,
+          border: `1px solid ${botColor}35`,
         }}
       >
-        <span className="text-[11px] leading-none">{trade.icon}</span>
-        <span className="text-[7px] font-bold uppercase tracking-wide leading-none" style={{ color: botColor }}>
-          {trade.bot === "Davy Jones" ? "DJ" :
-           trade.bot === "Blackbeard" ? "BB" :
-           trade.bot === "Calypso" ? "CAL" :
-           trade.bot === "Apex Predator" ? "APEX" :
-           trade.bot === "Navigator" ? "NAV" :
-           trade.bot === "Oracle" ? "ORC" : trade.bot.slice(0, 3).toUpperCase()}
+        <span className="text-[14px] leading-none">{trade.icon}</span>
+        <span className="text-[10px] font-black uppercase tracking-wider leading-none" style={{ color: botColor }}>
+          {getBotAbbrev(trade.bot)}
         </span>
       </span>
-      <span className="text-[9px] truncate" style={{ color: "rgba(148,163,184,0.7)" }}>
+      <span className="text-[12px] font-semibold truncate" style={{ color: "rgba(203,213,225,0.85)" }}>
         {trade.symbol}
       </span>
-      <span className="ml-auto flex items-center gap-1.5 shrink-0">
+      <span className="ml-auto flex items-center gap-2 shrink-0">
         {trade.pnlUsd !== 0 && (
           <motion.span
-            className="text-[9px] font-bold"
+            className="text-[12px] font-bold"
             style={{ color }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -88,7 +93,7 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
           </motion.span>
         )}
         <motion.span
-          className="text-[9px] font-bold"
+          className="text-[12px] font-bold"
           style={{ color }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -96,7 +101,7 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
         >
           {trade.pnlPct >= 0 ? "+" : ""}{trade.pnlPct.toFixed(2)}%
         </motion.span>
-        <span className="text-[7px]" style={{ color: "rgba(148,163,184,0.35)" }}>
+        <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.4)" }}>
           {timeAgo(trade.date)}
         </span>
       </span>
@@ -171,16 +176,16 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
           >
             Recent Trades
           </motion.span>
-          <span className="text-[12px] font-mono font-bold px-2 py-0.5 rounded-md border border-cyan-400/20" style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>{recentTrades.length}</span>
+          <span className="text-[13px] font-mono font-bold px-2.5 py-0.5 rounded-md border border-cyan-400/20" style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>{recentTrades.length}</span>
         </div>
-        <div className="flex-1 overflow-hidden min-h-0">
+        <div className="flex-1 overflow-auto min-h-0">
           <AnimatePresence mode="sync">
             {visible.slice(0, visibleCount).map((trade) => (
               <TradeRow key={`${cycle}-${trade.id}`} trade={trade} cycle={cycle} />
             ))}
           </AnimatePresence>
           {recentTrades.length === 0 && (
-            <div className="text-[9px] font-mono text-center py-4" style={{ color: "rgba(148,163,184,0.3)" }}>No closed trades yet</div>
+            <div className="text-[12px] font-mono text-center py-6" style={{ color: "rgba(148,163,184,0.3)" }}>No closed trades yet</div>
           )}
         </div>
       </div>

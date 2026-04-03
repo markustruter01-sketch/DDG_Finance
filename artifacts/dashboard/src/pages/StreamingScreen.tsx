@@ -7,8 +7,6 @@ import { Scoreboard } from "@/components/streaming/Scoreboard";
 import { NerveCenter } from "@/components/streaming/NerveCenter";
 import { NewsIntelligence } from "@/components/streaming/NewsIntelligence";
 import { VaultDisplay } from "@/components/streaming/VaultDisplay";
-import { BotLeaderboard } from "@/components/streaming/BotLeaderboard";
-import { TradeSpeedometer } from "@/components/streaming/TradeSpeedometer";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
 import { GeminiThinking } from "@/components/streaming/GeminiThinking";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
@@ -101,7 +99,7 @@ function StreamingNavBar() {
 }
 
 export default function StreamingScreen() {
-  const { trades, wins, losses, botStats, totalTrades, trades24h } = useRealFeed(20);
+  const { trades, wins, losses } = useRealFeed(30);
   const celebrations = useRealCelebrations();
   const scale = useViewportScale();
 
@@ -126,14 +124,8 @@ export default function StreamingScreen() {
           <GlobalHUD />
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
-            <div className="col-span-3 min-h-0 flex flex-col gap-2">
+            <div className="col-span-3 min-h-0 flex flex-col">
               <Scoreboard wins={wins} losses={losses} recentTrades={trades} />
-              <div className="shrink-0">
-                <TradeSpeedometer totalTrades={totalTrades} trades24h={trades24h} />
-              </div>
-              <div className="shrink-0">
-                <BotLeaderboard botStats={botStats} />
-              </div>
             </div>
 
             <div className="col-span-6 min-h-0 flex flex-col gap-1.5 relative">

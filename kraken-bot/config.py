@@ -29,7 +29,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.20,
         "MAX_POSITION_FRACTION": 0.10,
         "STOP_LOSS_PCT": 0.015,
-        "ATR_STOP_MULTIPLIER": 2.5,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
     },
     "blackbeard": {
@@ -42,7 +42,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.12,
         "STOP_LOSS_PCT": 0.020,
-        "ATR_STOP_MULTIPLIER": 2.5,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
     },
     "calypso": {
@@ -55,7 +55,7 @@ BOT_PROFILES = {
         "CASH_RESERVE": 0.10,
         "MAX_POSITION_FRACTION": 0.15,
         "STOP_LOSS_PCT": 0.025,
-        "ATR_STOP_MULTIPLIER": 2.5,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
     },
 }
@@ -165,7 +165,7 @@ RSI_OVERBOUGHT   = _profile.get("RSI_OVERBOUGHT", 60)
 
 ZSCORE_WINDOW    = 20
 ZSCORE_ENTRY     = _profile.get("ZSCORE_ENTRY", 1.0)
-ZSCORE_EXIT      = 0.3
+ZSCORE_EXIT      = 0.45
 
 OHLCV_TIMEFRAME  = "1h"
 OHLCV_LIMIT      = 100
@@ -173,11 +173,11 @@ OHLCV_LIMIT      = 100
 
 CASH_RESERVE          = _profile.get("CASH_RESERVE", 0.20)
 MAX_POSITION_FRACTION = _profile.get("MAX_POSITION_FRACTION", 0.10)
-MAX_POSITIONS         = 10
+MAX_POSITIONS         = 8
 RISK_FRACTION         = 0.01
 STOP_LOSS_PCT         = _profile.get("STOP_LOSS_PCT", 0.015)
 ATR_STOP_MULTIPLIER   = _profile.get("ATR_STOP_MULTIPLIER", 1.5)
-TRAIL_PCT             = 0.05
+TRAIL_PCT             = 0.03
 
 VPIN_ENTRY_BLOCK      = _profile.get("VPIN_ENTRY_BLOCK", 0.65)
 

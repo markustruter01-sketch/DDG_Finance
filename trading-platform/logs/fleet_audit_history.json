@@ -799,5 +799,77 @@
       "thoughtsTokenCount": 1518
     },
     "elapsed_seconds": 14.6
+  },
+  {
+    "generated_at": "2026-04-03T03:30:44.966029+00:00",
+    "valid_until": "2026-04-03T09:30:44.966029+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CAUTION",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "UNI",
+      "JPY"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "correlation_limit",
+        "value": 0.4
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.15,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Tightening entry and stop to protect capital; win rate is acceptable but P&L is negative due to correlated stop-outs in UNI and RENDER."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.25,
+        "STOP_LOSS_PCT": 0.028,
+        "reasoning": "Win rate 41.9% is insufficient for aggressive strategy; increasing entry threshold to filter low-probability mean reversions."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.3,
+        "TRAIL_PCT": 0.045,
+        "reasoning": "Highest deployment (89%) creates extreme risk in Bear regime; tightening entry and trailing stop to harvest gains faster."
+      }
+    ],
+    "critique_summary": "Fleet is suffering from extreme cross-bot correlation in Kraken (RENDER, DYM, ATOM) and Navigator (JPY shorts), leading to synchronized drawdowns. There is a clear regime contradiction: Oracle is 100% SGOV/Cash while Kraken bots remain 65-89% deployed in a 'Bear' environment.",
+    "critique_flags": [
+      "High cross-bot correlation on RENDER, DYM, and ATOM",
+      "Navigator win rate (16.7%) suggests failed JPY-short bias",
+      "Regime mismatch between Oracle (Risk-Off) and Kraken (High Deployment)",
+      "Significant slippage/stop-loss clustering on UNI and ENA"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16872,
+      "candidatesTokenCount": 629,
+      "totalTokenCount": 19189,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16872
+        }
+      ],
+      "thoughtsTokenCount": 1688
+    },
+    "elapsed_seconds": 16.3
   }
 ]

@@ -1,19 +1,19 @@
 {
-  "generated_at": "2026-04-03T03:15:47.371032+00:00",
-  "valid_until": "2026-04-03T09:15:47.371032+00:00",
+  "generated_at": "2026-04-03T03:30:44.966029+00:00",
+  "valid_until": "2026-04-03T09:30:44.966029+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
     "oracle": "CLEAN",
     "davy_jones": "CAUTION",
-    "blackbeard": "CLEAN",
-    "calypso": "CLEAN",
+    "blackbeard": "CAUTION",
+    "calypso": "CAUTION",
     "apex_predator": "CLEAN",
     "navigator": "HOLD"
   },
   "vetoed_tickers": [
     "RENDER",
     "UNI",
-    "BCH"
+    "JPY"
   ],
   "conditions": [
     {
@@ -25,8 +25,8 @@
       "value": 0.85
     },
     {
-      "type": "cross_bot_limit",
-      "value": 3.0
+      "type": "correlation_limit",
+      "value": 0.4
     }
   ],
   "kraken_param_adjustments": [
@@ -34,39 +34,39 @@
       "bot_id": "davy_jones",
       "ZSCORE_ENTRY": 1.15,
       "STOP_LOSS_PCT": 0.022,
-      "reasoning": "Win rate 53% but negative PnL indicates poor R:R; tightening entry and widening stops to avoid noise."
+      "reasoning": "Tightening entry and stop to protect capital; win rate is acceptable but P&L is negative due to correlated stop-outs in UNI and RENDER."
     },
     {
       "bot_id": "blackbeard",
       "ZSCORE_ENTRY": 1.25,
       "STOP_LOSS_PCT": 0.028,
-      "reasoning": "Win rate 41% is sub-optimal for aggressive strategy; requires higher statistical significance for entry."
+      "reasoning": "Win rate 41.9% is insufficient for aggressive strategy; increasing entry threshold to filter low-probability mean reversions."
     },
     {
       "bot_id": "calypso",
-      "ZSCORE_ENTRY": 1.35,
-      "TRAIL_PCT": 0.075,
-      "reasoning": "84% capital deployment with 47% win rate creates high tail risk; increasing entry threshold and trailing stop room."
+      "ZSCORE_ENTRY": 1.3,
+      "TRAIL_PCT": 0.045,
+      "reasoning": "Highest deployment (89%) creates extreme risk in Bear regime; tightening entry and trailing stop to harvest gains faster."
     }
   ],
-  "critique_summary": "The fleet shows dangerous asset correlation across Kraken bots with identical losing positions in DYM, IMX, and RENDER. Navigator (Forex) is severely underperforming with a 16.7% win rate and extreme overconcentration in JPY shorts. Oracle is appropriately defensive in SGOV, but regime labeling (Crypto vs Bear) requires alignment.",
+  "critique_summary": "Fleet is suffering from extreme cross-bot correlation in Kraken (RENDER, DYM, ATOM) and Navigator (JPY shorts), leading to synchronized drawdowns. There is a clear regime contradiction: Oracle is 100% SGOV/Cash while Kraken bots remain 65-89% deployed in a 'Bear' environment.",
   "critique_flags": [
-    "Cross-bot correlation: 50% of Kraken positions are identical across 3 bots",
-    "Navigator overconcentration: 100% of open forex risk is short JPY",
-    "Negative expectancy: RENDER and UNI showing 0-14% win rates fleet-wide",
-    "Regime contradiction: Oracle identifies Crypto regime but allocates 99% to SGOV"
+    "High cross-bot correlation on RENDER, DYM, and ATOM",
+    "Navigator win rate (16.7%) suggests failed JPY-short bias",
+    "Regime mismatch between Oracle (Risk-Off) and Kraken (High Deployment)",
+    "Significant slippage/stop-loss clustering on UNI and ENA"
   ],
   "token_usage": {
-    "promptTokenCount": 16874,
-    "candidatesTokenCount": 627,
-    "totalTokenCount": 19019,
+    "promptTokenCount": 16872,
+    "candidatesTokenCount": 629,
+    "totalTokenCount": 19189,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16874
+        "tokenCount": 16872
       }
     ],
-    "thoughtsTokenCount": 1518
+    "thoughtsTokenCount": 1688
   },
-  "elapsed_seconds": 14.6
+  "elapsed_seconds": 16.3
 }

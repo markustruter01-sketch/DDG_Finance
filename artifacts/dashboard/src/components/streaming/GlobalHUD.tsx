@@ -122,20 +122,20 @@ export function GlobalHUD() {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex gap-2">
-        <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 px-3 py-2 flex flex-col justify-center overflow-hidden">
+        <div className="w-1/2 rounded-xl border border-violet-500/20 bg-slate-900/80 px-4 py-2.5 flex flex-col justify-center overflow-hidden">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="space-y-1"
+            className="space-y-1.5"
           >
             <h2
-              className="text-[13px] font-black uppercase tracking-wide text-violet-200 leading-tight"
+              className="text-[15px] font-black uppercase tracking-wide text-violet-200 leading-tight"
               style={{ textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
             >
               Welcome!
             </h2>
-            <p className="text-[9px] leading-[1.45] text-slate-300/80 font-medium">
+            <p className="text-[12px] leading-[1.4] text-slate-300/90 font-medium">
               We created 6 AI powered automated trading bots that function off institutional grade algorithms and maths, with advanced risk metrics and market measuring conditions. Follow along to see how they perform, or get in contact with us to see how you can build your own for only{" "}
               <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
             </p>

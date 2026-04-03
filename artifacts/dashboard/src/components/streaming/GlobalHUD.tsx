@@ -143,7 +143,7 @@ export function GlobalHUD() {
                   >
                     Powered<br/>by
                   </motion.span>
-                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[62px] w-auto object-contain" />
+                  <img src={ddgLogo} alt="Digital Dynamics Group" className="h-[74px] w-auto object-contain" />
                 </div>
               ) : (
                 <>

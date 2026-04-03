@@ -355,7 +355,7 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "60px" }}>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "90px" }}>
             <svg viewBox="0 0 200 200" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
               <circle
                 cx={100} cy={90} r={24}
@@ -369,9 +369,9 @@ export function NerveCenter() {
               >
                 🧠
               </text>
-              <text x={100} y={115} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
+              <text x={100} y={122} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
               <text
-                x={100} y={127}
+                x={100} y={134}
                 textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="6"
               >
                 ALL NODES SYNCED

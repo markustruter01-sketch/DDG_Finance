@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-04-03T01:42:38.319279+00:00",
-  "valid_until": "2026-04-03T07:42:38.319279+00:00",
+  "generated_at": "2026-04-03T02:42:40.591244+00:00",
+  "valid_until": "2026-04-03T08:42:40.591244+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
-    "oracle": "CAUTION",
+    "oracle": "CLEAN",
     "davy_jones": "CAUTION",
     "blackbeard": "CAUTION",
-    "calypso": "HOLD",
+    "calypso": "CAUTION",
     "apex_predator": "CLEAN",
     "navigator": "HOLD"
   },
@@ -14,61 +14,60 @@
     "UNI",
     "RENDER",
     "BITO",
-    "ETHUSD",
-    "ENA"
+    "EUO"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.7
+      "value": 0.75
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "min_regime_confidence",
-      "value": 0.75
+      "type": "regime_lock",
+      "value": "BEAR"
     }
   ],
   "kraken_param_adjustments": [
     {
       "bot_id": "davy_jones",
       "ZSCORE_ENTRY": 1.2,
-      "STOP_LOSS_PCT": 0.024,
-      "reasoning": "Win rate 52% but negative PnL; UNI stop at 3.1% indicates current SL is too loose for 'conservative' profile."
+      "STOP_LOSS_PCT": 0.016,
+      "reasoning": "Regime contradiction: bot is 58% deployed in long crypto despite 'Extreme Fear' and BEAR regime labels. Tightening entry to reduce exposure."
     },
     {
       "bot_id": "blackbeard",
       "ZSCORE_ENTRY": 1.35,
-      "STOP_LOSS_PCT": 0.028,
-      "reasoning": "Win rate 40.5% is sub-optimal; tightening entry threshold to 1.35 to filter noise in Bear regime."
+      "STOP_LOSS_PCT": 0.024,
+      "reasoning": "Win rate at 41.9% with negative P&L suggests entries are too loose during volatility. Increasing Z-score requirement."
     },
     {
       "bot_id": "calypso",
       "ZSCORE_ENTRY": 1.45,
       "TRAIL_PCT": 0.045,
-      "reasoning": "Highest deployment (64%) in Bear regime is risky; increasing entry hurdle to reduce over-exposure."
+      "reasoning": "Highest deployment (69%) in a risk-off environment. Forcing extreme entry thresholds to prevent further capital erosion."
     }
   ],
-  "critique_summary": "Fleet exhibits dangerous cross-bot correlation with 100% fail rate on UNI and RENDER across all Kraken units. Oracle bot shows conviction inflation, where high-score trades (0.80+) result in significant alpha decay, while Navigator's 16% win rate suggests the H4 swing logic is catching falling knives in JPY crosses.",
+  "critique_summary": "The fleet is suffering from severe regime contradiction; Kraken bots are heavily long-biased despite the learning journal confirming a BEAR regime with VIX > 24. Cross-bot correlation is dangerously high with IMX, TIA, and ATOM held across all three Kraken portfolios. Navigator's 16.7% win rate indicates a fundamental failure in its H4 swing confluence logic.",
   "critique_flags": [
-    "Cross-bot correlation: 3 bots holding identical losing RENDER/UNI positions",
-    "Deployment violation: Kraken bots >50% deployed despite 'Extreme Fear' regime",
-    "Conviction inflation: Oracle crypto trades losing -8.3% despite 0.82 conviction",
-    "Forex divergence: Navigator win rate (16.7%) indicates strategy-regime mismatch"
+    "Regime Contradiction (Long bias in Bear market)",
+    "Severe Cross-Bot Correlation (IMX, TIA, ATOM)",
+    "Navigator Win-Rate Collapse (16.7%)",
+    "Conviction Inflation (Oracle losses on 0.80+ scores)"
   ],
   "token_usage": {
-    "promptTokenCount": 16690,
-    "candidatesTokenCount": 625,
-    "totalTokenCount": 19030,
+    "promptTokenCount": 16703,
+    "candidatesTokenCount": 606,
+    "totalTokenCount": 18944,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16690
+        "tokenCount": 16703
       }
     ],
-    "thoughtsTokenCount": 1715
+    "thoughtsTokenCount": 1635
   },
-  "elapsed_seconds": 19.8
+  "elapsed_seconds": 13.7
 }

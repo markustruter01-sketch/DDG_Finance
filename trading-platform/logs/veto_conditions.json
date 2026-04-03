@@ -1,33 +1,32 @@
 {
-  "generated_at": "2026-04-03T01:42:58.093631+00:00",
-  "valid_until": "2026-04-03T07:42:58.093631+00:00",
+  "generated_at": "2026-04-03T02:42:54.266942+00:00",
+  "valid_until": "2026-04-03T08:42:54.266942+00:00",
   "vetoed_tickers": [
     "UNI",
     "RENDER",
     "BITO",
-    "ETHUSD",
-    "ENA"
+    "EUO"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.7
+      "value": 0.75
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "min_regime_confidence",
-      "value": 0.75
+      "type": "regime_lock",
+      "value": "BEAR"
     }
   ],
-  "critique_summary": "Fleet exhibits dangerous cross-bot correlation with 100% fail rate on UNI and RENDER across all Kraken units. Oracle bot shows conviction inflation, where high-score trades (0.80+) result in significant alpha decay, while Navigator's 16% win rate suggests the H4 swing logic is catching falling knives in JPY crosses.",
+  "critique_summary": "The fleet is suffering from severe regime contradiction; Kraken bots are heavily long-biased despite the learning journal confirming a BEAR regime with VIX > 24. Cross-bot correlation is dangerously high with IMX, TIA, and ATOM held across all three Kraken portfolios. Navigator's 16.7% win rate indicates a fundamental failure in its H4 swing confluence logic.",
   "critique_flags": [
-    "Cross-bot correlation: 3 bots holding identical losing RENDER/UNI positions",
-    "Deployment violation: Kraken bots >50% deployed despite 'Extreme Fear' regime",
-    "Conviction inflation: Oracle crypto trades losing -8.3% despite 0.82 conviction",
-    "Forex divergence: Navigator win rate (16.7%) indicates strategy-regime mismatch"
+    "Regime Contradiction (Long bias in Bear market)",
+    "Severe Cross-Bot Correlation (IMX, TIA, ATOM)",
+    "Navigator Win-Rate Collapse (16.7%)",
+    "Conviction Inflation (Oracle losses on 0.80+ scores)"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

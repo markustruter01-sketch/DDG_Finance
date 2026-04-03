@@ -169,5 +169,23 @@
     "side": "SELL",
     "reason": "mean_reversion_complete",
     "timestamp": "2026-04-03T01:42:53.573156+00:00"
+  },
+  {
+    "bot_name": "Kraken Davy Jones' Portfolio",
+    "symbol": "UNI/USD",
+    "pnl_pct": 2.17,
+    "pnl_usd": 53.42,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T02:17:30.363035+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "SEI/USD",
+    "pnl_pct": 1.04,
+    "pnl_usd": 25.44,
+    "side": "SELL",
+    "reason": "mean_reversion_complete",
+    "timestamp": "2026-04-03T02:30:59.790099+00:00"
   }
 ]

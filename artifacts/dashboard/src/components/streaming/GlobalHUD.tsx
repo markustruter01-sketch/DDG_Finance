@@ -46,21 +46,22 @@ const BOT_DEFS = [
 
 function SleepZzz({ color }: { color: string }) {
   return (
-    <div className="absolute z-20" style={{ top: -2, right: 6, pointerEvents: "none" }}>
+    <div className="absolute z-20" style={{ top: -4, right: 4, pointerEvents: "none" }}>
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
           className="absolute font-black"
           style={{
-            color: color + "90",
-            fontSize: [7, 9, 6][i],
-            left: [0, 8, 14][i],
+            color: color + "cc",
+            fontSize: [13, 17, 11][i],
+            left: [0, 14, 26][i],
             top: 0,
+            textShadow: `0 0 6px ${color}60`,
           }}
           animate={{
-            y: [-2, -14 - i * 4],
-            x: [0, 4 + i * 3],
-            opacity: [0, 0.9, 0],
+            y: [-4, -30 - i * 8],
+            x: [0, 6 + i * 5],
+            opacity: [0, 1, 0],
           }}
           transition={{
             duration: 2.5,
@@ -252,7 +253,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50", grandPnlPct >= 0 ? "from-green-500/20 via-green-500/5 to-transparent" : "from-orange-500/20 via-orange-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Combined P&L:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Combined P&L:</span>
               <span className="font-mono font-bold tracking-tight" style={{ fontSize: 22, color: pnlColor }}>
                 <AnimatedValue value={`${grandPnlPct >= 0 ? "+" : ""}${grandPnlPct.toFixed(2)}%`} />
               </span>
@@ -271,7 +272,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-green-500/20 via-green-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Balance:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Balance:</span>
               <motion.span
                 className="font-mono font-bold tracking-tight"
                 style={{ fontSize: 24, color: C.green }}
@@ -292,7 +293,7 @@ export function GlobalHUD() {
           >
             <div className={cn("absolute inset-0 bg-gradient-to-br opacity-50 from-amber-500/20 via-amber-500/5 to-transparent")} />
             <div className="relative z-10 flex items-center gap-3 w-full">
-              <span className="uppercase tracking-widest font-bold shrink-0" style={{ fontSize: 10, color: C.label }}>Trades:</span>
+              <span className="uppercase tracking-widest font-extrabold shrink-0" style={{ fontSize: 14, color: C.labelDimmer }}>Trades:</span>
               <span className="font-mono font-bold tracking-tight" style={{ fontSize: 24, color: C.white }}>
                 <AnimatedValue value={`${totalTrades}`} />
               </span>

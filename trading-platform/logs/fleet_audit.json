@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-04-03T07:59:48.694266+00:00",
-  "valid_until": "2026-04-03T13:59:48.694266+00:00",
+  "generated_at": "2026-04-03T08:14:48.788091+00:00",
+  "valid_until": "2026-04-03T14:14:48.788091+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
     "oracle": "CLEAN",
     "davy_jones": "CAUTION",
-    "blackbeard": "CAUTION",
-    "calypso": "CAUTION",
+    "blackbeard": "CLEAN",
+    "calypso": "CLEAN",
     "apex_predator": "CLEAN",
     "navigator": "HOLD"
   },
@@ -14,20 +14,20 @@
     "RENDER",
     "ATOM",
     "UNI",
-    "GBP_JPY"
+    "NEAR"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.75
+      "value": 0.7
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "news_blacklist",
-      "ticker": "JPY"
+      "type": "correlation_cap",
+      "value": 0.4
     }
   ],
   "kraken_param_adjustments": [
@@ -35,40 +35,33 @@
       "bot_id": "davy_jones",
       "ZSCORE_ENTRY": 1.2,
       "STOP_LOSS_PCT": 0.022,
-      "reasoning": "Conservative bot is catching too many false reversals; tightening entry threshold to 1.20 to filter noise."
+      "reasoning": "Recent win rate degradation and high frequency of stop-outs on minor wicks; tightening entry and providing slightly more stop room."
     },
     {
       "bot_id": "blackbeard",
-      "ZSCORE_ENTRY": 1.3,
-      "STOP_LOSS_PCT": 0.034,
-      "TRAIL_PCT": 0.075,
-      "reasoning": "Aggressive bot win rate at 42.6% with heavy losses on RENDER and ATOM; widening stops to 3.4% to avoid being wicked out of mean-reversion moves."
-    },
-    {
-      "bot_id": "calypso",
       "ZSCORE_ENTRY": 1.35,
-      "STOP_LOSS_PCT": 0.038,
-      "reasoning": "Calypso hitting stops too frequently on high-volatility assets like RENDER (-2.86%); increasing stop buffer to 3.8%."
+      "TRAIL_PCT": 0.08,
+      "reasoning": "Aggressive strategy is over-correlated with Calypso; raising entry threshold to filter for higher-probability reversals."
     }
   ],
-  "critique_summary": "The fleet is suffering from extreme cross-bot correlation in the Kraken segment, specifically on RENDER and ATOM shorts which have a 0% and 40% win rate respectively. Navigator is severely overexposed to JPY shorts during a news blackout, resulting in a -3.08% drawdown. Oracle is correctly positioned in SGOV, but the trade history shows critical data leakage between Kraken and Alpaca logging systems.",
+  "critique_summary": "The fleet shows significant cross-bot correlation in the Kraken segment, specifically with NEAR and TIA positions, creating systemic risk. Navigator (Forex) is in a critical failure state with a 16.7% win rate, requiring an immediate halt. Oracle is effectively sidelined in SGOV, which is the correct defensive posture given the identified Bear regime and extreme market fear.",
   "critique_flags": [
-    "High cross-bot correlation on RENDER/ATOM/UNI",
-    "Navigator JPY short overconcentration",
-    "Data leakage in Oracle trade history logs",
-    "Kraken fleet win rates diverging below 50% for aggressive profiles"
+    "High correlation: NEAR/USD short held across all three Kraken bots.",
+    "Ticker failure: RENDER/USD maintains a 0% win rate across 9 trades.",
+    "Navigator performance: Win rate of 16.7% suggests strategy-regime mismatch.",
+    "Regime Labeling: Discrepancy between 'Crypto' regime label and 'Bear/Cash' execution."
   ],
   "token_usage": {
-    "promptTokenCount": 16632,
-    "candidatesTokenCount": 664,
-    "totalTokenCount": 19141,
+    "promptTokenCount": 16636,
+    "candidatesTokenCount": 532,
+    "totalTokenCount": 19381,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 16632
+        "tokenCount": 16636
       }
     ],
-    "thoughtsTokenCount": 1845
+    "thoughtsTokenCount": 2213
   },
-  "elapsed_seconds": 15.9
+  "elapsed_seconds": 56.3
 }

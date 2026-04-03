@@ -1237,5 +1237,72 @@
       "thoughtsTokenCount": 1845
     },
     "elapsed_seconds": 15.9
+  },
+  {
+    "generated_at": "2026-04-03T08:14:48.788091+00:00",
+    "valid_until": "2026-04-03T14:14:48.788091+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CLEAN",
+      "calypso": "CLEAN",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "UNI",
+      "NEAR"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.7
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "correlation_cap",
+        "value": 0.4
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.2,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Recent win rate degradation and high frequency of stop-outs on minor wicks; tightening entry and providing slightly more stop room."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.35,
+        "TRAIL_PCT": 0.08,
+        "reasoning": "Aggressive strategy is over-correlated with Calypso; raising entry threshold to filter for higher-probability reversals."
+      }
+    ],
+    "critique_summary": "The fleet shows significant cross-bot correlation in the Kraken segment, specifically with NEAR and TIA positions, creating systemic risk. Navigator (Forex) is in a critical failure state with a 16.7% win rate, requiring an immediate halt. Oracle is effectively sidelined in SGOV, which is the correct defensive posture given the identified Bear regime and extreme market fear.",
+    "critique_flags": [
+      "High correlation: NEAR/USD short held across all three Kraken bots.",
+      "Ticker failure: RENDER/USD maintains a 0% win rate across 9 trades.",
+      "Navigator performance: Win rate of 16.7% suggests strategy-regime mismatch.",
+      "Regime Labeling: Discrepancy between 'Crypto' regime label and 'Bear/Cash' execution."
+    ],
+    "token_usage": {
+      "promptTokenCount": 16636,
+      "candidatesTokenCount": 532,
+      "totalTokenCount": 19381,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16636
+        }
+      ],
+      "thoughtsTokenCount": 2213
+    },
+    "elapsed_seconds": 56.3
   }
 ]

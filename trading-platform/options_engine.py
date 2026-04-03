@@ -473,33 +473,52 @@ def _find_atm_straddle(chain: list[dict], spot_price: float, min_dte: int = TARG
 
 
 def _get_historical_stats() -> tuple[float, float]:
-    conn = sqlite3.connect(str(TRADES_DB))
-    rows = conn.execute(
-        "SELECT pnl FROM options_trades WHERE status = 'closed' AND pnl IS NOT NULL"
-    ).fetchall()
-    conn.close()
+    """
+    v2.0: Trailing 30-day empirical win/loss ratio only.
+    No static assumption fallbacks — returns (0, 0) if insufficient data,
+    which forces the caller to use Fixed Fractional Risk instead.
+    """
+    from datetime import timedelta
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=30)).isoformat()
+
+    try:
+        conn = sqlite3.connect(str(TRADES_DB))
+        rows = conn.execute(
+            "SELECT pnl FROM options_trades WHERE status = 'closed' AND pnl IS NOT NULL AND exit_date >= ?",
+            (cutoff,),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return 0.0, 0.0
 
     if len(rows) < MIN_TRADES_FOR_KELLY:
-        return 0.5, 1.0
+        return 0.0, 0.0
 
     pnls = [r[0] for r in rows]
     wins = [p for p in pnls if p > 0]
     losses = [abs(p) for p in pnls if p < 0]
 
-    win_rate = len(wins) / len(pnls) if pnls else 0.5
-    avg_win = np.mean(wins) if wins else 1.0
-    avg_loss = np.mean(losses) if losses else 1.0
-    win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else 1.0
+    win_rate = len(wins) / len(pnls) if pnls else 0.0
+    avg_win = np.mean(wins) if wins else 0.0
+    avg_loss = np.mean(losses) if losses else 0.0
+    win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else 0.0
 
     return win_rate, win_loss_ratio
 
 
-def _half_kelly(win_rate: float, win_loss_ratio: float) -> float:
+def _quarter_kelly(win_rate: float, win_loss_ratio: float) -> float:
+    """
+    v2.0: Quarter-Kelly (was Half-Kelly). Cap reduced from 25% → 10%.
+    Returns 0.0 if empirical data produces negative EV — caller must
+    fall back to DEFAULT_RISK_PCT (Fixed Fractional).
+    """
     b = win_loss_ratio
     p = win_rate
-    kelly = (p * (b + 1) - 1) / b if b > 0 else 0
-    half_kelly = kelly / 2
-    return max(0.0, min(half_kelly, 0.25))
+    if b <= 0 or p <= 0:
+        return 0.0
+    kelly = (p * (b + 1) - 1) / b
+    quarter_kelly = kelly / 4
+    return max(0.0, min(quarter_kelly, 0.10))
 
 
 def _compute_position_size(fenced_capital: float, premium_per_contract_usd: float) -> tuple[int, float]:
@@ -507,7 +526,7 @@ def _compute_position_size(fenced_capital: float, premium_per_contract_usd: floa
         return 0, 0.0
 
     win_rate, wl_ratio = _get_historical_stats()
-    kelly_fraction = _half_kelly(win_rate, wl_ratio)
+    kelly_fraction = _quarter_kelly(win_rate, wl_ratio)
 
     if kelly_fraction <= 0:
         risk_amount = fenced_capital * DEFAULT_RISK_PCT

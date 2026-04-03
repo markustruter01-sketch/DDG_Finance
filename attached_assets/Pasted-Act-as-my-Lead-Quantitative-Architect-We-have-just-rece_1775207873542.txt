@@ -1,0 +1,45 @@
+Act as my Lead Quantitative Architect. We have just received an Institutional Gap Analysis of our 6-bot trading fleet which identified critical mathematical, architectural, and latency-based failure modes. We must fundamentally refactor the system to meet 2026 institutional standards.
+
+Execute this refactor in the following strict stages. Do not proceed to the next stage until I confirm the current one is complete.
+
+Stage 1: Mathematical Sizing & The Kelly Refactor
+
+The 15% equity cap and half-Kelly sizing are mathematically ruinous on our current 45% win rate.
+
+Suspend the current Kelly logic. Implement a Fixed Fractional Risk Model capping maximum risk at 1% to 2% of total equity per trade.
+
+If Kelly is retained as an option, hardcode it to a Quarter-Kelly maximum, and program it to ingest the trailing 30-day empirical win/loss ratio, rather than static assumptions.
+
+Stage 2: Decoupling Cognitive Latency (The Speed Fix)
+
+The Groq LLM is causing 'Analysis Paralysis' in our 60-second execution loop.
+
+Decouple the architecture: Relegate the Llama 3.3 70B model to an asynchronous background task that generates daily/weekly macro regime biases.
+
+Refactor the Kraken execution logic to rely purely on deterministic math via a WebSocket-driven event loop for sub-second execution.
+
+Update the VPIN threshold to use a 30-day rolling mean rather than a hardcoded 0.82.
+
+Stage 3: Regime Isolation & Correlation Matrix
+
+Fix the 'Cross-Asset Contamination'. The Oracle (Alpaca) bot must no longer be slaved to Crypto momentum. Create a separate equity regime state based on Fed Funds, Yield Spreads, and SPY/QQQ momentum.
+
+Implement a rolling 60-day Pearson correlation matrix between the bots. If cross-asset correlation trends toward 1.0 (systemic shock), automatically scale down position sizes globally by 50%.
+
+Stage 4: Adaptive Stops & Dynamic Slippage
+
+Implement a Volatility State Indicator (Ratio of 10-period ATR to 50-period ATR).
+
+If the state is 'High Volatility', dynamically expand the ATR stop-loss multiplier from 1.5x to 2.5x/3.0x, while proportionally reducing position sizes to keep dollar-risk constant.
+
+Upgrade the paper trading engine to penalize fills using a Dynamic Slippage multiplier based on trade size and current ATR, closing the execution reality gap.
+
+Stage 5: The Institutional Re-Audit (Persona Shift)
+
+Once the above code changes are implemented, take on the role of an Institutional Chief Risk Officer (CRO).
+
+Review the entire updated logic.py and execution architecture.
+
+Output a final report assessing if the new math aligns with standard institutional expectancy models, and confirm that the latency bottlenecks have been eliminated.
+
+Acknowledge these instructions and begin Stage 1."

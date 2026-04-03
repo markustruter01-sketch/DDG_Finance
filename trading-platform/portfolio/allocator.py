@@ -1,7 +1,7 @@
 """
 Portfolio Allocator — Regime-Switching Architecture
 -----------------------------------------------------
-v4.4 — Volatility-Adjusted Sizing + 82% Utilization Target + Asset Class Caps
+v5.0 — Institutional Refactor: Fixed Fractional + Quarter-Kelly + 10% Position Cap
 
 Post-processes the raw LLM JSON output:
 
@@ -14,7 +14,7 @@ Post-processes the raw LLM JSON output:
        Replace even-weight with inverse-volatility sizing:
          weight_i ∝ 1 / annualised_volatility_i
        Target total deployment: 82 % of equity (TARGET_UTILIZATION).
-       Per-asset cap: 15 % (MAX_POSITION_KELLY).
+       Per-asset cap: 10 % (MAX_POSITION_KELLY).
        Falls back to even-weight if volatility data unavailable.
        ──────────────────────────────────────────────────────────────────
     5. ── ASSET CLASS CONCENTRATION CAP (v4.4) ───────────────────────────
@@ -50,7 +50,7 @@ from portfolio.kelly import compute_kelly_for_slots, normalise_kelly_fractions
 # ── Allocation Constants ─────────────────────────────────────────────────────
 
 TARGET_UTILIZATION:    float = 0.82   # 82% of equity actively deployed
-MAX_POSITION_KELLY:    float = 0.15   # 15% max per individual position
+MAX_POSITION_KELLY:    float = 0.10   # 10% max per individual position (institutional refactor: was 15%)
 MAX_ASSET_CLASS_KELLY: float = 0.35   # 35% max per asset class
 MAX_LEVERAGED_KELLY:   float = 0.20   # 20% max for entire leveraged_risk group
 

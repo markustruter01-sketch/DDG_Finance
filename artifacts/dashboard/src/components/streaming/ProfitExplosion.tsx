@@ -1,9 +1,9 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { CelebrationTrade } from "./useRealCelebrations";
 
-const BLACK_HOLE_X = "50%";
-const BLACK_HOLE_Y = "40%";
+const BH_X_PCT = 50;
+const BH_Y_PCT = 43;
 
 interface ProfitExplosionProps {
   trade: CelebrationTrade | null;
@@ -16,7 +16,6 @@ function Particle({ index, total, isWin }: { index: number; total: number; isWin
   const dy = Math.sin(angle) * distance;
   const size = 2 + Math.random() * 3;
   const isDollar = index % 5 === 0;
-
   const hueBase = isWin ? 120 : 25;
   const hueRange = isWin ? 40 : 20;
 
@@ -32,11 +31,7 @@ function Particle({ index, total, isWin }: { index: number; total: number; isWin
       }}
       initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
       animate={{ x: dx, y: dy, scale: isDollar ? [0, 1.5, 0] : [0, 1.2, 0], opacity: [1, 0.8, 0] }}
-      transition={{
-        duration: 1.2 + Math.random() * 0.8,
-        ease: [0.22, 1, 0.36, 1],
-        delay: Math.random() * 0.3,
-      }}
+      transition={{ duration: 1.2 + Math.random() * 0.8, ease: [0.22, 1, 0.36, 1], delay: Math.random() * 0.3 }}
     >
       {isDollar ? (
         isWin ? "\u{1F4B0}" : "\u{1F4CA}"
@@ -75,33 +70,24 @@ function AtomizeParticle({ index, total }: { index: number; total: number }) {
         boxShadow: `0 0 ${size * 3}px hsl(25, 80%, 50%)`,
       }}
       initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
-      animate={{
-        x: dx,
-        y: dy,
-        opacity: [1, 0.6, 0],
-        scale: [1, 0.5, 0],
-      }}
-      transition={{
-        duration: 1.8 + Math.random() * 0.7,
-        ease: "easeOut",
-        delay,
-      }}
+      animate={{ x: dx, y: dy, opacity: [1, 0.6, 0], scale: [1, 0.5, 0] }}
+      transition={{ duration: 1.8 + Math.random() * 0.7, ease: "easeOut", delay }}
     />
   );
 }
 
-function EnergyPulse({ id }: { id: string }) {
+function EnergyPulse({ parentRef }: { parentRef: React.RefObject<HTMLDivElement | null> }) {
+  const el = parentRef.current;
+  const cx = el ? el.offsetWidth * (BH_X_PCT / 100) : 0;
+  const cy = el ? el.offsetHeight * (BH_Y_PCT / 100) : 0;
+
   return (
     <motion.div
-      key={id}
       className="absolute pointer-events-none z-50"
-      style={{
-        left: BLACK_HOLE_X,
-        top: BLACK_HOLE_Y,
-        transform: "translate(-50%, -50%)",
-      }}
+      style={{ left: cx, top: cy }}
       initial={{ opacity: 1 }}
       animate={{ opacity: 0 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.8, ease: "easeOut" }}
     >
       {[0, 1, 2].map((ring) => (
@@ -109,9 +95,6 @@ function EnergyPulse({ id }: { id: string }) {
           key={ring}
           className="absolute rounded-full"
           style={{
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
             border: "1.5px solid",
             borderColor: ring === 0
               ? "rgba(34,197,94,0.7)"
@@ -119,27 +102,24 @@ function EnergyPulse({ id }: { id: string }) {
                 ? "rgba(52,211,153,0.5)"
                 : "rgba(167,243,208,0.3)",
           }}
-          initial={{ width: 4, height: 4, opacity: 1 }}
+          initial={{ width: 4, height: 4, x: -2, y: -2, opacity: 1 }}
           animate={{
-            width: [4, 40 + ring * 18],
-            height: [4, 40 + ring * 18],
-            opacity: [1, 0],
+            width: 40 + ring * 18,
+            height: 40 + ring * 18,
+            x: -(20 + ring * 9),
+            y: -(20 + ring * 9),
+            opacity: 0,
           }}
-          transition={{
-            duration: 0.7,
-            ease: "easeOut",
-            delay: ring * 0.1,
-          }}
+          transition={{ duration: 0.7, ease: "easeOut", delay: ring * 0.1 }}
         />
       ))}
       <motion.div
         className="absolute rounded-full"
         style={{
-          left: "50%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
           width: 6,
           height: 6,
+          x: -3,
+          y: -3,
           backgroundColor: "rgba(34,197,94,0.9)",
           boxShadow: "0 0 12px rgba(34,197,94,0.8), 0 0 24px rgba(34,197,94,0.4)",
         }}
@@ -152,6 +132,8 @@ function EnergyPulse({ id }: { id: string }) {
 }
 
 export function ProfitExplosion({ trade }: ProfitExplosionProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const pos = useMemo(() => {
     if (!trade) return { x: 50, y: 50 };
     return {
@@ -174,9 +156,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
   useEffect(() => {
     if (!trade && lastTradeRef.current?.isWin) {
       const tid = lastTradeRef.current.id;
-      const timer = setTimeout(() => {
-        setPulseId(tid);
-      }, 1900);
+      const timer = setTimeout(() => setPulseId(tid), 1900);
       return () => clearTimeout(timer);
     }
   }, [trade]);
@@ -187,6 +167,18 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
       return () => clearTimeout(timer);
     }
   }, [pulseId]);
+
+  const getExitXY = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const targetX = w * (BH_X_PCT / 100);
+    const targetY = h * (BH_Y_PCT / 100);
+    const currentX = w * (pos.x / 100);
+    const currentY = h * (pos.y / 100);
+    return { x: targetX - currentX, y: targetY - currentY };
+  }, [pos.x, pos.y]);
 
   const borderColor = isWin ? "border-green-400/50" : "border-orange-400/50";
   const bgShadow = isWin
@@ -205,37 +197,38 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
     ? ["0 0 10px rgba(34,197,94,0.3)", "0 0 20px rgba(34,197,94,0.15)", "0 0 10px rgba(34,197,94,0.3)"]
     : ["0 0 10px rgba(249,115,22,0.3)", "0 0 20px rgba(249,115,22,0.15)", "0 0 10px rgba(249,115,22,0.3)"];
 
+  const exitOffset = getExitXY();
+
   return (
-    <>
+    <div ref={containerRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 50 }}>
       <AnimatePresence>
         {trade && (
           <motion.div
             key={trade.id}
-            className="absolute z-50 pointer-events-none"
-            style={{ transform: "translate(-50%, -50%)" }}
+            className="absolute pointer-events-none"
+            style={{
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              marginLeft: "-112px",
+              marginTop: "-80px",
+            }}
             initial="enter"
             animate="visible"
             exit="exit"
             variants={{
-              enter: {
-                opacity: 0,
-                filter: "blur(0px)",
-                scale: 1,
-                left: `${pos.x}%`,
-                top: `${pos.y}%`,
-              },
+              enter: { opacity: 0, scale: 1, x: 0, y: 0, filter: "blur(0px)" },
               visible: {
                 opacity: 1,
-                filter: "blur(0px)",
                 scale: 1,
-                left: `${pos.x}%`,
-                top: `${pos.y}%`,
+                x: 0,
+                y: 0,
+                filter: "blur(0px)",
                 transition: { duration: 0.3 },
               },
               exit: isWin
                 ? {
-                    left: BLACK_HOLE_X,
-                    top: BLACK_HOLE_Y,
+                    x: exitOffset.x,
+                    y: exitOffset.y,
                     scale: 0.02,
                     opacity: 0,
                     transition: { duration: 2, ease: "easeInOut" },
@@ -249,7 +242,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             }}
             role="alert"
           >
-            <div className="absolute inset-0 overflow-hidden" style={{ width: 200, height: 200, left: -100, top: -100 }}>
+            <div className="absolute overflow-hidden" style={{ width: 200, height: 200, left: 12, top: -20 }}>
               {Array.from({ length: 12 }).map((_, i) => (
                 <Particle key={`${trade.id}-${i}`} index={i} total={12} isWin={isWin} />
               ))}
@@ -257,8 +250,8 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
 
             {!isWin && (
               <motion.div
-                className="absolute inset-0 overflow-visible"
-                style={{ width: 240, height: 240, left: -120, top: -120 }}
+                className="absolute overflow-visible"
+                style={{ width: 240, height: 240, left: -8, top: -40 }}
                 initial={{ opacity: 0 }}
                 exit={{ opacity: 1 }}
                 transition={{ duration: 0.3 }}
@@ -269,16 +262,13 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
               </motion.div>
             )}
 
-            <motion.div
+            <div
               className={`relative z-10 rounded-xl border ${borderColor} px-5 py-4 text-center`}
               style={{
                 boxShadow: bgShadow,
                 width: "225px",
                 backgroundColor: "rgba(2,6,23,0.95)",
               }}
-              initial={{ scale: 0.5, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
             >
               <motion.div
                 className={`absolute inset-0 rounded-xl border ${borderColor.replace("/50", "/30")}`}
@@ -317,14 +307,14 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
               <div className="text-[10px] text-white/50 font-mono">
                 {trade.symbol}
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {pulseId && <EnergyPulse id={pulseId} />}
+        {pulseId && <EnergyPulse key={pulseId} parentRef={containerRef} />}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

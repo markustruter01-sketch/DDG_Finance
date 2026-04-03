@@ -332,7 +332,7 @@ export function NerveCenter() {
             muted
             playsInline
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ opacity: 0.5 }}
+            style={{ opacity: 0.85 }}
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
 

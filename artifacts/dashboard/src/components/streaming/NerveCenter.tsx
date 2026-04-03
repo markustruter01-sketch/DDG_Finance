@@ -110,8 +110,8 @@ function useAlgoPopups() {
       setPopups((prev) => [...prev.slice(-3), { id, text, x: corner.x, y: corner.y }]);
       setTimeout(() => {
         setPopups((prev) => prev.filter((p) => p.id !== id));
-      }, 2800);
-    }, 1800 + Math.random() * 1200);
+      }, 950);
+    }, 600 + Math.random() * 400);
 
     return () => clearInterval(interval);
   }, []);
@@ -293,7 +293,7 @@ export function NerveCenter() {
   }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, optPositions, fxPositions]);
 
   /* DEACTIVATED: SVG overlay variables — reactivate with original nerve center graphics */
-  // const algoPopups = useAlgoPopups();
+  const algoPopups = useAlgoPopups();
   // const [scanY, setScanY] = useState(0);
   // useEffect(() => {
   //   const interval = setInterval(() => {
@@ -356,6 +356,25 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
+          <AnimatePresence>
+            {algoPopups.map((popup) => (
+              <motion.div
+                key={popup.id}
+                initial={{ opacity: 0, scale: 0.7, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.6, y: -10 }}
+                transition={{ duration: 0.25 }}
+                className="absolute z-30 pointer-events-none"
+                style={{ left: `${popup.x}%`, top: `${popup.y}%` }}
+              >
+                <div className="px-2 py-1 rounded-md bg-black/70 border border-cyan-500/30 text-[10px] font-mono text-cyan-300/90 whitespace-nowrap"
+                  style={{ textShadow: "0 0 6px rgba(34,211,238,0.5)" }}
+                >
+                  {popup.text}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "120px" }}>
             <svg viewBox="-30 -10 260 240" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
               <motion.circle

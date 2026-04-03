@@ -134,16 +134,18 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
         <motion.div
           key={trade.id}
           className="absolute z-30 pointer-events-none"
-          style={{
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            transform: "translate(-50%, -50%)",
-          }}
+          style={{ transform: "translate(-50%, -50%)" }}
           initial="enter"
           animate="visible"
           exit="exit"
           variants={{
-            enter: { opacity: 0, filter: "blur(0px)", scale: 1 },
+            enter: {
+              opacity: 0,
+              filter: "blur(0px)",
+              scale: 1,
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+            },
             visible: {
               opacity: 1,
               filter: "blur(0px)",

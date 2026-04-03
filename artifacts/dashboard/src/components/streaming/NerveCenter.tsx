@@ -327,7 +327,7 @@ export function NerveCenter() {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <div className="flex-1 relative min-h-0 overflow-hidden p-2">
+        <div className="flex-1 relative min-h-0 p-2">
           <motion.div
             className="absolute inset-1 rounded-xl pointer-events-none z-10"
             style={{
@@ -356,6 +356,7 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
+          <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none" />
           <AnimatePresence>
             {algoPopups.map((popup) => (
               <motion.div

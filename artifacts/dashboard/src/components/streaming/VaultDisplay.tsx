@@ -42,9 +42,16 @@ export function VaultDisplay() {
             </motion.div>
           </div>
           <div className="text-right">
-            <div className="text-[7px] uppercase tracking-widest text-amber-400/60 font-bold">Passive Income</div>
-            <div className="text-[14px] font-mono font-bold text-amber-400/80">{formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[7px] text-amber-400/40">/mo</span></div>
-            <div className="text-[7px] text-emerald-400/50 font-mono">{totalSweeps} sweeps</div>
+            <div className="text-[9px] uppercase tracking-widest text-amber-400/70 font-bold">Passive Income</div>
+            <motion.div
+              className="text-xl font-mono font-black text-amber-400"
+              style={{ textShadow: "0 0 16px rgba(251,191,36,0.5), 0 0 32px rgba(251,191,36,0.25)" }}
+              animate={{ opacity: [0.7, 1, 0.7], scale: [0.98, 1.02, 0.98] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+            >
+              {formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[9px] text-amber-400/50">/mo</span>
+            </motion.div>
+            <div className="text-[9px] text-emerald-400/60 font-mono font-bold">{totalSweeps} sweeps</div>
           </div>
         </div>
       </div>

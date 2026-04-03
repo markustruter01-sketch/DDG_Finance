@@ -156,7 +156,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
     <div className="px-4 py-3">
       <div className="flex items-center justify-between mb-2.5">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(99,102,241,0.55)" }}>
+          <span className="text-[13px] uppercase tracking-widest font-bold" style={{ color: "rgba(129,140,248,0.8)" }}>
             Trade Insight
           </span>
           <span className="text-[11px] font-mono text-white/25">
@@ -188,7 +188,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
               <span className="text-[13px] font-bold uppercase tracking-wider" style={{ color: trade.color }}>
                 {trade.bot}
               </span>
-              <span className="text-[13px] font-mono text-white/60">
+              <span className="text-[13px] font-mono text-white/80">
                 {trade.side.toUpperCase()} {trade.symbol}
               </span>
             </div>
@@ -199,7 +199,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
               {isUp ? "+" : ""}${trade.pnlUsd.toFixed(2)}
             </span>
           </div>
-          <div className="text-[11px] leading-relaxed text-white/55 font-mono">
+          <div className="text-[11px] leading-relaxed text-white/80 font-mono">
             {trade.reason}
           </div>
           {trade.entryTime && (

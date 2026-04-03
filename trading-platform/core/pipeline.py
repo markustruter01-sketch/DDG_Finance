@@ -571,6 +571,36 @@ async def _run_pipeline_inner(
         except Exception as _rw_exc:
             logger.warning(f"Pipeline | market_regime.json write failed (non-fatal): {_rw_exc}")
 
+    # ── Stage 3: Correlation Matrix & Independent Crypto Regime ──────────
+    try:
+        from analysis.correlation_matrix import (
+            compute_correlation_matrix,
+            get_equity_crypto_correlation,
+        )
+        _corr_state = compute_correlation_matrix()
+        _eq_crypto_corr = get_equity_crypto_correlation()
+        logger.debug(
+            f"Pipeline | Correlation matrix updated — "
+            f"max={_corr_state.get('max_correlation')} "
+            f"shock={_corr_state.get('systemic_shock')} "
+            f"eq_crypto_corr={_eq_crypto_corr:.3f}"
+        )
+    except Exception as _corr_exc:
+        logger.warning(f"Pipeline | Correlation matrix failed (non-fatal): {_corr_exc}")
+        _eq_crypto_corr = 0.0
+
+    try:
+        from analysis.crypto_regime import classify_crypto_regime
+        _crypto_regime = classify_crypto_regime(
+            correlation_with_equity=_eq_crypto_corr,
+        )
+        logger.debug(
+            f"Pipeline | Crypto regime: {_crypto_regime.get('crypto_regime')} "
+            f"(score={_crypto_regime.get('score')}, contagion={_crypto_regime.get('equity_contagion')})"
+        )
+    except Exception as _cr_exc:
+        logger.warning(f"Pipeline | Crypto regime classification failed (non-fatal): {_cr_exc}")
+
     # ── Equity snapshot ─────────────────────────────────────────────────────
     # Write a time-series equity point to PostgreSQL for the equity curve chart.
     # Kraken equity is read from the authoritative kraken_heartbeat DB table.

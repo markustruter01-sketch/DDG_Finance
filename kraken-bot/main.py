@@ -264,13 +264,17 @@ latest_microstructure: dict[str, dict] = {}
 # Throttles new order placement when the bucket exceeds 80% of the 15-point ceiling.
 _penalty_tracker: PenaltyTracker = PenaltyTracker()
 
-# ── Cross-Bot Regime Sync ─────────────────────────────────────────────────────
-# Path to the shared file the Alpaca pipeline writes after every successful cycle.
-# The Kraken bot reads this file once per cycle to apply Bear/RISK-OFF filters.
+# ── Cross-Bot Regime Sync (Stage 3: Decoupled) ───────────────────────────────
+# Legacy: Kraken bots used to read market_regime.json from the Alpaca pipeline,
+# inheriting equity-driven Bear/RISK-OFF states.  Stage 3 decouples this —
+# Kraken bots now read crypto_regime.json (independent crypto classification)
+# and only inherit equity contagion when correlation is empirically high (>0.6).
 _MARKET_REGIME_FILE = os.path.join(_REPO_ROOT, "trading-platform", "data", "market_regime.json")
+_CRYPTO_REGIME_FILE = os.path.join(_REPO_ROOT, "trading-platform", "data", "crypto_regime.json")
+_CORR_STATE_FILE = os.path.join(_REPO_ROOT, "trading-platform", "data", "correlation_state.json")
 
-# Bear and Risk-Off regimes that trigger Kraken's defensive mode.
 _BEAR_REGIMES = frozenset({"Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off"})
+_CRYPTO_BEAR_REGIMES = frozenset({"Crypto-Bear", "Crypto-Risk-Off"})
 
 
 def _read_market_regime() -> dict:
@@ -291,6 +295,58 @@ def _read_market_regime() -> dict:
     except Exception as _exc:
         logger.debug(f"RegimeSync | Could not read market_regime.json: {_exc}")
         return {"regime": "unknown", "is_bear": False, "source": "read_error"}
+
+
+def _read_crypto_regime() -> dict:
+    """
+    Read the independent crypto_regime.json (Stage 3).
+    This is the PRIMARY regime source for Kraken bots — decoupled from equity.
+    Falls back to market_regime.json if crypto regime unavailable.
+    """
+    try:
+        import pathlib as _pl
+        _path = _pl.Path(_CRYPTO_REGIME_FILE)
+        if _path.exists():
+            data = json.loads(_path.read_text())
+            crypto_regime = data.get("crypto_regime", "unknown")
+            is_bear = crypto_regime in _CRYPTO_BEAR_REGIMES
+            return {
+                "regime": crypto_regime,
+                "is_bear": is_bear,
+                "equity_contagion": data.get("equity_contagion", False),
+                "crypto_fear_greed": data.get("crypto_fear_greed"),
+                "btc_24h_change_pct": data.get("btc_24h_change_pct"),
+                "confidence": data.get("confidence", 0),
+                "source": "crypto_regime",
+                "score": data.get("score"),
+            }
+    except Exception as _exc:
+        logger.debug(f"CryptoRegime | Could not read crypto_regime.json: {_exc}")
+
+    legacy = _read_market_regime()
+    legacy["source"] = "equity_fallback"
+    return legacy
+
+
+def _read_correlation_state() -> dict:
+    """
+    Read the correlation_state.json for systemic-shock position scaling.
+    Returns position_scale_factor (1.0 = normal, 0.5 = systemic shock).
+    """
+    try:
+        import pathlib as _pl
+        _path = _pl.Path(_CORR_STATE_FILE)
+        if _path.exists():
+            data = json.loads(_path.read_text())
+            return {
+                "position_scale_factor": data.get("position_scale_factor", 1.0),
+                "systemic_shock": data.get("systemic_shock", False),
+                "max_correlation": data.get("max_correlation"),
+                "max_pair": data.get("max_pair", ""),
+            }
+    except Exception as _exc:
+        logger.debug(f"CorrMatrix | Could not read correlation_state.json: {_exc}")
+    return {"position_scale_factor": 1.0, "systemic_shock": False, "max_correlation": None}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -919,24 +975,34 @@ def run_cycle() -> None:
     _trail_pct          = _ap["TRAIL_PCT"]
     _min_net_profit_pct = _ap["MIN_NET_PROFIT_PCT"]
 
-    # ── Cross-Bot Regime Sync ─────────────────────────────────────────────────
-    # Read the shared market_regime.json file that the Alpaca pipeline writes
-    # after every successful analysis cycle.  When the Alpaca bot signals a
-    # Bear or RISK-OFF regime, the Kraken bot operates in defensive mode:
-    #   • All new LONG entries are blocked (crypto "dip buying" disabled)
-    #   • Max simultaneous positions reduced from 10 → BEAR_MAX_POSITIONS (5)
-    #   • Max position size reduced from 10% → BEAR_MAX_POSITION_FRACTION (7.5%)
-    _regime_data  = _read_market_regime()
+    # ── Stage 3: Independent Crypto Regime + Correlation Scaling ──────────
+    # Kraken bots now read crypto_regime.json (decoupled from equity).
+    # Equity Bear only affects crypto when empirical correlation > 0.6.
+    # Correlation matrix drives systemic-shock position scaling (50%).
+    _regime_data  = _read_crypto_regime()
     _regime_label = _regime_data.get("regime", "unknown")
     _is_bear      = _regime_data.get("is_bear", False)
+    _regime_src   = _regime_data.get("source", "unknown")
+    _eq_contagion = _regime_data.get("equity_contagion", False)
 
-    _vix_value = _regime_data.get("vix")
+    _eq_regime = _read_market_regime()
+    _vix_value = _eq_regime.get("vix")
     _vix_elevated = isinstance(_vix_value, (int, float)) and _vix_value > 25
     _effective_atr_stop_mult = 2.0 if _vix_elevated else ATR_STOP_MULTIPLIER
 
-    # Apply bear-regime sizing overrides
+    _corr_state = _read_correlation_state()
+    _position_scale = _corr_state.get("position_scale_factor", 1.0)
+    _systemic_shock = _corr_state.get("systemic_shock", False)
+
     _effective_max_positions       = BEAR_MAX_POSITIONS       if _is_bear else MAX_POSITIONS
     _effective_max_position_frac   = BEAR_MAX_POSITION_FRACTION if _is_bear else MAX_POSITION_FRACTION
+
+    if _position_scale < 1.0:
+        _effective_max_position_frac *= _position_scale
+        logger.warning(
+            f"CorrMatrix | SYSTEMIC SHOCK — position scaling {_position_scale:.0%} | "
+            f"max_corr={_corr_state.get('max_correlation')} ({_corr_state.get('max_pair')})"
+        )
 
     if _vix_elevated:
         logger.info(
@@ -945,14 +1011,15 @@ def run_cycle() -> None:
         )
 
     if _is_bear:
+        _contagion_note = " (equity contagion)" if _eq_contagion else ""
         logger.info(
-            f"RegimeSync | BEAR/RISK-OFF detected (Alpaca regime='{_regime_label}') — "
+            f"CryptoRegime | {_regime_label}{_contagion_note} [src={_regime_src}] — "
             f"LONG entries DISABLED | max_positions={_effective_max_positions} | "
             f"max_position_fraction={_effective_max_position_frac:.1%}"
         )
     else:
         logger.debug(
-            f"RegimeSync | Regime='{_regime_label}' — normal parameters active "
+            f"CryptoRegime | {_regime_label} [src={_regime_src}] — normal parameters "
             f"(max_positions={_effective_max_positions} max_frac={_effective_max_position_frac:.0%})"
         )
 
@@ -1312,12 +1379,11 @@ def run_cycle() -> None:
                     f"cap={_effective_vpin_cap:.2f}"
                 )
 
-            # ── Bear Regime LONG Filter + Contrarian Scout (Stage 3) ──────────
-            # In a confirmed Bear or RISK-OFF regime, all new LONG signals are
-            # normally blocked (SHORT-only mode). EXCEPTION: if RSI is extremely
-            # low (< CONTRARIAN_RSI_THRESH), the bot opens a small 3% "scout"
-            # position as an insurance play against missing the bottom.
-            # The scout only requires RSI < 25 — no z-score/RSI_OVERSOLD gate.
+            # ── Crypto Regime LONG Filter + Contrarian Scout ──────────────────
+            # In a confirmed Crypto-Bear or Crypto-Risk-Off regime, all new LONG
+            # signals are blocked.  Equity Bear only triggers this when empirical
+            # correlation > 0.6 (equity contagion).  EXCEPTION: if RSI < 25, a
+            # small 3% "scout" position is allowed as a contrarian insurance play.
             if _is_bear:
                 if sym_rsi < CONTRARIAN_RSI_THRESH:
                     _scout_size = total_equity * CONTRARIAN_EQUITY_PCT
@@ -1361,8 +1427,8 @@ def run_cycle() -> None:
 
                 if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
                     logger.info(
-                        f"BearRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
-                        f"RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
+                        f"CryptoRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
+                        f"[src={_regime_src}] RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
                         f"Capital preserved (SHORT-only mode active)"
                     )
                     cycle_signals.append({

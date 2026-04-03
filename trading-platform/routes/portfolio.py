@@ -1841,3 +1841,37 @@ async def news_feed() -> dict:
         logger.warning(f"News feed fetch failed: {exc}")
         news_cache.invalidate()
         return {"articles": [], "error": str(exc)}
+
+
+@portfolio_router.get("/crypto-regime")
+async def get_crypto_regime():
+    """
+    Stage 3 — Independent crypto regime classification.
+    Returns the current crypto-native regime (decoupled from equity).
+    """
+    try:
+        from analysis.crypto_regime import get_cached_crypto_regime, classify_crypto_regime
+        cached = get_cached_crypto_regime()
+        if cached:
+            return cached
+        return classify_crypto_regime(correlation_with_equity=0.0)
+    except Exception as exc:
+        logger.warning(f"API | crypto-regime failed: {exc}")
+        return {"crypto_regime": "unknown", "error": str(exc)}
+
+
+@portfolio_router.get("/correlation-matrix")
+async def get_correlation_matrix():
+    """
+    Stage 3 — Rolling 60-day Pearson correlation matrix between all bots.
+    Includes systemic-shock detection and position-scaling factor.
+    """
+    try:
+        from analysis.correlation_matrix import get_cached_state, compute_correlation_matrix
+        cached = get_cached_state()
+        if cached:
+            return cached
+        return compute_correlation_matrix()
+    except Exception as exc:
+        logger.warning(f"API | correlation-matrix failed: {exc}")
+        return {"matrix": {}, "systemic_shock": False, "error": str(exc)}

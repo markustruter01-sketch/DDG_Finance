@@ -1,0 +1,12 @@
+{
+  "crypto_regime": "Crypto-Bear",
+  "score": 25.0,
+  "confidence": 0.67,
+  "equity_contagion": false,
+  "equity_regime": "Crypto",
+  "correlation_with_equity": 0.0,
+  "crypto_fear_greed": 9,
+  "btc_24h_change_pct": 0.57,
+  "btc_dominance": 56.1,
+  "written_at": "2026-04-03T09:34:18.227387+00:00"
+}

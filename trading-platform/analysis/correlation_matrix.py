@@ -1,0 +1,271 @@
+"""
+correlation_matrix.py — Rolling Bot-to-Bot Correlation & Systemic Shock Detector (Stage 3)
+==========================================================================================
+Computes a rolling 60-day Pearson correlation matrix between all bot daily returns.
+
+When correlation converges toward 1.0 (all bots winning/losing together),
+this indicates a systemic shock scenario where diversification has failed.
+The system responds by auto-scaling position sizes by 50%.
+
+Data source: equity_snapshots table (PostgreSQL)
+  - Each row has: alpaca_equity, kraken_equity, options_equity, forex_equity
+  - We compute daily returns from equity changes for each bot class
+
+Output: correlation_state.json with:
+  - matrix: dict of bot-pair → correlation coefficient
+  - max_correlation: float (highest off-diagonal correlation)
+  - systemic_shock: bool (True if max_correlation > SHOCK_THRESHOLD)
+  - position_scale_factor: float (1.0 normal, 0.5 during shock)
+  - computed_at: ISO timestamp
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from loguru import logger
+
+_DATA_DIR = Path(__file__).parent.parent / "data"
+_CORR_FILE = _DATA_DIR / "correlation_state.json"
+
+ROLLING_WINDOW_DAYS = 60
+SHOCK_THRESHOLD = 0.85
+SHOCK_SCALE_FACTOR = 0.50
+MIN_DATA_POINTS = 15
+
+_cache: dict[str, Any] = {"data": None, "ts": 0}
+_CACHE_TTL = 900
+
+
+def _pearson(x: list[float], y: list[float]) -> float | None:
+    n = len(x)
+    if n < MIN_DATA_POINTS or n != len(y):
+        return None
+
+    mx = sum(x) / n
+    my = sum(y) / n
+
+    cov = sum((xi - mx) * (yi - my) for xi, yi in zip(x, y))
+    sx = math.sqrt(sum((xi - mx) ** 2 for xi in x))
+    sy = math.sqrt(sum((yi - my) ** 2 for yi in y))
+
+    if sx < 1e-12 or sy < 1e-12:
+        return None
+
+    return cov / (sx * sy)
+
+
+def _daily_returns(values: list[float]) -> list[float]:
+    if len(values) < 2:
+        return []
+    returns = []
+    for i in range(1, len(values)):
+        prev = values[i - 1]
+        if prev > 0:
+            returns.append((values[i] - prev) / prev)
+        else:
+            returns.append(0.0)
+    return returns
+
+
+def compute_correlation_matrix() -> dict:
+    """
+    Fetch the last 60 days of equity snapshots and compute
+    pair-wise Pearson correlation of daily returns.
+    """
+    try:
+        from db.postgres import get_conn
+    except ImportError:
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from db.postgres import get_conn
+
+    bots = {
+        "alpaca": "alpaca_equity",
+        "kraken": "kraken_equity",
+        "options": "COALESCE(options_equity, 0)",
+        "forex": "COALESCE(forex_equity, 0)",
+    }
+
+    columns = ", ".join(
+        f"{col} AS {name}" for name, col in bots.items()
+    )
+
+    query = f"""
+        SELECT
+            DATE(ts) AS day,
+            {columns}
+        FROM equity_snapshots
+        WHERE ts > NOW() - INTERVAL '{ROLLING_WINDOW_DAYS} days'
+        ORDER BY day ASC
+    """
+
+    daily_equity: dict[str, list[float]] = {b: [] for b in bots}
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+                rows = cur.fetchall()
+
+        if not rows:
+            logger.debug("CorrMatrix | No equity snapshots found")
+            return _empty_result("no_data")
+
+        prev_day = None
+        day_sums: dict[str, list[float]] = {b: [] for b in bots}
+        day_counts: dict[str, int] = {b: 0 for b in bots}
+
+        for row in rows:
+            day = row[0]
+            vals = {name: row[i + 1] for i, name in enumerate(bots)}
+
+            if prev_day is not None and day != prev_day:
+                for b in bots:
+                    if day_counts[b] > 0:
+                        avg = sum(day_sums[b]) / day_counts[b]
+                        daily_equity[b].append(avg)
+                day_sums = {b: [] for b in bots}
+                day_counts = {b: 0 for b in bots}
+
+            for b in bots:
+                v = vals[b]
+                if v is not None and v > 0:
+                    day_sums[b].append(float(v))
+                    day_counts[b] += 1
+
+            prev_day = day
+
+        for b in bots:
+            if day_counts[b] > 0:
+                avg = sum(day_sums[b]) / day_counts[b]
+                daily_equity[b].append(avg)
+
+    except Exception as exc:
+        logger.warning(f"CorrMatrix | DB query failed: {exc}")
+        return _empty_result("db_error")
+
+    returns = {b: _daily_returns(daily_equity[b]) for b in bots}
+
+    bot_names = list(bots.keys())
+    matrix: dict[str, float | None] = {}
+    max_corr = -1.0
+    max_pair = ""
+
+    for i in range(len(bot_names)):
+        for j in range(i + 1, len(bot_names)):
+            a, b = bot_names[i], bot_names[j]
+            ra, rb = returns[a], returns[b]
+
+            min_len = min(len(ra), len(rb))
+            if min_len < MIN_DATA_POINTS:
+                matrix[f"{a}_vs_{b}"] = None
+                continue
+
+            ra_trim = ra[-min_len:]
+            rb_trim = rb[-min_len:]
+
+            corr = _pearson(ra_trim, rb_trim)
+            if corr is not None:
+                matrix[f"{a}_vs_{b}"] = round(corr, 4)
+                if corr > max_corr:
+                    max_corr = corr
+                    max_pair = f"{a}_vs_{b}"
+            else:
+                matrix[f"{a}_vs_{b}"] = None
+
+    systemic_shock = max_corr > SHOCK_THRESHOLD
+    scale_factor = SHOCK_SCALE_FACTOR if systemic_shock else 1.0
+
+    if systemic_shock:
+        logger.warning(
+            f"CorrMatrix | SYSTEMIC SHOCK — max_corr={max_corr:.3f} ({max_pair}) > "
+            f"{SHOCK_THRESHOLD} — position scaling reduced to {scale_factor:.0%}"
+        )
+    else:
+        logger.debug(
+            f"CorrMatrix | max_corr={max_corr:.3f} ({max_pair}) — normal operations"
+        )
+
+    data_points = {b: len(returns[b]) for b in bots}
+
+    result = {
+        "matrix": matrix,
+        "max_correlation": round(max_corr, 4) if max_corr >= 0 else None,
+        "max_pair": max_pair,
+        "systemic_shock": systemic_shock,
+        "position_scale_factor": scale_factor,
+        "shock_threshold": SHOCK_THRESHOLD,
+        "data_points": data_points,
+        "rolling_window_days": ROLLING_WINDOW_DAYS,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        _DATA_DIR.mkdir(parents=True, exist_ok=True)
+        _CORR_FILE.write_text(json.dumps(result, indent=2))
+    except Exception as exc:
+        logger.warning(f"CorrMatrix | File write failed: {exc}")
+
+    _cache["data"] = result
+    _cache["ts"] = time.time()
+
+    return result
+
+
+def get_equity_crypto_correlation() -> float:
+    state = get_cached_state()
+    if state is None:
+        return 0.0
+    matrix = state.get("matrix", {})
+    corr = matrix.get("alpaca_vs_kraken")
+    return corr if corr is not None else 0.0
+
+
+def get_position_scale_factor() -> float:
+    state = get_cached_state()
+    if state is None:
+        return 1.0
+    return state.get("position_scale_factor", 1.0)
+
+
+def get_cached_state() -> dict | None:
+    if _cache["data"] and (time.time() - _cache["ts"]) < _CACHE_TTL:
+        return _cache["data"]
+
+    try:
+        if _CORR_FILE.exists():
+            data = json.loads(_CORR_FILE.read_text())
+            written = data.get("computed_at", "")
+            if written:
+                age = (
+                    datetime.now(timezone.utc) - datetime.fromisoformat(written)
+                ).total_seconds()
+                if age < _CACHE_TTL:
+                    _cache["data"] = data
+                    _cache["ts"] = time.time()
+                    return data
+    except Exception:
+        pass
+
+    return None
+
+
+def _empty_result(reason: str) -> dict:
+    return {
+        "matrix": {},
+        "max_correlation": None,
+        "max_pair": "",
+        "systemic_shock": False,
+        "position_scale_factor": 1.0,
+        "shock_threshold": SHOCK_THRESHOLD,
+        "data_points": {},
+        "rolling_window_days": ROLLING_WINDOW_DAYS,
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "note": reason,
+    }

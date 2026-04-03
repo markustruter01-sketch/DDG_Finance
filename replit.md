@@ -39,6 +39,10 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 -   **Stack**: Python 3.11, Kraken (via ccxt in paper mode), PostgreSQL (isolated `bot_id` columns).
 -   **Architecture**: Configurable profiles, DB isolation, and file isolation per bot. Features dynamic VPIN scaling, robust risk management, and ATR-based dynamic stops.
 -   **RAG TTL Decay**: Filters LLM insights to a 48-hour window to prevent stale context.
+-   **Stage 3 — Regime Isolation**: Kraken bots now read `crypto_regime.json` (independent crypto classification from Crypto Fear & Greed + BTC 24h change + BTC dominance) instead of inheriting equity-driven `market_regime.json`. Equity contagion only applies when rolling 60-day Pearson correlation > 0.6.
+-   **Correlation Matrix**: Rolling 60-day Pearson correlation between all 4 bot classes (Alpaca, Kraken, Options, Forex). When max correlation > 0.85 (systemic shock), positions auto-scale to 50%. File: `correlation_state.json`.
+-   **WebSocket Feed**: `ws_feed.py` connects to `wss://ws.kraken.com/v2` for sub-second price updates with auto-reconnect (10x backoff). REST polling remains as fallback.
+-   **Dynamic VPIN**: `vpin_adaptive.py` replaces hardcoded 0.82 threshold with 30-day rolling mean + 1.5σ (floor 0.60, ceiling 0.95).
 
 ## Bot #5: Apex Predator Options Engine
 

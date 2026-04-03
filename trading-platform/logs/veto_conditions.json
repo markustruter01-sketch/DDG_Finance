@@ -1,32 +1,32 @@
 {
-  "generated_at": "2026-04-03T07:30:17.998899+00:00",
-  "valid_until": "2026-04-03T13:30:17.998899+00:00",
+  "generated_at": "2026-04-03T08:00:04.619269+00:00",
+  "valid_until": "2026-04-03T14:00:04.619269+00:00",
   "vetoed_tickers": [
     "RENDER",
-    "UNI",
     "ATOM",
-    "GBPJPY"
+    "UNI",
+    "GBP_JPY"
   ],
   "conditions": [
+    {
+      "type": "vpin_threshold",
+      "value": 0.75
+    },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "vpin_threshold",
-      "value": 0.72
-    },
-    {
-      "type": "max_correlation_overlap",
-      "value": 2.0
+      "type": "news_blacklist",
+      "ticker": "JPY"
     }
   ],
-  "critique_summary": "The fleet is suffering from high cross-bot correlation in the Kraken segment, specifically on toxic assets RENDER and ATOM. Navigator is in a performance collapse with a 16.7% win rate and dangerous JPY short overconcentration, while Oracle's pivot to SGOV is the only effective risk-off move currently active.",
+  "critique_summary": "The fleet is suffering from extreme cross-bot correlation in the Kraken segment, specifically on RENDER and ATOM shorts which have a 0% and 40% win rate respectively. Navigator is severely overexposed to JPY shorts during a news blackout, resulting in a -3.08% drawdown. Oracle is correctly positioned in SGOV, but the trade history shows critical data leakage between Kraken and Alpaca logging systems.",
   "critique_flags": [
-    "High cross-bot correlation on RENDER, ATOM, and UNI",
-    "Navigator win rate collapse (16.7%)",
-    "JPY short overconcentration in Bot #6",
-    "Conviction inflation in historical Oracle crypto trades"
+    "High cross-bot correlation on RENDER/ATOM/UNI",
+    "Navigator JPY short overconcentration",
+    "Data leakage in Oracle trade history logs",
+    "Kraken fleet win rates diverging below 50% for aggressive profiles"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

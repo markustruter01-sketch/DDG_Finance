@@ -152,12 +152,12 @@ export function GlobalHUD() {
             className="space-y-1.5"
           >
             <h2
-              className="text-[15px] font-black uppercase tracking-wide leading-tight"
+              className="text-[18px] font-black uppercase tracking-wide leading-tight"
               style={{ color: C.violetLight, textShadow: "0 0 12px rgba(139,92,246,0.4)" }}
             >
               Welcome!
             </h2>
-            <p className="text-[12px] leading-[1.4] font-medium" style={{ color: C.slate300 }}>
+            <p className="text-[15px] leading-[1.5] font-medium" style={{ color: C.slate300 }}>
               Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in{" "}
               <span className="font-bold" style={{ color: C.yellow }}>Stocks</span>,{" "}
               <span className="font-bold" style={{ color: C.cyan }}>Crypto</span>,{" "}

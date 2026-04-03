@@ -355,6 +355,82 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+            <svg viewBox="0 0 200 140" className="w-[200px] h-[140px]" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <radialGradient id="brainGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="rgba(99,102,241,0.2)" />
+                  <stop offset="50%" stopColor="rgba(139,92,246,0.08)" />
+                  <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+                </radialGradient>
+                <radialGradient id="brainCore" cx="50%" cy="50%" r="30%">
+                  <stop offset="0%" stopColor="rgba(167,139,250,0.25)" />
+                  <stop offset="100%" stopColor="rgba(99,102,241,0)" />
+                </radialGradient>
+                <filter id="heavyGlow">
+                  <feGaussianBlur stdDeviation="8" result="blur" />
+                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <circle cx={100} cy={60} r={55} fill="url(#brainGlow)" />
+              <circle cx={100} cy={60} r={35} fill="url(#brainCore)" />
+              <motion.circle
+                cx={100} cy={60} r={38}
+                fill="none"
+                stroke="rgba(139,92,246,0.15)"
+                strokeWidth={1}
+                animate={{ scale: [1, 1.36, 1], opacity: [0.3, 0, 0.3] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeOut" }}
+                style={{ transformOrigin: "100px 60px" }}
+              />
+              <motion.circle
+                cx={100} cy={60} r={30}
+                fill="none"
+                stroke="rgba(99,102,241,0.2)"
+                strokeWidth={1}
+                animate={{ scale: [1, 1.55, 1], opacity: [0.4, 0, 0.4] }}
+                transition={{ duration: 3, repeat: Infinity, ease: "easeOut", delay: 1.5 }}
+                style={{ transformOrigin: "100px 60px" }}
+              />
+              <motion.circle
+                cx={100} cy={60} r={26}
+                fill="none"
+                stroke="rgba(167,139,250,0.12)"
+                strokeWidth={1.5}
+                animate={{ scale: [1, 2.25, 1], opacity: [0.2, 0, 0.2] }}
+                transition={{ duration: 4, repeat: Infinity, ease: "easeOut", delay: 0.8 }}
+                style={{ transformOrigin: "100px 60px" }}
+              />
+              <motion.circle
+                cx={100} cy={60} r={24}
+                fill="rgba(99,102,241,0.06)"
+                stroke="rgba(129,140,248,0.5)"
+                strokeWidth={2}
+                filter="url(#heavyGlow)"
+                animate={{ opacity: [0.5, 1, 0.5], scale: [0.97, 1.03, 0.97] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                style={{ transformOrigin: "100px 60px" }}
+              />
+              <motion.text
+                x={100} y={57}
+                textAnchor="middle" fontSize="24"
+                animate={{ scale: [1, 1.1, 1], opacity: [0.8, 1, 0.8] }}
+                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                style={{ transformOrigin: "100px 57px" }}
+              >
+                🧠
+              </motion.text>
+              <text x={100} y={78} textAnchor="middle" fill="rgba(167,139,250,0.8)" fontSize="7" fontWeight="bold">QUANT BRAIN</text>
+              <motion.text
+                x={100} y={90}
+                textAnchor="middle" fill="rgba(129,140,248,0.5)" fontSize="6"
+                animate={{ opacity: [0.3, 0.7, 0.3] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                ALL NODES SYNCED
+              </motion.text>
+            </svg>
+          </div>
         </div>
 
         <div className="shrink-0 border-t border-white/[0.04]">

@@ -82,10 +82,10 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
           </div>
 
           <motion.div
-            className="relative z-10 rounded-xl border border-green-400/50 bg-slate-950/95 backdrop-blur-xl px-4 py-3 text-center"
+            className="relative z-10 rounded-xl border border-green-400/50 bg-slate-950/95 backdrop-blur-xl px-5 py-4 text-center"
             style={{
-              boxShadow: "0 0 20px rgba(34,197,94,0.3), 0 0 40px rgba(34,197,94,0.15)",
-              width: "180px",
+              boxShadow: "0 0 24px rgba(34,197,94,0.3), 0 0 48px rgba(34,197,94,0.15)",
+              width: "225px",
             }}
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -106,25 +106,25 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
             />
 
             <motion.div
-              className="text-2xl mb-1"
+              className="text-3xl mb-1.5"
               animate={{ scale: [1, 1.15, 1] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
             >
               {trade.icon}
             </motion.div>
 
-            <div className="text-[7px] uppercase tracking-[0.15em] text-green-400/60 font-bold">
+            <div className="text-[9px] uppercase tracking-[0.15em] text-green-400/60 font-bold">
               Profit Locked In
             </div>
 
-            <div className="text-[10px] font-bold text-white mb-1">
+            <div className="text-[13px] font-bold text-white mb-1.5">
               {trade.bot}
             </div>
 
             <motion.div
-              className="text-lg font-black font-mono text-green-400 mb-0.5"
+              className="text-xl font-black font-mono text-green-400 mb-1"
               style={{
-                textShadow: "0 0 12px rgba(34,197,94,0.6), 0 0 24px rgba(34,197,94,0.3)",
+                textShadow: "0 0 14px rgba(34,197,94,0.6), 0 0 28px rgba(34,197,94,0.3)",
               }}
               animate={{ scale: [1, 1.05, 1] }}
               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
@@ -132,7 +132,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
               +${Math.abs(trade.pnlUsd).toFixed(2)}
             </motion.div>
 
-            <div className="text-[8px] text-white/50 font-mono">
+            <div className="text-[10px] text-white/50 font-mono">
               {trade.symbol}
             </div>
           </motion.div>

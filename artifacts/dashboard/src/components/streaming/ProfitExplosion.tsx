@@ -156,7 +156,7 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
   useEffect(() => {
     if (!trade && lastTradeRef.current?.isWin) {
       const tid = lastTradeRef.current.id;
-      const timer = setTimeout(() => setPulseId(tid), 1900);
+      const timer = setTimeout(() => setPulseId(tid), 1267);
       return () => clearTimeout(timer);
     }
   }, [trade]);
@@ -231,13 +231,13 @@ export function ProfitExplosion({ trade }: ProfitExplosionProps) {
                     y: exitOffset.y,
                     scale: 0.02,
                     opacity: 0,
-                    transition: { duration: 2, ease: "easeInOut" },
+                    transition: { duration: 1.33, ease: "easeInOut" },
                   }
                 : {
                     scale: 1.08,
                     opacity: 0,
                     filter: "blur(12px)",
-                    transition: { duration: 2, ease: "easeInOut" },
+                    transition: { duration: 1.33, ease: "easeInOut" },
                   },
             }}
             role="alert"

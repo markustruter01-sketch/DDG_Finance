@@ -136,7 +136,11 @@ export function GlobalHUD() {
               Welcome!
             </h2>
             <p className="text-[12px] leading-[1.4] text-slate-300/90 font-medium">
-              Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in Stocks, Crypto, FOREX and Futures. Get in contact to see how you can build your own for only{" "}
+              Follow our 6 AI-powered automated trading bots that function off institutional grade algorithms and maths to make profits for us 24/7 in{" "}
+              <span className="text-yellow-400 font-bold">Stocks</span>,{" "}
+              <span className="text-cyan-400 font-bold">Crypto</span>,{" "}
+              <span className="text-violet-400 font-bold">FOREX</span> and{" "}
+              <span className="text-orange-400 font-bold">Futures</span>. Get in contact to see how you can build your own for only{" "}
               <span className="text-emerald-400 font-bold">$24.99</span>! No experience needed!
             </p>
           </motion.div>

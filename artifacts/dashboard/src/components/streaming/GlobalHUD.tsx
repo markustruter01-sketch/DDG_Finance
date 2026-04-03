@@ -136,9 +136,9 @@ export function GlobalHUD() {
               {"isLogo" in card && card.isLogo ? (
                 <div className="flex items-center justify-center gap-3 h-full min-h-[48px] w-full py-1">
                   <motion.span
-                    className="text-[22px] font-black tracking-wider uppercase bg-gradient-to-r from-violet-300 via-white to-violet-400 bg-clip-text text-transparent shrink-0 leading-tight"
-                    style={{ textShadow: "0 0 20px rgba(139,92,246,0.5)" }}
-                    animate={{ opacity: [0.7, 1, 0.7] }}
+                    className="text-[22px] font-black tracking-wider uppercase text-violet-200 shrink-0 leading-tight"
+                    style={{ textShadow: "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)" }}
+                    animate={{ textShadow: ["0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)", "0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.5)", "0 0 12px rgba(139,92,246,0.6), 0 0 24px rgba(139,92,246,0.3)"] }}
                     transition={{ duration: 3, repeat: Infinity }}
                   >
                     Powered<br/>by

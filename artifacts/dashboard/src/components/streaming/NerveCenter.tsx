@@ -355,7 +355,7 @@ export function NerveCenter() {
             className="w-full h-full object-cover rounded-xl"
             src={`${import.meta.env.BASE_URL}ai-brain-loop.mp4`}
           />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "30px" }}>
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20" style={{ marginLeft: "-12px", marginTop: "90px" }}>
             <svg viewBox="-30 -10 260 240" className="w-[900px] h-[630px]" preserveAspectRatio="xMidYMid meet">
               <motion.circle
                 cx={100} cy={90} r={24}

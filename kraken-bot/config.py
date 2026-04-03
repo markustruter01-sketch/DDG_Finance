@@ -181,6 +181,12 @@ TRAIL_PCT             = 0.03
 
 VPIN_ENTRY_BLOCK      = _profile.get("VPIN_ENTRY_BLOCK", 0.65)
 
+try:
+    from vpin_adaptive import get_dynamic_threshold as _get_dyn_vpin
+    VPIN_ENTRY_BLOCK_DYNAMIC = True
+except ImportError:
+    VPIN_ENTRY_BLOCK_DYNAMIC = False
+
 VPIN_ELEVATED_CAP     = 0.90
 VOLUME_SURGE_RATIO    = 1.50
 

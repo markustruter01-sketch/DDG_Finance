@@ -47,6 +47,17 @@ VAMP_SHORT_MAX =  0.005
 VPIN_HIGH_THRESH  = 0.72
 VPIN_BLOCK_THRESH = 0.82
 
+def get_dynamic_vpin_block() -> float:
+    """
+    v2.0: Return the adaptive VPIN block threshold (30-day rolling mean + 1.5σ).
+    Falls back to VPIN_BLOCK_THRESH (0.82) if insufficient data.
+    """
+    try:
+        from vpin_adaptive import get_dynamic_threshold
+        return get_dynamic_threshold()
+    except ImportError:
+        return VPIN_BLOCK_THRESH
+
 # ── Order-book / trade-bucket defaults ───────────────────────────────────────
 _DEFAULT_OB_LEVELS    = 5
 _DEFAULT_BUCKET_USD   = 5_000.0
@@ -437,15 +448,27 @@ class MicrostructureSignal:
         side: str,
         ofi_min_long:  float = OFI_LONG_MIN,
         ofi_max_short: float = OFI_SHORT_MAX,
-        vpin_block:    float = VPIN_BLOCK_THRESH,
+        vpin_block:    float | None = None,
     ) -> tuple[bool, str]:
         """
         Gate a new entry based on microstructure conditions.
+
+        v2.0: vpin_block defaults to the adaptive 30-day rolling threshold.
+        Pass an explicit value to override.
 
         Returns
         -------
         (allowed: bool, reason: str)
         """
+        if vpin_block is None:
+            vpin_block = get_dynamic_vpin_block()
+
+        try:
+            from vpin_adaptive import record_vpin
+            record_vpin(self.symbol, self.vpin)
+        except ImportError:
+            pass
+
         if self.vpin >= vpin_block:
             return False, (
                 f"VPIN={self.vpin:.3f} >= block_threshold={vpin_block:.2f} (toxic flow)"

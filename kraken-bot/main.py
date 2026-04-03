@@ -779,6 +779,17 @@ def _read_market_cache() -> dict | None:
         return None
 
 
+def get_ws_price(symbol: str) -> float | None:
+    """
+    Get sub-second price from WebSocket feed (Stage 2).
+    Returns None if WebSocket is unavailable or price is stale.
+    """
+    _feed = globals().get("_ws_feed")
+    if _feed is None:
+        return None
+    return _feed.get_price(symbol)
+
+
 def _fetch_ohlcv_with_cache(symbol: str) -> list | None:
     """Fetch OHLCV data, using shared cache for non-primary bots."""
     if not IS_PRIMARY_FETCHER:
@@ -1705,6 +1716,17 @@ def main() -> None:
     _keepalive = threading.Thread(target=_keepalive_loop, name="keepalive", daemon=True)
     _keepalive.start()
     logger.info("Bot | Keepalive thread started (2-min DB heartbeat, independent of cycle)")
+
+    # ── WebSocket feed — sub-second price updates (Stage 2) ───────────────────
+    _ws_feed = None
+    try:
+        from ws_feed import WebSocketFeed
+        _ws_feed = WebSocketFeed(symbols=SYMBOLS)
+        _ws_feed.start()
+        logger.info("Bot | WebSocket feed started — sub-second price updates active")
+        globals()["_ws_feed"] = _ws_feed
+    except Exception as _ws_exc:
+        logger.warning(f"Bot | WebSocket feed unavailable ({_ws_exc}) — using REST polling")
 
     # Do an initial equity fetch before starting the loop
     refresh_equity()

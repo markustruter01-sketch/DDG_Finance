@@ -307,6 +307,22 @@ async def _run_pipeline_inner(
 
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
     using_fallback = False
+
+    _regime_bias_used = False
+    if not crypto_only and not dry_run:
+        try:
+            from analysis.regime_bias_manager import get_cached_bias
+            _bias = get_cached_bias()
+            if _bias is not None:
+                logger.info(
+                    f"Pipeline | Async regime bias available: regime={_bias['regime']} "
+                    f"(age={_bias.get('age_hours', '?')}h) — skipping synchronous LLM call"
+                )
+                _regime_bias_used = True
+                result["regime_bias_age_hours"] = _bias.get("age_hours")
+        except ImportError:
+            pass
+
     try:
         logger.info("Pipeline | Step 1: Running analysis cycle...")
         allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)

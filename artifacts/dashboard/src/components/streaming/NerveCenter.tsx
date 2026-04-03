@@ -215,7 +215,12 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
 }
 
 
-export function NerveCenter() {
+interface NerveCenterProps {
+  wins24h?: number;
+  losses24h?: number;
+}
+
+export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
   const { data: summary } = useStatusSummary();
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
@@ -335,8 +340,19 @@ export function NerveCenter() {
           </motion.div>
         ))}
       </AnimatePresence>
-      <div className="flex items-center justify-center gap-3 pt-1 shrink-0">
-        <div className="text-[15px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
+      <div className="flex items-center justify-between pt-1 px-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-md border border-green-500/20 bg-green-500/5 px-1.5 py-0.5">
+            <span className="text-[9px] font-mono font-bold text-green-400">W</span>
+            <span className="text-[11px] font-mono font-black text-green-400">{wins24h}</span>
+          </div>
+          <div className="flex items-center gap-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-1.5 py-0.5">
+            <span className="text-[9px] font-mono font-bold text-orange-400">L</span>
+            <span className="text-[11px] font-mono font-black text-orange-400">{losses24h}</span>
+          </div>
+          <span className="text-[8px] uppercase tracking-widest text-white/20 font-bold">24h</span>
+        </div>
+        <div className="text-[13px] uppercase tracking-widest text-indigo-400/50 font-bold">Nerve Center</div>
         <div className="flex items-center gap-1.5 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
           <span className="text-[10px] font-mono font-bold text-green-400" style={{ textShadow: "0 0 8px rgba(34,197,94,0.5)" }}>

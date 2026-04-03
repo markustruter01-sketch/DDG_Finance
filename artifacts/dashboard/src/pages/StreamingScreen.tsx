@@ -105,6 +105,11 @@ export default function StreamingScreen() {
   const celebrations = useRealCelebrations();
   const scale = useViewportScale();
 
+  const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+  const recent24h = trades.filter(t => new Date(t.date).getTime() > cutoff24h);
+  const wins24h = recent24h.filter(t => t.isWin).length;
+  const losses24h = recent24h.filter(t => !t.isWin).length;
+
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
       <div
@@ -133,7 +138,7 @@ export default function StreamingScreen() {
 
             <div className="col-span-6 min-h-0 flex flex-col gap-1.5 relative">
               <div className="flex-1 rounded-xl border border-indigo-500/10 bg-slate-900/40 min-h-0 overflow-visible">
-                <NerveCenter />
+                <NerveCenter wins24h={wins24h} losses24h={losses24h} />
               </div>
               <ProfitExplosion trade={celebrations.explosion} />
               <StreamingNavBar />

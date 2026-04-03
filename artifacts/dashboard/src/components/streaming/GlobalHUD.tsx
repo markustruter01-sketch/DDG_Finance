@@ -121,7 +121,9 @@ export function GlobalHUD() {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+      <div className="flex gap-2">
+        <div className="w-1/2 rounded-xl border border-white/[0.06] bg-slate-900/60 min-h-0" />
+        <div className="w-1/2 grid grid-cols-2 lg:grid-cols-4 gap-2">
         {cards.map((card, i) => (
           <motion.div
             key={card.label}
@@ -194,6 +196,7 @@ export function GlobalHUD() {
             </div>
           </motion.div>
         ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-3 lg:grid-cols-6 gap-1.5">

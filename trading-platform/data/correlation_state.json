@@ -13,11 +13,11 @@
   "position_scale_factor": 1.0,
   "shock_threshold": 0.85,
   "data_points": {
-    "alpaca": 4,
-    "kraken": 4,
+    "alpaca": 5,
+    "kraken": 5,
     "options": 0,
-    "forex": 1
+    "forex": 2
   },
   "rolling_window_days": 60,
-  "computed_at": "2026-04-03T23:48:02.778322+00:00"
+  "computed_at": "2026-04-04T00:18:03.761270+00:00"
 }

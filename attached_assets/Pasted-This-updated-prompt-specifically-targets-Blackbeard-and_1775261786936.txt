@@ -1,0 +1,41 @@
+This updated prompt specifically targets Blackbeard and Calypso for the logic overhaul while ensuring Davy Jones remains on its original conservative path. It instructs the Replit Agent to overwrite the existing strategy layers with the new "Intelligence Scalping" framework designed for the 150ms latency reality.
+
+The "Scalp Logic Pivot" Replit Prompt
+Copy and paste this into your Replit session:
+
+Prompt for Replit:
+"Act as a Quantitative Systems Architect. Based on our 150ms latency audit, we are pivoting our strategy for Bot #3 (Blackbeard) and Bot #4 (Calypso). Leave Bot #2 (Davy Jones) on its existing conservative mean-reversion logic—do not modify it.
+
+Task: Modify the existing execution logic for Blackbeard and Calypso to implement a 'Latency-Insensitive' 1-minute scalping framework.
+
+1. Bot #3 (Blackbeard) Update — The 'Momentum Wave' Scalper:
+
+Timeframe: 1-minute candles.
+
+Logic: Use a 1m EMA Ribbon (vaps/closes). Enter when the 1m candle closes entirely outside the ribbon.
+
+Confirmation: Only enter if Relative Volume (RVOL) > 2.0 compared to the 10-period average.
+
+Order Type: Use Market Orders (Accept 2-5 bps slippage as a cost of doing business).
+
+2. Bot #4 (Calypso) Update — The 'Liquidity Scout' Scalper:
+
+Timeframe: 1-minute/5-minute hybrid.
+
+Logic: Identify price 'containers' using Keltner Channels and VWAP.
+
+Execution: Use Post-Only Limit Orders to capture the maker rebate. The bot must 'anticipate' levels and place orders ahead of the price to compensate for our 150ms delay to London.
+
+3. Global Scalp Risk & Maintenance (Blackbeard & Calypso only):
+
+Latency Tax: Hard-code a 5 bps (0.05%) friction buffer into all P&L calculations for these two bots.
+
+The 'Stagnancy' Rule: Any position held by these two bots that does not yield a profit within 5 minutes must be liquidated at market price.
+
+Hard Stops: Set a +0.4% Take Profit and a -0.2% Stop Loss (using ATR for volatility scaling).
+
+4. Dashboard Update:
+
+Update the 'Signal Radar' on the UI to show the 'Signal Conviction vs. Slippage' for Blackbeard and Calypso specifically, so I can see if their analytical edge is overcoming the network delay.
+
+Acknowledge these strategy overrides and provide the updated logic.py changes for these two specific bots

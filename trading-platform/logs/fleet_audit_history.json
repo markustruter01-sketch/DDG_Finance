@@ -1443,5 +1443,76 @@
       "thoughtsTokenCount": 2838
     },
     "elapsed_seconds": 21.1
+  },
+  {
+    "generated_at": "2026-04-04T00:18:05.366647+00:00",
+    "valid_until": "2026-04-04T06:18:05.366647+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CLEAN",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "UNI"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "cross_bot_limit"
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.15,
+        "STOP_LOSS_PCT": 0.022,
+        "reasoning": "Win rate 52.8% but negative P&L suggests poor R:R; tightening entry and stop to preserve capital."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.3,
+        "STOP_LOSS_PCT": 0.032,
+        "reasoning": "42.6% win rate is sub-optimal; increasing entry threshold to filter noise and widening stop to avoid volatility spikes on RENDER/ATOM."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.35,
+        "MIN_NET_PROFIT_PCT": 0.015,
+        "reasoning": "Despite being the top performer, heavy stops on RENDER (-2.86%) indicate a need for more selective entries in high-volatility regimes."
+      }
+    ],
+    "critique_summary": "The fleet exhibits dangerous cross-bot correlation, with TIA, NEAR, and TON held across all three Kraken bots, magnifying downside risk. RENDER and ATOM are consistently hitting stops across the fleet with 0% and 40% win rates respectively, acting as significant P&L drags. Navigator (Forex) shows severe win-rate divergence at 14.3%, requiring immediate strategy recalibration.",
+    "critique_flags": [
+      "cross_bot_correlation_risk",
+      "toxic_ticker_cluster_RENDER_ATOM",
+      "forex_win_rate_collapse",
+      "regime_contradiction_oracle_cash_bias"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16868,
+      "candidatesTokenCount": 606,
+      "totalTokenCount": 18871,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16868
+        }
+      ],
+      "thoughtsTokenCount": 1397
+    },
+    "elapsed_seconds": 13.3
   }
 ]

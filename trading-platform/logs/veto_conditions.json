@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-03T21:47:49.466838+00:00",
-  "valid_until": "2026-04-04T03:47:49.466838+00:00",
+  "generated_at": "2026-04-04T00:18:18.714189+00:00",
+  "valid_until": "2026-04-04T06:18:18.714189+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
@@ -9,24 +9,22 @@
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.7
+      "value": 0.75
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "regime_alignment_check",
-      "value": "required"
+      "type": "cross_bot_limit"
     }
   ],
-  "critique_summary": "The fleet is suffering from significant cross-bot correlation in crypto (NEAR, TIA, OP) and a regime contradiction where Oracle holds 100% cash while Kraken bots are >60% deployed. RENDER and ATOM have become toxic assets with 0% win rates and must be purged.",
+  "critique_summary": "The fleet exhibits dangerous cross-bot correlation, with TIA, NEAR, and TON held across all three Kraken bots, magnifying downside risk. RENDER and ATOM are consistently hitting stops across the fleet with 0% and 40% win rates respectively, acting as significant P&L drags. Navigator (Forex) shows severe win-rate divergence at 14.3%, requiring immediate strategy recalibration.",
   "critique_flags": [
-    "Systemic failure on RENDER/USD (0% win rate, -21.75% fleet PnL)",
-    "High cross-bot correlation in NEAR, TIA, and OP positions across Kraken fleet",
-    "Regime contradiction: Oracle Bear stance vs Kraken high deployment (>60%)",
-    "Navigator win rate divergence at 16.7% indicating H4 swing strategy failure",
-    "Oracle analysis cycle failure status detected in system logs"
+    "cross_bot_correlation_risk",
+    "toxic_ticker_cluster_RENDER_ATOM",
+    "forex_win_rate_collapse",
+    "regime_contradiction_oracle_cash_bias"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

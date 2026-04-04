@@ -340,5 +340,149 @@
     "side": "SELL",
     "reason": "scalp_tp",
     "timestamp": "2026-04-04T07:43:30.214635+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "WLD/USD",
+    "pnl_pct": 0.64,
+    "pnl_usd": 21.2,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T08:21:06.296524+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "NEAR/USD",
+    "pnl_pct": 0.62,
+    "pnl_usd": 5.82,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T08:54:41.527220+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "ICP/USD",
+    "pnl_pct": 0.57,
+    "pnl_usd": 3.85,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T09:29:50.495284+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "RUNE/USD",
+    "pnl_pct": 1.26,
+    "pnl_usd": 44.26,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T13:47:49.656185+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "ONDO/USD",
+    "pnl_pct": 0.68,
+    "pnl_usd": 11.89,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T13:51:23.883872+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "ONDO/USD",
+    "pnl_pct": 0.56,
+    "pnl_usd": 3.24,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T14:07:15.948594+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "CRV/USD",
+    "pnl_pct": 0.58,
+    "pnl_usd": 4.42,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T14:26:47.431453+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "SUI/USD",
+    "pnl_pct": 0.59,
+    "pnl_usd": 5.08,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T14:41:13.113717+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "RENDER/USD",
+    "pnl_pct": 0.65,
+    "pnl_usd": 9.61,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T14:41:20.279031+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "UNI/USD",
+    "pnl_pct": 0.57,
+    "pnl_usd": 3.16,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T14:43:47.480599+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "IMX/USD",
+    "pnl_pct": 0.78,
+    "pnl_usd": 19.57,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T17:07:42.235143+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "WLD/USD",
+    "pnl_pct": 0.57,
+    "pnl_usd": 3.19,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T18:43:27.777812+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "NEAR/USD",
+    "pnl_pct": 0.67,
+    "pnl_usd": 10.99,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T19:36:06.090004+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "ARB/USD",
+    "pnl_pct": 0.61,
+    "pnl_usd": 6.52,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T19:42:48.455433+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "RENDER/USD",
+    "pnl_pct": 0.6,
+    "pnl_usd": 6.23,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T21:18:15.351294+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "TIA/USD",
+    "pnl_pct": 0.75,
+    "pnl_usd": 17.51,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T21:38:08.498351+00:00"
   }
 ]

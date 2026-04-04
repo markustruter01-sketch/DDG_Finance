@@ -334,6 +334,15 @@ def _check_open_positions():
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
                                 logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on LONG — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
+                    _IMMEDIATE_BE_PAIRS = {"AUDJPY=X"}
+                    if pair in _IMMEDIATE_BE_PAIRS:
+                        pip_size_be = PIP_SIZE.get(pair, 0.01)
+                        be_price = round(entry + (pip_size_be * 2), 5)
+                        if current_price > entry and be_price > pos["trailing_sl"]:
+                            pos["trailing_sl"] = be_price
+                            field_updates["trailing_sl"] = pos["trailing_sl"]
+                            logger.warning(f"Forex | {PAIR_LABELS.get(pair, pair)} IMMEDIATE BREAK-EVEN on LONG — trailing SL → {pos['trailing_sl']:.5f} (protecting unrealized gain)")
+
                 else:
                     if candle_low < pos.get("lowest_price", entry):
                         pos["lowest_price"] = candle_low
@@ -363,6 +372,15 @@ def _check_open_positions():
                                 pos["trailing_sl"] = gain_lock_sl
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
                                 logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on SHORT — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
+
+                    _IMMEDIATE_BE_PAIRS_SHORT = {"AUDJPY=X"}
+                    if pair in _IMMEDIATE_BE_PAIRS_SHORT:
+                        pip_size_be = PIP_SIZE.get(pair, 0.01)
+                        be_price = round(entry - (pip_size_be * 2), 5)
+                        if current_price < entry and be_price < pos["trailing_sl"]:
+                            pos["trailing_sl"] = be_price
+                            field_updates["trailing_sl"] = pos["trailing_sl"]
+                            logger.warning(f"Forex | {PAIR_LABELS.get(pair, pair)} IMMEDIATE BREAK-EVEN on SHORT — trailing SL → {pos['trailing_sl']:.5f} (protecting unrealized gain)")
 
                 field_updates["sl_price"] = pos["trailing_sl"]
                 pos["sl_price"] = pos["trailing_sl"]

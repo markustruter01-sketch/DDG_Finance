@@ -1023,6 +1023,17 @@ def run_cycle() -> None:
     _regime_src   = _regime_data.get("source", "unknown")
     _eq_contagion = _regime_data.get("equity_contagion", False)
 
+    _crypto_fg = _regime_data.get("crypto_fear_greed")
+    _extreme_fear = isinstance(_crypto_fg, (int, float)) and _crypto_fg <= 25
+    _bear_bias_override = _extreme_fear and IS_SCALP_BOT
+    if _bear_bias_override and not _is_bear:
+        _is_bear = True
+        _regime_label = f"{_regime_label}+ExtremeFear"
+        logger.warning(
+            f"BearBias | OVERRIDE — Crypto Fear & Greed={_crypto_fg} (Extreme Fear) | "
+            f"All LONG entries DISABLED for {BOT_DISPLAY_NAME} — SHORT scalps only"
+        )
+
     _eq_regime = _read_market_regime()
     _vix_value = _eq_regime.get("vix")
     _vix_elevated = isinstance(_vix_value, (int, float)) and _vix_value > 25

@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-04T08:09:32.790593+00:00",
-  "elapsed_sec": 19.26,
+  "timestamp": "2026-04-04T21:39:13.070310+00:00",
+  "elapsed_sec": 1.25,
   "alerts": [
     {
       "check": "pnl_velocity",
@@ -10,20 +10,14 @@
     },
     {
       "check": "win_rate_decay",
-      "bot": "calypso",
-      "severity": "MEDIUM",
-      "detail": "calypso win rate 39.6% (38/96) below 40.0% floor"
-    },
-    {
-      "check": "win_rate_decay",
       "bot": "navigator",
       "severity": "MEDIUM",
       "detail": "Navigator win rate 11.1% (1/9) below floor"
     }
   ],
-  "alert_count": 3,
+  "alert_count": 2,
   "high_count": 1,
-  "medium_count": 2,
-  "escalated_to_gemini": true,
+  "medium_count": 1,
+  "escalated_to_gemini": false,
   "status": "ALERT"
 }

@@ -69,7 +69,7 @@ def check_scalp_exits(
         except Exception:
             minutes_held = 0.0
 
-        if minutes_held >= 5.0 and net_pnl_pct > 0:
+        if minutes_held >= 10.0 and net_pnl_pct > 0:
             return "scalp_tp"
 
         if minutes_held >= stagnancy_minutes:

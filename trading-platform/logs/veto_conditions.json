@@ -1,30 +1,31 @@
 {
-  "generated_at": "2026-04-04T08:09:32.765747+00:00",
-  "valid_until": "2026-04-04T14:09:32.765747+00:00",
+  "generated_at": "2026-04-04T21:00:14.698750+00:00",
+  "valid_until": "2026-04-05T03:00:14.698750+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "BITO"
+    "UNI"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.75
+      "value": 0.7
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "position_limit_enforcement"
+      "type": "regime_lock",
+      "value": "risk_off"
     }
   ],
-  "critique_summary": "The fleet shows significant data contamination in Bot #1 and a major position limit violation in Bot #6 (10 positions vs 5 max). While the Bear regime classification is accurate, the aggressive Kraken bots are bleeding capital due to low win rates and poor stop-loss effectiveness on high-volatility assets like RENDER.",
+  "critique_summary": "The fleet is currently net positive only due to the Navigator's Forex performance (+6.23%), which masks systemic bleeding in the Kraken crypto fleet. Calypso and Blackbeard are over-trading low-probability mean reversions, while RENDER and ATOM remain toxic assets across all crypto bots.",
   "critique_flags": [
-    "Bot #1 trade history contains Kraken crypto entries (data contamination)",
-    "Bot #6 Navigator position limit violation (10 open, limit 5)",
-    "Calypso win rate 33.3% indicates failed entry logic in current volatility",
-    "Extreme loss concentration in RENDER (-22%) and ATOM"
+    "Calypso win rate at 34.5% suggests entry signal exhaustion",
+    "RENDER/USD aggregate P&L at -21.35% requires immediate veto",
+    "Davy Jones expectancy is negative despite >50% win rate",
+    "High cross-bot correlation in crypto short positions"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

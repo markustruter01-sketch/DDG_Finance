@@ -1,14 +1,23 @@
 {
-  "exported_at": "2026-04-02T20:38:53.155666+00:00",
+  "exported_at": "2026-04-04T19:54:11.046365+00:00",
   "llm_learnings": [
     {
       "insight_text": "Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV.",
       "regime": "Crypto",
       "category": "crypto",
       "first_seen": "2026-04-02T01:29:43.670890+00:00",
-      "last_seen": "2026-04-02T05:59:01.659753+00:00",
-      "confirmed_count": 7,
-      "confidence_score": 0.85
+      "last_seen": "2026-04-04T17:54:12.351047+00:00",
+      "confirmed_count": 27,
+      "confidence_score": 1.0
+    },
+    {
+      "insight_text": "Crypto market experiencing extreme fear with low on-chain demand.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-02T01:29:43.632646+00:00",
+      "last_seen": "2026-04-04T17:54:12.338293+00:00",
+      "confirmed_count": 13,
+      "confidence_score": 0.9571
     },
     {
       "insight_text": "Bear Regime SGOV Default: no safe-haven has positive 3-month momentum.",
@@ -20,29 +29,11 @@
       "confidence_score": 0.8143
     },
     {
-      "insight_text": "Crypto market experiencing extreme fear with low on-chain demand.",
-      "regime": "Crypto",
-      "category": "crypto",
-      "first_seen": "2026-04-02T01:29:43.632646+00:00",
-      "last_seen": "2026-04-02T03:30:20.984773+00:00",
-      "confirmed_count": 4,
-      "confidence_score": 0.7
-    },
-    {
       "insight_text": "SGOV is a cash equivalent that provides a safe haven in a Bear regime.",
       "regime": "Bear",
       "category": "position",
       "first_seen": "2026-04-02T14:16:20.539194+00:00",
       "last_seen": "2026-04-02T17:46:03.435882+00:00",
-      "confirmed_count": 3,
-      "confidence_score": 0.6
-    },
-    {
-      "insight_text": "Bear Regime capital preservation: additional 50% position-size haircut applied \u2014 excess 7.5% held as SGOV.",
-      "regime": "Bear",
-      "category": "position",
-      "first_seen": "2026-04-02T14:16:20.545809+00:00",
-      "last_seen": "2026-04-02T17:46:03.443507+00:00",
       "confirmed_count": 3,
       "confidence_score": 0.6
     },
@@ -56,13 +47,13 @@
       "confidence_score": 0.6
     },
     {
-      "insight_text": "Tech sector momentum has been consistently positive, supporting SPY and QQQ allocation.",
-      "regime": "Bull",
-      "category": "momentum",
-      "first_seen": "2026-03-29T07:32:03.250845+00:00",
-      "last_seen": "2026-03-29T07:32:03.265586+00:00",
-      "confirmed_count": 2,
-      "confidence_score": 0.4333
+      "insight_text": "Bear Regime capital preservation: additional 50% position-size haircut applied \u2014 excess 7.5% held as SGOV.",
+      "regime": "Bear",
+      "category": "position",
+      "first_seen": "2026-04-02T14:16:20.545809+00:00",
+      "last_seen": "2026-04-02T17:46:03.443507+00:00",
+      "confirmed_count": 3,
+      "confidence_score": 0.6
     },
     {
       "insight_text": "The current regime is classified as Bear due to the elevated VIX (24.54), declining equity prices (e.g., SPY, QQQ), and rising safe-haven prices (e.g., TLT, IEF).",
@@ -72,6 +63,24 @@
       "last_seen": "2026-04-02T17:46:03.416772+00:00",
       "confirmed_count": 2,
       "confidence_score": 0.4333
+    },
+    {
+      "insight_text": "Tech sector momentum has been consistently positive, supporting SPY and QQQ allocation.",
+      "regime": "Bull",
+      "category": "momentum",
+      "first_seen": "2026-03-29T07:32:03.250845+00:00",
+      "last_seen": "2026-03-29T07:32:03.265586+00:00",
+      "confirmed_count": 2,
+      "confidence_score": 0.4333
+    },
+    {
+      "insight_text": "Given the cautious market regime and the lack of strong positive momentum in Bitcoin, allocating a significant portion to cash (SGOV) seems prudent to preserve capital.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.548489+00:00",
+      "last_seen": "2026-04-01T09:11:51.548489+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
     },
     {
       "insight_text": "The current regime is classified as Bear due to the elevated VIX (24.54), negative momentum in most equity indices (SPY, QQQ, XLK, XLF, XLV, IWM), and the overall macroeconomic indicators suggesting a risk-off environment.",
@@ -119,6 +128,15 @@
       "confidence_score": 0.33
     },
     {
+      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.242208+00:00",
+      "last_seen": "2026-03-29T07:32:03.242208+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
       "insight_text": "Additionally, the 10Y-2Y Yield Spread is positive (0.52), which may indicate a potential recession.",
       "regime": "Bear",
       "category": "macro",
@@ -137,11 +155,47 @@
       "confidence_score": 0.33
     },
     {
+      "insight_text": "Ethereum shows positive momentum on the 3-month signal and a relatively better performance compared to Bitcoin, making it a preferable choice for allocation.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.544452+00:00",
+      "last_seen": "2026-04-01T09:11:51.544452+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Crypto market with low momentum, cautious approach.",
+      "regime": "Crypto",
+      "category": "crypto",
+      "first_seen": "2026-04-01T09:11:51.501165+00:00",
+      "last_seen": "2026-04-01T09:11:51.501165+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
       "insight_text": "The conviction score is high due to its low-risk nature and potential for capital preservation.",
       "regime": "Bear",
       "category": "risk",
       "first_seen": "2026-04-02T17:46:03.439779+00:00",
       "last_seen": "2026-04-02T17:46:03.439779+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "VIX has remained elevated above 25 indicating a risk-off environment persists.",
+      "regime": "Bear",
+      "category": "macro",
+      "first_seen": "2026-03-29T07:32:03.262095+00:00",
+      "last_seen": "2026-03-29T07:32:03.262095+00:00",
+      "confirmed_count": 1,
+      "confidence_score": 0.33
+    },
+    {
+      "insight_text": "Capital preservation in SGOV remains correct when no safe haven has positive momentum.",
+      "regime": "Sideways",
+      "category": "risk",
+      "first_seen": "2026-03-29T07:32:03.258208+00:00",
+      "last_seen": "2026-03-29T07:32:03.258208+00:00",
       "confirmed_count": 1,
       "confidence_score": 0.33
     },
@@ -173,29 +227,11 @@
       "confidence_score": 0.33
     },
     {
-      "insight_text": "VIX has been elevated above 25 for consecutive sessions suggesting risk-off sentiment persists.",
-      "regime": "Bear",
-      "category": "macro",
-      "first_seen": "2026-03-29T07:32:03.242208+00:00",
-      "last_seen": "2026-03-29T07:32:03.242208+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
       "insight_text": "Given the Bear regime and lack of positive momentum in most assets, the best course of action is to prioritize capital preservation by allocating 100% to SGOV, a cash equivalent that provides a safe haven in such market conditions.",
       "regime": "Bear",
       "category": "momentum",
       "first_seen": "2026-04-02T19:31:18.008763+00:00",
       "last_seen": "2026-04-02T19:31:18.008763+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "GLD and TLT both show positive momentum on 3-month and 6-month moving averages in this regime.",
-      "regime": "Bear",
-      "category": "momentum",
-      "first_seen": "2026-03-29T07:32:03.247206+00:00",
-      "last_seen": "2026-03-29T07:32:03.247206+00:00",
       "confirmed_count": 1,
       "confidence_score": 0.33
     },
@@ -209,47 +245,11 @@
       "confidence_score": 0.33
     },
     {
-      "insight_text": "Capital preservation in SGOV remains correct when no safe haven has positive momentum.",
-      "regime": "Sideways",
-      "category": "risk",
-      "first_seen": "2026-03-29T07:32:03.258208+00:00",
-      "last_seen": "2026-03-29T07:32:03.258208+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "VIX has remained elevated above 25 indicating a risk-off environment persists.",
+      "insight_text": "GLD and TLT both show positive momentum on 3-month and 6-month moving averages in this regime.",
       "regime": "Bear",
-      "category": "macro",
-      "first_seen": "2026-03-29T07:32:03.262095+00:00",
-      "last_seen": "2026-03-29T07:32:03.262095+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "Crypto market with low momentum, cautious approach.",
-      "regime": "Crypto",
-      "category": "crypto",
-      "first_seen": "2026-04-01T09:11:51.501165+00:00",
-      "last_seen": "2026-04-01T09:11:51.501165+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "Ethereum shows positive momentum on the 3-month signal and a relatively better performance compared to Bitcoin, making it a preferable choice for allocation.",
-      "regime": "Crypto",
-      "category": "crypto",
-      "first_seen": "2026-04-01T09:11:51.544452+00:00",
-      "last_seen": "2026-04-01T09:11:51.544452+00:00",
-      "confirmed_count": 1,
-      "confidence_score": 0.33
-    },
-    {
-      "insight_text": "Given the cautious market regime and the lack of strong positive momentum in Bitcoin, allocating a significant portion to cash (SGOV) seems prudent to preserve capital.",
-      "regime": "Crypto",
-      "category": "crypto",
-      "first_seen": "2026-04-01T09:11:51.548489+00:00",
-      "last_seen": "2026-04-01T09:11:51.548489+00:00",
+      "category": "momentum",
+      "first_seen": "2026-03-29T07:32:03.247206+00:00",
+      "last_seen": "2026-03-29T07:32:03.247206+00:00",
       "confirmed_count": 1,
       "confidence_score": 0.33
     }
@@ -257,16 +257,16 @@
   "kraken_adaptive_params": {
     "params": {
       "ZSCORE_ENTRY": 1.0,
-      "ZSCORE_EXIT": 0.3,
+      "ZSCORE_EXIT": 0.45,
       "STOP_LOSS_PCT": 0.02,
-      "TRAIL_PCT": 0.05,
+      "TRAIL_PCT": 0.03,
       "MIN_NET_PROFIT_PCT": 0.008
     },
     "defaults": {
       "ZSCORE_ENTRY": 1.0,
-      "ZSCORE_EXIT": 0.3,
+      "ZSCORE_EXIT": 0.45,
       "STOP_LOSS_PCT": 0.015,
-      "TRAIL_PCT": 0.05,
+      "TRAIL_PCT": 0.03,
       "MIN_NET_PROFIT_PCT": 0.008
     },
     "bounds": {
@@ -275,8 +275,8 @@
         1.5
       ],
       "ZSCORE_EXIT": [
-        0.1,
-        0.55
+        0.2,
+        0.6
       ],
       "STOP_LOSS_PCT": [
         0.008,

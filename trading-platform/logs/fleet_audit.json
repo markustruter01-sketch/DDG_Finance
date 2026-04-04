@@ -1,65 +1,72 @@
 {
-  "generated_at": "2026-04-04T08:09:14.715867+00:00",
-  "valid_until": "2026-04-04T14:09:14.715867+00:00",
+  "generated_at": "2026-04-04T21:00:00.000983+00:00",
+  "valid_until": "2026-04-05T03:00:00.000983+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
-    "oracle": "CAUTION",
-    "davy_jones": "CLEAN",
+    "oracle": "CLEAN",
+    "davy_jones": "CAUTION",
     "blackbeard": "CAUTION",
     "calypso": "HOLD",
     "apex_predator": "CLEAN",
-    "navigator": "CAUTION"
+    "navigator": "CLEAN"
   },
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "BITO"
+    "UNI"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.75
+      "value": 0.7
     },
     {
       "type": "max_conviction_cap",
       "value": 0.85
     },
     {
-      "type": "position_limit_enforcement"
+      "type": "regime_lock",
+      "value": "risk_off"
     }
   ],
   "kraken_param_adjustments": [
     {
-      "bot_id": "blackbeard",
+      "bot_id": "davy_jones",
       "ZSCORE_ENTRY": 1.15,
-      "STOP_LOSS_PCT": 0.024,
-      "reasoning": "Win rate 43.1% with frequent scalp_stop exits; tightening entry and widening stop to reduce noise churn."
+      "STOP_LOSS_PCT": 0.018,
+      "reasoning": "Win rate 55.1% but negative P&L indicates poor risk-reward; tightening entry and stop to improve expectancy."
+    },
+    {
+      "bot_id": "blackbeard",
+      "ZSCORE_ENTRY": 1.25,
+      "TRAIL_PCT": 0.07,
+      "reasoning": "Win rate 40.9% with frequent scalp_stagnant exits; increasing entry hurdle to filter low-quality volatility."
     },
     {
       "bot_id": "calypso",
-      "ZSCORE_ENTRY": 1.3,
-      "STOP_LOSS_PCT": 0.028,
-      "reasoning": "Win rate 33.3% is unsustainable; requiring higher statistical significance for entry and more volatility room for stops."
+      "ZSCORE_ENTRY": 1.4,
+      "STOP_LOSS_PCT": 0.026,
+      "reasoning": "Critical win rate failure at 34.5%; extreme Z-score requirement needed to survive current high-volatility regime."
     }
   ],
-  "critique_summary": "The fleet shows significant data contamination in Bot #1 and a major position limit violation in Bot #6 (10 positions vs 5 max). While the Bear regime classification is accurate, the aggressive Kraken bots are bleeding capital due to low win rates and poor stop-loss effectiveness on high-volatility assets like RENDER.",
+  "critique_summary": "The fleet is currently net positive only due to the Navigator's Forex performance (+6.23%), which masks systemic bleeding in the Kraken crypto fleet. Calypso and Blackbeard are over-trading low-probability mean reversions, while RENDER and ATOM remain toxic assets across all crypto bots.",
   "critique_flags": [
-    "Bot #1 trade history contains Kraken crypto entries (data contamination)",
-    "Bot #6 Navigator position limit violation (10 open, limit 5)",
-    "Calypso win rate 33.3% indicates failed entry logic in current volatility",
-    "Extreme loss concentration in RENDER (-22%) and ATOM"
+    "Calypso win rate at 34.5% suggests entry signal exhaustion",
+    "RENDER/USD aggregate P&L at -21.35% requires immediate veto",
+    "Davy Jones expectancy is negative despite >50% win rate",
+    "High cross-bot correlation in crypto short positions"
   ],
   "token_usage": {
-    "promptTokenCount": 17211,
-    "candidatesTokenCount": 513,
-    "totalTokenCount": 19660,
+    "promptTokenCount": 16229,
+    "candidatesTokenCount": 585,
+    "totalTokenCount": 18523,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 17211
+        "tokenCount": 16229
       }
     ],
-    "thoughtsTokenCount": 1936
+    "thoughtsTokenCount": 1709
   },
-  "elapsed_seconds": 18.1
+  "elapsed_seconds": 14.7
 }

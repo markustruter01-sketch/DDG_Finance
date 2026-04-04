@@ -52,17 +52,20 @@ BOT_PROFILES = {
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.005,
-        "SCALP_SL_PCT": 0.006,
-        "SCALP_STAGNANCY_MINUTES": 15,
-        "SCALP_STAGNANCY_DEADZONE": 0.005,
+        "SCALP_TP_PCT": 0.008,
+        "SCALP_SL_PCT": 0.005,
+        "SCALP_STAGNANCY_MINUTES": 45,
+        "SCALP_STAGNANCY_DEADZONE": 0.003,
         "LATENCY_TAX_BPS": 5,
         "SCALP_FEE_RATE": 0.0026,
         "EMA_FAST": 8,
         "EMA_MID": 21,
         "EMA_SLOW": 55,
-        "RVOL_THRESHOLD": 0.8,
+        "RVOL_THRESHOLD": 1.2,
         "RVOL_PERIOD": 20,
+        "MIN_CONVICTION": 0.65,
+        "STAGNANCY_COOLDOWN_MINUTES": 45,
+        "MAX_NEW_ENTRIES_PER_CYCLE": 2,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
@@ -80,15 +83,18 @@ BOT_PROFILES = {
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.003,
-        "SCALP_SL_PCT": 0.005,
-        "SCALP_STAGNANCY_MINUTES": 20,
-        "SCALP_STAGNANCY_DEADZONE": 0.004,
+        "SCALP_TP_PCT": 0.006,
+        "SCALP_SL_PCT": 0.004,
+        "SCALP_STAGNANCY_MINUTES": 45,
+        "SCALP_STAGNANCY_DEADZONE": 0.003,
         "LATENCY_TAX_BPS": 5,
         "SCALP_FEE_RATE": 0.0026,
         "KELTNER_EMA_PERIOD": 20,
         "KELTNER_ATR_MULT": 2.0,
         "VWAP_PROXIMITY_PCT": 0.005,
+        "MIN_CONVICTION": 0.65,
+        "STAGNANCY_COOLDOWN_MINUTES": 45,
+        "MAX_NEW_ENTRIES_PER_CYCLE": 2,
     },
 }
 
@@ -264,6 +270,10 @@ RVOL_PERIOD      = _profile.get("RVOL_PERIOD", 20)
 KELTNER_EMA_PERIOD  = _profile.get("KELTNER_EMA_PERIOD", 20)
 KELTNER_ATR_MULT    = _profile.get("KELTNER_ATR_MULT", 1.5)
 VWAP_PROXIMITY_PCT  = _profile.get("VWAP_PROXIMITY_PCT", 0.002)
+
+MIN_CONVICTION            = _profile.get("MIN_CONVICTION", 0.50)
+STAGNANCY_COOLDOWN_MINUTES = _profile.get("STAGNANCY_COOLDOWN_MINUTES", 0)
+MAX_NEW_ENTRIES_PER_CYCLE  = _profile.get("MAX_NEW_ENTRIES_PER_CYCLE", 99)
 
 
 CB_PRICE_DROP_PCT = 0.10

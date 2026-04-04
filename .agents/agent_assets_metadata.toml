@@ -12,3 +12,9 @@ id = "LVpR9Qre07z721iKo44v4"
 uri = "file://.local/platform_technical_overview.md"
 type = "text"
 title = "AlgoEdge Trading Platform — Complete Technical Overview"
+
+[[outputs]]
+id = "wktTUnkeW_LqKFNR4Wb-E"
+uri = "file://.local/scalp_bot_logic_breakdown.md"
+type = "text"
+title = "Crypto Scalp Bot Logic — Complete Technical Breakdown"

@@ -4,6 +4,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   useKrakenStatus, useOptionsState, useForexState, useStatusSummary,
   useLivePositions, useForexPositions, useOptionsPositions,
+  useFleetCommanderStatus,
 } from "@/hooks/use-trading";
 
 const BOTS = [
@@ -215,6 +216,131 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
 }
 
 
+const AUDIT_GAPS_MS = [
+  5.5 * 3600_000,
+  2.25 * 3600_000,
+  3 * 3600_000,
+  2 * 3600_000,
+  5 * 3600_000,
+  6.25 * 3600_000,
+];
+
+function computeAuditTimings(runs: Array<{ next_run?: string | null }> | undefined) {
+  const nowMs = Date.now();
+
+  const serverRuns = (runs ?? [])
+    .map((r) => r.next_run ? new Date(r.next_run).getTime() : null)
+    .filter((t): t is number => t !== null && !isNaN(t))
+    .sort((a, b) => a - b);
+
+  const futureRuns = serverRuns.filter((t) => t > nowMs);
+  const pastRuns = serverRuns.filter((t) => t <= nowMs);
+
+  if (futureRuns.length === 0) {
+    return { fraction: 0.5, remainingMs: -1 };
+  }
+
+  const nextAuditMs = futureRuns[0];
+  const remaining = nextAuditMs - nowMs;
+
+  let prevAuditMs: number;
+  if (pastRuns.length > 0) {
+    prevAuditMs = pastRuns[pastRuns.length - 1];
+  } else {
+    const idx = serverRuns.indexOf(nextAuditMs);
+    const gapIdx = idx > 0 ? idx - 1 : AUDIT_GAPS_MS.length - 1;
+    const gap = AUDIT_GAPS_MS[gapIdx] ?? 3 * 3600_000;
+    prevAuditMs = nextAuditMs - gap;
+  }
+
+  const totalWindow = nextAuditMs - prevAuditMs;
+  const elapsed = nowMs - prevAuditMs;
+  const fraction = totalWindow > 0 ? Math.max(0, Math.min(1, 1 - elapsed / totalWindow)) : 0;
+
+  return { fraction, remainingMs: Math.max(0, remaining) };
+}
+
+function useAuditCountdown() {
+  const { data: fcStatus } = useFleetCommanderStatus();
+  const runsRef = useRef(fcStatus?.scheduled_runs);
+  runsRef.current = fcStatus?.scheduled_runs;
+
+  const [state, setState] = useState(() => computeAuditTimings(runsRef.current));
+
+  useEffect(() => {
+    const tick = () => setState(computeAuditTimings(runsRef.current));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    setState(computeAuditTimings(fcStatus?.scheduled_runs));
+  }, [fcStatus]);
+
+  return state;
+}
+
+function formatRemaining(ms: number): string {
+  if (ms < 0) return "—";
+  if (ms === 0) return "NOW";
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0) return `${h}h ${m.toString().padStart(2, "0")}m`;
+  const s = Math.floor((ms % 60000) / 1000);
+  if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
+function AuditCountdown() {
+  const { fraction, remainingMs } = useAuditCountdown();
+  const isUrgent = remainingMs < 300_000;
+  const isImminent = remainingMs < 60_000;
+
+  const barColor = isImminent
+    ? "rgba(250,204,21,0.9)"
+    : isUrgent
+    ? "rgba(167,139,250,0.9)"
+    : "rgba(129,140,248,0.7)";
+
+  const glowStyle = isUrgent
+    ? `0 0 8px ${barColor}, 0 0 16px ${barColor}`
+    : "none";
+
+  return (
+    <div className="shrink-0 px-4 py-1.5">
+      <div className="flex items-center gap-3">
+        <span
+          className="text-[9px] uppercase tracking-widest font-bold whitespace-nowrap shrink-0"
+          style={{ color: isUrgent ? "rgba(167,139,250,0.9)" : "rgba(129,140,248,0.5)" }}
+        >
+          Next Audit
+        </span>
+        <div className="flex-1 h-[6px] rounded-full overflow-hidden" style={{ background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.15)" }}>
+          <div
+            className="h-full rounded-full transition-all duration-1000 ease-linear"
+            style={{
+              width: `${fraction * 100}%`,
+              background: `linear-gradient(90deg, ${barColor}, rgba(139,92,246,0.6))`,
+              boxShadow: glowStyle,
+            }}
+          />
+        </div>
+        <span
+          className="text-[10px] font-mono font-bold whitespace-nowrap shrink-0 tabular-nums"
+          style={{
+            color: isImminent ? "rgba(250,204,21,0.9)" : isUrgent ? "rgba(167,139,250,0.9)" : "rgba(129,140,248,0.7)",
+            textShadow: isUrgent ? `0 0 6px ${barColor}` : "none",
+          }}
+        >
+          {formatRemaining(remainingMs)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 interface NerveCenterProps {
   wins24h?: number;
   losses24h?: number;
@@ -419,6 +545,10 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
               </text>
             </svg>
           </div>
+        </div>
+
+        <div className="shrink-0 border-t border-white/[0.04]">
+          <AuditCountdown />
         </div>
 
         <div className="shrink-0 border-t border-white/[0.04]">

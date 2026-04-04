@@ -10,7 +10,20 @@ const CATEGORY_META: Record<string, { icon: string; color: string }> = {
   markets: { icon: "📊", color: "#10b981" },
 };
 
-const FALLBACK_HEADLINES: { title: string; source: string; category: string; published_at: string; url: string }[] = [];
+const FALLBACK_HEADLINES = [
+  { title: "Federal Reserve holds rates steady, signals data-dependent approach", source: "Reuters", category: "macro", published_at: "", url: "" },
+  { title: "Bitcoin consolidates near key support as institutional demand grows", source: "CoinDesk", category: "crypto", published_at: "", url: "" },
+  { title: "S&P 500 futures point to cautious open amid global uncertainty", source: "Bloomberg", category: "markets", published_at: "", url: "" },
+  { title: "Gold prices edge higher as safe-haven demand persists", source: "MarketWatch", category: "commodities", published_at: "", url: "" },
+  { title: "Dollar index steady as traders await inflation data release", source: "Reuters", category: "currencies", published_at: "", url: "" },
+  { title: "Ethereum network activity surges with DeFi protocol launches", source: "CoinTelegraph", category: "crypto", published_at: "", url: "" },
+  { title: "Treasury yields dip as bond market prices in rate cut expectations", source: "CNBC", category: "macro", published_at: "", url: "" },
+  { title: "Crude oil rallies on OPEC+ supply cut extension signals", source: "Bloomberg", category: "commodities", published_at: "", url: "" },
+  { title: "EUR/USD tests resistance as ECB policy divergence narrows", source: "Financial Times", category: "currencies", published_at: "", url: "" },
+  { title: "Nasdaq tech rally broadens as AI spending forecasts lift sentiment", source: "Yahoo Finance", category: "markets", published_at: "", url: "" },
+  { title: "Crypto market cap surpasses $3 trillion milestone", source: "CoinDesk", category: "crypto", published_at: "", url: "" },
+  { title: "Global PMI data signals manufacturing sector stabilization", source: "Reuters", category: "macro", published_at: "", url: "" },
+];
 
 const SOURCE_ICONS: Record<string, string> = {
   Bloomberg: "📊",
@@ -44,7 +57,7 @@ export function NewsIntelligence() {
     return FALLBACK_HEADLINES;
   }, [apiArticles]);
 
-  const isFallback = apiArticles.length === 0;
+  const isFallback = apiArticles.length === 0 && articles.length > 0;
 
   useEffect(() => {
     if (apiArticles.length > 0) return;

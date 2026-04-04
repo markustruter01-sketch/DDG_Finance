@@ -22,6 +22,7 @@ BOT_PROFILES = {
     "davy-jones": {
         "display_name": "Davy Jones' Portfolio",
         "db_id": 1,
+        "strategy_type": "mean_reversion",
         "strategy_label": "Conservative",
         "RSI_OVERSOLD": 40,
         "RSI_OVERBOUGHT": 60,
@@ -31,32 +32,61 @@ BOT_PROFILES = {
         "STOP_LOSS_PCT": 0.015,
         "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
+        "OHLCV_TIMEFRAME": "1h",
+        "OHLCV_LIMIT": 100,
+        "LOOP_SLEEP_SECONDS": 60,
     },
     "blackbeard": {
         "display_name": "Blackbeard's Fleet",
         "db_id": 2,
-        "strategy_label": "Aggressive",
+        "strategy_type": "momentum_wave",
+        "strategy_label": "Momentum Wave Scalper",
         "RSI_OVERSOLD": 45,
         "RSI_OVERBOUGHT": 55,
         "ZSCORE_ENTRY": 0.8,
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.12,
-        "STOP_LOSS_PCT": 0.020,
+        "STOP_LOSS_PCT": 0.002,
         "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
+        "OHLCV_TIMEFRAME": "1m",
+        "OHLCV_LIMIT": 120,
+        "LOOP_SLEEP_SECONDS": 15,
+        "SCALP_TP_PCT": 0.004,
+        "SCALP_SL_PCT": 0.002,
+        "SCALP_STAGNANCY_MINUTES": 5,
+        "SCALP_STAGNANCY_DEADZONE": 0.001,
+        "LATENCY_TAX_BPS": 5,
+        "EMA_FAST": 8,
+        "EMA_MID": 13,
+        "EMA_SLOW": 21,
+        "RVOL_THRESHOLD": 1.5,
+        "RVOL_PERIOD": 20,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
         "db_id": 3,
-        "strategy_label": "Most Aggressive",
+        "strategy_type": "liquidity_scout",
+        "strategy_label": "Liquidity Scout Scalper",
         "RSI_OVERSOLD": 50,
         "RSI_OVERBOUGHT": 50,
         "ZSCORE_ENTRY": 0.6,
         "CASH_RESERVE": 0.10,
         "MAX_POSITION_FRACTION": 0.15,
-        "STOP_LOSS_PCT": 0.025,
+        "STOP_LOSS_PCT": 0.0015,
         "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
+        "OHLCV_TIMEFRAME": "1m",
+        "OHLCV_LIMIT": 120,
+        "LOOP_SLEEP_SECONDS": 15,
+        "SCALP_TP_PCT": 0.003,
+        "SCALP_SL_PCT": 0.0015,
+        "SCALP_STAGNANCY_MINUTES": 5,
+        "SCALP_STAGNANCY_DEADZONE": 0.001,
+        "LATENCY_TAX_BPS": 5,
+        "KELTNER_EMA_PERIOD": 20,
+        "KELTNER_ATR_MULT": 1.5,
+        "VWAP_PROXIMITY_PCT": 0.002,
     },
 }
 
@@ -69,6 +99,8 @@ _profile = BOT_PROFILES[BOT_ID]
 BOT_DISPLAY_NAME = _profile["display_name"]
 BOT_DB_ID = _profile["db_id"]
 BOT_STRATEGY_LABEL = _profile["strategy_label"]
+BOT_STRATEGY_TYPE = _profile.get("strategy_type", "mean_reversion")
+IS_SCALP_BOT = BOT_STRATEGY_TYPE in ("momentum_wave", "liquidity_scout")
 
 if PAPER_TRADING:
     print("\n" + "=" * 65)
@@ -167,8 +199,8 @@ ZSCORE_WINDOW    = 20
 ZSCORE_ENTRY     = _profile.get("ZSCORE_ENTRY", 1.0)
 ZSCORE_EXIT      = 0.45
 
-OHLCV_TIMEFRAME  = "1h"
-OHLCV_LIMIT      = 100
+OHLCV_TIMEFRAME  = _profile.get("OHLCV_TIMEFRAME", "1h")
+OHLCV_LIMIT      = _profile.get("OHLCV_LIMIT", 100)
 
 
 CASH_RESERVE          = _profile.get("CASH_RESERVE", 0.20)
@@ -210,8 +242,25 @@ STALE_DEAD_ZONE_PCT   = 0.005
 
 
 EQUITY_REFRESH_INTERVAL = 3600
-LOOP_SLEEP_SECONDS      = 60
+LOOP_SLEEP_SECONDS      = _profile.get("LOOP_SLEEP_SECONDS", 60)
 RESTART_SLEEP_SECONDS   = 30
+
+SCALP_TP_PCT             = _profile.get("SCALP_TP_PCT", 0.004)
+SCALP_SL_PCT             = _profile.get("SCALP_SL_PCT", 0.002)
+SCALP_STAGNANCY_MINUTES  = _profile.get("SCALP_STAGNANCY_MINUTES", 5)
+SCALP_STAGNANCY_DEADZONE = _profile.get("SCALP_STAGNANCY_DEADZONE", 0.001)
+LATENCY_TAX_BPS          = _profile.get("LATENCY_TAX_BPS", 0)
+LATENCY_TAX_PCT          = LATENCY_TAX_BPS / 10000.0
+
+EMA_FAST         = _profile.get("EMA_FAST", 8)
+EMA_MID          = _profile.get("EMA_MID", 13)
+EMA_SLOW         = _profile.get("EMA_SLOW", 21)
+RVOL_THRESHOLD   = _profile.get("RVOL_THRESHOLD", 1.5)
+RVOL_PERIOD      = _profile.get("RVOL_PERIOD", 20)
+
+KELTNER_EMA_PERIOD  = _profile.get("KELTNER_EMA_PERIOD", 20)
+KELTNER_ATR_MULT    = _profile.get("KELTNER_ATR_MULT", 1.5)
+VWAP_PROXIMITY_PCT  = _profile.get("VWAP_PROXIMITY_PCT", 0.002)
 
 
 CB_PRICE_DROP_PCT = 0.10

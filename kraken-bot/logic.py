@@ -816,6 +816,119 @@ def check_stops(
     return None  # Neither stop triggered — hold
 
 
+def calculate_ema(closes: list[float], period: int) -> list[float]:
+    if len(closes) < period:
+        return []
+    k = 2.0 / (period + 1)
+    ema_vals = [sum(closes[:period]) / period]
+    for price in closes[period:]:
+        ema_vals.append(price * k + ema_vals[-1] * (1 - k))
+    return ema_vals
+
+
+def calculate_ema_ribbon(
+    closes: list[float],
+    fast: int = 8,
+    mid: int = 13,
+    slow: int = 21,
+) -> dict:
+    ema_fast = calculate_ema(closes, fast)
+    ema_mid = calculate_ema(closes, mid)
+    ema_slow = calculate_ema(closes, slow)
+
+    if not ema_fast or not ema_mid or not ema_slow:
+        return {"signal": "neutral", "spread": 0.0, "aligned_bullish": False, "aligned_bearish": False}
+
+    f = ema_fast[-1]
+    m = ema_mid[-1]
+    s = ema_slow[-1]
+
+    aligned_bullish = f > m > s
+    aligned_bearish = f < m < s
+
+    spread = abs(f - s) / s if s > 0 else 0.0
+
+    prev_f = ema_fast[-2] if len(ema_fast) >= 2 else f
+    prev_m = ema_mid[-2] if len(ema_mid) >= 2 else m
+
+    if f > m and prev_f <= prev_m and aligned_bullish:
+        signal = "bullish_cross"
+    elif f < m and prev_f >= prev_m and aligned_bearish:
+        signal = "bearish_cross"
+    elif aligned_bullish:
+        signal = "bullish"
+    elif aligned_bearish:
+        signal = "bearish"
+    else:
+        signal = "neutral"
+
+    return {
+        "signal": signal,
+        "spread": round(spread, 6),
+        "aligned_bullish": aligned_bullish,
+        "aligned_bearish": aligned_bearish,
+        "ema_fast": round(f, 8),
+        "ema_mid": round(m, 8),
+        "ema_slow": round(s, 8),
+    }
+
+
+def calculate_rvol(volumes: list[float], period: int = 20) -> float:
+    if len(volumes) < period + 1:
+        return 1.0
+    avg_vol = sum(volumes[-(period + 1):-1]) / period
+    if avg_vol <= 0:
+        return 1.0
+    return round(volumes[-1] / avg_vol, 4)
+
+
+def calculate_keltner_channels(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    ema_period: int = 20,
+    atr_mult: float = 1.5,
+    atr_period: int = 14,
+) -> dict:
+    ema_vals = calculate_ema(closes, ema_period)
+    atr_val = calculate_atr(highs, lows, closes, period=atr_period)
+
+    if not ema_vals or atr_val <= 0:
+        return {"mid": 0.0, "upper": 0.0, "lower": 0.0, "width": 0.0, "position": 0.5}
+
+    mid = ema_vals[-1]
+    upper = mid + atr_mult * atr_val
+    lower = mid - atr_mult * atr_val
+    width = (upper - lower) / mid if mid > 0 else 0.0
+
+    price = closes[-1]
+    band_range = upper - lower
+    position = (price - lower) / band_range if band_range > 0 else 0.5
+
+    return {
+        "mid": round(mid, 8),
+        "upper": round(upper, 8),
+        "lower": round(lower, 8),
+        "width": round(width, 6),
+        "position": round(max(0.0, min(1.0, position)), 4),
+    }
+
+
+def calculate_vwap(candles: list) -> float:
+    if not candles:
+        return 0.0
+    cum_tp_vol = 0.0
+    cum_vol = 0.0
+    for c in candles:
+        high, low, close, volume = c[2], c[3], c[4], c[5]
+        tp = (high + low + close) / 3.0
+        cum_tp_vol += tp * volume
+        cum_vol += volume
+    if cum_vol <= 0:
+        return 0.0
+    return round(cum_tp_vol / cum_vol, 8)
+
+
 class VPINDecayTracker:
     """
     Track consecutive VPIN-blocked cycles per symbol and apply decay

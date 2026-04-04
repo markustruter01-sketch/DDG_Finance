@@ -100,11 +100,26 @@ from config import (
     BOT_DISPLAY_NAME,
     BOT_DB_ID,
     BOT_STRATEGY_LABEL,
+    BOT_STRATEGY_TYPE,
+    IS_SCALP_BOT,
     MARKET_CACHE_FILE,
     IS_PRIMARY_FETCHER,
     MARKET_CACHE_TTL,
     STALE_EXIT_HOURS,
     STALE_DEAD_ZONE_PCT,
+    SCALP_TP_PCT,
+    SCALP_SL_PCT,
+    SCALP_STAGNANCY_MINUTES,
+    SCALP_STAGNANCY_DEADZONE,
+    LATENCY_TAX_PCT,
+    EMA_FAST,
+    EMA_MID,
+    EMA_SLOW,
+    RVOL_THRESHOLD,
+    RVOL_PERIOD,
+    KELTNER_EMA_PERIOD,
+    KELTNER_ATR_MULT,
+    VWAP_PROXIMITY_PCT,
 )
 
 import adaptive_params as _adaptive
@@ -124,6 +139,9 @@ from logic import (
     get_adaptive_atr_multiplier,
     get_vol_state_size_scale,
 )
+
+from scalp_strategies import evaluate_momentum_wave, evaluate_liquidity_scout
+from scalp_exits import check_scalp_exits
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
 # but always imported so the module is ready to switch modes).
@@ -153,6 +171,7 @@ else:
     logger.info("  REAL MONEY — Real orders on Kraken Pro.")
 logger.info("=" * 65)
 logger.info(f"  Symbols        : {', '.join(SYMBOLS)}")
+logger.info(f"  Strategy type  : {BOT_STRATEGY_TYPE}" + (" (SCALP BOT — 1m candles, 15s loop)" if IS_SCALP_BOT else ""))
 logger.info(f"  Timeframe      : {OHLCV_TIMEFRAME}")
 logger.info(f"  Cash reserve   : {CASH_RESERVE*100:.0f}% (always held back)")
 logger.info(f"  Max positions  : {MAX_POSITIONS}")
@@ -849,8 +868,13 @@ def get_ws_price(symbol: str) -> float | None:
 
 
 def _fetch_ohlcv_with_cache(symbol: str) -> list | None:
-    """Fetch OHLCV data, using shared cache for non-primary bots."""
-    if not IS_PRIMARY_FETCHER:
+    """Fetch OHLCV data, using shared cache for non-primary bots.
+
+    Scalp bots (IS_SCALP_BOT=True) always fetch their own 1m candles
+    directly — the shared cache carries 1h data from DJ and is not
+    compatible with 1-minute timeframes.
+    """
+    if not IS_PRIMARY_FETCHER and not IS_SCALP_BOT:
         cache = _read_market_cache()
         if cache and symbol in cache.get("ohlcv", {}):
             return cache["ohlcv"][symbol]
@@ -1142,23 +1166,61 @@ def run_cycle() -> None:
             if symbol in open_positions:
                 pos = open_positions[symbol]
 
-                # Update the best price seen (high-water for long, low-water for short)
                 if pos["side"] == "long":
                     pos["best_price"] = max(pos["best_price"], current_price)
                 else:
                     pos["best_price"] = min(pos["best_price"], current_price)
 
-                # ── Pending tranche check (T2 / T3 scale-ins) ─────────────────
-                # Before evaluating exits, check whether the current price has
-                # reached the next pending tranche target.  We only try one
-                # tranche per cycle so the bot doesn't overshoot.
+                if IS_SCALP_BOT:
+                    # ── SCALP EXIT PATH (Blackbeard / Calypso) ─────────────
+                    _scalp_exit = check_scalp_exits(
+                        side=pos["side"],
+                        entry_price=pos["entry_price"],
+                        current_price=current_price,
+                        best_price=pos["best_price"],
+                        entry_time=pos.get("entry_time"),
+                        tp_pct=SCALP_TP_PCT,
+                        sl_pct=SCALP_SL_PCT,
+                        stagnancy_minutes=SCALP_STAGNANCY_MINUTES,
+                        stagnancy_deadzone=SCALP_STAGNANCY_DEADZONE,
+                        latency_tax_pct=LATENCY_TAX_PCT,
+                        atr=sym_atr,
+                        atr_stop_price=pos.get("atr_stop_price"),
+                    )
+                    if _scalp_exit:
+                        close_position(symbol, reason=_scalp_exit, atr=sym_atr)
+                        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": f"exit_{_scalp_exit}",
+                            "has_position": False,
+                        })
+                    else:
+                        _s_pnl = (
+                            (current_price - pos["entry_price"]) / pos["entry_price"]
+                            if pos["side"] == "long"
+                            else (pos["entry_price"] - current_price) / pos["entry_price"]
+                        )
+                        logger.debug(
+                            f"Hold   | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.2f} | "
+                            f"Now: ${current_price:,.2f} | P&L: {_s_pnl*100:+.2f}%"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "hold",
+                            "has_position": True, "pnl_pct": round(_s_pnl * 100, 2),
+                            "side": pos["side"],
+                        })
+                    continue
+
+                # ── MEAN-REVERSION EXIT PATH (Davy Jones) ──────────────────
+
                 if symbol in _pending_tranches:
                     for _t in _pending_tranches[symbol]:
                         if _t.get("filled"):
                             continue
                         _t_side   = _t["side"]
                         _t_target = _t["price_target"]
-                        # For longs T2/T3 are lower (dip-buy); for shorts they are higher
                         _triggered = (
                             (current_price <= _t_target) if _t_side == "long"
                             else (current_price >= _t_target)
@@ -1173,9 +1235,8 @@ def run_cycle() -> None:
                                     f"Tranches | {symbol} T{_t['tranche']} filled @ ${current_price:,.4f} "
                                     f"(target was ${_t_target:,.4f})"
                                 )
-                            break  # only one tranche per cycle
+                            break
 
-                # Check if we should exit via stop-loss or trailing take-profit
                 exit_reason = check_stops(
                     side=pos["side"],
                     entry_price=pos["entry_price"],
@@ -1194,16 +1255,6 @@ def run_cycle() -> None:
                         "price": round(current_price, 4), "signal_type": f"exit_{exit_reason}",
                         "has_position": False,
                     })
-                # ── Exit Conditions (in priority order) ──────────────────────
-                # 1. Hard stop loss (check_stops above) — always fires, no P&L gate.
-                # 2. Trailing take-profit (check_stops above) — always fires, no P&L gate.
-                # 3. Time stop (stale exit) — if position held > STALE_EXIT_HOURS
-                #    and P&L is in the dead zone (±STALE_DEAD_ZONE_PCT), close it.
-                #    Rationale: signal edge decays over time; capital locked in a
-                #    flat position has high opportunity cost.
-                # 4. Mean-reversion exit — fires only when BOTH:
-                #      a. |z-score| has returned below ZSCORE_EXIT (reversion complete), AND
-                #      b. unrealised P&L ≥ MIN_NET_PROFIT_PCT (covers 0.52% round-trip fee).
                 elif symbol in open_positions:
                     unrealised_pnl_pct = (
                         (current_price - pos["entry_price"]) / pos["entry_price"]
@@ -1240,7 +1291,6 @@ def run_cycle() -> None:
 
                     if abs(sym_z_score) < _zscore_exit:
                         if unrealised_pnl_pct >= _min_net_profit_pct:
-                            # Both conditions met — take the mean-reversion exit
                             close_position(symbol, reason="mean_reversion_complete", atr=sym_atr)
                             deployed_usd = sum(p["size_usd"] for p in open_positions.values())
                             cycle_signals.append({
@@ -1249,8 +1299,6 @@ def run_cycle() -> None:
                                 "has_position": False,
                             })
                         else:
-                            # Z returned to mean but P&L is below the fee threshold —
-                            # hold and wait for the trailing stop or more profit.
                             needed_pct = (_min_net_profit_pct - unrealised_pnl_pct) * 100
                             logger.info(
                                 f"Hold   | {pos['side'].upper()} {symbol} | "
@@ -1292,6 +1340,117 @@ def run_cycle() -> None:
                 continue  # Don't try to open a new position in the same symbol
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
+
+            # ── SCALP ENTRY PATH (Blackbeard / Calypso) ──────────────────
+            # Scalp bots skip VPIN gate, contrarian scout, and tranches.
+            # They use their own evaluators and enter full-size positions.
+            if IS_SCALP_BOT:
+                if len(open_positions) >= _effective_max_positions:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "slots_full", "has_position": False,
+                    })
+                    continue
+                if _profile_breached:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "skip_ceiling_breach", "has_position": False,
+                    })
+                    continue
+                if _penalty_tracker.is_throttled():
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "skip_penalty_throttle", "has_position": False,
+                    })
+                    continue
+
+                if BOT_STRATEGY_TYPE == "momentum_wave":
+                    _scalp_eval = evaluate_momentum_wave(
+                        candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
+                        current_price=current_price,
+                        ema_fast=EMA_FAST, ema_mid=EMA_MID, ema_slow=EMA_SLOW,
+                        rvol_threshold=RVOL_THRESHOLD, rvol_period=RVOL_PERIOD,
+                    )
+                else:
+                    _scalp_eval = evaluate_liquidity_scout(
+                        candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
+                        current_price=current_price,
+                        keltner_ema_period=KELTNER_EMA_PERIOD, keltner_atr_mult=KELTNER_ATR_MULT,
+                        vwap_proximity_pct=VWAP_PROXIMITY_PCT,
+                    )
+
+                _scalp_side = _scalp_eval.get("side")
+                _scalp_conviction = _scalp_eval.get("conviction", 0.0)
+
+                if _scalp_side and _scalp_conviction >= 0.5:
+                    if _is_bear and _scalp_side == "long":
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "long_blocked_bear_regime",
+                            "has_position": False, "regime": _regime_label,
+                        })
+                        continue
+
+                    size_usd, _vol_tier, _eff_stop = get_position_size(
+                        total_equity=total_equity,
+                        entry_price=current_price,
+                        deployed_usd=deployed_usd,
+                        risk_fraction=RISK_FRACTION,
+                        stop_loss_pct=SCALP_SL_PCT,
+                        max_position_fraction=_effective_max_position_frac,
+                        cash_reserve=CASH_RESERVE,
+                        atr=sym_atr,
+                        atr_multiplier=_sym_atr_mult,
+                    )
+                    size_usd *= _vol_size_scale
+
+                    if size_usd >= MIN_POSITION_USD:
+                        _atr_stop = get_atr_stop_price(_scalp_side, current_price, sym_atr, multiplier=_sym_atr_mult)
+                        logger.info(
+                            f"Scalp  | {_scalp_side.upper()} {symbol} | "
+                            f"Strategy={BOT_STRATEGY_TYPE} conviction={_scalp_conviction:.2f} | "
+                            f"Size: ${size_usd:,.2f} [{_vol_tier}] | ATR stop: ${_atr_stop:,.4f}"
+                        )
+                        if open_position(symbol, _scalp_side, size_usd, current_price):
+                            deployed_usd += size_usd
+                            if symbol in open_positions:
+                                open_positions[symbol]["atr_stop_price"] = _atr_stop
+                                open_positions[symbol]["vol_tier"] = _vol_tier
+                                open_positions[symbol]["tranches_filled"] = 1
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4),
+                                "signal_type": f"{_scalp_side}_entered",
+                                "has_position": True, "size_usd": round(size_usd, 2),
+                                "vol_tier": _vol_tier, "conviction": _scalp_conviction,
+                            })
+                        else:
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4),
+                                "signal_type": f"{_scalp_side}_signal",
+                                "has_position": False,
+                            })
+                    else:
+                        logger.debug(f"Scalp  | {symbol}: {_scalp_side.upper()} signal but size ${size_usd:.2f} too small")
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4),
+                            "signal_type": f"{_scalp_side}_signal_small",
+                            "has_position": False,
+                        })
+                else:
+                    logger.debug(
+                        f"Scalp  | {symbol} | No signal | Strategy={BOT_STRATEGY_TYPE} "
+                        f"conviction={_scalp_conviction:.2f} | Price: ${current_price:,.2f}"
+                    )
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "watching", "has_position": False,
+                    })
+                continue  # scalp entry path complete — skip mean-reversion entry below
+
+            # ── MEAN-REVERSION ENTRY PATH (Davy Jones) ─────────────────────
 
             if len(open_positions) >= _effective_max_positions:
                 logger.debug(

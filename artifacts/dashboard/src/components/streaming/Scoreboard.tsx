@@ -155,8 +155,8 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
               "rgba(74,222,128,0.8)",
               "rgba(34,197,94,0.3)",
             ],
-          } : {}}
-          transition={winPulse ? { duration: 1, ease: "easeInOut" } : {}}
+          } : { scale: 1, boxShadow: "0 0 0px transparent", borderColor: "rgba(34,197,94,0.3)" }}
+          transition={winPulse ? { duration: 1, ease: "easeInOut" } : { duration: 0.3 }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-green-500/10 to-transparent" />
           <div className="relative">
@@ -190,8 +190,8 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
               "rgba(251,146,60,0.8)",
               "rgba(249,115,22,0.3)",
             ],
-          } : {}}
-          transition={lossPulse ? { duration: 1, ease: "easeInOut" } : {}}
+          } : { scale: 1, boxShadow: "0 0 0px transparent", borderColor: "rgba(249,115,22,0.3)" }}
+          transition={lossPulse ? { duration: 1, ease: "easeInOut" } : { duration: 0.3 }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-orange-500/10 to-transparent" />
           <div className="relative">

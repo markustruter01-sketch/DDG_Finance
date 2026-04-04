@@ -121,8 +121,8 @@ function BotStatusBox({ name, market, icon, color, active, index, countdown, pul
           `0 0 20px ${color}aa, 0 0 40px ${color}55`,
           `0 0 0px ${color}00`,
         ],
-      } : "visible"}
-      transition={pulsing ? { duration: 1, ease: "easeInOut" } : undefined}
+      } : { opacity: 1, y: 0, scale: 1, boxShadow: "0 0 0px transparent" }}
+      transition={pulsing ? { duration: 1, ease: "easeInOut" } : { duration: 0.3 }}
       className="relative rounded-lg bg-slate-900/60"
       style={{
         flex: "1 1 0%",

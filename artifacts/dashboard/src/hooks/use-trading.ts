@@ -245,9 +245,9 @@ export function useStatusSummary() {
   return useQuery<StatusSummary>({
     queryKey: ["/status/summary"],
     queryFn: async () => (await api.get("/status/summary")).data,
-    refetchInterval: useVisibleInterval(15000),
+    refetchInterval: useVisibleInterval(8_000),
     retry: 1,
-    staleTime: 10_000,
+    staleTime: 5_000,
   });
 }
 
@@ -282,7 +282,7 @@ export function useLivePositions() {
   return useQuery<LivePositionsData>({
     queryKey: ["/positions/live"],
     queryFn: async () => (await api.get("/positions/live")).data,
-    refetchInterval: useVisibleInterval(30000),
+    refetchInterval: useVisibleInterval(10_000),
   });
 }
 
@@ -297,7 +297,7 @@ export function useJournal() {
   return useQuery<TradeJournal>({
     queryKey: ["/journal"],
     queryFn: async () => (await api.get("/journal")).data,
-    refetchInterval: useVisibleInterval(30_000),
+    refetchInterval: useVisibleInterval(10_000),
   });
 }
 
@@ -995,7 +995,7 @@ export function useKrakenStatus(botId?: string) {
   return useQuery<KrakenStatus>({
     queryKey: ["/kraken/status", botId ?? "default"],
     queryFn: async () => (await api.get(`/kraken/status${params}`)).data,
-    refetchInterval: useVisibleInterval(30_000),
+    refetchInterval: useVisibleInterval(8_000),
     retry: false,
   });
 }
@@ -1026,7 +1026,7 @@ export function useKrakenFleetSummary() {
   return useQuery<KrakenFleetSummary>({
     queryKey: ["/kraken/fleet-summary"],
     queryFn: async () => (await api.get("/kraken/fleet-summary")).data,
-    refetchInterval: useVisibleInterval(30_000),
+    refetchInterval: useVisibleInterval(8_000),
     retry: 2,
     retryDelay: 3000,
   });
@@ -1103,7 +1103,7 @@ export function useKrakenPerformance(botId?: string) {
   return useQuery<KrakenPerformance>({
     queryKey: ["/kraken/performance", botId ?? "default"],
     queryFn: async () => (await api.get(`/kraken/performance${params}`)).data,
-    refetchInterval: useVisibleInterval(60_000),
+    refetchInterval: useVisibleInterval(10_000),
     retry: 2,
     retryDelay: 3000,
   });

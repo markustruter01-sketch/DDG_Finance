@@ -1,77 +1,5 @@
 [
   {
-    "generated_at": "2026-04-03T01:12:47.124669+00:00",
-    "valid_until": "2026-04-03T07:12:47.124669+00:00",
-    "overall_verdict": "CAUTION",
-    "bot_verdicts": {
-      "oracle": "CAUTION",
-      "davy_jones": "CAUTION",
-      "blackbeard": "CAUTION",
-      "calypso": "CAUTION",
-      "apex_predator": "CLEAN",
-      "navigator": "CLEAN"
-    },
-    "vetoed_tickers": [
-      "UNI",
-      "RENDER",
-      "BITO"
-    ],
-    "conditions": [
-      {
-        "type": "vpin_threshold",
-        "value": 0.75
-      },
-      {
-        "type": "max_conviction_cap",
-        "value": 0.85
-      },
-      {
-        "type": "bear_regime_deployment_cap",
-        "value": 0.4
-      }
-    ],
-    "kraken_param_adjustments": [
-      {
-        "bot_id": "davy_jones",
-        "ZSCORE_ENTRY": 1.2,
-        "STOP_LOSS_PCT": 0.014,
-        "reasoning": "Conservative bot is over-deployed (58%) in a BEAR regime; tightening entry and stop to preserve capital."
-      },
-      {
-        "bot_id": "blackbeard",
-        "ZSCORE_ENTRY": 1.35,
-        "TRAIL_PCT": 0.08,
-        "reasoning": "Win rate at 40.5% indicates low-quality entries; increasing threshold and loosening trail to avoid stop-hunts."
-      },
-      {
-        "bot_id": "calypso",
-        "ZSCORE_ENTRY": 1.4,
-        "STOP_LOSS_PCT": 0.022,
-        "reasoning": "Clustered stop-outs on UNI/USD suggest entry criteria are too loose for current high-VIX environment."
-      }
-    ],
-    "critique_summary": "The fleet is suffering from severe cross-bot correlation, specifically in UNI and RENDER, leading to clustered losses. While the Oracle bot correctly pivoted to SGOV for the BEAR regime, the Kraken fleet remains over-exposed (50-60% deployment) despite a VIX above 24. AI conviction scores are inflated relative to historical PnL, necessitating a cap on conviction-based sizing.",
-    "critique_flags": [
-      "Cross-bot correlation risk: UNI/USD stop-outs across all Kraken bots",
-      "Conviction inflation: Oracle high-conviction trades (0.8+) showing significant historical losses",
-      "Regime contradiction: Kraken bots maintaining high deployment in a confirmed BEAR regime",
-      "Stop-loss clustering: Simultaneous exits on UNI/USD and ENA/USD"
-    ],
-    "token_usage": {
-      "promptTokenCount": 16644,
-      "candidatesTokenCount": 620,
-      "totalTokenCount": 19058,
-      "promptTokensDetails": [
-        {
-          "modality": "TEXT",
-          "tokenCount": 16644
-        }
-      ],
-      "thoughtsTokenCount": 1794
-    },
-    "elapsed_seconds": 15.9
-  },
-  {
     "generated_at": "2026-04-03T01:27:39.685373+00:00",
     "valid_until": "2026-04-03T07:27:39.685373+00:00",
     "overall_verdict": "CAUTION",
@@ -1731,5 +1659,78 @@
       "thoughtsTokenCount": 3115
     },
     "elapsed_seconds": 22.6
+  },
+  {
+    "generated_at": "2026-04-04T07:36:35.682234+00:00",
+    "valid_until": "2026-04-04T13:36:35.682234+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CAUTION",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "UNI",
+      "BCH"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "news_blacklist",
+        "ticker": "RENDER"
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.2,
+        "STOP_LOSS_PCT": 0.018,
+        "reasoning": "Conservative bot hitting full stops on RENDER/W. Tighten entry requirements to avoid catching falling knives in extreme fear regime."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.35,
+        "TRAIL_PCT": 0.055,
+        "reasoning": "Win rate 41.7% with high frequency of scalp_stagnant exits. Tighter entry and wider trail needed to capture infrequent trending moves."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.4,
+        "STOP_LOSS_PCT": 0.024,
+        "reasoning": "Lowest win rate (39.8%) in the fleet. Current scalp-heavy approach is failing in high-fear regime; requires highest entry threshold."
+      }
+    ],
+    "critique_summary": "Fleet is experiencing systemic bleed in a high-fear crypto regime with Kraken bots suffering from high-frequency stagnant exits and poor win rates. Navigator (Forex) is in a failure state with 11.1% win rate and over-correlation in JPY pairs, while Oracle is correctly preserving capital in SGOV.",
+    "critique_flags": [
+      "Navigator win rate divergence (11.1%)",
+      "Kraken fleet scalp_stagnant exit cluster",
+      "Cross-bot correlation in TIA and AVAX",
+      "Excessive JPY exposure in Navigator"
+    ],
+    "token_usage": {
+      "promptTokenCount": 17229,
+      "candidatesTokenCount": 616,
+      "totalTokenCount": 19110,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 17229
+        }
+      ],
+      "thoughtsTokenCount": 1265
+    },
+    "elapsed_seconds": 12.7
   }
 ]

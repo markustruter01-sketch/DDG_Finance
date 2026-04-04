@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-04T07:06:57.323139+00:00",
-  "valid_until": "2026-04-04T13:06:57.323139+00:00",
+  "generated_at": "2026-04-04T07:36:48.415358+00:00",
+  "valid_until": "2026-04-04T13:36:48.415358+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
@@ -17,16 +17,16 @@
       "value": 0.85
     },
     {
-      "type": "position_limit_enforcement",
-      "value": 5.0
+      "type": "news_blacklist",
+      "ticker": "RENDER"
     }
   ],
-  "critique_summary": "The fleet is suffering from systemic data contamination in the Oracle ledger and a major risk violation in the Navigator bot, which is holding 10 positions despite a 5-position cap. Kraken bots show high correlation in short positions during a 'Bear' regime, but poor win rates suggest the mean-reversion entries are triggering prematurely.",
+  "critique_summary": "Fleet is experiencing systemic bleed in a high-fear crypto regime with Kraken bots suffering from high-frequency stagnant exits and poor win rates. Navigator (Forex) is in a failure state with 11.1% win rate and over-correlation in JPY pairs, while Oracle is correctly preserving capital in SGOV.",
   "critique_flags": [
-    "Position sizing violation: Navigator holding 10/5 max positions",
-    "Data anomaly: Oracle ledger contaminated with Kraken paper trade entries",
-    "Correlation risk: Blackbeard and Calypso heavily overlapped in crypto shorts",
-    "Conviction inflation: Oracle conviction at 0.82 with negative performance"
+    "Navigator win rate divergence (11.1%)",
+    "Kraken fleet scalp_stagnant exit cluster",
+    "Cross-bot correlation in TIA and AVAX",
+    "Excessive JPY exposure in Navigator"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

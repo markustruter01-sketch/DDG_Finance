@@ -146,6 +146,8 @@ OUTPUT FORMAT (strict JSON, no markdown fences)
 
 RULES
 =====
+• CRITICAL: Use the pre-computed summary metrics (Win Rate, Win/Loss counts, Total P&L) from each bot's overview section. DO NOT attempt to count individual trade rows or calculate your own metrics — the pre-computed values are authoritative and your manual counting WILL be wrong.
+• When citing win rates in your reasoning, use the EXACT percentage from the "Win / Loss" line in the report.
 • Only recommend param changes when data clearly supports it — do not change params for bots performing well
 • kraken_param_adjustments: only include bots that NEED changes.  Omit bots that are fine.
 • bot_id values: "davy_jones", "blackbeard", "calypso" (exact strings)

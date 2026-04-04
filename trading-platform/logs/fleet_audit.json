@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-04-04T07:06:34.676340+00:00",
-  "valid_until": "2026-04-04T13:06:34.676340+00:00",
+  "generated_at": "2026-04-04T07:36:35.682234+00:00",
+  "valid_until": "2026-04-04T13:36:35.682234+00:00",
   "overall_verdict": "CAUTION",
   "bot_verdicts": {
-    "oracle": "CAUTION",
-    "davy_jones": "CLEAN",
+    "oracle": "CLEAN",
+    "davy_jones": "CAUTION",
     "blackbeard": "CAUTION",
     "calypso": "CAUTION",
     "apex_predator": "CLEAN",
@@ -26,48 +26,48 @@
       "value": 0.85
     },
     {
-      "type": "position_limit_enforcement",
-      "value": 5.0
+      "type": "news_blacklist",
+      "ticker": "RENDER"
     }
   ],
   "kraken_param_adjustments": [
     {
       "bot_id": "davy_jones",
-      "ZSCORE_ENTRY": 1.15,
-      "STOP_LOSS_PCT": 0.022,
-      "reasoning": "Win rate 52.8% is acceptable but negative P&L suggests poor entry quality; tightening Z-score to 1.15."
+      "ZSCORE_ENTRY": 1.2,
+      "STOP_LOSS_PCT": 0.018,
+      "reasoning": "Conservative bot hitting full stops on RENDER/W. Tighten entry requirements to avoid catching falling knives in extreme fear regime."
     },
     {
       "bot_id": "blackbeard",
-      "ZSCORE_ENTRY": 1.25,
-      "STOP_LOSS_PCT": 0.026,
-      "reasoning": "Low 42.3% win rate and high frequency of scalp_stagnant exits indicate entry criteria are too loose."
+      "ZSCORE_ENTRY": 1.35,
+      "TRAIL_PCT": 0.055,
+      "reasoning": "Win rate 41.7% with high frequency of scalp_stagnant exits. Tighter entry and wider trail needed to capture infrequent trending moves."
     },
     {
       "bot_id": "calypso",
-      "ZSCORE_ENTRY": 1.35,
-      "STOP_LOSS_PCT": 0.03,
-      "reasoning": "Critical 39.8% win rate with frequent scalp_stop triggers; tightening entry significantly to filter market noise."
+      "ZSCORE_ENTRY": 1.4,
+      "STOP_LOSS_PCT": 0.024,
+      "reasoning": "Lowest win rate (39.8%) in the fleet. Current scalp-heavy approach is failing in high-fear regime; requires highest entry threshold."
     }
   ],
-  "critique_summary": "The fleet is suffering from systemic data contamination in the Oracle ledger and a major risk violation in the Navigator bot, which is holding 10 positions despite a 5-position cap. Kraken bots show high correlation in short positions during a 'Bear' regime, but poor win rates suggest the mean-reversion entries are triggering prematurely.",
+  "critique_summary": "Fleet is experiencing systemic bleed in a high-fear crypto regime with Kraken bots suffering from high-frequency stagnant exits and poor win rates. Navigator (Forex) is in a failure state with 11.1% win rate and over-correlation in JPY pairs, while Oracle is correctly preserving capital in SGOV.",
   "critique_flags": [
-    "Position sizing violation: Navigator holding 10/5 max positions",
-    "Data anomaly: Oracle ledger contaminated with Kraken paper trade entries",
-    "Correlation risk: Blackbeard and Calypso heavily overlapped in crypto shorts",
-    "Conviction inflation: Oracle conviction at 0.82 with negative performance"
+    "Navigator win rate divergence (11.1%)",
+    "Kraken fleet scalp_stagnant exit cluster",
+    "Cross-bot correlation in TIA and AVAX",
+    "Excessive JPY exposure in Navigator"
   ],
   "token_usage": {
-    "promptTokenCount": 17275,
-    "candidatesTokenCount": 603,
-    "totalTokenCount": 20993,
+    "promptTokenCount": 17229,
+    "candidatesTokenCount": 616,
+    "totalTokenCount": 19110,
     "promptTokensDetails": [
       {
         "modality": "TEXT",
-        "tokenCount": 17275
+        "tokenCount": 17229
       }
     ],
-    "thoughtsTokenCount": 3115
+    "thoughtsTokenCount": 1265
   },
-  "elapsed_seconds": 22.6
+  "elapsed_seconds": 12.7
 }

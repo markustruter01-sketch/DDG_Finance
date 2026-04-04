@@ -1423,7 +1423,7 @@ async def export_diagnostic_report() -> dict:
         row("Deployed capital:", f"{_c(k_deployed)} ({_pct(k_deploy_pct, 1)} of equity)")
         row("Open positions:", str(len(k_positions)))
 
-        _pf_wins = [t for t in _pf_trades if (t.get("pnl_pct", 0) or 0) > 0]
+        _pf_wins = [t for t in _pf_trades if (t.get("pnl_usd", 0) or 0) >= 0]
         if _pf_trades:
             ps_trades = len(_pf_trades)
             ps_wins   = len(_pf_wins)
@@ -1477,7 +1477,7 @@ async def export_diagnostic_report() -> dict:
             pusd = t.get("pnl_usd", 0) or 0
             sym_stats[s]["pnl_pct"] += ppct
             sym_stats[s]["pnl_usd"] += pusd
-            if ppct > 0:
+            if pusd >= 0:
                 sym_stats[s]["wins"] += 1
         lines.append(f"  {'Symbol':<12} {'Trades':>7} {'Win Rate':>10} {'Total PnL%':>12} {'Total PnL$':>12} {'Avg PnL%':>9}")
         lines.append("  " + "-" * 68)

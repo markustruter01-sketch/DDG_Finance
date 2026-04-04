@@ -2506,5 +2506,34 @@
     "medium_count": 2,
     "escalated_to_gemini": true,
     "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T07:36:48.420540+00:00",
+    "elapsed_sec": 14.03,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 39.8% (37/93) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
   }
 ]

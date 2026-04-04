@@ -10,6 +10,7 @@ export type RealTrade = {
   bot: string;
   icon: string;
   symbol: string;
+  side: string;
   pnlPct: number;
   pnlUsd: number;
   isWin: boolean;
@@ -86,6 +87,7 @@ export function useRealFeed(maxTrades = 20) {
           bot,
           icon,
           symbol: sym,
+          side: t.side || t.direction || "",
           pnlPct: t.pnl_percentage,
           pnlUsd: 0,
           isWin: t.status === "Closed_Win",
@@ -110,9 +112,10 @@ export function useRealFeed(maxTrades = 20) {
           bot,
           icon,
           symbol: rt.symbol,
+          side: rt.side || "",
           pnlPct: rt.pnl_pct,
           pnlUsd: rt.pnl_usd,
-          isWin: rt.pnl_pct >= 0,
+          isWin: rt.pnl_usd >= 0,
           date: rt.closed_at,
         });
       }
@@ -133,6 +136,7 @@ export function useRealFeed(maxTrades = 20) {
           bot: "Navigator",
           icon: "🧭",
           symbol: ft.pair.replace("_", "/"),
+          side: ft.direction || "",
           pnlPct,
           pnlUsd: ft.pnl_usd ?? 0,
           isWin: (ft.pnl_usd ?? 0) >= 0,

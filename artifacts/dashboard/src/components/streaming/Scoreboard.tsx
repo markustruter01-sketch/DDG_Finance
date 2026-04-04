@@ -54,10 +54,10 @@ function getBotAbbrev(name: string): string {
 function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
   const usdPositive = trade.pnlUsd >= 0;
   const pctPositive = trade.pnlPct >= 0;
+  const netPositive = trade.pnlUsd !== 0 ? usdPositive : pctPositive;
   const usdColor = usdPositive ? "#00ff88" : "#ff8c00";
-  const pctColor = pctPositive ? "#00ff88" : "#ff8c00";
-  const rowPositive = trade.pnlUsd !== 0 ? usdPositive : pctPositive;
-  const bgColor = rowPositive ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
+  const pctColor = netPositive ? "#00ff88" : "#ff8c00";
+  const bgColor = netPositive ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
   const botColor = BOT_COLORS[trade.bot] ?? "#64748b";
 
   return (
@@ -77,6 +77,22 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
           {getBotAbbrev(trade.bot)}
         </span>
       </span>
+      {trade.side && (
+        <span
+          className="shrink-0 rounded px-1 py-0.5"
+          style={{
+            fontSize: 9,
+            fontWeight: 900,
+            letterSpacing: "0.05em",
+            lineHeight: 1,
+            color: trade.side === "short" ? "#f87171" : "#4ade80",
+            backgroundColor: trade.side === "short" ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.1)",
+            border: `1px solid ${trade.side === "short" ? "rgba(248,113,113,0.2)" : "rgba(74,222,128,0.2)"}`,
+          }}
+        >
+          {trade.side === "short" ? "SHORT" : "LONG"}
+        </span>
+      )}
       <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(203,213,225,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {trade.symbol}
       </span>

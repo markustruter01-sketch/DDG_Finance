@@ -75,8 +75,11 @@ def check_scalp_exits(
         if minutes_held >= stagnancy_minutes:
             if net_pnl_pct > 0:
                 return "scalp_tp"
+
+        forced_exit_minutes = stagnancy_minutes * 3.0
+        if minutes_held >= forced_exit_minutes:
             price_move_pct = abs(raw_pnl_pct)
-            if price_move_pct <= stagnancy_deadzone:
+            if price_move_pct <= stagnancy_deadzone * 2.0:
                 return "scalp_stagnant"
 
     return None

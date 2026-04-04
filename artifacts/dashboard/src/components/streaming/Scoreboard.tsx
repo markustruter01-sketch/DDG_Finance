@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import type { RealTrade } from "./useRealFeed";
+import { onTradePulse } from "./tradePulseEvents";
 
 interface ScoreboardProps {
   wins: number;
@@ -99,6 +100,21 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
 export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
   const [cycle, setCycle] = useState(0);
   const [visibleCount, setVisibleCount] = useState(recentTrades.length);
+  const [winPulse, setWinPulse] = useState(false);
+  const [lossPulse, setLossPulse] = useState(false);
+
+  useEffect(() => {
+    const unsub = onTradePulse((ev) => {
+      if (ev.type === "win") {
+        setWinPulse(true);
+        setTimeout(() => setWinPulse(false), 1000);
+      } else {
+        setLossPulse(true);
+        setTimeout(() => setLossPulse(false), 1000);
+      }
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -121,7 +137,27 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
       <div className="grid grid-cols-2 gap-2 shrink-0">
-        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-2 text-center relative overflow-hidden">
+        <motion.div
+          className="rounded-xl border border-green-500/30 bg-green-500/5 p-2 text-center relative overflow-hidden"
+          animate={winPulse ? {
+            scale: [1, 1.12, 0.95, 1.08, 1],
+            boxShadow: [
+              "0 0 0px rgba(34,197,94,0)",
+              "0 0 30px rgba(34,197,94,0.8), 0 0 60px rgba(34,197,94,0.4)",
+              "0 0 10px rgba(34,197,94,0.3)",
+              "0 0 25px rgba(34,197,94,0.6), 0 0 50px rgba(34,197,94,0.3)",
+              "0 0 0px rgba(34,197,94,0)",
+            ],
+            borderColor: [
+              "rgba(34,197,94,0.3)",
+              "rgba(74,222,128,1)",
+              "rgba(34,197,94,0.5)",
+              "rgba(74,222,128,0.8)",
+              "rgba(34,197,94,0.3)",
+            ],
+          } : {}}
+          transition={winPulse ? { duration: 1, ease: "easeInOut" } : {}}
+        >
           <div className="absolute inset-0 bg-gradient-to-t from-green-500/10 to-transparent" />
           <div className="relative">
             <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(74,222,128,0.6)" }}>WINS</div>
@@ -135,8 +171,28 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
               {wins}
             </motion.div>
           </div>
-        </div>
-        <div className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-2 text-center relative overflow-hidden">
+        </motion.div>
+        <motion.div
+          className="rounded-xl border border-orange-500/30 bg-orange-500/5 p-2 text-center relative overflow-hidden"
+          animate={lossPulse ? {
+            scale: [1, 1.12, 0.95, 1.08, 1],
+            boxShadow: [
+              "0 0 0px rgba(249,115,22,0)",
+              "0 0 30px rgba(249,115,22,0.8), 0 0 60px rgba(249,115,22,0.4)",
+              "0 0 10px rgba(249,115,22,0.3)",
+              "0 0 25px rgba(249,115,22,0.6), 0 0 50px rgba(249,115,22,0.3)",
+              "0 0 0px rgba(249,115,22,0)",
+            ],
+            borderColor: [
+              "rgba(249,115,22,0.3)",
+              "rgba(251,146,60,1)",
+              "rgba(249,115,22,0.5)",
+              "rgba(251,146,60,0.8)",
+              "rgba(249,115,22,0.3)",
+            ],
+          } : {}}
+          transition={lossPulse ? { duration: 1, ease: "easeInOut" } : {}}
+        >
           <div className="absolute inset-0 bg-gradient-to-t from-orange-500/10 to-transparent" />
           <div className="relative">
             <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(251,146,60,0.6)" }}>LOSSES</div>
@@ -150,7 +206,7 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
               {losses}
             </motion.div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       <div className="flex-1 overflow-hidden rounded-lg border border-white/5 bg-slate-900/60 min-h-0 flex flex-col">

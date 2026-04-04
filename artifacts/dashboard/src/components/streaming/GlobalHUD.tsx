@@ -6,6 +6,7 @@ import {
   useJournal, useKrakenPerformance, useKrakenStatus,
 } from "@/hooks/use-trading";
 import { AnimatedValue } from "./AnimatedValue";
+import { onTradePulse } from "./tradePulseEvents";
 
 
 const cardVariants = {
@@ -52,10 +53,16 @@ function useCountdown(targetIso: string | null | undefined) {
     const tick = () => {
       const diff = new Date(targetIso).getTime() - Date.now();
       if (diff <= 0) { setRemaining(""); return; }
-      const h = Math.floor(diff / 3_600_000);
+      const totalH = Math.floor(diff / 3_600_000);
       const m = Math.floor((diff % 3_600_000) / 60_000);
       const s = Math.floor((diff % 60_000) / 1000);
-      setRemaining(`${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`);
+      if (totalH >= 24) {
+        const d = Math.floor(totalH / 24);
+        const h = totalH % 24;
+        setRemaining(`${d}d ${h}h ${String(m).padStart(2, "0")}m`);
+      } else {
+        setRemaining(`${totalH}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`);
+      }
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -97,15 +104,25 @@ function SleepZzz({ color }: { color: string }) {
   );
 }
 
-function BotStatusBox({ name, market, icon, color, active, index, countdown }: {
-  name: string; market: string; icon: string; color: string; active: boolean; index: number; countdown?: string;
+function BotStatusBox({ name, market, icon, color, active, index, countdown, pulsing }: {
+  name: string; market: string; icon: string; color: string; active: boolean; index: number; countdown?: string; pulsing?: boolean;
 }) {
   return (
     <motion.div
       custom={index + 4}
       variants={cardVariants}
       initial="hidden"
-      animate="visible"
+      animate={pulsing ? {
+        opacity: 1, y: 0, scale: [1, 1.15, 0.95, 1.1, 1],
+        boxShadow: [
+          `0 0 0px ${color}00`,
+          `0 0 25px ${color}cc, 0 0 50px ${color}66`,
+          `0 0 8px ${color}44`,
+          `0 0 20px ${color}aa, 0 0 40px ${color}55`,
+          `0 0 0px ${color}00`,
+        ],
+      } : "visible"}
+      transition={pulsing ? { duration: 1, ease: "easeInOut" } : undefined}
       className="relative rounded-lg bg-slate-900/60"
       style={{
         flex: "1 1 0%",
@@ -117,7 +134,7 @@ function BotStatusBox({ name, market, icon, color, active, index, countdown }: {
         gap: 5,
         padding: "6px 8px",
         overflow: "visible",
-        border: `1px solid ${active ? color + "50" : color + "25"}`,
+        border: `1px solid ${pulsing ? color : active ? color + "50" : color + "25"}`,
       }}
     >
       {active && (
@@ -177,7 +194,30 @@ function BotStatusBox({ name, market, icon, color, active, index, countdown }: {
   );
 }
 
+const BOT_NAME_TO_KEY: Record<string, string> = {
+  "Oracle": "oracle",
+  "Davy Jones": "davy-jones",
+  "Blackbeard": "blackbeard",
+  "Calypso": "calypso",
+  "Apex Predator": "apex",
+  "Apex": "apex",
+  "Navigator": "navigator",
+};
+
 export function GlobalHUD() {
+  const [pulsingBot, setPulsingBot] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onTradePulse((ev) => {
+      const key = BOT_NAME_TO_KEY[ev.botName];
+      if (key) {
+        setPulsingBot(key);
+        setTimeout(() => setPulsingBot(null), 1000);
+      }
+    });
+    return unsub;
+  }, []);
+
   const { data: summary } = useStatusSummary();
   const { data: fleet } = useKrakenFleetSummary();
   const { data: optState } = useOptionsState();
@@ -362,6 +402,7 @@ export function GlobalHUD() {
             active={botActive[bot.statusKey]}
             index={i}
             countdown={botCountdowns[bot.statusKey]}
+            pulsing={pulsingBot === bot.statusKey}
           />
         ))}
       </div>

@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import {
   useJournal, useKrakenPerformance, useOptionsState, useForexState,
   useKrakenStatus, useLivePositions, useForexPositions, useForexTrades,
 } from "@/hooks/use-trading";
+import { emitTradePulse } from "./tradePulseEvents";
 
 export type RealTrade = {
   id: string;
@@ -318,6 +319,24 @@ export function useRealFeed(maxTrades = 20) {
 
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
   }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions]);
+
+  const seenTradeIds = useRef<Set<string>>(new Set());
+  const initialized = useRef(false);
+
+  useEffect(() => {
+    if (trades.length === 0) return;
+    if (!initialized.current) {
+      for (const t of trades) seenTradeIds.current.add(t.id);
+      initialized.current = true;
+      return;
+    }
+    for (const t of trades) {
+      if (!seenTradeIds.current.has(t.id)) {
+        seenTradeIds.current.add(t.id);
+        emitTradePulse({ type: t.isWin ? "win" : "loss", botName: t.bot });
+      }
+    }
+  }, [trades]);
 
   return { trades, wins, losses, botStats, totalTrades, trades24h, openPositions };
 }

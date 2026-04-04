@@ -45,15 +45,15 @@ def evaluate_momentum_wave(
 
     volume_confirmed = rvol >= rvol_threshold
 
-    if ribbon["signal"] in ("bullish_cross", "bullish") and volume_confirmed:
-        conviction = 0.5
-        if ribbon["signal"] == "bullish_cross":
-            conviction += 0.2
+    if ribbon["signal"] == "bullish_cross" and volume_confirmed:
+        conviction = 0.6
         if rvol >= rvol_threshold * 1.5:
             conviction += 0.15
         if rsi < 65:
             conviction += 0.1
         if ribbon["spread"] > 0.001:
+            conviction += 0.1
+        if rsi < 40:
             conviction += 0.05
 
         conviction = min(conviction, 1.0)
@@ -61,15 +61,15 @@ def evaluate_momentum_wave(
         result["side"] = "long"
         result["conviction"] = round(conviction, 2)
 
-    elif ribbon["signal"] in ("bearish_cross", "bearish") and volume_confirmed:
-        conviction = 0.5
-        if ribbon["signal"] == "bearish_cross":
-            conviction += 0.2
+    elif ribbon["signal"] == "bearish_cross" and volume_confirmed:
+        conviction = 0.6
         if rvol >= rvol_threshold * 1.5:
             conviction += 0.15
         if rsi > 35:
             conviction += 0.1
         if ribbon["spread"] > 0.001:
+            conviction += 0.1
+        if rsi > 60:
             conviction += 0.05
 
         conviction = min(conviction, 1.0)
@@ -122,10 +122,10 @@ def evaluate_liquidity_scout(
     at_lower_band = keltner["position"] <= 0.05
     at_upper_band = keltner["position"] >= 0.95
 
-    if at_lower_band and current_price <= vwap:
-        conviction = 0.5
-        if near_vwap:
-            conviction += 0.2
+    if at_lower_band and near_vwap and current_price <= vwap:
+        conviction = 0.6
+        if vwap_dist_pct <= vwap_proximity_pct * 0.5:
+            conviction += 0.1
         if rsi < 35:
             conviction += 0.15
         elif rsi < 45:
@@ -138,10 +138,10 @@ def evaluate_liquidity_scout(
         result["side"] = "long"
         result["conviction"] = round(conviction, 2)
 
-    elif at_upper_band and current_price >= vwap:
-        conviction = 0.5
-        if near_vwap:
-            conviction += 0.2
+    elif at_upper_band and near_vwap and current_price >= vwap:
+        conviction = 0.6
+        if vwap_dist_pct <= vwap_proximity_pct * 0.5:
+            conviction += 0.1
         if rsi > 65:
             conviction += 0.15
         elif rsi > 55:

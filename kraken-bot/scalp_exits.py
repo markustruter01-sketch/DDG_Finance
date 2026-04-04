@@ -18,6 +18,13 @@ def check_scalp_exits(
     atr: float = 0.0,
     atr_stop_price: float | None = None,
 ) -> Optional[str]:
+    eff_tp = tp_pct
+    eff_sl = sl_pct
+    if atr > 0 and entry_price > 0:
+        atr_pct = atr / entry_price
+        eff_tp = max(tp_pct, atr_pct * 1.0)
+        eff_sl = max(sl_pct, atr_pct * 0.5)
+
     if side == "long":
         raw_pnl_pct = (current_price - entry_price) / entry_price
     else:
@@ -32,23 +39,23 @@ def check_scalp_exits(
             return "scalp_atr_stop"
 
     if side == "long":
-        sl_price = entry_price * (1.0 - sl_pct)
+        sl_price = entry_price * (1.0 - eff_sl)
         if current_price <= sl_price:
             return "scalp_stop"
     else:
-        sl_price = entry_price * (1.0 + sl_pct)
+        sl_price = entry_price * (1.0 + eff_sl)
         if current_price >= sl_price:
             return "scalp_stop"
 
-    if net_pnl_pct >= tp_pct:
+    if net_pnl_pct >= eff_tp:
         return "scalp_tp"
 
     if best_price > entry_price and side == "long":
-        trail_stop = best_price * (1.0 - sl_pct)
+        trail_stop = best_price * (1.0 - eff_sl)
         if current_price <= trail_stop:
             return "scalp_trail"
     elif best_price < entry_price and side == "short":
-        trail_stop = best_price * (1.0 + sl_pct)
+        trail_stop = best_price * (1.0 + eff_sl)
         if current_price >= trail_stop:
             return "scalp_trail"
 

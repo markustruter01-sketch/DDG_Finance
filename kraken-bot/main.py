@@ -121,6 +121,9 @@ from config import (
     KELTNER_EMA_PERIOD,
     KELTNER_ATR_MULT,
     VWAP_PROXIMITY_PCT,
+    MIN_CONVICTION,
+    STAGNANCY_COOLDOWN_MINUTES,
+    MAX_NEW_ENTRIES_PER_CYCLE,
 )
 
 import adaptive_params as _adaptive
@@ -254,8 +257,9 @@ last_equity_refresh: float = 0.0
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
 
-SCALP_ENTRY_COOLDOWN_BARS = 3
+SCALP_ENTRY_COOLDOWN_BARS = 10
 _scalp_last_entry: dict[str, datetime] = {}
+_scalp_stagnant_exit: dict[str, datetime] = {}
 
 # Recent trade history for the status file (last 20 trades shown on dashboard).
 recent_trades: list[dict] = []
@@ -921,6 +925,7 @@ def run_cycle() -> None:
     global latest_signals, thinking_text, latest_microstructure
 
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
+    _cycle_new_entries: int = 0
     cycle_microstructure: dict[str, dict] = {}
 
     cycle_count += 1
@@ -1198,6 +1203,8 @@ def run_cycle() -> None:
                     if _scalp_exit:
                         close_position(symbol, reason=_scalp_exit, atr=sym_atr)
                         deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        if _scalp_exit == "scalp_stagnant":
+                            _scalp_stagnant_exit[symbol] = now_utc
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": f"exit_{_scalp_exit}",
@@ -1371,6 +1378,12 @@ def run_cycle() -> None:
                         "price": round(current_price, 4), "signal_type": "skip_penalty_throttle", "has_position": False,
                     })
                     continue
+                if _cycle_new_entries >= MAX_NEW_ENTRIES_PER_CYCLE:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "max_entries_this_cycle", "has_position": False,
+                    })
+                    continue
 
                 if BOT_STRATEGY_TYPE == "momentum_wave":
                     _scalp_eval = evaluate_momentum_wave(
@@ -1390,7 +1403,7 @@ def run_cycle() -> None:
                 _scalp_side = _scalp_eval.get("side")
                 _scalp_conviction = _scalp_eval.get("conviction", 0.0)
 
-                if _scalp_conviction < 0.5 and symbol in ("BTC/USD", "ETH/USD", "SOL/USD"):
+                if _scalp_conviction < MIN_CONVICTION and symbol in ("BTC/USD", "ETH/USD", "SOL/USD"):
                     _ribbon = _scalp_eval.get("ribbon", {})
                     _kelt = _scalp_eval.get("keltner", {})
                     _vwap = _scalp_eval.get("vwap", 0)
@@ -1404,7 +1417,7 @@ def run_cycle() -> None:
                         f"kelt_pos={_kelt.get('position',0):.3f} vwap={_vwap:.4f} price={current_price:.4f}"
                     )
 
-                if _scalp_side and _scalp_conviction >= 0.5:
+                if _scalp_side and _scalp_conviction >= MIN_CONVICTION:
                     _cooldown_seconds = SCALP_ENTRY_COOLDOWN_BARS * 60
                     _last_entry = _scalp_last_entry.get(symbol)
                     if _last_entry and (now_utc - _last_entry).total_seconds() < _cooldown_seconds:
@@ -1418,6 +1431,21 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue
+
+                    _last_stagnant = _scalp_stagnant_exit.get(symbol)
+                    if _last_stagnant and STAGNANCY_COOLDOWN_MINUTES > 0:
+                        _stag_elapsed = (now_utc - _last_stagnant).total_seconds() / 60.0
+                        if _stag_elapsed < STAGNANCY_COOLDOWN_MINUTES:
+                            logger.debug(
+                                f"Scalp  | {symbol} | Stagnancy cooldown — "
+                                f"{STAGNANCY_COOLDOWN_MINUTES - _stag_elapsed:.0f}min remaining"
+                            )
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4), "signal_type": "stagnancy_cooldown",
+                                "has_position": False,
+                            })
+                            continue
 
                     if _is_bear and _scalp_side == "long":
                         cycle_signals.append({
@@ -1449,6 +1477,7 @@ def run_cycle() -> None:
                         )
                         if open_position(symbol, _scalp_side, size_usd, current_price):
                             _scalp_last_entry[symbol] = now_utc
+                            _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
                                 open_positions[symbol]["atr_stop_price"] = _atr_stop

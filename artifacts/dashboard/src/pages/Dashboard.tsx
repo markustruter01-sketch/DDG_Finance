@@ -15,6 +15,7 @@ import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
 import { FleetCommanderPanel } from "@/components/FleetCommanderPanel";
 import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
 import { AIImpactTimeline } from "@/components/AIImpactTimeline";
+import { SystemDegradationLog } from "@/components/SystemDegradationLog";
 import { BlackoutBanner } from "@/components/EconomicCalendarBanner";
 import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
@@ -1484,6 +1485,12 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
           <SafeSection label="Risk Metrics">
             <RiskMetricsPanel />
+          </SafeSection>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
+          <SafeSection label="System Health Log">
+            <SystemDegradationLog />
           </SafeSection>
         </motion.div>
       </main>

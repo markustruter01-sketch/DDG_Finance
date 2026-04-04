@@ -44,17 +44,30 @@ def evaluate_momentum_wave(
     }
 
     volume_confirmed = rvol >= rvol_threshold
+    strong_volume = rvol >= rvol_threshold * 1.5
 
     if ribbon["signal"] == "bullish_cross" and volume_confirmed:
-        conviction = 0.6
-        if rvol >= rvol_threshold * 1.5:
-            conviction += 0.15
-        if rsi < 65:
+        conviction = 0.7
+        if strong_volume:
+            conviction += 0.1
+        if rsi < 55:
             conviction += 0.1
         if ribbon["spread"] > 0.001:
             conviction += 0.1
-        if rsi < 40:
-            conviction += 0.05
+
+        conviction = min(conviction, 1.0)
+        result["signal"] = "long"
+        result["side"] = "long"
+        result["conviction"] = round(conviction, 2)
+
+    elif ribbon["signal"] == "bullish" and strong_volume and ribbon["spread"] > 0.0005:
+        conviction = 0.55
+        if rsi < 50:
+            conviction += 0.1
+        if ribbon["spread"] > 0.002:
+            conviction += 0.1
+        if rvol >= rvol_threshold * 2.0:
+            conviction += 0.1
 
         conviction = min(conviction, 1.0)
         result["signal"] = "long"
@@ -62,15 +75,27 @@ def evaluate_momentum_wave(
         result["conviction"] = round(conviction, 2)
 
     elif ribbon["signal"] == "bearish_cross" and volume_confirmed:
-        conviction = 0.6
-        if rvol >= rvol_threshold * 1.5:
-            conviction += 0.15
-        if rsi > 35:
+        conviction = 0.7
+        if strong_volume:
+            conviction += 0.1
+        if rsi > 45:
             conviction += 0.1
         if ribbon["spread"] > 0.001:
             conviction += 0.1
-        if rsi > 60:
-            conviction += 0.05
+
+        conviction = min(conviction, 1.0)
+        result["signal"] = "short"
+        result["side"] = "short"
+        result["conviction"] = round(conviction, 2)
+
+    elif ribbon["signal"] == "bearish" and strong_volume and ribbon["spread"] > 0.0005:
+        conviction = 0.55
+        if rsi > 50:
+            conviction += 0.1
+        if ribbon["spread"] > 0.002:
+            conviction += 0.1
+        if rvol >= rvol_threshold * 2.0:
+            conviction += 0.1
 
         conviction = min(conviction, 1.0)
         result["signal"] = "short"
@@ -119,8 +144,8 @@ def evaluate_liquidity_scout(
     vwap_dist_pct = abs(current_price - vwap) / vwap
     near_vwap = vwap_dist_pct <= vwap_proximity_pct
 
-    at_lower_band = keltner["position"] <= 0.05
-    at_upper_band = keltner["position"] >= 0.95
+    at_lower_band = keltner["position"] <= 0.10
+    at_upper_band = keltner["position"] >= 0.90
 
     if at_lower_band and near_vwap and current_price <= vwap:
         conviction = 0.6

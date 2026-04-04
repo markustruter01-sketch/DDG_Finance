@@ -1,10 +1,10 @@
 {
-  "last_updated": "2026-04-03T22:03:04.242810+00:00",
+  "last_updated": "2026-04-04T01:18:38.635996+00:00",
   "status": "idle",
   "cycle_count": 1,
   "usd_bias": "USD_BULLISH",
   "news_blackout": false,
-  "equity_usd": 99933.79,
+  "equity_usd": 99912.53,
   "paper_trading": true,
   "positions": [
     {
@@ -120,11 +120,11 @@
       "trailing_sl": 2.03679,
       "highest_price": null,
       "lowest_price": 2.02312,
-      "units": 9228,
-      "size_usd": 10630.54,
+      "units": 9226,
+      "size_usd": 10628.23,
       "unrealized_pnl_usd": 0.0,
       "unrealized_pnl_pips": 0.0,
-      "entry_time": "2026-04-03T22:03:03.255781+00:00"
+      "entry_time": "2026-04-04T01:18:37.753985+00:00"
     }
   ],
   "scan_results": [
@@ -146,7 +146,7 @@
     },
     {
       "pair": "USD_JPY",
-      "price": 159.632,
+      "price": 159.633,
       "atr": 0.33478,
       "rsi": 69.8,
       "bias_filter": "long",
@@ -162,17 +162,17 @@
     },
     {
       "pair": "USD_CHF",
-      "price": 0.79942,
+      "price": 0.79938,
       "atr": 0.00231,
-      "rsi": 69.4,
+      "rsi": 69.3,
       "bias_filter": "long",
       "signal": null
     },
     {
       "pair": "USD_CAD",
-      "price": 1.3946,
+      "price": 1.39423,
       "atr": 0.00207,
-      "rsi": 84.4,
+      "rsi": 81.4,
       "bias_filter": "long",
       "signal": null
     },
@@ -298,36 +298,36 @@
     },
     {
       "pair": "USD_NOK",
-      "price": 9.74339,
+      "price": 9.7404,
       "atr": 0.04667,
-      "rsi": 57.6,
+      "rsi": 57.0,
       "bias_filter": "long",
       "signal": null
     },
     {
       "pair": "USD_SEK",
-      "price": 9.4697,
+      "price": 9.4666,
       "atr": 0.04923,
-      "rsi": 63.5,
+      "rsi": 62.9,
       "bias_filter": "long",
       "signal": null
     },
     {
       "pair": "USD_ZAR",
-      "price": 16.92,
-      "atr": 0.09151,
-      "rsi": 60.9,
+      "price": 17.0,
+      "atr": 0.08913,
+      "rsi": 68.7,
       "bias_filter": "long",
       "signal": null
     }
   ],
-  "last_scan": "2026-04-03T22:03:04.236657+00:00",
+  "last_scan": "2026-04-04T01:18:38.629001+00:00",
   "summary": {
     "starting_balance_usd": 100000.0,
-    "cash_usd": 28006.68,
-    "total_trades": 7,
+    "cash_usd": 27987.72,
+    "total_trades": 8,
     "win_count": 1,
-    "all_time_pnl_usd": -72.52,
+    "all_time_pnl_usd": -83.15,
     "hwm_usd": 100000.0,
     "vault_total_usd": 0.0
   },

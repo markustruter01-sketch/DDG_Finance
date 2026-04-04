@@ -46,21 +46,22 @@ BOT_PROFILES = {
         "ZSCORE_ENTRY": 0.8,
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.12,
-        "STOP_LOSS_PCT": 0.002,
+        "STOP_LOSS_PCT": 0.006,
         "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.004,
-        "SCALP_SL_PCT": 0.002,
-        "SCALP_STAGNANCY_MINUTES": 5,
-        "SCALP_STAGNANCY_DEADZONE": 0.001,
+        "SCALP_TP_PCT": 0.012,
+        "SCALP_SL_PCT": 0.006,
+        "SCALP_STAGNANCY_MINUTES": 15,
+        "SCALP_STAGNANCY_DEADZONE": 0.002,
         "LATENCY_TAX_BPS": 5,
+        "SCALP_FEE_RATE": 0.0026,
         "EMA_FAST": 8,
         "EMA_MID": 13,
         "EMA_SLOW": 21,
-        "RVOL_THRESHOLD": 1.5,
+        "RVOL_THRESHOLD": 1.2,
         "RVOL_PERIOD": 20,
     },
     "calypso": {
@@ -73,20 +74,21 @@ BOT_PROFILES = {
         "ZSCORE_ENTRY": 0.6,
         "CASH_RESERVE": 0.10,
         "MAX_POSITION_FRACTION": 0.15,
-        "STOP_LOSS_PCT": 0.0015,
+        "STOP_LOSS_PCT": 0.005,
         "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.82,
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.003,
-        "SCALP_SL_PCT": 0.0015,
-        "SCALP_STAGNANCY_MINUTES": 5,
-        "SCALP_STAGNANCY_DEADZONE": 0.001,
+        "SCALP_TP_PCT": 0.010,
+        "SCALP_SL_PCT": 0.005,
+        "SCALP_STAGNANCY_MINUTES": 15,
+        "SCALP_STAGNANCY_DEADZONE": 0.002,
         "LATENCY_TAX_BPS": 5,
+        "SCALP_FEE_RATE": 0.0026,
         "KELTNER_EMA_PERIOD": 20,
         "KELTNER_ATR_MULT": 1.5,
-        "VWAP_PROXIMITY_PCT": 0.002,
+        "VWAP_PROXIMITY_PCT": 0.003,
     },
 }
 
@@ -245,12 +247,13 @@ EQUITY_REFRESH_INTERVAL = 3600
 LOOP_SLEEP_SECONDS      = _profile.get("LOOP_SLEEP_SECONDS", 60)
 RESTART_SLEEP_SECONDS   = 30
 
-SCALP_TP_PCT             = _profile.get("SCALP_TP_PCT", 0.004)
-SCALP_SL_PCT             = _profile.get("SCALP_SL_PCT", 0.002)
-SCALP_STAGNANCY_MINUTES  = _profile.get("SCALP_STAGNANCY_MINUTES", 5)
-SCALP_STAGNANCY_DEADZONE = _profile.get("SCALP_STAGNANCY_DEADZONE", 0.001)
+SCALP_TP_PCT             = _profile.get("SCALP_TP_PCT", 0.010)
+SCALP_SL_PCT             = _profile.get("SCALP_SL_PCT", 0.005)
+SCALP_STAGNANCY_MINUTES  = _profile.get("SCALP_STAGNANCY_MINUTES", 15)
+SCALP_STAGNANCY_DEADZONE = _profile.get("SCALP_STAGNANCY_DEADZONE", 0.002)
 LATENCY_TAX_BPS          = _profile.get("LATENCY_TAX_BPS", 0)
 LATENCY_TAX_PCT          = LATENCY_TAX_BPS / 10000.0
+SCALP_FEE_RATE           = _profile.get("SCALP_FEE_RATE", PAPER_FEE_PCT)
 
 EMA_FAST         = _profile.get("EMA_FAST", 8)
 EMA_MID          = _profile.get("EMA_MID", 13)

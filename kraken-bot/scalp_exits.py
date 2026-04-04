@@ -10,27 +10,30 @@ def check_scalp_exits(
     current_price: float,
     best_price: float,
     entry_time: str | None,
-    tp_pct: float = 0.004,
-    sl_pct: float = 0.002,
-    stagnancy_minutes: float = 5.0,
-    stagnancy_deadzone: float = 0.001,
+    tp_pct: float = 0.010,
+    sl_pct: float = 0.005,
+    stagnancy_minutes: float = 15.0,
+    stagnancy_deadzone: float = 0.002,
     latency_tax_pct: float = 0.0005,
     atr: float = 0.0,
     atr_stop_price: float | None = None,
+    fee_rate: float = 0.0026,
 ) -> Optional[str]:
+    round_trip_fees = fee_rate * 2.0
+
     eff_tp = tp_pct
     eff_sl = sl_pct
     if atr > 0 and entry_price > 0:
         atr_pct = atr / entry_price
-        eff_tp = max(tp_pct, atr_pct * 1.0)
-        eff_sl = max(sl_pct, atr_pct * 0.5)
+        eff_tp = max(tp_pct, atr_pct * 1.5)
+        eff_sl = max(sl_pct, atr_pct * 0.75)
 
     if side == "long":
         raw_pnl_pct = (current_price - entry_price) / entry_price
     else:
         raw_pnl_pct = (entry_price - current_price) / entry_price
 
-    net_pnl_pct = raw_pnl_pct - latency_tax_pct
+    net_pnl_pct = raw_pnl_pct - round_trip_fees - latency_tax_pct
 
     if atr_stop_price is not None:
         if side == "long" and current_price <= atr_stop_price:
@@ -67,6 +70,8 @@ def check_scalp_exits(
             minutes_held = 0.0
 
         if minutes_held >= stagnancy_minutes:
+            if net_pnl_pct > 0:
+                return "scalp_tp"
             price_move_pct = abs(raw_pnl_pct)
             if price_move_pct <= stagnancy_deadzone:
                 return "scalp_stagnant"

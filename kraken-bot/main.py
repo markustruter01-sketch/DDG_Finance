@@ -112,6 +112,7 @@ from config import (
     SCALP_STAGNANCY_MINUTES,
     SCALP_STAGNANCY_DEADZONE,
     LATENCY_TAX_PCT,
+    SCALP_FEE_RATE,
     EMA_FAST,
     EMA_MID,
     EMA_SLOW,
@@ -252,6 +253,9 @@ last_equity_refresh: float = 0.0
 
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
+
+SCALP_ENTRY_COOLDOWN_BARS = 3
+_scalp_last_entry: dict[str, datetime] = {}
 
 # Recent trade history for the status file (last 20 trades shown on dashboard).
 recent_trades: list[dict] = []
@@ -1186,6 +1190,7 @@ def run_cycle() -> None:
                         latency_tax_pct=LATENCY_TAX_PCT,
                         atr=sym_atr,
                         atr_stop_price=pos.get("atr_stop_price"),
+                        fee_rate=SCALP_FEE_RATE,
                     )
                     if _scalp_exit:
                         close_position(symbol, reason=_scalp_exit, atr=sym_atr)
@@ -1383,6 +1388,20 @@ def run_cycle() -> None:
                 _scalp_conviction = _scalp_eval.get("conviction", 0.0)
 
                 if _scalp_side and _scalp_conviction >= 0.5:
+                    _cooldown_seconds = SCALP_ENTRY_COOLDOWN_BARS * 60
+                    _last_entry = _scalp_last_entry.get(symbol)
+                    if _last_entry and (now_utc - _last_entry).total_seconds() < _cooldown_seconds:
+                        logger.debug(
+                            f"Scalp  | {symbol} | Cooldown active — "
+                            f"{_cooldown_seconds - (now_utc - _last_entry).total_seconds():.0f}s remaining"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "entry_cooldown",
+                            "has_position": False,
+                        })
+                        continue
+
                     if _is_bear and _scalp_side == "long":
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1412,6 +1431,7 @@ def run_cycle() -> None:
                             f"Size: ${size_usd:,.2f} [{_vol_tier}] | ATR stop: ${_atr_stop:,.4f}"
                         )
                         if open_position(symbol, _scalp_side, size_usd, current_price):
+                            _scalp_last_entry[symbol] = now_utc
                             deployed_usd += size_usd
                             if symbol in open_positions:
                                 open_positions[symbol]["atr_stop_price"] = _atr_stop

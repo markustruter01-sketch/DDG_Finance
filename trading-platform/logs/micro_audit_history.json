@@ -1857,5 +1857,51 @@
     "medium_count": 1,
     "escalated_to_gemini": false,
     "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T01:48:37.666958+00:00",
+    "elapsed_sec": 1.95,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 12.5% (1/8) below floor"
+      }
+    ],
+    "alert_count": 2,
+    "high_count": 1,
+    "medium_count": 1,
+    "escalated_to_gemini": false,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T02:03:36.957724+00:00",
+    "elapsed_sec": 1.16,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 12.5% (1/8) below floor"
+      }
+    ],
+    "alert_count": 2,
+    "high_count": 1,
+    "medium_count": 1,
+    "escalated_to_gemini": false,
+    "status": "ALERT"
   }
 ]

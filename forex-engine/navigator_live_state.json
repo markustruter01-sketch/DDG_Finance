@@ -1,10 +1,10 @@
 {
-  "last_updated": "2026-04-04T01:18:38.635996+00:00",
+  "last_updated": "2026-04-04T02:06:35.051727+00:00",
   "status": "idle",
   "cycle_count": 1,
-  "usd_bias": "USD_BULLISH",
+  "usd_bias": "USD_BEARISH",
   "news_blackout": false,
-  "equity_usd": 99912.53,
+  "equity_usd": 99863.66,
   "paper_trading": true,
   "positions": [
     {
@@ -110,21 +110,72 @@
       "entry_time": "2026-04-03T21:32:26.744317+00:00"
     },
     {
-      "pair": "EUR_NZD",
-      "direction": "short",
-      "entry_price": 2.02312,
-      "current_price": 2.02312,
-      "sl_price": 2.03679,
-      "tp_price": 1.99577,
-      "original_sl": 2.03679,
-      "trailing_sl": 2.03679,
-      "highest_price": null,
-      "lowest_price": 2.02312,
-      "units": 9226,
-      "size_usd": 10628.23,
+      "pair": "EUR_USD",
+      "direction": "long",
+      "entry_price": 1.15221,
+      "current_price": 1.15221,
+      "sl_price": 1.14648,
+      "tp_price": 1.16365,
+      "original_sl": 1.14648,
+      "trailing_sl": 1.14648,
+      "highest_price": 1.15221,
+      "lowest_price": null,
+      "units": 9222,
+      "size_usd": 10625.65,
       "unrealized_pnl_usd": 0.0,
       "unrealized_pnl_pips": 0.0,
-      "entry_time": "2026-04-04T01:18:37.753985+00:00"
+      "entry_time": "2026-04-04T02:06:32.213699+00:00"
+    },
+    {
+      "pair": "GBP_USD",
+      "direction": "long",
+      "entry_price": 1.31938,
+      "current_price": 1.31938,
+      "sl_price": 1.31183,
+      "tp_price": 1.3345,
+      "original_sl": 1.31183,
+      "trailing_sl": 1.31183,
+      "highest_price": 1.31938,
+      "lowest_price": null,
+      "units": 8054,
+      "size_usd": 10626.32,
+      "unrealized_pnl_usd": 0.0,
+      "unrealized_pnl_pips": 0.0,
+      "entry_time": "2026-04-04T02:06:32.348524+00:00"
+    },
+    {
+      "pair": "USD_CAD",
+      "direction": "short",
+      "entry_price": 1.39423,
+      "current_price": 1.39423,
+      "sl_price": 1.39939,
+      "tp_price": 1.3839,
+      "original_sl": 1.39939,
+      "trailing_sl": 1.39939,
+      "highest_price": null,
+      "lowest_price": 1.39423,
+      "units": 10626,
+      "size_usd": 10626.0,
+      "unrealized_pnl_usd": 0.0,
+      "unrealized_pnl_pips": 0.0,
+      "entry_time": "2026-04-04T02:06:32.796242+00:00"
+    },
+    {
+      "pair": "NZD_USD",
+      "direction": "long",
+      "entry_price": 0.56941,
+      "current_price": 0.56941,
+      "sl_price": 0.56525,
+      "tp_price": 0.57773,
+      "original_sl": 0.56525,
+      "trailing_sl": 0.56525,
+      "highest_price": 0.56941,
+      "lowest_price": null,
+      "units": 11171,
+      "size_usd": 6360.7,
+      "unrealized_pnl_usd": 0.0,
+      "unrealized_pnl_pips": 0.0,
+      "entry_time": "2026-04-04T02:06:32.915663+00:00"
     }
   ],
   "scan_results": [
@@ -133,23 +184,23 @@
       "price": 1.15221,
       "atr": 0.00229,
       "rsi": 25.1,
-      "bias_filter": "short",
-      "signal": null
+      "bias_filter": "long",
+      "signal": "RSI_OVERSOLD \u2192 LONG \u2192 FILLED"
     },
     {
       "pair": "GBP_USD",
       "price": 1.31938,
       "atr": 0.00302,
       "rsi": 22.1,
-      "bias_filter": "short",
-      "signal": null
+      "bias_filter": "long",
+      "signal": "RSI_OVERSOLD \u2192 LONG \u2192 FILLED"
     },
     {
       "pair": "USD_JPY",
       "price": 159.633,
       "atr": 0.33478,
       "rsi": 69.8,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -157,7 +208,7 @@
       "price": 0.68912,
       "atr": 0.00209,
       "rsi": 34.4,
-      "bias_filter": "short",
+      "bias_filter": "long",
       "signal": null
     },
     {
@@ -165,7 +216,7 @@
       "price": 0.79938,
       "atr": 0.00231,
       "rsi": 69.3,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -173,16 +224,16 @@
       "price": 1.39423,
       "atr": 0.00207,
       "rsi": 81.4,
-      "bias_filter": "long",
-      "signal": null
+      "bias_filter": "short",
+      "signal": "RSI_OVERBOUGHT \u2192 SHORT \u2192 FILLED"
     },
     {
       "pair": "NZD_USD",
       "price": 0.56941,
       "atr": 0.00166,
       "rsi": 21.5,
-      "bias_filter": "short",
-      "signal": null
+      "bias_filter": "long",
+      "signal": "RSI_OVERSOLD \u2192 LONG \u2192 FILLED"
     },
     {
       "pair": "EUR_GBP",
@@ -246,7 +297,7 @@
       "atr": 0.00547,
       "rsi": 74.1,
       "bias_filter": "both",
-      "signal": "RSI_OVERBOUGHT \u2192 SHORT \u2192 FILLED"
+      "signal": "RSI_OVERBOUGHT \u2192 SHORT (size too small)"
     },
     {
       "pair": "GBP_NZD",
@@ -285,7 +336,7 @@
       "price": 17.855,
       "atr": 0.06654,
       "rsi": 59.1,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -293,7 +344,7 @@
       "price": 1.2865,
       "atr": 0.00219,
       "rsi": 64.5,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -301,7 +352,7 @@
       "price": 9.7404,
       "atr": 0.04667,
       "rsi": 57.0,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -309,7 +360,7 @@
       "price": 9.4666,
       "atr": 0.04923,
       "rsi": 62.9,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     },
     {
@@ -317,17 +368,17 @@
       "price": 17.0,
       "atr": 0.08913,
       "rsi": 68.7,
-      "bias_filter": "long",
+      "bias_filter": "short",
       "signal": null
     }
   ],
-  "last_scan": "2026-04-04T01:18:38.629001+00:00",
+  "last_scan": "2026-04-04T02:06:35.045098+00:00",
   "summary": {
     "starting_balance_usd": 100000.0,
-    "cash_usd": 27987.72,
-    "total_trades": 8,
+    "cash_usd": 328.41,
+    "total_trades": 9,
     "win_count": 1,
-    "all_time_pnl_usd": -83.15,
+    "all_time_pnl_usd": -93.78,
     "hwm_usd": 100000.0,
     "vault_total_usd": 0.0
   },

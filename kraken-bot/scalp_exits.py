@@ -25,8 +25,8 @@ def check_scalp_exits(
     eff_sl = sl_pct
     if atr > 0 and entry_price > 0:
         atr_pct = atr / entry_price
-        eff_tp = max(tp_pct, atr_pct * 1.5)
-        eff_sl = max(sl_pct, atr_pct * 0.75)
+        eff_tp = max(tp_pct, min(atr_pct * 0.3, 0.015))
+        eff_sl = max(sl_pct, min(atr_pct * 0.25, 0.012))
 
     if side == "long":
         raw_pnl_pct = (current_price - entry_price) / entry_price
@@ -68,6 +68,9 @@ def check_scalp_exits(
             minutes_held = (datetime.now(tz=timezone.utc) - et).total_seconds() / 60.0
         except Exception:
             minutes_held = 0.0
+
+        if minutes_held >= 5.0 and net_pnl_pct > 0:
+            return "scalp_tp"
 
         if minutes_held >= stagnancy_minutes:
             if net_pnl_pct > 0:

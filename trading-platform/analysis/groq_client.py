@@ -191,8 +191,10 @@ def build_user_prompt(
     if crypto_only:
         lines.append("MODE: CRYPTO-ONLY (stock market closed).")
         lines.append("Only trade BTC/USD or ETH/USD with positive momentum. Default to SGOV if low conviction. Do NOT use ATOM/USD.")
+        lines.append("Output your response as valid json.")
     else:
         lines.append("TASK: Classify regime (Bull/Bear/Sideways), apply momentum filter, then output allocations.")
         lines.append("Remember: NEVER FORCE A TRADE. If no high-conviction setup exists → 100% SGOV.")
+        lines.append("Output your response as valid json.")
 
     return "\n".join(lines)

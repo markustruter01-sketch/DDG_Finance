@@ -1390,6 +1390,20 @@ def run_cycle() -> None:
                 _scalp_side = _scalp_eval.get("side")
                 _scalp_conviction = _scalp_eval.get("conviction", 0.0)
 
+                if _scalp_conviction < 0.5 and symbol in ("BTC/USD", "ETH/USD", "SOL/USD"):
+                    _ribbon = _scalp_eval.get("ribbon", {})
+                    _kelt = _scalp_eval.get("keltner", {})
+                    _vwap = _scalp_eval.get("vwap", 0)
+                    _eval_rsi = _scalp_eval.get("rsi", 0)
+                    logger.info(
+                        f"DEBUG  | {symbol} | conv={_scalp_conviction:.2f} "
+                        f"ribbon={_ribbon.get('signal','?')} spread={_ribbon.get('spread',0):.6f} "
+                        f"ema_f={_ribbon.get('ema_fast',0):.4f} ema_m={_ribbon.get('ema_mid',0):.4f} ema_s={_ribbon.get('ema_slow',0):.4f} "
+                        f"aligned_bear={_ribbon.get('aligned_bearish',False)} aligned_bull={_ribbon.get('aligned_bullish',False)} "
+                        f"rsi={_eval_rsi:.1f} rvol={_scalp_eval.get('rvol',0):.2f} "
+                        f"kelt_pos={_kelt.get('position',0):.3f} vwap={_vwap:.4f} price={current_price:.4f}"
+                    )
+
                 if _scalp_side and _scalp_conviction >= 0.5:
                     _cooldown_seconds = SCALP_ENTRY_COOLDOWN_BARS * 60
                     _last_entry = _scalp_last_entry.get(symbol)

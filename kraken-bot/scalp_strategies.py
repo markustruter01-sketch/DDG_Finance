@@ -9,6 +9,7 @@ from logic import (
     calculate_vwap,
     calculate_rsi,
     calculate_atr,
+    calculate_ema,
 )
 
 
@@ -60,13 +61,13 @@ def evaluate_momentum_wave(
         result["side"] = "long"
         result["conviction"] = round(conviction, 2)
 
-    elif ribbon["signal"] == "bullish" and strong_volume and ribbon["spread"] > 0.0005:
+    elif ribbon["signal"] == "bullish" and volume_confirmed and ribbon["spread"] > 0.0003:
         conviction = 0.55
         if rsi < 50:
             conviction += 0.1
-        if ribbon["spread"] > 0.002:
+        if ribbon["spread"] > 0.001:
             conviction += 0.1
-        if rvol >= rvol_threshold * 2.0:
+        if strong_volume:
             conviction += 0.1
 
         conviction = min(conviction, 1.0)
@@ -88,19 +89,82 @@ def evaluate_momentum_wave(
         result["side"] = "short"
         result["conviction"] = round(conviction, 2)
 
-    elif ribbon["signal"] == "bearish" and strong_volume and ribbon["spread"] > 0.0005:
+    elif ribbon["signal"] == "bearish" and volume_confirmed and ribbon["spread"] > 0.0003:
         conviction = 0.55
         if rsi > 50:
             conviction += 0.1
-        if ribbon["spread"] > 0.002:
+        if ribbon["spread"] > 0.001:
             conviction += 0.1
-        if rvol >= rvol_threshold * 2.0:
+        if strong_volume:
             conviction += 0.1
 
         conviction = min(conviction, 1.0)
         result["signal"] = "short"
         result["side"] = "short"
         result["conviction"] = round(conviction, 2)
+
+    elif ribbon["aligned_bearish"] and ribbon["spread"] > 0.0002:
+        conviction = 0.50
+        if rsi > 55:
+            conviction += 0.1
+        if ribbon["spread"] > 0.001:
+            conviction += 0.1
+        if volume_confirmed:
+            conviction += 0.1
+
+        conviction = min(conviction, 1.0)
+        result["signal"] = "short"
+        result["side"] = "short"
+        result["conviction"] = round(conviction, 2)
+
+    elif ribbon["aligned_bullish"] and ribbon["spread"] > 0.0002:
+        conviction = 0.50
+        if rsi < 45:
+            conviction += 0.1
+        if ribbon["spread"] > 0.001:
+            conviction += 0.1
+        if volume_confirmed:
+            conviction += 0.1
+
+        conviction = min(conviction, 1.0)
+        result["signal"] = "long"
+        result["side"] = "long"
+        result["conviction"] = round(conviction, 2)
+
+    else:
+        ema_fast_vals = calculate_ema(closes, ema_fast)
+        ema_slow_vals = calculate_ema(closes, ema_slow)
+        if ema_fast_vals and ema_slow_vals and len(ema_fast_vals) >= 1 and len(ema_slow_vals) >= 1:
+            f_val = ema_fast_vals[-1]
+            s_val = ema_slow_vals[-1]
+            if s_val > 0:
+                gap_pct = (f_val - s_val) / s_val
+
+                if gap_pct < -0.0005 and rsi > 50:
+                    conviction = 0.50
+                    if rsi > 60:
+                        conviction += 0.1
+                    if gap_pct < -0.001:
+                        conviction += 0.1
+                    if volume_confirmed:
+                        conviction += 0.1
+                    conviction = min(conviction, 1.0)
+                    result["signal"] = "short"
+                    result["side"] = "short"
+                    result["conviction"] = round(conviction, 2)
+
+                elif gap_pct > 0.0005 and rsi < 50:
+                    conviction = 0.50
+                    if rsi < 40:
+                        conviction += 0.1
+                    if gap_pct > 0.001:
+                        conviction += 0.1
+                    if volume_confirmed:
+                        conviction += 0.1
+                    conviction = min(conviction, 1.0)
+                    result["signal"] = "long"
+                    result["side"] = "long"
+                    result["conviction"] = round(conviction, 2)
 
     return result
 
@@ -144,13 +208,15 @@ def evaluate_liquidity_scout(
     vwap_dist_pct = abs(current_price - vwap) / vwap
     near_vwap = vwap_dist_pct <= vwap_proximity_pct
 
-    at_lower_band = keltner["position"] <= 0.10
-    at_upper_band = keltner["position"] >= 0.90
+    at_lower_band = keltner["position"] <= 0.20
+    at_upper_band = keltner["position"] >= 0.80
 
-    if at_lower_band and near_vwap and current_price <= vwap:
-        conviction = 0.6
+    if at_lower_band and current_price <= vwap:
+        conviction = 0.55
+        if near_vwap:
+            conviction += 0.10
         if vwap_dist_pct <= vwap_proximity_pct * 0.5:
-            conviction += 0.1
+            conviction += 0.05
         if rsi < 35:
             conviction += 0.15
         elif rsi < 45:
@@ -163,10 +229,12 @@ def evaluate_liquidity_scout(
         result["side"] = "long"
         result["conviction"] = round(conviction, 2)
 
-    elif at_upper_band and near_vwap and current_price >= vwap:
-        conviction = 0.6
+    elif at_upper_band and current_price >= vwap:
+        conviction = 0.55
+        if near_vwap:
+            conviction += 0.10
         if vwap_dist_pct <= vwap_proximity_pct * 0.5:
-            conviction += 0.1
+            conviction += 0.05
         if rsi > 65:
             conviction += 0.15
         elif rsi > 55:

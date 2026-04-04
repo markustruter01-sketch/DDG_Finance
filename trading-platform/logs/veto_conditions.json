@@ -1,11 +1,10 @@
 {
-  "generated_at": "2026-04-04T07:36:48.415358+00:00",
-  "valid_until": "2026-04-04T13:36:48.415358+00:00",
+  "generated_at": "2026-04-04T08:09:32.765747+00:00",
+  "valid_until": "2026-04-04T14:09:32.765747+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "UNI",
-    "BCH"
+    "BITO"
   ],
   "conditions": [
     {
@@ -17,16 +16,15 @@
       "value": 0.85
     },
     {
-      "type": "news_blacklist",
-      "ticker": "RENDER"
+      "type": "position_limit_enforcement"
     }
   ],
-  "critique_summary": "Fleet is experiencing systemic bleed in a high-fear crypto regime with Kraken bots suffering from high-frequency stagnant exits and poor win rates. Navigator (Forex) is in a failure state with 11.1% win rate and over-correlation in JPY pairs, while Oracle is correctly preserving capital in SGOV.",
+  "critique_summary": "The fleet shows significant data contamination in Bot #1 and a major position limit violation in Bot #6 (10 positions vs 5 max). While the Bear regime classification is accurate, the aggressive Kraken bots are bleeding capital due to low win rates and poor stop-loss effectiveness on high-volatility assets like RENDER.",
   "critique_flags": [
-    "Navigator win rate divergence (11.1%)",
-    "Kraken fleet scalp_stagnant exit cluster",
-    "Cross-bot correlation in TIA and AVAX",
-    "Excessive JPY exposure in Navigator"
+    "Bot #1 trade history contains Kraken crypto entries (data contamination)",
+    "Bot #6 Navigator position limit violation (10 open, limit 5)",
+    "Calypso win rate 33.3% indicates failed entry logic in current volatility",
+    "Extreme loss concentration in RENDER (-22%) and ATOM"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

@@ -322,5 +322,14 @@
     "side": "SELL",
     "reason": "scalp_tp",
     "timestamp": "2026-04-04T00:27:25.279716+00:00"
+  },
+  {
+    "bot_name": "Kraken Calypso's Tide",
+    "symbol": "DYM/USD",
+    "pnl_pct": 0.91,
+    "pnl_usd": 29.04,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-04T05:50:53.988138+00:00"
   }
 ]

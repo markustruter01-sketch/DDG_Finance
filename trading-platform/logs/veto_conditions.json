@@ -1,12 +1,11 @@
 {
-  "generated_at": "2026-04-04T04:06:51.433412+00:00",
-  "valid_until": "2026-04-04T10:06:51.433412+00:00",
+  "generated_at": "2026-04-04T07:06:57.323139+00:00",
+  "valid_until": "2026-04-04T13:06:57.323139+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "W",
-    "BCH",
-    "ALGO"
+    "UNI",
+    "BCH"
   ],
   "conditions": [
     {
@@ -18,16 +17,16 @@
       "value": 0.85
     },
     {
-      "type": "max_open_positions_navigator",
+      "type": "position_limit_enforcement",
       "value": 5.0
     }
   ],
-  "critique_summary": "Fleet-wide crypto correlation is high with all Kraken bots heavily weighted in shorts. Bot #6 (Navigator) is in direct violation of its 5-position limit, currently holding 10, while Bot #1 (Oracle) shows regime contradiction by labeling 'Crypto' while the thesis describes a Bear/Cash preservation state.",
+  "critique_summary": "The fleet is suffering from systemic data contamination in the Oracle ledger and a major risk violation in the Navigator bot, which is holding 10 positions despite a 5-position cap. Kraken bots show high correlation in short positions during a 'Bear' regime, but poor win rates suggest the mean-reversion entries are triggering prematurely.",
   "critique_flags": [
-    "Navigator position limit violation (10/5 positions)",
-    "RENDER/USD underperformance (-22% fleet-wide)",
-    "Win rate divergence in aggressive bots (<45%)",
-    "Regime label mismatch in Oracle bot"
+    "Position sizing violation: Navigator holding 10/5 max positions",
+    "Data anomaly: Oracle ledger contaminated with Kraken paper trade entries",
+    "Correlation risk: Blackbeard and Calypso heavily overlapped in crypto shorts",
+    "Conviction inflation: Oracle conviction at 0.82 with negative performance"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

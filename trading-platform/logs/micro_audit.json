@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-04T04:51:37.345817+00:00",
-  "elapsed_sec": 2.94,
+  "timestamp": "2026-04-04T07:21:44.050144+00:00",
+  "elapsed_sec": 8.8,
   "alerts": [
     {
       "check": "pnl_velocity",
@@ -12,7 +12,7 @@
       "check": "win_rate_decay",
       "bot": "calypso",
       "severity": "MEDIUM",
-      "detail": "calypso win rate 39.6% (36/91) below 40.0% floor"
+      "detail": "calypso win rate 39.8% (37/93) below 40.0% floor"
     },
     {
       "check": "win_rate_decay",

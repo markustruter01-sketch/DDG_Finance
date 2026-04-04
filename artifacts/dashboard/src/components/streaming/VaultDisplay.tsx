@@ -42,23 +42,22 @@ export function VaultDisplay() {
             </motion.div>
           </div>
           <div className="text-right">
-            <div className="text-[7px] uppercase tracking-widest font-bold" style={{ color: "rgba(251,191,36,0.7)" }}>Passive Income</div>
+            <div className="text-[7px] uppercase tracking-widest font-bold" style={{ color: "rgba(52,211,153,0.6)" }}>Sweeps</div>
             <motion.div
               className="text-[16px] font-mono font-black"
-              style={{ color: "#fbbf24", textShadow: "0 0 16px rgba(251,191,36,0.5), 0 0 32px rgba(251,191,36,0.25)" }}
+              style={{ color: "#34d399", textShadow: "0 0 16px rgba(16,185,129,0.5), 0 0 32px rgba(16,185,129,0.25)" }}
               animate={{ opacity: [0.7, 1, 0.7], scale: [0.98, 1.02, 0.98] }}
               transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             >
-              {formatUsd(totalVaulted * 0.073 / 12)}<span className="text-[8px]" style={{ color: "rgba(251,191,36,0.5)" }}>/mo</span>
+              {totalSweeps}
             </motion.div>
-            <div className="text-[7px] font-mono font-bold" style={{ color: "rgba(52,211,153,0.6)" }}>{totalSweeps} sweeps</div>
           </div>
         </div>
       </div>
 
       <div className="rounded-lg border border-emerald-500/10 bg-emerald-950/5 px-3 py-2.5 flex-1 flex items-center">
         <div className="text-[13px] font-mono leading-[1.6]" style={{ color: "rgba(52,211,153,0.5)" }}>
-          20% of realized profits are automatically swept into the <span className="font-bold" style={{ color: "rgba(52,211,153,0.8)" }}>Growth Vault (JEPQ)</span> for compounding high-yield dividend income. This passive dividend income is then re-invested into the platform in order to accelerate exponential growth.
+          20% of realized profits are automatically swept into the <span className="font-bold" style={{ color: "rgba(52,211,153,0.8)" }}>Growth Vault</span> and allocated to income-generating ETFs. Sweep amounts and timing are determined by the profit sweep engine based on high-water-mark equity thresholds.
         </div>
       </div>
     </div>

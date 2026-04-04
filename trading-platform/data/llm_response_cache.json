@@ -1,6 +1,6 @@
 {
   "e5b75ab03c04e6d655342f56934d0cfc": {
     "raw_json": "{\n  \"market_regime\": \"Extreme Fear with low on-chain demand\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Both BTC/USD and ETH/USD have negative momentum on the 3-month and 6-month signals, and given the extreme fear in the market, it's best to preserve capital in SGOV.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
-    "saved_at": 1775270231.939342
+    "saved_at": 1775277393.0596898
   }
 }

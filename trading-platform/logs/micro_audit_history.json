@@ -2042,5 +2042,150 @@
     "medium_count": 2,
     "escalated_to_gemini": true,
     "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T03:36:39.700165+00:00",
+    "elapsed_sec": 2.01,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 39.1% (34/87) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T03:51:36.947773+00:00",
+    "elapsed_sec": 2.08,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 38.6% (34/88) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T04:06:51.439009+00:00",
+    "elapsed_sec": 15.41,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 38.6% (34/88) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T04:21:33.433334+00:00",
+    "elapsed_sec": 1.91,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 38.6% (34/88) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T04:36:38.503193+00:00",
+    "elapsed_sec": 2.04,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 38.2% (34/89) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 3,
+    "high_count": 1,
+    "medium_count": 2,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
   }
 ]

@@ -1588,5 +1588,79 @@
       "thoughtsTokenCount": 1805
     },
     "elapsed_seconds": 14.3
+  },
+  {
+    "generated_at": "2026-04-04T04:06:37.230352+00:00",
+    "valid_until": "2026-04-04T10:06:37.230352+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CLEAN",
+      "blackbeard": "CAUTION",
+      "calypso": "CAUTION",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "W",
+      "BCH",
+      "ALGO"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "max_open_positions_navigator",
+        "value": 5.0
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.2,
+        "STOP_LOSS_PCT": 0.024,
+        "reasoning": "Win rate 52.8% but negative P&L suggests stops are too tight or slippage is eroding gains on conservative entries."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.35,
+        "STOP_LOSS_PCT": 0.03,
+        "reasoning": "Win rate 42.6% with high frequency of scalp_stagnant exits; tightening entry threshold to filter low-probability noise."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.45,
+        "STOP_LOSS_PCT": 0.036,
+        "reasoning": "Worst performing win rate (38.6%) and highest loss frequency; requires significantly tighter entry filters to survive current volatility."
+      }
+    ],
+    "critique_summary": "Fleet-wide crypto correlation is high with all Kraken bots heavily weighted in shorts. Bot #6 (Navigator) is in direct violation of its 5-position limit, currently holding 10, while Bot #1 (Oracle) shows regime contradiction by labeling 'Crypto' while the thesis describes a Bear/Cash preservation state.",
+    "critique_flags": [
+      "Navigator position limit violation (10/5 positions)",
+      "RENDER/USD underperformance (-22% fleet-wide)",
+      "Win rate divergence in aggressive bots (<45%)",
+      "Regime label mismatch in Oracle bot"
+    ],
+    "token_usage": {
+      "promptTokenCount": 17271,
+      "candidatesTokenCount": 622,
+      "totalTokenCount": 19502,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 17271
+        }
+      ],
+      "thoughtsTokenCount": 1609
+    },
+    "elapsed_seconds": 14.2
   }
 ]

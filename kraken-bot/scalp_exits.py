@@ -25,8 +25,8 @@ def check_scalp_exits(
     eff_sl = sl_pct
     if atr > 0 and entry_price > 0:
         atr_pct = atr / entry_price
-        eff_tp = max(tp_pct, min(atr_pct * 0.3, 0.015))
-        eff_sl = max(sl_pct, min(atr_pct * 0.25, 0.012))
+        eff_tp = max(tp_pct, min(atr_pct * 0.5, 0.025))
+        eff_sl = max(sl_pct, min(atr_pct * 0.4, 0.020))
 
     if side == "long":
         raw_pnl_pct = (current_price - entry_price) / entry_price

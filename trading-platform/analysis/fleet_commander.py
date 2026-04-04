@@ -356,6 +356,11 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     except Exception as exc:
         logger.warning(f"FleetCommander | Failed to write audit file: {exc}")
 
+    try:
+        _record_intervention(result, started_at)
+    except Exception as exc:
+        logger.warning(f"FleetCommander | Failed to record intervention: {exc}")
+
     logger.info(
         f"FleetCommander | Complete in {elapsed:.1f}s — "
         f"verdict={result.overall_verdict} "
@@ -400,6 +405,42 @@ def get_last_fleet_audit() -> dict[str, Any]:
             "message": f"Could not parse fleet_audit.json: {exc}",
             "file_exists": True,
         }
+
+
+def _record_intervention(result: FleetCommanderResponse, generated_at: datetime) -> None:
+    import psycopg2
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT total_equity FROM equity_snapshots WHERE ts <= %s ORDER BY ts DESC LIMIT 1",
+                (generated_at,)
+            )
+            eq_row = cur.fetchone()
+            equity = eq_row[0] if eq_row else None
+
+            cur.execute(
+                """INSERT INTO ai_interventions
+                    (ts, source, overall_verdict, bot_verdicts, param_changes,
+                     vetoed_tickers, critique_summary, critique_flags, conditions, equity_at_time)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (
+                    generated_at, "fleet_commander", result.overall_verdict,
+                    json.dumps(result.bot_verdicts),
+                    json.dumps([p.model_dump(exclude_none=True) for p in result.kraken_param_adjustments]),
+                    json.dumps(result.vetoed_tickers),
+                    result.critique_summary,
+                    json.dumps(result.critique_flags),
+                    json.dumps([c.model_dump(exclude_none=True) for c in result.conditions]),
+                    equity,
+                ),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_fleet_audit_history() -> list[dict]:

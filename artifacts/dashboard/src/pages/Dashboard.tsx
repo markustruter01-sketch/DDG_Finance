@@ -14,6 +14,7 @@ import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays"
 import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
 import { FleetCommanderPanel } from "@/components/FleetCommanderPanel";
 import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
+import { AIImpactTimeline } from "@/components/AIImpactTimeline";
 import { BlackoutBanner } from "@/components/EconomicCalendarBanner";
 import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
@@ -1436,6 +1437,12 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
           <SafeSection label="Fleet Performance">
             <FleetPerformanceHero />
+          </SafeSection>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
+          <SafeSection label="AI Impact Timeline">
+            <AIImpactTimeline />
           </SafeSection>
         </motion.div>
 

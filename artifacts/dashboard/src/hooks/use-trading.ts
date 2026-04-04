@@ -1640,3 +1640,57 @@ export function useNewsFeed() {
     staleTime: 240_000,
   });
 }
+
+export interface AIIntervention {
+  id: number;
+  ts: string;
+  source: string;
+  overall_verdict: string;
+  bot_verdicts: Record<string, string>;
+  param_changes: Array<{
+    bot_id: string;
+    reasoning: string;
+    ZSCORE_ENTRY?: number;
+    ZSCORE_EXIT?: number;
+    STOP_LOSS_PCT?: number;
+    TRAIL_PCT?: number;
+    MIN_NET_PROFIT_PCT?: number;
+  }>;
+  vetoed_tickers: string[];
+  critique_summary: string;
+  critique_flags: string[];
+  conditions: Array<{ type: string; value?: number; ticker?: string }>;
+  equity_at_time: number | null;
+  performance_before: { trades: number; wins: number; win_rate: number | null; net_pnl: number } | null;
+  performance_after: { trades: number; wins: number; win_rate: number | null; net_pnl: number } | null;
+  impact?: "helped" | "hurt" | "neutral";
+}
+
+export interface AIImpactTimeline {
+  equity_curve: Array<{
+    ts: string;
+    alpaca_equity: number;
+    kraken_equity: number;
+    options_equity: number;
+    forex_equity: number;
+    total_equity: number;
+    regime: string | null;
+  }>;
+  interventions: AIIntervention[];
+  summary: {
+    total_interventions: number;
+    helped: number;
+    hurt: number;
+    neutral: number;
+  };
+}
+
+export function useAIImpactTimeline() {
+  return useQuery<AIImpactTimeline>({
+    queryKey: ["/ai-impact/timeline"],
+    queryFn: async () => (await api.get("/ai-impact/timeline")).data,
+    refetchInterval: useVisibleInterval(120_000),
+    retry: 1,
+    staleTime: 60_000,
+  });
+}

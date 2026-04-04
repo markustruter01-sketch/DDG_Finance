@@ -16,7 +16,7 @@ load_dotenv()
 
 PAPER_TRADING = True
 PAPER_STARTING_BALANCE = 100_000.0
-PAPER_FEE_PCT = 0.0010
+PAPER_FEE_PCT = 0.0026
 
 BOT_PROFILES = {
     "davy-jones": {
@@ -52,12 +52,12 @@ BOT_PROFILES = {
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.010,
-        "SCALP_SL_PCT": 0.006,
-        "SCALP_STAGNANCY_MINUTES": 45,
+        "SCALP_TP_PCT": 0.020,
+        "SCALP_SL_PCT": 0.010,
+        "SCALP_STAGNANCY_MINUTES": 120,
         "SCALP_STAGNANCY_DEADZONE": 0.003,
-        "LATENCY_TAX_BPS": 2,
-        "SCALP_FEE_RATE": 0.0010,
+        "LATENCY_TAX_BPS": 5,
+        "SCALP_FEE_RATE": 0.0026,
         "EMA_FAST": 8,
         "EMA_MID": 21,
         "EMA_SLOW": 55,
@@ -83,12 +83,12 @@ BOT_PROFILES = {
         "OHLCV_TIMEFRAME": "1m",
         "OHLCV_LIMIT": 120,
         "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.008,
-        "SCALP_SL_PCT": 0.005,
-        "SCALP_STAGNANCY_MINUTES": 45,
+        "SCALP_TP_PCT": 0.015,
+        "SCALP_SL_PCT": 0.008,
+        "SCALP_STAGNANCY_MINUTES": 90,
         "SCALP_STAGNANCY_DEADZONE": 0.003,
-        "LATENCY_TAX_BPS": 2,
-        "SCALP_FEE_RATE": 0.0010,
+        "LATENCY_TAX_BPS": 5,
+        "SCALP_FEE_RATE": 0.0026,
         "KELTNER_EMA_PERIOD": 20,
         "KELTNER_ATR_MULT": 2.0,
         "VWAP_PROXIMITY_PCT": 0.005,

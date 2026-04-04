@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-04T04:48:05.383644+00:00",
+  "last_updated": "2026-04-04T04:54:13.779121+00:00",
   "deployed_usd": 0,
   "deployed_pct": 0.0,
   "deployable_ceiling_pct": 90.0,
@@ -11,11 +11,11 @@
   "thinking_text": "Initialising \u2014 fetching market data...",
   "adaptive_params": {
     "active": {
-      "ZSCORE_ENTRY": 1.45,
+      "ZSCORE_ENTRY": 1.5,
       "ZSCORE_EXIT": 0.28,
       "STOP_LOSS_PCT": 0.034,
       "TRAIL_PCT": 0.05,
-      "MIN_NET_PROFIT_PCT": 0.013
+      "MIN_NET_PROFIT_PCT": 0.014
     },
     "defaults": {
       "ZSCORE_ENTRY": 0.6,

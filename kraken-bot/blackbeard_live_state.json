@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-04T04:47:54.448715+00:00",
+  "last_updated": "2026-04-04T04:54:05.763108+00:00",
   "deployed_usd": 0,
   "deployed_pct": 0.0,
   "deployable_ceiling_pct": 85.0,
@@ -15,7 +15,7 @@
       "ZSCORE_EXIT": 0.32,
       "STOP_LOSS_PCT": 0.03,
       "TRAIL_PCT": 0.07,
-      "MIN_NET_PROFIT_PCT": 0.009
+      "MIN_NET_PROFIT_PCT": 0.01
     },
     "defaults": {
       "ZSCORE_ENTRY": 0.8,

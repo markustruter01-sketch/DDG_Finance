@@ -229,8 +229,8 @@ def _compute_metrics(trades: list[dict]) -> dict:
     recent = trades[-LOOKBACK_TRADES:]
     n      = len(recent)
 
-    wins   = [t for t in recent if t.get("pnl_pct", 0) > 0]
-    losses = [t for t in recent if t.get("pnl_pct", 0) <= 0]
+    wins   = [t for t in recent if (t.get("pnl_usd", 0) or 0) >= 0]
+    losses = [t for t in recent if (t.get("pnl_usd", 0) or 0) < 0]
 
     win_rate   = len(wins) / n if n else 0
     avg_win    = sum(t["pnl_pct"] for t in wins)   / len(wins)   if wins   else 0
@@ -245,10 +245,9 @@ def _compute_metrics(trades: list[dict]) -> dict:
     trailing_rate     = _rate("trailing")
     reversion_rate    = _rate("mean_reversion")
 
-    # Consecutive losses at the tail of the sequence
     consec_losses = 0
     for t in reversed(recent):
-        if t.get("pnl_pct", 0) <= 0:
+        if (t.get("pnl_usd", 0) or 0) < 0:
             consec_losses += 1
         else:
             break

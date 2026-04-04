@@ -581,9 +581,11 @@ def refresh_equity() -> None:
 
     if PAPER_TRADING:
         # ── Paper trading: compute from simulated portfolio ───────────────────
+        _prev_equity        = total_equity
         total_equity        = get_paper_equity(current_prices=latest_prices)
         last_equity_refresh = time.time()
-        logger.info(f"Equity | Paper account → ${total_equity:,.2f} (simulated)")
+        if abs(total_equity - _prev_equity) > 0.5 or not IS_SCALP_BOT:
+            logger.info(f"Equity | Paper account → ${total_equity:,.2f} (simulated)")
 
     else:
         # ── Live trading: fetch real balance from Kraken ──────────────────────
@@ -936,8 +938,9 @@ def run_cycle() -> None:
         write_live_state()
         return
 
-    # ── Step 1: Refresh equity if it's been more than 60 minutes ─────────────
-    if time.time() - last_equity_refresh >= EQUITY_REFRESH_INTERVAL:
+    # ── Step 1: Refresh equity ───────────────────────────────────────────────
+    _equity_stale = time.time() - last_equity_refresh >= EQUITY_REFRESH_INTERVAL
+    if _equity_stale or (IS_SCALP_BOT and PAPER_TRADING):
         refresh_equity()
 
     # If we still have no equity figure, something is wrong — skip this cycle

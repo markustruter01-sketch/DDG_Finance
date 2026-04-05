@@ -187,11 +187,11 @@ function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCou
 }) {
   const meta = BOT_META[botKey] ?? { icon: "🤖", color: "#64748b", label: botKey };
   const isOnline = status === "running" || status === "online" || status === "ok";
-  const truncatedThinking = thinkingText.length > 80 ? thinkingText.slice(0, 77) + "..." : thinkingText;
+  const truncatedThinking = thinkingText.length > 40 ? thinkingText.slice(0, 37) + "..." : thinkingText;
 
   return (
     <motion.div
-      className="rounded-lg border p-2.5 flex flex-col gap-1.5 min-w-0"
+      className="rounded-lg border p-2 flex flex-col gap-1 min-w-0"
       animate={hasRecentTrade ? { boxShadow: [`0 0 0px ${color}00`, `0 0 16px ${color}60`, `0 0 0px ${color}00`] } : {}}
       transition={hasRecentTrade ? { duration: 1.5, repeat: 2 } : {}}
       style={{
@@ -372,7 +372,7 @@ function BotTilesRow() {
   ];
 
   return (
-    <div className="grid grid-cols-6 gap-2 px-4 py-2 shrink-0">
+    <div className="flex flex-col gap-1.5 w-52 shrink-0 overflow-auto min-h-0 px-1">
       {bots.map((b) => (
         <BotTile
           key={b.key}
@@ -622,20 +622,13 @@ function EquitySidebar() {
   const perBotSparklines = useMemo(() => {
     if (!curve?.snapshots?.length) return [];
     const snaps = curve.snapshots;
-    const djRatio = djStatus?.total_equity_usd && fleet?.total_equity_usd && fleet.total_equity_usd > 0
-      ? djStatus.total_equity_usd / fleet.total_equity_usd : 0.33;
-    const bbRatio = bbStatus?.total_equity_usd && fleet?.total_equity_usd && fleet.total_equity_usd > 0
-      ? bbStatus.total_equity_usd / fleet.total_equity_usd : 0.33;
-    const caRatio = 1 - djRatio - bbRatio;
     return [
       { name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) },
-      { name: "Davy Jones", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity * djRatio) },
-      { name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316", data: snaps.map(s => s.kraken_equity * bbRatio) },
-      { name: "Calypso", icon: "🌊", color: "#a855f7", data: snaps.map(s => s.kraken_equity * Math.max(0, caRatio)) },
+      { name: "Kraken Fleet", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity) },
       { name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) },
       { name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) },
     ];
-  }, [curve, djStatus, bbStatus, fleet]);
+  }, [curve]);
 
   const allPositions = useMemo(() => {
     const pos: Array<{ symbol: string; bot: string; icon: string; pnlUsd: number; color: string }> = [];
@@ -723,14 +716,14 @@ function EquitySidebar() {
       {perBotSparklines.length > 0 && (
         <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
           <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Per-Bot Equity</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {perBotSparklines.map(bot => (
               <div key={bot.name}>
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span style={{ fontSize: 8 }}>{bot.icon}</span>
-                  <span className="text-[7px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
+                  <span style={{ fontSize: 9 }}>{bot.icon}</span>
+                  <span className="text-[8px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
                 </div>
-                <MiniSparkline data={bot.data} color={bot.color} w={72} h={20} />
+                <MiniSparkline data={bot.data} color={bot.color} w={110} h={24} />
               </div>
             ))}
           </div>
@@ -928,9 +921,9 @@ function DecisionPipelineBar() {
   }, [allBotEntries, optState, fxState, summary]);
 
   return (
-    <div className="flex items-center gap-3 px-4 py-1.5 border-t shrink-0 font-mono text-[10px]" style={{
+    <div className="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-3 py-1 rounded-lg border shrink-0 font-mono text-[9px]" style={{
       borderColor: "rgba(255,255,255,0.06)",
-      backgroundColor: "rgba(15,23,42,0.95)",
+      backgroundColor: "rgba(15,23,42,0.9)",
       color: "rgba(148,163,184,0.5)",
     }}>
       <div className="flex items-center gap-0.5">
@@ -1004,15 +997,18 @@ export default function StreamingScreenV2() {
 
       <HeroStrip />
 
-      <BotTilesRow />
+      <div className="flex-1 min-h-0 flex gap-2 px-3 py-2">
+        <BotTilesRow />
 
-      <div className="flex-1 min-h-0 flex gap-2 px-4 py-2">
-        <NeuralFeed />
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <NeuralFeed />
+          <DecisionPipelineBar />
+        </div>
+
         <EquitySidebar />
       </div>
 
       <TradeTickerFooter />
-      <DecisionPipelineBar />
     </div>
   );
 }

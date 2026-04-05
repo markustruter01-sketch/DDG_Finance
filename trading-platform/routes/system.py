@@ -667,7 +667,8 @@ async def system_degradations_report(hours: int = 48) -> dict:
     heal_log_data: list[dict] | None = None
 
     try:
-        live_health = await system_health_architecture()
+        import asyncio
+        live_health = await asyncio.wait_for(system_health_architecture(), timeout=10.0)
     except Exception:
         pass
 

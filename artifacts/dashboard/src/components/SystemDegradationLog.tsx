@@ -94,12 +94,24 @@ export function SystemDegradationLog() {
   const handleCopyReport = async () => {
     try {
       const report = await reportMutation.mutateAsync();
-      await navigator.clipboard.writeText(report);
+      try {
+        await navigator.clipboard.writeText(report);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = report;
+        ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
       setCopied(true);
       toast({ title: "Bug Report Copied", description: "Full diagnostic report copied to clipboard. Paste it to the AI for analysis." });
       setTimeout(() => setCopied(false), 3000);
-    } catch {
-      toast({ variant: "destructive", title: "Failed", description: "Could not generate bug report." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast({ variant: "destructive", title: "Report Failed", description: `Could not generate bug report: ${msg.slice(0, 80)}` });
     }
   };
 

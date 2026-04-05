@@ -1226,7 +1226,7 @@ export function useDegradationLog(hours = 48) {
 export function useDegradationReport(hours = 24) {
   return useMutation({
     mutationFn: async () => {
-      const res = await api.get(`/system/degradations/report?hours=${hours}`);
+      const res = await api.get(`/system/degradations/report?hours=${hours}`, { timeout: 30000 });
       return res.data.report as string;
     },
   });

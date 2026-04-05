@@ -3943,5 +3943,74 @@
     "medium_count": 1,
     "escalated_to_gemini": false,
     "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T22:09:15.172942+00:00",
+    "elapsed_sec": 1.18,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 2,
+    "high_count": 1,
+    "medium_count": 1,
+    "escalated_to_gemini": false,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T22:24:16.127503+00:00",
+    "elapsed_sec": 1.17,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 2,
+    "high_count": 1,
+    "medium_count": 1,
+    "escalated_to_gemini": false,
+    "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-04T22:39:15.325883+00:00",
+    "elapsed_sec": 1.18,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 2,
+    "high_count": 1,
+    "medium_count": 1,
+    "escalated_to_gemini": false,
+    "status": "ALERT"
   }
 ]

@@ -4186,5 +4186,40 @@
     "medium_count": 3,
     "escalated_to_gemini": true,
     "status": "ALERT"
+  },
+  {
+    "timestamp": "2026-04-05T08:04:54.440418+00:00",
+    "elapsed_sec": 16.05,
+    "alerts": [
+      {
+        "check": "pnl_velocity",
+        "bot": "davy-jones",
+        "severity": "HIGH",
+        "detail": "davy-jones has 10 consecutive losses \u2014 momentum bleeding"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "blackbeard",
+        "severity": "MEDIUM",
+        "detail": "blackbeard win rate 31.2% (25/80) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "calypso",
+        "severity": "MEDIUM",
+        "detail": "calypso win rate 26.4% (28/106) below 40.0% floor"
+      },
+      {
+        "check": "win_rate_decay",
+        "bot": "navigator",
+        "severity": "MEDIUM",
+        "detail": "Navigator win rate 11.1% (1/9) below floor"
+      }
+    ],
+    "alert_count": 4,
+    "high_count": 1,
+    "medium_count": 3,
+    "escalated_to_gemini": true,
+    "status": "ALERT"
   }
 ]

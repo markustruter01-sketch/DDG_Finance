@@ -66,6 +66,7 @@ function HeroStrip() {
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: sentiment } = useSentiment();
+  const { data: curve } = useEquityCurve(100);
   const { wins, losses, totalTrades } = useRealFeed(50);
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
@@ -73,13 +74,28 @@ function HeroStrip() {
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
   const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
-  const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
-  const krakenStart = fleet?.total_starting_usd ?? (fleet?.bots?.length ? fleet.bots.reduce((s, b) => s + (b.starting_balance_usd ?? 100_000), 0) : 0);
-  const optStart = optState?.starting_capital ?? 100_000;
-  const fxStart = fxState?.starting_capital ?? 100_000;
-  const initialCapital = alpacaStart + krakenStart + optStart + fxStart;
-  const totalPnl = totalEquity - initialCapital;
-  const totalPnlPct = initialCapital > 0 ? (totalPnl / initialCapital) * 100 : 0;
+
+  const pnl24h = useMemo(() => {
+    if (!curve?.snapshots?.length) return { value: 0, pct: 0 };
+    const now = Date.now();
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    const snaps = curve.snapshots;
+    const baseline = snaps.find(s => new Date(s.ts).getTime() >= cutoff) ?? snaps[0];
+    const latest = snaps[snaps.length - 1];
+    if (!baseline || !latest) return { value: 0, pct: 0 };
+    const delta = latest.total_equity - baseline.total_equity;
+    const pct = baseline.total_equity > 0 ? (delta / baseline.total_equity) * 100 : 0;
+    return { value: delta, pct };
+  }, [curve]);
+
+  const [prevPnl, setPrevPnl] = useState(0);
+  const pnlDelta = pnl24h.value - prevPnl;
+  useEffect(() => {
+    if (pnl24h.value !== prevPnl) {
+      const timer = setTimeout(() => setPrevPnl(pnl24h.value), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [pnl24h.value, prevPnl]);
 
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
 
@@ -98,10 +114,28 @@ function HeroStrip() {
       <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
 
       <div>
-        <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>Total P&L</div>
-        <span className={`text-base font-mono font-bold ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-          {fmtPnl(totalPnl)} <span className="text-[10px] opacity-60">({totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(2)}%)</span>
-        </span>
+        <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>24h P&L</div>
+        <div className="flex items-baseline gap-1.5">
+          <AnimatedValue
+            value={fmtPnl(pnl24h.value)}
+            className={`text-base font-mono font-bold ${pnl24h.value >= 0 ? "text-green-400" : "text-red-400"}`}
+          />
+          <span className="text-[10px] font-mono opacity-60" style={{ color: pnl24h.pct >= 0 ? "#4ade80" : "#f87171" }}>
+            ({pnl24h.pct >= 0 ? "+" : ""}{pnl24h.pct.toFixed(2)}%)
+          </span>
+          {pnlDelta !== 0 && (
+            <motion.span
+              initial={{ opacity: 1, y: 0 }}
+              animate={{ opacity: 0, y: -12 }}
+              transition={{ duration: 1.5 }}
+              key={`delta-${pnl24h.value}`}
+              className="text-[9px] font-mono font-bold"
+              style={{ color: pnlDelta >= 0 ? "#22c55e" : "#ef4444" }}
+            >
+              {pnlDelta >= 0 ? "+" : ""}{fmtUsd(pnlDelta)}
+            </motion.span>
+          )}
+        </div>
       </div>
 
       <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
@@ -370,6 +404,7 @@ interface NeuralLine {
   color: string;
   text: string;
   type: "thinking" | "signal" | "trade" | "position" | "system";
+  highConviction?: boolean;
 }
 
 function NeuralFeed() {
@@ -421,10 +456,12 @@ function NeuralFeed() {
             parts.push(`→ ${decision}`);
             const sigText = parts.join(" | ");
             const sigHash = sigText.slice(0, 80).replace(/\s+/g, "_");
+            const isHighConv = (s.conviction != null && s.conviction >= 0.7) || s.signal_type === "entry" || s.signal_type === "exit";
             newLines.push({
               id: `sig-${key}-${sigHash}`, ts: now, bot, icon, color,
               text: sigText,
               type: "signal",
+              highConviction: isHighConv,
             });
           }
         }
@@ -437,6 +474,7 @@ function NeuralFeed() {
           id: `trade-${key}-${latest.symbol}-${latest.closed_at}`, ts: now, bot, icon, color,
           text: `TRADE ${pnlColor}: ${latest.symbol} ${latest.side?.toUpperCase()} | ${fmtPnl(latest.pnl_usd)} (${latest.pnl_pct >= 0 ? "+" : ""}${latest.pnl_pct.toFixed(2)}%) | ${latest.reason}`,
           type: "trade",
+          highConviction: true,
         });
       }
     }
@@ -510,9 +548,21 @@ function NeuralFeed() {
             transition={{ duration: 0.3 }}
             className="flex items-start gap-2 px-3 py-1.5 border-b"
             style={{
-              borderColor: "rgba(255,255,255,0.03)",
-              backgroundColor: line.type === "trade" ? "rgba(250,204,21,0.04)" : line.type === "signal" ? "rgba(248,113,113,0.02)" : "transparent",
+              borderColor: line.highConviction ? "rgba(250,204,21,0.15)" : "rgba(255,255,255,0.03)",
+              backgroundColor: line.highConviction
+                ? line.type === "trade" ? "rgba(250,204,21,0.08)" : "rgba(248,113,113,0.06)"
+                : line.type === "trade" ? "rgba(250,204,21,0.04)" : line.type === "signal" ? "rgba(248,113,113,0.02)" : "transparent",
+              boxShadow: line.highConviction && i < 3 ? "inset 0 0 20px rgba(250,204,21,0.06)" : "none",
             }}
+            {...(line.highConviction && i < 3 ? {
+              animate: {
+                backgroundColor: [
+                  line.type === "trade" ? "rgba(250,204,21,0.12)" : "rgba(248,113,113,0.1)",
+                  line.type === "trade" ? "rgba(250,204,21,0.04)" : "rgba(248,113,113,0.03)",
+                ],
+              },
+              transition: { duration: 1.5, ease: "easeOut" },
+            } : {})}
           >
             <span style={{ fontSize: 12 }}>{line.icon}</span>
             <span className="shrink-0 font-bold" style={{ color: line.color, fontSize: 10, minWidth: 70 }}>
@@ -527,6 +577,11 @@ function NeuralFeed() {
             >
               {line.type}
             </span>
+            {line.highConviction && (
+              <span className="shrink-0 px-1 py-0.5 rounded text-[7px] font-black" style={{ color: "#facc15", backgroundColor: "rgba(250,204,21,0.15)", letterSpacing: "0.05em" }}>
+                HIGH
+              </span>
+            )}
             <span className="flex-1 min-w-0 break-words" style={{ color: "rgba(203,213,225,0.8)" }}>
               {line.text}
             </span>
@@ -567,13 +622,20 @@ function EquitySidebar() {
   const perBotSparklines = useMemo(() => {
     if (!curve?.snapshots?.length) return [];
     const snaps = curve.snapshots;
+    const djRatio = djStatus?.total_equity_usd && fleet?.total_equity_usd && fleet.total_equity_usd > 0
+      ? djStatus.total_equity_usd / fleet.total_equity_usd : 0.33;
+    const bbRatio = bbStatus?.total_equity_usd && fleet?.total_equity_usd && fleet.total_equity_usd > 0
+      ? bbStatus.total_equity_usd / fleet.total_equity_usd : 0.33;
+    const caRatio = 1 - djRatio - bbRatio;
     return [
       { name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) },
-      { name: "Kraken Fleet", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity) },
+      { name: "Davy Jones", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity * djRatio) },
+      { name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316", data: snaps.map(s => s.kraken_equity * bbRatio) },
+      { name: "Calypso", icon: "🌊", color: "#a855f7", data: snaps.map(s => s.kraken_equity * Math.max(0, caRatio)) },
       { name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) },
       { name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) },
     ];
-  }, [curve]);
+  }, [curve, djStatus, bbStatus, fleet]);
 
   const allPositions = useMemo(() => {
     const pos: Array<{ symbol: string; bot: string; icon: string; pnlUsd: number; color: string }> = [];
@@ -661,14 +723,14 @@ function EquitySidebar() {
       {perBotSparklines.length > 0 && (
         <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
           <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Per-Bot Equity</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             {perBotSparklines.map(bot => (
               <div key={bot.name}>
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span style={{ fontSize: 9 }}>{bot.icon}</span>
-                  <span className="text-[8px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
+                  <span style={{ fontSize: 8 }}>{bot.icon}</span>
+                  <span className="text-[7px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
                 </div>
-                <MiniSparkline data={bot.data} color={bot.color} w={110} h={24} />
+                <MiniSparkline data={bot.data} color={bot.color} w={72} h={20} />
               </div>
             ))}
           </div>
@@ -815,40 +877,55 @@ function DecisionPipelineBar() {
   const totalCycles = (djStatus?.cycle_count ?? 0) + (bbStatus?.cycle_count ?? 0) + (caStatus?.cycle_count ?? 0)
     + (optState?.cycle_count ?? 0) + (fxState?.cycle_count ?? 0) + (summary?.system_health?.run_count ?? 0);
 
-  const allBotStates = [djStatus, bbStatus, caStatus];
+  const allBotEntries = useMemo(() => [
+    { data: djStatus, name: "DJ", icon: "⚓" },
+    { data: bbStatus, name: "BB", icon: "🏴‍☠️" },
+    { data: caStatus, name: "CAL", icon: "🌊" },
+  ], [djStatus, bbStatus, caStatus]);
 
-  const activeStage = useMemo(() => {
+  const { activeStage, activeBot } = useMemo(() => {
     let maxStage = 0;
+    let leadBot = "";
 
-    for (const bot of allBotStates) {
+    for (const { data: bot, name } of allBotEntries) {
       if (!bot) continue;
+      let botStage = 0;
       if (bot.recent_trades?.length) {
         const latest = bot.recent_trades[bot.recent_trades.length - 1];
         if (latest.closed_at && Date.now() - new Date(latest.closed_at).getTime() < 30000) {
-          maxStage = Math.max(maxStage, 4);
-          continue;
+          botStage = 4;
         }
       }
-      if (bot.thinking_text?.includes("SIGNAL") || bot.thinking_text?.includes("Scalp")) {
-        maxStage = Math.max(maxStage, 3);
-      } else if (bot.thinking_text?.includes("Microstructure") || bot.thinking_text?.includes("RiskProfile")) {
-        maxStage = Math.max(maxStage, 2);
-      } else if (bot.signals?.some(s => s.signal_type && s.signal_type !== "watching")) {
-        maxStage = Math.max(maxStage, 2);
-      } else if (bot.cycle_count > 0) {
-        maxStage = Math.max(maxStage, 1);
+      if (botStage < 4) {
+        if (bot.thinking_text?.includes("SIGNAL") || bot.thinking_text?.includes("Scalp")) {
+          botStage = Math.max(botStage, 3);
+        } else if (bot.thinking_text?.includes("Microstructure") || bot.thinking_text?.includes("RiskProfile")) {
+          botStage = Math.max(botStage, 2);
+        } else if (bot.signals?.some(s => s.signal_type && s.signal_type !== "watching")) {
+          botStage = Math.max(botStage, 2);
+        } else if (bot.cycle_count > 0) {
+          botStage = Math.max(botStage, 1);
+        }
+      }
+      if (botStage > maxStage) {
+        maxStage = botStage;
+        leadBot = name;
       }
     }
 
-    if (optState?.last_scan_results?.some(r => r.is_squeeze)) maxStage = Math.max(maxStage, 2);
-    if (fxState?.last_scan_results?.some(r => r.signal)) maxStage = Math.max(maxStage, 2);
-
-    if (summary?.system_health?.run_count && summary.system_health.run_count > 0) {
-      maxStage = Math.max(maxStage, 1);
+    if (optState?.last_scan_results?.some(r => r.is_squeeze)) {
+      if (maxStage < 2) { maxStage = 2; leadBot = "APEX"; }
+    }
+    if (fxState?.last_scan_results?.some(r => r.signal)) {
+      if (maxStage < 2) { maxStage = 2; leadBot = "NAV"; }
+    }
+    if (summary?.system_health?.run_count && summary.system_health.run_count > 0 && maxStage < 1) {
+      maxStage = 1;
+      leadBot = "ORC";
     }
 
-    return maxStage;
-  }, [allBotStates, optState, fxState, summary]);
+    return { activeStage: maxStage, activeBot: leadBot };
+  }, [allBotEntries, optState, fxState, summary]);
 
   return (
     <div className="flex items-center gap-3 px-4 py-1.5 border-t shrink-0 font-mono text-[10px]" style={{
@@ -887,6 +964,16 @@ function DecisionPipelineBar() {
         })}
       </div>
 
+      {activeBot && (
+        <>
+          <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#22d3ee", boxShadow: "0 0 4px #22d3ee", animation: "pulse 1.5s ease-in-out infinite" }} />
+            <span style={{ color: "#22d3ee", fontWeight: 800 }}>{activeBot}</span>
+            <span style={{ color: "rgba(148,163,184,0.4)" }}>CYCLING</span>
+          </span>
+        </>
+      )}
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>REGIME: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{regime}</span></span>
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>

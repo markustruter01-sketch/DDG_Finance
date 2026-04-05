@@ -1,79 +1,5 @@
 [
   {
-    "generated_at": "2026-04-04T04:06:37.230352+00:00",
-    "valid_until": "2026-04-04T10:06:37.230352+00:00",
-    "overall_verdict": "CAUTION",
-    "bot_verdicts": {
-      "oracle": "CLEAN",
-      "davy_jones": "CLEAN",
-      "blackbeard": "CAUTION",
-      "calypso": "CAUTION",
-      "apex_predator": "CLEAN",
-      "navigator": "HOLD"
-    },
-    "vetoed_tickers": [
-      "RENDER",
-      "ATOM",
-      "W",
-      "BCH",
-      "ALGO"
-    ],
-    "conditions": [
-      {
-        "type": "vpin_threshold",
-        "value": 0.75
-      },
-      {
-        "type": "max_conviction_cap",
-        "value": 0.85
-      },
-      {
-        "type": "max_open_positions_navigator",
-        "value": 5.0
-      }
-    ],
-    "kraken_param_adjustments": [
-      {
-        "bot_id": "davy_jones",
-        "ZSCORE_ENTRY": 1.2,
-        "STOP_LOSS_PCT": 0.024,
-        "reasoning": "Win rate 52.8% but negative P&L suggests stops are too tight or slippage is eroding gains on conservative entries."
-      },
-      {
-        "bot_id": "blackbeard",
-        "ZSCORE_ENTRY": 1.35,
-        "STOP_LOSS_PCT": 0.03,
-        "reasoning": "Win rate 42.6% with high frequency of scalp_stagnant exits; tightening entry threshold to filter low-probability noise."
-      },
-      {
-        "bot_id": "calypso",
-        "ZSCORE_ENTRY": 1.45,
-        "STOP_LOSS_PCT": 0.036,
-        "reasoning": "Worst performing win rate (38.6%) and highest loss frequency; requires significantly tighter entry filters to survive current volatility."
-      }
-    ],
-    "critique_summary": "Fleet-wide crypto correlation is high with all Kraken bots heavily weighted in shorts. Bot #6 (Navigator) is in direct violation of its 5-position limit, currently holding 10, while Bot #1 (Oracle) shows regime contradiction by labeling 'Crypto' while the thesis describes a Bear/Cash preservation state.",
-    "critique_flags": [
-      "Navigator position limit violation (10/5 positions)",
-      "RENDER/USD underperformance (-22% fleet-wide)",
-      "Win rate divergence in aggressive bots (<45%)",
-      "Regime label mismatch in Oracle bot"
-    ],
-    "token_usage": {
-      "promptTokenCount": 17271,
-      "candidatesTokenCount": 622,
-      "totalTokenCount": 19502,
-      "promptTokensDetails": [
-        {
-          "modality": "TEXT",
-          "tokenCount": 17271
-        }
-      ],
-      "thoughtsTokenCount": 1609
-    },
-    "elapsed_seconds": 14.2
-  },
-  {
     "generated_at": "2026-04-04T05:06:45.124061+00:00",
     "valid_until": "2026-04-04T11:06:45.124061+00:00",
     "overall_verdict": "CAUTION",
@@ -1740,5 +1666,76 @@
       "thoughtsTokenCount": 4016
     },
     "elapsed_seconds": 26.6
+  },
+  {
+    "generated_at": "2026-04-05T08:04:39.572586+00:00",
+    "valid_until": "2026-04-05T14:04:39.572586+00:00",
+    "overall_verdict": "CAUTION",
+    "bot_verdicts": {
+      "oracle": "CLEAN",
+      "davy_jones": "CAUTION",
+      "blackbeard": "CAUTION",
+      "calypso": "CAUTION",
+      "apex_predator": "CLEAN",
+      "navigator": "HOLD"
+    },
+    "vetoed_tickers": [
+      "RENDER",
+      "ATOM",
+      "NEAR"
+    ],
+    "conditions": [
+      {
+        "type": "vpin_threshold",
+        "value": 0.75
+      },
+      {
+        "type": "max_conviction_cap",
+        "value": 0.85
+      },
+      {
+        "type": "position_limit_enforcement"
+      }
+    ],
+    "kraken_param_adjustments": [
+      {
+        "bot_id": "davy_jones",
+        "ZSCORE_ENTRY": 1.15,
+        "STOP_LOSS_PCT": 0.018,
+        "reasoning": "Win rate 54.4% is acceptable but all-time P&L is -$3,491.80, indicating loss magnitude exceeds wins; tightening entry and stop to protect equity."
+      },
+      {
+        "bot_id": "blackbeard",
+        "ZSCORE_ENTRY": 1.25,
+        "MIN_NET_PROFIT_PCT": 0.012,
+        "reasoning": "Win rate 44.4% with frequent scalp_stagnant exits suggests entries lack sufficient momentum; increasing Z-score requirement for higher quality setups."
+      },
+      {
+        "bot_id": "calypso",
+        "ZSCORE_ENTRY": 1.45,
+        "STOP_LOSS_PCT": 0.012,
+        "reasoning": "Critical win rate failure at 35.7%; strategy is over-trading low-probability setups. Increasing ZSCORE_ENTRY to the upper bound to force selectivity."
+      }
+    ],
+    "critique_summary": "The fleet is experiencing significant cross-bot correlation in crypto shorts and a critical logic failure in the Navigator bot, which has doubled its allowed position limit. Kraken performance is degraded by high-drawdown outliers like NEAR (-4.27%) and RENDER (-20.75% fleet-wide), suggesting stop-loss parameters are failing to contain volatility-induced slippage.",
+    "critique_flags": [
+      "Navigator position limit violation: 10 positions open vs 5 max limit",
+      "Extreme underperformance in RENDER/USD (16.7% win rate, -20.75% P&L)",
+      "Divergence in Navigator win rate (11.1%) vs expected swing performance",
+      "High correlation risk: multiple bots holding identical short positions in SEI and LINK"
+    ],
+    "token_usage": {
+      "promptTokenCount": 16027,
+      "candidatesTokenCount": 663,
+      "totalTokenCount": 18534,
+      "promptTokensDetails": [
+        {
+          "modality": "TEXT",
+          "tokenCount": 16027
+        }
+      ],
+      "thoughtsTokenCount": 1844
+    },
+    "elapsed_seconds": 14.9
   }
 ]

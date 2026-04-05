@@ -65,7 +65,7 @@ function StreamingNavBar() {
                 "relative flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[56px] py-1.5 px-3",
                 isActive
                   ? "scale-105"
-                  : "bg-slate-900/60 backdrop-blur-xl border border-white/[0.06] hover:border-white/10 hover:bg-slate-800/60"
+                  : "bg-slate-900/60 border border-white/[0.06] hover:border-white/10 hover:bg-slate-800/60"
               )}
               style={isActive ? {
                 background: `linear-gradient(135deg, ${item.color}20, ${item.color}10)`,
@@ -108,6 +108,8 @@ export default function StreamingScreen() {
   const wins24h = recent24h.filter(t => t.isWin).length;
   const losses24h = recent24h.filter(t => !t.isWin).length;
 
+  const [, setLocation] = useLocation();
+
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
       <div
@@ -121,7 +123,21 @@ export default function StreamingScreen() {
       >
         <AchievementFeed achievements={celebrations.achievements} />
         <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
-          <GlobalHUD />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setLocation("/")}
+              className="flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-mono font-bold uppercase tracking-wider shrink-0"
+              style={{
+                borderColor: "rgba(148,163,184,0.2)",
+                color: "rgba(148,163,184,0.6)",
+                backgroundColor: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <span style={{ fontSize: 12 }}>←</span>
+              <span>Dashboard</span>
+            </button>
+            <div className="flex-1"><GlobalHUD /></div>
+          </div>
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
             <div className="col-span-3 min-h-0 flex flex-col">

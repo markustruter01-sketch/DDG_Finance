@@ -351,17 +351,15 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
         return {"swept": False, "reason": f"internal_error: {exc}"}
 
 
-def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20) -> dict:
+def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20, source: str = "kraken_paper") -> dict:
     """
-    Record a per-trade vault contribution from the Kraken crypto bot.
+    Record a per-trade vault contribution.
 
-    Called after each profitable Kraken paper trade closes.  Unlike the Alpaca
-    HWM sweep (portfolio-level), this is a per-trade sweep — sweep_rate % of
+    Called after each profitable paper trade closes.  sweep_rate % of
     each winning trade's gross PnL is earmarked for the Growth Vault (JEPQ).
 
-    Since Kraken is paper-trading we cannot place a real JEPQ order, but the
-    amount is recorded in vault_ledger alongside Alpaca contributions so that
-    total_vaulted_usd reflects the combined vault balance.
+    The `source` parameter identifies which bot produced the profit
+    (e.g. "kraken_paper", "options_paper", "forex_paper").
 
     Returns a dict with swept=True/False and the contributed amount.
     """
@@ -395,11 +393,11 @@ def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20) -
             )
 
         logger.info(
-            f"Vault | Kraken contribution: ${amount:.2f} "
+            f"Vault | {source} contribution: ${amount:.2f} "
             f"({sweep_rate*100:.0f}% of ${pnl_usd:.2f} profit) → Growth Vault"
         )
-        return {"swept": True, "amount": amount, "source": "kraken_paper"}
+        return {"swept": True, "amount": amount, "source": source}
 
     except Exception as exc:
-        logger.error(f"Vault | Kraken contribution failed: {exc}")
+        logger.error(f"Vault | {source} contribution failed: {exc}")
         return {"swept": False, "reason": f"error: {exc}"}

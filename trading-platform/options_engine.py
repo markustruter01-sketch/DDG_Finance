@@ -959,6 +959,11 @@ def close_position_by_id(position_id: str, exit_value: Optional[float] = None, e
 
         if pnl > 0:
             try:
+                from execution.profit_sweep import record_kraken_vault_contribution
+                record_kraken_vault_contribution(pnl, sweep_rate=0.20, source="options_paper")
+            except Exception as _ve:
+                logger.warning(f"Options | Vault sweep failed: {_ve}")
+            try:
                 from notifications.alert_manager import enqueue_profitable_trade
                 enqueue_profitable_trade(
                     bot_name="Apex Predator (Options)",

@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
   useStatusSummary,
@@ -61,6 +62,7 @@ function PulsingDot({ color }: { color: string }) {
 }
 
 function HeroStrip() {
+  const [, navigate] = useLocation();
   const { data: summary } = useStatusSummary();
   const { data: fleet } = useKrakenFleetSummary();
   const { data: optState } = useOptionsState();
@@ -103,6 +105,18 @@ function HeroStrip() {
 
   return (
     <div className="flex items-center gap-6 px-6 py-3 border-b shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9))" }}>
+      <button
+        onClick={() => navigate("/")}
+        className="flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-mono font-bold uppercase tracking-wider shrink-0"
+        style={{
+          borderColor: "rgba(148,163,184,0.2)",
+          color: "rgba(148,163,184,0.6)",
+          backgroundColor: "rgba(255,255,255,0.03)",
+        }}
+      >
+        <span style={{ fontSize: 12 }}>←</span>
+        <span>Dashboard</span>
+      </button>
       <div className="flex items-center gap-3">
         <span style={{ fontSize: 22 }}>⚡</span>
         <div>

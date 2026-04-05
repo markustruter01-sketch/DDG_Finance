@@ -403,14 +403,45 @@ def section_oracle_regime_transparency() -> list[str]:
 def section_vpin_shadow_log() -> list[str]:
     lines: list[str] = []
     _h2(lines, "VPIN SHADOW LOG (Trades blocked by VPIN filter)")
-    lines += [
-        f"  Historical VPIN rejections were not persisted to database prior to this report.",
-        f"  VPIN blocked-entry events were logged to console only and overwritten each cycle.",
-        f"  Status: Capturing from {_today_str()} forward.",
-        "",
-        "  VPIN rejection tracking requires kraken-bot code changes (out of scope per user rules).",
-        "  Current cycle rejections can be seen in each bot's live_state.json under cycle_signals.",
-    ]
+
+    db_rows = _pg_query("""
+        SELECT bot_id, pair, vpin_value, threshold, direction, price, ts, reason
+        FROM vpin_rejections
+        ORDER BY ts DESC
+        LIMIT 50
+    """)
+
+    if db_rows:
+        lines.append(f"  [Persistent VPIN rejection log — {len(db_rows)} most recent entries]")
+        lines.append("")
+
+        by_bot: dict[str, list] = {}
+        for r in db_rows:
+            bid = r.get("bot_id", "?")
+            by_bot.setdefault(bid, []).append(r)
+
+        for bid in sorted(by_bot):
+            bot_rows = by_bot[bid]
+            lines.append(f"  {bid} — {len(bot_rows)} recent rejections:")
+            lines.append(f"    {'Timestamp':<20} {'Pair':<10} {'VPIN':>7} {'Thresh':>7} {'Dir':<6} {'Price':>12}")
+            lines.append("    " + "-" * 65)
+            for r in bot_rows[:15]:
+                ts_str = str(r.get("ts", "?"))[:19]
+                pair = str(r.get("pair", "?"))[:9]
+                vpin = float(r.get("vpin_value", 0))
+                thresh = float(r.get("threshold", 0))
+                direction = str(r.get("direction", "?"))[:5]
+                price = float(r.get("price", 0))
+                lines.append(f"    {ts_str:<20} {pair:<10} {vpin:>7.3f} {thresh:>7.3f} {direction:<6} {_c(price):>12}")
+            if len(bot_rows) > 15:
+                lines.append(f"    ... ({len(bot_rows) - 15} more omitted)")
+            lines.append("")
+
+        total_rows = _pg_query("SELECT COUNT(*) as cnt FROM vpin_rejections")
+        total_count = int(total_rows[0]["cnt"]) if total_rows else 0
+        lines.append(f"  All-time VPIN rejections logged: {total_count}")
+    else:
+        lines.append(f"  No VPIN rejections logged yet. Capturing from {_today_str()} forward.")
 
     for bot_id in ["davy-jones", "blackbeard", "calypso"]:
         ls_path = Path(__file__).parent.parent.parent / "kraken-bot" / f"{bot_id}_live_state.json"
@@ -422,12 +453,11 @@ def section_vpin_shadow_log() -> list[str]:
             if ls_path.exists():
                 ls = json.loads(ls_path.read_text())
                 signals = ls.get("cycle_signals", [])
-                vpin_blocks = [s for s in signals if "vpin" in str(s.get("signal_type", "")).lower()]
+                vpin_blocks = [s for s in signals if "blocked" in str(s.get("signal_type", "")).lower()]
                 if vpin_blocks:
-                    lines.append(f"\n  {bot_id} — current cycle VPIN blocks: {len(vpin_blocks)}")
+                    lines.append(f"\n  {bot_id} — current cycle micro blocks: {len(vpin_blocks)}")
                     for vb in vpin_blocks[:5]:
-                        lines.append(f"    Symbol: {vb.get('symbol', '?')}  VPIN: {vb.get('vpin', '?')}  "
-                                     f"Threshold: {vb.get('threshold', '?')}")
+                        lines.append(f"    Symbol: {vb.get('symbol', '?')}  Price: {vb.get('price', '?')}")
         except Exception:
             pass
 
@@ -504,7 +534,15 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
         "forex": "forex_equity",
         "all": "total_equity",
     }
+    pool_map = {
+        "oracle": "alpaca",
+        "kraken": "kraken",
+        "options": "options",
+        "forex": "forex",
+        "all": None,
+    }
     col = col_map.get(source, "total_equity")
+    pool_name = pool_map.get(source)
 
     rows = _pg_query(f"""
         SELECT DATE(ts) as day,
@@ -516,6 +554,20 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
         GROUP BY DATE(ts)
         ORDER BY DATE(ts) ASC
     """)
+
+    injection_by_day: dict[str, float] = {}
+    if pool_name:
+        inj_rows = _pg_query(
+            "SELECT DATE(ts) as day, SUM(amount_usd) as total FROM capital_injections WHERE pool = %s GROUP BY DATE(ts)",
+            (pool_name,),
+        )
+    else:
+        inj_rows = _pg_query(
+            "SELECT DATE(ts) as day, SUM(amount_usd) as total FROM capital_injections GROUP BY DATE(ts)"
+        )
+    for ir in inj_rows:
+        if ir.get("day"):
+            injection_by_day[str(ir["day"])] = float(ir["total"] or 0)
 
     trade_counts: dict = {}
     if source == "oracle":
@@ -530,6 +582,8 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
 
     if rows:
         lines.append(f"  [Reconstructed from historical data — {len(rows)} days]")
+        if injection_by_day:
+            lines.append(f"  NOTE: Capital injections detected and subtracted from P&L on {len(injection_by_day)} day(s)")
         lines.append(f"  {'Date':<12} {'Open Eq':>14} {'Close Eq':>14} {'Daily P&L':>12} {'Daily %':>9} {'Regime':<12} {'Trades':>7}")
         lines.append("  " + "-" * 82)
         prev_close = None
@@ -538,10 +592,13 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
             open_eq = float(r.get("open_eq") or 0)
             close_eq = float(r.get("close_eq_proxy") or 0)
             regime = str(r.get("regime") or "?")[:10]
-            daily_pnl = close_eq - (prev_close if prev_close else open_eq)
-            daily_pct = (daily_pnl / (prev_close if prev_close else open_eq) * 100) if (prev_close or open_eq) > 0 else 0
+            injection = injection_by_day.get(day[:10], 0.0)
+            base = prev_close if prev_close else open_eq
+            daily_pnl = close_eq - base - injection
+            daily_pct = (daily_pnl / base * 100) if base > 0 else 0
             trades = trade_counts.get(day[:10], 0)
-            lines.append(f"  {day:<12} {_c(open_eq):>14} {_c(close_eq):>14} {_c(daily_pnl):>12} {_pct(daily_pct):>9} {regime:<12} {trades:>7}")
+            inj_marker = f" [+{_c(injection)} injected]" if injection > 0 else ""
+            lines.append(f"  {day:<12} {_c(open_eq):>14} {_c(close_eq):>14} {_c(daily_pnl):>12} {_pct(daily_pct):>9} {regime:<12} {trades:>7}{inj_marker}")
             prev_close = close_eq
         if len(rows) > 60:
             lines.append(f"  ... ({len(rows) - 60} earlier days omitted)")
@@ -600,39 +657,46 @@ def section_cross_bot_correlation() -> list[str]:
     lines: list[str] = []
     _h1(lines, "CROSS-BOT CORRELATION MATRIX")
 
-    corr_path = Path(__file__).parent.parent / "data" / "correlation_state.json"
     corr_data: dict = {}
     try:
-        if corr_path.exists():
-            corr_data = json.loads(corr_path.read_text())
+        from analysis.correlation_matrix import compute_correlation_matrix
+        corr_data = compute_correlation_matrix()
     except Exception:
-        pass
-
-    if not corr_data:
+        corr_path = Path(__file__).parent.parent / "data" / "correlation_state.json"
         try:
-            from analysis.correlation_matrix import compute_correlation_matrix
-            corr_data = compute_correlation_matrix()
+            if corr_path.exists():
+                corr_data = json.loads(corr_path.read_text())
         except Exception:
             pass
 
     matrix = corr_data.get("matrix", {})
+    data_points = corr_data.get("data_points", {})
+    note = corr_data.get("note", "")
+
+    if note:
+        lines.append(f"  Note: {note}")
+
     if matrix:
-        lines.append("  [Reconstructed from historical data]")
-        lines.append(f"  Data points: {corr_data.get('data_points', 'N/A')}")
+        lines.append("  [Computed from equity_snapshots daily returns]")
+        lines.append(f"  Data points per bot: {data_points}")
+        lines.append(f"  Min required for correlation: 3 overlapping days")
         lines.append(f"  Computed at: {str(corr_data.get('computed_at', 'N/A'))[:19]}")
         lines.append("")
         lines.append(f"  {'Bot Pair':<30} {'Correlation':>12} {'Flag':>10}")
         lines.append("  " + "-" * 55)
         for pair, coeff in sorted(matrix.items()):
-            c = float(coeff) if coeff is not None else 0
-            flag = "HIGH" if abs(c) > 0.70 else ""
-            lines.append(f"  {pair:<30} {c:>+12.4f} {flag:>10}")
+            if coeff is None:
+                lines.append(f"  {pair:<30} {'N/A':>12} {'INSUF':>10}")
+            else:
+                c = float(coeff)
+                flag = "HIGH" if abs(c) > 0.70 else ""
+                lines.append(f"  {pair:<30} {c:>+12.4f} {flag:>10}")
 
         max_c = corr_data.get("max_correlation")
         shock = corr_data.get("systemic_shock", False)
         scale = corr_data.get("position_scale_factor", 1.0)
         lines.append("")
-        _row(lines, "Max correlation:", f"{float(max_c):.4f}" if max_c is not None else "N/A")
+        _row(lines, "Max correlation:", f"{float(max_c):.4f}" if max_c is not None else "N/A (insufficient data)")
         _row(lines, "Systemic shock detected:", "YES" if shock else "NO")
         _row(lines, "Position scale factor:", f"{float(scale or 1.0):.2f}x")
     else:
@@ -743,32 +807,50 @@ def section_apex_scan_log() -> list[str]:
         if state_path.exists():
             state = json.loads(state_path.read_text())
             last_scan = state.get("last_scan")
-            scan_results = state.get("last_scan_results", {})
+            scan_results_raw = state.get("last_scan_results")
             lines.append(f"  Last scan time: {str(last_scan)[:19] if last_scan else 'Never'}")
 
-            if scan_results:
-                evaluated = scan_results.get("tickers_evaluated", 0)
-                setups = scan_results.get("setups_found", 0)
-                entries = scan_results.get("entries_taken", 0)
+            scanner_detail: list = []
+            if isinstance(scan_results_raw, list):
+                scanner_detail = scan_results_raw
+                signals = [s for s in scanner_detail if s.get("signal") in (True, "True")]
+                squeezes = [s for s in scanner_detail if s.get("is_squeeze") in (True, "True")]
+                lines.append(f"  Tickers evaluated: {len(scanner_detail)}")
+                lines.append(f"  Squeeze detected: {len(squeezes)}")
+                lines.append(f"  Signals generated: {len(signals)}")
+            elif isinstance(scan_results_raw, dict):
+                evaluated = scan_results_raw.get("tickers_evaluated", 0)
+                setups = scan_results_raw.get("setups_found", 0)
+                entries = scan_results_raw.get("entries_taken", 0)
                 lines.append(f"  Tickers evaluated: {evaluated}")
                 lines.append(f"  Setups found (IVR<20 + squeeze): {setups}")
                 lines.append(f"  Entries taken: {entries}")
+                scanner_detail = scan_results_raw.get("scanner_detail", [])
 
-                scanner_detail = scan_results.get("scanner_detail", [])
-                if scanner_detail:
-                    lines.append("")
-                    lines.append(f"  {'Ticker':<8} {'IVR':>6} {'Squeeze':>8} {'BW%':>8} {'Status':<25}")
-                    lines.append("  " + "-" * 58)
-                    for sd in scanner_detail[:40]:
-                        lines.append(
-                            f"  {sd.get('ticker','?'):<8} "
-                            f"{sd.get('ivr','?'):>6} "
-                            f"{'YES' if sd.get('squeeze') else 'NO':>8} "
-                            f"{sd.get('bandwidth','?'):>8} "
-                            f"{str(sd.get('rejection_reason', sd.get('status', '?')))[:25]:<25}"
-                        )
-                    if len(scanner_detail) > 40:
-                        lines.append(f"  ... ({len(scanner_detail) - 40} more omitted)")
+            if scanner_detail:
+                lines.append("")
+                lines.append(f"  {'Ticker':<8} {'IVR':>8} {'Squeeze':>8} {'BW%':>10} {'Status':<25}")
+                lines.append("  " + "-" * 62)
+                for sd in scanner_detail[:40]:
+                    ticker = sd.get("ticker") or sd.get("symbol", "?")
+                    ivr_val = sd.get("ivr", "?")
+                    if isinstance(ivr_val, (int, float)):
+                        ivr_str = f"{ivr_val:.1f}"
+                    else:
+                        ivr_str = str(ivr_val)
+                    squeeze = sd.get("is_squeeze", sd.get("squeeze", False))
+                    squeeze_str = "YES" if squeeze in (True, "True") else "NO"
+                    bw = sd.get("bandwidth") or sd.get("bollinger_bandwidth", "?")
+                    if isinstance(bw, (int, float)):
+                        bw_str = f"{bw:.2f}"
+                    else:
+                        bw_str = str(bw)
+                    status = str(sd.get("rejection_reason") or sd.get("status", "?"))[:25]
+                    lines.append(
+                        f"  {ticker:<8} {ivr_str:>8} {squeeze_str:>8} {bw_str:>10} {status:<25}"
+                    )
+                if len(scanner_detail) > 40:
+                    lines.append(f"  ... ({len(scanner_detail) - 40} more omitted)")
         else:
             lines.append("  No scan state file found.")
     except Exception as e:

@@ -332,6 +332,31 @@ CREATE TABLE IF NOT EXISTS fleet_commander_chat (
     metadata    JSONB DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_fleet_chat_ts ON fleet_commander_chat (ts DESC);
+
+-- Capital injections tracking (prevents injection events from appearing as P&L)
+CREATE TABLE IF NOT EXISTS capital_injections (
+    id          BIGSERIAL PRIMARY KEY,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    pool        TEXT NOT NULL,
+    amount_usd  DOUBLE PRECISION NOT NULL,
+    reason      TEXT,
+    bot_id      TEXT
+);
+
+-- VPIN rejection log (persistent record of VPIN-blocked entries)
+CREATE TABLE IF NOT EXISTS vpin_rejections (
+    id          BIGSERIAL PRIMARY KEY,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bot_id      TEXT NOT NULL,
+    pair        TEXT NOT NULL,
+    vpin_value  DOUBLE PRECISION NOT NULL,
+    threshold   DOUBLE PRECISION NOT NULL,
+    direction   TEXT NOT NULL,
+    price       DOUBLE PRECISION NOT NULL,
+    reason      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

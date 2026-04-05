@@ -36,7 +36,7 @@ _CORR_FILE = _DATA_DIR / "correlation_state.json"
 ROLLING_WINDOW_DAYS = 60
 SHOCK_THRESHOLD = 0.85
 SHOCK_SCALE_FACTOR = 0.50
-MIN_DATA_POINTS = 15
+MIN_DATA_POINTS = 3
 
 _cache: dict[str, Any] = {"data": None, "ts": 0}
 _CACHE_TTL = 900

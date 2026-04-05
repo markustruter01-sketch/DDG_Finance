@@ -116,6 +116,7 @@ def _get_heat_metrics(ticker: str) -> dict:
 def execute_allocations(
     output: RegimeAnalysisOutput | CryptoAnalysisOutput,
     dry_run: bool = False,
+    regime_label: str | None = None,
 ) -> dict:
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
@@ -267,10 +268,12 @@ def execute_allocations(
     )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
+        _regime_for_slot = regime_label or (output.regime if hasattr(output, "regime") else None)
         results, remaining_cash = _execute_slot(
             slot, equity, max_position_usd, remaining_cash,
             current_positions, results, dry_run,
             var_tripped=_var_tripped,
+            regime_at_entry=str(_regime_for_slot) if _regime_for_slot else None,
         )
 
     results = _run_vault_sweep(equity, results, dry_run)
@@ -348,6 +351,7 @@ def _execute_slot(
     results: dict,
     dry_run: bool,
     var_tripped: bool = False,
+    regime_at_entry: str | None = None,
 ) -> tuple[dict, float]:
     ticker = slot.ticker
     symbol = _normalize_symbol(ticker)
@@ -416,6 +420,7 @@ def _execute_slot(
                         asset_class="cash",
                         conviction_score=1.0,
                         original_thesis=slot.thesis,
+                        regime_at_entry=regime_at_entry,
                     )
                     results["placed"].append({
                         "slot":         slot.slot,
@@ -600,6 +605,7 @@ def _execute_slot(
             conviction_score=slot.conviction_score,
             original_thesis=slot.thesis,
             intended_price=intended_price,
+            regime_at_entry=regime_at_entry,
         )
         logger.info(f"  → Logged to journal: trade_id={order_id}")
 
@@ -650,7 +656,7 @@ def _execute_slot(
             _place_ratchet_stop(ticker, notional_usd, actual_fill_price, results, dry_run)
 
         if overheated and sgov_notional >= MIN_NOTIONAL_USD:
-            _reroute_to_sgov(slot, sgov_notional, results)
+            _reroute_to_sgov(slot, sgov_notional, results, regime_at_entry=regime_at_entry)
 
     except Exception as exc:
         logger.error(f"Slot {slot.slot}: order failed for {ticker}: {exc}")
@@ -729,6 +735,7 @@ def _reroute_to_sgov(
     slot: RegimeAllocationSlot | CryptoAllocationSlot,
     sgov_notional: float,
     results: dict,
+    regime_at_entry: str | None = None,
 ) -> None:
     """Buy SGOV with the capital cut from an overheated slot."""
     logger.info(f"  → Risk reroute: buying {CASH_TICKER} ${sgov_notional:,.2f}")
@@ -740,6 +747,7 @@ def _reroute_to_sgov(
             asset_class="cash",
             conviction_score=1.0,
             original_thesis=f"Risk overlay reroute from overheated slot {slot.slot} ({slot.ticker})",
+            regime_at_entry=regime_at_entry,
         )
         results["placed"].append({
             "slot":       f"{slot.slot}a",

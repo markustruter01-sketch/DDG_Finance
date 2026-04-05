@@ -517,7 +517,8 @@ async def _run_pipeline_inner(
 
     try:
         logger.info("Pipeline | Step 2: Executing allocations...")
-        exec_result = execute_allocations(allocation, dry_run=dry_run)
+        _pipeline_regime = str(allocation.regime) if hasattr(allocation, "regime") else _state.get("last_regime")
+        exec_result = execute_allocations(allocation, dry_run=dry_run, regime_label=_pipeline_regime)
         result["execution"] = {
             "placed":  len(exec_result["placed"]),
             "closed":  len(exec_result["closed"]),

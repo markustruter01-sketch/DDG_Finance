@@ -135,6 +135,20 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
+
+CREATE TABLE IF NOT EXISTS vpin_rejections (
+    id          BIGSERIAL PRIMARY KEY,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bot_id      TEXT NOT NULL,
+    pair        TEXT NOT NULL,
+    vpin_value  DOUBLE PRECISION NOT NULL,
+    threshold   DOUBLE PRECISION NOT NULL,
+    direction   TEXT NOT NULL,
+    price       DOUBLE PRECISION NOT NULL,
+    reason      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
 """
 
 
@@ -624,3 +638,27 @@ def load_all_trades(limit: int | None = None) -> list[dict]:
     except Exception as exc:
         logger.warning(f"DB | load_all_trades failed: {exc}")
         return []
+
+
+def log_vpin_rejection(
+    bot_id: str,
+    pair: str,
+    vpin_value: float,
+    threshold: float,
+    direction: str,
+    price: float,
+    reason: str = "",
+) -> None:
+    if not _is_available():
+        return
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO vpin_rejections (bot_id, pair, vpin_value, threshold, direction, price, reason)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """, (bot_id, pair, vpin_value, threshold, direction, price, reason))
+            conn.commit()
+        logger.debug(f"DB | VPIN rejection logged: {bot_id} {pair} VPIN={vpin_value:.3f} >= {threshold:.3f} ({direction})")
+    except Exception as exc:
+        logger.warning(f"DB | log_vpin_rejection failed: {exc}")

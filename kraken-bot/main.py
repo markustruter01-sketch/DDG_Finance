@@ -1793,6 +1793,16 @@ def run_cycle() -> None:
                             f"Signal | LONG {symbol} blocked by microstructure: {_ms_reason} "
                             f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
                         )
+                        if "VPIN" in _ms_reason.upper():
+                            try:
+                                _db.log_vpin_rejection(
+                                    bot_id=BOT_ID, pair=symbol,
+                                    vpin_value=_ms.vpin, threshold=_ms_vpin_override,
+                                    direction="LONG", price=current_price,
+                                    reason=_ms_reason,
+                                )
+                            except Exception as _vpin_exc:
+                                logger.warning(f"VPIN | Failed to log rejection: {_vpin_exc}")
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "long_blocked_microstructure",
@@ -1876,6 +1886,16 @@ def run_cycle() -> None:
                             f"Signal | SHORT {symbol} blocked by microstructure: {_ms_reason} "
                             f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
                         )
+                        if "VPIN" in _ms_reason.upper():
+                            try:
+                                _db.log_vpin_rejection(
+                                    bot_id=BOT_ID, pair=symbol,
+                                    vpin_value=_ms.vpin, threshold=VPIN_ENTRY_BLOCK,
+                                    direction="SHORT", price=current_price,
+                                    reason=_ms_reason,
+                                )
+                            except Exception as _vpin_exc:
+                                logger.warning(f"VPIN | Failed to log rejection: {_vpin_exc}")
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "short_blocked_microstructure",

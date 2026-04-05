@@ -1,14 +1,14 @@
 {
   "matrix": {
-    "alpaca_vs_kraken": null,
+    "alpaca_vs_kraken": -0.8012,
     "alpaca_vs_options": null,
-    "alpaca_vs_forex": null,
+    "alpaca_vs_forex": -0.3981,
     "kraken_vs_options": null,
-    "kraken_vs_forex": null,
+    "kraken_vs_forex": -0.4438,
     "options_vs_forex": null
   },
   "max_correlation": null,
-  "max_pair": "",
+  "max_pair": "alpaca_vs_forex",
   "systemic_shock": false,
   "position_scale_factor": 1.0,
   "shock_threshold": 0.85,
@@ -19,5 +19,5 @@
     "forex": 3
   },
   "rolling_window_days": 60,
-  "computed_at": "2026-04-05T09:41:38.333483+00:00"
+  "computed_at": "2026-04-05T22:31:41.746316+00:00"
 }

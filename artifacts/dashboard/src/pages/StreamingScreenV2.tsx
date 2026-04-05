@@ -74,7 +74,7 @@ function HeroStrip() {
   const fxEq = fxState?.paper_equity ?? 0;
   const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
   const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
-  const krakenStart = fleet?.total_starting_usd ?? (fleet?.bots?.length ? fleet.bots.reduce((s: number, b: any) => s + (b.starting_balance_usd ?? 100_000), 0) : 0);
+  const krakenStart = fleet?.total_starting_usd ?? (fleet?.bots?.length ? fleet.bots.reduce((s, b) => s + (b.starting_balance_usd ?? 100_000), 0) : 0);
   const optStart = optState?.starting_capital ?? 100_000;
   const fxStart = fxState?.starting_capital ?? 100_000;
   const initialCapital = alpacaStart + krakenStart + optStart + fxStart;
@@ -84,7 +84,6 @@ function HeroStrip() {
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
 
   const cfg = sentiment?.crypto_fear_greed;
-  const mfg = sentiment?.market_fear_greed;
 
   return (
     <div className="flex items-center gap-6 px-6 py-3 border-b shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(90deg, rgba(15,23,42,0.95), rgba(30,41,59,0.9))" }}>
@@ -125,18 +124,17 @@ function HeroStrip() {
       <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
 
       <div className="flex items-center gap-3 ml-auto">
+        <div className="text-center px-2 py-1 rounded-lg border" style={{ borderColor: "rgba(139,92,246,0.15)", backgroundColor: "rgba(139,92,246,0.05)" }}>
+          <div className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(139,92,246,0.5)" }}>Equity Regime</div>
+          <span className="text-sm font-mono font-bold" style={{ color: "#8b5cf6" }}>
+            {summary?.groq?.regime ?? "---"}
+          </span>
+        </div>
         {cfg && cfg.value != null && (
           <div className="text-center px-2 py-1 rounded-lg border" style={{ borderColor: "rgba(34,211,238,0.15)", backgroundColor: "rgba(34,211,238,0.05)" }}>
-            <div className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(34,211,238,0.5)" }}>Crypto F&G</div>
+            <div className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(34,211,238,0.5)" }}>Crypto Regime</div>
             <span className="text-sm font-mono font-bold" style={{ color: "#22d3ee" }}>{cfg.value}</span>
             <span className="text-[9px] ml-1" style={{ color: "rgba(34,211,238,0.6)" }}>{cfg.label}</span>
-          </div>
-        )}
-        {mfg && mfg.value != null && (
-          <div className="text-center px-2 py-1 rounded-lg border" style={{ borderColor: "rgba(139,92,246,0.15)", backgroundColor: "rgba(139,92,246,0.05)" }}>
-            <div className="text-[8px] uppercase tracking-widest font-bold" style={{ color: "rgba(139,92,246,0.5)" }}>Market F&G</div>
-            <span className="text-sm font-mono font-bold" style={{ color: "#8b5cf6" }}>{mfg.value}</span>
-            <span className="text-[9px] ml-1" style={{ color: "rgba(139,92,246,0.6)" }}>{mfg.label}</span>
           </div>
         )}
         <div className="flex items-center gap-1.5">
@@ -476,7 +474,7 @@ function NeuralFeed() {
         const existing = new Set(prev.map(l => l.id));
         const filtered = newLines.filter(l => !existing.has(l.id));
         if (filtered.length === 0) return prev;
-        return [...filtered, ...prev].slice(0, 100);
+        return [...filtered, ...prev].slice(0, 50);
       });
     }
   }, [djStatus, bbStatus, caStatus, optState, fxState, summary]);
@@ -566,6 +564,17 @@ function EquitySidebar() {
     return curve.snapshots.map(s => s.total_equity);
   }, [curve]);
 
+  const perBotSparklines = useMemo(() => {
+    if (!curve?.snapshots?.length) return [];
+    const snaps = curve.snapshots;
+    return [
+      { name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) },
+      { name: "Kraken Fleet", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity) },
+      { name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) },
+      { name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) },
+    ];
+  }, [curve]);
+
   const allPositions = useMemo(() => {
     const pos: Array<{ symbol: string; bot: string; icon: string; pnlUsd: number; color: string }> = [];
 
@@ -645,9 +654,26 @@ function EquitySidebar() {
   return (
     <div className="w-72 shrink-0 flex flex-col gap-2 min-h-0 overflow-auto px-2">
       <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
-        <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Equity Curve</div>
+        <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Fleet Equity Curve</div>
         <MiniSparkline data={equityData} color="#22d3ee" w={240} h={50} />
       </div>
+
+      {perBotSparklines.length > 0 && (
+        <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
+          <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Per-Bot Equity</div>
+          <div className="grid grid-cols-2 gap-2">
+            {perBotSparklines.map(bot => (
+              <div key={bot.name}>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span style={{ fontSize: 9 }}>{bot.icon}</span>
+                  <span className="text-[8px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
+                </div>
+                <MiniSparkline data={bot.data} color={bot.color} w={110} h={24} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
         <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Bot Equity</div>

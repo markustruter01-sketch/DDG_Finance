@@ -263,13 +263,14 @@ def _fmt_hours(h) -> str:
 
 def _fmt_exit(reason: str | None) -> str:
     _MAP = {
-        "ratchet_stop":      "stop-loss",
-        "time_exit":         "5d-time-exit",
-        "algo_cover":        "algo-cover",
-        "short_scanner_exit":"algo-cover",
-        "allocation_sell":   "rebalance",
-        "manual":            "manual",
-        "unknown":           "unclassified",
+        "ratchet_stop":            "stop-loss",
+        "time_exit":               "5d-time-exit",
+        "algo_cover":              "algo-cover",
+        "short_scanner_exit":      "algo-cover",
+        "allocation_sell":         "rebalance",
+        "rebalance_liquidation":   "force-rebalance",
+        "manual":                  "manual",
+        "unknown":                 "unclassified",
     }
     return _MAP.get(reason or "unknown", reason or "n/a")
 

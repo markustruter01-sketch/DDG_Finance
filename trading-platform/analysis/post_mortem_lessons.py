@@ -156,6 +156,17 @@ def generate_lesson(
             f"LLM dropped {ticker} from portfolio in updated allocation."
         )
 
+    # ── Force rebalance liquidation ───────────────────────────────────────
+    elif exit_reason == "rebalance_liquidation":
+        direction = "loss" if is_loss else "profit"
+        return (
+            f"{MANUAL_EXIT} Asset: {ticker}. Regime: {regime}. "
+            f"Position force-closed at {direction} via manual rebalance after {hours:.1f}h. "
+            f"P&L: {pnl_pct:+.2f}%. {regime_ctx}. "
+            f"Operator triggered Force Rebalance — all positions liquidated simultaneously. "
+            f"This is NOT a strategy failure; exclude from win/loss pattern analysis."
+        )
+
     # ── Manual close ───────────────────────────────────────────────────────
     elif exit_reason == "manual":
         direction = "loss" if is_loss else "profit"

@@ -396,9 +396,11 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
 
     positions     = _live.get("open_positions", kdata.get("open_positions", []))
     signals       = _live.get("signals", kdata.get("signals", []))
-    wins          = [t for t in recent_trades if t.get("pnl_pct", 0) > 0]
-    losses        = [t for t in recent_trades if t.get("pnl_pct", 0) <= 0]
-    win_rate      = (len(wins) / len(recent_trades) * 100) if recent_trades else None
+    strategy_trades = [t for t in recent_trades if t.get("reason") != "rebalance_liquidation"]
+    rebalance_trades = [t for t in recent_trades if t.get("reason") == "rebalance_liquidation"]
+    wins          = [t for t in strategy_trades if t.get("pnl_pct", 0) > 0]
+    losses        = [t for t in strategy_trades if t.get("pnl_pct", 0) <= 0]
+    win_rate      = (len(wins) / len(strategy_trades) * 100) if strategy_trades else None
 
     pos_text = "\n".join(
         f"  {p.get('side','').upper()} {p['symbol']}: "
@@ -437,6 +439,13 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     }
     persona_name, persona_desc = _persona_map.get(bid, ("Kraken Bot", "a 24/7 crypto mean-reversion trading AI"))
 
+    rebalance_note = ""
+    if rebalance_trades:
+        rebalance_note = (
+            f"\nNOTE: {len(rebalance_trades)} trades were closed by operator Force Rebalance "
+            f"(not strategy exits). Exclude these from win/loss analysis.\n"
+        )
+
     user_prompt = f"""
 {persona_name}'s current open positions (Kraken 24/7 mean-reversion crypto bot, {profile.get('strategy_label', '')} strategy):
 {pos_text}
@@ -446,11 +455,11 @@ Recent wins (reinforcing behaviour):
 
 Recent losses (behavioural corrections needed):
 {losses_text}
-
+{rebalance_note}
 Signal scanner snapshot:
 {signal_text}
 
-Statistics: {len(recent_trades)} total trades{f', win rate {win_rate:.0f}%' if win_rate is not None else ''}
+Statistics: {len(strategy_trades)} strategy trades{f', win rate {win_rate:.0f}%' if win_rate is not None else ''}{f' | {len(rebalance_trades)} force-rebalanced (excluded)' if rebalance_trades else ''}
 Equity: ${kdata.get('total_equity_usd', 0):,.2f} | Deployed: {kdata.get('deployed_pct', 0):.0f}% of {kdata.get('deployable_ceiling_pct', 80)}% ceiling
 Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pct', 20)}%
 {sentiment_line}
@@ -627,14 +636,20 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         empty["cycle_count"]    = cycle_count
         return empty
 
-    pnl_list = [t.get("pnl_pct", 0) for t in trades]
-    pnl_usd  = [t.get("pnl_usd", 0) for t in trades]
+    strategy_only = [t for t in trades if t.get("reason") != "rebalance_liquidation"]
+    rebalance_count = len(trades) - len(strategy_only)
+
+    pnl_list = [t.get("pnl_pct", 0) for t in strategy_only]
+    pnl_usd  = [t.get("pnl_usd", 0) for t in strategy_only]
     wins     = [p for p in pnl_list if p > 0]
     losses   = [p for p in pnl_list if p <= 0]
-    win_rate = (len(wins) / len(trades)) * 100 if trades else 0
+    win_rate = (len(wins) / len(strategy_only)) * 100 if strategy_only else 0
+
+    total_pnl_pct_all = sum(t.get("pnl_pct", 0) for t in trades)
+    total_pnl_usd_all = sum(t.get("pnl_usd", 0) for t in trades)
 
     by_symbol: dict[str, dict] = {}
-    for t in trades:
+    for t in strategy_only:
         sym = t.get("symbol", "UNKNOWN")
         if sym not in by_symbol:
             by_symbol[sym] = {"trades": 0, "wins": 0, "total_pnl_pct": 0.0, "total_pnl_usd": 0.0}
@@ -655,15 +670,18 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         "data_source":     "postgresql:kraken_trades",
         "exchange":        "Kraken (crypto, independent from Alpaca)",
         "has_data":        True,
-        "total_trades":    len(trades),
+        "total_trades":    len(strategy_only),
+        "rebalance_trades": rebalance_count,
         "win_count":       len(wins),
         "loss_count":      len(losses),
         "win_rate_pct":    round(win_rate, 1),
-        "total_pnl_pct":   round(sum(pnl_list), 2),
-        "total_pnl_usd":   round(sum(pnl_usd), 2),
-        "best_trade_pct":  round(max(pnl_list), 2),
-        "worst_trade_pct": round(min(pnl_list), 2),
-        "avg_trade_pct":   round(sum(pnl_list) / len(pnl_list), 2),
+        "total_pnl_pct":   round(sum(pnl_list), 2) if pnl_list else 0,
+        "total_pnl_usd":   round(sum(pnl_usd), 2) if pnl_usd else 0,
+        "total_pnl_pct_incl_rebalance": round(total_pnl_pct_all, 2),
+        "total_pnl_usd_incl_rebalance": round(total_pnl_usd_all, 2),
+        "best_trade_pct":  round(max(pnl_list), 2) if pnl_list else 0,
+        "worst_trade_pct": round(min(pnl_list), 2) if pnl_list else 0,
+        "avg_trade_pct":   round(sum(pnl_list) / len(pnl_list), 2) if pnl_list else 0,
         "by_symbol":       by_symbol,
         "recent_trades":   trades,
         "current_equity":  current_equity,

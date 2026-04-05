@@ -22,6 +22,7 @@ Exit-reason labels used in rule text:
   time_exit     → momentum stalled before the mandatory 5-day time exit (thesis failure)
   algo_cover    → algorithmic short covered before Z-score mean-reverted (execution gap)
   allocation_sell → position liquidated on rebalance before thesis resolved
+  rebalance_liquidation → operator Force Rebalance (not a strategy failure, exclude from pattern analysis)
   manual        → manually closed before natural exit
   unknown       → unclassified exit
 """
@@ -38,21 +39,23 @@ PROMOTION_THRESHOLD = 3
 # ── Exit-reason → human-readable label ─────────────────────────────────────
 
 _EXIT_LABELS: dict[str, str] = {
-    "ratchet_stop":    "premature stop-loss whipsawing (stop triggered before thesis resolved)",
-    "time_exit":       "momentum stalling before the mandatory 5-day time exit",
-    "algo_cover":      "algorithmic short cover before full Z-score mean-reversion",
-    "allocation_sell": "forced rebalance liquidation before thesis completed",
-    "manual":          "discretionary manual exit overriding the system",
-    "unknown":         "unclassified exit (no exit reason captured)",
+    "ratchet_stop":            "premature stop-loss whipsawing (stop triggered before thesis resolved)",
+    "time_exit":               "momentum stalling before the mandatory 5-day time exit",
+    "algo_cover":              "algorithmic short cover before full Z-score mean-reversion",
+    "allocation_sell":         "forced rebalance liquidation before thesis completed",
+    "rebalance_liquidation":   "operator-initiated Force Rebalance — all positions closed simultaneously (not a strategy failure)",
+    "manual":                  "discretionary manual exit overriding the system",
+    "unknown":                 "unclassified exit (no exit reason captured)",
 }
 
 _EXIT_PREFIX: dict[str, str] = {
-    "ratchet_stop":    "EXECUTION FAILURE",
-    "time_exit":       "THESIS FAILURE",
-    "algo_cover":      "EXECUTION GAP",
-    "allocation_sell": "ALLOCATION CONFLICT",
-    "manual":          "MANUAL OVERRIDE",
-    "unknown":         "UNCLASSIFIED",
+    "ratchet_stop":            "EXECUTION FAILURE",
+    "time_exit":               "THESIS FAILURE",
+    "algo_cover":              "EXECUTION GAP",
+    "allocation_sell":         "ALLOCATION CONFLICT",
+    "rebalance_liquidation":   "FORCE REBALANCE",
+    "manual":                  "MANUAL OVERRIDE",
+    "unknown":                 "UNCLASSIFIED",
 }
 
 

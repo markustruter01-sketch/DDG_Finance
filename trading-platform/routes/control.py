@@ -371,6 +371,10 @@ async def manual_postmortem() -> dict:
 
 @control_router.post("/rebalance", tags=["Control"])
 async def force_rebalance() -> dict:
+    logger.warning("════════════════════════════════════════════════════════════")
+    logger.warning("  FORCE REBALANCE — operator-initiated full liquidation")
+    logger.warning("════════════════════════════════════════════════════════════")
+
     market_open = is_market_open()
     positions = get_positions()
     cancel_all_orders()
@@ -395,6 +399,18 @@ async def force_rebalance() -> dict:
                 delete_stop(sym)
             except Exception:
                 pass
+            try:
+                from analysis.trade_journal import close_trade
+                pnl_pct = float(pos.get("unrealized_plpc", 0) or 0) * 100
+                pnl_usd = float(pos.get("unrealized_pl", 0) or 0)
+                close_trade(
+                    ticker=sym,
+                    pnl_percentage=pnl_pct,
+                    exit_reason="rebalance_liquidation",
+                    realized_pnl=pnl_usd,
+                )
+            except Exception as jexc:
+                logger.debug(f"Rebalance | Journal close_trade for {sym} failed (non-fatal): {jexc}")
         except Exception as exc:
             logger.error(f"Rebalance | Failed to close {sym}: {exc}")
             errors.append({"symbol": sym, "error": str(exc)})

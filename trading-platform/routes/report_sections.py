@@ -390,10 +390,8 @@ def section_oracle_regime_transparency() -> list[str]:
         lines.append(f"  [Reconstructed from historical data]")
         lines.append(f"  {'Timestamp':<22} {'From':<15} {'To':<15}")
         lines.append("  " + "-" * 52)
-        for ts, to_r, from_r in changes[-30:]:
+        for ts, to_r, from_r in changes:
             lines.append(f"  {ts:<22} {from_r:<15} {to_r:<15}")
-        if len(changes) > 30:
-            lines.append(f"  ... ({len(changes) - 30} earlier transitions omitted)")
     else:
         lines.append(f"  No regime history in equity_snapshots. Capturing from {_today_str()} forward.")
 
@@ -408,7 +406,7 @@ def section_vpin_shadow_log() -> list[str]:
         SELECT bot_id, pair, vpin_value, threshold, direction, price, ts, reason
         FROM vpin_rejections
         ORDER BY ts DESC
-        LIMIT 50
+        LIMIT 500
     """)
 
     if db_rows:
@@ -425,7 +423,7 @@ def section_vpin_shadow_log() -> list[str]:
             lines.append(f"  {bid} — {len(bot_rows)} recent rejections:")
             lines.append(f"    {'Timestamp':<20} {'Pair':<10} {'VPIN':>7} {'Thresh':>7} {'Dir':<6} {'Price':>12}")
             lines.append("    " + "-" * 65)
-            for r in bot_rows[:15]:
+            for r in bot_rows:
                 ts_str = str(r.get("ts", "?"))[:19]
                 pair = str(r.get("pair", "?"))[:9]
                 vpin = float(r.get("vpin_value", 0))
@@ -433,8 +431,6 @@ def section_vpin_shadow_log() -> list[str]:
                 direction = str(r.get("direction", "?"))[:5]
                 price = float(r.get("price", 0))
                 lines.append(f"    {ts_str:<20} {pair:<10} {vpin:>7.3f} {thresh:>7.3f} {direction:<6} {_c(price):>12}")
-            if len(bot_rows) > 15:
-                lines.append(f"    ... ({len(bot_rows) - 15} more omitted)")
             lines.append("")
 
         total_rows = _pg_query("SELECT COUNT(*) as cnt FROM vpin_rejections")
@@ -587,7 +583,7 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
         lines.append(f"  {'Date':<12} {'Open Eq':>14} {'Close Eq':>14} {'Daily P&L':>12} {'Daily %':>9} {'Regime':<12} {'Trades':>7}")
         lines.append("  " + "-" * 82)
         prev_close = None
-        for r in rows[-60:]:
+        for r in rows:
             day = str(r["day"])
             open_eq = float(r.get("open_eq") or 0)
             close_eq = float(r.get("close_eq_proxy") or 0)
@@ -831,7 +827,7 @@ def section_apex_scan_log() -> list[str]:
                 lines.append("")
                 lines.append(f"  {'Ticker':<8} {'IVR':>8} {'Squeeze':>8} {'BW%':>10} {'Status':<25}")
                 lines.append("  " + "-" * 62)
-                for sd in scanner_detail[:40]:
+                for sd in scanner_detail:
                     ticker = sd.get("ticker") or sd.get("symbol", "?")
                     ivr_val = sd.get("ivr", "?")
                     if isinstance(ivr_val, (int, float)):
@@ -928,7 +924,7 @@ def section_slippage_execution_quality(alpaca_trades: list, kraken_trades: list,
     failed_rows = _pg_query("""
         SELECT ticker, date, exit_reason FROM trades
         WHERE exit_reason ILIKE '%fail%' OR exit_reason ILIKE '%error%' OR exit_reason ILIKE '%reject%'
-        ORDER BY date DESC LIMIT 10
+        ORDER BY date DESC
     """)
     if failed_rows:
         lines.append("")
@@ -1010,7 +1006,6 @@ def section_rolling_metrics(bot_label: str, trades: list, equity_source: str = "
         WHERE {col} IS NOT NULL AND {col} > 0
         GROUP BY DATE(ts)
         ORDER BY DATE(ts) DESC
-        LIMIT 30
     """)
 
     sharpe_label = "N/A"
@@ -1098,7 +1093,7 @@ def section_learning_journal_metadata(entries: list) -> list[str]:
         conf = e.get("confidence_score", 0)
         confirmed = e.get("confirmed_count", 0)
         regime = str(e.get("regime", "?"))[:10]
-        insight = str(e.get("insight_text", "?"))[:55]
+        insight = str(e.get("insight_text", "?"))[:120]
         lines.append(
             f"  {i:<4} {age_days:>7} {conf:>11.2f} {confirmed:>10} {stale:>7} {regime:<12} {insight}"
         )

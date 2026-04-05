@@ -1250,20 +1250,22 @@ async def export_diagnostic_report() -> dict:
             pnl_d   = t.get("pnl_usd") or t.get("pnl_usd")
             pnl_p_s = _pct(pnl_p) if pnl_p is not None else "N/A"
             pnl_d_s = _c(pnl_d) if pnl_d is not None else "N/A"
-            thesis  = str(t.get("original_thesis") or t.get("exit_reason") or "N/A")[:55]
+            thesis  = str(t.get("original_thesis") or t.get("exit_reason") or "N/A")
             lines.append(f"  {i:<4} {date:<12} {sym:<10} {status:<16} {pnl_p_s:>8} {pnl_d_s:>12}  {thesis}")
             entry_px    = t.get("intended_price") or t.get("avg_entry_price")
             fill_px     = t.get("actual_fill_price")
             slippage    = t.get("slippage_pct")
             conv_score  = t.get("conviction_score")
             asset_cls   = t.get("asset_class", "")
-            if any(v is not None for v in [entry_px, fill_px, slippage, conv_score]):
-                detail = []
-                if entry_px:   detail.append(f"entry={_c(entry_px)}")
-                if fill_px:    detail.append(f"fill={_c(fill_px)}")
-                if slippage:   detail.append(f"slippage={_pct(slippage, 3)}")
-                if conv_score: detail.append(f"conviction={conv_score:.2f}")
-                if asset_cls:  detail.append(f"class={asset_cls}")
+            regime_tag  = t.get("regime_at_entry", "")
+            detail = []
+            if entry_px:   detail.append(f"entry={_c(entry_px)}")
+            if fill_px:    detail.append(f"fill={_c(fill_px)}")
+            if slippage:   detail.append(f"slippage={_pct(slippage, 3)}")
+            if conv_score: detail.append(f"conviction={conv_score:.2f}")
+            if asset_cls:  detail.append(f"class={asset_cls}")
+            if regime_tag: detail.append(f"regime={regime_tag}")
+            if detail:
                 lines.append(f"       \u2514\u2500 {' | '.join(detail)}")
 
     h2("ATTRIBUTION ANALYSIS (What worked and what didn't)")
@@ -1368,7 +1370,7 @@ async def export_diagnostic_report() -> dict:
                         _rtc.execute(
                             """
                             SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                                   fees_usd, reason, closed_at, paper
+                                   fees_usd, reason, closed_at, paper, order_id
                             FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
                             """,
                             (_kbid,)
@@ -1458,15 +1460,23 @@ async def export_diagnostic_report() -> dict:
 
         if _pf_trades:
             lines.append("")
-            lines.append(f"    Recent Trades (last 15):")
-            for t in _pf_trades[-15:]:
+            lines.append(f"    Full Trade History ({len(_pf_trades)} trades):")
+            lines.append(f"      {'#':<4} {'Date':<16} {'Symbol':<12} {'Side':<5} {'PnL%':>7} {'PnL$':>10}  {'Entry':>10} {'Exit':>10} {'Fees':>8}  Reason")
+            lines.append("      " + "-" * 110)
+            for _ti, t in enumerate(_pf_trades, 1):
                 sym    = str(t.get("symbol", "?"))[:11]
                 dt     = str(t.get("closed_at") or "?")[:16]
                 side   = str(t.get("side", "?")).upper()[:5]
                 ppct   = t.get("pnl_pct") or 0
                 pusd   = t.get("pnl_usd") or 0
-                reason = str(t.get("reason") or "?")[:35]
-                lines.append(f"      {dt:<16} {sym:<12} {side:<5} {_pct(ppct):>7} {_c(pusd):>10}  {reason}")
+                entry  = t.get("entry_price") or 0
+                exit_p = t.get("exit_price") or 0
+                fees   = t.get("fees_usd") or 0
+                reason = str(t.get("reason") or "?")
+                order  = str(t.get("order_id") or "")[:12]
+                lines.append(f"      {_ti:<4} {dt:<16} {sym:<12} {side:<5} {_pct(ppct):>7} {_c(pusd):>10}  {_c(entry, 4):>10} {_c(exit_p, 4):>10} {_c(fees):>8}  {reason}")
+                if order:
+                    lines.append(f"           \u2514\u2500 order_id={order}")
 
     h2("KRAKEN FLEET TOTALS")
     _k_fleet_pnl = _all_kraken_equity - _all_kraken_starting
@@ -1615,7 +1625,7 @@ async def export_diagnostic_report() -> dict:
         pass
     try:
         if _fx_db:
-            _fx_trades = _fx_db.load_recent_trades(limit=100)
+            _fx_trades = _fx_db.load_recent_trades(limit=10_000)
     except Exception:
         pass
 
@@ -1671,14 +1681,14 @@ async def export_diagnostic_report() -> dict:
             row("Stop loss:", f"{sl:.5f}", indent=2)
             row("Take profit:", f"{tp:.5f}", indent=2)
 
-    h2("FOREX TRADE HISTORY (recent trades)")
+    h2("FOREX TRADE HISTORY (all trades)")
     if not _fx_trades:
         lines.append("  No forex trade history yet.")
     else:
         lines.append(f"  Total recorded: {len(_fx_trades)}")
         lines.append(f"  {'#':<4} {'Date':<18} {'Pair':<12} {'Dir':<6} {'Entry':>10} {'Exit':>10} {'PnL$':>10} {'Pips':>7}  Reason")
         lines.append("  " + "-" * 85)
-        for i, ft in enumerate(_fx_trades[-30:], 1):
+        for i, ft in enumerate(_fx_trades, 1):
             pair   = str(ft.get("pair", "?"))[:11]
             dt     = str(ft.get("closed_at") or ft.get("exit_time") or "?")[:16]
             dirn   = str(ft.get("direction", "?")).upper()[:5]
@@ -1686,7 +1696,7 @@ async def export_diagnostic_report() -> dict:
             exit_p = ft.get("exit_price") or 0
             pusd   = ft.get("pnl_usd") or 0
             pips   = ft.get("pnl_pips") or 0
-            reason = str(ft.get("exit_reason") or ft.get("reason") or "?")[:30]
+            reason = str(ft.get("exit_reason") or ft.get("reason") or "?")
             try:
                 lines.append(f"  {i:<4} {dt:<18} {pair:<12} {dirn:<6} {float(entry):>10.5f} {float(exit_p):>10.5f} {_c(pusd):>10} {float(pips):>+7.1f}  {reason}")
             except (TypeError, ValueError):

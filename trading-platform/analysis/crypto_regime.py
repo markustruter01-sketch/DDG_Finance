@@ -1,6 +1,6 @@
 """
-crypto_regime.py — Independent Crypto Regime Classifier (Stage 3)
-=================================================================
+crypto_regime.py — Independent Crypto Regime Classifier (Stage 3 + 3.5)
+========================================================================
 Decouples crypto trading from equity-driven market_regime.json.
 
 Instead of blindly inheriting the Alpaca pipeline's Bear/Bull regime
@@ -9,8 +9,13 @@ independent crypto-native regime using:
 
   1. Crypto Fear & Greed Index  (alternative.me API)
   2. BTC 24h price change       (proxy for crypto-native risk appetite)
-  3. BTC dominance trend        (from CoinGecko)
+  3. BTC dominance trend        (from CoinGecko) — NOW SCORED
   4. Equity regime contagion    (only applied when correlation is high)
+
+Stage 3.5 additions:
+  - BTC dominance scoring (rising dominance + fear = bearish for alts)
+  - Regime history tracking for transition cooldown
+  - Previous regime written to JSON for bot-side cooldown logic
 
 Output: crypto_regime.json with fields:
   - crypto_regime: "Crypto-Bull" | "Crypto-Bear" | "Crypto-Sideways" | "Crypto-Risk-Off"
@@ -18,6 +23,8 @@ Output: crypto_regime.json with fields:
   - crypto_fear_greed: int  (0-100)
   - btc_24h_change_pct: float
   - confidence: float (0-1)
+  - previous_regime: str  (regime from last classification)
+  - regime_changed: bool  (True if regime flipped this cycle)
 
 The Kraken bots read this file instead of market_regime.json for entry gating.
 """
@@ -36,6 +43,8 @@ from loguru import logger
 _DATA_DIR = Path(__file__).parent.parent / "data"
 _CRYPTO_REGIME_FILE = _DATA_DIR / "crypto_regime.json"
 _EQUITY_REGIME_FILE = _DATA_DIR / "market_regime.json"
+
+_BTC_DOM_BASELINE = 54.0
 
 _CACHE_TTL = 1800
 
@@ -91,6 +100,15 @@ def _read_equity_regime() -> dict:
     return {}
 
 
+def _read_previous_regime() -> dict:
+    try:
+        if _CRYPTO_REGIME_FILE.exists():
+            return json.loads(_CRYPTO_REGIME_FILE.read_text())
+    except Exception:
+        pass
+    return {}
+
+
 def classify_crypto_regime(
     correlation_with_equity: float = 0.0,
 ) -> dict:
@@ -107,6 +125,9 @@ def classify_crypto_regime(
     -------
     dict with crypto_regime, confidence, and supporting data.
     """
+    previous = _read_previous_regime()
+    prev_regime = previous.get("crypto_regime", "unknown")
+
     fg = _fetch_crypto_fear_greed()
     btc_change = _fetch_btc_24h_change()
     btc_dom = _fetch_btc_dominance()
@@ -137,6 +158,30 @@ def classify_crypto_regime(
         elif btc_change < -2:
             score -= 10
 
+    if btc_dom is not None:
+        signals_available += 1
+        dom_delta = btc_dom - _BTC_DOM_BASELINE
+        is_fearful = fg is not None and fg <= 40
+        if dom_delta > 3.0 and is_fearful:
+            score -= 10
+            logger.info(
+                f"CryptoRegime | BTC dominance penalty — "
+                f"dom={btc_dom:.1f}% (Δ{dom_delta:+.1f}% vs baseline {_BTC_DOM_BASELINE}%) "
+                f"+ F&G={fg} (fear) → -10 (flight to safety, bearish alts)"
+            )
+        elif dom_delta > 5.0:
+            score -= 5
+            logger.info(
+                f"CryptoRegime | BTC dominance mild penalty — "
+                f"dom={btc_dom:.1f}% (Δ{dom_delta:+.1f}%) → -5"
+            )
+        elif dom_delta < -3.0 and fg is not None and fg >= 55:
+            score += 5
+            logger.debug(
+                f"CryptoRegime | BTC dominance bullish alts — "
+                f"dom={btc_dom:.1f}% (Δ{dom_delta:+.1f}%) + F&G={fg} → +5"
+            )
+
     eq_is_bear = eq_regime.get("regime", "") in {
         "Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off",
     }
@@ -162,7 +207,14 @@ def classify_crypto_regime(
     else:
         regime = "Crypto-Sideways"
 
-    confidence = min(1.0, signals_available / 3.0)
+    confidence = min(1.0, signals_available / 4.0)
+
+    regime_changed = regime != prev_regime and prev_regime != "unknown"
+    if regime_changed:
+        logger.info(
+            f"CryptoRegime | REGIME TRANSITION: {prev_regime} → {regime} "
+            f"(score={score:.1f}, confidence={confidence:.2f})"
+        )
 
     result = {
         "crypto_regime": regime,
@@ -172,8 +224,10 @@ def classify_crypto_regime(
         "equity_regime": eq_regime.get("regime", "unknown"),
         "correlation_with_equity": round(correlation_with_equity, 3),
         "crypto_fear_greed": fg,
-        "btc_24h_change_pct": round(btc_change, 2) if btc_change else None,
-        "btc_dominance": round(btc_dom, 1) if btc_dom else None,
+        "btc_24h_change_pct": round(btc_change, 2) if btc_change is not None else None,
+        "btc_dominance": round(btc_dom, 1) if btc_dom is not None else None,
+        "previous_regime": prev_regime,
+        "regime_changed": regime_changed,
         "written_at": datetime.now(timezone.utc).isoformat(),
     }
 

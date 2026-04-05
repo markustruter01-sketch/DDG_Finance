@@ -96,6 +96,8 @@ from config import (
     MICRO_LOT_EQUITY_PCT,
     BEAR_MAX_POSITIONS,
     BEAR_MAX_POSITION_FRACTION,
+    REGIME_COOLDOWN_CYCLES,
+    REGIME_CONFIDENCE_GATE,
     BOT_ID,
     BOT_DISPLAY_NAME,
     BOT_DB_ID,
@@ -191,7 +193,8 @@ logger.info(f"  Penalty throttle: Kraken API leaky-bucket (15pt ceiling, throttl
 logger.info(f"  Microstructure: OFI + VAMP + VPIN entry filter active (order-book primary)")
 logger.info(f"  VPIN gate     : base={VPIN_ENTRY_BLOCK} | surge_cap={VPIN_ELEVATED_CAP} | decay_after={VPIN_DECAY_AFTER_CYCLES}cyc @{VPIN_DECAY_RATE*100:.0f}%/cyc")
 logger.info(f"  Stale exit    : after {STALE_EXIT_HOURS}h if P&L within ±{STALE_DEAD_ZONE_PCT*100:.1f}%")
-logger.info(f"  Contrarian    : RSI<{CONTRARIAN_RSI_THRESH} scout={CONTRARIAN_EQUITY_PCT*100:.0f}% | RSI<{DEEP_OVERSOLD_RSI} bypass=micro-lot {MICRO_LOT_EQUITY_PCT*100:.0f}%")
+logger.info(f"  Contrarian    : RSI<{CONTRARIAN_RSI_THRESH} scout={CONTRARIAN_EQUITY_PCT*100:.1f}% | RSI<{DEEP_OVERSOLD_RSI} bypass=micro-lot {MICRO_LOT_EQUITY_PCT*100:.0f}%")
+logger.info(f"  RegimeCooldown: {REGIME_COOLDOWN_CYCLES} cycles | ConfidenceGate: {REGIME_CONFIDENCE_GATE}")
 logger.info("=" * 65)
 
 # ── DB schema bootstrap + one-time JSON migration ─────────────────────────────
@@ -305,6 +308,31 @@ _CORR_STATE_FILE = os.path.join(_REPO_ROOT, "trading-platform", "data", "correla
 
 _BEAR_REGIMES = frozenset({"Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off"})
 _CRYPTO_BEAR_REGIMES = frozenset({"Crypto-Bear", "Crypto-Risk-Off"})
+
+def _init_regime_cooldown_state() -> tuple[int, bool, bool]:
+    try:
+        import pathlib as _pl
+        _path = _pl.Path(_CRYPTO_REGIME_FILE)
+        if _path.exists():
+            data = json.loads(_path.read_text())
+            current = data.get("crypto_regime", "unknown")
+            previous = data.get("previous_regime", "unknown")
+            current_is_bear = current in _CRYPTO_BEAR_REGIMES
+            prev_is_bear = previous in _CRYPTO_BEAR_REGIMES or previous == "unknown"
+            if current_is_bear:
+                return 0, True, False
+            if prev_is_bear and not current_is_bear:
+                return 1, True, True
+            return 0, False, False
+    except Exception:
+        pass
+    return 0, True, False
+
+_regime_cooldown_counter, _last_bear_regime, _bear_locked_until_stable = _init_regime_cooldown_state()
+logger.debug(
+    f"RegimeCooldown | Init from file — counter={_regime_cooldown_counter}, "
+    f"last_bear={_last_bear_regime}, locked={_bear_locked_until_stable}"
+)
 
 
 def _read_market_regime() -> dict:
@@ -1017,11 +1045,14 @@ def run_cycle() -> None:
     # Kraken bots now read crypto_regime.json (decoupled from equity).
     # Equity Bear only affects crypto when empirical correlation > 0.6.
     # Correlation matrix drives systemic-shock position scaling (50%).
+    global _regime_cooldown_counter, _last_bear_regime, _bear_locked_until_stable
+
     _regime_data  = _read_crypto_regime()
     _regime_label = _regime_data.get("regime", "unknown")
     _is_bear      = _regime_data.get("is_bear", False)
     _regime_src   = _regime_data.get("source", "unknown")
     _eq_contagion = _regime_data.get("equity_contagion", False)
+    _regime_confidence = _regime_data.get("confidence", 0)
 
     _crypto_fg = _regime_data.get("crypto_fear_greed")
     _extreme_fear = isinstance(_crypto_fg, (int, float)) and _crypto_fg <= 25
@@ -1033,6 +1064,44 @@ def run_cycle() -> None:
             f"BearBias | OVERRIDE — Crypto Fear & Greed={_crypto_fg} (Extreme Fear) | "
             f"All LONG entries DISABLED for {BOT_DISPLAY_NAME} — SHORT scalps only"
         )
+
+    if not _is_bear and _regime_confidence < REGIME_CONFIDENCE_GATE:
+        _is_bear = True
+        _regime_label = f"{_regime_label}+LowConf({_regime_confidence:.2f})"
+        logger.warning(
+            f"ConfidenceGate | Regime '{_regime_data.get('regime')}' confidence "
+            f"{_regime_confidence:.2f} < {REGIME_CONFIDENCE_GATE} — "
+            f"defaulting to BEAR (conservative) until signals strengthen"
+        )
+
+    if _last_bear_regime and not _is_bear:
+        _regime_cooldown_counter += 1
+        if _regime_cooldown_counter < REGIME_COOLDOWN_CYCLES:
+            _is_bear = True
+            _bear_locked_until_stable = True
+            _regime_label = f"{_regime_label}+Cooldown({_regime_cooldown_counter}/{REGIME_COOLDOWN_CYCLES})"
+            logger.warning(
+                f"RegimeCooldown | Bear→non-Bear transition detected, "
+                f"cycle {_regime_cooldown_counter}/{REGIME_COOLDOWN_CYCLES} — "
+                f"holding BEAR stance until stable "
+                f"(prevents whipsaw longs on brief bounces)"
+            )
+        else:
+            _regime_cooldown_counter = 0
+            _bear_locked_until_stable = False
+            _last_bear_regime = False
+            logger.info(
+                f"RegimeCooldown | CLEARED — regime stable for "
+                f"{REGIME_COOLDOWN_CYCLES} consecutive cycles — "
+                f"LONG entries now permitted"
+            )
+    elif _is_bear:
+        _regime_cooldown_counter = 0
+        _last_bear_regime = True
+        _bear_locked_until_stable = False
+    else:
+        _regime_cooldown_counter = 0
+        _last_bear_regime = False
 
     _eq_regime = _read_market_regime()
     _vix_value = _eq_regime.get("vix")
@@ -1061,15 +1130,18 @@ def run_cycle() -> None:
 
     if _is_bear:
         _contagion_note = " (equity contagion)" if _eq_contagion else ""
+        _cooldown_note = " [COOLDOWN HOLD]" if _bear_locked_until_stable else ""
         logger.info(
-            f"CryptoRegime | {_regime_label}{_contagion_note} [src={_regime_src}] — "
+            f"CryptoRegime | {_regime_label}{_contagion_note}{_cooldown_note} [src={_regime_src}] — "
             f"LONG entries DISABLED | max_positions={_effective_max_positions} | "
-            f"max_position_fraction={_effective_max_position_frac:.1%}"
+            f"max_position_fraction={_effective_max_position_frac:.1%} | "
+            f"confidence={_regime_confidence:.2f}"
         )
     else:
         logger.debug(
             f"CryptoRegime | {_regime_label} [src={_regime_src}] — normal parameters "
-            f"(max_positions={_effective_max_positions} max_frac={_effective_max_position_frac:.0%})"
+            f"(max_positions={_effective_max_positions} max_frac={_effective_max_position_frac:.0%}) "
+            f"confidence={_regime_confidence:.2f}"
         )
 
     _ohlcv_cache_data: dict[str, list] = {}

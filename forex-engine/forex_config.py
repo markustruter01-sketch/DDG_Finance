@@ -16,7 +16,10 @@ PAIRS = [
     "NZDJPY=X", "CADJPY=X", "EURCAD=X", "GBPCAD=X",
     "EURNZD=X", "GBPNZD=X", "AUDCAD=X", "AUDCHF=X",
     "NZDCHF=X", "NZDCAD=X",
+    "CHFJPY=X",
     "MXN=X", "SGD=X", "NOK=X", "SEK=X", "ZAR=X",
+    "TRY=X", "PLN=X", "DKK=X", "HKD=X", "INR=X", "KRW=X",
+    "THB=X", "CZK=X",
 ]
 
 PAIR_LABELS = {
@@ -45,11 +48,20 @@ PAIR_LABELS = {
     "AUDCHF=X": "AUD_CHF",
     "NZDCHF=X": "NZD_CHF",
     "NZDCAD=X": "NZD_CAD",
+    "CHFJPY=X": "CHF_JPY",
     "MXN=X":    "USD_MXN",
     "SGD=X":    "USD_SGD",
     "NOK=X":    "USD_NOK",
     "SEK=X":    "USD_SEK",
     "ZAR=X":    "USD_ZAR",
+    "TRY=X":    "USD_TRY",
+    "PLN=X":    "USD_PLN",
+    "DKK=X":    "USD_DKK",
+    "HKD=X":    "USD_HKD",
+    "INR=X":    "USD_INR",
+    "KRW=X":    "USD_KRW",
+    "THB=X":    "USD_THB",
+    "CZK=X":    "USD_CZK",
 }
 
 PAIR_DIRECTIONS = {
@@ -78,16 +90,25 @@ PAIR_DIRECTIONS = {
     "AUDCHF=X": "cross",
     "NZDCHF=X": "cross",
     "NZDCAD=X": "cross",
+    "CHFJPY=X": "cross",
     "MXN=X":    "base_usd",
     "SGD=X":    "base_usd",
     "NOK=X":    "base_usd",
     "SEK=X":    "base_usd",
     "ZAR=X":    "base_usd",
+    "TRY=X":    "base_usd",
+    "PLN=X":    "base_usd",
+    "DKK=X":    "base_usd",
+    "HKD=X":    "base_usd",
+    "INR=X":    "base_usd",
+    "KRW=X":    "base_usd",
+    "THB=X":    "base_usd",
+    "CZK=X":    "base_usd",
 }
 
 JPY_PAIRS = {
     "JPY=X", "EURJPY=X", "GBPJPY=X", "AUDJPY=X",
-    "NZDJPY=X", "CADJPY=X",
+    "NZDJPY=X", "CADJPY=X", "CHFJPY=X",
 }
 
 USD_BASE_PAIRS = {k for k, v in PAIR_DIRECTIONS.items() if v == "base_usd"}
@@ -118,11 +139,20 @@ PIP_SIZE = {
     "AUDCHF=X": 0.0001,
     "NZDCHF=X": 0.0001,
     "NZDCAD=X": 0.0001,
+    "CHFJPY=X": 0.01,
     "MXN=X":    0.0001,
     "SGD=X":    0.0001,
     "NOK=X":    0.0001,
     "SEK=X":    0.0001,
     "ZAR=X":    0.0001,
+    "TRY=X":    0.0001,
+    "PLN=X":    0.0001,
+    "DKK=X":    0.0001,
+    "HKD=X":    0.0001,
+    "INR=X":    0.01,
+    "KRW=X":    0.01,
+    "THB=X":    0.01,
+    "CZK=X":    0.001,
 }
 
 CROSS_QUOTE_USD = {
@@ -144,6 +174,7 @@ CROSS_QUOTE_USD = {
     "NZDCAD=X":  ("CAD=X",    "divide"),
     "EURNZD=X":  ("NZDUSD=X", "multiply"),
     "GBPNZD=X":  ("NZDUSD=X", "multiply"),
+    "CHFJPY=X":  ("JPY=X",    "divide"),
 }
 
 

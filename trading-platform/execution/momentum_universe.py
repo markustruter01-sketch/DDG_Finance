@@ -1,7 +1,7 @@
 """
-Momentum Universe — ~200 Liquid NYSE/NASDAQ Stocks
----------------------------------------------------
-Organized by GICS sector for regime-aware filtering.
+Momentum Universe — ~250+ Liquid NYSE/NASDAQ Stocks & ETFs
+-----------------------------------------------------------
+Organized by GICS sector and asset class for regime-aware filtering.
 Bear regime favors defensive sectors (healthcare, utilities, staples, energy).
 Bull/Sideways scans the full universe.
 """
@@ -13,23 +13,24 @@ TECHNOLOGY: list[str] = [
     "CRM", "ORCL", "ADBE", "INTC", "CSCO", "TXN", "QCOM", "MU", "AMAT",
     "LRCX", "KLAC", "MRVL", "SNPS", "CDNS", "NOW", "PANW", "CRWD", "FTNT",
     "NET", "DDOG", "ZS", "PLTR", "ARM", "SMCI", "DELL", "HPE", "UBER",
-    "ABNB", "DASH", "SHOP", "SQ",
+    "ABNB", "DASH", "SHOP", "SQ", "SNOW", "COIN", "MSTR",
 ]
 
 FINANCIALS: list[str] = [
     "JPM", "BAC", "WFC", "GS", "MS", "BLK", "SCHW", "AXP", "V", "MA",
     "COF", "C", "USB", "PNC", "TFC", "AIG", "MET", "PRU", "ALL", "CB",
+    "PYPL",
 ]
 
 HEALTHCARE: list[str] = [
     "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO", "ABT", "DHR", "BMY",
     "AMGN", "GILD", "ISRG", "BSX", "MDT", "SYK", "EW", "ZTS", "REGN",
-    "VRTX", "HCA", "CI", "ELV", "GEHC",
+    "VRTX", "HCA", "CI", "ELV", "GEHC", "MRNA", "BIIB",
 ]
 
 ENERGY: list[str] = [
     "XOM", "CVX", "COP", "EOG", "SLB", "MPC", "PSX", "VLO", "OXY", "DVN",
-    "HAL", "FANG", "HES", "BKR", "KMI",
+    "HAL", "FANG", "HES", "BKR", "KMI", "FSLR", "ENPH",
 ]
 
 INDUSTRIALS: list[str] = [
@@ -65,9 +66,29 @@ UTILITIES: list[str] = [
     "NEE", "DUK", "SO", "AEP", "D", "SRE", "EXC", "XEL", "WEC", "ES",
 ]
 
+INTERNATIONAL_ADRS: list[str] = [
+    "TSM", "ASML", "NVO", "SAP", "TM", "MELI", "NU", "PDD", "SE",
+]
+
 SECTOR_ETFS: list[str] = [
     "SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLV", "XLE", "XLI",
     "XLP", "XLY", "XLC", "XLB", "XLRE", "XLU",
+]
+
+SAFE_HAVEN_ETFS: list[str] = [
+    "TLT", "IEF", "GLD", "SLV", "AGG", "BND", "TIP", "GOVT",
+]
+
+COMMODITY_ETFS: list[str] = [
+    "USO", "PDBC", "DBA", "UNG", "COPX",
+]
+
+LEVERAGED_BULL_ETFS: list[str] = [
+    "TQQQ", "SOXL", "UPRO",
+]
+
+INVERSE_BEAR_ETFS: list[str] = [
+    "SH", "PSQ", "DOG", "SPXS", "SQQQ", "SRTY", "SDS", "SDOW",
 ]
 
 ALL_SECTORS: dict[str, list[str]] = {
@@ -82,16 +103,23 @@ ALL_SECTORS: dict[str, list[str]] = {
     "materials": MATERIALS,
     "reits": REITS,
     "utilities": UTILITIES,
+    "international_adrs": INTERNATIONAL_ADRS,
     "sector_etfs": SECTOR_ETFS,
+    "safe_haven_etfs": SAFE_HAVEN_ETFS,
+    "commodity_etfs": COMMODITY_ETFS,
+    "leveraged_bull_etfs": LEVERAGED_BULL_ETFS,
+    "inverse_bear_etfs": INVERSE_BEAR_ETFS,
 }
 
 DEFENSIVE_SECTORS: set[str] = {
     "healthcare", "utilities", "consumer_staples", "energy",
+    "safe_haven_etfs", "commodity_etfs",
 }
 
 CYCLICAL_SECTORS: set[str] = {
     "technology", "financials", "industrials",
     "consumer_discretionary", "communication", "materials",
+    "international_adrs",
 }
 
 FULL_UNIVERSE: list[str] = []

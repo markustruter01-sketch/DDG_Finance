@@ -18,3 +18,9 @@ id = "wktTUnkeW_LqKFNR4Wb-E"
 uri = "file://.local/scalp_bot_logic_breakdown.md"
 type = "text"
 title = "Crypto Scalp Bot Logic — Complete Technical Breakdown"
+
+[[outputs]]
+id = "C9y_tN4PMgMkcMp5bU77q"
+uri = "file://trading-report-2026-04-05_latest.txt"
+type = "text"
+title = "Trading Report (Plain Text)"

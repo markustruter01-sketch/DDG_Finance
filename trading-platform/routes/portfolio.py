@@ -904,7 +904,8 @@ async def data_snapshot() -> dict:
 
 
 @portfolio_router.get("/export/report", tags=["Export"])
-async def export_diagnostic_report() -> dict:
+async def export_diagnostic_report():
+    from starlette.responses import PlainTextResponse
     import json as _json
     from pathlib import Path as _Path
     from datetime import datetime as _dt, timezone as _tz
@@ -1879,12 +1880,16 @@ async def export_diagnostic_report() -> dict:
     lines.append(W)
 
     report_text = "\n".join(lines)
-    return {
-        "report":       report_text,
-        "generated_at": ts,
-        "char_count":   len(report_text),
-        "line_count":   len(lines),
-    }
+    filename = f"trading-report-{now_utc.strftime('%Y-%m-%d_%H%M%S')}.txt"
+    return PlainTextResponse(
+        content=report_text,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Report-Lines": str(len(lines)),
+            "X-Report-Chars": str(len(report_text)),
+        },
+    )
 
 
 @portfolio_router.get("/portfolio/news-feed", tags=["Portfolio"])

@@ -1,0 +1,1706 @@
+════════════════════════════════════════════════════════════════════════════════
+  QUANTITATIVE TRADING PLATFORM — AI DIAGNOSTIC REPORT
+  Generated: 2026-04-05 23:27:12 UTC
+  PURPOSE: Paste into Claude / Gemini / ChatGPT for strategy analysis.
+           Contains all trade history, AI reasoning, risk parameters,
+           entry/exit conditions, and performance data for ALL 6 BOTS.
+  FLEET:   #1 Oracle (Alpaca), #2 Davy Jones, #3 Blackbeard, #4 Calypso (Kraken),
+           #5 Apex Predator (Options), #6 Navigator (Forex)
+  CAPITAL: $600,000 total across 4 capital pools
+════════════════════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT
+════════════════════════════════════════════════════════════════════════════════
+    Report timestamp:               2026-04-05 23:27:12 UTC
+    Market status:                  CLOSED (After Hours / Weekend)
+    Kill switch:                    ARMED (not tripped — normal)
+    Daily drawdown:                 +0.000% / +5.0% threshold
+    Opening equity baseline:        N/A
+    Pending liquidation:            NO
+    Groq token budget:              Unknown
+    Last analysis cycle:            Never | status=never_run
+    Current market regime:          Unknown
+
+  Scheduler (8 jobs):
+    • Auto Self-Heal Monitor                        next: 2026-04-05 23:28:35
+    • Crypto-Only 24/7 Cycle                        next: 2026-04-05 23:41:35
+    • Equity Curve Hourly Heartbeat                 next: 2026-04-06 00:26:35
+    • Fleet Commander (Evening Crypto 10:00 PM ET)  next: 2026-04-05 22:00:00
+    • Forex Navigator 4h Cycle                      next: 2026-04-05 23:26:35
+    • Learning Snapshot Auto-Export                 next: 2026-04-06 05:26:35
+    • Fleet Commander (Pre-Market 4:15 AM ET)       next: 2026-04-06 04:15:00
+    • Gemini Self-Critic Auditor (Pre-Market)       next: 2026-04-06 04:15:00
+    • 15-Min Analysis & Execution Cycle             next: 2026-04-06 09:01:00
+    • Fleet Commander (Post-Open 9:45 AM ET)        next: 2026-04-06 09:45:00
+    • Apex Predator Intraday Scan (10am/12pm/2pm ET) next: 2026-04-06 10:00:00
+    • Fleet Commander (Midday 12:00 PM ET)          next: 2026-04-06 12:00:00
+    • Fleet Commander (Late Session 3:00 PM ET)     next: 2026-04-06 15:00:00
+    • Apex Predator Options Scan (3:30 PM ET)       next: 2026-04-06 15:30:00
+    • Post-Mortem Reconciliation                    next: 2026-04-06 16:10:00
+    • Fleet Commander (Post-Close 5:00 PM ET)       next: 2026-04-06 17:00:00
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 2: ALPACA BOT — QUANTITATIVE EQUITY PLATFORM (US Equities)
+════════════════════════════════════════════════════════════════════════════════
+
+── PORTFOLIO OVERVIEW ────────────────────────────────────────────────────────
+    Capital pool:                   US Equity — Paper Trading via Alpaca
+    Starting capital:               $100,000.00
+    Current equity:                 $97,821.35
+    Total P&L:                      $-2,178.65 (-2.18%)
+    Available cash:                 $0.00
+    Buying power:                   $97,821.35
+    Open positions:                 2
+
+── CURRENT OPEN POSITIONS (ALPACA) ───────────────────────────────────────────
+
+  JEPQ [PROFIT VAULT — protected from liquidation]
+    Qty:                            0.777982 shares
+    Avg entry price:                $54.50
+    Current price:                  $55.59
+    Market value:                   $43.25
+    Unrealized P&L:                 $0.85 (+2.00%)
+    Asset class:                    unknown
+    Conviction score:               N/A
+    Kelly fraction:                 N/A
+    Stop loss:                      N/A
+    Take profit:                    N/A
+    Original thesis:                N/A
+
+  SGOV
+    Qty:                            973.594581 shares
+    Avg entry price:                $100.39
+    Current price:                  $100.43
+    Market value:                   $97,778.10
+    Unrealized P&L:                 $38.94 (+0.04%)
+    Asset class:                    unknown
+    Conviction score:               N/A
+    Kelly fraction:                 N/A
+    Stop loss:                      N/A
+    Take profit:                    N/A
+    Original thesis:                N/A
+
+── SHORT & BEAR-HEDGE POSITIONS (ALGO SHORT SCANNER) ─────────────────────────
+  No direct short positions open.
+  No bear-hedge ETF positions open.
+
+── LATEST AI ALLOCATION DECISION (GROQ LLAMA 3.3 70B) ────────────────────────
+  No allocation has been generated yet. Run an analysis cycle to populate.
+
+── ALPACA PERFORMANCE METRICS ────────────────────────────────────────────────
+    Trading days tracked:           4
+    Total closed trades:            0
+    Win rate:                       N/A
+    Best day:                       +0.040%
+    Worst day:                      -0.154%
+    Total return:                   -0.114%
+    Avg AI conviction:              0.8275
+
+── ALPACA RISK METRICS (requires 30+ days of equity snapshots) ───────────────
+    Data points (days):             0
+    Sharpe ratio:                   N/A (0 day(s) — need 30+)
+    Sortino ratio:                  N/A (0 day(s) — need 30+)
+    Max drawdown:                   N/A (0 day(s) — need 30+)
+    Calmar ratio:                   N/A
+    Annual volatility:              N/A
+
+── ALPACA TRADE HISTORY (sorted by PnL ascending — worst losses first) ───────
+  Total Alpaca trades: 32 (showing worst losses first)
+  #    Date         Symbol     Status               PnL%         PnL$  Thesis / Exit Reason
+  ------------------------------------------------------------------------------
+  1    2026-03-31   ETHUSD     Closed             -2.54%          N/A  Kraken paper trade (stop)
+       └─ entry=$2,031.77 | fill=$2,083.36 | slippage=+2.539% | conviction=5.00 | class=Crypto
+  2    2026-03-31   DOTUSD     Closed             +1.04%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1.25 | fill=$1.26 | slippage=+1.044% | conviction=5.00 | class=Crypto
+  3    2026-03-30   ATOMUSD    Closed             +1.82%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1.62 | fill=$1.65 | slippage=+1.823% | conviction=5.00 | class=Crypto
+  4    2026-03-30   BTCUSD     Closed             +1.79%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$65,293.30 | fill=$66,462.60 | slippage=+1.791% | conviction=5.00 | class=Crypto
+  5    2026-03-30   AVAXUSD    Closed             +2.84%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$8.44 | fill=$8.68 | slippage=+2.844% | conviction=5.00 | class=Crypto
+  6    2026-03-30   ADAUSD     Closed             +3.23%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$0.23 | fill=$0.24 | slippage=+3.234% | conviction=5.00 | class=Crypto
+  7    2026-03-30   LTCUSD     Closed             +0.92%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$53.19 | fill=$53.68 | slippage=+0.921% | conviction=5.00 | class=Crypto
+  8    2026-03-30   SOLUSD     Closed             +3.01%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$79.69 | fill=$82.09 | slippage=+3.012% | conviction=5.00 | class=Crypto
+  9    2026-03-30   ETHUSD     Closed             +2.40%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1,950.05 | fill=$1,996.83 | slippage=+2.399% | conviction=5.00 | class=Crypto
+  10   2026-03-30   LINKUSD    Closed             +2.25%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$8.27 | fill=$8.46 | slippage=+2.248% | conviction=5.00 | class=Crypto
+  11   2026-03-30   XRPUSD     Closed             +1.04%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1.34 | fill=$1.33 | slippage=-1.043% | conviction=5.00 | class=Crypto
+  12   2026-03-30   AVAXUSD    Closed             -2.04%          N/A  Kraken paper trade (stop)
+       └─ entry=$8.84 | fill=$9.02 | slippage=+2.036% | conviction=5.00 | class=Crypto
+  13   2026-03-29   ETHUSD     Closed             -2.21%          N/A  Kraken paper trade (stop)
+       └─ entry=$1,994.47 | fill=$1,950.44 | slippage=-2.208% | conviction=5.00 | class=Crypto
+  14   2026-03-29   LTCUSD     Closed             -2.22%          N/A  Kraken paper trade (stop)
+       └─ entry=$53.63 | fill=$52.44 | slippage=-2.219% | conviction=5.00 | class=Crypto
+  15   2026-03-29   XRPUSD     Closed             +2.11%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1.30 | fill=$1.33 | slippage=+2.105% | conviction=5.00 | class=Crypto
+  16   2026-03-29   DOTUSD     Closed             +1.97%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$1.24 | fill=$1.26 | slippage=+1.966% | conviction=5.00 | class=Crypto
+  17   2026-03-29   XRPUSD     Closed             -2.19%          N/A  Kraken paper trade (stop)
+       └─ entry=$1.33 | fill=$1.30 | slippage=-2.192% | conviction=5.00 | class=Crypto
+  18   2026-03-29   BTCUSD     Closed             +0.42%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$66,250.20 | fill=$66,525.40 | slippage=+0.415% | conviction=5.00 | class=Crypto
+  19   2026-03-29   SOLUSD     Closed             +0.12%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$82.83 | fill=$82.93 | slippage=+0.121% | conviction=5.00 | class=Crypto
+  20   2026-03-29   LINKUSD    Closed             +0.29%          N/A  Kraken paper trade (mean_reversion_complete)
+       └─ entry=$8.52 | fill=$8.54 | slippage=+0.292% | conviction=5.00 | class=Crypto
+  21   2026-03-29   ADAUSD     Closed             -2.33%          N/A  Kraken paper trade (stop)
+       └─ entry=$0.25 | fill=$0.24 | slippage=-2.334% | conviction=5.00 | class=Crypto
+  22   2026-03-29   AVAXUSD    Closed             -2.05%          N/A  Kraken paper trade (stop)
+       └─ entry=$8.76 | fill=$8.58 | slippage=-2.055% | conviction=5.00 | class=Crypto
+  23   2026-03-29   SOLUSD     Closed             -2.03%          N/A  Kraken paper trade (stop)
+       └─ entry=$82.20 | fill=$80.53 | slippage=-2.032% | conviction=5.00 | class=Crypto
+  24   2026-03-29   ADAUSD     Closed             -2.08%          N/A  Kraken paper trade (stop)
+       └─ entry=$0.24 | fill=$0.24 | slippage=-2.078% | conviction=5.00 | class=Crypto
+  25   2026-03-29   AVAXUSD    Closed             -2.20%          N/A  Kraken paper trade (stop)
+       └─ entry=$8.62 | fill=$8.43 | slippage=-2.204% | conviction=5.00 | class=Crypto
+  26   2026-03-29   LINKUSD    Closed             -2.50%          N/A  Kraken paper trade (stop)
+       └─ entry=$8.48 | fill=$8.27 | slippage=-2.495% | conviction=5.00 | class=Crypto
+  27   2026-03-29   DOTUSD     Closed             -2.11%          N/A  Kraken paper trade (stop)
+       └─ entry=$1.27 | fill=$1.24 | slippage=-2.110% | conviction=5.00 | class=Crypto
+  28   2026-03-29   ATOMUSD    Closed             -2.45%          N/A  Kraken paper trade (stop)
+       └─ entry=$1.66 | fill=$1.62 | slippage=-2.447% | conviction=5.00 | class=Crypto
+  29   2026-03-01   GLD        Closed_Loss        -3.70%          N/A  Gold as safe haven amid banking stress; strong inflation hedge.
+       └─ conviction=0.91 | class=commodity
+  30   2026-02-20   USO        Closed_Win        +12.40%          N/A  WTI oil supply shock from Middle East tensions; long crude via USO.
+       └─ conviction=0.80 | class=commodity
+  31   2026-02-10   EUO        Closed_Loss        -5.10%          N/A  EUR weakening vs USD due to ECB dovish pivot; short EUR position via EUO.
+       └─ conviction=0.78 | class=currency
+  32   2026-02-01   BITO       Closed_Loss        -8.30%          N/A  Bitcoin momentum strong after ETF approval; expected 15% upside in 30 days.
+       └─ conviction=0.82 | class=crypto
+
+── ATTRIBUTION ANALYSIS (What worked and what didn't) ────────────────────────
+  By Asset Class:
+    Asset Class     Trades   Win Rate   Total PnL   Avg PnL
+    -------------------------------------------------------
+    crypto               1     +0.00%      -8.30%    -8.30%
+    currency             1     +0.00%      -5.10%    -5.10%
+    Crypto              28    +53.60%      -3.70%    -0.13%
+    commodity            2    +50.00%      +8.70%    +4.35%
+
+  By AI Conviction Level:
+    Level       Trades   Win Rate   Total PnL   Avg PnL
+    ---------------------------------------------------
+    high            29    +51.70%      -7.40%    -0.26%
+    low              0     +0.00%      +0.00%    +0.00%
+    medium           3    +33.30%      -1.00%    -0.33%
+
+── TRADE MECHANICS — EXACT FORMULAS (ORACLE #1) ──────────────────────────────
+  MOMENTUM SCORE FORMULA:
+    composite_score = (20d_return * 0.50) + (60d_return * 0.30)
+    Trend bonus: +5.0 if Price > SMA-63 AND Price > SMA-126
+
+  ENTRY FILTERS (ALL must be True):
+    1. Composite momentum score ranks in top N for regime (Bull=9, Sideways=6, Bear=4)
+    2. RSI(14) between 30 and regime_upper (Bull=75, Bear=70)
+    3. 3-month momentum must be 'positive'
+    4. Sector diversification: max 3 per sector (Bull), max 2 per sector (Bear/Sideways)
+    5. Bear regime: only DEFENSIVE sectors (healthcare, utilities, staples, energy, safe-haven ETFs, commodity ETFs)
+    6. Not in existing open positions
+
+  STOP LOSS FORMULA:
+    vol_factor = annualized_volatility_20d / 100
+    stop_loss_pct = -min(max(vol_factor * stop_mult, 0.03), 0.08)
+    Bull: stop_mult=1.5  |  Sideways: stop_mult=1.2  |  Bear: stop_mult=1.0
+
+  TAKE PROFIT FORMULA:
+    take_profit_pct = min(max(vol_factor * take_mult, 0.05), 0.20)
+    Bull: take_mult=2.0  |  Sideways: take_mult=1.6  |  Bear: take_mult=1.3
+
+  KELLY CRITERION FORMULA:
+    kelly = (win_rate * (avg_win / avg_loss + 1) - 1) / (avg_win / avg_loss)
+    Final sizing = min(kelly * conviction_score, kelly_cap)
+    Bull: kelly_cap=12%  |  Sideways: kelly_cap=8%  |  Bear: kelly_cap=6%
+    Fallback: 2% fixed fractional if insufficient trade history
+
+  REGIME-SPECIFIC PARAMETERS:
+    Bull:     max_active=9  kelly_cap=12%  stop_mult=1.5x  take_mult=2.0x  full_universe
+    Sideways: max_active=6  kelly_cap=8%   stop_mult=1.2x  take_mult=1.6x  full_universe
+    Bear:     max_active=4  kelly_cap=6%   stop_mult=1.0x  take_mult=1.3x  defensive_only
+
+── ORACLE REGIME LOGIC TRANSPARENCY ──────────────────────────────────────────
+  REGIME DEFINITIONS:
+    Bull:     LLM (Groq) classifies based on: SPY trend, VIX level, breadth indicators,
+              economic data (FRED), news sentiment. Characterized by broad risk-on conditions.
+    Sideways: Mixed signals, no clear directional bias. Moderate risk parameters.
+    Bear:     Risk-off conditions: elevated VIX, declining breadth, negative macro data.
+              Triggers defensive-only universe (healthcare, utilities, staples, energy,
+              safe-haven ETFs, commodity ETFs).
+
+    The LLM provides the regime label. The algo scanner adjusts RISK PARAMETERS not strategy.
+
+  SGOV DEFAULT LOGIC:
+    SGOV (T-Bill ETF) is the cash-equivalent parking position.
+    Used when: all active slots are filled OR no momentum signals pass filters.
+    One slot always reserved for SGOV to prevent full capital deployment.
+    SGOV is exempt from position size cap and treated as a cash proxy.
+    Current regime:                     Bear
+    Regime set at:                      2026-04-05T08:43:15
+    Rationale:                          Bear regime: elevated VIX (24.54), negative momentum on QQQ and XLK, recession signals.
+
+── REGIME CHANGE LOG (Reconstructed from equity_snapshots) ───────────────────
+  Total regime transitions detected: 5
+  [Reconstructed from historical data]
+  Timestamp              From            To             
+  ----------------------------------------------------
+  2026-03-30 03:20:02    N/A             LIVE           
+  2026-03-30 19:13:47    LIVE            Bear           
+  2026-04-01 09:11:53    Bear            Crypto         
+  2026-04-02 14:16:22    Crypto          Bear           
+  2026-04-02 20:39:10    Bear            Crypto         
+
+── DAILY EQUITY HISTORY (Oracle #1) ──────────────────────────────────────────
+  [Reconstructed from historical data — 7 days]
+  Date                Open Eq       Close Eq    Daily P&L   Daily % Regime        Trades
+  ----------------------------------------------------------------------------------
+  2026-03-30       $97,711.40     $97,939.14      $227.74    +0.23% Bear              10
+  2026-03-31       $97,933.51     $97,933.51       $-5.63    -0.01% ?                  2
+  2026-04-01       $97,887.98     $97,924.00       $-9.51    -0.01% Crypto             0
+  2026-04-02       $97,810.96     $97,821.35     $-102.65    -0.10% Bear               0
+  2026-04-03       $97,821.35     $97,821.35        $0.00    +0.00% Crypto             0
+  2026-04-04       $97,821.35     $97,821.35        $0.00    +0.00% Crypto             0
+  2026-04-05       $97,821.35     $97,821.35        $0.00    +0.00% Crypto             0
+
+── REGIME PERFORMANCE TABLE (Oracle #1) ──────────────────────────────────────
+  [Reconstructed from historical data]
+  Regime            Trades   Wins   Win Rate    Avg PnL     Total PnL$
+  --------------------------------------------------------------------
+  Bear                  32     16     +50.0%     -0.26%          $0.00
+
+── CONSECUTIVE STREAK TRACKER (Oracle #1) ────────────────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     32 WINS
+    Max win streak (all-time):          32
+    Max loss streak (all-time):         0
+
+── ROLLING PERFORMANCE METRICS (Oracle #1) ───────────────────────────────────
+    7-day rolling Sharpe ratio:         -9.9738 (preliminary — under 30 days)
+    7-day rolling win rate:             +100.0%
+    7-day rolling avg P&L/trade:        $0.00
+    Profit factor (all-time):           Infinite (no losses)
+      Gross profit:                     $0.00
+      Gross loss:                       $0.00
+  [Reconstructed from historical data]
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 3: KRAKEN FLEET — ALL 3 CRYPTO BOTS (24/7)
+════════════════════════════════════════════════════════════════════════════════
+
+── BOT #2: DAVY JONES' PORTFOLIO (bot_id=davy-jones, strategy=Conservative) ──
+    Bot status:                     RUNNING (running)
+    Paper trading:                  YES
+    Strategy:                       Conservative
+    Cycles completed:               5
+    Last updated:                   2026-04-05T08:46:52
+    Starting capital:               $100,000.00
+    Current equity:                 $99,322.84
+    Total P&L:                      $-677.16 (-0.68%)
+    Deployed capital:               $39,321.55 (+39.6% of equity)
+    Open positions:                 6
+    All-time trades:                90
+    Win / Loss:                     49W / 41L (+54.4% win rate)
+    All-time P&L:                   $-3,491.80
+
+    Open Positions:
+      OP/USD       SHORT  entry=$0.1100  now=$0.1073  P&L=$162.76 (+2.49%)
+      ICP/USD      SHORT  entry=$2.2990  now=$2.2570  P&L=$59.65 (+1.83%)
+      LTC/USD      LONG   entry=$52.0550  now=$52.7500  P&L=$86.92 (+1.34%)
+      POL/USD      SHORT  entry=$0.0934  now=$0.0900  P&L=$118.15 (+3.63%)
+      SEI/USD      SHORT  entry=$0.0535  now=$0.0526  P&L=$153.51 (+1.55%)
+      TIA/USD      LONG   entry=$0.2854  now=$0.2826  P&L=$-96.15 (-0.97%)
+
+    Full Trade History (90 trades):
+      #    Date             Symbol       Side     PnL%       PnL$       Entry       Exit     Fees  Reason
+      --------------------------------------------------------------------------------------------------------------
+      1    2026-03-29T01:07 BTC/USD      LONG   +0.42%    $-10.54  $66,250.2000 $66,525.4000   $51.95  mean_reversion_complete
+      2    2026-03-29T03:54 SOL/USD      LONG   +0.12%   $-119.88    $82.8300   $82.9300  $156.09  mean_reversion_complete
+      3    2026-03-29T03:54 LINK/USD     LONG   +0.29%    $-22.89     $8.5200    $8.5449   $52.04  mean_reversion_complete
+      4    2026-03-29T13:08 ADA/USD      LONG   -2.33%   $-284.53     $0.2462    $0.2405   $51.35  stop
+      5    2026-03-29T17:17 AVAX/USD     LONG   -2.05%   $-256.74     $8.7600    $8.5800   $51.43  stop
+      6    2026-03-29T22:45 SOL/USD      LONG   -2.03%   $-253.91    $82.2000   $80.5300   $51.33  stop
+      7    2026-03-29T22:46 ADA/USD      LONG   -2.08%   $-250.03     $0.2405    $0.2355   $49.62  stop
+      8    2026-03-29T22:46 AVAX/USD     LONG   -2.20%     $-0.51     $8.6200    $8.4300    $0.10  stop
+      9    2026-03-29T22:46 LINK/USD     LONG   -2.50%   $-299.71     $8.4779    $8.2663   $51.16  stop
+      10   2026-03-29T22:46 DOT/USD      LONG   -2.11%   $-262.28     $1.2652    $1.2385   $51.41  stop
+      11   2026-03-29T22:46 ATOM/USD     LONG   -2.45%   $-292.02     $1.6636    $1.6229   $50.67  stop
+      12   2026-03-29T22:47 ETH/USD      LONG   -2.21%   $-270.69  $1,994.4700 $1,950.4400   $51.14  stop
+      13   2026-03-29T22:47 XRP/USD      LONG   -2.19%   $-269.89     $1.3301    $1.3010   $51.30  stop
+      14   2026-03-29T22:49 LTC/USD      LONG   -2.22%   $-269.18    $53.6300   $52.4400   $50.65  stop
+      15   2026-03-29T23:21 XRP/USD      LONG   +2.11%    $155.57     $1.3006    $1.3280   $51.75  mean_reversion_complete
+      16   2026-03-29T23:49 DOT/USD      LONG   +1.97%    $142.18     $1.2361    $1.2604   $51.82  mean_reversion_complete
+      17   2026-03-30T00:00 ATOM/USD     LONG   +1.82%    $128.14     $1.6180    $1.6475   $51.78  mean_reversion_complete
+      18   2026-03-30T00:19 BTC/USD      LONG   +1.79%    $122.79  $65,293.3000 $66,462.6000   $50.88  mean_reversion_complete
+      19   2026-03-30T00:19 AVAX/USD     LONG   +2.84%    $228.57     $8.4400    $8.6800   $52.04  mean_reversion_complete
+      20   2026-03-30T00:25 ADA/USD      LONG   +3.23%    $266.96     $0.2350    $0.2426   $52.14  mean_reversion_complete
+      21   2026-03-30T00:25 LTC/USD      LONG   +0.92%     $39.28    $53.1900   $53.6800   $51.45  mean_reversion_complete
+      22   2026-03-30T00:33 SOL/USD      LONG   +3.01%    $245.11    $79.6900   $82.0900   $52.09  mean_reversion_complete
+      23   2026-03-30T00:38 ETH/USD      LONG   +2.40%      $3.56  $1,950.0500 $1,996.8300    $1.00  mean_reversion_complete
+      24   2026-03-30T00:39 XRP/USD      SHORT  +1.04%     $51.51     $1.3438    $1.3298   $50.72  mean_reversion_complete
+      25   2026-03-30T00:39 LINK/USD     LONG   +2.25%    $169.96     $8.2744    $8.4604   $51.89  mean_reversion_complete
+      26   2026-03-30T08:51 AVAX/USD     SHORT  -2.04%   $-252.21     $8.8400    $9.0200   $51.72  stop
+      27   2026-03-31T01:33 ETH/USD      SHORT  -2.54%   $-301.70  $2,031.7700 $2,083.3600   $51.82  stop
+      28   2026-03-31T01:34 DOT/USD      LONG   +1.04%     $51.36     $1.2454    $1.2584   $51.52  mean_reversion_complete
+      29   2026-03-31T05:31 AVAX/USD     SHORT  +1.33%     $79.90     $9.0400    $8.9200   $50.90  mean_reversion_complete
+      30   2026-03-31T08:21 ATOM/USD     SHORT  -2.11%   $-259.17     $1.6708    $1.7060   $51.74  stop
+      31   2026-03-31T16:08 ATOM/USD     SHORT  +1.31%     $78.72     $1.7040    $1.6816   $50.96  mean_reversion_complete
+           └─ order_id=PAPER-ATOMUS
+      32   2026-03-31T16:26 XRP/USD      SHORT  +1.68%    $114.84     $1.3415    $1.3189   $50.78  mean_reversion_complete
+           └─ order_id=PAPER-XRPUSD
+      33   2026-03-31T16:34 ADA/USD      LONG   -2.09%   $-257.08     $0.2410    $0.2360   $50.84  stop
+           └─ order_id=PAPER-ADAUSD
+      34   2026-03-31T21:56 ONDO/USD     SHORT  -2.67%   $-313.88     $0.2697    $0.2768   $51.73  stop
+           └─ order_id=PAPER-ONDOUS
+      35   2026-03-31T21:56 SEI/USD      LONG   +2.63%    $206.33     $0.0491    $0.0504   $51.72  mean_reversion_complete
+           └─ order_id=PAPER-SEIUSD
+      36   2026-03-31T22:30 DOT/USD      LONG   +2.03%    $148.35     $1.2284    $1.2533   $51.89  mean_reversion_complete
+           └─ order_id=PAPER-DOTUSD
+      37   2026-03-31T22:31 DOT/USD      LONG   +1.98%    $143.53     $1.2284    $1.2527   $51.87  mean_reversion_complete
+           └─ order_id=PAPER-DOTUSD
+      38   2026-04-01T00:07 ALGO/USD     SHORT  -2.18%      $0.00     $0.0921    $0.0941    $0.00  stop
+           └─ order_id=PAPER-ALGOUS
+      39   2026-04-01T00:50 ICP/USD      SHORT  +0.96%      $0.00     $2.3030    $2.2810    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-ICPUSD
+      40   2026-04-01T00:56 RENDER/USD   SHORT  -2.12%     $-0.02     $1.7460    $1.7830    $0.00  stop
+           └─ order_id=PAPER-RENDER
+      41   2026-04-01T01:13 SNX/USD      SHORT  -2.08%   $-255.77     $0.2835    $0.2894   $51.56  stop
+           └─ order_id=PAPER-SNXUSD
+      42   2026-04-01T01:57 ALGO/USD     SHORT  -2.18%      $0.00     $0.0967    $0.0988    $0.00  stop
+           └─ order_id=PAPER-ALGOUS
+      43   2026-04-01T03:09 W/USD        LONG   +0.84%      $0.00     $0.0143    $0.0144    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-WUSD-1
+      44   2026-04-01T05:26 HBAR/USD     SHORT  -2.11%      $0.00     $0.0883    $0.0901    $0.00  stop
+           └─ order_id=PAPER-HBARUS
+      45   2026-04-01T05:27 JUP/USD      SHORT  -2.16%      $0.00     $0.1575    $0.1610    $0.00  stop
+           └─ order_id=PAPER-JUPUSD
+      46   2026-04-01T08:43 RENDER/USD   SHORT  -2.30%     $-0.02     $1.7830    $1.8240    $0.00  stop
+           └─ order_id=PAPER-RENDER
+      47   2026-04-01T08:44 SEI/USD      SHORT  -2.55%      $0.00     $0.0534    $0.0548    $0.00  stop
+           └─ order_id=PAPER-SEIUSD
+      48   2026-04-01T08:56 ONDO/USD     SHORT  +1.36%      $0.00     $0.2765    $0.2727    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-ONDOUS
+      49   2026-04-01T09:35 SNX/USD      SHORT  +1.03%      $0.00     $0.2907    $0.2877    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-SNXUSD
+      50   2026-04-02T00:44 W/USD        SHORT  -2.38%      $0.00     $0.0147    $0.0150    $0.00  stop
+           └─ order_id=PAPER-WUSD-1
+      51   2026-04-02T07:49 BCH/USD      LONG   -2.62%   $-102.27   $454.2400  $442.3400   $16.75  rebalance_liquidation
+           └─ order_id=PAPER-BCHUSD
+      52   2026-04-02T07:49 BNB/USD      SHORT  +4.36%      $7.86   $618.7800  $591.8200    $1.04  rebalance_liquidation
+           └─ order_id=PAPER-BNBUSD
+      53   2026-04-02T07:49 ENS/USD      SHORT  +2.99%      $0.05     $5.6900    $5.5200    $0.01  rebalance_liquidation
+           └─ order_id=PAPER-ENSUSD
+      54   2026-04-02T07:49 JUP/USD      SHORT  +5.88%      $0.00     $0.1643    $0.1546    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-JUPUSD
+      55   2026-04-02T07:49 POL/USD      SHORT  +3.36%      $0.00     $0.0946    $0.0914    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-POLUSD
+      56   2026-04-02T07:49 STX/USD      SHORT  +3.37%      $0.00     $0.2252    $0.2176    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STXUSD
+      57   2026-04-02T07:49 ATOM/USD     SHORT  +3.74%      $0.02     $1.7052    $1.6414    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-ATOMUS
+      58   2026-04-02T07:49 PYTH/USD     SHORT  +4.44%      $0.00     $0.0401    $0.0383    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-PYTHUS
+      59   2026-04-02T07:49 RUNE/USD     SHORT  +3.38%      $0.00     $0.4140    $0.4000    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-RUNEUS
+      60   2026-04-02T07:49 STRK/USD     SHORT  +4.71%      $0.00     $0.0353    $0.0336    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STRKUS
+      61   2026-04-02T07:55 OP/USD       LONG   +0.00%    $-16.96     $0.1075    $0.1075   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-OPUSD-
+      62   2026-04-02T07:55 ARB/USD      LONG   +0.00%    $-16.96     $0.0915    $0.0915   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-ARBUSD
+      63   2026-04-02T07:55 BNB/USD      LONG   +0.00%    $-16.96   $591.7100  $591.7100   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-BNBUSD
+      64   2026-04-02T07:55 ENA/USD      LONG   +0.00%    $-16.96     $0.0824    $0.0824   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-ENAUSD
+      65   2026-04-02T07:55 GRT/USD      LONG   +0.00%    $-16.96     $0.0238    $0.0238   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-GRTUSD
+      66   2026-04-02T07:55 INJ/USD      LONG   +0.00%    $-16.96     $2.7960    $2.7960   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-INJUSD
+      67   2026-04-02T07:55 TIA/USD      LONG   +0.00%    $-16.96     $0.2884    $0.2884   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-TIAUSD
+      68   2026-04-02T07:55 UNI/USD      LONG   +0.00%    $-16.96     $3.3420    $3.3420   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-UNIUSD
+      69   2026-04-02T07:55 SHIB/USD     LONG   +0.00%    $-16.96     $0.0000    $0.0000   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-SHIBUS
+      70   2026-04-02T07:55 STRK/USD     LONG   +0.00%    $-16.96     $0.0337    $0.0337   $16.96  rebalance_liquidation
+           └─ order_id=PAPER-STRKUS
+      71   2026-04-02T13:49 UNI/USD      LONG   -3.10%   $-339.28     $3.2993    $3.1970   $33.32  stop
+           └─ order_id=PAPER-UNIUSD
+      72   2026-04-02T14:36 SHIB/USD     LONG   +1.38%     $64.17     $0.0000    $0.0000   $25.62  mean_reversion_complete
+           └─ order_id=PAPER-SHIBUS
+      73   2026-04-02T14:41 ICP/USD      LONG   +1.73%     $38.95     $2.2020    $2.2400   $17.01  mean_reversion_complete
+           └─ order_id=PAPER-ICPUSD
+      74   2026-04-02T14:41 ARB/USD      LONG   +1.33%     $60.71     $0.0905    $0.0917   $25.62  mean_reversion_complete
+           └─ order_id=PAPER-ARBUSD
+      75   2026-04-02T17:03 GRT/USD      LONG   +1.00%     $64.67     $0.0235    $0.0237   $34.37  mean_reversion_complete
+           └─ order_id=PAPER-GRTUSD
+      76   2026-04-02T17:18 OP/USD       LONG   +1.27%     $56.96     $0.1065    $0.1078   $25.61  mean_reversion_complete
+           └─ order_id=PAPER-OPUSD-
+      77   2026-04-02T17:22 VET/USD      LONG   +1.61%     $79.35     $0.0067    $0.0068   $25.66  mean_reversion_complete
+           └─ order_id=PAPER-VETUSD
+      78   2026-04-02T23:01 ENA/USD      LONG   +1.01%     $65.02     $0.0805    $0.0813   $34.37  mean_reversion_complete
+           └─ order_id=PAPER-ENAUSD
+      79   2026-04-03T01:42 INJ/USD      LONG   +0.98%     $38.46     $2.7430    $2.7700   $25.51  mean_reversion_complete
+           └─ order_id=PAPER-INJUSD
+      80   2026-04-03T02:17 UNI/USD      LONG   +2.17%     $53.42     $3.1340    $3.2020   $17.08  mean_reversion_complete
+           └─ order_id=PAPER-UNIUSD
+      81   2026-04-03T04:01 STX/USD      LONG   +0.85%     $10.56     $0.2123    $0.2141   $16.93  mean_reversion_complete
+           └─ order_id=PAPER-STXUSD
+      82   2026-04-03T04:12 RENDER/USD   SHORT  -1.96%   $-227.22     $1.8802    $1.9170   $34.54  stop
+           └─ order_id=PAPER-RENDER
+      83   2026-04-03T05:20 W/USD        LONG   -1.83%   $-213.53     $0.0140    $0.0137   $33.58  stop
+           └─ order_id=PAPER-WUSD-1
+      84   2026-04-03T05:28 DYM/USD      LONG   +1.23%     $86.96     $0.0218    $0.0221   $34.37  mean_reversion_complete
+           └─ order_id=PAPER-DYMUSD
+      85   2026-04-03T05:34 ATOM/USD     SHORT  -1.83%   $-214.54     $1.6970    $1.7281   $34.45  stop
+           └─ order_id=PAPER-ATOMUS
+      86   2026-04-03T05:35 VET/USD      SHORT  -1.19%   $-151.74     $0.0069    $0.0070   $34.40  stop
+           └─ order_id=PAPER-VETUSD
+      87   2026-04-03T06:26 PYTH/USD     SHORT  -1.92%   $-167.65     $0.0409    $0.0416   $25.94  trail
+           └─ order_id=PAPER-PYTHUS
+      88   2026-04-03T06:37 IMX/USD      LONG   +0.92%     $55.93     $0.1323    $0.1335   $34.29  mean_reversion_complete
+           └─ order_id=PAPER-IMXUSD
+      89   2026-04-03T10:16 STRK/USD     LONG   +0.32%     $-4.79     $0.0334    $0.0336   $25.44  stale_exit
+           └─ order_id=PAPER-STRKUS
+      90   2026-04-05T05:54 NEAR/USD     SHORT  -4.27%   $-458.28     $1.2031    $1.2545   $35.32  stop
+           └─ order_id=PAPER-NEARUS
+
+── BOT #3: BLACKBEARD'S FLEET (bot_id=blackbeard, strategy=Aggressive) ───────
+    Bot status:                     RUNNING (running)
+    Paper trading:                  YES
+    Strategy:                       Aggressive
+    Cycles completed:               7
+    Last updated:                   2026-04-05T08:47:18
+    Starting capital:               $100,000.00
+    Current equity:                 $97,946.53
+    Total P&L:                      $-2,053.47 (-2.05%)
+    Deployed capital:               $36,814.69 (+37.6% of equity)
+    Open positions:                 5
+    All-time trades:                99
+    Win / Loss:                     44W / 55L (+44.4% win rate)
+    All-time P&L:                   $-3,415.00
+
+    Open Positions:
+      ETH/USD      SHORT  entry=$2,035.1468  now=$2,037.0100  P&L=$-6.73 (-0.09%)
+      SEI/USD      SHORT  entry=$0.0526  now=$0.0526  P&L=$0.12 (+0.00%)
+      SOL/USD      SHORT  entry=$79.6861  now=$79.6000  P&L=$8.01 (+0.11%)
+      LINK/USD     SHORT  entry=$8.5562  now=$8.5413  P&L=$12.79 (+0.17%)
+      SHIB/USD     SHORT  entry=$0.0000  now=$0.0000  P&L=$12.62 (+0.17%)
+
+    Full Trade History (99 trades):
+      #    Date             Symbol       Side     PnL%       PnL$       Entry       Exit     Fees  Reason
+      --------------------------------------------------------------------------------------------------------------
+      1    2026-04-01T00:31 RENDER/USD   SHORT  -2.02%     $-0.01     $1.7290    $1.7640    $0.00  stop
+           └─ order_id=PAPER-RENDER
+      2    2026-04-01T00:50 ICP/USD      SHORT  +0.96%      $0.00     $2.3030    $2.2810    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-ICPUSD
+      3    2026-04-01T00:57 ALGO/USD     SHORT  -2.35%      $0.00     $0.0945    $0.0967    $0.00  stop
+           └─ order_id=PAPER-ALGOUS
+      4    2026-04-01T01:12 APT/USD      LONG   +0.88%      $0.00     $0.8892    $0.8970    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-APTUSD
+      5    2026-04-01T03:55 SNX/USD      SHORT  -2.75%      $0.00     $0.2868    $0.2947    $0.00  stop
+           └─ order_id=PAPER-SNXUSD
+      6    2026-04-01T04:27 JUP/USD      SHORT  -2.02%      $0.00     $0.1575    $0.1606    $0.00  stop
+           └─ order_id=PAPER-JUPUSD
+      7    2026-04-01T05:11 SEI/USD      SHORT  -2.39%      $0.00     $0.0514    $0.0527    $0.00  stop
+           └─ order_id=PAPER-SEIUSD
+      8    2026-04-01T06:07 AVAX/USD     SHORT  -2.35%     $-0.08     $8.9500    $9.1600    $0.02  stop
+           └─ order_id=PAPER-AVAXUS
+      9    2026-04-01T06:12 SUI/USD      SHORT  -2.13%     $-0.01     $0.8797    $0.8984    $0.00  stop
+           └─ order_id=PAPER-SUIUSD
+      10   2026-04-01T08:40 ALGO/USD     SHORT  +0.00%      $0.00     $0.1043    $0.1043    $0.00  blacklisted_asset
+           └─ order_id=PAPER-ALGOUS
+      11   2026-04-01T08:43 RENDER/USD   SHORT  -2.07%     $-0.02     $1.7870    $1.8240    $0.00  stop
+           └─ order_id=PAPER-RENDER
+      12   2026-04-01T08:44 PYTH/USD     SHORT  -3.06%      $0.00     $0.0389    $0.0401    $0.00  stop
+           └─ order_id=PAPER-PYTHUS
+      13   2026-04-01T08:46 ATOM/USD     SHORT  -2.00%     $-0.01     $1.7049    $1.7390    $0.00  stop
+           └─ order_id=PAPER-ATOMUS
+      14   2026-04-01T10:56 OP/USD       SHORT  +1.86%      $0.00     $0.1130    $0.1109    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-OPUSD-
+      15   2026-04-02T01:05 TON/USD      LONG   +1.15%      $0.00     $1.2170    $1.2310    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-TONUSD
+      16   2026-04-02T07:49 ADA/USD      SHORT  +3.97%      $0.00     $0.2483    $0.2385    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-ADAUSD
+      17   2026-04-02T07:49 DOT/USD      LONG   -2.35%   $-113.25     $1.2532    $1.2238   $20.35  rebalance_liquidation
+           └─ order_id=PAPER-DOTUSD
+      18   2026-04-02T07:49 INJ/USD      SHORT  +4.53%      $0.04     $2.9340    $2.8010    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-INJUSD
+      19   2026-04-02T07:49 POL/USD      SHORT  +2.81%      $0.00     $0.0940    $0.0914    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-POLUSD
+      20   2026-04-02T07:49 SNX/USD      SHORT  +3.99%      $0.00     $0.2910    $0.2794    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-SNXUSD
+      21   2026-04-02T07:49 STX/USD      SHORT  +2.86%      $0.00     $0.2240    $0.2176    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STXUSD
+      22   2026-04-02T07:49 XRP/USD      SHORT  +1.51%      $0.00     $1.3380    $1.3178    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-XRPUSD
+      23   2026-04-02T07:49 DOGE/USD     SHORT  +2.10%      $0.00     $0.0922    $0.0903    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-DOGEUS
+      24   2026-04-02T07:49 SHIB/USD     SHORT  +0.00%      $0.00     $0.0000    $0.0000    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-SHIBUS
+      25   2026-04-02T07:49 STRK/USD     SHORT  +4.25%      $0.00     $0.0351    $0.0336    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STRKUS
+      26   2026-04-02T07:55 ENA/USD      LONG   +0.00%    $-20.57     $0.0824    $0.0824   $20.57  rebalance_liquidation
+           └─ order_id=PAPER-ENAUSD
+      27   2026-04-02T07:55 LTC/USD      LONG   +0.00%    $-20.56    $52.4000   $52.4000   $20.56  rebalance_liquidation
+           └─ order_id=PAPER-LTCUSD
+      28   2026-04-02T07:55 UNI/USD      LONG   +0.00%    $-20.57     $3.3420    $3.3420   $20.57  rebalance_liquidation
+           └─ order_id=PAPER-UNIUSD
+      29   2026-04-02T08:18 BCH/USD      LONG   +0.00%     $-1.71   $440.7300  $440.7300    $1.71  rebalance_liquidation
+           └─ order_id=PAPER-BCHUSD
+      30   2026-04-02T08:18 ENA/USD      LONG   +0.00%    $-20.57     $0.0824    $0.0824   $20.57  rebalance_liquidation
+           └─ order_id=PAPER-ENAUSD
+      31   2026-04-02T08:18 IMX/USD      LONG   +0.00%    $-20.56     $0.1341    $0.1341   $20.56  rebalance_liquidation
+           └─ order_id=PAPER-IMXUSD
+      32   2026-04-02T08:18 LTC/USD      LONG   +0.00%    $-20.56    $52.4000   $52.4000   $20.56  rebalance_liquidation
+           └─ order_id=PAPER-LTCUSD
+      33   2026-04-02T08:18 SEI/USD      LONG   +0.00%    $-20.56     $0.0524    $0.0524   $20.56  rebalance_liquidation
+           └─ order_id=PAPER-SEIUSD
+      34   2026-04-02T08:18 UNI/USD      LONG   +0.00%    $-20.57     $3.3420    $3.3420   $20.57  rebalance_liquidation
+           └─ order_id=PAPER-UNIUSD
+      35   2026-04-02T13:49 UNI/USD      LONG   -2.64%   $-356.20     $3.2835    $3.1970   $40.59  stop
+           └─ order_id=PAPER-UNIUSD
+      36   2026-04-02T14:36 AVAX/USD     LONG   +1.38%     $33.93     $8.6800    $8.8000   $20.68  mean_reversion_complete
+           └─ order_id=PAPER-AVAXUS
+      37   2026-04-02T14:45 ICP/USD      LONG   +1.40%     $34.67     $2.2120    $2.2430   $20.68  mean_reversion_complete
+           └─ order_id=PAPER-ICPUSD
+      38   2026-04-02T15:02 STRK/USD     LONG   +1.41%     $80.47     $0.0333    $0.0338   $31.10  mean_reversion_complete
+           └─ order_id=PAPER-STRKUS
+      39   2026-04-02T15:53 ENA/USD      LONG   -2.21%   $-305.55     $0.0810    $0.0792   $40.71  stop
+           └─ order_id=PAPER-ENAUSD
+      40   2026-04-02T16:40 W/USD        LONG   +1.69%     $46.10     $0.0142    $0.0144   $20.71  mean_reversion_complete
+           └─ order_id=PAPER-WUSD-1
+      41   2026-04-02T16:46 LINK/USD     LONG   +1.35%     $32.53     $8.5085    $8.6231   $20.68  mean_reversion_complete
+           └─ order_id=PAPER-LINKUS
+      42   2026-04-02T19:59 RENDER/USD   SHORT  -2.25%   $-193.37     $1.8112    $1.8520   $26.10  stop
+           └─ order_id=PAPER-RENDER
+      43   2026-04-03T01:42 INJ/USD      LONG   +1.39%     $34.35     $2.7320    $2.7700   $20.74  mean_reversion_complete
+           └─ order_id=PAPER-INJUSD
+      44   2026-04-03T05:28 DYM/USD      LONG   +1.61%     $96.23     $0.0217    $0.0221   $31.22  mean_reversion_complete
+           └─ order_id=PAPER-DYMUSD
+      45   2026-04-03T05:34 ATOM/USD     SHORT  -2.58%   $-352.40     $1.6846    $1.7281   $42.30  stop
+           └─ order_id=PAPER-ATOMUS
+      46   2026-04-03T06:37 IMX/USD      LONG   +1.20%    $101.85     $0.1319    $0.1335   $41.87  mean_reversion_complete
+           └─ order_id=PAPER-IMXUSD
+      47   2026-04-03T07:35 RENDER/USD   SHORT  -2.76%   $-373.25     $1.8782    $1.9300   $42.36  stop
+           └─ order_id=PAPER-RENDER
+      48   2026-04-04T00:24 TON/USD      SHORT  +0.71%     $25.09     $1.2440    $1.2352   $30.73  scalp_tp
+           └─ order_id=PAPER-TONUSD
+      49   2026-04-04T00:24 DOT/USD      SHORT  +0.75%     $28.46     $1.2475    $1.2382   $30.73  scalp_tp
+           └─ order_id=PAPER-DOTUSD
+      50   2026-04-04T00:25 NEAR/USD     SHORT  -1.78%   $-256.55     $1.1901    $1.2113   $42.26  scalp_stop
+           └─ order_id=PAPER-NEARUS
+      51   2026-04-04T00:25 OP/USD       SHORT  -0.29%    $-32.26     $0.1091    $0.1094   $20.72  scalp_stop
+           └─ order_id=PAPER-OPUSD-
+      52   2026-04-04T00:26 HBAR/USD     SHORT  +1.49%    $138.29     $0.0889    $0.0876   $41.03  scalp_tp
+           └─ order_id=PAPER-HBARUS
+      53   2026-04-04T00:26 WLD/USD      LONG   +0.51%     $-0.25     $0.2644    $0.2658   $20.62  scalp_tp
+           └─ order_id=PAPER-WLDUSD
+      54   2026-04-04T00:26 TIA/USD      LONG   +2.00%     $58.23     $0.2833    $0.2890   $20.77  scalp_tp
+           └─ order_id=PAPER-TIAUSD
+      55   2026-04-04T00:26 W/USD        LONG   -4.68%   $-601.74     $0.0138    $0.0131   $40.04  scalp_stop
+           └─ order_id=PAPER-WUSD-1
+      56   2026-04-04T00:31 GRT/USD      SHORT  +0.01%    $-30.81     $0.0238    $0.0238   $31.37  scalp_stagnant
+           └─ order_id=PAPER-GRTUSD
+      57   2026-04-04T02:03 SHIB/USD     SHORT  +0.00%    $-38.93     $0.0000    $0.0000   $38.93  scalp_stagnant
+           └─ order_id=PAPER-SHIBUS
+      58   2026-04-04T02:04 APT/USD      SHORT  -0.02%    $-40.69     $0.8466    $0.8468   $38.92  scalp_stagnant
+           └─ order_id=PAPER-APTUSD
+      59   2026-04-04T02:04 RENDER/USD   SHORT  -0.25%    $-57.41     $1.9057    $1.9104   $38.97  scalp_stagnant
+           └─ order_id=PAPER-RENDER
+      60   2026-04-04T02:04 TAO/USD      SHORT  -0.13%    $-48.93   $309.5158  $309.9287   $38.94  scalp_stagnant
+           └─ order_id=PAPER-TAOUSD
+      61   2026-04-04T02:05 WLD/USD      SHORT  -0.04%    $-41.55     $0.2645    $0.2645   $38.92  scalp_stagnant
+           └─ order_id=PAPER-WLDUSD
+      62   2026-04-04T02:51 TON/USD      SHORT  -0.04%    $-41.53     $1.2338    $1.2342   $38.90  scalp_stagnant
+           └─ order_id=PAPER-TONUSD
+      63   2026-04-04T02:52 STX/USD      SHORT  +0.01%    $-37.99     $0.2128    $0.2127   $38.89  scalp_stagnant
+           └─ order_id=PAPER-STXUSD
+      64   2026-04-04T02:52 POL/USD      SHORT  +0.05%    $-35.03     $0.0922    $0.0922   $38.89  scalp_stagnant
+           └─ order_id=PAPER-POLUSD
+      65   2026-04-04T02:52 JUP/USD      SHORT  -0.30%    $-61.41     $0.1622    $0.1626   $38.95  scalp_stagnant
+           └─ order_id=PAPER-JUPUSD
+      66   2026-04-04T03:17 ARB/USD      SHORT  +0.18%    $-25.20     $0.0918    $0.0916   $38.86  scalp_stagnant
+           └─ order_id=PAPER-ARBUSD
+      67   2026-04-04T03:29 NEAR/USD     SHORT  -0.53%    $-78.53     $1.2108    $1.2172   $38.90  scalp_stop
+           └─ order_id=PAPER-NEARUS
+      68   2026-04-04T03:48 DOT/USD      SHORT  -0.66%    $-70.24     $1.2371    $1.2452   $31.13  scalp_stop
+           └─ order_id=PAPER-DOTUSD
+      69   2026-04-04T04:20 TAO/USD      SHORT  -0.69%    $-90.43   $310.0389  $312.1790   $38.93  scalp_stop
+           └─ order_id=PAPER-TAOUSD
+      70   2026-04-04T04:38 SHIB/USD     SHORT  -0.51%    $-76.80     $0.0000    $0.0000   $38.88  scalp_stop
+           └─ order_id=PAPER-SHIBUS
+      71   2026-04-04T04:48 UNI/USD      SHORT  +0.22%     $-8.27     $3.1575    $3.1505   $21.47  scalp_tp
+           └─ order_id=PAPER-UNIUSD
+      72   2026-04-04T07:34 FIL/USD      SHORT  -1.11%    $-80.99     $0.8369    $0.8461   $25.99  scalp_stop
+           └─ order_id=PAPER-FILUSD
+      73   2026-04-04T09:04 SUI/USD      SHORT  +0.19%    $-24.21     $0.8690    $0.8674   $38.74  scalp_stagnant
+           └─ order_id=PAPER-SUIUSD
+      74   2026-04-04T10:26 AVAX/USD     SHORT  +0.19%    $-24.61     $8.8784    $8.8616   $38.76  scalp_stagnant
+           └─ order_id=PAPER-AVAXUS
+      75   2026-04-04T10:40 TIA/USD      SHORT  -1.11%    $-97.47     $0.2879    $0.2910   $31.21  scalp_stop
+           └─ order_id=PAPER-TIAUSD
+      76   2026-04-04T10:59 TAO/USD      SHORT  -0.19%    $-53.24   $309.0692  $309.6661   $38.83  scalp_stagnant
+           └─ order_id=PAPER-TAOUSD
+      77   2026-04-04T11:16 DYM/USD      SHORT  -1.92%   $-182.21     $0.0213    $0.0217   $39.12  scalp_stop
+           └─ order_id=PAPER-DYMUSD
+      78   2026-04-04T13:36 TON/USD      SHORT  -0.44%    $-71.84     $1.2308    $1.2362   $38.89  scalp_stagnant
+           └─ order_id=PAPER-TONUSD
+      79   2026-04-04T13:47 RUNE/USD     SHORT  +1.26%     $44.26     $0.3869    $0.3821   $30.81  scalp_tp
+           └─ order_id=PAPER-RUNEUS
+      80   2026-04-04T13:51 ONDO/USD     SHORT  +0.68%     $11.89     $0.2579    $0.2561   $38.63  scalp_tp
+           └─ order_id=PAPER-ONDOUS
+      81   2026-04-04T14:41 SUI/USD      SHORT  +0.59%      $5.08     $0.8675    $0.8625   $38.68  scalp_tp
+           └─ order_id=PAPER-SUIUSD
+      82   2026-04-04T14:41 RENDER/USD   SHORT  +0.65%      $9.61     $1.9037    $1.8913   $38.66  scalp_tp
+           └─ order_id=PAPER-RENDER
+      83   2026-04-04T16:09 AVAX/USD     SHORT  -1.05%    $-77.86     $8.8687    $8.9614   $25.94  scalp_stop
+           └─ order_id=PAPER-AVAXUS
+      84   2026-04-04T16:29 FIL/USD      SHORT  -0.51%    $-61.50     $0.8359    $0.8401   $31.07  scalp_stagnant
+           └─ order_id=PAPER-FILUSD
+      85   2026-04-04T17:07 IMX/USD      SHORT  +0.78%     $19.57     $0.1347    $0.1336   $38.53  scalp_tp
+           └─ order_id=PAPER-IMXUSD
+      86   2026-04-04T17:20 OP/USD       SHORT  -1.59%   $-104.95     $0.1088    $0.1105   $25.96  scalp_stop
+           └─ order_id=PAPER-OPUSD-
+      87   2026-04-04T18:27 SNX/USD      SHORT  -1.08%    $-95.19     $0.2771    $0.2800   $31.07  scalp_stop
+           └─ order_id=PAPER-SNXUSD
+      88   2026-04-04T19:51 DOT/USD      SHORT  -0.08%    $-35.79     $1.2527    $1.2537   $31.00  scalp_stagnant
+           └─ order_id=PAPER-DOTUSD
+      89   2026-04-04T21:13 XRP/USD      SHORT  -0.52%    $-77.45     $1.3080    $1.3148   $38.73  scalp_stagnant
+           └─ order_id=PAPER-XRPUSD
+      90   2026-04-04T21:18 RENDER/USD   SHORT  +0.60%      $6.23     $1.8827    $1.8713   $38.52  scalp_tp
+           └─ order_id=PAPER-RENDER
+      91   2026-04-04T21:38 TIA/USD      SHORT  +0.75%     $17.51     $0.2916    $0.2895   $38.51  scalp_tp
+           └─ order_id=PAPER-TIAUSD
+      92   2026-04-04T22:15 TON/USD      SHORT  +0.21%    $-23.17     $1.2348    $1.2322   $38.63  scalp_stagnant
+           └─ order_id=PAPER-TONUSD
+      93   2026-04-05T06:46 BTC/USD      SHORT  +0.73%     $15.68  $67,307.1613 $66,816.5010   $38.53  scalp_tp
+           └─ order_id=PAPER-BTCUSD
+      94   2026-04-05T06:47 DOGE/USD     SHORT  +1.89%    $102.01     $0.0921    $0.0904   $38.19  scalp_tp
+           └─ order_id=PAPER-DOGEUS
+      95   2026-04-05T06:47 ADA/USD      SHORT  +1.64%     $83.75     $0.2472    $0.2431   $38.28  scalp_tp
+           └─ order_id=PAPER-ADAUSD
+      96   2026-04-05T06:47 ICP/USD      SHORT  +1.70%     $70.35     $2.3076    $2.2684   $30.58  scalp_tp
+           └─ order_id=PAPER-ICPUSD
+      97   2026-04-05T06:48 HBAR/USD     SHORT  +0.42%     $-7.11     $0.0872    $0.0869   $38.49  scalp_stagnant
+           └─ order_id=PAPER-HBARUS
+      98   2026-04-05T07:33 W/USD        SHORT  +1.04%     $38.35     $0.0130    $0.0129   $38.11  scalp_tp
+           └─ order_id=PAPER-WUSD-1
+      99   2026-04-05T07:48 ATOM/USD     SHORT  +0.56%      $2.99     $1.6998    $1.6903   $38.42  scalp_tp
+           └─ order_id=PAPER-ATOMUS
+
+── BOT #4: CALYPSO'S TIDE (bot_id=calypso, strategy=Most Aggressive) ─────────
+    Bot status:                     RUNNING (running)
+    Paper trading:                  YES
+    Strategy:                       Most Aggressive
+    Cycles completed:               7
+    Last updated:                   2026-04-05T08:47:19
+    Starting capital:               $100,000.00
+    Current equity:                 $97,643.75
+    Total P&L:                      $-2,356.25 (-2.36%)
+    Deployed capital:               $36,703.91 (+37.6% of equity)
+    Open positions:                 5
+    All-time trades:                126
+    Win / Loss:                     45W / 81L (+35.7% win rate)
+    All-time P&L:                   $-3,590.42
+
+    Open Positions:
+      BTC/USD      SHORT  entry=$66,803.5197  now=$66,843.1000  P&L=$-4.34 (-0.06%)
+      INJ/USD      SHORT  entry=$2.7675  now=$2.7680  P&L=$-1.27 (-0.02%)
+      SUI/USD      SHORT  entry=$0.8553  now=$0.8525  P&L=$23.75 (+0.32%)
+      UNI/USD      SHORT  entry=$3.0815  now=$3.0710  P&L=$24.90 (+0.34%)
+      LINK/USD     SHORT  entry=$8.5611  now=$8.5413  P&L=$17.09 (+0.23%)
+
+    Full Trade History (126 trades):
+      #    Date             Symbol       Side     PnL%       PnL$       Entry       Exit     Fees  Reason
+      --------------------------------------------------------------------------------------------------------------
+      1    2026-04-01T00:51 RENDER/USD   SHORT  -3.41%     $-0.02     $1.7290    $1.7880    $0.00  stop
+           └─ order_id=PAPER-RENDER
+      2    2026-04-01T03:55 SNX/USD      SHORT  -2.75%      $0.00     $0.2868    $0.2947    $0.00  stop
+           └─ order_id=PAPER-SNXUSD
+      3    2026-04-01T05:46 JUP/USD      SHORT  -2.62%      $0.00     $0.1575    $0.1616    $0.00  stop
+           └─ order_id=PAPER-JUPUSD
+      4    2026-04-01T05:46 SEI/USD      SHORT  -3.45%      $0.00     $0.0515    $0.0533    $0.00  stop
+           └─ order_id=PAPER-SEIUSD
+      5    2026-04-01T05:53 HBAR/USD     SHORT  -2.65%      $0.00     $0.0880    $0.0903    $0.00  stop
+           └─ order_id=PAPER-HBARUS
+      6    2026-04-01T08:47 VET/USD      SHORT  -2.58%      $0.00     $0.0068    $0.0069    $0.00  stop
+           └─ order_id=PAPER-VETUSD
+      7    2026-04-01T08:56 ONDO/USD     SHORT  +1.88%      $0.00     $0.2780    $0.2727    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-ONDOUS
+      8    2026-04-01T22:16 ADA/USD      LONG   +3.69%      $0.00     $0.2400    $0.2489    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-ADAUSD
+      9    2026-04-01T22:20 SEI/USD      SHORT  +0.89%      $0.00     $0.0548    $0.0543    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-SEIUSD
+      10   2026-04-02T01:05 TON/USD      LONG   +1.07%      $0.00     $1.2180    $1.2310    $0.00  mean_reversion_complete
+           └─ order_id=PAPER-TONUSD
+      11   2026-04-02T07:49 BCH/USD      LONG   -2.59%     $-4.65   $454.0900  $442.3400    $0.77  rebalance_liquidation
+           └─ order_id=PAPER-BCHUSD
+      12   2026-04-02T07:49 BNB/USD      SHORT  +3.98%      $7.05   $616.3200  $591.8200    $1.04  rebalance_liquidation
+           └─ order_id=PAPER-BNBUSD
+      13   2026-04-02T07:49 DOT/USD      LONG   -2.35%   $-141.56     $1.2532    $1.2238   $25.44  rebalance_liquidation
+           └─ order_id=PAPER-DOTUSD
+      14   2026-04-02T07:49 DYM/USD      LONG   -6.53%      $0.00     $0.0245    $0.0229    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-DYMUSD
+      15   2026-04-02T07:49 SNX/USD      SHORT  +4.51%      $0.00     $0.2926    $0.2794    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-SNXUSD
+      16   2026-04-02T07:49 STX/USD      SHORT  +2.86%      $0.00     $0.2240    $0.2176    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STXUSD
+      17   2026-04-02T07:49 TRX/USD      LONG   +0.67%      $0.00     $0.3135    $0.3156    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-TRXUSD
+      18   2026-04-02T07:49 AAVE/USD     SHORT  +3.92%      $1.11    $98.9300   $95.0500    $0.17  rebalance_liquidation
+           └─ order_id=PAPER-AAVEUS
+      19   2026-04-02T07:49 ATOM/USD     SHORT  +3.72%      $0.02     $1.7049    $1.6414    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-ATOMUS
+      20   2026-04-02T07:49 STRK/USD     SHORT  +4.71%      $0.00     $0.0353    $0.0336    $0.00  rebalance_liquidation
+           └─ order_id=PAPER-STRKUS
+      21   2026-04-02T07:55 OP/USD       LONG   +0.00%    $-25.70     $0.1075    $0.1075   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-OPUSD-
+      22   2026-04-02T07:55 ARB/USD      LONG   +0.00%    $-25.70     $0.0915    $0.0915   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-ARBUSD
+      23   2026-04-02T07:55 BCH/USD      LONG   +0.00%     $-1.71   $441.2600  $441.2600    $1.71  rebalance_liquidation
+           └─ order_id=PAPER-BCHUSD
+      24   2026-04-02T07:55 BNB/USD      LONG   +0.00%    $-25.70   $591.7100  $591.7100   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-BNBUSD
+      25   2026-04-02T07:55 FIL/USD      LONG   +0.00%    $-25.70     $0.8160    $0.8160   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-FILUSD
+      26   2026-04-02T07:55 GRT/USD      LONG   +0.00%    $-25.70     $0.0238    $0.0238   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-GRTUSD
+      27   2026-04-02T07:55 IMX/USD      LONG   +0.00%    $-25.70     $0.1366    $0.1366   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-IMXUSD
+      28   2026-04-02T07:55 VET/USD      LONG   +0.00%    $-25.70     $0.0067    $0.0067   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-VETUSD
+      29   2026-04-02T07:55 PEPE/USD     LONG   +0.00%    $-25.70     $0.0000    $0.0000   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-PEPEUS
+      30   2026-04-02T07:55 SHIB/USD     LONG   +0.00%    $-25.70     $0.0000    $0.0000   $25.70  rebalance_liquidation
+           └─ order_id=PAPER-SHIBUS
+      31   2026-04-02T13:49 UNI/USD      LONG   -3.59%   $-391.43     $3.3160    $3.1970   $37.54  stop
+           └─ order_id=PAPER-UNIUSD
+      32   2026-04-02T15:00 SHIB/USD     LONG   +1.20%     $33.41     $0.0000    $0.0000   $25.79  mean_reversion_complete
+           └─ order_id=PAPER-SHIBUS
+      33   2026-04-02T16:27 IMX/USD      LONG   +1.26%     $85.21     $0.1352    $0.1369   $38.78  mean_reversion_complete
+           └─ order_id=PAPER-IMXUSD
+      34   2026-04-02T17:18 OP/USD       LONG   +1.27%     $86.28     $0.1065    $0.1078   $38.79  mean_reversion_complete
+           └─ order_id=PAPER-OPUSD-
+      35   2026-04-02T17:22 VET/USD      LONG   +1.70%    $128.45     $0.0067    $0.0068   $38.90  mean_reversion_complete
+           └─ order_id=PAPER-VETUSD
+      36   2026-04-02T21:50 JUP/USD      SHORT  +1.28%     $37.47     $0.1570    $0.1550   $25.35  mean_reversion_complete
+           └─ order_id=PAPER-JUPUSD
+      37   2026-04-03T01:42 INJ/USD      LONG   +1.39%     $42.93     $2.7320    $2.7700   $25.92  mean_reversion_complete
+           └─ order_id=PAPER-INJUSD
+      38   2026-04-03T02:30 SEI/USD      LONG   +1.04%     $25.44     $0.0511    $0.0516   $25.83  mean_reversion_complete
+           └─ order_id=PAPER-SEIUSD
+      39   2026-04-03T05:28 DYM/USD      LONG   +1.38%     $97.27     $0.0218    $0.0221   $38.97  mean_reversion_complete
+           └─ order_id=PAPER-DYMUSD
+      40   2026-04-03T05:34 ATOM/USD     SHORT  -2.68%   $-454.72     $1.6830    $1.7281   $52.92  stop
+           └─ order_id=PAPER-ATOMUS
+      41   2026-04-03T06:37 IMX/USD      LONG   +1.20%    $127.31     $0.1319    $0.1335   $52.34  mean_reversion_complete
+           └─ order_id=PAPER-IMXUSD
+      42   2026-04-03T06:44 RENDER/USD   SHORT  -2.86%   $-482.00     $1.8695    $1.9230   $52.99  stop
+           └─ order_id=PAPER-RENDER
+      43   2026-04-04T00:25 XRP/USD      SHORT  -0.06%    $-28.93     $1.3169    $1.3177   $25.75  scalp_stagnant
+           └─ order_id=PAPER-XRPUSD
+      44   2026-04-04T00:25 BNB/USD      SHORT  +0.03%     $-9.41   $587.9900  $587.8427    $9.88  scalp_stagnant
+           └─ order_id=PAPER-BNBUSD
+      45   2026-04-04T00:25 SHIB/USD     SHORT  -0.34%   $-102.11     $0.0000    $0.0000   $51.80  scalp_stop
+           └─ order_id=PAPER-SHIBUS
+      46   2026-04-04T00:25 TON/USD      SHORT  +0.54%     $15.31     $1.2420    $1.2353   $38.47  scalp_tp
+           └─ order_id=PAPER-TONUSD
+      47   2026-04-04T00:25 NEAR/USD     SHORT  -1.77%    $-25.57     $1.1901    $1.2111    $4.23  scalp_stop
+           └─ order_id=PAPER-NEARUS
+      48   2026-04-04T00:26 STX/USD      LONG   +0.59%     $19.78     $0.2126    $0.2139   $38.76  scalp_tp
+           └─ order_id=PAPER-STXUSD
+      49   2026-04-04T00:27 HBAR/USD     SHORT  +1.19%    $126.38     $0.0887    $0.0876   $51.41  scalp_tp
+           └─ order_id=PAPER-HBARUS
+      50   2026-04-04T00:27 TIA/USD      LONG   +1.49%     $48.05     $0.2847    $0.2890   $25.93  scalp_tp
+           └─ order_id=PAPER-TIAUSD
+      51   2026-04-04T00:29 TAO/USD      SHORT  -0.18%    $-52.86   $310.5932  $311.1489   $39.34  scalp_stop
+           └─ order_id=PAPER-TAOUSD
+      52   2026-04-04T00:33 BTC/USD      SHORT  -0.04%    $-41.97  $66,924.2608 $66,948.7722   $39.20  scalp_stagnant
+           └─ order_id=PAPER-BTCUSD
+      53   2026-04-04T00:34 SUI/USD      SHORT  -0.01%    $-40.27     $0.8726    $0.8728   $39.30  scalp_stagnant
+           └─ order_id=PAPER-SUIUSD
+      54   2026-04-04T00:34 IMX/USD      SHORT  -0.11%    $-47.50     $0.1346    $0.1347   $39.22  scalp_stagnant
+           └─ order_id=PAPER-IMXUSD
+      55   2026-04-04T00:35 SEI/USD      SHORT  +0.08%    $-26.73     $0.0542    $0.0542   $31.43  scalp_stagnant
+           └─ order_id=PAPER-SEIUSD
+      56   2026-04-04T00:39 ETH/USD      SHORT  -0.02%    $-40.72  $2,052.9500 $2,053.3684   $39.18  scalp_stagnant
+           └─ order_id=PAPER-ETHUSD
+      57   2026-04-04T00:40 UNI/USD      SHORT  -0.22%    $-56.33     $3.1714    $3.1786   $39.34  scalp_stop
+           └─ order_id=PAPER-UNIUSD
+      58   2026-04-04T00:41 STX/USD      SHORT  -0.04%    $-41.83     $0.2139    $0.2139   $39.19  scalp_stagnant
+           └─ order_id=PAPER-STXUSD
+      59   2026-04-04T00:41 WLD/USD      SHORT  +0.00%    $-39.01     $0.2660    $0.2659   $39.18  scalp_stagnant
+           └─ order_id=PAPER-WLDUSD
+      60   2026-04-04T00:42 CRV/USD      SHORT  -0.23%    $-56.28     $0.2097    $0.2101   $39.22  scalp_stop
+           └─ order_id=PAPER-CRVUSD
+      61   2026-04-04T00:45 XRP/USD      SHORT  +0.03%    $-37.06     $1.3186    $1.3183   $39.17  scalp_stagnant
+           └─ order_id=PAPER-XRPUSD
+      62   2026-04-04T00:46 NEAR/USD     SHORT  -0.04%    $-41.86     $1.2108    $1.2112   $39.19  scalp_stagnant
+           └─ order_id=PAPER-NEARUS
+      63   2026-04-04T00:49 DOGE/USD     SHORT  +0.01%    $-38.25     $0.0915    $0.0914   $39.18  scalp_stagnant
+           └─ order_id=PAPER-DOGEUS
+      64   2026-04-04T00:49 TRX/USD      SHORT  -0.06%    $-34.81     $0.3154    $0.3156   $31.35  scalp_stagnant
+           └─ order_id=PAPER-TRXUSD
+      65   2026-04-04T00:49 LTC/USD      SHORT  -0.02%    $-40.46    $53.2207   $53.2297   $39.18  scalp_stagnant
+           └─ order_id=PAPER-LTCUSD
+      66   2026-04-04T00:52 BNB/USD      SHORT  +0.05%    $-35.05   $588.4768  $588.1553   $39.17  scalp_stagnant
+           └─ order_id=PAPER-BNBUSD
+      67   2026-04-04T00:53 ATOM/USD     SHORT  -0.08%    $-45.44     $1.6878    $1.6892   $39.20  scalp_stagnant
+           └─ order_id=PAPER-ATOMUS
+      68   2026-04-04T01:19 TRX/USD      SHORT  -0.06%    $-34.75     $0.3155    $0.3157   $31.35  scalp_stagnant
+           └─ order_id=PAPER-TRXUSD
+      69   2026-04-04T01:19 NEAR/USD     SHORT  +0.13%    $-29.39     $1.2108    $1.2092   $39.15  scalp_stagnant
+           └─ order_id=PAPER-NEARUS
+      70   2026-04-04T01:20 FIL/USD      SHORT  -0.03%    $-33.30     $0.8359    $0.8361   $31.35  scalp_stagnant
+           └─ order_id=PAPER-FILUSD
+      71   2026-04-04T01:20 INJ/USD      SHORT  +0.11%    $-31.03     $2.7945    $2.7915   $39.16  scalp_stagnant
+           └─ order_id=PAPER-INJUSD
+      72   2026-04-04T01:37 TRX/USD      SHORT  -0.10%    $-37.31     $0.3157    $0.3161   $31.16  scalp_stagnant
+           └─ order_id=PAPER-TRXUSD
+      73   2026-04-04T01:37 ATOM/USD     SHORT  -0.02%    $-40.27     $1.6891    $1.6894   $38.93  scalp_stagnant
+           └─ order_id=PAPER-ATOMUS
+      74   2026-04-04T01:42 DYM/USD      SHORT  -0.04%    $-41.55     $0.0211    $0.0211   $38.92  scalp_stagnant
+           └─ order_id=PAPER-DYMUSD
+      75   2026-04-04T01:59 GRT/USD      SHORT  -0.58%    $-82.98     $0.0239    $0.0240   $39.29  scalp_stop
+           └─ order_id=PAPER-GRTUSD
+      76   2026-04-04T02:03 UNI/USD      SHORT  -0.04%    $-41.59     $3.1694    $3.1706   $38.92  scalp_stagnant
+           └─ order_id=PAPER-UNIUSD
+      77   2026-04-04T02:04 NEAR/USD     SHORT  -0.12%    $-47.73     $1.2088    $1.2102   $38.91  scalp_stagnant
+           └─ order_id=PAPER-NEARUS
+      78   2026-04-04T02:04 OP/USD       SHORT  -0.22%    $-55.25     $0.1097    $0.1099   $38.97  scalp_stagnant
+           └─ order_id=PAPER-OPUSD-
+      79   2026-04-04T02:05 SNX/USD      SHORT  -0.04%    $-41.55     $0.2781    $0.2781   $38.92  scalp_stagnant
+           └─ order_id=PAPER-SNXUSD
+      80   2026-04-04T02:31 PYTH/USD     SHORT  -0.47%    $-74.31     $0.0412    $0.0414   $38.96  scalp_stop
+           └─ order_id=PAPER-PYTHUS
+      81   2026-04-04T02:46 SEI/USD      SHORT  +0.21%    $-18.65     $0.0542    $0.0541   $31.07  scalp_stagnant
+           └─ order_id=PAPER-SEIUSD
+      82   2026-04-04T02:51 ICP/USD      SHORT  +0.27%    $-18.60     $2.2876    $2.2814   $38.81  scalp_stagnant
+           └─ order_id=PAPER-ICPUSD
+      83   2026-04-04T02:51 FIL/USD      SHORT  -0.04%    $-41.50     $0.8369    $0.8371   $38.87  scalp_stagnant
+           └─ order_id=PAPER-FILUSD
+      84   2026-04-04T02:52 SUI/USD      SHORT  +0.07%    $-33.76     $0.8709    $0.8704   $38.85  scalp_stagnant
+           └─ order_id=PAPER-SUIUSD
+      85   2026-04-04T03:06 DYM/USD      SHORT  -0.50%    $-50.87     $0.0213    $0.0214   $25.94  scalp_stop
+           └─ order_id=PAPER-DYMUSD
+      86   2026-04-04T03:08 VET/USD      SHORT  -2.14%   $-198.47     $0.0071    $0.0073   $39.20  scalp_stop
+           └─ order_id=PAPER-VETUSD
+      87   2026-04-04T03:18 AAVE/USD     SHORT  -0.05%    $-42.24    $94.7834   $94.8269   $38.82  scalp_stagnant
+           └─ order_id=PAPER-AAVEUS
+      88   2026-04-04T03:45 OP/USD       SHORT  -0.49%    $-60.13     $0.1103    $0.1108   $31.10  scalp_stop
+           └─ order_id=PAPER-OPUSD-
+      89   2026-04-04T04:36 INJ/USD      SHORT  -0.43%    $-56.54     $2.7926    $2.8045   $31.09  scalp_stop
+           └─ order_id=PAPER-INJUSD
+      90   2026-04-04T04:48 TON/USD      SHORT  +0.29%     $-5.25     $1.2338    $1.2302   $26.81  scalp_tp
+           └─ order_id=PAPER-TONUSD
+      91   2026-04-04T04:50 RUNE/USD     SHORT  +0.22%    $-10.59     $0.3959    $0.3951   $26.80  scalp_tp
+           └─ order_id=PAPER-RUNEUS
+      92   2026-04-04T05:40 IMX/USD      SHORT  -0.99%    $-75.35     $0.1352    $0.1365   $25.97  scalp_stop
+           └─ order_id=PAPER-IMXUSD
+      93   2026-04-04T05:50 DYM/USD      SHORT  +0.91%     $29.04     $0.0212    $0.0210   $38.57  scalp_tp
+           └─ order_id=PAPER-DYMUSD
+      94   2026-04-04T07:39 BTC/USD      SHORT  -0.19%    $-52.69  $66,854.0320 $66,978.8852   $38.78  scalp_stagnant
+           └─ order_id=PAPER-BTCUSD
+      95   2026-04-04T07:43 STRK/USD     SHORT  +0.82%     $22.84     $0.0337    $0.0334   $38.57  scalp_tp
+           └─ order_id=PAPER-STRKUS
+      96   2026-04-04T07:50 BNB/USD      SHORT  -0.21%    $-54.11   $588.7272  $589.9344   $38.82  scalp_stagnant
+           └─ order_id=PAPER-BNBUSD
+      97   2026-04-04T08:21 WLD/USD      SHORT  +0.64%     $21.20     $0.2656    $0.2638   $26.72  scalp_tp
+           └─ order_id=PAPER-WLDUSD
+      98   2026-04-04T08:54 NEAR/USD     SHORT  +0.62%      $5.82     $1.2328    $1.2252   $30.83  scalp_tp
+           └─ order_id=PAPER-NEARUS
+      99   2026-04-04T09:20 BCH/USD      SHORT  +0.22%     $-8.56   $443.5192  $442.5617   $21.44  scalp_stagnant
+           └─ order_id=PAPER-BCHUSD
+      100  2026-04-04T09:29 ICP/USD      SHORT  +0.57%      $3.85     $2.3116    $2.2984   $38.52  scalp_tp
+           └─ order_id=PAPER-ICPUSD
+      101  2026-04-04T11:32 ENA/USD      SHORT  -0.91%    $-85.01     $0.0798    $0.0805   $31.01  scalp_stop
+           └─ order_id=PAPER-ENAUSD
+      102  2026-04-04T11:44 TIA/USD      SHORT  -0.93%    $-71.91     $0.2897    $0.2923   $25.88  scalp_stop
+           └─ order_id=PAPER-TIAUSD
+      103  2026-04-04T12:10 TRX/USD      SHORT  -0.41%    $-69.55     $0.3159    $0.3172   $38.78  scalp_stagnant
+           └─ order_id=PAPER-TRXUSD
+      104  2026-04-04T12:16 BTC/USD      SHORT  -0.20%    $-53.64  $66,966.3225 $67,100.9220   $38.70  scalp_stagnant
+           └─ order_id=PAPER-BTCUSD
+      105  2026-04-04T14:02 AVAX/USD     SHORT  -0.03%    $-32.81     $8.8686    $8.8715   $30.87  scalp_stagnant
+           └─ order_id=PAPER-AVAXUS
+      106  2026-04-04T14:07 ONDO/USD     SHORT  +0.56%      $3.24     $0.2575    $0.2560   $38.47  scalp_tp
+           └─ order_id=PAPER-ONDOUS
+      107  2026-04-04T14:26 CRV/USD      SHORT  +0.58%      $4.42     $0.2120    $0.2107   $38.48  scalp_tp
+           └─ order_id=PAPER-CRVUSD
+      108  2026-04-04T14:43 UNI/USD      SHORT  +0.57%      $3.16     $3.1425    $3.1245   $30.74  scalp_tp
+           └─ order_id=PAPER-UNIUSD
+      109  2026-04-04T14:57 VET/USD      SHORT  -1.12%    $-81.09     $0.0074    $0.0075   $25.78  scalp_stop
+           └─ order_id=PAPER-VETUSD
+      110  2026-04-04T15:18 ADA/USD      SHORT  -0.84%   $-100.83     $0.2444    $0.2465   $38.64  scalp_stop
+           └─ order_id=PAPER-ADAUSD
+      111  2026-04-04T16:50 LINK/USD     SHORT  -0.50%    $-76.14     $8.6590    $8.7028   $38.68  scalp_stagnant
+           └─ order_id=PAPER-LINKUS
+      112  2026-04-04T16:50 TON/USD      SHORT  -0.19%    $-35.29     $1.2318    $1.2342   $25.75  scalp_stagnant
+           └─ order_id=PAPER-TONUSD
+      113  2026-04-04T17:30 ENS/USD      SHORT  -1.46%    $-97.88     $5.5992    $5.6809   $25.84  scalp_stop
+           └─ order_id=PAPER-ENSUSD
+      114  2026-04-04T17:41 AVAX/USD     SHORT  -0.93%    $-85.92     $8.9486    $9.0316   $30.96  scalp_stop
+           └─ order_id=PAPER-AVAXUS
+      115  2026-04-04T18:38 XRP/USD      SHORT  -0.33%    $-62.80     $1.3103    $1.3146   $38.58  scalp_stagnant
+           └─ order_id=PAPER-XRPUSD
+      116  2026-04-04T18:43 WLD/USD      SHORT  +0.57%      $3.19     $0.2646    $0.2630   $30.74  scalp_tp
+           └─ order_id=PAPER-WLDUSD
+      117  2026-04-04T18:58 ICP/USD      SHORT  -0.86%   $-102.59     $2.2986    $2.3184   $38.69  scalp_stop
+           └─ order_id=PAPER-ICPUSD
+      118  2026-04-04T19:36 NEAR/USD     SHORT  +0.67%     $10.99     $1.2788    $1.2703   $38.42  scalp_tp
+           └─ order_id=PAPER-NEARUS
+      119  2026-04-04T19:42 ARB/USD      SHORT  +0.61%      $6.52     $0.0934    $0.0928   $38.36  scalp_tp
+           └─ order_id=PAPER-ARBUSD
+      120  2026-04-04T21:24 ATOM/USD     SHORT  +0.08%    $-32.43     $1.7081    $1.7067   $38.51  scalp_stagnant
+           └─ order_id=PAPER-ATOMUS
+      121  2026-04-04T22:09 SUI/USD      SHORT  -0.59%    $-82.15     $0.8691    $0.8743   $38.61  scalp_stop
+           └─ order_id=PAPER-SUIUSD
+      122  2026-04-05T06:47 TRX/USD      SHORT  -0.11%    $-46.61     $0.3174    $0.3178   $38.54  scalp_stagnant
+           └─ order_id=PAPER-TRXUSD
+      123  2026-04-05T06:48 OP/USD       SHORT  +2.68%    $160.07     $0.1105    $0.1075   $37.88  scalp_tp
+           └─ order_id=PAPER-OPUSD-
+      124  2026-04-05T06:48 INJ/USD      SHORT  +1.95%     $88.54     $2.8195    $2.7645   $31.68  scalp_tp
+           └─ order_id=PAPER-INJUSD
+      125  2026-04-05T06:48 STX/USD      SHORT  +1.69%     $87.08     $0.2142    $0.2105   $38.13  scalp_tp
+           └─ order_id=PAPER-STXUSD
+      126  2026-04-05T06:49 JUP/USD      SHORT  +2.60%    $102.96     $0.1628    $0.1586   $25.33  scalp_tp
+           └─ order_id=PAPER-JUPUSD
+
+── KRAKEN FLEET TOTALS ───────────────────────────────────────────────────────
+    Fleet starting capital:         $300,000.00
+    Fleet current equity:           $294,913.12
+    Fleet P&L:                      $-5,086.88 (-1.70%)
+    Fleet total trades:             315
+
+── KRAKEN PER-SYMBOL PERFORMANCE (all bots combined) ─────────────────────────
+  Symbol        Trades   Win Rate   Total PnL%   Total PnL$  Avg PnL%
+  --------------------------------------------------------------------
+  ATOM/USD          14     +35.7%       -2.52%   $-1,481.11    -0.18%
+  RENDER/USD        12     +16.7%      -20.75%   $-1,317.50    -1.73%
+  UNI/USD           11     +18.2%       -6.63%   $-1,194.62    -0.60%
+  NEAR/USD           9     +22.2%       -7.09%     $-921.10    -0.79%
+  W/USD              6     +66.7%       -5.32%     $-730.82    -0.89%
+  ETH/USD            4     +25.0%       -2.37%     $-609.55    -0.59%
+  ADA/USD            8     +50.0%       +5.19%     $-541.76    +0.65%
+  SNX/USD            8     +62.5%       +0.83%     $-392.51    +0.10%
+  AVAX/USD          11     +27.3%       -4.91%     $-388.34    -0.45%
+  ENA/USD            6     +16.7%       -2.11%     $-383.64    -0.35%
+  LTC/USD            5     +20.0%       -1.32%     $-311.48    -0.26%
+  ONDO/USD           5     +80.0%       +1.81%     $-298.75    +0.36%
+  VET/USD            7     +42.9%       -3.72%     $-249.20    -0.53%
+  TAO/USD            4      +0.0%       -1.19%     $-245.46    -0.30%
+  FIL/USD            5      +0.0%       -1.69%     $-242.99    -0.34%
+  PYTH/USD           4     +50.0%       -1.01%     $-241.96    -0.25%
+  TRX/USD            6     +16.7%       -0.07%     $-223.03    -0.01%
+  LINK/USD           5     +40.0%       +0.89%     $-196.25    +0.18%
+  SUI/USD            6     +16.7%       -1.88%     $-175.32    -0.31%
+  SHIB/USD           8     +37.5%       +1.73%     $-162.92    +0.22%
+  XRP/USD            9     +44.4%       +3.27%     $-154.21    +0.36%
+  TON/USD            9     +44.4%       +3.30%     $-136.68    +0.37%
+  SOL/USD            3     +33.3%       +1.10%     $-128.68    +0.37%
+  BNB/USD            7     +28.6%       +8.21%     $-126.32    +1.17%
+  BCH/USD            5      +0.0%       -4.99%     $-118.90    -1.00%
+  DOT/USD           10     +50.0%       +0.22%     $-109.24    +0.02%
+  ENS/USD            2     +50.0%       +1.53%      $-97.83    +0.77%
+  GRT/USD            5     +20.0%       +0.43%      $-91.78    +0.09%
+  TIA/USD            6     +50.0%       +2.20%      $-62.55    +0.37%
+  WLD/USD            5     +40.0%       +1.68%      $-56.42    +0.34%
+  CRV/USD            2     +50.0%       +0.35%      $-51.86    +0.17%
+  AAVE/USD           2     +50.0%       +3.87%      $-41.13    +1.94%
+  APT/USD            2     +50.0%       +0.86%      $-40.69    +0.43%
+  POL/USD            3     +66.7%       +6.22%      $-35.03    +2.07%
+  PEPE/USD           1      +0.0%       +0.00%      $-25.70    +0.00%
+  BTC/USD            6     +33.3%       +2.51%      $-20.37    +0.42%
+  ARB/USD            5     +40.0%       +2.12%       $-0.63    +0.42%
+  ALGO/USD           4    +100.0%       -6.71%        $0.00    -1.68%
+  OP/USD            10     +40.0%       +4.49%        $8.06    +0.45%
+  ICP/USD            8     +75.0%       +6.73%       $26.63    +0.84%
+  RUNE/USD           3     +66.7%       +4.86%       $33.67    +1.62%
+  DYM/USD            8     +62.5%       -3.86%       $34.87    -0.48%
+  STX/USD            8     +75.0%      +12.19%       $37.60    +1.52%
+  DOGE/USD           3     +66.7%       +4.00%       $63.76    +1.33%
+  JUP/USD            7     +85.7%       +2.66%       $79.02    +0.38%
+  STRK/USD           7     +71.4%      +16.22%       $81.56    +2.32%
+  INJ/USD            8     +62.5%       +9.92%       $99.79    +1.24%
+  SEI/USD            9     +66.7%       -3.54%      $165.83    -0.39%
+  IMX/USD            9     +55.6%       +4.26%      $220.76    +0.47%
+  HBAR/USD           5     +80.0%       -1.66%      $257.56    -0.33%
+
+── TRADE MECHANICS — EXACT FORMULAS (KRAKEN FLEET #2-4) ──────────────────────
+  VPIN (Volume-Synchronized Probability of Informed Trading):
+    bucket_size = volume / num_buckets (50 buckets default)
+    vpin = abs(buy_volume - sell_volume) / total_volume per bucket
+    Dynamic threshold = rolling_30d_mean + 1.5 * rolling_30d_stddev
+    Threshold floor: 0.60  |  Threshold ceiling: 0.95
+    Legacy fallback threshold: 0.82 (if < 100 observations)
+
+  Z-SCORE (Mean Reversion Entry):
+    z_score = (current_price - SMA_20) / rolling_stddev_20
+    Entry LONG:  z_score < -2.0  |  Entry SHORT: z_score > +2.0
+
+  ATR-BASED STOP/TAKE PROFIT:
+    ATR = 14-period Average True Range
+    Stop Loss: entry_price +/- (ATR * sl_atr_mult)
+    Take Profit: entry_price +/- (ATR * tp_atr_mult)
+    Trailing stop ratchets with price movement
+
+  POSITION SIZING:
+    Base: 10-15% of equity per position (varies by bot aggression profile)
+    Davy Jones (Conservative): smaller sizes, tighter stops
+    Blackbeard (Aggressive): larger sizes, wider stops
+    Calypso (Most Aggressive): largest sizes, widest stops
+    Max simultaneous positions: 10 per bot
+
+  CIRCUIT BREAKER:
+    Triggers after N consecutive losses (varies by bot profile)
+    Cooldown period before resuming trading
+
+  ENTRY FILTERS (ALL must be True):
+    1. VPIN < dynamic_threshold (no toxic flow detected)
+    2. Z-score exceeds threshold OR momentum signal active
+    3. Not already holding max positions
+    4. Not in circuit breaker cooldown
+    5. Not in RAG-derived blacklist for symbol+regime
+
+── VPIN SHADOW LOG (Trades blocked by VPIN filter) ───────────────────────────
+  No VPIN rejections logged yet. Capturing from 2026-04-05 forward.
+
+── VPIN CALIBRATION METRICS (Kraken Fleet) ───────────────────────────────────
+  EXACT VPIN FORMULA:
+    1. Divide volume stream into N buckets (50 default)
+    2. Classify each trade as buy/sell using tick rule
+    3. VPIN = |buy_vol - sell_vol| / total_vol per bucket
+    4. Rolling window: last 50 buckets
+
+  DYNAMIC THRESHOLD FORMULA:
+    threshold = mean(30d_readings) + 1.5 * stddev(30d_readings)
+    Floor: 0.60  |  Ceiling: 0.95
+    Fallback: 0.82 (if < 100 historical observations)
+  VPIN history file not found. Capturing from 2026-04-05 forward.
+
+  Total Kraken trades executed (VPIN allowed): 315
+  Total VPIN-blocked entries: Not historically tracked — console logs only
+  Note: VPIN blocking statistics require kraken-bot code changes to persist
+
+── DAILY EQUITY HISTORY (Kraken Fleet) ───────────────────────────────────────
+  [Reconstructed from historical data — 7 days]
+  NOTE: Capital injections detected and subtracted from P&L on 1 day(s)
+  Date                Open Eq       Close Eq    Daily P&L   Daily % Regime        Trades
+  ----------------------------------------------------------------------------------
+  2026-03-30       $98,102.18     $98,102.18        $0.00    +0.00% Bear              10
+  2026-03-31       $98,102.18     $98,102.18        $0.00    +0.00% ?                 11
+  2026-04-01       $98,921.64     $98,921.64      $819.46    +0.84% Crypto            35
+  2026-04-02      $294,125.96    $298,920.73       $-0.91    -0.00% Bear              84 [+$200,000.00 injected]
+  2026-04-03      $298,309.84    $301,719.66    $2,798.93    +0.94% Crypto            22
+  2026-04-04      $296,190.30    $301,424.83     $-294.83    -0.10% Crypto           124
+  2026-04-05      $294,280.58    $294,922.05   $-6,502.78    -2.16% Crypto            13
+
+── REGIME PERFORMANCE TABLE (Kraken Fleet) ───────────────────────────────────
+  [Reconstructed from historical data]
+  Regime            Trades   Wins   Win Rate    Avg PnL     Total PnL$
+  --------------------------------------------------------------------
+  Crypto               315    138     +43.8%     +0.10%    $-10,497.22
+
+── CONSECUTIVE STREAK TRACKER (Davy Jones' Portfolio) ────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     2 LOSSS
+    Max win streak (all-time):          11
+    Max loss streak (all-time):         14
+
+── CONSECUTIVE STREAK TRACKER (Blackbeard's Fleet) ───────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     2 WINS
+    Max win streak (all-time):          8
+    Max loss streak (all-time):         24
+
+── CONSECUTIVE STREAK TRACKER (Calypso's Tide) ───────────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     4 WINS
+    Max win streak (all-time):          9
+    Max loss streak (all-time):         42
+
+── ROLLING PERFORMANCE METRICS (Kraken Fleet) ────────────────────────────────
+    7-day rolling Sharpe ratio:         7.0968 (preliminary — under 30 days)
+    7-day rolling win rate:             +43.8%
+    7-day rolling avg P&L/trade:        $-33.32
+    Profit factor (all-time):           0.349
+      Gross profit:                     $5,631.66
+      Gross loss:                       $16,128.88
+  [Reconstructed from historical data]
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 4: APEX PREDATOR — OPTIONS ENGINE (Bot #5)
+════════════════════════════════════════════════════════════════════════════════
+
+── OVERVIEW ──────────────────────────────────────────────────────────────────
+    Capital pool:                   Options — Paper Trading (Volatility Squeeze Strategy)
+    Bot status:                     RUNNING
+    Paper trading:                  YES
+    Starting capital:               $100,000.00
+    Current equity:                 $100,000.00
+    Total P&L:                      $0.00 (+0.00%)
+    Deployed capital:               $0.00
+    Unrealized P&L:                 $0.00
+    Total trades:                   0
+    Wins:                           0
+    Win rate:                       +0.0%
+
+── CURRENT OPTIONS POSITIONS ─────────────────────────────────────────────────
+  No open options positions.
+
+── OPTIONS STRATEGY PARAMETERS ───────────────────────────────────────────────
+  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)
+  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)
+  Capital fence:     20% of equity max deployed at any time
+  Entry:             Bollinger Band squeeze + low IV rank → buy ATM straddle
+  Exit:              Profit target or time decay threshold
+  Paper mode:        Simulated fills with real option chain data
+
+── TRADE MECHANICS — EXACT FORMULAS (APEX PREDATOR #5) ───────────────────────
+  IV RANK (IVR) FORMULA:
+    current_iv = median(all option IVs in chain)
+    iv_min = 5th percentile of chain IVs
+    iv_max = 95th percentile of chain IVs
+    ivr = ((current_iv - iv_min) / (iv_max - iv_min)) * 100
+    THRESHOLD: IVR < 20 (implied volatility is compressed)
+
+  BOLLINGER BAND SQUEEZE FORMULA:
+    SMA = 20-day Simple Moving Average
+    Upper Band = SMA + (2.0 * 20d_stddev)
+    Lower Band = SMA - (2.0 * 20d_stddev)
+    Bandwidth = ((Upper - Lower) / SMA) * 100
+    Lookback: 126 trading days (6 months)
+    SQUEEZE = True when current_bandwidth <= 1.05 * min_bandwidth_126d
+
+  ENTRY CONDITIONS (ALL must be True):
+    1. IVR < 20
+    2. Bollinger Band squeeze detected
+    3. Option chain has valid ATM strikes with 30-45 DTE
+    4. Deployed capital < capital fence (5% of equity)
+
+  TRADE CONSTRUCTION:
+    Strategy: Long Straddle (ATM Call + ATM Put, same strike, same expiration)
+    DTE target: 30-45 days to expiration
+    Strike: At-The-Money (closest to current stock price)
+
+  QUARTER-KELLY POSITION SIZING:
+    p = historical win rate  |  b = avg_win / avg_loss ratio
+    kelly = (p * (b + 1) - 1) / b
+    final_size = min(kelly / 4, 0.10)  (capped at 10% of fenced capital)
+    Fallback: 1% fixed fractional risk if < 10 historical trades
+
+  EXIT CONDITIONS:
+    Max loss: 50% of entry cost (MAX_LOSS_PCT = 0.50)
+    Time decay: exit before significant theta burn
+    Profit target: based on expected vol expansion
+
+── APEX PREDATOR SCAN LOG ────────────────────────────────────────────────────
+  Last scan time: 2026-04-04T20:08:06
+  Tickers evaluated: 106
+  Squeeze detected: 1
+  Signals generated: 0
+
+  Ticker        IVR  Squeeze        BW% Status                   
+  --------------------------------------------------------------
+  SPY          23.6       NO       8.00 no_signal                
+  QQQ          26.8       NO       9.57 no_signal                
+  IWM          23.7       NO       5.93 no_signal                
+  DIA          26.2       NO       6.59 no_signal                
+  AAPL         50.0       NO       6.57 no_signal                
+  MSFT         16.6       NO      17.93 no_signal                
+  NVDA         27.1       NO      12.52 no_signal                
+  AMZN         22.2       NO       7.77 no_signal                
+  GOOGL        17.2       NO      15.13 no_signal                
+  META         18.1       NO      25.27 no_signal                
+  TSLA         50.0       NO      15.58 no_signal                
+  AVGO         50.0       NO      16.97 no_signal                
+  AMD          24.1       NO      14.01 no_signal                
+  NFLX         18.0       NO       9.74 no_signal                
+  CRM          17.2       NO      13.68 no_signal                
+  ORCL         20.7       NO      16.80 no_signal                
+  ADBE         18.6       NO      24.58 no_signal                
+  INTC         28.6       NO      18.31 no_signal                
+  MU           23.7       NO      40.09 no_signal                
+  QCOM         21.9       NO       9.48 no_signal                
+  CSCO         25.1       NO       7.77 no_signal                
+  TXN          27.1       NO       7.43 no_signal                
+  AMAT         26.8       NO      14.92 no_signal                
+  LRCX         30.9       NO      20.16 no_signal                
+  KLAC         23.4       NO      15.04 no_signal                
+  MRVL         21.5       NO      25.31 no_signal                
+  SNPS         15.8       NO      17.21 no_signal                
+  CDNS         23.7       NO      11.10 no_signal                
+  ARM          19.8       NO      43.52 no_signal                
+  PLTR         29.8       NO      14.19 no_signal                
+  COIN         25.1       NO      32.05 no_signal                
+  SHOP         33.6       NO      20.65 no_signal                
+  SNOW         26.6       NO      26.19 no_signal                
+  CRWD         24.8       NO      22.92 no_signal                
+  DDOG         30.1       NO      15.34 no_signal                
+  NET          34.2       NO      15.24 no_signal                
+  PANW         15.9       NO      15.09 no_signal                
+  ZS           22.8       NO      25.15 no_signal                
+  FTNT         34.0       NO       9.62 no_signal                
+  UBER         21.3       NO      12.01 no_signal                
+  ABNB         27.1       NO      10.90 no_signal                
+  DASH         31.1       NO      23.55 no_signal                
+  RBLX         33.9       NO      20.58 no_signal                
+  SPOT         21.7       NO      21.77 no_signal                
+  JPM          27.9      YES       5.66 no_signal                
+  BAC          30.7       NO       7.17 no_signal                
+  GS           30.9       NO      10.85 no_signal                
+  MS           30.3       NO       9.34 no_signal                
+  C            30.6       NO      11.88 no_signal                
+  WFC          31.1       NO       9.96 no_signal                
+  SCHW         30.1       NO       4.89 no_signal                
+  BLK          27.2       NO       7.23 no_signal                
+  V            21.3       NO       7.89 no_signal                
+  MA           21.6       NO       7.75 no_signal                
+  AXP          25.9       NO       4.82 no_signal                
+  PYPL         26.1       NO       7.22 no_signal                
+  JNJ          24.6       NO       5.05 no_signal                
+  UNH          28.4       NO      12.07 no_signal                
+  LLY          21.5       NO      18.06 no_signal                
+  PFE          22.7       NO       7.96 no_signal                
+  ABBV         26.4       NO      16.19 no_signal                
+  MRK          26.1       NO       7.40 no_signal                
+  TMO          22.8       NO      10.96 no_signal                
+  ABT          19.6       NO      12.22 no_signal                
+  AMGN         24.7       NO      11.89 no_signal                
+  GILD         36.9       NO      11.57 no_signal                
+  MRNA         43.3       NO      16.15 no_signal                
+  BIIB         21.2       NO       7.24 no_signal                
+  REGN         23.4       NO       7.90 no_signal                
+  VRTX         20.0       NO      14.44 no_signal                
+  ISRG         17.0       NO      10.80 no_signal                
+  MDT          18.6       NO       7.00 no_signal                
+  XOM          32.2       NO      16.98 no_signal                
+  CVX          31.6       NO      14.27 no_signal                
+  COP          42.6       NO      19.39 no_signal                
+  SLB          26.4       NO      22.63 no_signal                
+  OXY          29.6       NO      25.54 no_signal                
+  EOG          29.9       NO      18.10 no_signal                
+  MPC          37.0       NO      17.54 no_signal                
+  PSX          35.6       NO      16.19 no_signal                
+  FSLR         25.6       NO       9.73 no_signal                
+  ENPH         32.8       NO      30.26 no_signal                
+  BA           19.0       NO      21.53 no_signal                
+  CAT          29.9       NO       8.56 no_signal                
+  DE           18.3       NO       8.19 no_signal                
+  GE           26.8       NO      21.07 no_signal                
+  HON          13.5       NO      10.43 no_signal                
+  RTX          21.9       NO      13.54 no_signal                
+  LMT          24.3       NO      12.54 no_signal                
+  MMM          21.2       NO      11.48 no_signal                
+  WMT          21.4       NO       6.33 no_signal                
+  COST         16.9       NO       5.61 no_signal                
+  HD           22.9       NO      14.07 no_signal                
+  LOW          22.8       NO      12.76 no_signal                
+  TGT          25.3       NO       8.32 no_signal                
+  NKE          21.4       NO      25.18 no_signal                
+  SBUX         30.4       NO      19.82 no_signal                
+  MCD          21.3       NO      11.60 no_signal                
+  DIS          19.9       NO      10.63 no_signal                
+  CMCSA        23.5       NO      15.04 no_signal                
+  T            21.5       NO       8.95 no_signal                
+  VZ           26.4       NO       4.59 no_signal                
+  GLD          17.6       NO      24.69 no_signal                
+  SLV          40.0       NO      35.90 no_signal                
+  USO          21.5       NO      28.56 no_signal                
+  TLT          21.3       NO       4.14 no_signal                
+  ... (66 more omitted)
+
+── DAILY EQUITY HISTORY (Apex Predator #5) ───────────────────────────────────
+  No equity history available. Capturing from 2026-04-05 forward.
+
+── CONSECUTIVE STREAK TRACKER (Apex Predator #5) ─────────────────────────────
+  No trade history for Apex Predator #5. Capturing from 2026-04-05 forward.
+
+── ROLLING PERFORMANCE METRICS (Apex Predator #5) ────────────────────────────
+  No trade data for Apex Predator #5. Capturing from 2026-04-05 forward.
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 5: THE NAVIGATOR — FOREX SWING ENGINE (Bot #6)
+════════════════════════════════════════════════════════════════════════════════
+
+── OVERVIEW ──────────────────────────────────────────────────────────────────
+    Capital pool:                   Forex — Paper Trading (H4 Swing Strategy)
+    Bot status:                     idle
+    USD bias (Groq macro):          NEUTRAL
+    News blackout:                  NO
+    Cycles completed:               1
+    Starting capital:               $100,000.00
+    Current equity:                 $99,822.62
+    Total P&L:                      $-177.38 (-0.18%)
+    High water mark:                $100,000.00
+    Vault (profit lock):            $0.00
+    Total trades:                   9
+    Wins:                           1
+    Win rate:                       +11.1%
+    Open positions:                 10
+
+── CURRENT FOREX POSITIONS ───────────────────────────────────────────────────
+
+  USD_CAD  SHORT
+    Units:                          10,626
+    Entry:                          1.39423
+    Current:                        1.39445
+    P&L:                            $-1.68 (-2.2 pips)
+    Stop loss:                      1.39695
+    Take profit:                    1.38390
+
+  AUD_JPY  SHORT
+    Units:                          14,470
+    Entry:                          110.22800
+    Current:                        110.03400
+    P&L:                            $17.57 (+19.4 pips)
+    Stop loss:                      110.20800
+    Take profit:                    109.01900
+
+  AUD_NZD  SHORT
+    Units:                          14,467
+    Entry:                          1.20844
+    Current:                        1.21076
+    P&L:                            $-19.10 (-23.2 pips)
+    Stop loss:                      1.21195
+    Take profit:                    1.20042
+
+  EUR_JPY  SHORT
+    Units:                          8,665
+    Entry:                          184.06700
+    Current:                        183.90700
+    P&L:                            $8.68 (+16.0 pips)
+    Stop loss:                      184.25600
+    Take profit:                    182.77401
+
+  EUR_USD  LONG
+    Units:                          9,222
+    Entry:                          1.15221
+    Current:                        1.15141
+    P&L:                            $-7.34 (-8.0 pips)
+    Stop loss:                      1.14925
+    Take profit:                    1.16365
+
+  GBP_JPY  SHORT
+    Units:                          7,561
+    Entry:                          210.96100
+    Current:                        210.68600
+    P&L:                            $13.01 (+27.5 pips)
+    Stop loss:                      211.16486
+    Take profit:                    209.37593
+
+  GBP_USD  LONG
+    Units:                          8,054
+    Entry:                          1.31938
+    Current:                        1.31883
+    P&L:                            $-4.50 (-5.6 pips)
+    Stop loss:                      1.31573
+    Take profit:                    1.33450
+
+  NZD_CAD  LONG
+    Units:                          18,687
+    Entry:                          0.79365
+    Current:                        0.79283
+    P&L:                            $-10.99 (-8.2 pips)
+    Stop loss:                      0.79070
+    Take profit:                    0.80689
+
+  NZD_JPY  LONG
+    Units:                          18,678
+    Entry:                          90.88800
+    Current:                        90.85100
+    P&L:                            $-4.33 (-3.7 pips)
+    Stop loss:                      90.46828
+    Take profit:                    92.16049
+
+  NZD_USD  LONG
+    Units:                          11,171
+    Entry:                          0.56941
+    Current:                        0.56893
+    P&L:                            $-5.43 (-4.9 pips)
+    Stop loss:                      0.56702
+    Take profit:                    0.57773
+
+── FOREX TRADE HISTORY (all trades) ──────────────────────────────────────────
+  Total recorded: 26
+  #    Date               Pair         Dir         Entry       Exit       PnL$    Pips  Reason
+  -------------------------------------------------------------------------------------
+  1    ?                  NZDUSD=X     LONG      0.56941    0.00000      $0.00    +0.0  ?
+  2    ?                  CAD=X        SHORT     1.39423    0.00000      $0.00    +0.0  ?
+  3    ?                  GBPUSD=X     LONG      1.31938    0.00000      $0.00    +0.0  ?
+  4    ?                  EURUSD=X     LONG      1.15221    0.00000      $0.00    +0.0  ?
+  5    2026-04-04T02:06   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  6    2026-04-04T01:18   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  7    ?                  NZDCAD=X     LONG      0.79365    0.00000      $0.00    +0.0  ?
+  8    2026-04-03T22:03   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  9    ?                  NZDJPY=X     LONG     90.88800    0.00000      $0.00    +0.0  ?
+  10   ?                  AUDNZD=X     SHORT     1.20844    0.00000      $0.00    +0.0  ?
+  11   ?                  AUDJPY=X     SHORT   110.22800    0.00000      $0.00    +0.0  ?
+  12   ?                  GBPJPY=X     SHORT   210.96100    0.00000      $0.00    +0.0  ?
+  13   ?                  EURJPY=X     SHORT   184.06700    0.00000      $0.00    +0.0  ?
+  14   ?                  AUDNZD=X     SHORT     1.20852    0.00000      $0.00    +0.0  ?
+  15   ?                  AUDJPY=X     SHORT   110.25500    0.00000      $0.00    +0.0  ?
+  16   ?                  GBPJPY=X     SHORT   211.02000    0.00000      $0.00    +0.0  ?
+  17   ?                  EURJPY=X     SHORT   184.03300    0.00000      $0.00    +0.0  ?
+  18   ?                  CADJPY=X     LONG    114.30600    0.00000      $0.00    +0.0  ?
+  19   2026-04-02T16:38   AUDNZD=X     SHORT     1.20365    1.20714    $-38.77   -34.9  ?
+  20   2026-04-02T16:38   SEK=X        LONG      9.40845    9.41380     $-4.32   +53.5  ?
+  21   2026-04-02T20:45   SGD=X        LONG      1.28313    1.28451      $0.74   +13.8  ?
+  22   2026-04-02T16:38   EURCAD=X     SHORT     1.60796    1.60693     $-5.40   +10.3  ?
+  23   2026-04-02T08:17   EURJPY=X     SHORT   184.02800  184.03700    $-10.42    -0.9  ?
+  24   ?                  EURUSD=X     SHORT     1.15888    0.00000      $0.00    +0.0  ?
+  25   ?                  ZAR=X        LONG     16.83787    0.00000      $0.00    +0.0  ?
+  26   2026-04-02T16:38   MXN=X        LONG     17.82880   17.84000     $-3.72  +112.0  ?
+
+── FOREX STRATEGY PARAMETERS ─────────────────────────────────────────────────
+  Strategy:          H4 swing — 5 major pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD)
+  AI engine:         Groq Llama 3.3 70B — USD directional bias only (BULLISH/BEARISH/NEUTRAL)
+  Cycle frequency:   Every 4 hours (24/7)
+  Position sizing:   3% risk per trade, ATR-based stop loss
+  Max positions:     5 simultaneous
+  Entry:             EMA crossover + RSI + MACD confluence, filtered by USD bias
+  Stop loss:         1.5× ATR from entry
+  Take profit:       2.0× risk (R:R = 1:2)
+  Profit vault:      10% of realized profits locked in vault
+  News blackout:     Groq detects high-impact events → pauses trading
+
+── TRADE MECHANICS — EXACT FORMULAS (NAVIGATOR #6) ───────────────────────────
+  RSI (Relative Strength Index):
+    Period: 14  |  Oversold: < 30  |  Overbought: > 70
+
+  ATR (Average True Range):
+    Period: 14  |  Used for all bracket calculations
+
+  STOP LOSS FORMULA:
+    Initial SL = 2.5 * ATR(14) from entry  (SL_ATR_MULT = 2.5)
+    Breakeven trigger: when price moves 1.5 * ATR in favor, SL moves to entry + 2 pips
+
+  TAKE PROFIT FORMULA:
+    TP = 5.0 * ATR(14) from entry  (TP_ATR_MULT = 5.0)
+
+  TRAILING STOP FORMULA:
+    Trailing offset = 2.0 * ATR(14) from best price seen  (TRAIL_ATR_MULT = 2.0)
+    Ratchets up (longs) / down (shorts) as price moves favorably
+
+  POSITION SIZING FORMULA:
+    risk_per_trade = equity * MAX_RISK_PER_TRADE_PCT  (1%)
+    units = risk_per_trade / (SL_distance_in_price * pip_value)
+    Max position size: 10% of equity  (MAX_POSITION_SIZE_PCT = 0.10)
+
+  ENTRY FILTERS (ALL must be True):
+    1. RSI confirms direction (< 30 for long, > 70 for short)
+    2. USD bias from Groq LLM aligns with trade direction
+    3. Not in news blackout (high-impact event within 4 hours)
+    4. Open positions < MAX_OPEN_POSITIONS (10)
+    5. Not in circuit breaker cooldown (3% drawdown triggers 8hr pause)
+
+  SPREAD COST MODEL (Paper Trading):
+    PAPER_SPREAD_COST_PCT = 0.001 (0.1% per side)
+    Total round-trip cost = entry_size * 0.001 + exit_size * 0.001
+
+  VAULT SWEEP:
+    20% of profits above High Water Mark swept weekly
+
+── NAVIGATOR PAIR-BY-PAIR BREAKDOWN ──────────────────────────────────────────
+  [Reconstructed from historical data]
+  Pair            Trades    Win%    Total PnL   Avg Hold  Avg R:R  Bias Ovr
+  ------------------------------------------------------------------------
+  SGD=X                1 +100.0%        $0.74      24.6h     0.33         0
+  MXN=X                1   +0.0%       $-3.72      20.7h     0.09         0
+  SEK=X                1   +0.0%       $-4.32      20.5h     0.07         0
+  EURCAD=X             1   +0.0%       $-5.40      20.5h     0.18         0
+  EURJPY=X             1   +0.0%      $-10.42      12.1h     0.01         0
+  EURNZD=X             3   +0.0%      $-31.89       1.5h     0.00         0
+  AUDNZD=X             1   +0.0%      $-38.77      17.6h     0.78         0
+
+── DAILY EQUITY HISTORY (Navigator #6) ───────────────────────────────────────
+  [Reconstructed from historical data — 4 days]
+  NOTE: Capital injections detected and subtracted from P&L on 1 day(s)
+  Date                Open Eq       Close Eq    Daily P&L   Daily % Regime        Trades
+  ----------------------------------------------------------------------------------
+  2026-04-02       $99,893.05    $100,252.72  $-99,640.33   -99.75% Bear               0 [+$100,000.00 injected]
+  2026-04-03       $96,704.35     $99,933.79     $-318.93    -0.32% Crypto             0
+  2026-04-04       $99,860.84    $106,227.44    $6,293.65    +6.30% Crypto             0
+  2026-04-05       $99,860.84     $99,860.84   $-6,366.60    -5.99% Crypto             0
+
+── CONSECUTIVE STREAK TRACKER (Navigator #6) ─────────────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     1 LOSS
+    Max win streak (all-time):          10
+    Max loss streak (all-time):         2
+
+── ROLLING PERFORMANCE METRICS (Navigator #6) ────────────────────────────────
+    7-day rolling Sharpe ratio:         0.0777 (preliminary — under 30 days)
+    7-day rolling win rate:             +11.1%
+    7-day rolling avg P&L/trade:        $-10.42
+    Profit factor (all-time):           0.008
+      Gross profit:                     $0.74
+      Gross loss:                       $94.52
+  [Reconstructed from historical data]
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 6: COMBINED FLEET PORTFOLIO — ALL 6 BOTS
+════════════════════════════════════════════════════════════════════════════════
+    Total starting capital:         $600,000.00 across 4 capital pools, 6 bots
+
+    Bot #1 Oracle (Alpaca):         $97,821.35  (-2.18% from $100k)
+    Bots #2-4 Kraken Fleet:         $294,913.12  (-1.70% from $300,000.00)
+      - Davy Jones' Portfolio (#2): $99,322.84
+      - Blackbeard's Fleet (#3):    $97,946.53
+      - Calypso's Tide (#4):        $97,643.75
+    Bot #5 Apex Predator:           $100,000.00  (+0.00% from $100k)
+    Bot #6 Navigator:               $99,822.62  (-0.18% from $100k)
+
+    GRAND TOTAL EQUITY:             $592,557.09
+    COMBINED P&L:                   $-7,442.91 (-1.24%)
+
+  CAPITAL POOLS:
+    Pool 1: Alpaca US Equities     $100k  (Bot #1 Oracle)
+    Pool 2: Kraken Crypto Fleet    $300k  (Bots #2 Davy Jones, #3 Blackbeard, #4 Calypso)
+    Pool 3: Options (Apex Predator) $100k (Bot #5)
+    Pool 4: Forex (Navigator)       $100k (Bot #6)
+  Each pool is independent — different asset classes, strategies, and risk profiles.
+
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 1A: FLEET SUMMARY RISK DASHBOARD
+════════════════════════════════════════════════════════════════════════════════
+    Combined fleet equity:              $592,557.09
+    Fleet all-time peak:                $592,557.09
+    Fleet drawdown from peak:           +-0.000%
+    Best performing bot:                #5 Apex Predator ($0.00)
+    Biggest drag on performance:        #4 Calypso ($-2,356.25)
+    Total open exposure (all bots):     $310,242.09
+      Alpaca (Oracle):                  $97,821.35
+      Kraken fleet:                     $112,912.44
+      Options (Apex):                   $0.00
+      Forex (Navigator):                $99,508.30
+    Kill switch status:                 ARMED (normal)
+    Bots in circuit breaker:            None
+    Idle bots (0 positions):            #5 Apex Predator (0 positions)
+
+════════════════════════════════════════════════════════════════════════════════
+  CROSS-BOT CORRELATION MATRIX
+════════════════════════════════════════════════════════════════════════════════
+  [Computed from equity_snapshots daily returns]
+  Data points per bot: {'alpaca': 6, 'kraken': 6, 'options': 0, 'forex': 3}
+  Min required for correlation: 3 overlapping days
+  Computed at: 2026-04-05T23:27:13
+
+  Bot Pair                        Correlation       Flag
+  -------------------------------------------------------
+  alpaca_vs_forex                     -0.3981           
+  alpaca_vs_kraken                    -0.8012       HIGH
+  alpaca_vs_options                       N/A      INSUF
+  kraken_vs_forex                     -0.4438           
+  kraken_vs_options                       N/A      INSUF
+  options_vs_forex                        N/A      INSUF
+
+    Max correlation:                    N/A (insufficient data)
+    Systemic shock detected:            NO
+    Position scale factor:              1.00x
+
+════════════════════════════════════════════════════════════════════════════════
+  EXECUTION QUALITY — SLIPPAGE & FILL ANALYSIS
+════════════════════════════════════════════════════════════════════════════════
+  [Reconstructed from historical data]
+    Total slippage cost (Oracle):       $1,594.19
+    Average slippage per trade:         +0.1205%
+    Best slippage (smallest):           -2.4951%
+    Worst slippage (largest):           +3.2336%
+    Trades with slippage data:          28
+
+    Navigator spread cost model:        0.1% per side (simulated, not real slippage)
+    Kraken slippage model:              Dynamic based on order size and ATR volatility
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 7: AI LEARNING JOURNAL (Persistent insights across cycles)
+════════════════════════════════════════════════════════════════════════════════
+  2 insights stored:
+
+  [CRYPTO / crypto]  confidence=1.00  confirmed×33  first_seen=2026-04-02
+    "Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV."
+
+  [CRYPTO / crypto]  confidence=0.97  confirmed×15  first_seen=2026-04-02
+    "Crypto market experiencing extreme fear with low on-chain demand."
+
+
+── LEARNING JOURNAL METADATA ─────────────────────────────────────────────────
+  #     Age(d)  Confidence  Confirmed  Stale? Regime       Insight (truncated)
+  ------------------------------------------------------------------------------------------
+  1          3        1.00         33   Fresh Crypto       Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's be
+  2          3        0.97         15   Fresh Crypto       Crypto market experiencing extreme fear with low on-chain demand.
+
+    Total insights:                     2
+    Stale insights (>14 days):          0
+    Injection count tracking:           Not currently tracked. Capturing from 2026-04-05 forward.
+    Contradiction detection:            Not currently tracked. Capturing from 2026-04-05 forward.
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 8: STRATEGY PARAMETERS — ALL 6 BOTS (for LLM context)
+════════════════════════════════════════════════════════════════════════════════
+
+── BOT #1: ORACLE (ALPACA) — HOW IT WORKS ────────────────────────────────────
+  AI Engine:         Groq Llama 3.3 70B (100,000 tokens/day budget)
+  Execution:         Alpaca paper trading (simulated US equities)
+  Cycle frequency:   Every 15 minutes during market hours
+                     24/7 crypto-only cycle for crypto ETFs
+  Market regimes:    Bear | Bull | Neutral | Risk-Off
+                     Regime changes the entire allocation strategy
+  Position sizing:   Kelly Criterion × conviction score (0.0–1.0)
+                     Max 15% per position (except SGOV)
+  Risk controls:
+    - Kill switch:   Trips at 5% daily drawdown — liquidates all
+    - Stop losses:   Per-trade, set by AI in allocation decision
+    - Take profits:  Per-trade, set by AI in allocation decision
+    - Ratchet stops: Trailing stop that locks in gains
+  Special positions:
+    - SGOV:          AI cash-equivalent — absorbs overflow when all
+                     normal slots are capped. Exempt from 15% cap.
+    - JEPQ:          Profit vault. 20% of every profit event swept here
+                     as a DRIP position. Protected from all liquidations.
+  Auditing:          Gemini self-critic runs daily pre-market,
+                     HITL auditor agent runs post-close.
+  Learning:          AI insights persist in a learning journal and are
+                     injected as context into future allocation calls.
+
+── BOTS #2-4: KRAKEN FLEET — HOW THEY WORK ───────────────────────────────────
+  Bots:              #2 Davy Jones (Conservative), #3 Blackbeard (Aggressive), #4 Calypso (Most Aggressive)
+  Execution:         Kraken exchange (paper trading simulation, $100k each)
+  Strategy:          Mean reversion + momentum with VPIN microstructure filter
+  Pairs:             35+ crypto pairs (BTC, ETH, XRP, SOL, BNB, ADA, DOT, AVAX, etc.)
+  Position sizing:   10-15% of equity per position (varies by bot aggression)
+  Max positions:     10 simultaneous per bot
+  VPIN filter:       Volume-synchronized Probability of Informed Trading.
+                     VPIN > 0.65-0.75 blocks entries (varies by bot)
+  Stop loss:         Trailing — adapts to best price seen
+  Take profit:       Fixed target from entry
+  Circuit breaker:   Pauses bot after N consecutive losses
+  Cycle:             Runs 24/7 every 60s (crypto never closes)
+  Sides:             Both LONG and SHORT allowed
+
+── BOT #5: APEX PREDATOR — HOW IT WORKS ──────────────────────────────────────
+  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)
+  Execution:         Paper trading with real options chain data
+  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)
+  Capital fence:     20% of equity max deployed
+  Entry:             Bollinger Band squeeze + low IV rank → ATM straddle
+  Exit:              Profit target or time decay threshold
+
+── BOT #6: THE NAVIGATOR — HOW IT WORKS ──────────────────────────────────────
+  Strategy:          H4 swing — 5 major forex pairs
+  Pairs:             EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD
+  AI engine:         Groq Llama 3.3 70B — USD directional bias only
+  Cycle frequency:   Every 4 hours (24/7)
+  Position sizing:   3% risk per trade, ATR-based stop loss
+  Max positions:     5 simultaneous
+  Stop loss:         1.5× ATR from entry
+  Take profit:       2.0× risk (R:R = 1:2)
+  Profit vault:      10% of realized profits locked in vault
+  News blackout:     Groq detects high-impact events → pauses trading
+
+════════════════════════════════════════════════════════════════════════════════
+  END OF REPORT
+  Generated: 2026-04-05 23:27:12 UTC
+  Suggested LLM prompt:
+    "Review this trading report. Identify (1) what's working and why,
+     (2) what's losing and the likely root cause, (3) specific parameter
+     changes to improve performance (stop loss %, position sizing, VPIN
+     threshold, conviction cutoffs), and (4) any regime-specific patterns
+     you can see in the trade history. Be specific with numbers."
+════════════════════════════════════════════════════════════════════════════════

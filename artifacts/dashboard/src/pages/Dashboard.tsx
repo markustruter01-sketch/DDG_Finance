@@ -1325,11 +1325,14 @@ function ExportReportButton() {
       const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
       const res = await fetch(`${base}/export/report`);
       if (!res.ok) throw new Error("Export failed");
+      const disposition = res.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : `trading-report-${new Date().toISOString().slice(0, 10)}.txt`;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `trading-report-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
     } catch {

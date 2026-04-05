@@ -1,0 +1,421 @@
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 4: APEX PREDATOR — OPTIONS ENGINE (Bot #5)
+════════════════════════════════════════════════════════════════════════════════
+
+── OVERVIEW ──────────────────────────────────────────────────────────────────
+    Capital pool:                   Options — Paper Trading (Volatility Squeeze Strategy)
+    Bot status:                     RUNNING
+    Paper trading:                  YES
+    Starting capital:               $100,000.00
+    Current equity:                 $100,000.00
+    Total P&L:                      $0.00 (+0.00%)
+    Deployed capital:               $0.00
+    Unrealized P&L:                 $0.00
+    Total trades:                   0
+    Wins:                           0
+    Win rate:                       +0.0%
+
+── CURRENT OPTIONS POSITIONS ─────────────────────────────────────────────────
+  No open options positions.
+
+── OPTIONS STRATEGY PARAMETERS ───────────────────────────────────────────────
+  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)
+  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)
+  Capital fence:     20% of equity max deployed at any time
+  Entry:             Bollinger Band squeeze + low IV rank → buy ATM straddle
+  Exit:              Profit target or time decay threshold
+  Paper mode:        Simulated fills with real option chain data
+
+── TRADE MECHANICS — EXACT FORMULAS (APEX PREDATOR #5) ───────────────────────
+  IV RANK (IVR) FORMULA:
+    current_iv = median(all option IVs in chain)
+    iv_min = 5th percentile of chain IVs
+    iv_max = 95th percentile of chain IVs
+    ivr = ((current_iv - iv_min) / (iv_max - iv_min)) * 100
+    THRESHOLD: IVR < 20 (implied volatility is compressed)
+
+  BOLLINGER BAND SQUEEZE FORMULA:
+    SMA = 20-day Simple Moving Average
+    Upper Band = SMA + (2.0 * 20d_stddev)
+    Lower Band = SMA - (2.0 * 20d_stddev)
+    Bandwidth = ((Upper - Lower) / SMA) * 100
+    Lookback: 126 trading days (6 months)
+    SQUEEZE = True when current_bandwidth <= 1.05 * min_bandwidth_126d
+
+  ENTRY CONDITIONS (ALL must be True):
+    1. IVR < 20
+    2. Bollinger Band squeeze detected
+    3. Option chain has valid ATM strikes with 30-45 DTE
+    4. Deployed capital < capital fence (5% of equity)
+
+  TRADE CONSTRUCTION:
+    Strategy: Long Straddle (ATM Call + ATM Put, same strike, same expiration)
+    DTE target: 30-45 days to expiration
+    Strike: At-The-Money (closest to current stock price)
+
+  QUARTER-KELLY POSITION SIZING:
+    p = historical win rate  |  b = avg_win / avg_loss ratio
+    kelly = (p * (b + 1) - 1) / b
+    final_size = min(kelly / 4, 0.10)  (capped at 10% of fenced capital)
+    Fallback: 1% fixed fractional risk if < 10 historical trades
+
+  EXIT CONDITIONS:
+    Max loss: 50% of entry cost (MAX_LOSS_PCT = 0.50)
+    Time decay: exit before significant theta burn
+    Profit target: based on expected vol expansion
+
+── APEX PREDATOR SCAN LOG ────────────────────────────────────────────────────
+  Last scan time: 2026-04-04T20:08:06
+  Tickers evaluated: 106
+  Squeeze detected: 1
+  Signals generated: 0
+
+  Ticker        IVR  Squeeze        BW% Status                   
+  --------------------------------------------------------------
+  SPY          23.6       NO       8.00 no_signal                
+  QQQ          26.8       NO       9.57 no_signal                
+  IWM          23.7       NO       5.93 no_signal                
+  DIA          26.2       NO       6.59 no_signal                
+  AAPL         50.0       NO       6.57 no_signal                
+  MSFT         16.6       NO      17.93 no_signal                
+  NVDA         27.1       NO      12.52 no_signal                
+  AMZN         22.2       NO       7.77 no_signal                
+  GOOGL        17.2       NO      15.13 no_signal                
+  META         18.1       NO      25.27 no_signal                
+  TSLA         50.0       NO      15.58 no_signal                
+  AVGO         50.0       NO      16.97 no_signal                
+  AMD          24.1       NO      14.01 no_signal                
+  NFLX         18.0       NO       9.74 no_signal                
+  CRM          17.2       NO      13.68 no_signal                
+  ORCL         20.7       NO      16.80 no_signal                
+  ADBE         18.6       NO      24.58 no_signal                
+  INTC         28.6       NO      18.31 no_signal                
+  MU           23.7       NO      40.09 no_signal                
+  QCOM         21.9       NO       9.48 no_signal                
+  CSCO         25.1       NO       7.77 no_signal                
+  TXN          27.1       NO       7.43 no_signal                
+  AMAT         26.8       NO      14.92 no_signal                
+  LRCX         30.9       NO      20.16 no_signal                
+  KLAC         23.4       NO      15.04 no_signal                
+  MRVL         21.5       NO      25.31 no_signal                
+  SNPS         15.8       NO      17.21 no_signal                
+  CDNS         23.7       NO      11.10 no_signal                
+  ARM          19.8       NO      43.52 no_signal                
+  PLTR         29.8       NO      14.19 no_signal                
+  COIN         25.1       NO      32.05 no_signal                
+  SHOP         33.6       NO      20.65 no_signal                
+  SNOW         26.6       NO      26.19 no_signal                
+  CRWD         24.8       NO      22.92 no_signal                
+  DDOG         30.1       NO      15.34 no_signal                
+  NET          34.2       NO      15.24 no_signal                
+  PANW         15.9       NO      15.09 no_signal                
+  ZS           22.8       NO      25.15 no_signal                
+  FTNT         34.0       NO       9.62 no_signal                
+  UBER         21.3       NO      12.01 no_signal                
+  ABNB         27.1       NO      10.90 no_signal                
+  DASH         31.1       NO      23.55 no_signal                
+  RBLX         33.9       NO      20.58 no_signal                
+  SPOT         21.7       NO      21.77 no_signal                
+  JPM          27.9      YES       5.66 no_signal                
+  BAC          30.7       NO       7.17 no_signal                
+  GS           30.9       NO      10.85 no_signal                
+  MS           30.3       NO       9.34 no_signal                
+  C            30.6       NO      11.88 no_signal                
+  WFC          31.1       NO       9.96 no_signal                
+  SCHW         30.1       NO       4.89 no_signal                
+  BLK          27.2       NO       7.23 no_signal                
+  V            21.3       NO       7.89 no_signal                
+  MA           21.6       NO       7.75 no_signal                
+  AXP          25.9       NO       4.82 no_signal                
+  PYPL         26.1       NO       7.22 no_signal                
+  JNJ          24.6       NO       5.05 no_signal                
+  UNH          28.4       NO      12.07 no_signal                
+  LLY          21.5       NO      18.06 no_signal                
+  PFE          22.7       NO       7.96 no_signal                
+  ABBV         26.4       NO      16.19 no_signal                
+  MRK          26.1       NO       7.40 no_signal                
+  TMO          22.8       NO      10.96 no_signal                
+  ABT          19.6       NO      12.22 no_signal                
+  AMGN         24.7       NO      11.89 no_signal                
+  GILD         36.9       NO      11.57 no_signal                
+  MRNA         43.3       NO      16.15 no_signal                
+  BIIB         21.2       NO       7.24 no_signal                
+  REGN         23.4       NO       7.90 no_signal                
+  VRTX         20.0       NO      14.44 no_signal                
+  ISRG         17.0       NO      10.80 no_signal                
+  MDT          18.6       NO       7.00 no_signal                
+  XOM          32.2       NO      16.98 no_signal                
+  CVX          31.6       NO      14.27 no_signal                
+  COP          42.6       NO      19.39 no_signal                
+  SLB          26.4       NO      22.63 no_signal                
+  OXY          29.6       NO      25.54 no_signal                
+  EOG          29.9       NO      18.10 no_signal                
+  MPC          37.0       NO      17.54 no_signal                
+  PSX          35.6       NO      16.19 no_signal                
+  FSLR         25.6       NO       9.73 no_signal                
+  ENPH         32.8       NO      30.26 no_signal                
+  BA           19.0       NO      21.53 no_signal                
+  CAT          29.9       NO       8.56 no_signal                
+  DE           18.3       NO       8.19 no_signal                
+  GE           26.8       NO      21.07 no_signal                
+  HON          13.5       NO      10.43 no_signal                
+  RTX          21.9       NO      13.54 no_signal                
+  LMT          24.3       NO      12.54 no_signal                
+  MMM          21.2       NO      11.48 no_signal                
+  WMT          21.4       NO       6.33 no_signal                
+  COST         16.9       NO       5.61 no_signal                
+  HD           22.9       NO      14.07 no_signal                
+  LOW          22.8       NO      12.76 no_signal                
+  TGT          25.3       NO       8.32 no_signal                
+  NKE          21.4       NO      25.18 no_signal                
+  SBUX         30.4       NO      19.82 no_signal                
+  MCD          21.3       NO      11.60 no_signal                
+  DIS          19.9       NO      10.63 no_signal                
+  CMCSA        23.5       NO      15.04 no_signal                
+  T            21.5       NO       8.95 no_signal                
+  VZ           26.4       NO       4.59 no_signal                
+  GLD          17.6       NO      24.69 no_signal                
+  SLV          40.0       NO      35.90 no_signal                
+  USO          21.5       NO      28.56 no_signal                
+  TLT          21.3       NO       4.14 no_signal                
+  ... (66 more omitted)
+
+── DAILY EQUITY HISTORY (Apex Predator #5) ───────────────────────────────────
+  No equity history available. Capturing from 2026-04-05 forward.
+
+── CONSECUTIVE STREAK TRACKER (Apex Predator #5) ─────────────────────────────
+  No trade history for Apex Predator #5. Capturing from 2026-04-05 forward.
+
+── ROLLING PERFORMANCE METRICS (Apex Predator #5) ────────────────────────────
+  No trade data for Apex Predator #5. Capturing from 2026-04-05 forward.
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 5: THE NAVIGATOR — FOREX SWING ENGINE (Bot #6)
+════════════════════════════════════════════════════════════════════════════════
+
+── OVERVIEW ──────────────────────────────────────────────────────────────────
+    Capital pool:                   Forex — Paper Trading (H4 Swing Strategy)
+    Bot status:                     idle
+    USD bias (Groq macro):          NEUTRAL
+    News blackout:                  NO
+    Cycles completed:               1
+    Starting capital:               $100,000.00
+    Current equity:                 $99,820.45
+    Total P&L:                      $-179.55 (-0.18%)
+    High water mark:                $100,000.00
+    Vault (profit lock):            $0.00
+    Total trades:                   9
+    Wins:                           1
+    Win rate:                       +11.1%
+    Open positions:                 10
+
+── CURRENT FOREX POSITIONS ───────────────────────────────────────────────────
+
+  USD_CAD  SHORT
+    Units:                          10,626
+    Entry:                          1.39423
+    Current:                        1.39452
+    P&L:                            $-2.21 (-2.9 pips)
+    Stop loss:                      1.39695
+    Take profit:                    1.38390
+
+  AUD_JPY  SHORT
+    Units:                          14,470
+    Entry:                          110.22800
+    Current:                        109.99300
+    P&L:                            $21.29 (+23.5 pips)
+    Stop loss:                      110.20800
+    Take profit:                    109.01900
+
+  AUD_NZD  SHORT
+    Units:                          14,467
+    Entry:                          1.20844
+    Current:                        1.21081
+    P&L:                            $-19.50 (-23.7 pips)
+    Stop loss:                      1.21195
+    Take profit:                    1.20042
+
+  EUR_JPY  SHORT
+    Units:                          8,665
+    Entry:                          184.06700
+    Current:                        183.86600
+    P&L:                            $10.90 (+20.1 pips)
+    Stop loss:                      184.25600
+    Take profit:                    182.77401
+
+  EUR_USD  LONG
+    Units:                          9,222
+    Entry:                          1.15221
+    Current:                        1.15128
+    P&L:                            $-8.56 (-9.3 pips)
+    Stop loss:                      1.14925
+    Take profit:                    1.16365
+
+  GBP_JPY  SHORT
+    Units:                          7,561
+    Entry:                          210.96100
+    Current:                        210.64999
+    P&L:                            $14.72 (+31.1 pips)
+    Stop loss:                      211.16486
+    Take profit:                    209.37593
+
+  GBP_USD  LONG
+    Units:                          8,054
+    Entry:                          1.31938
+    Current:                        1.31868
+    P&L:                            $-5.67 (-7.0 pips)
+    Stop loss:                      1.31573
+    Take profit:                    1.33450
+
+  NZD_CAD  LONG
+    Units:                          18,687
+    Entry:                          0.79365
+    Current:                        0.79277
+    P&L:                            $-11.79 (-8.8 pips)
+    Stop loss:                      0.79070
+    Take profit:                    0.80689
+
+  NZD_JPY  LONG
+    Units:                          18,678
+    Entry:                          90.88800
+    Current:                        90.82100
+    P&L:                            $-7.83 (-6.7 pips)
+    Stop loss:                      90.46828
+    Take profit:                    92.16049
+
+  NZD_USD  LONG
+    Units:                          11,171
+    Entry:                          0.56941
+    Current:                        0.56873
+    P&L:                            $-7.60 (-6.8 pips)
+    Stop loss:                      0.56702
+    Take profit:                    0.57773
+
+── FOREX TRADE HISTORY (all trades) ──────────────────────────────────────────
+  Total recorded: 26
+  #    Date               Pair         Dir         Entry       Exit       PnL$    Pips  Reason
+  -------------------------------------------------------------------------------------
+  1    ?                  NZDUSD=X     LONG      0.56941    0.00000      $0.00    +0.0  ?
+  2    ?                  CAD=X        SHORT     1.39423    0.00000      $0.00    +0.0  ?
+  3    ?                  GBPUSD=X     LONG      1.31938    0.00000      $0.00    +0.0  ?
+  4    ?                  EURUSD=X     LONG      1.15221    0.00000      $0.00    +0.0  ?
+  5    2026-04-04T02:06   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  6    2026-04-04T01:18   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  7    ?                  NZDCAD=X     LONG      0.79365    0.00000      $0.00    +0.0  ?
+  8    2026-04-03T22:03   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
+  9    ?                  NZDJPY=X     LONG     90.88800    0.00000      $0.00    +0.0  ?
+  10   ?                  AUDNZD=X     SHORT     1.20844    0.00000      $0.00    +0.0  ?
+  11   ?                  AUDJPY=X     SHORT   110.22800    0.00000      $0.00    +0.0  ?
+  12   ?                  GBPJPY=X     SHORT   210.96100    0.00000      $0.00    +0.0  ?
+  13   ?                  EURJPY=X     SHORT   184.06700    0.00000      $0.00    +0.0  ?
+  14   ?                  AUDNZD=X     SHORT     1.20852    0.00000      $0.00    +0.0  ?
+  15   ?                  AUDJPY=X     SHORT   110.25500    0.00000      $0.00    +0.0  ?
+  16   ?                  GBPJPY=X     SHORT   211.02000    0.00000      $0.00    +0.0  ?
+  17   ?                  EURJPY=X     SHORT   184.03300    0.00000      $0.00    +0.0  ?
+  18   ?                  CADJPY=X     LONG    114.30600    0.00000      $0.00    +0.0  ?
+  19   2026-04-02T16:38   AUDNZD=X     SHORT     1.20365    1.20714    $-38.77   -34.9  ?
+  20   2026-04-02T16:38   SEK=X        LONG      9.40845    9.41380     $-4.32   +53.5  ?
+  21   2026-04-02T20:45   SGD=X        LONG      1.28313    1.28451      $0.74   +13.8  ?
+  22   2026-04-02T16:38   EURCAD=X     SHORT     1.60796    1.60693     $-5.40   +10.3  ?
+  23   2026-04-02T08:17   EURJPY=X     SHORT   184.02800  184.03700    $-10.42    -0.9  ?
+  24   ?                  EURUSD=X     SHORT     1.15888    0.00000      $0.00    +0.0  ?
+  25   ?                  ZAR=X        LONG     16.83787    0.00000      $0.00    +0.0  ?
+  26   2026-04-02T16:38   MXN=X        LONG     17.82880   17.84000     $-3.72  +112.0  ?
+
+── FOREX STRATEGY PARAMETERS ─────────────────────────────────────────────────
+  Strategy:          H4 swing — 5 major pairs (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD)
+  AI engine:         Groq Llama 3.3 70B — USD directional bias only (BULLISH/BEARISH/NEUTRAL)
+  Cycle frequency:   Every 4 hours (24/7)
+  Position sizing:   3% risk per trade, ATR-based stop loss
+  Max positions:     5 simultaneous
+  Entry:             EMA crossover + RSI + MACD confluence, filtered by USD bias
+  Stop loss:         1.5× ATR from entry
+  Take profit:       2.0× risk (R:R = 1:2)
+  Profit vault:      10% of realized profits locked in vault
+  News blackout:     Groq detects high-impact events → pauses trading
+
+── TRADE MECHANICS — EXACT FORMULAS (NAVIGATOR #6) ───────────────────────────
+  RSI (Relative Strength Index):
+    Period: 14  |  Oversold: < 30  |  Overbought: > 70
+
+  ATR (Average True Range):
+    Period: 14  |  Used for all bracket calculations
+
+  STOP LOSS FORMULA:
+    Initial SL = 2.5 * ATR(14) from entry  (SL_ATR_MULT = 2.5)
+    Breakeven trigger: when price moves 1.5 * ATR in favor, SL moves to entry + 2 pips
+
+  TAKE PROFIT FORMULA:
+    TP = 5.0 * ATR(14) from entry  (TP_ATR_MULT = 5.0)
+
+  TRAILING STOP FORMULA:
+    Trailing offset = 2.0 * ATR(14) from best price seen  (TRAIL_ATR_MULT = 2.0)
+    Ratchets up (longs) / down (shorts) as price moves favorably
+
+  POSITION SIZING FORMULA:
+    risk_per_trade = equity * MAX_RISK_PER_TRADE_PCT  (1%)
+    units = risk_per_trade / (SL_distance_in_price * pip_value)
+    Max position size: 10% of equity  (MAX_POSITION_SIZE_PCT = 0.10)
+
+  ENTRY FILTERS (ALL must be True):
+    1. RSI confirms direction (< 30 for long, > 70 for short)
+    2. USD bias from Groq LLM aligns with trade direction
+    3. Not in news blackout (high-impact event within 4 hours)
+    4. Open positions < MAX_OPEN_POSITIONS (10)
+    5. Not in circuit breaker cooldown (3% drawdown triggers 8hr pause)
+
+  SPREAD COST MODEL (Paper Trading):
+    PAPER_SPREAD_COST_PCT = 0.001 (0.1% per side)
+    Total round-trip cost = entry_size * 0.001 + exit_size * 0.001
+
+  VAULT SWEEP:
+    20% of profits above High Water Mark swept weekly
+
+── NAVIGATOR PAIR-BY-PAIR BREAKDOWN ──────────────────────────────────────────
+  [Reconstructed from historical data]
+  Pair            Trades    Win%    Total PnL   Avg Hold  Avg R:R  Bias Ovr
+  ------------------------------------------------------------------------
+  SGD=X                1 +100.0%        $0.74      24.6h     0.33         0
+  MXN=X                1   +0.0%       $-3.72      20.7h     0.09         0
+  SEK=X                1   +0.0%       $-4.32      20.5h     0.07         0
+  EURCAD=X             1   +0.0%       $-5.40      20.5h     0.18         0
+  EURJPY=X             1   +0.0%      $-10.42      12.1h     0.01         0
+  EURNZD=X             3   +0.0%      $-31.89       1.5h     0.00         0
+  AUDNZD=X             1   +0.0%      $-38.77      17.6h     0.78         0
+
+── DAILY EQUITY HISTORY (Navigator #6) ───────────────────────────────────────
+  [Reconstructed from historical data — 4 days]
+  NOTE: Capital injections detected and subtracted from P&L on 1 day(s)
+  Date                Open Eq       Close Eq    Daily P&L   Daily % Regime        Trades
+  ----------------------------------------------------------------------------------
+  2026-04-02       $99,893.05    $100,252.72  $-99,640.33   -99.75% Bear               0 [+$100,000.00 injected]
+  2026-04-03       $96,704.35     $99,933.79     $-318.93    -0.32% Crypto             0
+  2026-04-04       $99,860.84    $106,227.44    $6,293.65    +6.30% Crypto             0
+  2026-04-05       $99,860.84     $99,860.84   $-6,366.60    -5.99% Crypto             0
+
+── CONSECUTIVE STREAK TRACKER (Navigator #6) ─────────────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     1 LOSS
+    Max win streak (all-time):          10
+    Max loss streak (all-time):         2
+
+── ROLLING PERFORMANCE METRICS (Navigator #6) ────────────────────────────────
+    7-day rolling Sharpe ratio:         0.0777 (preliminary — under 30 days)
+    7-day rolling win rate:             +11.1%
+    7-day rolling avg P&L/trade:        $-10.42
+    Profit factor (all-time):           0.008
+      Gross profit:                     $0.74
+      Gross loss:                       $94.52
+  [Reconstructed from historical data]
+
+════════════════════════════════════════════════════════════════════════════════
+  EXECUTION QUALITY — SLIPPAGE & FILL ANALYSIS
+════════════════════════════════════════════════════════════════════════════════
+  [Reconstructed from historical data]
+    Total slippage cost (Oracle):       $1,594.19
+    Average slippage per trade:         +0.1205%
+    Best slippage (smallest):           -2.4951%
+    Worst slippage (largest):           +3.2336%
+    Trades with slippage data:          28
+
+    Navigator spread cost model:        0.1% per side (simulated, not real slippage)
+    Kraken slippage model:              Dynamic based on order size and ATR volatility

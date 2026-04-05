@@ -978,6 +978,7 @@ async def export_diagnostic_report():
     except Exception:
         ks_state = {}; mkt_open = False; sched_jobs = []; last_run = {}; groq_tok = None; groq_used = None; groq_max = 100_000
 
+    lines.append("@@PART1@@")
     h1("SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT")
     row("Report timestamp:", ts)
     row("Market status:", "OPEN (US Equities)" if mkt_open else "CLOSED (After Hours / Weekend)")
@@ -1306,6 +1307,7 @@ async def export_diagnostic_report():
     lines += _rs.section_consecutive_streaks("Oracle #1", alpaca_trades)
     lines += _rs.section_rolling_metrics("Oracle #1", alpaca_trades, equity_source="oracle")
 
+    lines.append("@@PART2@@")
     h1("SECTION 3: KRAKEN FLEET \u2014 ALL 3 CRYPTO BOTS (24/7)")
 
     import psycopg2 as _pg2rpt, psycopg2.extras as _pg2xrpt, os as _osrpt
@@ -1474,10 +1476,7 @@ async def export_diagnostic_report():
                 exit_p = t.get("exit_price") or 0
                 fees   = t.get("fees_usd") or 0
                 reason = str(t.get("reason") or "?")
-                order  = str(t.get("order_id") or "")[:12]
                 lines.append(f"      {_ti:<4} {dt:<16} {sym:<12} {side:<5} {_pct(ppct):>7} {_c(pusd):>10}  {_c(entry, 4):>10} {_c(exit_p, 4):>10} {_c(fees):>8}  {reason}")
-                if order:
-                    lines.append(f"           \u2514\u2500 order_id={order}")
 
     h2("KRAKEN FLEET TOTALS")
     _k_fleet_pnl = _all_kraken_equity - _all_kraken_starting
@@ -1510,6 +1509,7 @@ async def export_diagnostic_report():
     else:
         lines.append("  No trade data in kraken_trades DB yet.")
 
+    lines.append("@@KRAKEN_SUPP@@")
     lines += _rs.section_trade_mechanics_kraken()
     lines += _rs.section_vpin_shadow_log()
     lines += _rs.section_vpin_calibration()
@@ -1520,6 +1520,7 @@ async def export_diagnostic_report():
         lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)
     lines += _rs.section_rolling_metrics("Kraken Fleet", _all_kraken_trades_all, equity_source="kraken")
 
+    lines.append("@@PART3@@")
     h1("SECTION 4: APEX PREDATOR \u2014 OPTIONS ENGINE (Bot #5)")
 
     try:
@@ -1723,6 +1724,7 @@ async def export_diagnostic_report():
     lines += _rs.section_consecutive_streaks("Navigator #6", _fx_trades)
     lines += _rs.section_rolling_metrics("Navigator #6", _fx_trades, equity_source="forex")
 
+    lines.append("@@SEC6@@")
     h1("SECTION 6: COMBINED FLEET PORTFOLIO \u2014 ALL 6 BOTS")
 
     grand_start = 600_000.0
@@ -1753,6 +1755,7 @@ async def export_diagnostic_report():
     lines.append("    Pool 4: Forex (Navigator)       $100k (Bot #6)")
     lines.append("  Each pool is independent \u2014 different asset classes, strategies, and risk profiles.")
 
+    lines.append("@@SEC1A@@")
     lines += _rs.section_fleet_risk_dashboard(
         equity=equity,
         kraken_equity=_all_kraken_equity,
@@ -1766,14 +1769,17 @@ async def export_diagnostic_report():
         ks_state=_report_ks_state,
     )
 
+    lines.append("@@CORR@@")
     lines += _rs.section_cross_bot_correlation()
 
+    lines.append("@@EXEC@@")
     lines += _rs.section_slippage_execution_quality(
         alpaca_trades=alpaca_trades,
         kraken_trades=_all_kraken_trades_all,
         fx_trades=_fx_trades,
     )
 
+    lines.append("@@SEC7@@")
     h1("SECTION 7: AI LEARNING JOURNAL (Persistent insights across cycles)")
     try:
         lj_entries = _lj(limit=50)
@@ -1798,6 +1804,7 @@ async def export_diagnostic_report():
 
     lines += _rs.section_learning_journal_metadata(lj_entries)
 
+    lines.append("@@SEC8@@")
     h1("SECTION 8: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
 
     h2("BOT #1: ORACLE (ALPACA) \u2014 HOW IT WORKS")
@@ -1879,17 +1886,67 @@ async def export_diagnostic_report():
     lines.append("     you can see in the trade history. Be specific with numbers.\"")
     lines.append(W)
 
-    report_text = "\n".join(lines)
+    clean_lines = [l for l in lines if not l.startswith("@@")]
+    report_text = "\n".join(clean_lines)
     filename = f"trading-report-{now_utc.strftime('%Y-%m-%d_%H%M%S')}.txt"
+
+    global _last_report_lines_with_markers
+    _last_report_lines_with_markers = lines[:]
+
     return PlainTextResponse(
         content=report_text,
         media_type="text/plain; charset=utf-8",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Report-Lines": str(len(lines)),
+            "X-Report-Lines": str(len(clean_lines)),
             "X-Report-Chars": str(len(report_text)),
         },
     )
+
+_last_report_lines_with_markers: list[str] = []
+
+
+@portfolio_router.get("/export/report-parts", tags=["Export"])
+async def export_report_parts():
+    from starlette.responses import JSONResponse
+
+    await export_diagnostic_report()
+
+    lines = _last_report_lines_with_markers
+    if not lines:
+        return JSONResponse(content={"error": "No report generated"}, status_code=500)
+
+    idx: dict[str, int] = {}
+    for i, l in enumerate(lines):
+        if l.startswith("@@"):
+            idx[l.strip()] = i
+
+    def _grab(start_m: str, end_m: str | None) -> list[str]:
+        s = idx.get(start_m, 0)
+        e = idx.get(end_m, len(lines)) if end_m else len(lines)
+        return [l for l in lines[s:e] if not l.startswith("@@")]
+
+    header = [l for l in lines[:idx.get("@@PART1@@", 0)] if not l.startswith("@@")]
+
+    p1 = header + _grab("@@PART1@@", "@@PART2@@")
+    p2 = _grab("@@PART2@@", "@@KRAKEN_SUPP@@") + _grab("@@CORR@@", "@@EXEC@@")
+    p3 = _grab("@@PART3@@", "@@SEC6@@") + _grab("@@EXEC@@", "@@SEC7@@")
+    p4 = (_grab("@@SEC1A@@", "@@CORR@@")
+          + _grab("@@SEC6@@", "@@SEC1A@@")
+          + _grab("@@KRAKEN_SUPP@@", "@@PART3@@")
+          + _grab("@@SEC7@@", "@@SEC8@@")
+          + _grab("@@SEC8@@", None))
+
+    result = {}
+    for name, part_lines in [("p1", p1), ("p2", p2), ("p3", p3), ("p4", p4)]:
+        text = "\n".join(part_lines)
+        result[name] = {
+            "filename": f"report-{name}.txt",
+            "text": text,
+            "lines": len(part_lines),
+            "chars": len(text),
+        }
+    return JSONResponse(content=result)
 
 
 @portfolio_router.get("/portfolio/news-feed", tags=["Portfolio"])

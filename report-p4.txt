@@ -1,0 +1,236 @@
+
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 1A: FLEET SUMMARY RISK DASHBOARD
+════════════════════════════════════════════════════════════════════════════════
+    Combined fleet equity:              $592,554.92
+    Fleet all-time peak:                $592,554.92
+    Fleet drawdown from peak:           +-0.000%
+    Best performing bot:                #5 Apex Predator ($0.00)
+    Biggest drag on performance:        #4 Calypso ($-2,356.25)
+    Total open exposure (all bots):     $310,242.09
+      Alpaca (Oracle):                  $97,821.35
+      Kraken fleet:                     $112,912.44
+      Options (Apex):                   $0.00
+      Forex (Navigator):                $99,508.30
+    Kill switch status:                 ARMED (normal)
+    Bots in circuit breaker:            None
+    Idle bots (0 positions):            #5 Apex Predator (0 positions)
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 6: COMBINED FLEET PORTFOLIO — ALL 6 BOTS
+════════════════════════════════════════════════════════════════════════════════
+    Total starting capital:         $600,000.00 across 4 capital pools, 6 bots
+
+    Bot #1 Oracle (Alpaca):         $97,821.35  (-2.18% from $100k)
+    Bots #2-4 Kraken Fleet:         $294,913.12  (-1.70% from $300,000.00)
+      - Davy Jones' Portfolio (#2): $99,322.84
+      - Blackbeard's Fleet (#3):    $97,946.53
+      - Calypso's Tide (#4):        $97,643.75
+    Bot #5 Apex Predator:           $100,000.00  (+0.00% from $100k)
+    Bot #6 Navigator:               $99,820.45  (-0.18% from $100k)
+
+    GRAND TOTAL EQUITY:             $592,554.92
+    COMBINED P&L:                   $-7,445.08 (-1.24%)
+
+  CAPITAL POOLS:
+    Pool 1: Alpaca US Equities     $100k  (Bot #1 Oracle)
+    Pool 2: Kraken Crypto Fleet    $300k  (Bots #2 Davy Jones, #3 Blackbeard, #4 Calypso)
+    Pool 3: Options (Apex Predator) $100k (Bot #5)
+    Pool 4: Forex (Navigator)       $100k (Bot #6)
+  Each pool is independent — different asset classes, strategies, and risk profiles.
+
+── TRADE MECHANICS — EXACT FORMULAS (KRAKEN FLEET #2-4) ──────────────────────
+  VPIN (Volume-Synchronized Probability of Informed Trading):
+    bucket_size = volume / num_buckets (50 buckets default)
+    vpin = abs(buy_volume - sell_volume) / total_volume per bucket
+    Dynamic threshold = rolling_30d_mean + 1.5 * rolling_30d_stddev
+    Threshold floor: 0.60  |  Threshold ceiling: 0.95
+    Legacy fallback threshold: 0.82 (if < 100 observations)
+
+  Z-SCORE (Mean Reversion Entry):
+    z_score = (current_price - SMA_20) / rolling_stddev_20
+    Entry LONG:  z_score < -2.0  |  Entry SHORT: z_score > +2.0
+
+  ATR-BASED STOP/TAKE PROFIT:
+    ATR = 14-period Average True Range
+    Stop Loss: entry_price +/- (ATR * sl_atr_mult)
+    Take Profit: entry_price +/- (ATR * tp_atr_mult)
+    Trailing stop ratchets with price movement
+
+  POSITION SIZING:
+    Base: 10-15% of equity per position (varies by bot aggression profile)
+    Davy Jones (Conservative): smaller sizes, tighter stops
+    Blackbeard (Aggressive): larger sizes, wider stops
+    Calypso (Most Aggressive): largest sizes, widest stops
+    Max simultaneous positions: 10 per bot
+
+  CIRCUIT BREAKER:
+    Triggers after N consecutive losses (varies by bot profile)
+    Cooldown period before resuming trading
+
+  ENTRY FILTERS (ALL must be True):
+    1. VPIN < dynamic_threshold (no toxic flow detected)
+    2. Z-score exceeds threshold OR momentum signal active
+    3. Not already holding max positions
+    4. Not in circuit breaker cooldown
+    5. Not in RAG-derived blacklist for symbol+regime
+
+── VPIN SHADOW LOG (Trades blocked by VPIN filter) ───────────────────────────
+  No VPIN rejections logged yet. Capturing from 2026-04-05 forward.
+
+── VPIN CALIBRATION METRICS (Kraken Fleet) ───────────────────────────────────
+  EXACT VPIN FORMULA:
+    1. Divide volume stream into N buckets (50 default)
+    2. Classify each trade as buy/sell using tick rule
+    3. VPIN = |buy_vol - sell_vol| / total_vol per bucket
+    4. Rolling window: last 50 buckets
+
+  DYNAMIC THRESHOLD FORMULA:
+    threshold = mean(30d_readings) + 1.5 * stddev(30d_readings)
+    Floor: 0.60  |  Ceiling: 0.95
+    Fallback: 0.82 (if < 100 historical observations)
+  VPIN history file not found. Capturing from 2026-04-05 forward.
+
+  Total Kraken trades executed (VPIN allowed): 315
+  Total VPIN-blocked entries: Not historically tracked — console logs only
+  Note: VPIN blocking statistics require kraken-bot code changes to persist
+
+── DAILY EQUITY HISTORY (Kraken Fleet) ───────────────────────────────────────
+  [Reconstructed from historical data — 7 days]
+  NOTE: Capital injections detected and subtracted from P&L on 1 day(s)
+  Date                Open Eq       Close Eq    Daily P&L   Daily % Regime        Trades
+  ----------------------------------------------------------------------------------
+  2026-03-30       $98,102.18     $98,102.18        $0.00    +0.00% Bear              10
+  2026-03-31       $98,102.18     $98,102.18        $0.00    +0.00% ?                 11
+  2026-04-01       $98,921.64     $98,921.64      $819.46    +0.84% Crypto            35
+  2026-04-02      $294,125.96    $298,920.73       $-0.91    -0.00% Bear              84 [+$200,000.00 injected]
+  2026-04-03      $298,309.84    $301,719.66    $2,798.93    +0.94% Crypto            22
+  2026-04-04      $296,190.30    $301,424.83     $-294.83    -0.10% Crypto           124
+  2026-04-05      $294,280.58    $294,922.05   $-6,502.78    -2.16% Crypto            13
+
+── REGIME PERFORMANCE TABLE (Kraken Fleet) ───────────────────────────────────
+  [Reconstructed from historical data]
+  Regime            Trades   Wins   Win Rate    Avg PnL     Total PnL$
+  --------------------------------------------------------------------
+  Crypto               315    138     +43.8%     +0.10%    $-10,497.22
+
+── CONSECUTIVE STREAK TRACKER (Davy Jones' Portfolio) ────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     2 LOSSS
+    Max win streak (all-time):          11
+    Max loss streak (all-time):         14
+
+── CONSECUTIVE STREAK TRACKER (Blackbeard's Fleet) ───────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     2 WINS
+    Max win streak (all-time):          8
+    Max loss streak (all-time):         24
+
+── CONSECUTIVE STREAK TRACKER (Calypso's Tide) ───────────────────────────────
+  [Reconstructed from historical data]
+    Current streak:                     4 WINS
+    Max win streak (all-time):          9
+    Max loss streak (all-time):         42
+
+── ROLLING PERFORMANCE METRICS (Kraken Fleet) ────────────────────────────────
+    7-day rolling Sharpe ratio:         7.0968 (preliminary — under 30 days)
+    7-day rolling win rate:             +43.8%
+    7-day rolling avg P&L/trade:        $-33.32
+    Profit factor (all-time):           0.349
+      Gross profit:                     $5,631.66
+      Gross loss:                       $16,128.88
+  [Reconstructed from historical data]
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 7: AI LEARNING JOURNAL (Persistent insights across cycles)
+════════════════════════════════════════════════════════════════════════════════
+  2 insights stored:
+
+  [CRYPTO / crypto]  confidence=1.00  confirmed×33  first_seen=2026-04-02
+    "Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV."
+
+  [CRYPTO / crypto]  confidence=0.97  confirmed×15  first_seen=2026-04-02
+    "Crypto market experiencing extreme fear with low on-chain demand."
+
+
+── LEARNING JOURNAL METADATA ─────────────────────────────────────────────────
+  #     Age(d)  Confidence  Confirmed  Stale? Regime       Insight (truncated)
+  ------------------------------------------------------------------------------------------
+  1          3        1.00         33   Fresh Crypto       Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's be
+  2          3        0.97         15   Fresh Crypto       Crypto market experiencing extreme fear with low on-chain demand.
+
+    Total insights:                     2
+    Stale insights (>14 days):          0
+    Injection count tracking:           Not currently tracked. Capturing from 2026-04-05 forward.
+    Contradiction detection:            Not currently tracked. Capturing from 2026-04-05 forward.
+════════════════════════════════════════════════════════════════════════════════
+  SECTION 8: STRATEGY PARAMETERS — ALL 6 BOTS (for LLM context)
+════════════════════════════════════════════════════════════════════════════════
+
+── BOT #1: ORACLE (ALPACA) — HOW IT WORKS ────────────────────────────────────
+  AI Engine:         Groq Llama 3.3 70B (100,000 tokens/day budget)
+  Execution:         Alpaca paper trading (simulated US equities)
+  Cycle frequency:   Every 15 minutes during market hours
+                     24/7 crypto-only cycle for crypto ETFs
+  Market regimes:    Bear | Bull | Neutral | Risk-Off
+                     Regime changes the entire allocation strategy
+  Position sizing:   Kelly Criterion × conviction score (0.0–1.0)
+                     Max 15% per position (except SGOV)
+  Risk controls:
+    - Kill switch:   Trips at 5% daily drawdown — liquidates all
+    - Stop losses:   Per-trade, set by AI in allocation decision
+    - Take profits:  Per-trade, set by AI in allocation decision
+    - Ratchet stops: Trailing stop that locks in gains
+  Special positions:
+    - SGOV:          AI cash-equivalent — absorbs overflow when all
+                     normal slots are capped. Exempt from 15% cap.
+    - JEPQ:          Profit vault. 20% of every profit event swept here
+                     as a DRIP position. Protected from all liquidations.
+  Auditing:          Gemini self-critic runs daily pre-market,
+                     HITL auditor agent runs post-close.
+  Learning:          AI insights persist in a learning journal and are
+                     injected as context into future allocation calls.
+
+── BOTS #2-4: KRAKEN FLEET — HOW THEY WORK ───────────────────────────────────
+  Bots:              #2 Davy Jones (Conservative), #3 Blackbeard (Aggressive), #4 Calypso (Most Aggressive)
+  Execution:         Kraken exchange (paper trading simulation, $100k each)
+  Strategy:          Mean reversion + momentum with VPIN microstructure filter
+  Pairs:             35+ crypto pairs (BTC, ETH, XRP, SOL, BNB, ADA, DOT, AVAX, etc.)
+  Position sizing:   10-15% of equity per position (varies by bot aggression)
+  Max positions:     10 simultaneous per bot
+  VPIN filter:       Volume-synchronized Probability of Informed Trading.
+                     VPIN > 0.65-0.75 blocks entries (varies by bot)
+  Stop loss:         Trailing — adapts to best price seen
+  Take profit:       Fixed target from entry
+  Circuit breaker:   Pauses bot after N consecutive losses
+  Cycle:             Runs 24/7 every 60s (crypto never closes)
+  Sides:             Both LONG and SHORT allowed
+
+── BOT #5: APEX PREDATOR — HOW IT WORKS ──────────────────────────────────────
+  Strategy:          Volatility Squeeze → Long Straddle (100% quant, LLM-free)
+  Execution:         Paper trading with real options chain data
+  Scan schedule:     Daily at 3:30 PM ET (Mon–Fri)
+  Capital fence:     20% of equity max deployed
+  Entry:             Bollinger Band squeeze + low IV rank → ATM straddle
+  Exit:              Profit target or time decay threshold
+
+── BOT #6: THE NAVIGATOR — HOW IT WORKS ──────────────────────────────────────
+  Strategy:          H4 swing — 5 major forex pairs
+  Pairs:             EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CAD
+  AI engine:         Groq Llama 3.3 70B — USD directional bias only
+  Cycle frequency:   Every 4 hours (24/7)
+  Position sizing:   3% risk per trade, ATR-based stop loss
+  Max positions:     5 simultaneous
+  Stop loss:         1.5× ATR from entry
+  Take profit:       2.0× risk (R:R = 1:2)
+  Profit vault:      10% of realized profits locked in vault
+  News blackout:     Groq detects high-impact events → pauses trading
+
+════════════════════════════════════════════════════════════════════════════════
+  END OF REPORT
+  Generated: 2026-04-05 23:45:27 UTC
+  Suggested LLM prompt:
+    "Review this trading report. Identify (1) what's working and why,
+     (2) what's losing and the likely root cause, (3) specific parameter
+     changes to improve performance (stop loss %, position sizing, VPIN
+     threshold, conviction cutoffs), and (4) any regime-specific patterns
+     you can see in the trade history. Be specific with numbers."
+════════════════════════════════════════════════════════════════════════════════

@@ -24,3 +24,27 @@ id = "C9y_tN4PMgMkcMp5bU77q"
 uri = "file://trading-report-2026-04-05_latest.txt"
 type = "text"
 title = "Trading Report (Plain Text)"
+
+[[outputs]]
+id = "9O6YPAz4ZKYZfeB1KmOIx"
+uri = "file://report-p1.txt"
+type = "text"
+title = "Part 1: System Status + Oracle/Alpaca"
+
+[[outputs]]
+id = "yOe9hhUUkppTSHmRm7NlQ"
+uri = "file://report-p2.txt"
+type = "text"
+title = "Part 2: Kraken Fleet + Correlation Matrix"
+
+[[outputs]]
+id = "Y0r0pUPHhwUYihr1XuWhm"
+uri = "file://report-p3.txt"
+type = "text"
+title = "Part 3: Apex Predator + Navigator + Execution Quality"
+
+[[outputs]]
+id = "w34mW7xFPcBvRZQWHBKXG"
+uri = "file://report-p4.txt"
+type = "text"
+title = "Part 4: Fleet Risk + Combined Summary + Journal + Strategy"

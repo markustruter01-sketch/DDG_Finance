@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, RefreshCw, X, Zap, ShieldOff } from "lucide-react";
-import { useLiquidateAll, useSystemRestart } from "@/hooks/use-trading";
+import { AlertTriangle, RefreshCw, X, Zap, ShieldOff, RotateCcw } from "lucide-react";
+import { useLiquidateAll, useSystemRestart, useForceRebalance } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -189,6 +189,23 @@ export function EmergencyHeaderButtons() {
     handleLiquidateConfirm, handleRestartConfirm,
   } = useEmergencyActions();
 
+  const { mutate: rebalance, isPending: isRebalancing } = useForceRebalance();
+  const [showRebalanceModal, setShowRebalanceModal] = useState(false);
+  const { toast } = useToast();
+
+  const handleRebalanceConfirm = () => {
+    rebalance(undefined, {
+      onSuccess: () => {
+        toast({ title: "Rebalance complete", description: "All positions liquidated and pipeline re-run." });
+        setShowRebalanceModal(false);
+      },
+      onError: () => {
+        toast({ title: "Rebalance failed", description: "Check logs for details.", variant: "destructive" });
+        setShowRebalanceModal(false);
+      },
+    });
+  };
+
   return (
     <>
       <ConfirmModal
@@ -215,8 +232,42 @@ export function EmergencyHeaderButtons() {
         onCancel={() => setShowRestartModal(false)}
         isLoading={restart.isPending}
       />
+      <ConfirmModal
+        open={showRebalanceModal}
+        title="Force Rebalance All Bots?"
+        description={
+          "Close ALL open positions across every bot (Alpaca, Kraken, Forex, Options) " +
+          "and re-run the trading pipeline. This cannot be undone."
+        }
+        confirmLabel="Rebalance Now"
+        confirmClass="bg-orange-600 hover:bg-orange-500 text-white border border-orange-500"
+        onConfirm={handleRebalanceConfirm}
+        onCancel={() => setShowRebalanceModal(false)}
+        isLoading={isRebalancing}
+      />
 
       <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => setShowRebalanceModal(true)}
+          disabled={isRebalancing}
+          title="Force Rebalance — close all positions and re-run pipeline"
+          className={cn(
+            "flex items-center justify-center gap-1.5 rounded-md",
+            "text-[10px] font-semibold tracking-wide",
+            "bg-orange-950/40 border border-orange-800/40 text-orange-400",
+            "hover:bg-orange-600 hover:border-orange-500 hover:text-white",
+            "transition-all duration-150",
+            "disabled:opacity-40 disabled:cursor-not-allowed",
+            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
+          )}
+        >
+          {isRebalancing
+            ? <RefreshCw className="h-3.5 w-3.5 sm:h-3 sm:w-3 animate-spin" />
+            : <RotateCcw className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+          }
+          <span className="hidden md:inline">Rebalance</span>
+        </button>
+
         <button
           onClick={() => setShowLiquidateModal(true)}
           disabled={liquidate.isPending}

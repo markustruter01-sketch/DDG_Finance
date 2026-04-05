@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-04-05T07:19:55.060062+00:00",
-  "elapsed_sec": 15.26,
+  "timestamp": "2026-04-05T07:34:55.801834+00:00",
+  "elapsed_sec": 16.47,
   "alerts": [
     {
       "check": "pnl_velocity",
@@ -12,7 +12,7 @@
       "check": "win_rate_decay",
       "bot": "blackbeard",
       "severity": "MEDIUM",
-      "detail": "blackbeard win rate 29.5% (23/78) below 40.0% floor"
+      "detail": "blackbeard win rate 30.4% (24/79) below 40.0% floor"
     },
     {
       "check": "win_rate_decay",

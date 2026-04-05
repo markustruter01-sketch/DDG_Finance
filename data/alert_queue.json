@@ -556,5 +556,14 @@
     "side": "SELL",
     "reason": "scalp_tp",
     "timestamp": "2026-04-05T06:49:03.843108+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "W/USD",
+    "pnl_pct": 1.04,
+    "pnl_usd": 38.35,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-05T07:33:47.249998+00:00"
   }
 ]

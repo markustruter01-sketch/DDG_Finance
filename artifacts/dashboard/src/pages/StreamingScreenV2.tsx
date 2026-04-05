@@ -480,31 +480,78 @@ function NeuralFeed() {
     }
 
     if (summary?.groq?.regime) {
+      const oracleDecision = summary.auto_trading ? "HOLD" : "PASS";
+      const regimeParts = [`REGIME: ${summary.groq.regime}`, `Groq ${summary.groq.pct_used.toFixed(0)}% used`];
+      if (summary.market_open != null) regimeParts.push(`Market ${summary.market_open ? "OPEN" : "CLOSED"}`);
+      regimeParts.push(`→ ${oracleDecision}`);
       newLines.push({
-        id: `regime-${summary.groq.regime}-${summary.groq.pct_used.toFixed(0)}`, ts: now, bot: "Oracle", icon: "🔮", color: "#8b5cf6",
-        text: `REGIME: ${summary.groq.regime} | Groq ${summary.groq.pct_used.toFixed(0)}% budget used`,
-        type: "system",
+        id: `regime-${summary.groq.regime}-${summary.groq.pct_used.toFixed(0)}-${oracleDecision}`,
+        ts: now, bot: "Oracle", icon: "🔮", color: "#8b5cf6",
+        text: regimeParts.join(" | "),
+        type: "thinking",
+      });
+    }
+    if (summary?.kill_switch_tripped) {
+      newLines.push({
+        id: `oracle-killswitch-${summary.system_health?.run_count}`, ts: now, bot: "Oracle", icon: "🔮", color: "#8b5cf6",
+        text: "KILL SWITCH TRIPPED — All trading halted → PASS",
+        type: "signal",
+        highConviction: true,
       });
     }
 
     if (optState && optState.last_scan_results?.length > 0) {
-      const squeezes = optState.last_scan_results.filter(r => r.is_squeeze);
-      if (squeezes.length > 0) {
-        const squeezeSymbols = squeezes.map(s => s.symbol).sort().join(",");
+      for (const scan of optState.last_scan_results.slice(0, 3)) {
+        const parts = [`SCAN ${scan.symbol}`];
+        if (scan.ivr != null) parts.push(`IVR=${scan.ivr.toFixed(0)}`);
+        const decision = scan.is_squeeze ? "ENTER" : "PASS";
+        parts.push(`→ ${decision}`);
         newLines.push({
-          id: `opt-squeeze-${squeezeSymbols}`, ts: now, bot: "Apex Predator", icon: "🎯", color: "#f59e0b",
-          text: `VOL SQUEEZE detected: ${squeezes.map(s => s.symbol).join(", ")} | IVR range scanning`,
-          type: "signal",
+          id: `opt-scan-${scan.symbol}-${scan.is_squeeze}-${optState.cycle_count}`,
+          ts: now, bot: "Apex Predator", icon: "🎯", color: "#f59e0b",
+          text: parts.join(" | "),
+          type: scan.is_squeeze ? "signal" : "thinking",
+          highConviction: scan.is_squeeze,
+        });
+      }
+      if (optState.circuit_breaker_active) {
+        newLines.push({
+          id: `opt-circuit-${optState.cycle_count}`, ts: now, bot: "Apex Predator", icon: "🎯", color: "#f59e0b",
+          text: "CIRCUIT BREAKER ACTIVE — Position sizing reduced → HOLD",
+          type: "system",
         });
       }
     }
 
-    if (fxState?.usd_bias) {
+    if (fxState) {
+      const fxDecision = fxState.news_blackout ? "PASS" : fxState.position_count > 0 ? "HOLD" : "PASS";
+      const fxParts = [`USD BIAS: ${(fxState.usd_bias ?? "neutral").toUpperCase()}`];
+      fxParts.push(`${fxState.position_count} pos`);
+      fxParts.push(`C#${fxState.cycle_count}`);
+      if (fxState.news_blackout) fxParts.push("NEWS BLACKOUT");
+      fxParts.push(`→ ${fxDecision}`);
       newLines.push({
-        id: `fx-bias-${fxState.usd_bias}-${fxState.cycle_count}-${fxState.position_count}`, ts: now, bot: "Navigator", icon: "🧭", color: "#10b981",
-        text: `USD BIAS: ${fxState.usd_bias.toUpperCase()} | ${fxState.position_count} positions | Cycle #${fxState.cycle_count}${fxState.news_blackout ? " | NEWS BLACKOUT ACTIVE" : ""}`,
-        type: "system",
+        id: `fx-bias-${fxState.usd_bias}-${fxState.cycle_count}-${fxState.position_count}`,
+        ts: now, bot: "Navigator", icon: "🧭", color: "#10b981",
+        text: fxParts.join(" | "),
+        type: "thinking",
       });
+      if (fxState.last_scan_results?.length) {
+        for (const scan of fxState.last_scan_results.slice(0, 2)) {
+          const scanParts = [`SIGNAL ${scan.pair}`];
+          if (scan.rsi != null) scanParts.push(`RSI=${scan.rsi.toFixed(1)}`);
+          if (scan.atr != null) scanParts.push(`ATR=${scan.atr.toFixed(4)}`);
+          const scanDecision = scan.signal ? "ENTER" : "PASS";
+          scanParts.push(`→ ${scanDecision}`);
+          newLines.push({
+            id: `fx-scan-${scan.pair}-${scan.signal}-${fxState.cycle_count}`,
+            ts: now, bot: "Navigator", icon: "🧭", color: "#10b981",
+            text: scanParts.join(" | "),
+            type: scan.signal ? "signal" : "thinking",
+            highConviction: !!scan.signal,
+          });
+        }
+      }
     }
 
     if (newLines.length > 0) {
@@ -619,16 +666,43 @@ function EquitySidebar() {
     return curve.snapshots.map(s => s.total_equity);
   }, [curve]);
 
+  const krakenBotCurves = useMemo(() => {
+    const buildCurve = (status: typeof djStatus, startBalance: number) => {
+      if (!status?.recent_trades?.length) return [startBalance, status?.total_equity_usd ?? startBalance];
+      const sorted = [...status.recent_trades].sort(
+        (a, b) => new Date(a.closed_at).getTime() - new Date(b.closed_at).getTime()
+      );
+      const points: number[] = [startBalance];
+      let running = startBalance;
+      for (const t of sorted) {
+        running += (t.pnl_usd ?? 0);
+        points.push(running);
+      }
+      return points;
+    };
+    return {
+      dj: buildCurve(djStatus, djStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      bb: buildCurve(bbStatus, bbStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      ca: buildCurve(caStatus, caStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+    };
+  }, [djStatus, bbStatus, caStatus]);
+
   const perBotSparklines = useMemo(() => {
-    if (!curve?.snapshots?.length) return [];
-    const snaps = curve.snapshots;
-    return [
-      { name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) },
-      { name: "Kraken Fleet", icon: "⚓", color: "#22d3ee", data: snaps.map(s => s.kraken_equity) },
-      { name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) },
-      { name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) },
-    ];
-  }, [curve]);
+    const result: Array<{ name: string; icon: string; color: string; data: number[] }> = [];
+    if (curve?.snapshots?.length) {
+      const snaps = curve.snapshots;
+      result.push({ name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) });
+    }
+    result.push({ name: "Davy Jones", icon: "⚓", color: "#22d3ee", data: krakenBotCurves.dj });
+    result.push({ name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316", data: krakenBotCurves.bb });
+    result.push({ name: "Calypso", icon: "🌊", color: "#a855f7", data: krakenBotCurves.ca });
+    if (curve?.snapshots?.length) {
+      const snaps = curve.snapshots;
+      result.push({ name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) });
+      result.push({ name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) });
+    }
+    return result;
+  }, [curve, krakenBotCurves]);
 
   const allPositions = useMemo(() => {
     const pos: Array<{ symbol: string; bot: string; icon: string; pnlUsd: number; color: string }> = [];
@@ -716,14 +790,14 @@ function EquitySidebar() {
       {perBotSparklines.length > 0 && (
         <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
           <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Per-Bot Equity</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             {perBotSparklines.map(bot => (
               <div key={bot.name}>
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span style={{ fontSize: 9 }}>{bot.icon}</span>
-                  <span className="text-[8px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
+                  <span style={{ fontSize: 8 }}>{bot.icon}</span>
+                  <span className="text-[7px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
                 </div>
-                <MiniSparkline data={bot.data} color={bot.color} w={110} h={24} />
+                <MiniSparkline data={bot.data} color={bot.color} w={72} h={20} />
               </div>
             ))}
           </div>

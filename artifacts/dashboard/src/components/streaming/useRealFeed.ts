@@ -83,6 +83,7 @@ export function useRealFeed(maxTrades = 20) {
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
 
         const pnlUsd = t.pnl_usd ?? 0;
+        const hasExplicitPnl = t.pnl_usd != null;
         all.push({
           id: t.trade_id,
           bot,
@@ -91,7 +92,7 @@ export function useRealFeed(maxTrades = 20) {
           side: t.side || t.direction || "",
           pnlPct: t.pnl_percentage,
           pnlUsd,
-          isWin: pnlUsd >= 0,
+          isWin: hasExplicitPnl ? pnlUsd >= 0 : t.status === "Closed_Win",
           date: t.date,
         });
       }

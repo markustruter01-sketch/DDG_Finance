@@ -37,6 +37,7 @@ if _ENGINE_DIR not in sys.path:
 from forex_config import (
     PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
     PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, USD_BASE_PAIRS, PIP_SIZE,
+    CROSS_QUOTE_USD,
     RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
     SL_ATR_MULT, TP_ATR_MULT, TRAIL_ATR_MULT, BREAKEVEN_ATR_MULT,
     MAX_RISK_PER_TRADE_PCT,
@@ -132,24 +133,95 @@ def _check_news_blackout() -> bool:
         return False
 
 
+def _gemini_compass_fallback(rag_block: str = "") -> tuple[str, str]:
+    import requests as _req
+
+    api_key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GOOGLE_GEMINI_API_KEY not set")
+
+    system_prompt = (
+        "You are a Forex Macro Compass. Your ONLY job is to determine the directional bias "
+        "for the US Dollar based on central bank policy, interest rate expectations, and "
+        "macroeconomic conditions.\n\n"
+        "You must output EXACTLY one of three values in a JSON object:\n"
+        '{"bias": "USD_BULLISH", "thesis": "brief 1-sentence reason"}\n'
+        '{"bias": "USD_BEARISH", "thesis": "brief 1-sentence reason"}\n'
+        '{"bias": "NEUTRAL", "thesis": "brief 1-sentence reason"}\n\n'
+        "Do NOT output anything else."
+    )
+
+    user_prompt = (
+        f"Current date: {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+        "Based on current central bank policy stances (Fed, ECB, BOJ, BOE, RBA, SNB), "
+        "recent economic data releases, and interest rate expectations, "
+        "what is the directional bias for the US Dollar?\n\n"
+        "Consider: Fed rate path, inflation trends, employment data, "
+        "relative growth differentials, and risk sentiment.\n"
+        f"{rag_block}"
+    )
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    body = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 256,
+            "temperature": 0.1,
+        },
+    }
+
+    resp = _req.post(
+        url,
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        json=body,
+        timeout=30,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:200]}")
+
+    data = resp.json()
+    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    result = json.loads(raw_text)
+
+    bias = result.get("bias", "NEUTRAL").upper()
+    thesis = result.get("thesis", "")
+    if bias not in ("USD_BULLISH", "USD_BEARISH", "NEUTRAL"):
+        bias = "NEUTRAL"
+        thesis = f"Gemini returned invalid bias '{result.get('bias')}' — defaulting to NEUTRAL"
+
+    return bias, thesis
+
+
 def _get_usd_bias() -> tuple[str, str]:
     now = time.time()
     if now - _USD_BIAS_CACHE["cached_at"] < _USD_BIAS_CACHE_TTL and _USD_BIAS_CACHE["bias"]:
         logger.info(f"Forex | Using cached USD bias: {_USD_BIAS_CACHE['bias']}")
         return _USD_BIAS_CACHE["bias"], _USD_BIAS_CACHE["thesis"]
 
+    rag_block = ""
     try:
         from analysis.groq_budget import budget as groq_budget
         from analysis.groq_client import call_groq
 
         if not groq_budget.can_call_regime():
-            cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
-            cached_thesis = _USD_BIAS_CACHE["thesis"] or "Budget throttled — using last known bias"
-            logger.info(f"Forex | Groq budget throttled — using cached bias: {cached_bias}")
-            return cached_bias, cached_thesis
+            logger.info("Forex | Groq budget throttled — trying Gemini fallback")
+            try:
+                bias, thesis = _gemini_compass_fallback()
+                _USD_BIAS_CACHE["bias"] = bias
+                _USD_BIAS_CACHE["thesis"] = thesis
+                _USD_BIAS_CACHE["cached_at"] = time.time()
+                logger.info(f"Forex | Gemini fallback USD bias: {bias} — {thesis}")
+                return bias, thesis
+            except Exception as gem_exc:
+                logger.warning(f"Forex | Gemini fallback failed: {gem_exc}")
+                cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
+                cached_thesis = _USD_BIAS_CACHE["thesis"] or "Budget throttled — using last known bias"
+                logger.info(f"Forex | Using cached bias: {cached_bias}")
+                return cached_bias, cached_thesis
 
         losing_trades = _journal.get_recent_losers(limit=5) or _db.load_losing_trades(limit=5)
-        rag_block = ""
         if losing_trades:
             rag_block = "\n\nRECENT LOSING TRADES (learn from these mistakes):\n"
             for lt in losing_trades:
@@ -206,10 +278,19 @@ def _get_usd_bias() -> tuple[str, str]:
         return bias, thesis
 
     except Exception as exc:
-        logger.warning(f"Forex | Groq compass failed: {exc}")
-        cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
-        cached_thesis = _USD_BIAS_CACHE["thesis"] or f"Groq unavailable — using NEUTRAL: {exc}"
-        return cached_bias, cached_thesis
+        logger.warning(f"Forex | Groq compass failed: {exc} — trying Gemini fallback")
+        try:
+            bias, thesis = _gemini_compass_fallback(rag_block)
+            _USD_BIAS_CACHE["bias"] = bias
+            _USD_BIAS_CACHE["thesis"] = thesis
+            _USD_BIAS_CACHE["cached_at"] = time.time()
+            logger.info(f"Forex | Gemini fallback USD bias: {bias} — {thesis}")
+            return bias, thesis
+        except Exception as gem_exc:
+            logger.warning(f"Forex | Gemini fallback also failed: {gem_exc}")
+            cached_bias = _USD_BIAS_CACHE["bias"] or "NEUTRAL"
+            cached_thesis = _USD_BIAS_CACHE["thesis"] or f"Both LLMs unavailable — using NEUTRAL"
+            return cached_bias, cached_thesis
 
 
 def _filter_pairs_by_bias(bias: str) -> dict[str, str]:
@@ -259,6 +340,22 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
     units = min(units, max_units)
 
     return max(0, round(units))
+
+
+_CROSS_REF_SYMBOLS = sorted(set(ref for ref, _ in CROSS_QUOTE_USD.values()))
+
+
+def _prefetch_reference_prices():
+    for ref_sym in _CROSS_REF_SYMBOLS:
+        if ref_sym in _latest_prices:
+            continue
+        try:
+            candles = fetch_h4_candles(ref_sym, count=5)
+            if candles is not None and not candles.empty:
+                _latest_prices[ref_sym] = float(candles.iloc[-1]["Close"])
+                logger.debug(f"Forex | Pre-fetched ref price {ref_sym} = {_latest_prices[ref_sym]:.5f}")
+        except Exception as exc:
+            logger.warning(f"Forex | Failed to pre-fetch ref price {ref_sym}: {exc}")
 
 
 def _check_open_positions():
@@ -503,6 +600,7 @@ def _run_cycle_inner() -> dict:
     logger.info(f"{'=' * 60}")
 
     try:
+        _prefetch_reference_prices()
         _check_open_positions()
 
         if _state["circuit_breaker_active"]:

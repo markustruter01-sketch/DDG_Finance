@@ -58,8 +58,9 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 ## Bot #6: The Navigator — Forex Swing Engine
 
 -   **Strategy**: H4 (4-hour) swing trading on 30 FX pairs.
--   **LLM Usage**: Groq Macro Compass for USD directional bias only; execution is 100% algorithmic.
+-   **LLM Usage**: Groq Macro Compass for USD directional bias only; execution is 100% algorithmic. Gemini fallback (`gemini-2.0-flash`) activates when Groq is rate-limited (429) or budget-throttled.
 -   **Data Source**: Yahoo Finance API.
+-   **Cross-Pair Conversion**: Pre-fetches reference prices (JPY=X, CHF=X, CAD=X, NZDUSD=X, AUDUSD=X, GBPUSD=X) at cycle start for accurate P&L on cross-pairs (EUR/JPY, GBP/JPY, AUD/NZD, etc.).
 -   **Risk Management**: SL = 1.5× ATR(14), TP = 3.0× ATR(14), max 1.5% risk per trade, max 10 open positions.
 -   **Capital**: $100k paper (PostgreSQL-backed) with a Capital Vault sweeping 20% of profits above HWM weekly.
 -   **News Blackout**: Skips new entries if a high-impact economic event is within 4 hours.

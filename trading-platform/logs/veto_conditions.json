@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-04-04T21:00:14.698750+00:00",
-  "valid_until": "2026-04-05T03:00:14.698750+00:00",
+  "generated_at": "2026-04-05T07:19:55.024208+00:00",
+  "valid_until": "2026-04-05T13:19:55.024208+00:00",
   "vetoed_tickers": [
     "RENDER",
     "ATOM",
-    "UNI"
+    "NEAR"
   ],
   "conditions": [
     {
@@ -16,16 +16,16 @@
       "value": 0.85
     },
     {
-      "type": "regime_lock",
-      "value": "risk_off"
+      "type": "max_position_limit_enforcement",
+      "value": 5.0
     }
   ],
-  "critique_summary": "The fleet is currently net positive only due to the Navigator's Forex performance (+6.23%), which masks systemic bleeding in the Kraken crypto fleet. Calypso and Blackbeard are over-trading low-probability mean reversions, while RENDER and ATOM remain toxic assets across all crypto bots.",
+  "critique_summary": "Fleet-wide performance is deteriorating with a -1.25% total loss. Navigator bot is in flagrant violation of its 5-position limit with 10 open trades, while the Kraken fleet shows significant alpha decay in high-volatility assets like RENDER and ATOM.",
   "critique_flags": [
-    "Calypso win rate at 34.5% suggests entry signal exhaustion",
-    "RENDER/USD aggregate P&L at -21.35% requires immediate veto",
-    "Davy Jones expectancy is negative despite >50% win rate",
-    "High cross-bot correlation in crypto short positions"
+    "Navigator position sizing violation (10/5 positions)",
+    "Calypso win rate collapse (35.7%)",
+    "Regime mismatch: Oracle is risk-off (SGOV) while Kraken fleet remains 38% deployed",
+    "Stop-loss failure on NEAR/USD (-4.27%)"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

@@ -912,6 +912,7 @@ async def export_diagnostic_report() -> dict:
     from analysis.learning_journal import get_journal_entries as _lj
     from analysis.groq_budget import budget as _groq_budget
     import options_engine as _opts
+    from routes import report_sections as _rs
 
     now_utc = _dt.now(_tz.utc)
     ts = now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -999,6 +1000,8 @@ async def export_diagnostic_report() -> dict:
         lines.append("  Scheduler (8 jobs):")
         for job in sched_jobs:
             lines.append(f"    \u2022 {job.get('name','?'):<45} next: {str(job.get('next_fire_utc','?'))[:19]}")
+
+    _report_ks_state = ks_state
 
     try:
         acct      = get_account()
@@ -1293,6 +1296,13 @@ async def export_diagnostic_report() -> dict:
         for regime, v in sorted(by_regime.items()):
             lines.append(f"    {regime:<12} {v.get('count',0)} trades | {_pct(v.get('win_rate',0))} win | avg {_pct(v.get('avg_pnl_pct'))}")
 
+    lines += _rs.section_trade_mechanics_oracle()
+    lines += _rs.section_oracle_regime_transparency()
+    lines += _rs.section_daily_equity_history("Oracle #1", source="oracle")
+    lines += _rs.section_regime_performance("Oracle #1", source="oracle")
+    lines += _rs.section_consecutive_streaks("Oracle #1", alpaca_trades)
+    lines += _rs.section_rolling_metrics("Oracle #1", alpaca_trades, equity_source="oracle")
+
     h1("SECTION 3: KRAKEN FLEET \u2014 ALL 3 CRYPTO BOTS (24/7)")
 
     import psycopg2 as _pg2rpt, psycopg2.extras as _pg2xrpt, os as _osrpt
@@ -1489,6 +1499,16 @@ async def export_diagnostic_report() -> dict:
     else:
         lines.append("  No trade data in kraken_trades DB yet.")
 
+    lines += _rs.section_trade_mechanics_kraken()
+    lines += _rs.section_vpin_shadow_log()
+    lines += _rs.section_vpin_calibration()
+    lines += _rs.section_daily_equity_history("Kraken Fleet", source="kraken")
+    lines += _rs.section_regime_performance("Kraken Fleet", source="kraken")
+    for _streak_bid, _streak_prof in KRAKEN_BOT_PROFILES.items():
+        _streak_name = _streak_prof["display_name"]
+        lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)
+    lines += _rs.section_rolling_metrics("Kraken Fleet", _all_kraken_trades_all, equity_source="kraken")
+
     h1("SECTION 4: APEX PREDATOR \u2014 OPTIONS ENGINE (Bot #5)")
 
     try:
@@ -1558,6 +1578,26 @@ async def export_diagnostic_report() -> dict:
         "  Exit:              Profit target or time decay threshold",
         "  Paper mode:        Simulated fills with real option chain data",
     ]
+
+    lines += _rs.section_trade_mechanics_apex()
+    lines += _rs.section_apex_scan_log()
+
+    _opts_all_trades: list = []
+    _opts_trades_db = _Path(__file__).parent.parent / "_options_state" / "trades.db"
+    if _opts_trades_db.exists():
+        try:
+            import sqlite3 as _sq3
+            _sq_conn = _sq3.connect(str(_opts_trades_db))
+            _sq_conn.row_factory = _sq3.Row
+            _sq_cur = _sq_conn.execute("SELECT * FROM options_trades ORDER BY closed_at ASC")
+            _opts_all_trades = [dict(r) for r in _sq_cur.fetchall()]
+            _sq_conn.close()
+        except Exception:
+            pass
+
+    lines += _rs.section_daily_equity_history("Apex Predator #5", source="options")
+    lines += _rs.section_consecutive_streaks("Apex Predator #5", _opts_all_trades)
+    lines += _rs.section_rolling_metrics("Apex Predator #5", _opts_all_trades, equity_source="options")
 
     h1("SECTION 5: THE NAVIGATOR \u2014 FOREX SWING ENGINE (Bot #6)")
 
@@ -1666,6 +1706,12 @@ async def export_diagnostic_report() -> dict:
         "  News blackout:     Groq detects high-impact events \u2192 pauses trading",
     ]
 
+    lines += _rs.section_trade_mechanics_navigator()
+    lines += _rs.section_navigator_pair_breakdown(_fx_trades)
+    lines += _rs.section_daily_equity_history("Navigator #6", source="forex")
+    lines += _rs.section_consecutive_streaks("Navigator #6", _fx_trades)
+    lines += _rs.section_rolling_metrics("Navigator #6", _fx_trades, equity_source="forex")
+
     h1("SECTION 6: COMBINED FLEET PORTFOLIO \u2014 ALL 6 BOTS")
 
     grand_start = 600_000.0
@@ -1696,6 +1742,27 @@ async def export_diagnostic_report() -> dict:
     lines.append("    Pool 4: Forex (Navigator)       $100k (Bot #6)")
     lines.append("  Each pool is independent \u2014 different asset classes, strategies, and risk profiles.")
 
+    lines += _rs.section_fleet_risk_dashboard(
+        equity=equity,
+        kraken_equity=_all_kraken_equity,
+        kraken_starting=_all_kraken_starting,
+        opts_equity=_opts_equity,
+        fx_equity=_fx_equity,
+        positions=positions,
+        kraken_per_bot_equity=_kraken_per_bot_equity,
+        fx_positions=_fx_positions,
+        opts_positions=_opts_positions,
+        ks_state=_report_ks_state,
+    )
+
+    lines += _rs.section_cross_bot_correlation()
+
+    lines += _rs.section_slippage_execution_quality(
+        alpaca_trades=alpaca_trades,
+        kraken_trades=_all_kraken_trades_all,
+        fx_trades=_fx_trades,
+    )
+
     h1("SECTION 7: AI LEARNING JOURNAL (Persistent insights across cycles)")
     try:
         lj_entries = _lj(limit=50)
@@ -1717,6 +1784,8 @@ async def export_diagnostic_report() -> dict:
             lines.append(f"  [{regime.upper()} / {cat}]  confidence={conf:.2f}  confirmed\u00d7{confirmed}  first_seen={first_s}")
             lines.append(f"    \"{insight}\"")
             lines.append("")
+
+    lines += _rs.section_learning_journal_metadata(lj_entries)
 
     h1("SECTION 8: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
 

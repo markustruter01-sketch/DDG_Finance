@@ -63,3 +63,9 @@ forex-engine/forex_journal.db
 # Runtime state files
 navigator_live_state.json
 logs/cycle_state.json
+data/alert_queue.json
+trading-platform/logs/*.json
+trading-platform/logs/*.md
+trading-platform/trade_journal.db
+trading-platform/_options_state/trades.db
+*.db

@@ -256,8 +256,8 @@ function BotTilesRow() {
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
   const oracleStatus = summary?.system_health?.system_status ?? "offline";
-  const alpacaStartCap = summary?.portfolio_totals?.initial_capital ?? 100_000;
-  const oraclePnl = alpacaEq - alpacaStartCap;
+  const alpacaStartCap = summary?.portfolio_totals?.initial_capital ?? 0;
+  const oraclePnl = alpacaStartCap > 0 ? alpacaEq - alpacaStartCap : 0;
   const oraclePositions = livePos?.count ?? 0;
   const { botStats, trades: recentTrades } = useRealFeed(50);
   const oracleStats = botStats.find(b => b.name === "Oracle");
@@ -320,7 +320,7 @@ function BotTilesRow() {
     },
     {
       key: "davy-jones", equity: djStatus?.total_equity_usd ?? 0,
-      pnl: (djStatus?.total_equity_usd ?? 0) - (djStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: djStatus?.paper_summary?.starting_balance_usd ? (djStatus.total_equity_usd ?? 0) - djStatus.paper_summary.starting_balance_usd : 0,
       status: djStatus?.status ?? "offline", thinkingText: djStatus?.thinking_text ?? "",
       posCount: djStatus?.position_count ?? 0, cycleCount: djStatus?.cycle_count ?? 0,
       winCount: djPerf?.win_count ?? 0, lossCount: djPerf?.loss_count ?? 0,
@@ -329,7 +329,7 @@ function BotTilesRow() {
     },
     {
       key: "blackbeard", equity: bbStatus?.total_equity_usd ?? 0,
-      pnl: (bbStatus?.total_equity_usd ?? 0) - (bbStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: bbStatus?.paper_summary?.starting_balance_usd ? (bbStatus.total_equity_usd ?? 0) - bbStatus.paper_summary.starting_balance_usd : 0,
       status: bbStatus?.status ?? "offline", thinkingText: bbStatus?.thinking_text ?? "",
       posCount: bbStatus?.position_count ?? 0, cycleCount: bbStatus?.cycle_count ?? 0,
       winCount: bbPerf?.win_count ?? 0, lossCount: bbPerf?.loss_count ?? 0,
@@ -338,7 +338,7 @@ function BotTilesRow() {
     },
     {
       key: "calypso", equity: caStatus?.total_equity_usd ?? 0,
-      pnl: (caStatus?.total_equity_usd ?? 0) - (caStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: caStatus?.paper_summary?.starting_balance_usd ? (caStatus.total_equity_usd ?? 0) - caStatus.paper_summary.starting_balance_usd : 0,
       status: caStatus?.status ?? "offline", thinkingText: caStatus?.thinking_text ?? "",
       posCount: caStatus?.position_count ?? 0, cycleCount: caStatus?.cycle_count ?? 0,
       winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
@@ -681,9 +681,9 @@ function EquitySidebar() {
       return points;
     };
     return {
-      dj: buildCurve(djStatus, djStatus?.paper_summary?.starting_balance_usd ?? 100_000),
-      bb: buildCurve(bbStatus, bbStatus?.paper_summary?.starting_balance_usd ?? 100_000),
-      ca: buildCurve(caStatus, caStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      dj: buildCurve(djStatus, djStatus?.paper_summary?.starting_balance_usd ?? (djStatus?.total_equity_usd ?? 0)),
+      bb: buildCurve(bbStatus, bbStatus?.paper_summary?.starting_balance_usd ?? (bbStatus?.total_equity_usd ?? 0)),
+      ca: buildCurve(caStatus, caStatus?.paper_summary?.starting_balance_usd ?? (caStatus?.total_equity_usd ?? 0)),
     };
   }, [djStatus, bbStatus, caStatus]);
 
@@ -737,8 +737,8 @@ function EquitySidebar() {
   const botEquityRows = useMemo(() => {
     const rows: Array<{ name: string; icon: string; equity: number; pnl: number; color: string; vaultUsd?: number }> = [];
     const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
-    const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
-    rows.push({ name: "Oracle", icon: "🔮", equity: alpacaEq, pnl: alpacaEq - alpacaStart, color: "#8b5cf6" });
+    const alpacaStart = summary?.portfolio_totals?.initial_capital;
+    rows.push({ name: "Oracle", icon: "🔮", equity: alpacaEq, pnl: alpacaStart ? alpacaEq - alpacaStart : 0, color: "#8b5cf6" });
 
     const krakenBots = [
       { data: djStatus, name: "Davy Jones", icon: "⚓", color: "#22d3ee" },
@@ -748,8 +748,8 @@ function EquitySidebar() {
     for (const { data, name, icon, color } of krakenBots) {
       if (!data) continue;
       const eq = data.total_equity_usd ?? 0;
-      const start = data.paper_summary?.starting_balance_usd ?? 100_000;
-      rows.push({ name, icon, equity: eq, pnl: eq - start, color });
+      const start = data.paper_summary?.starting_balance_usd;
+      rows.push({ name, icon, equity: eq, pnl: start ? eq - start : 0, color });
     }
 
     if (optState) {

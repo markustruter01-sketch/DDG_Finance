@@ -215,7 +215,7 @@ export interface StatusSummary {
     error_count: number;
     run_count: number;
   };
-  portfolio_totals: { equity: number; cash: number; buying_power: number };
+  portfolio_totals: { equity: number; cash: number; buying_power: number; initial_capital?: number };
   position_count: number;
   bot_statuses: Record<string, { display_name: string; status: string }>;
   alert_queue_size: number;
@@ -985,6 +985,9 @@ export interface KrakenStatus {
     signal_type: string;
     has_position: boolean;
     pnl_pct: number | null;
+    vpin?: number | null;
+    ofi?: number | null;
+    conviction?: number | null;
   }>;
   thinking_text: string;
   error: string | null;
@@ -1297,6 +1300,7 @@ export interface OptionsState {
   deployed_capital: number;
   current_value: number;
   unrealized_pnl: number;
+  starting_capital?: number;
   circuit_breaker_active?: boolean;
   circuit_breaker_reason?: string | null;
 }
@@ -1438,6 +1442,7 @@ export interface ForexState {
   hwm_usd: number;
   vault_total_usd: number;
   error: string | null;
+  starting_capital?: number;
   circuit_breaker_active?: boolean;
   circuit_breaker_reason?: string | null;
 }

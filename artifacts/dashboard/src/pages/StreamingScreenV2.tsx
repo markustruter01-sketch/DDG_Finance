@@ -16,7 +16,7 @@ import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { AnimatedValue } from "@/components/streaming/AnimatedValue";
 import { MiniSparkline } from "@/lib/dashboard-shared";
 import { formatCurrency } from "@/lib/utils";
-import { SalesTicker } from "@/components/streaming/SalesTicker";
+
 
 const BOT_META: Record<string, { icon: string; color: string; label: string }> = {
   oracle:     { icon: "🔮", color: "#8b5cf6", label: "Oracle #1" },
@@ -73,10 +73,10 @@ function HeroStrip() {
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
   const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
-  const alpacaStart = (summary?.portfolio_totals as any)?.initial_capital ?? 100_000;
+  const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
   const krakenStart = fleet?.total_starting_usd ?? (fleet?.bots?.length ? fleet.bots.reduce((s: number, b: any) => s + (b.starting_balance_usd ?? 100_000), 0) : 0);
-  const optStart = (optState as any)?.starting_capital ?? 100_000;
-  const fxStart = (fxState as any)?.starting_capital ?? 100_000;
+  const optStart = optState?.starting_capital ?? 100_000;
+  const fxStart = fxState?.starting_capital ?? 100_000;
   const initialCapital = alpacaStart + krakenStart + optStart + fxStart;
   const totalPnl = totalEquity - initialCapital;
   const totalPnlPct = initialCapital > 0 ? (totalPnl / initialCapital) * 100 : 0;
@@ -148,9 +148,10 @@ function HeroStrip() {
   );
 }
 
-function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCount, winCount, lossCount, color, hasRecentTrade }: {
+function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCount, winCount, lossCount, color, hasRecentTrade, currentTicker, signalStrength, lastSignal }: {
   botKey: string; equity: number; pnl: number; status: string; thinkingText: string;
-  posCount: number; cycleCount: number; winCount: number; lossCount: number; color: string; hasRecentTrade?: boolean;
+  posCount: number; cycleCount: number; winCount: number; lossCount: number; color: string;
+  hasRecentTrade?: boolean; currentTicker?: string; signalStrength?: string; lastSignal?: string;
 }) {
   const meta = BOT_META[botKey] ?? { icon: "🤖", color: "#64748b", label: botKey };
   const isOnline = status === "running" || status === "online" || status === "ok";
@@ -188,6 +189,14 @@ function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCou
         <span>C#{cycleCount}</span>
       </div>
 
+      {(currentTicker || lastSignal) && (
+        <div className="flex items-center gap-1.5 text-[9px] font-mono truncate" style={{ color: `${color}bb` }}>
+          {currentTicker && <span className="font-bold text-white">{currentTicker}</span>}
+          {lastSignal && <span>{lastSignal.toUpperCase()}</span>}
+          {signalStrength && <span style={{ color: "#f59e0b" }}>{signalStrength}</span>}
+        </div>
+      )}
+
       {truncatedThinking && (
         <div className="text-[9px] font-mono leading-relaxed mt-0.5 overflow-hidden" style={{
           color: `${color}99`,
@@ -215,7 +224,7 @@ function BotTilesRow() {
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
   const oracleStatus = summary?.system_health?.system_status ?? "offline";
-  const alpacaStartCap = (summary?.portfolio_totals as any)?.initial_capital ?? 100_000;
+  const alpacaStartCap = summary?.portfolio_totals?.initial_capital ?? 100_000;
   const oraclePnl = alpacaEq - alpacaStartCap;
   const oraclePositions = livePos?.count ?? 0;
   const { botStats, trades: recentTrades } = useRealFeed(50);
@@ -249,12 +258,33 @@ function BotTilesRow() {
     return recent;
   }, [recentTrades, djStatus, bbStatus, caStatus]);
 
+  function getKrakenTopSignal(status: typeof djStatus) {
+    if (!status?.signals?.length) return { ticker: undefined, signal: undefined, strength: undefined };
+    const active = status.signals.find(s => s.signal_type && s.signal_type !== "watching") ?? status.signals[0];
+    return {
+      ticker: active?.symbol,
+      signal: active?.signal_type,
+      strength: active?.conviction != null ? `${(active.conviction * 100).toFixed(0)}%` :
+        active?.rsi != null ? `RSI ${active.rsi.toFixed(0)}` : undefined,
+    };
+  }
+
+  const djSig = getKrakenTopSignal(djStatus);
+  const bbSig = getKrakenTopSignal(bbStatus);
+  const caSig = getKrakenTopSignal(caStatus);
+
+  const optTopScan = optState?.last_scan_results?.[0];
+  const fxTopScan = fxState?.last_scan_results?.[0];
+
   const bots = [
     {
       key: "oracle", equity: alpacaEq, pnl: oraclePnl, status: oracleStatus,
       thinkingText: summary?.groq?.regime ? `Regime: ${summary.groq.regime}` : "",
       posCount: oraclePositions, cycleCount: oracleCycles,
       winCount: oracleWins, lossCount: oracleLosses, color: BOT_META.oracle.color,
+      currentTicker: undefined as string | undefined,
+      lastSignal: summary?.groq?.regime,
+      signalStrength: undefined as string | undefined,
     },
     {
       key: "davy-jones", equity: djStatus?.total_equity_usd ?? 0,
@@ -263,6 +293,7 @@ function BotTilesRow() {
       posCount: djStatus?.position_count ?? 0, cycleCount: djStatus?.cycle_count ?? 0,
       winCount: djPerf?.win_count ?? 0, lossCount: djPerf?.loss_count ?? 0,
       color: BOT_META["davy-jones"].color,
+      currentTicker: djSig.ticker, lastSignal: djSig.signal, signalStrength: djSig.strength,
     },
     {
       key: "blackbeard", equity: bbStatus?.total_equity_usd ?? 0,
@@ -271,6 +302,7 @@ function BotTilesRow() {
       posCount: bbStatus?.position_count ?? 0, cycleCount: bbStatus?.cycle_count ?? 0,
       winCount: bbPerf?.win_count ?? 0, lossCount: bbPerf?.loss_count ?? 0,
       color: BOT_META.blackbeard.color,
+      currentTicker: bbSig.ticker, lastSignal: bbSig.signal, signalStrength: bbSig.strength,
     },
     {
       key: "calypso", equity: caStatus?.total_equity_usd ?? 0,
@@ -279,6 +311,7 @@ function BotTilesRow() {
       posCount: caStatus?.position_count ?? 0, cycleCount: caStatus?.cycle_count ?? 0,
       winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
       color: BOT_META.calypso.color,
+      currentTicker: caSig.ticker, lastSignal: caSig.signal, signalStrength: caSig.strength,
     },
     {
       key: "apex", equity: optState?.paper_equity ?? 0,
@@ -288,6 +321,9 @@ function BotTilesRow() {
       winCount: optState?.total_wins ?? 0,
       lossCount: (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0),
       color: BOT_META.apex.color,
+      currentTicker: optTopScan?.symbol,
+      lastSignal: optTopScan?.is_squeeze ? "squeeze" : undefined,
+      signalStrength: optTopScan?.ivr != null ? `IVR ${optTopScan.ivr.toFixed(0)}` : undefined,
     },
     {
       key: "navigator", equity: fxState?.paper_equity ?? 0,
@@ -297,6 +333,9 @@ function BotTilesRow() {
       winCount: fxState?.total_wins ?? 0,
       lossCount: (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0),
       color: BOT_META.navigator.color,
+      currentTicker: fxTopScan?.pair,
+      lastSignal: fxTopScan?.signal ?? undefined,
+      signalStrength: fxTopScan?.rsi != null ? `RSI ${fxTopScan.rsi.toFixed(0)}` : undefined,
     },
   ];
 
@@ -316,6 +355,9 @@ function BotTilesRow() {
           lossCount={b.lossCount}
           color={b.color}
           hasRecentTrade={recentBotTrades.has(b.key)}
+          currentTicker={b.currentTicker}
+          lastSignal={b.lastSignal}
+          signalStrength={b.signalStrength}
         />
       ))}
     </div>
@@ -371,13 +413,12 @@ function NeuralFeed() {
         const top3 = data.signals.slice(0, 3);
         for (const s of top3) {
           if (s.signal_type && s.signal_type !== "watching") {
-            const sa = s as any;
             const parts = [`SIGNAL ${s.symbol}: ${s.signal_type.toUpperCase()}`];
             if (s.rsi != null) parts.push(`RSI=${s.rsi.toFixed(1)}`);
             if (s.z_score != null) parts.push(`Z=${s.z_score.toFixed(2)}`);
-            if (sa.vpin != null) parts.push(`VPIN=${sa.vpin.toFixed(3)}`);
-            if (sa.ofi != null) parts.push(`OFI=${sa.ofi > 0 ? "+" : ""}${sa.ofi.toFixed(2)}`);
-            if (sa.conviction != null) parts.push(`Conv=${(sa.conviction * 100).toFixed(0)}%`);
+            if (s.vpin != null) parts.push(`VPIN=${s.vpin.toFixed(3)}`);
+            if (s.ofi != null) parts.push(`OFI=${s.ofi > 0 ? "+" : ""}${s.ofi.toFixed(2)}`);
+            if (s.conviction != null) parts.push(`Conv=${(s.conviction * 100).toFixed(0)}%`);
             const decision = s.signal_type === "entry" ? "ENTER" : s.signal_type === "exit" ? "EXIT" : s.signal_type === "hold" ? "HOLD" : "PASS";
             parts.push(`→ ${decision}`);
             const sigText = parts.join(" | ");
@@ -555,6 +596,37 @@ function EquitySidebar() {
     return pos.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd)).slice(0, 12);
   }, [djStatus, bbStatus, caStatus, livePos, fxPos]);
 
+  const botEquityRows = useMemo(() => {
+    const rows: Array<{ name: string; icon: string; equity: number; pnl: number; color: string; vaultUsd?: number }> = [];
+    const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
+    const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
+    rows.push({ name: "Oracle", icon: "🔮", equity: alpacaEq, pnl: alpacaEq - alpacaStart, color: "#8b5cf6" });
+
+    const krakenBots = [
+      { data: djStatus, name: "Davy Jones", icon: "⚓", color: "#22d3ee" },
+      { data: bbStatus, name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
+      { data: caStatus, name: "Calypso", icon: "🌊", color: "#a855f7" },
+    ];
+    for (const { data, name, icon, color } of krakenBots) {
+      if (!data) continue;
+      const eq = data.total_equity_usd ?? 0;
+      const start = data.paper_summary?.starting_balance_usd ?? 100_000;
+      rows.push({ name, icon, equity: eq, pnl: eq - start, color });
+    }
+
+    if (optState) {
+      rows.push({ name: "Apex", icon: "🎯", equity: optState.paper_equity ?? 0, pnl: optState.total_pnl ?? 0, color: "#f59e0b" });
+    }
+    if (fxState) {
+      rows.push({
+        name: "Navigator", icon: "🧭", equity: fxState.paper_equity ?? 0,
+        pnl: fxState.total_pnl ?? 0, color: "#10b981",
+        vaultUsd: fxState.vault_total_usd,
+      });
+    }
+    return rows;
+  }, [summary, djStatus, bbStatus, caStatus, optState, fxState]);
+
   const segments = useMemo(() => {
     const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
     const krakenEq = fleet?.total_equity_usd ?? 0;
@@ -575,6 +647,33 @@ function EquitySidebar() {
       <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
         <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Equity Curve</div>
         <MiniSparkline data={equityData} color="#22d3ee" w={240} h={50} />
+      </div>
+
+      <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
+        <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Bot Equity</div>
+        <div className="space-y-1.5">
+          {botEquityRows.map(r => (
+            <div key={r.name} className="flex items-center gap-1.5 font-mono text-[10px]">
+              <span style={{ fontSize: 10 }}>{r.icon}</span>
+              <span className="truncate flex-1 font-semibold" style={{ color: r.color }}>{r.name}</span>
+              <span className="text-white font-bold">{fmtUsd(r.equity)}</span>
+              <span className={r.pnl >= 0 ? "text-green-400" : "text-red-400"} style={{ fontSize: 9 }}>
+                {fmtPnl(r.pnl)}
+              </span>
+            </div>
+          ))}
+          {botEquityRows.some(r => r.vaultUsd != null && r.vaultUsd > 0) && (
+            <div className="border-t pt-1 mt-1" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+              {botEquityRows.filter(r => r.vaultUsd != null && r.vaultUsd > 0).map(r => (
+                <div key={`vault-${r.name}`} className="flex items-center gap-1.5 font-mono text-[9px]" style={{ color: "rgba(148,163,184,0.5)" }}>
+                  <span>{r.icon}</span>
+                  <span>Vault:</span>
+                  <span className="font-bold text-green-400">{fmtUsd(r.vaultUsd!)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {segments.length > 0 && (
@@ -637,6 +736,9 @@ function TradeTickerFooter() {
             <span key={`${t.id}-${i}`} className="inline-flex items-center gap-1.5 px-3">
               <span style={{ fontSize: 11 }}>{t.icon}</span>
               <span className="font-semibold text-white">{t.symbol}</span>
+              <span className="font-bold" style={{ color: t.side === "LONG" || t.side === "long" || t.side === "buy" ? "#22d3ee" : "#f472b6", fontSize: 10 }}>
+                {(t.side || "").toUpperCase() === "BUY" ? "LONG" : (t.side || "").toUpperCase() === "SELL" ? "SHORT" : (t.side || "LONG").toUpperCase()}
+              </span>
               <span className={isWin ? "text-green-400" : "text-orange-400"} style={{ fontWeight: 700 }}>
                 {fmtPnl(t.pnlUsd)}
               </span>
@@ -673,22 +775,54 @@ const PIPELINE_STAGES = [
 function DecisionPipelineBar() {
   const { data: summary } = useStatusSummary();
   const { data: djStatus } = useKrakenStatus("davy-jones");
+  const { data: bbStatus } = useKrakenStatus("blackbeard");
+  const { data: caStatus } = useKrakenStatus("calypso");
+  const { data: optState } = useOptionsState();
+  const { data: fxState } = useForexState();
 
   const regime = summary?.groq?.regime ?? "---";
   const autoTrading = summary?.auto_trading ? "ON" : "OFF";
   const marketOpen = summary?.market_open ? "OPEN" : "CLOSED";
   const killSwitch = summary?.kill_switch_tripped ? "TRIPPED" : "SAFE";
   const groqPct = summary?.groq?.pct_used?.toFixed(0) ?? "0";
-  const djCycle = djStatus?.cycle_count ?? 0;
+
+  const totalCycles = (djStatus?.cycle_count ?? 0) + (bbStatus?.cycle_count ?? 0) + (caStatus?.cycle_count ?? 0)
+    + (optState?.cycle_count ?? 0) + (fxState?.cycle_count ?? 0) + (summary?.system_health?.run_count ?? 0);
+
+  const allBotStates = [djStatus, bbStatus, caStatus];
 
   const activeStage = useMemo(() => {
-    if (!djStatus) return 0;
-    if (djStatus.thinking_text?.includes("SIGNAL") || djStatus.thinking_text?.includes("Scalp")) return 3;
-    if (djStatus.thinking_text?.includes("Microstructure") || djStatus.thinking_text?.includes("RiskProfile")) return 2;
-    if (djStatus.recent_trades?.length && Date.now() - new Date(djStatus.recent_trades[djStatus.recent_trades.length - 1]?.closed_at ?? 0).getTime() < 30000) return 4;
-    if (djStatus.cycle_count > 0) return 1;
-    return 0;
-  }, [djStatus]);
+    let maxStage = 0;
+
+    for (const bot of allBotStates) {
+      if (!bot) continue;
+      if (bot.recent_trades?.length) {
+        const latest = bot.recent_trades[bot.recent_trades.length - 1];
+        if (latest.closed_at && Date.now() - new Date(latest.closed_at).getTime() < 30000) {
+          maxStage = Math.max(maxStage, 4);
+          continue;
+        }
+      }
+      if (bot.thinking_text?.includes("SIGNAL") || bot.thinking_text?.includes("Scalp")) {
+        maxStage = Math.max(maxStage, 3);
+      } else if (bot.thinking_text?.includes("Microstructure") || bot.thinking_text?.includes("RiskProfile")) {
+        maxStage = Math.max(maxStage, 2);
+      } else if (bot.signals?.some(s => s.signal_type && s.signal_type !== "watching")) {
+        maxStage = Math.max(maxStage, 2);
+      } else if (bot.cycle_count > 0) {
+        maxStage = Math.max(maxStage, 1);
+      }
+    }
+
+    if (optState?.last_scan_results?.some(r => r.is_squeeze)) maxStage = Math.max(maxStage, 2);
+    if (fxState?.last_scan_results?.some(r => r.signal)) maxStage = Math.max(maxStage, 2);
+
+    if (summary?.system_health?.run_count && summary.system_health.run_count > 0) {
+      maxStage = Math.max(maxStage, 1);
+    }
+
+    return maxStage;
+  }, [allBotStates, optState, fxState, summary]);
 
   return (
     <div className="flex items-center gap-3 px-4 py-1.5 border-t shrink-0 font-mono text-[10px]" style={{
@@ -738,7 +872,7 @@ function DecisionPipelineBar() {
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>GROQ: <span style={{ color: "#a78bfa", fontWeight: 700 }}>{groqPct}%</span></span>
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
-      <span>KRAKEN CYCLES: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{djCycle}</span></span>
+      <span>FLEET CYCLES: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{totalCycles}</span></span>
       <span className="ml-auto text-[9px]" style={{ color: "rgba(148,163,184,0.3)" }}>
         FLEET MIND v2 — {new Date().toISOString().slice(0, 10)}
       </span>
@@ -766,7 +900,6 @@ export default function StreamingScreenV2() {
 
       <TradeTickerFooter />
       <DecisionPipelineBar />
-      <SalesTicker />
     </div>
   );
 }

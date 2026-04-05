@@ -73,7 +73,11 @@ function HeroStrip() {
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
   const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
-  const initialCapital = 600_000;
+  const alpacaStart = (summary?.portfolio_totals as any)?.initial_capital ?? 100_000;
+  const krakenStart = fleet?.total_starting_usd ?? (fleet?.bots?.length ? fleet.bots.reduce((s: number, b: any) => s + (b.starting_balance_usd ?? 100_000), 0) : 0);
+  const optStart = (optState as any)?.starting_capital ?? 100_000;
+  const fxStart = (fxState as any)?.starting_capital ?? 100_000;
+  const initialCapital = alpacaStart + krakenStart + optStart + fxStart;
   const totalPnl = totalEquity - initialCapital;
   const totalPnlPct = initialCapital > 0 ? (totalPnl / initialCapital) * 100 : 0;
 
@@ -144,19 +148,23 @@ function HeroStrip() {
   );
 }
 
-function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCount, winCount, lossCount, color }: {
+function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCount, winCount, lossCount, color, hasRecentTrade }: {
   botKey: string; equity: number; pnl: number; status: string; thinkingText: string;
-  posCount: number; cycleCount: number; winCount: number; lossCount: number; color: string;
+  posCount: number; cycleCount: number; winCount: number; lossCount: number; color: string; hasRecentTrade?: boolean;
 }) {
   const meta = BOT_META[botKey] ?? { icon: "🤖", color: "#64748b", label: botKey };
   const isOnline = status === "running" || status === "online" || status === "ok";
   const truncatedThinking = thinkingText.length > 80 ? thinkingText.slice(0, 77) + "..." : thinkingText;
 
   return (
-    <div className="rounded-lg border p-2.5 flex flex-col gap-1.5 min-w-0" style={{
-      borderColor: `${color}25`,
-      background: `linear-gradient(135deg, rgba(15,23,42,0.95), ${color}08)`,
-    }}>
+    <motion.div
+      className="rounded-lg border p-2.5 flex flex-col gap-1.5 min-w-0"
+      animate={hasRecentTrade ? { boxShadow: [`0 0 0px ${color}00`, `0 0 16px ${color}60`, `0 0 0px ${color}00`] } : {}}
+      transition={hasRecentTrade ? { duration: 1.5, repeat: 2 } : {}}
+      style={{
+        borderColor: hasRecentTrade ? `${color}60` : `${color}25`,
+        background: `linear-gradient(135deg, rgba(15,23,42,0.95), ${color}08)`,
+      }}>
       <div className="flex items-center gap-2">
         <span style={{ fontSize: 16 }}>{meta.icon}</span>
         <span className="text-[11px] font-black uppercase tracking-wider truncate" style={{ color }}>{meta.label}</span>
@@ -188,7 +196,7 @@ function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCou
           {truncatedThinking}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -207,13 +215,39 @@ function BotTilesRow() {
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
   const oracleStatus = summary?.system_health?.system_status ?? "offline";
-  const oraclePnl = alpacaEq - 100_000;
+  const alpacaStartCap = (summary?.portfolio_totals as any)?.initial_capital ?? 100_000;
+  const oraclePnl = alpacaEq - alpacaStartCap;
   const oraclePositions = livePos?.count ?? 0;
-  const { botStats } = useRealFeed(50);
+  const { botStats, trades: recentTrades } = useRealFeed(50);
   const oracleStats = botStats.find(b => b.name === "Oracle");
   const oracleWins = oracleStats?.wins ?? 0;
   const oracleLosses = oracleStats?.losses ?? 0;
   const oracleCycles = summary?.system_health?.run_count ?? 0;
+
+  const recentBotTrades = useMemo(() => {
+    const cutoff = Date.now() - 60_000;
+    const recent = new Set<string>();
+    for (const t of recentTrades) {
+      if (new Date(t.date).getTime() >= cutoff) {
+        const botKey = t.bot === "Davy Jones" ? "davy-jones" : t.bot === "Apex Predator" ? "apex" : t.bot.toLowerCase();
+        recent.add(botKey);
+      }
+    }
+    const krakenBots = [
+      { data: djStatus, key: "davy-jones" },
+      { data: bbStatus, key: "blackbeard" },
+      { data: caStatus, key: "calypso" },
+    ];
+    for (const { data, key } of krakenBots) {
+      if (data?.recent_trades?.length) {
+        const latest = data.recent_trades[data.recent_trades.length - 1];
+        if (latest.closed_at && Date.now() - new Date(latest.closed_at).getTime() < 60_000) {
+          recent.add(key);
+        }
+      }
+    }
+    return recent;
+  }, [recentTrades, djStatus, bbStatus, caStatus]);
 
   const bots = [
     {
@@ -224,7 +258,7 @@ function BotTilesRow() {
     },
     {
       key: "davy-jones", equity: djStatus?.total_equity_usd ?? 0,
-      pnl: (djStatus?.total_equity_usd ?? 100_000) - (djStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: (djStatus?.total_equity_usd ?? 0) - (djStatus?.paper_summary?.starting_balance_usd ?? 100_000),
       status: djStatus?.status ?? "offline", thinkingText: djStatus?.thinking_text ?? "",
       posCount: djStatus?.position_count ?? 0, cycleCount: djStatus?.cycle_count ?? 0,
       winCount: djPerf?.win_count ?? 0, lossCount: djPerf?.loss_count ?? 0,
@@ -232,7 +266,7 @@ function BotTilesRow() {
     },
     {
       key: "blackbeard", equity: bbStatus?.total_equity_usd ?? 0,
-      pnl: (bbStatus?.total_equity_usd ?? 100_000) - (bbStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: (bbStatus?.total_equity_usd ?? 0) - (bbStatus?.paper_summary?.starting_balance_usd ?? 100_000),
       status: bbStatus?.status ?? "offline", thinkingText: bbStatus?.thinking_text ?? "",
       posCount: bbStatus?.position_count ?? 0, cycleCount: bbStatus?.cycle_count ?? 0,
       winCount: bbPerf?.win_count ?? 0, lossCount: bbPerf?.loss_count ?? 0,
@@ -240,7 +274,7 @@ function BotTilesRow() {
     },
     {
       key: "calypso", equity: caStatus?.total_equity_usd ?? 0,
-      pnl: (caStatus?.total_equity_usd ?? 100_000) - (caStatus?.paper_summary?.starting_balance_usd ?? 100_000),
+      pnl: (caStatus?.total_equity_usd ?? 0) - (caStatus?.paper_summary?.starting_balance_usd ?? 100_000),
       status: caStatus?.status ?? "offline", thinkingText: caStatus?.thinking_text ?? "",
       posCount: caStatus?.position_count ?? 0, cycleCount: caStatus?.cycle_count ?? 0,
       winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
@@ -281,6 +315,7 @@ function BotTilesRow() {
           winCount={b.winCount}
           lossCount={b.lossCount}
           color={b.color}
+          hasRecentTrade={recentBotTrades.has(b.key)}
         />
       ))}
     </div>
@@ -324,8 +359,9 @@ function NeuralFeed() {
 
       if (data.thinking_text && data.thinking_text !== prevThinking.current[key]) {
         prevThinking.current[key] = data.thinking_text;
+        const thinkHash = data.thinking_text.slice(0, 60).replace(/\s+/g, "_");
         newLines.push({
-          id: `think-${key}-${now}`, ts: now, bot, icon, color,
+          id: `think-${key}-${thinkHash}`, ts: now, bot, icon, color,
           text: data.thinking_text,
           type: "thinking",
         });
@@ -335,9 +371,20 @@ function NeuralFeed() {
         const top3 = data.signals.slice(0, 3);
         for (const s of top3) {
           if (s.signal_type && s.signal_type !== "watching") {
+            const sa = s as any;
+            const parts = [`SIGNAL ${s.symbol}: ${s.signal_type.toUpperCase()}`];
+            if (s.rsi != null) parts.push(`RSI=${s.rsi.toFixed(1)}`);
+            if (s.z_score != null) parts.push(`Z=${s.z_score.toFixed(2)}`);
+            if (sa.vpin != null) parts.push(`VPIN=${sa.vpin.toFixed(3)}`);
+            if (sa.ofi != null) parts.push(`OFI=${sa.ofi > 0 ? "+" : ""}${sa.ofi.toFixed(2)}`);
+            if (sa.conviction != null) parts.push(`Conv=${(sa.conviction * 100).toFixed(0)}%`);
+            const decision = s.signal_type === "entry" ? "ENTER" : s.signal_type === "exit" ? "EXIT" : s.signal_type === "hold" ? "HOLD" : "PASS";
+            parts.push(`→ ${decision}`);
+            const sigText = parts.join(" | ");
+            const sigHash = sigText.slice(0, 80).replace(/\s+/g, "_");
             newLines.push({
-              id: `sig-${key}-${s.symbol}-${s.signal_type}-${s.rsi?.toFixed(0) ?? 0}`, ts: now, bot, icon, color,
-              text: `SIGNAL ${s.symbol}: ${s.signal_type.toUpperCase()} | RSI=${s.rsi?.toFixed(1) ?? "?"} Z=${s.z_score?.toFixed(2) ?? "?"}`,
+              id: `sig-${key}-${sigHash}`, ts: now, bot, icon, color,
+              text: sigText,
               type: "signal",
             });
           }
@@ -423,7 +470,10 @@ function NeuralFeed() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3 }}
             className="flex items-start gap-2 px-3 py-1.5 border-b"
-            style={{ borderColor: "rgba(255,255,255,0.03)" }}
+            style={{
+              borderColor: "rgba(255,255,255,0.03)",
+              backgroundColor: line.type === "trade" ? "rgba(250,204,21,0.04)" : line.type === "signal" ? "rgba(248,113,113,0.02)" : "transparent",
+            }}
           >
             <span style={{ fontSize: 12 }}>{line.icon}</span>
             <span className="shrink-0 font-bold" style={{ color: line.color, fontSize: 10, minWidth: 70 }}>
@@ -577,7 +627,7 @@ function TradeTickerFooter() {
   const doubled = [...trades, ...trades];
 
   return (
-    <div className="relative overflow-hidden border-t py-1.5 shrink-0" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.95)" }}>
+    <div className="relative overflow-hidden border-t py-1.5 shrink-0 trade-ticker-container" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.95)" }}>
       <div className="absolute left-0 top-0 bottom-0 w-12 z-10" style={{ background: "linear-gradient(to right, rgba(15,23,42,0.95), transparent)" }} />
       <div className="absolute right-0 top-0 bottom-0 w-12 z-10" style={{ background: "linear-gradient(to left, rgba(15,23,42,0.95), transparent)" }} />
       <div className="flex whitespace-nowrap font-mono text-[11px] trade-ticker-scroll">
@@ -600,6 +650,9 @@ function TradeTickerFooter() {
         .trade-ticker-scroll {
           animation: tradeTickerScroll 30s linear infinite;
         }
+        .trade-ticker-container:hover .trade-ticker-scroll {
+          animation-play-state: paused;
+        }
         @keyframes tradeTickerScroll {
           0% { transform: translateX(0); }
           100% { transform: translateX(-50%); }
@@ -608,6 +661,14 @@ function TradeTickerFooter() {
     </div>
   );
 }
+
+const PIPELINE_STAGES = [
+  { key: "data", label: "Market Data", icon: "📡" },
+  { key: "scan", label: "Signal Scan", icon: "🔍" },
+  { key: "conviction", label: "Conviction", icon: "⚡" },
+  { key: "risk", label: "Risk Check", icon: "🛡️" },
+  { key: "execute", label: "Execute", icon: "🎯" },
+];
 
 function DecisionPipelineBar() {
   const { data: summary } = useStatusSummary();
@@ -620,22 +681,63 @@ function DecisionPipelineBar() {
   const groqPct = summary?.groq?.pct_used?.toFixed(0) ?? "0";
   const djCycle = djStatus?.cycle_count ?? 0;
 
+  const activeStage = useMemo(() => {
+    if (!djStatus) return 0;
+    if (djStatus.thinking_text?.includes("SIGNAL") || djStatus.thinking_text?.includes("Scalp")) return 3;
+    if (djStatus.thinking_text?.includes("Microstructure") || djStatus.thinking_text?.includes("RiskProfile")) return 2;
+    if (djStatus.recent_trades?.length && Date.now() - new Date(djStatus.recent_trades[djStatus.recent_trades.length - 1]?.closed_at ?? 0).getTime() < 30000) return 4;
+    if (djStatus.cycle_count > 0) return 1;
+    return 0;
+  }, [djStatus]);
+
   return (
-    <div className="flex items-center gap-4 px-4 py-1.5 border-t shrink-0 font-mono text-[10px]" style={{
+    <div className="flex items-center gap-3 px-4 py-1.5 border-t shrink-0 font-mono text-[10px]" style={{
       borderColor: "rgba(255,255,255,0.06)",
       backgroundColor: "rgba(15,23,42,0.95)",
       color: "rgba(148,163,184,0.5)",
     }}>
+      <div className="flex items-center gap-0.5">
+        {PIPELINE_STAGES.map((stage, i) => {
+          const isActive = i <= activeStage;
+          const isCurrent = i === activeStage;
+          return (
+            <div key={stage.key} className="flex items-center">
+              <div
+                className="flex items-center gap-1 px-2 py-0.5 rounded-sm transition-all duration-500"
+                style={{
+                  backgroundColor: isActive ? "rgba(34,211,238,0.12)" : "rgba(255,255,255,0.02)",
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                  borderColor: isCurrent ? "rgba(34,211,238,0.4)" : isActive ? "rgba(34,211,238,0.1)" : "rgba(255,255,255,0.04)",
+                  boxShadow: isCurrent ? "0 0 8px rgba(34,211,238,0.2)" : "none",
+                }}
+              >
+                <span style={{ fontSize: 9 }}>{stage.icon}</span>
+                <span style={{
+                  color: isActive ? "#22d3ee" : "rgba(148,163,184,0.3)",
+                  fontWeight: isCurrent ? 800 : 600,
+                  fontSize: 9,
+                }}>{stage.label}</span>
+              </div>
+              {i < PIPELINE_STAGES.length - 1 && (
+                <span style={{ color: isActive ? "rgba(34,211,238,0.4)" : "rgba(255,255,255,0.06)", fontSize: 8, margin: "0 1px" }}>→</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>REGIME: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{regime}</span></span>
-      <span style={{ color: "rgba(255,255,255,0.08)" }}>|</span>
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>AUTO: <span style={{ color: autoTrading === "ON" ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{autoTrading}</span></span>
-      <span style={{ color: "rgba(255,255,255,0.08)" }}>|</span>
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>MARKET: <span style={{ color: marketOpen === "OPEN" ? "#22c55e" : "#f59e0b", fontWeight: 700 }}>{marketOpen}</span></span>
-      <span style={{ color: "rgba(255,255,255,0.08)" }}>|</span>
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>KILL SWITCH: <span style={{ color: killSwitch === "SAFE" ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{killSwitch}</span></span>
-      <span style={{ color: "rgba(255,255,255,0.08)" }}>|</span>
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>GROQ: <span style={{ color: "#a78bfa", fontWeight: 700 }}>{groqPct}%</span></span>
-      <span style={{ color: "rgba(255,255,255,0.08)" }}>|</span>
+      <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>KRAKEN CYCLES: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{djCycle}</span></span>
       <span className="ml-auto text-[9px]" style={{ color: "rgba(148,163,184,0.3)" }}>
         FLEET MIND v2 — {new Date().toISOString().slice(0, 10)}

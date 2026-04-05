@@ -31,7 +31,7 @@ import {
   WifiOff, AlertTriangle, Brain,
   RefreshCw, History,
   Vault, ArrowUpRight, Coins, Target,
-  ExternalLink, Radio, Bot,
+  ExternalLink, Radio, Bot, Zap,
   LayoutDashboard, ArrowUp, ArrowDown, ArrowUpDown, Layers,
   ChevronDown, FileText,
 } from "lucide-react";
@@ -1395,6 +1395,21 @@ function BottomNav() {
           </span>
           <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-rose-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
             Live
+          </span>
+        </button>
+        <button
+          onClick={() => navigate('/streaming-v2')}
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 border border-white/[0.06] hover:border-cyan-500/40 hover:bg-slate-800/80 group"
+        >
+          <span className="relative" style={{ color: 'rgb(148,163,184)' }}>
+            <Zap className="h-6 w-6 group-hover:text-cyan-400 transition-colors" />
+            <span
+              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
+              style={{ background: '#22d3ee', boxShadow: '0 0 6px #22d3ee' }}
+            />
+          </span>
+          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-cyan-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
+            Fleet
           </span>
         </button>
       </div>

@@ -1,16 +1,17 @@
 {
-  "generated_at": "2026-04-05T07:34:55.773120+00:00",
-  "valid_until": "2026-04-05T13:34:55.773120+00:00",
+  "generated_at": "2026-04-05T07:50:06.468291+00:00",
+  "valid_until": "2026-04-05T13:50:06.468291+00:00",
   "vetoed_tickers": [
-    "NEAR",
+    "BTC",
+    "ETH",
     "RENDER",
-    "ATOM",
-    "UNI"
+    "UNI",
+    "NEAR"
   ],
   "conditions": [
     {
       "type": "vpin_threshold",
-      "value": 0.75
+      "value": 0.7
     },
     {
       "type": "max_conviction_cap",
@@ -21,12 +22,12 @@
       "value": 5.0
     }
   ],
-  "critique_summary": "The fleet is currently net-negative (-1.29%) with significant performance drag from Calypso and Navigator. Bot #6 (Navigator) is in flagrant violation of its 5-position maximum, currently holding 10, while Kraken bots show high correlation risk across short positions in LINK and SEI.",
+  "critique_summary": "Navigator bot is in flagrant violation of its risk mandate, maintaining 10 open positions against a limit of 5. The Kraken fleet is suffering from low win rates (Calypso 35.7%) and high cross-bot correlation in LINK and SEI short positions, increasing systemic downside risk.",
   "critique_flags": [
-    "Navigator position sizing violation (10 positions held vs 5 max)",
-    "Calypso win rate collapse (35.7%)",
-    "Davy Jones outlier loss on NEAR (-4.27%) exceeding standard risk bounds",
-    "Overconcentration in SGOV (97%) rendering Oracle unproductive"
+    "Navigator position limit violation (10/5)",
+    "Calypso win rate 35.7%",
+    "Davy Jones stop-loss slippage (-4.27% on NEAR)",
+    "Cross-bot correlation on LINK/SEI shorts"
   ],
   "overall_verdict": "CAUTION",
   "source": "fleet_commander"

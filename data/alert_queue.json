@@ -565,5 +565,14 @@
     "side": "SELL",
     "reason": "scalp_tp",
     "timestamp": "2026-04-05T07:33:47.249998+00:00"
+  },
+  {
+    "bot_name": "Kraken Blackbeard's Fleet",
+    "symbol": "ATOM/USD",
+    "pnl_pct": 0.56,
+    "pnl_usd": 2.99,
+    "side": "SELL",
+    "reason": "scalp_tp",
+    "timestamp": "2026-04-05T07:48:05.651698+00:00"
   }
 ]

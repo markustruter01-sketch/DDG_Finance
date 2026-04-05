@@ -14,10 +14,11 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 
 -   **Runtime**: Python 3.11
 -   **Framework**: FastAPI + Uvicorn
--   **LLM**: Groq (Llama 3.3 70B Versatile) for market analysis and regime classification.
+-   **LLM**: Groq (Llama 3.3 70B Versatile) for regime classification and oversight only. Does NOT select individual trades.
+-   **Algorithmic Trading Engine**: `algo_scanner.py` generates all trade entries using technical signals (momentum, RSI, Z-score, SMA crossovers). LLM classifies the regime (Bull/Bear/Sideways), algo scanner selects the trades. Gemini Self-Critic provides veto oversight.
 -   **Database**: PostgreSQL (primary) with SQLite fallback for trade journaling, vault ledger, ratchet stops, and performance snapshots.
--   **Architecture**: Modular design including components for data integration, AI analysis (with RAG feedback, post-mortem analysis, and a rule engine), notifications, portfolio management (Kelly Criterion), and execution management (Alpaca integration, kill switch, slippage tracking).
--   **Regime-Switching Architecture**: Dynamically adjusts asset allocation across a fixed 8-asset universe (SPY, QQQ, TLT, GLD, BTC/USD, ETH/USD, ATOM/USD, SGOV) based on a 3-step Bull/Bear/Sideways regime model determined by the LLM.
+-   **Architecture**: Modular design — LLM for oversight, algorithms for execution. Components for data integration, AI analysis (with RAG feedback, post-mortem analysis, and a rule engine), notifications, portfolio management (Kelly Criterion), and execution management (Alpaca integration, kill switch, slippage tracking).
+-   **Regime-Switching Architecture**: 22-instrument universe with regime-appropriate strategies. Bull: momentum equity entries. Bear: safe haven rotation + inverse ETFs + algorithmic shorts. Sideways: mean-reversion oversold bounces.
 -   **Key Features**: 24/7 dual-mode trading, 15-minute intraday cycles, smart data caching, LLM budget guardrails, pre-LLM signal guardrails (TemporalQuarantine, MultiSourceConsensus, PriceToSentimentDivergence), and a shared risk library.
 -   **RAG Memory Architecture**: A 4-phase Retrieval-Augmented Generation layer for deterministic post-mortem logging, context-aware prompt injection, and deriving permanent hardcoded rules from failure patterns.
 
@@ -50,7 +51,7 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 -   **Signals**: IVR < 20 threshold + Bollinger Band squeeze detection.
 -   **Trades**: ATM Long Straddle construction (30-45 DTE) on a 106-ticker watchlist.
 -   **Sizing**: Half-Kelly position sizing with a 5% capital fence.
--   **Schedule**: APScheduler CronTrigger daily at 3:30 PM ET.
+-   **Schedule**: APScheduler CronTrigger at 10am, 12pm, 2pm, and 3:30 PM ET (4 scans/day).
 -   **Persistence**: SQLite persistence for state, positions, and trades.
 -   **API Endpoints**: Comprehensive set of endpoints for state, positions, pending trades, and control actions.
 -   **Dashboard Tab**: Dedicated "Options" tab with capital fence cards, volatility scanner, and trade approval queue.

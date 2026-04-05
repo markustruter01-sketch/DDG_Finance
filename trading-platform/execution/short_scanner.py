@@ -48,8 +48,8 @@ _BEAR_REGIMES: frozenset[str] = frozenset(
     {"Bear", "RISK-OFF", "Risk-Off", "bear", "risk-off"}
 )
 
-ZSCORE_ENTRY_THRESHOLD: float = 2.0    # Z-score above this signals over-extension
-RSI_ENTRY_THRESHOLD:    float = 68.0   # RSI above this confirms overbought
+ZSCORE_ENTRY_THRESHOLD: float = 1.5    # Z-score above this signals over-extension
+RSI_ENTRY_THRESHOLD:    float = 62.0   # RSI above this confirms overbought
 ZSCORE_EXIT_THRESHOLD:  float = 0.3    # Z-score below this → mean reversion complete
 TRAILING_EXIT_PCT:      float = 0.05   # Exit if price rises 5% above best entry low
 MAX_SHORT_EXPOSURE_PCT: float = 0.35   # Max 35% of equity in algo shorts combined

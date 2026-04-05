@@ -401,27 +401,87 @@ async def _run_pipeline_inner(
         if allocation.regime != "Bear":
             logger.warning(
                 f"Pipeline | EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% — "
-                f"forcing regime from '{allocation.regime}' to 'Bear' + re-applying defensive controls"
+                f"forcing regime from '{allocation.regime}' to 'Bear'"
             )
-            from portfolio.allocator import (
-                _apply_bear_half_kelly,
-                _apply_bear_sgov_default,
-                normalise_kelly_fractions,
-            )
-            raw_allocs = [a.dict() if hasattr(a, "dict") else a.model_dump() for a in allocation.allocations]
-            raw_allocs = _apply_bear_half_kelly(raw_allocs)
-            raw_allocs = _apply_bear_sgov_default(raw_allocs)
-            raw_allocs = normalise_kelly_fractions(raw_allocs)
-            from analysis.schemas import AllocationSlot
-            allocation.allocations = [AllocationSlot.model_validate(s) for s in raw_allocs]
             allocation.regime = "Bear"
             allocation.regime_rationale = (
                 f"EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% intraday drop. "
-                f"Original regime overridden to Bear with defensive controls applied."
+                f"Original regime overridden to Bear."
             )
             result["errors"].append(
-                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime + defensive sizing"
+                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime"
             )
+
+    # ── ALGORITHMIC SIGNAL GENERATION (equity cycles only) ────────────────────
+    # The LLM provides regime classification and oversight/veto.
+    # The algo scanner generates the actual trade entries/allocations.
+    # Crypto-only cycles still use the LLM's allocations directly (CryptoAnalysisOutput).
+    if isinstance(allocation, RegimeAnalysisOutput):
+        try:
+            from execution.algo_scanner import run_algo_scan
+            from core.veto_enforcer import load_active_vetoes
+
+            _llm_regime = allocation.regime
+            _llm_rationale = allocation.regime_rationale
+
+            _veto_tickers = set(load_active_vetoes())
+
+            _vix_val = None
+            try:
+                import json as _vj
+                from pathlib import Path as _vp
+                _regime_file = _vp(__file__).parent.parent / "data" / "market_regime.json"
+                if _regime_file.exists():
+                    _rd = _vj.loads(_regime_file.read_text())
+                    _vix_val = _rd.get("vix")
+            except Exception:
+                pass
+
+            _algo_result = run_algo_scan(
+                regime=_llm_regime,
+                vix=_vix_val,
+                veto_tickers=_veto_tickers if _veto_tickers else None,
+            )
+            result["algo_scanner"] = {
+                "scan_type": _algo_result["scan_type"],
+                "active_signals": _algo_result.get("active_signals", 0),
+                "activated": _algo_result["activated"],
+            }
+
+            _algo_signals = _algo_result["signals"]
+            if _algo_signals:
+                from analysis.schemas import RegimeAllocationSlot
+                _new_allocs = []
+                for s in _algo_signals:
+                    _new_allocs.append(RegimeAllocationSlot.model_validate(s))
+                allocation.allocations = _new_allocs
+                logger.info(
+                    f"Pipeline | Algo scanner replaced LLM allocations: "
+                    f"{len(_new_allocs)} slots (regime={_llm_regime}, "
+                    f"scan={_algo_result['scan_type']})"
+                )
+        except Exception as _algo_exc:
+            logger.warning(
+                f"Pipeline | Algo scanner failed (non-fatal), "
+                f"falling back to LLM allocations: {_algo_exc}"
+            )
+            result.setdefault("errors", []).append(f"Algo scanner error: {_algo_exc}")
+            if allocation.regime == "Bear":
+                try:
+                    from portfolio.allocator import (
+                        _apply_bear_half_kelly,
+                        _apply_bear_sgov_default,
+                        normalise_kelly_fractions,
+                    )
+                    from analysis.schemas import RegimeAllocationSlot as _FallbackSlot
+                    _raw = [a.dict() if hasattr(a, "dict") else a.model_dump() for a in allocation.allocations]
+                    _raw = _apply_bear_half_kelly(_raw)
+                    _raw = _apply_bear_sgov_default(_raw)
+                    _raw = normalise_kelly_fractions(_raw)
+                    allocation.allocations = [_FallbackSlot.model_validate(s) for s in _raw]
+                    logger.info("Pipeline | Bear defensive controls applied to LLM fallback allocations")
+                except Exception as _def_exc:
+                    logger.warning(f"Pipeline | Bear defensive fallback also failed: {_def_exc}")
 
     # ── Build allocation summary (same path for fresh and fallback allocations) ──
     if isinstance(allocation, RegimeAnalysisOutput):
@@ -523,20 +583,17 @@ async def _run_pipeline_inner(
             result.setdefault("errors", []).append(f"Short scanner error: {_ss_exc}")
 
     # ── Regime Sync File ──────────────────────────────────────────────────────
-    # Write market_regime.json so the Kraken bot can read the current regime
-    # and apply Bear/RISK-OFF defensive filters without any HTTP call.
-    # Location: trading-platform/data/market_regime.json  (repo-relative)
-    if allocation is not None:
+    # Write market_regime.json so the Kraken bot and short scanner can read
+    # the current EQUITY regime.  Crypto-only cycles must NOT overwrite this
+    # file — they would clobber the equity regime label ("Bear"/"Bull") with
+    # "Crypto", which disables the short scanner and algo scanner.
+    if allocation is not None and isinstance(allocation, RegimeAnalysisOutput):
         try:
             import json as _json
             from pathlib import Path as _Path
             from datetime import datetime as _dt, timezone as _tz
 
-            _regime_str = (
-                allocation.regime
-                if isinstance(allocation, RegimeAnalysisOutput)
-                else "Crypto"
-            )
+            _regime_str = allocation.regime
             _regime_path = _Path(__file__).parent.parent / "data" / "market_regime.json"
             _regime_path.parent.mkdir(parents=True, exist_ok=True)
             _regime_payload = {
@@ -547,7 +604,7 @@ async def _run_pipeline_inner(
                 "regime_override": spy_override,
                 "rationale": (
                     allocation.regime_rationale
-                    if isinstance(allocation, RegimeAnalysisOutput) and not using_fallback
+                    if not using_fallback
                     else None
                 ),
             }

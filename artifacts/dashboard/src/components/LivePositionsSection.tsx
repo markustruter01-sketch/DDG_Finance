@@ -154,7 +154,7 @@ export function LivePositionsSection() {
             {!confirmRebalance ? (
               <button
                 onClick={() => setConfirmRebalance(true)}
-                disabled={isRebalancing || !data || data.count === 0}
+                disabled={isRebalancing || totalCount === 0}
                 className={cn(
                   "flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide px-2.5 sm:px-3 py-1.5 rounded-lg border transition-all duration-200 min-h-[44px]",
                   isRebalancing

@@ -180,6 +180,106 @@ def _liquidate_kraken_positions() -> dict:
     return {"closed": closed, "errors": errors}
 
 
+def _liquidate_forex_positions() -> dict:
+    closed = []
+    errors = []
+    try:
+        import importlib.util as _ilu
+        import sys as _sys
+        _fx_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "forex-engine")
+        if _fx_path not in _sys.path:
+            _sys.path.insert(0, _fx_path)
+
+        spec_pe = _ilu.spec_from_file_location("paper_engine_fx", os.path.join(_fx_path, "paper_engine.py"))
+        pe = _ilu.module_from_spec(spec_pe)
+        spec_pe.loader.exec_module(pe)
+
+        raw_positions = pe.get_paper_positions()
+        if not raw_positions:
+            return {"closed": [], "errors": []}
+
+        from routes._deps import _get_forex_engine
+        fx = _get_forex_engine()
+        latest_prices = {}
+        if fx:
+            labeled_positions = fx.get_positions()
+            spec_cfg = _ilu.spec_from_file_location("forex_config_liq", os.path.join(_fx_path, "forex_config.py"))
+            cfg = _ilu.module_from_spec(spec_cfg)
+            spec_cfg.loader.exec_module(cfg)
+            label_to_raw = {v: k for k, v in cfg.PAIR_LABELS.items()}
+            for lp in labeled_positions:
+                label = lp["pair"]
+                raw_key = label_to_raw.get(label, label)
+                latest_prices[raw_key] = lp["current_price"]
+
+        for pair, pos in list(raw_positions.items()):
+            current_price = latest_prices.get(pair, pos.get("entry_price", 0))
+            direction = pos.get("direction", "long")
+            try:
+                result = pe.paper_close_position(pair, current_price, "rebalance_liquidation",
+                                                  latest_prices=latest_prices)
+                if result:
+                    closed.append({
+                        "pair": pair,
+                        "direction": direction,
+                        "pnl_usd": round(result.get("pnl_usd", 0), 2),
+                    })
+                    logger.info(
+                        f"Rebalance | Forex closed {direction.upper()} {pair} "
+                        f"@ {current_price:.5f} | P&L: ${result.get('pnl_usd', 0):+,.2f}"
+                    )
+                else:
+                    errors.append({"pair": pair, "error": "close returned None"})
+            except Exception as exc:
+                logger.error(f"Rebalance | Forex failed to close {pair}: {exc}")
+                errors.append({"pair": pair, "error": str(exc)})
+
+    except Exception as exc:
+        logger.error(f"Rebalance | Forex liquidation error: {exc}")
+        errors.append({"pair": "all", "error": str(exc)})
+
+    logger.info(f"Rebalance | Forex: closed {len(closed)} positions, {len(errors)} errors")
+    return {"closed": closed, "errors": errors}
+
+
+def _liquidate_options_positions() -> dict:
+    closed = []
+    errors = []
+    try:
+        import importlib as _il
+        opts = _il.import_module("options_engine")
+        positions = opts._get_positions()
+        if not positions:
+            return {"closed": [], "errors": []}
+
+        for pos in positions:
+            pos_id = pos.get("id")
+            symbol = pos.get("symbol", "?")
+            try:
+                result = opts.close_position_by_id(pos_id, exit_reason="rebalance_liquidation")
+                if result and not result.get("error"):
+                    closed.append({
+                        "symbol": symbol,
+                        "pnl": round(result.get("pnl", 0), 2),
+                    })
+                    logger.info(
+                        f"Rebalance | Options closed {symbol} straddle | P&L: ${result.get('pnl', 0):+,.2f}"
+                    )
+                else:
+                    err_msg = result.get("error", "unknown") if result else "no result"
+                    errors.append({"symbol": symbol, "error": err_msg})
+            except Exception as exc:
+                logger.error(f"Rebalance | Options failed to close {symbol}: {exc}")
+                errors.append({"symbol": symbol, "error": str(exc)})
+
+    except Exception as exc:
+        logger.error(f"Rebalance | Options liquidation error: {exc}")
+        errors.append({"symbol": "all", "error": str(exc)})
+
+    logger.info(f"Rebalance | Options: closed {len(closed)} positions, {len(errors)} errors")
+    return {"closed": closed, "errors": errors}
+
+
 class RunRequest(BaseModel):
     dry_run: bool = False
     force: bool = False
@@ -303,9 +403,19 @@ async def force_rebalance() -> dict:
     kraken_closed = kraken_result.get("closed", [])
     kraken_errors = kraken_result.get("errors", [])
 
+    forex_result = _liquidate_forex_positions()
+    forex_closed = forex_result.get("closed", [])
+    forex_errors = forex_result.get("errors", [])
+
+    options_result = _liquidate_options_positions()
+    options_closed = options_result.get("closed", [])
+    options_errors = options_result.get("errors", [])
+
     logger.info(
         f"Rebalance | Alpaca: closed {len(closed)}, held {len(held)}, errors {len(errors)} | "
-        f"Kraken: closed {len(kraken_closed)}, errors {len(kraken_errors)}"
+        f"Kraken: closed {len(kraken_closed)}, errors {len(kraken_errors)} | "
+        f"Forex: closed {len(forex_closed)}, errors {len(forex_errors)} | "
+        f"Options: closed {len(options_closed)}, errors {len(options_errors)}"
     )
 
     crypto_only = not market_open
@@ -318,6 +428,10 @@ async def force_rebalance() -> dict:
         "errors": errors,
         "kraken_closed": kraken_closed,
         "kraken_errors": kraken_errors,
+        "forex_closed": forex_closed,
+        "forex_errors": forex_errors,
+        "options_closed": options_closed,
+        "options_errors": options_errors,
         "market_open": market_open,
         "pipeline": pipeline_result,
     }

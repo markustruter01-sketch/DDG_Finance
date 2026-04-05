@@ -387,8 +387,8 @@ def _build_param_snippet() -> str:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """SELECT COUNT(*) FILTER (WHERE pnl_pct > 0),
-                                  COUNT(*) FILTER (WHERE pnl_pct <= 0),
+                        """SELECT COUNT(*) FILTER (WHERE pnl_usd > 0),
+                                  COUNT(*) FILTER (WHERE pnl_usd <= 0),
                                   COALESCE(SUM(pnl_usd), 0)
                            FROM kraken_trades WHERE bot_id = %s
                            AND closed_at > NOW() - INTERVAL '24 hours'""",
@@ -597,8 +597,8 @@ async def _handle_pause_losing() -> dict:
             with conn.cursor() as cur:
                 for bot_name, profile_key in bot_map:
                     cur.execute(
-                        """SELECT COUNT(*) FILTER (WHERE pnl_pct > 0) AS wins,
-                                  COUNT(*) FILTER (WHERE pnl_pct <= 0) AS losses,
+                        """SELECT COUNT(*) FILTER (WHERE pnl_usd > 0) AS wins,
+                                  COUNT(*) FILTER (WHERE pnl_usd <= 0) AS losses,
                                   COALESCE(SUM(pnl_usd), 0) AS total_pnl
                            FROM kraken_trades WHERE bot_id = %s
                            AND closed_at > NOW() - INTERVAL '24 hours'""",

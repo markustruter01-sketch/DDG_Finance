@@ -163,7 +163,7 @@ export function KillBoardPanel({
   const isPirate = theme === "pirate";
   const pnlNum = (t: KillTradeEntry) => t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? 0;
   const wins = [...trades]
-    .filter(t => (t.pnl_pct ?? t.pnl_percentage ?? 0) > 0)
+    .filter(t => (t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? 0) > 0)
     .sort((a, b) => pnlNum(b) - pnlNum(a))
     .slice(0, 10);
   if (wins.length === 0) return null;

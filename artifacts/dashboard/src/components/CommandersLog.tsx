@@ -125,14 +125,14 @@ export function CommandersLog() {
   const recentKills = useMemo(() => {
     const kills: { agent: string; icon: string; accent: string; symbol: string; pnlPct: number; side: string; ts: string }[] = [];
     (recentTrades?.trades ?? []).forEach((t: RecentTradeItem) => {
-      if (t.pnl_pct != null && t.pnl_pct > 0) {
+      if ((t.pnl_usd ?? t.pnl_pct ?? 0) > 0) {
         kills.push({ agent: "Oracle", icon: "🔮", accent: "#818cf8", symbol: t.symbol ?? "?", pnlPct: t.pnl_pct, side: "long", ts: t.closed_at ?? "" });
       }
     });
     krakenBots.forEach((b) => {
       const t = BOT_THEMES[b.id] ?? BOT_THEMES["davy-jones"];
       (b.status?.recent_trades ?? []).forEach((tr: KrakenTradeEntry) => {
-        if (tr.pnl_pct != null && tr.pnl_pct > 0) {
+        if ((tr.pnl_usd ?? tr.pnl_pct ?? 0) > 0) {
           kills.push({ agent: b.status?.bot_name ?? b.id, icon: t.icon, accent: t.accent, symbol: tr.symbol ?? "?", pnlPct: tr.pnl_pct, side: tr.side ?? "long", ts: tr.closed_at ?? "" });
         }
       });

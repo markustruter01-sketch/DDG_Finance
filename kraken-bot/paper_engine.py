@@ -450,7 +450,7 @@ def get_paper_portfolio_summary() -> dict:
     else:
         trades = p.get("all_trades", [])
 
-    wins = [t for t in trades if t.get("pnl_pct", 0) > 0]
+    wins = [t for t in trades if (t.get("pnl_usd") or 0) > 0]
 
     return {
         "starting_balance_usd": p["starting_balance_usd"],

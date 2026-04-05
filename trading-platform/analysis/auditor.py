@@ -1169,7 +1169,7 @@ def check_kraken_bot() -> AuditFinding:
     # ── (e) Recent P&L balance ────────────────────────────────────────────────
     if recent_trades:
         total_pnl = sum(t.get("pnl_pct", 0) for t in recent_trades)
-        win_count = sum(1 for t in recent_trades if t.get("pnl_pct", 0) > 0)
+        win_count = sum(1 for t in recent_trades if (t.get("pnl_usd") or 0) > 0)
         details["recent_trade_count"] = len(recent_trades)
         details["recent_total_pnl_pct"] = round(total_pnl, 2)
         details["recent_win_rate"] = round(win_count / len(recent_trades), 2)
@@ -1355,7 +1355,7 @@ def run_performance_analysis(days: int = 10) -> dict[str, Any]:
         kraken_trades = _load_kraken_recent_trades()
         closed_kraken = [t for t in kraken_trades if t.get("pnl_pct") is not None]
         kraken_total  = len(closed_kraken)
-        kraken_wins   = sum(1 for t in closed_kraken if float(t.get("pnl_pct", 0) or 0) > 0)
+        kraken_wins   = sum(1 for t in closed_kraken if float(t.get("pnl_usd", 0) or 0) > 0)
         kraken_losses = kraken_total - kraken_wins
         kraken_win_rate = (kraken_wins / kraken_total * 100) if kraken_total > 0 else None
         kraken_avg_pnl  = (

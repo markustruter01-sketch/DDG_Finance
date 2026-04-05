@@ -186,8 +186,9 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     pnl_raw = pnl_raw * conv
 
     exit_spread = size_usd * PAPER_SPREAD_COST_PCT
+    entry_spread = pos.get("spread_cost", 0)
+    total_fees = entry_spread + exit_spread
     net_pnl = pnl_raw - exit_spread
-    total_fees = pos.get("spread_cost", 0) + exit_spread
 
     pip_size = PIP_SIZE.get(pair, 0.0001)
     if direction == "long":
@@ -197,6 +198,8 @@ def paper_close_position(pair: str, current_price: float, reason: str,
 
     p["cash_usd"] += size_usd + net_pnl
 
+    true_net_pnl = pnl_raw - total_fees
+
     open_trades = _db.load_open_trades()
     trade_id = None
     for t in open_trades:
@@ -205,7 +208,7 @@ def paper_close_position(pair: str, current_price: float, reason: str,
             break
 
     if trade_id:
-        _db.update_trade_close(trade_id, current_price, pnl_pips, net_pnl,
+        _db.update_trade_close(trade_id, current_price, pnl_pips, true_net_pnl,
                                final_trailing_sl=pos.get("trailing_sl"))
 
     trade_result = {
@@ -214,7 +217,7 @@ def paper_close_position(pair: str, current_price: float, reason: str,
         "entry_price": entry,
         "exit_price": current_price,
         "pnl_pips": round(pnl_pips, 1),
-        "pnl_usd": round(net_pnl, 2),
+        "pnl_usd": round(true_net_pnl, 2),
         "fees_usd": round(total_fees, 4),
         "reason": reason,
         "closed_at": datetime.now(tz=timezone.utc).isoformat(),
@@ -225,7 +228,7 @@ def paper_close_position(pair: str, current_price: float, reason: str,
 
     logger.info(
         f"Forex Paper | Closed {direction.upper()} {pair} @ {current_price:.5f} | "
-        f"Reason: {reason} | P&L: {pnl_pips:+.1f} pips (${net_pnl:+,.2f}) | "
+        f"Reason: {reason} | P&L: {pnl_pips:+.1f} pips (${true_net_pnl:+,.2f}) | "
         f"Cash: ${p['cash_usd']:,.2f}"
     )
 

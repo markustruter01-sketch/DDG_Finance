@@ -132,7 +132,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                     d["closed_at"] = d["closed_at"].isoformat()
                 all_trades.append(d)
 
-            wins = [t for t in all_trades if (t.get("pnl_pct") or 0) > 0]
+            wins = [t for t in all_trades if (t.get("pnl_usd") or 0) > 0]
             paper_summary = {
                 "starting_balance_usd": starting,
                 "cash_usd":             round(cash_usd, 2),
@@ -229,7 +229,7 @@ async def kraken_fleet_summary() -> dict:
 
                     _fsc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END), "
+                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END), "
                         "COALESCE(SUM(pnl_usd), 0) "
                         "FROM kraken_trades WHERE bot_id = %s",
                         (_bid,)
@@ -398,8 +398,8 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     signals       = _live.get("signals", kdata.get("signals", []))
     strategy_trades = [t for t in recent_trades if t.get("reason") != "rebalance_liquidation"]
     rebalance_trades = [t for t in recent_trades if t.get("reason") == "rebalance_liquidation"]
-    wins          = [t for t in strategy_trades if t.get("pnl_pct", 0) > 0]
-    losses        = [t for t in strategy_trades if t.get("pnl_pct", 0) <= 0]
+    wins          = [t for t in strategy_trades if (t.get("pnl_usd") or 0) > 0]
+    losses        = [t for t in strategy_trades if (t.get("pnl_usd") or 0) <= 0]
     win_rate      = (len(wins) / len(strategy_trades) * 100) if strategy_trades else None
 
     pos_text = "\n".join(
@@ -641,8 +641,8 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
 
     pnl_list = [t.get("pnl_pct", 0) for t in strategy_only]
     pnl_usd  = [t.get("pnl_usd", 0) for t in strategy_only]
-    wins     = [p for p in pnl_list if p > 0]
-    losses   = [p for p in pnl_list if p <= 0]
+    wins     = [u for u in pnl_usd if u > 0]
+    losses   = [u for u in pnl_usd if u <= 0]
     win_rate = (len(wins) / len(strategy_only)) * 100 if strategy_only else 0
 
     total_pnl_pct_all = sum(t.get("pnl_pct", 0) for t in trades)
@@ -656,7 +656,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         by_symbol[sym]["trades"]        += 1
         by_symbol[sym]["total_pnl_pct"] += t.get("pnl_pct", 0)
         by_symbol[sym]["total_pnl_usd"] += t.get("pnl_usd", 0)
-        if (t.get("pnl_pct") or 0) > 0:
+        if (t.get("pnl_usd") or 0) > 0:
             by_symbol[sym]["wins"] += 1
 
     for sym in by_symbol:

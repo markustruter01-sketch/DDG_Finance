@@ -953,7 +953,7 @@ function CombinedTradeHistorySection() {
       pnl_usd: t.pnl_usd,
       closed_at: t.closed_at,
       reason: t.exit_reason ?? "",
-      is_win: t.pnl_pct > 0,
+      is_win: (t.pnl_usd ?? 0) > 0,
     }));
     const makeKrakenRows = (trades: Array<{ symbol: string; side: string; entry_price: number; exit_price: number; pnl_pct: number; pnl_usd: number; reason: string; closed_at: string }> | undefined, botId: "davy-jones" | "blackbeard" | "calypso") =>
       (trades ?? []).map((t) => ({
@@ -967,7 +967,7 @@ function CombinedTradeHistorySection() {
         pnl_usd: t.pnl_usd,
         closed_at: t.closed_at,
         reason: t.reason ?? "",
-        is_win: t.pnl_pct > 0,
+        is_win: (t.pnl_usd ?? 0) > 0,
       }));
     const davyRows = makeKrakenRows(davyPerf?.recent_trades, "davy-jones");
     const bbRows = makeKrakenRows(bbPerf?.recent_trades, "blackbeard");

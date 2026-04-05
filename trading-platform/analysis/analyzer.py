@@ -297,11 +297,13 @@ async def run_analysis_cycle(
         )
         macro_data = {}
     else:
-        logger.info("Step 2/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | News cached 1hr)...")
-        macro_data, market_data, news_data = await asyncio.gather(
+        logger.info("Step 2/5 | Fetching data (FRED cached 1hr | Market 6mo + MA signals | Momentum ~200 tickers | News cached 1hr)...")
+        from data.yfinance_client import fetch_momentum_universe
+        macro_data, market_data, news_data, _momentum_data = await asyncio.gather(
             fred_cache.get_or_fetch(fetch_macro_data, lookback_days=lookback_days_macro),
             fetch_market_data(period=market_period),
             news_cache.get_or_fetch(fetch_news, lookback_days=news_lookback_days),
+            fetch_momentum_universe(),
         )
 
     if crypto_only:
@@ -312,9 +314,12 @@ async def run_analysis_cycle(
         macro_ok  = sum(1 for v in macro_data.values() if v.get("value") is not None)
         market_ok = sum(1 for v in market_data["by_ticker"].values() if "error" not in v)
         news_ok   = len(news_data["all_headlines"])
+        momentum_ok = _momentum_data.get("fetched", 0) if _momentum_data else 0
+        momentum_total = _momentum_data.get("universe_size", 0) if _momentum_data else 0
         logger.info(
             f"  Data snapshot: FRED={macro_ok}/10 | "
             f"Market={market_ok}/{len(market_data['by_ticker'])} tickers | "
+            f"Momentum={momentum_ok}/{momentum_total} | "
             f"News={news_ok} headlines"
         )
 

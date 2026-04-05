@@ -271,6 +271,8 @@ def _enforce_asset_class_cap(allocations: list[dict]) -> list[dict]:
         if slot["ticker"] == "SGOV" or slot["kelly_fraction"] == 0:
             continue
         cls = slot.get("asset_class", "unknown")
+        if cls == "momentum_equity":
+            continue
         class_totals[cls] = class_totals.get(cls, 0.0) + slot["kelly_fraction"]
 
     breached = {cls: total for cls, total in class_totals.items() if total > MAX_ASSET_CLASS_KELLY}

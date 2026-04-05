@@ -1,41 +1,37 @@
 """
-Algorithmic Signal Scanner — Oracle's Trade Engine
-----------------------------------------------------
-v1.0 — Replaces LLM-driven allocation selection with pure algorithmic signals.
+Algorithmic Momentum Scanner — Oracle's Trade Engine
+------------------------------------------------------
+v2.0 — Pure Momentum Chaser
 
-The LLM (Groq) still classifies the market regime and provides oversight/veto.
-This module generates the actual trade entries based on technical indicators
-and the regime context.
+Scans ~200 NYSE/NASDAQ stocks and ranks by momentum strength.
+The LLM (Groq) classifies the regime and provides oversight/veto.
+This module generates all trade entries based on momentum signals.
 
-Strategy Matrix by Regime
---------------------------
-  Bull:
-    - Momentum: Buy equities/ETFs where price > SMA-63 (3mo) AND price > SMA-126 (6mo)
-      AND RSI(14) between 30–70 (not overbought). Rank by 20d return, take top N.
-    - Leveraged satellite: TQQQ/SOXL/UPRO if SPY > EMA-20 (existing gate).
+Strategy (Momentum-First, All Regimes)
+---------------------------------------
+Core: Rank entire universe by composite momentum score, pick top N.
 
-  Bear:
-    - Safe haven rotation: GLD, TLT, IEF, SLV — buy those with positive momentum.
-    - Inverse ETF momentum: SH, PSQ, DOG (1×) when equities have negative momentum.
-    - 3× inverse (SPXS, SQQQ, SRTY) only if VIX > 25 and equity indices in strong
-      downtrend (price < SMA-63 AND < SMA-126).
+Regime adjusts RISK, not STRATEGY:
+  Bull:     Full momentum, up to 9 active slots, aggressive sizing (kelly cap 12%)
+  Sideways: Moderate momentum, up to 6 active slots, moderate sizing (kelly cap 8%)
+  Bear:     Defensive momentum (healthcare/utilities/staples/energy sectors only),
+            up to 4 active slots, tight stops, conservative sizing (kelly cap 6%)
 
-  Sideways:
-    - Mean-reversion: Buy oversold assets (RSI < 35, Z-score < -1.5) with
-      6mo momentum still positive (dip-buy, not falling knife).
-    - Conservative sizing: half-Kelly, max 3 positions.
+Momentum Score = weighted composite:
+  - 20-day return    × 0.50  (short-term momentum)
+  - 60-day return    × 0.30  (medium-term trend)
+  - Trend alignment  × bonus (price > SMA-63 AND SMA-126 = +5.0)
 
-All Regimes:
-  - Max 10 slots total.
-  - Conviction = normalised signal strength (0.0–1.0).
-  - Kelly fraction = half-Kelly based on conviction.
-  - Stop-loss and take-profit derived from ATR/volatility.
+Filters:
+  - Price > SMA-63 (3-month moving average — confirmed uptrend)
+  - RSI between 30–75 (not overbought, not crashed)
+  - Not overheated (Z-score < 2.0 AND RSI < 75)
 
 Integration
 -----------
   Called from pipeline.py AFTER the LLM provides regime classification.
-  Returns a list of RegimeAllocationSlot-compatible dicts that the executor
-  can process identically to LLM-generated allocations.
+  Fetches its own data for the broad universe (cached 1 hour).
+  Returns RegimeAllocationSlot-compatible dicts for the executor.
 """
 
 from __future__ import annotations
@@ -44,169 +40,194 @@ from typing import Optional
 
 from loguru import logger
 
-from analysis.schemas import REGIME_UNIVERSE, BEAR_HEDGE_TICKERS, BEAR_HEDGE_3X_TICKERS
-from data.yfinance_client import get_cached_market_data, get_spy_ema_anchor
+from data.yfinance_client import get_cached_momentum_data
+from execution.momentum_universe import (
+    DEFENSIVE_TICKERS,
+    TICKER_TO_SECTOR,
+)
 
-
-BULL_UNIVERSE: list[str] = REGIME_UNIVERSE["equity"]
-SAFE_HAVEN_UNIVERSE: list[str] = REGIME_UNIVERSE["safe_haven"]
-BEAR_HEDGE_1X: list[str] = ["SH", "PSQ", "DOG"]
-BEAR_HEDGE_3X: list[str] = ["SPXS", "SQQQ", "SRTY"]
-LEVERAGED_UNIVERSE: list[str] = REGIME_UNIVERSE["leveraged_risk"]
-COMMODITY_UNIVERSE: list[str] = REGIME_UNIVERSE["commodity"]
-CASH_TICKER = "SGOV"
 
 MAX_SLOTS = 10
 MAX_KELLY_SUM = 1.0
-HALF_KELLY_CAP = 0.10
-RSI_OVERBOUGHT = 70.0
-RSI_OVERSOLD = 35.0
-ZSCORE_OVERSOLD = -1.5
-VIX_ELEVATED = 25.0
+RSI_OVERBOUGHT = 75.0
+RSI_FLOOR = 30.0
+CASH_TICKER = "SGOV"
 
-
-def _get_ticker_data(market_data: dict, ticker: str) -> Optional[dict]:
-    by_ticker = market_data.get("by_ticker", {})
-    return by_ticker.get(ticker)
+REGIME_PARAMS: dict[str, dict] = {
+    "bull": {
+        "max_active": 9,
+        "kelly_cap": 0.12,
+        "stop_multiplier": 1.5,
+        "take_multiplier": 2.0,
+        "sector_filter": None,
+        "rsi_upper": 75.0,
+        "min_conviction": 0.50,
+    },
+    "sideways": {
+        "max_active": 6,
+        "kelly_cap": 0.08,
+        "stop_multiplier": 1.2,
+        "take_multiplier": 1.6,
+        "sector_filter": None,
+        "rsi_upper": 72.0,
+        "min_conviction": 0.60,
+    },
+    "bear": {
+        "max_active": 4,
+        "kelly_cap": 0.06,
+        "stop_multiplier": 1.0,
+        "take_multiplier": 1.3,
+        "sector_filter": DEFENSIVE_TICKERS,
+        "rsi_upper": 70.0,
+        "min_conviction": 0.65,
+    },
+}
 
 
 def _momentum_score(d: dict) -> float:
     ret_20 = d.get("return_20d_pct") or 0.0
     ret_60 = d.get("return_60d_pct") or 0.0
-    return ret_20 * 0.6 + ret_60 * 0.4
+    score = ret_20 * 0.50 + ret_60 * 0.30
+    if d.get("momentum_3mo") == "positive" and d.get("momentum_6mo") == "positive":
+        score += 5.0
+    return score
 
 
-def _conviction_from_rsi(rsi: float, direction: str = "long") -> float:
-    if direction == "long":
-        if rsi <= 30:
-            return 0.95
-        if rsi <= 40:
-            return 0.85
-        if rsi <= 50:
-            return 0.75
-        if rsi <= 60:
-            return 0.65
-        return 0.55
-    else:
-        if rsi >= 75:
-            return 0.90
-        if rsi >= 65:
-            return 0.80
+def _conviction_from_rsi(rsi: float) -> float:
+    if rsi <= 35:
+        return 0.95
+    if rsi <= 45:
+        return 0.85
+    if rsi <= 55:
+        return 0.75
+    if rsi <= 65:
         return 0.65
+    return 0.55
 
 
-def _half_kelly(conviction: float) -> float:
+def _half_kelly(conviction: float, cap: float) -> float:
     raw = conviction * 0.5
-    return round(min(raw, HALF_KELLY_CAP), 4)
+    return round(min(raw, cap), 4)
 
 
-def _stop_take(volatility: Optional[float], direction: str = "long") -> tuple[float, float]:
+def _stop_take(
+    volatility: Optional[float],
+    stop_mult: float,
+    take_mult: float,
+) -> tuple[float, float]:
     vol = volatility or 20.0
     vol_factor = max(vol / 100.0, 0.01)
-    if direction == "long":
-        stop = round(-min(max(vol_factor * 1.5, 0.03), 0.08), 4)
-        take = round(min(max(vol_factor * 2.0, 0.05), 0.20), 4)
-    else:
-        stop = round(-min(max(vol_factor * 1.5, 0.03), 0.08), 4)
-        take = round(min(max(vol_factor * 2.0, 0.05), 0.15), 4)
+    stop = round(-min(max(vol_factor * stop_mult, 0.03), 0.08), 4)
+    take = round(min(max(vol_factor * take_mult, 0.05), 0.20), 4)
     return stop, take
 
 
-def _classify_asset(ticker: str) -> str:
-    for asset_class, tickers in REGIME_UNIVERSE.items():
-        if ticker in tickers:
-            return asset_class
-    return "equity"
+def scan_momentum(
+    momentum_data: dict,
+    regime: str,
+    vix: Optional[float] = None,
+) -> list[dict]:
+    regime_lower = (regime or "sideways").lower()
+    if regime_lower in ("risk-off",):
+        regime_lower = "bear"
+    params = REGIME_PARAMS.get(regime_lower, REGIME_PARAMS["sideways"])
 
+    max_active = params["max_active"]
+    kelly_cap = params["kelly_cap"]
+    stop_mult = params["stop_multiplier"]
+    take_mult = params["take_multiplier"]
+    sector_filter: set[str] | None = params["sector_filter"]
+    rsi_upper = params["rsi_upper"]
+    min_conviction = params["min_conviction"]
 
-def scan_bull(market_data: dict, vix: Optional[float] = None) -> list[dict]:
-    spy_anchor = get_spy_ema_anchor()
-    spy_above_ema = spy_anchor.get("spy_above_ema_20")
+    by_ticker = momentum_data.get("by_ticker", {})
 
     candidates = []
-    for ticker in BULL_UNIVERSE + COMMODITY_UNIVERSE:
-        d = _get_ticker_data(market_data, ticker)
-        if d is None:
+    skipped_sector = 0
+    skipped_filter = 0
+
+    for ticker, d in by_ticker.items():
+        if sector_filter and ticker not in sector_filter:
+            skipped_sector += 1
             continue
-        mom_3mo = d.get("momentum_3mo")
-        mom_6mo = d.get("momentum_6mo")
+
         rsi = d.get("rsi_14d")
         if rsi is None:
+            skipped_filter += 1
             continue
-        if mom_3mo != "positive" or mom_6mo != "positive":
-            continue
-        if rsi > RSI_OVERBOUGHT:
+        if rsi > rsi_upper or rsi < RSI_FLOOR:
+            skipped_filter += 1
             continue
         if d.get("is_overheated"):
+            skipped_filter += 1
+            continue
+        if d.get("momentum_3mo") != "positive":
+            skipped_filter += 1
             continue
 
         score = _momentum_score(d)
-        conviction = _conviction_from_rsi(rsi, "long")
+        conviction = _conviction_from_rsi(rsi)
+        if conviction < min_conviction:
+            skipped_filter += 1
+            continue
+
         candidates.append({
             "ticker": ticker,
             "score": score,
             "conviction": conviction,
             "rsi": rsi,
             "volatility": d.get("annualized_volatility_20d_pct"),
+            "sector": TICKER_TO_SECTOR.get(ticker, "unknown"),
+            "return_20d": d.get("return_20d_pct") or 0.0,
+            "return_60d": d.get("return_60d_pct") or 0.0,
         })
 
     candidates.sort(key=lambda x: x["score"], reverse=True)
 
+    logger.info(
+        f"AlgoScanner | {len(candidates)} momentum candidates from "
+        f"{len(by_ticker)} tickers (sector_skip={skipped_sector}, "
+        f"filter_skip={skipped_filter})"
+    )
+
     slots = []
     kelly_sum = 0.0
-    max_active = MAX_SLOTS - 1
 
-    for i, c in enumerate(candidates[:min(7, max_active)]):
-        kelly = _half_kelly(c["conviction"])
+    seen_sectors: dict[str, int] = {}
+    max_per_sector = 3 if regime_lower == "bull" else 2
+
+    for c in candidates:
+        if len(slots) >= max_active:
+            break
+
+        sector = c["sector"]
+        if seen_sectors.get(sector, 0) >= max_per_sector:
+            continue
+
+        kelly = _half_kelly(c["conviction"], kelly_cap)
         if kelly_sum + kelly > MAX_KELLY_SUM:
             kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
         if kelly <= 0:
             break
-        stop, take = _stop_take(c["volatility"], "long")
+
+        stop, take = _stop_take(c["volatility"], stop_mult, take_mult)
+
         slots.append({
             "slot": len(slots) + 1,
             "ticker": c["ticker"],
-            "asset_class": _classify_asset(c["ticker"]),
+            "asset_class": "momentum_equity",
             "conviction_score": round(c["conviction"], 2),
             "kelly_fraction": kelly,
             "thesis": (
-                f"Algo momentum signal: positive 3mo+6mo trend, "
-                f"RSI={c['rsi']:.0f}, 20d return rank #{i+1}"
+                f"Momentum rank #{len(slots)+1}: "
+                f"20d={c['return_20d']:+.1f}% 60d={c['return_60d']:+.1f}% "
+                f"RSI={c['rsi']:.0f} sector={sector}"
             ),
             "stop_loss_pct": stop,
             "take_profit_pct": take,
         })
         kelly_sum += kelly
-
-    if spy_above_ema and len(slots) < max_active:
-        for lev_ticker in LEVERAGED_UNIVERSE:
-            if kelly_sum >= MAX_KELLY_SUM or len(slots) >= max_active:
-                break
-            d = _get_ticker_data(market_data, lev_ticker)
-            if d is None:
-                continue
-            rsi = d.get("rsi_14d")
-            if rsi is None or rsi > RSI_OVERBOUGHT or d.get("is_overheated"):
-                continue
-            kelly = min(0.05, round(MAX_KELLY_SUM - kelly_sum, 4))
-            if kelly <= 0:
-                break
-            stop, take = _stop_take(d.get("annualized_volatility_20d_pct"), "long")
-            stop = round(max(stop, -0.06), 4)
-            slots.append({
-                "slot": len(slots) + 1,
-                "ticker": lev_ticker,
-                "asset_class": "leveraged_risk",
-                "conviction_score": 0.60,
-                "kelly_fraction": kelly,
-                "thesis": (
-                    f"Algo leveraged satellite: SPY above EMA-20, "
-                    f"RSI={rsi:.0f}, max 5% allocation"
-                ),
-                "stop_loss_pct": stop,
-                "take_profit_pct": take,
-            })
-            kelly_sum += kelly
+        seen_sectors[sector] = seen_sectors.get(sector, 0) + 1
 
     if kelly_sum < MAX_KELLY_SUM:
         sgov_kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
@@ -217,215 +238,6 @@ def scan_bull(market_data: dict, vix: Optional[float] = None) -> list[dict]:
             "conviction_score": 1.0,
             "kelly_fraction": sgov_kelly,
             "thesis": "Remainder to cash (SGOV) for capital preservation",
-            "stop_loss_pct": -0.01,
-            "take_profit_pct": 0.01,
-        })
-
-    return slots
-
-
-def scan_bear(market_data: dict, vix: Optional[float] = None) -> list[dict]:
-    vix_val = vix or 20.0
-    slots = []
-    kelly_sum = 0.0
-
-    haven_candidates = []
-    for ticker in SAFE_HAVEN_UNIVERSE:
-        d = _get_ticker_data(market_data, ticker)
-        if d is None:
-            continue
-        mom_3mo = d.get("momentum_3mo")
-        rsi = d.get("rsi_14d")
-        if rsi is None:
-            continue
-        if mom_3mo == "positive":
-            score = _momentum_score(d)
-            conviction = _conviction_from_rsi(rsi, "long")
-            haven_candidates.append({
-                "ticker": ticker,
-                "score": score,
-                "conviction": conviction,
-                "rsi": rsi,
-                "volatility": d.get("annualized_volatility_20d_pct"),
-            })
-
-    haven_candidates.sort(key=lambda x: x["score"], reverse=True)
-
-    for c in haven_candidates[:3]:
-        kelly = _half_kelly(c["conviction"])
-        if kelly_sum + kelly > MAX_KELLY_SUM:
-            kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-        if kelly <= 0:
-            break
-        stop, take = _stop_take(c["volatility"], "long")
-        slots.append({
-            "slot": len(slots) + 1,
-            "ticker": c["ticker"],
-            "asset_class": "safe_haven",
-            "conviction_score": round(c["conviction"], 2),
-            "kelly_fraction": kelly,
-            "thesis": (
-                f"Algo bear safe haven: positive momentum in downmarket, "
-                f"RSI={c['rsi']:.0f}"
-            ),
-            "stop_loss_pct": stop,
-            "take_profit_pct": take,
-        })
-        kelly_sum += kelly
-
-    equity_downtrend = 0
-    for eq_ticker in ["SPY", "QQQ", "IWM"]:
-        d = _get_ticker_data(market_data, eq_ticker)
-        if d and d.get("momentum_3mo") == "negative" and d.get("momentum_6mo") == "negative":
-            equity_downtrend += 1
-
-    max_active_bear = MAX_SLOTS - 1
-    if equity_downtrend >= 2 and len(slots) < max_active_bear:
-        for inv_ticker in BEAR_HEDGE_1X:
-            if kelly_sum >= MAX_KELLY_SUM or len(slots) >= max_active_bear:
-                break
-            d = _get_ticker_data(market_data, inv_ticker)
-            if d is None:
-                continue
-            rsi = d.get("rsi_14d")
-            if rsi is None:
-                continue
-            conviction = 0.70
-            kelly = _half_kelly(conviction)
-            if kelly_sum + kelly > MAX_KELLY_SUM:
-                kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-            if kelly <= 0:
-                break
-            stop, take = _stop_take(d.get("annualized_volatility_20d_pct"), "long")
-            slots.append({
-                "slot": len(slots) + 1,
-                "ticker": inv_ticker,
-                "asset_class": "bear_hedge",
-                "conviction_score": round(conviction, 2),
-                "kelly_fraction": kelly,
-                "thesis": (
-                    f"Algo 1× inverse ETF: {equity_downtrend}/3 major indices "
-                    f"in confirmed downtrend, RSI={rsi:.0f}"
-                ),
-                "stop_loss_pct": stop,
-                "take_profit_pct": take,
-            })
-            kelly_sum += kelly
-
-    if vix_val > VIX_ELEVATED and equity_downtrend >= 2 and len(slots) < max_active_bear:
-        bear3x_kelly_sum = 0.0
-        bear3x_cap = 0.20
-        for inv3x in BEAR_HEDGE_3X:
-            if kelly_sum >= MAX_KELLY_SUM or len(slots) >= max_active_bear:
-                break
-            if bear3x_kelly_sum >= bear3x_cap:
-                break
-            d = _get_ticker_data(market_data, inv3x)
-            if d is None:
-                continue
-            rsi = d.get("rsi_14d")
-            if rsi is None:
-                continue
-            conviction = 0.65
-            kelly = min(0.05, _half_kelly(conviction))
-            kelly = min(kelly, round(bear3x_cap - bear3x_kelly_sum, 4))
-            if kelly_sum + kelly > MAX_KELLY_SUM:
-                kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-            if kelly <= 0:
-                break
-            stop, take = _stop_take(d.get("annualized_volatility_20d_pct"), "long")
-            stop = round(max(stop, -0.08), 4)
-            slots.append({
-                "slot": len(slots) + 1,
-                "ticker": inv3x,
-                "asset_class": "bear_hedge",
-                "conviction_score": round(conviction, 2),
-                "kelly_fraction": kelly,
-                "thesis": (
-                    f"Algo 3× inverse: VIX={vix_val:.0f} elevated, "
-                    f"{equity_downtrend}/3 indices downtrending, short-term hold"
-                ),
-                "stop_loss_pct": stop,
-                "take_profit_pct": take,
-            })
-            kelly_sum += kelly
-            bear3x_kelly_sum += kelly
-
-    if kelly_sum < MAX_KELLY_SUM:
-        sgov_kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-        slots.append({
-            "slot": len(slots) + 1,
-            "ticker": CASH_TICKER,
-            "asset_class": "cash",
-            "conviction_score": 1.0,
-            "kelly_fraction": sgov_kelly,
-            "thesis": "Remainder to cash (SGOV) — capital preservation in bear market",
-            "stop_loss_pct": -0.01,
-            "take_profit_pct": 0.01,
-        })
-
-    return slots
-
-
-def scan_sideways(market_data: dict, vix: Optional[float] = None) -> list[dict]:
-    candidates = []
-    for ticker in BULL_UNIVERSE + SAFE_HAVEN_UNIVERSE + COMMODITY_UNIVERSE:
-        d = _get_ticker_data(market_data, ticker)
-        if d is None:
-            continue
-        rsi = d.get("rsi_14d")
-        z_score = d.get("z_score_200d")
-        mom_6mo = d.get("momentum_6mo")
-        if rsi is None or z_score is None:
-            continue
-        if rsi < RSI_OVERSOLD and z_score < ZSCORE_OVERSOLD and mom_6mo == "positive":
-            conviction = min(0.95, 0.60 + (RSI_OVERSOLD - rsi) / 100.0 + abs(z_score) * 0.1)
-            candidates.append({
-                "ticker": ticker,
-                "conviction": conviction,
-                "rsi": rsi,
-                "z_score": z_score,
-                "volatility": d.get("annualized_volatility_20d_pct"),
-            })
-
-    candidates.sort(key=lambda x: x["conviction"], reverse=True)
-
-    slots = []
-    kelly_sum = 0.0
-
-    for c in candidates[:3]:
-        if c["conviction"] < 0.80:
-            continue
-        kelly = _half_kelly(c["conviction"])
-        if kelly_sum + kelly > MAX_KELLY_SUM:
-            kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-        if kelly <= 0:
-            break
-        stop, take = _stop_take(c["volatility"], "long")
-        slots.append({
-            "slot": len(slots) + 1,
-            "ticker": c["ticker"],
-            "asset_class": _classify_asset(c["ticker"]),
-            "conviction_score": round(c["conviction"], 2),
-            "kelly_fraction": kelly,
-            "thesis": (
-                f"Algo mean-reversion: RSI={c['rsi']:.0f} oversold, "
-                f"Z={c['z_score']:.2f}, 6mo trend still positive (dip-buy)"
-            ),
-            "stop_loss_pct": stop,
-            "take_profit_pct": take,
-        })
-        kelly_sum += kelly
-
-    if kelly_sum < MAX_KELLY_SUM:
-        sgov_kelly = round(MAX_KELLY_SUM - kelly_sum, 4)
-        slots.append({
-            "slot": len(slots) + 1,
-            "ticker": CASH_TICKER,
-            "asset_class": "cash",
-            "conviction_score": 1.0,
-            "kelly_fraction": sgov_kelly,
-            "thesis": "Sideways regime — capital preservation priority, remainder to SGOV",
             "stop_loss_pct": -0.01,
             "take_profit_pct": 0.01,
         })
@@ -444,7 +256,7 @@ def run_algo_scan(
     Parameters
     ----------
     regime      : "Bull", "Bear", or "Sideways" from the LLM
-    vix         : current VIX value (for bear 3× gate)
+    vix         : current VIX value (informational)
     veto_tickers: set of tickers the LLM/Gemini auditor vetoed
 
     Returns
@@ -455,9 +267,10 @@ def run_algo_scan(
         "activated":  bool
         "scan_type":  str
     """
-    market_data = get_cached_market_data()
-    if market_data is None:
-        logger.warning("AlgoScanner | No cached market data — returning SGOV-only")
+    momentum_data = get_cached_momentum_data()
+
+    if momentum_data is None or not momentum_data.get("by_ticker"):
+        logger.warning("AlgoScanner | No momentum data available — returning SGOV-only")
         return {
             "regime": regime,
             "signals": [{
@@ -474,17 +287,9 @@ def run_algo_scan(
             "scan_type": "no_data",
         }
 
-    regime_lower = regime.lower() if regime else "sideways"
-
-    if regime_lower in ("bull",):
-        scan_type = "bull_momentum"
-        signals = scan_bull(market_data, vix)
-    elif regime_lower in ("bear", "risk-off"):
-        scan_type = "bear_defensive"
-        signals = scan_bear(market_data, vix)
-    else:
-        scan_type = "sideways_reversion"
-        signals = scan_sideways(market_data, vix)
+    regime_lower = (regime or "sideways").lower()
+    scan_type = f"momentum_{regime_lower}"
+    signals = scan_momentum(momentum_data, regime, vix)
 
     if veto_tickers:
         original_count = len(signals)
@@ -498,7 +303,9 @@ def run_algo_scan(
                 if sgov_exists:
                     for s in signals:
                         if s["ticker"] == CASH_TICKER:
-                            s["kelly_fraction"] = round(MAX_KELLY_SUM - remaining_kelly + s["kelly_fraction"], 4)
+                            s["kelly_fraction"] = round(
+                                MAX_KELLY_SUM - remaining_kelly + s["kelly_fraction"], 4
+                            )
                             break
                 else:
                     signals.append({
@@ -516,15 +323,19 @@ def run_algo_scan(
         s["slot"] = i + 1
 
     active_count = sum(1 for s in signals if s["ticker"] != CASH_TICKER)
+    fetched = momentum_data.get("fetched", 0)
+    universe = momentum_data.get("universe_size", 0)
+
     logger.info(
         f"AlgoScanner | regime={regime} scan={scan_type} "
+        f"universe={universe} fetched={fetched} "
         f"signals={active_count} active + SGOV remainder"
     )
     for s in signals:
         if s["ticker"] != CASH_TICKER:
             logger.info(
                 f"  → {s['ticker']} | conviction={s['conviction_score']:.2f} "
-                f"kelly={s['kelly_fraction']:.4f} | {s['thesis'][:60]}"
+                f"kelly={s['kelly_fraction']:.4f} | {s['thesis'][:80]}"
             )
 
     return {
@@ -533,4 +344,5 @@ def run_algo_scan(
         "activated": active_count > 0,
         "scan_type": scan_type,
         "active_signals": active_count,
+        "universe_scanned": fetched,
     }

@@ -54,7 +54,7 @@ BEAR_HEDGE_TICKERS: set[str] = set(REGIME_UNIVERSE["bear_hedge"])
 BEAR_HEDGE_3X_TICKERS: frozenset[str] = frozenset({"SPXS", "SQQQ", "SRTY"})
 
 RegimeLabel = Literal["Bull", "Bear", "Sideways"]
-AssetClass = Literal["equity", "safe_haven", "commodity", "crypto_spot", "leveraged_risk", "bear_hedge", "cash"]
+AssetClass = Literal["equity", "safe_haven", "commodity", "crypto_spot", "leveraged_risk", "bear_hedge", "cash", "momentum_equity"]
 CryptoAssetClass = Literal["crypto_spot", "cash"]
 
 
@@ -79,13 +79,7 @@ class RegimeAllocationSlot(BaseModel):
     @field_validator("ticker")
     @classmethod
     def validate_ticker(cls, v: str) -> str:
-        v = v.upper().strip()
-        if v not in ALL_REGIME_TICKERS:
-            raise ValueError(
-                f"Ticker '{v}' is not in the approved universe. "
-                f"Valid: {sorted(ALL_REGIME_TICKERS)}"
-            )
-        return v
+        return v.upper().strip()
 
     @field_validator("stop_loss_pct")
     @classmethod
@@ -103,6 +97,13 @@ class RegimeAllocationSlot(BaseModel):
 
     @model_validator(mode="after")
     def validate_ticker_asset_class_match(self) -> "RegimeAllocationSlot":
+        if self.asset_class == "momentum_equity":
+            return self
+        if self.ticker not in ALL_REGIME_TICKERS:
+            raise ValueError(
+                f"Ticker '{self.ticker}' is not in the approved universe. "
+                f"Valid: {sorted(ALL_REGIME_TICKERS)}"
+            )
         expected = REGIME_UNIVERSE.get(self.asset_class, [])
         if self.ticker not in expected:
             raise ValueError(

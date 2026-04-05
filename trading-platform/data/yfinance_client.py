@@ -70,6 +70,9 @@ MA_200D_BARS    = 200
 RSI_PERIOD      = 14
 
 _cached_market_data: dict | None = None
+_cached_momentum_data: dict | None = None
+_momentum_cache_ts: float = 0.0
+MOMENTUM_CACHE_TTL = 3600
 
 
 def get_cached_market_data() -> dict | None:
@@ -395,3 +398,63 @@ async def fetch_single_ticker(ticker: str, period: str = "6mo") -> dict[str, Any
         if "/" in ticker:
             return await _fetch_bars_crypto(client, ticker, start_date, end_date)
         return await _fetch_bars_alpaca(client, ticker, start_date, end_date)
+
+
+def get_cached_momentum_data() -> dict | None:
+    return _cached_momentum_data
+
+
+async def fetch_momentum_universe() -> dict[str, Any]:
+    import time
+    global _cached_momentum_data, _momentum_cache_ts
+
+    now = time.time()
+    if _cached_momentum_data and (now - _momentum_cache_ts) < MOMENTUM_CACHE_TTL:
+        age_min = int((now - _momentum_cache_ts) / 60)
+        logger.info(f"Momentum Screen | Using cached data ({age_min}min old, TTL={MOMENTUM_CACHE_TTL // 60}min)")
+        return _cached_momentum_data
+
+    from execution.momentum_universe import FULL_UNIVERSE
+
+    period_days = 365
+    end_date = date.today().isoformat()
+    start_date = (date.today() - timedelta(days=period_days)).isoformat()
+
+    logger.info(
+        f"Momentum Screen | Fetching {len(FULL_UNIVERSE)} tickers via Alpaca "
+        f"(1y bars, {start_date} → {end_date})"
+    )
+
+    semaphore = asyncio.Semaphore(15)
+
+    async def _fetch_with_limit(client: httpx.AsyncClient, ticker: str):
+        async with semaphore:
+            return await _fetch_bars_alpaca(client, ticker, start_date, end_date)
+
+    async with httpx.AsyncClient() as client:
+        tasks = [_fetch_with_limit(client, t) for t in FULL_UNIVERSE]
+        results_list = await asyncio.gather(*tasks)
+
+    by_ticker: dict[str, Any] = {}
+    errors = 0
+    for r in results_list:
+        if "error" in r:
+            errors += 1
+        else:
+            by_ticker[r["ticker"]] = r
+
+    fetched = len(by_ticker)
+    logger.info(
+        f"Momentum Screen | Complete — {fetched}/{len(FULL_UNIVERSE)} tickers "
+        f"({errors} errors)"
+    )
+
+    result = {
+        "by_ticker": by_ticker,
+        "universe_size": len(FULL_UNIVERSE),
+        "fetched": fetched,
+    }
+    _cached_momentum_data = result
+    _momentum_cache_ts = now
+
+    return result

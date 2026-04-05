@@ -446,6 +446,7 @@ async def _run_pipeline_inner(
                 "scan_type": _algo_result["scan_type"],
                 "active_signals": _algo_result.get("active_signals", 0),
                 "activated": _algo_result["activated"],
+                "universe_scanned": _algo_result.get("universe_scanned", 0),
             }
 
             _algo_signals = _algo_result["signals"]

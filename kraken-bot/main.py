@@ -126,6 +126,8 @@ from config import (
     MIN_CONVICTION,
     STAGNANCY_COOLDOWN_MINUTES,
     MAX_NEW_ENTRIES_PER_CYCLE,
+    LOSS_STREAK_LIMIT,
+    LOSS_STREAK_COOLDOWN_HOURS,
 )
 
 import adaptive_params as _adaptive
@@ -259,6 +261,11 @@ last_equity_refresh: float = 0.0
 
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
+
+# Consecutive-loss circuit breaker: counts losing trades in a row.
+# When the streak reaches LOSS_STREAK_LIMIT, trading pauses for LOSS_STREAK_COOLDOWN_HOURS.
+consecutive_losses: int = 0
+loss_streak_paused_until: datetime | None = None
 
 SCALP_ENTRY_COOLDOWN_BARS = 10
 _scalp_last_entry: dict[str, datetime] = {}
@@ -500,10 +507,14 @@ def write_status(error: str | None = None) -> None:
     cb_active = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
     cb_until  = circuit_breaker_until.isoformat() if cb_active else None
 
+    ls_active = loss_streak_paused_until is not None and datetime.now(tz=timezone.utc) < loss_streak_paused_until
+    ls_until  = loss_streak_paused_until.isoformat() if ls_active else None
+
     paused = is_bot_paused()
     status_str = (
         "paused_dashboard"         if paused     else
         "paused_circuit_breaker"   if cb_active  else
+        "paused_loss_streak"       if ls_active  else
         ("running" if not error else "error")
     )
 
@@ -515,7 +526,18 @@ def write_status(error: str | None = None) -> None:
         position_count=len(open_positions),
         paper_trading=PAPER_TRADING,
         bot_paused=paused,
-        circuit_breaker={"active": cb_active, "paused_until": cb_until},
+        circuit_breaker={
+            "active": cb_active or ls_active,
+            "paused_until": cb_until or ls_until,
+            "flash_crash": {"active": cb_active, "paused_until": cb_until},
+            "loss_streak": {
+                "consecutive_losses": consecutive_losses,
+                "limit": LOSS_STREAK_LIMIT,
+                "active": ls_active,
+                "paused_until": ls_until,
+                "cooldown_hours": LOSS_STREAK_COOLDOWN_HOURS,
+            },
+        },
         error=error,
     )
 
@@ -642,7 +664,25 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
     PAPER mode → calls paper_engine.paper_open_position()
     LIVE mode  → places a real market order via ccxt
     """
-    global open_positions
+    global open_positions, consecutive_losses, loss_streak_paused_until
+
+    if loss_streak_paused_until is not None:
+        now_utc = datetime.now(tz=timezone.utc)
+        if now_utc < loss_streak_paused_until:
+            remaining_min = (loss_streak_paused_until - now_utc).total_seconds() / 60
+            logger.warning(
+                f"LossStreak | BLOCKED entry {side.upper()} {symbol} — "
+                f"{consecutive_losses} consecutive losses, "
+                f"cooldown expires in {remaining_min:.0f}min"
+            )
+            return False
+        else:
+            logger.info(
+                f"LossStreak | Cooldown expired — resetting streak counter "
+                f"(was {consecutive_losses} losses)"
+            )
+            consecutive_losses = 0
+            loss_streak_paused_until = None
 
     if PAPER_TRADING:
         # ── Paper: simulate the fill at current price ─────────────────────────
@@ -689,6 +729,29 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
             return False
 
 
+def _track_loss_streak(pnl_usd: float) -> None:
+    """Update consecutive loss counter and trigger cooldown if limit reached."""
+    global consecutive_losses, loss_streak_paused_until
+    if pnl_usd >= 0:
+        if consecutive_losses > 0:
+            logger.info(f"LossStreak | Win resets streak (was {consecutive_losses})")
+        consecutive_losses = 0
+        return
+    consecutive_losses += 1
+    logger.info(
+        f"LossStreak | Loss #{consecutive_losses} "
+        f"(limit={LOSS_STREAK_LIMIT}, cooldown={LOSS_STREAK_COOLDOWN_HOURS}h)"
+    )
+    if consecutive_losses >= LOSS_STREAK_LIMIT:
+        now_utc = datetime.now(tz=timezone.utc)
+        loss_streak_paused_until = now_utc + timedelta(hours=LOSS_STREAK_COOLDOWN_HOURS)
+        logger.warning(
+            f"LossStreak | CIRCUIT BREAKER TRIGGERED — {consecutive_losses} consecutive losses! "
+            f"All new entries paused until {loss_streak_paused_until.strftime('%Y-%m-%d %H:%M UTC')} "
+            f"({LOSS_STREAK_COOLDOWN_HOURS}h cooldown)"
+        )
+
+
 def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
     """
     Close an open position — simulated (paper mode) or real (live mode).
@@ -710,6 +773,7 @@ def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
             recent_trades.append(trade_record)
             _pnl = trade_record.get("pnl_usd", 0)
             _pnl_pct = trade_record.get("pnl_pct", 0)
+            _track_loss_streak(_pnl)
             if _pnl > 0:
                 try:
                     from execution.profit_sweep import record_kraken_vault_contribution
@@ -749,6 +813,7 @@ def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
                 pnl_pct = ((pos["entry_price"] - fill_price) / pos["entry_price"]) * 100
 
             pnl_usd = pos["size_usd"] * (pnl_pct / 100)
+            _track_loss_streak(pnl_usd)
 
             logger.info(
                 f"Close | {pos['side'].upper()} {symbol} | "
@@ -2096,7 +2161,7 @@ def main() -> None:
     so the health monitor never sees the bot as stale, even during slow cycles.
     """
     import threading
-    global total_equity
+    global total_equity, consecutive_losses, loss_streak_paused_until
 
     _start_health_server()
 
@@ -2123,6 +2188,32 @@ def main() -> None:
             _persist_tranches()
     else:
         logger.debug("Tranches | No pending tranches to restore from DB")
+
+    # ── Restore consecutive-loss streak from recent trade history ──────────────
+    try:
+        _recent = _db.get_recent_trades(limit=LOSS_STREAK_LIMIT + 5)
+        _streak = 0
+        for _rt in _recent:
+            if (_rt.get("pnl_usd") or 0) < 0:
+                _streak += 1
+            else:
+                break
+        if _streak > 0:
+            consecutive_losses = _streak
+            logger.info(
+                f"LossStreak | Restored {_streak} consecutive losses from DB "
+                f"(limit={LOSS_STREAK_LIMIT})"
+            )
+            if _streak >= LOSS_STREAK_LIMIT:
+                loss_streak_paused_until = datetime.now(tz=timezone.utc) + timedelta(
+                    hours=LOSS_STREAK_COOLDOWN_HOURS
+                )
+                logger.warning(
+                    f"LossStreak | Streak {_streak} >= limit {LOSS_STREAK_LIMIT} on startup — "
+                    f"cooldown active until {loss_streak_paused_until.strftime('%Y-%m-%d %H:%M UTC')}"
+                )
+    except Exception as _ls_exc:
+        logger.warning(f"LossStreak | Could not restore streak from DB: {_ls_exc}")
 
     # ── Background keepalive thread — prevents false-stale alerts ─────────────
     _keepalive = threading.Thread(target=_keepalive_loop, name="keepalive", daemon=True)

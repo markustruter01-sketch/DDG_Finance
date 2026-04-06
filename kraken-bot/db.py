@@ -606,6 +606,30 @@ def load_pending_tranches() -> dict[str, list[dict]]:
         return {}
 
 
+def get_recent_trades(limit: int = 20) -> list[dict]:
+    if not _is_available():
+        return []
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT symbol, side, pnl_usd, pnl_pct, closed_at
+                    FROM   kraken_trades
+                    WHERE  bot_id = %s
+                    ORDER  BY closed_at DESC
+                    LIMIT  %s
+                    """,
+                    (bot_id, limit),
+                )
+                cols = ("symbol", "side", "pnl_usd", "pnl_pct", "closed_at")
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+    except Exception as exc:
+        logger.warning(f"DB | get_recent_trades failed: {exc}")
+        return []
+
+
 def load_all_trades(limit: int | None = None) -> list[dict]:
     if not _is_available():
         return []

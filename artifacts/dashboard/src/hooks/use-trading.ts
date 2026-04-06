@@ -948,7 +948,7 @@ export interface KrakenStatus {
   strategy_label?: string;
   paper_trading: boolean;
   bot_paused: boolean;
-  status: "running" | "paused_circuit_breaker" | "paused_dashboard" | "not_started" | "error";
+  status: "running" | "paused_circuit_breaker" | "paused_loss_streak" | "paused_dashboard" | "not_started" | "error";
   last_updated: string | null;
   cycle_count: number;
   total_equity_usd: number;
@@ -959,7 +959,18 @@ export interface KrakenStatus {
   open_positions: KrakenPosition[];
   position_count: number;
   max_positions: number;
-  circuit_breaker: { active: boolean; paused_until: string | null };
+  circuit_breaker: {
+    active: boolean;
+    paused_until: string | null;
+    flash_crash?: { active: boolean; paused_until: string | null };
+    loss_streak?: {
+      consecutive_losses: number;
+      limit: number;
+      active: boolean;
+      paused_until: string | null;
+      cooldown_hours: number;
+    };
+  };
   recent_trades: Array<{
     symbol: string;
     side: string;

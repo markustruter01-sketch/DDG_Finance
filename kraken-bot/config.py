@@ -35,6 +35,8 @@ BOT_PROFILES = {
         "OHLCV_TIMEFRAME": "1h",
         "OHLCV_LIMIT": 100,
         "LOOP_SLEEP_SECONDS": 60,
+        "LOSS_STREAK_LIMIT": 12,
+        "LOSS_STREAK_COOLDOWN_HOURS": 6,
     },
     "blackbeard": {
         "display_name": "Blackbeard's Fleet",
@@ -66,6 +68,8 @@ BOT_PROFILES = {
         "MIN_CONVICTION": 0.65,
         "STAGNANCY_COOLDOWN_MINUTES": 45,
         "MAX_NEW_ENTRIES_PER_CYCLE": 2,
+        "LOSS_STREAK_LIMIT": 10,
+        "LOSS_STREAK_COOLDOWN_HOURS": 8,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
@@ -95,6 +99,8 @@ BOT_PROFILES = {
         "MIN_CONVICTION": 0.65,
         "STAGNANCY_COOLDOWN_MINUTES": 45,
         "MAX_NEW_ENTRIES_PER_CYCLE": 2,
+        "LOSS_STREAK_LIMIT": 8,
+        "LOSS_STREAK_COOLDOWN_HOURS": 12,
     },
 }
 
@@ -282,6 +288,9 @@ MAX_NEW_ENTRIES_PER_CYCLE  = _profile.get("MAX_NEW_ENTRIES_PER_CYCLE", 99)
 CB_PRICE_DROP_PCT = 0.10
 CB_WINDOW_MINUTES = 5
 CB_PAUSE_HOURS    = 2
+
+LOSS_STREAK_LIMIT          = _profile.get("LOSS_STREAK_LIMIT", 10)
+LOSS_STREAK_COOLDOWN_HOURS = _profile.get("LOSS_STREAK_COOLDOWN_HOURS", 8)
 
 
 STATUS_FILE           = f"kraken-bot/{BOT_ID}_status.json"

@@ -104,8 +104,9 @@ function SleepZzz({ color }: { color: string }) {
   );
 }
 
-function BotStatusBox({ name, market, icon, color, active, index, countdown, pulsing }: {
+function BotStatusBox({ name, market, icon, color, active, index, countdown, pulsing, lossStreak }: {
   name: string; market: string; icon: string; color: string; active: boolean; index: number; countdown?: string; pulsing?: boolean;
+  lossStreak?: { active: boolean; consecutive_losses: number; limit: number } | null;
 }) {
   return (
     <motion.div
@@ -182,13 +183,23 @@ function BotStatusBox({ name, market, icon, color, active, index, countdown, pul
           {countdown}
         </span>
       )}
-      {active && (
+      {active && !lossStreak?.active && (
         <motion.span
           className="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full"
           style={{ backgroundColor: color, boxShadow: `0 0 4px ${color}` }}
           animate={{ opacity: [1, 0.3, 1] }}
           transition={{ duration: 1.5, repeat: Infinity }}
         />
+      )}
+      {lossStreak?.active && (
+        <motion.span
+          className="absolute top-1 right-1.5 font-mono font-bold leading-none"
+          style={{ fontSize: 8, color: "#f87171" }}
+          animate={{ opacity: [1, 0.4, 1] }}
+          transition={{ duration: 1.2, repeat: Infinity }}
+        >
+          {lossStreak.consecutive_losses}L
+        </motion.span>
       )}
     </motion.div>
   );
@@ -261,9 +272,9 @@ export function GlobalHUD() {
 
   const botActive = {
     oracle: !!(summary?.auto_trading && summary?.market_open),
-    "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused),
-    blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused),
-    calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused),
+    "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused && djStatus.data.status !== "paused_loss_streak"),
+    blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused && bbStatus.data.status !== "paused_loss_streak"),
+    calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused && caStatus.data.status !== "paused_loss_streak"),
     apex: optState !== undefined && !optState?.paused,
     navigator: fxState !== undefined && !fxState?.paused,
   };
@@ -279,6 +290,27 @@ export function GlobalHUD() {
     calypso: undefined,
     apex: nyseCountdown || undefined,
     navigator: undefined,
+  };
+
+  const botLossStreaks: Record<string, { active: boolean; consecutive_losses: number; limit: number } | null> = {
+    oracle: null,
+    "davy-jones": djStatus.data?.circuit_breaker?.loss_streak ? {
+      active: djStatus.data.circuit_breaker.loss_streak.active,
+      consecutive_losses: djStatus.data.circuit_breaker.loss_streak.consecutive_losses,
+      limit: djStatus.data.circuit_breaker.loss_streak.limit,
+    } : null,
+    blackbeard: bbStatus.data?.circuit_breaker?.loss_streak ? {
+      active: bbStatus.data.circuit_breaker.loss_streak.active,
+      consecutive_losses: bbStatus.data.circuit_breaker.loss_streak.consecutive_losses,
+      limit: bbStatus.data.circuit_breaker.loss_streak.limit,
+    } : null,
+    calypso: caStatus.data?.circuit_breaker?.loss_streak ? {
+      active: caStatus.data.circuit_breaker.loss_streak.active,
+      consecutive_losses: caStatus.data.circuit_breaker.loss_streak.consecutive_losses,
+      limit: caStatus.data.circuit_breaker.loss_streak.limit,
+    } : null,
+    apex: null,
+    navigator: null,
   };
 
   return (
@@ -403,6 +435,7 @@ export function GlobalHUD() {
             index={i}
             countdown={botCountdowns[bot.statusKey]}
             pulsing={pulsingBot === bot.statusKey}
+            lossStreak={botLossStreaks[bot.statusKey]}
           />
         ))}
       </div>

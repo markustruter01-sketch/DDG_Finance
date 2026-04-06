@@ -20,6 +20,7 @@ Regime adjusts RISK, not STRATEGY:
 Momentum Score = weighted composite:
   - 20-day return    × 0.50  (short-term momentum)
   - 60-day return    × 0.30  (medium-term trend)
+  - 5-day return     × 0.20  (very short-term signal)
   - Trend alignment  × bonus (price > SMA-63 AND SMA-126 = +5.0)
 
 Filters:
@@ -91,7 +92,8 @@ REGIME_PARAMS: dict[str, dict] = {
 def _momentum_score(d: dict) -> float:
     ret_20 = d.get("return_20d_pct") or 0.0
     ret_60 = d.get("return_60d_pct") or 0.0
-    score = ret_20 * 0.50 + ret_60 * 0.30
+    ret_5 = d.get("return_5d_pct") or 0.0
+    score = ret_20 * 0.50 + ret_60 * 0.30 + ret_5 * 0.20
     if d.get("momentum_3mo") == "positive" and d.get("momentum_6mo") == "positive":
         score += 5.0
     return score
@@ -272,6 +274,7 @@ def scan_momentum(
             "rsi": rsi,
             "volatility": d.get("annualized_volatility_20d_pct"),
             "sector": TICKER_TO_SECTOR.get(ticker, "unknown"),
+            "return_5d": d.get("return_5d_pct") or 0.0,
             "return_20d": d.get("return_20d_pct") or 0.0,
             "return_60d": d.get("return_60d_pct") or 0.0,
         })
@@ -314,7 +317,8 @@ def scan_momentum(
             "kelly_fraction": kelly,
             "thesis": (
                 f"Momentum rank #{len(slots)+1}: "
-                f"20d={c['return_20d']:+.1f}% 60d={c['return_60d']:+.1f}% "
+                f"5d={c['return_5d']:+.1f}% 20d={c['return_20d']:+.1f}% "
+                f"60d={c['return_60d']:+.1f}% "
                 f"RSI={c['rsi']:.0f} sector={sector}"
             ),
             "stop_loss_pct": stop,

@@ -55,7 +55,7 @@ function MobilePositionCard({ pos, onThesisClick, onEject, confirmClose, setConf
         )}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
-        <div className="flex justify-between"><span className="text-muted-foreground">Qty</span><span className="font-mono text-white">{pos.qty.toFixed(4)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Qty</span><span className="font-mono text-white">{(pos.qty ?? 0).toFixed(4)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Notional</span><span className="font-mono text-white">{formatCurrency(pos.market_value)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Entry</span><span className="font-mono text-muted-foreground">{formatCurrency(pos.avg_entry_price)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Current</span><span className="font-mono text-white">{formatCurrency(pos.current_price)}</span></div>

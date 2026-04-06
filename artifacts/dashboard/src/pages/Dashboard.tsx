@@ -735,12 +735,12 @@ function ConsolidatedPositionsTable() {
         botColor: BOT_COLORS.oracle,
         symbol: p.symbol,
         side: p.side === "long" ? "L" : "S",
-        qty: p.qty,
-        entryPrice: p.avg_entry_price,
-        currentPrice: p.current_price,
-        sizeUsd: p.market_value,
-        pnlUsd: p.unrealized_pl,
-        pnlPct: p.unrealized_plpc * 100,
+        qty: p.qty ?? 0,
+        entryPrice: p.avg_entry_price ?? 0,
+        currentPrice: p.current_price ?? 0,
+        sizeUsd: p.market_value ?? 0,
+        pnlUsd: p.unrealized_pl ?? 0,
+        pnlPct: (p.unrealized_plpc ?? 0) * 100,
         entryTime: null,
       });
     }
@@ -759,12 +759,12 @@ function ConsolidatedPositionsTable() {
           botColor: BOT_COLORS[botId],
           symbol: p.symbol,
           side: p.side === "long" ? "L" : "S",
-          qty: p.qty,
-          entryPrice: p.entry_price,
-          currentPrice: p.current_price,
-          sizeUsd: p.size_usd,
-          pnlUsd: p.unrealized_pnl_usd,
-          pnlPct: p.unrealized_pnl_pct * 100,
+          qty: p.qty ?? 0,
+          entryPrice: p.entry_price ?? 0,
+          currentPrice: p.current_price ?? 0,
+          sizeUsd: p.size_usd ?? 0,
+          pnlUsd: p.unrealized_pnl_usd ?? 0,
+          pnlPct: (p.unrealized_pnl_pct ?? 0) * 100,
           entryTime: p.entry_time,
         });
       }
@@ -778,12 +778,12 @@ function ConsolidatedPositionsTable() {
         botColor: BOT_COLORS["apex-predator"],
         symbol: `${p.symbol} ${p.strategy}`,
         side: "L",
-        qty: p.contracts,
-        entryPrice: p.premium_per_contract,
-        currentPrice: p.current_value / Math.max(p.contracts, 1),
-        sizeUsd: p.total_cost,
-        pnlUsd: p.unrealized_pnl,
-        pnlPct: p.unrealized_pnl_pct * 100,
+        qty: p.contracts ?? 0,
+        entryPrice: p.premium_per_contract ?? 0,
+        currentPrice: (p.current_value ?? 0) / Math.max(p.contracts ?? 1, 1),
+        sizeUsd: p.total_cost ?? 0,
+        pnlUsd: p.unrealized_pnl ?? 0,
+        pnlPct: (p.unrealized_pnl_pct ?? 0) * 100,
         entryTime: p.opened_at ?? p.scanned_at,
       });
     }
@@ -796,12 +796,12 @@ function ConsolidatedPositionsTable() {
         botColor: BOT_COLORS.navigator,
         symbol: p.pair,
         side: p.direction === "long" ? "L" : "S",
-        qty: p.units,
-        entryPrice: p.entry_price,
-        currentPrice: p.current_price,
-        sizeUsd: p.size_usd,
-        pnlUsd: p.unrealized_pnl_usd,
-        pnlPct: (p.unrealized_pnl_usd / Math.max(p.size_usd, 1)) * 100,
+        qty: p.units ?? 0,
+        entryPrice: p.entry_price ?? 0,
+        currentPrice: p.current_price ?? 0,
+        sizeUsd: p.size_usd ?? 0,
+        pnlUsd: p.unrealized_pnl_usd ?? 0,
+        pnlPct: ((p.unrealized_pnl_usd ?? 0) / Math.max(p.size_usd ?? 1, 1)) * 100,
         entryTime: p.entry_time,
       });
     }
@@ -905,7 +905,7 @@ function ConsolidatedPositionsTable() {
                   <td className="px-3 py-2 text-center">
                     <span className={`font-mono font-semibold ${pos.side === "L" ? "text-green-400" : "text-red-400"}`}>{pos.side}</span>
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-white/70">{pos.qty.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right font-mono text-white/70">{(pos.qty ?? 0).toLocaleString()}</td>
                   <td className="px-3 py-2 text-right font-mono text-white/60">${pos.entryPrice.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-white/80">${pos.currentPrice.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right font-mono text-white/70">${pos.sizeUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>

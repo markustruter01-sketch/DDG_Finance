@@ -1,0 +1,27 @@
+Convert Bot #3 Blackbeard from momentum breakout strategy to flow sentiment detection and trading. Additionally, architect a new Growth Vault subsystem that splits capital between yield-generating and growth assets, with a dividend reinvestment loop back into trading capital.
+PART A: BLACKBEARD — FLOW SENTIMENT TRADING BOT
+Replace the existing momentum_breakout strategy entirely with flow_sentiment strategy. Keep all existing infrastructure (Kraken API, position tracking, P&L logging) but change entry and exit logic as follows:
+Entry Conditions (ALL must be true):
+
+Calculate 1-hour order flow imbalance: buy_volume_1h / (buy_volume_1h + sell_volume_1h). If this ratio exceeds 0.65 for LONG entries or drops below 0.35 for SHORT entries, sustained directional buying/selling is confirmed.
+VPIN check: VPIN must be below 0.75. This ensures we're riding sustained sentiment, not front-running insider spikes.
+RSI(14) confirmation: For longs, RSI must be between 40 and 60 (not overbought). For shorts, same range (not oversold). This prevents entering already-extended moves.
+Volume confirmation: 1-hour volume must exceed 1.5x the rolling 20-period average volume. This confirms the sentiment shift is genuine.
+Not at max positions: Blackbeard can have maximum 5 simultaneous positions (down from 6).
+Symbol win rate filter: If the symbol has fewer than 5 trades, it's eligible. If it has 5+ trades, its win rate over the last 15 trades must be above 30% to enter.
+
+Position Sizing:
+
+Base: 8% of equity per position (consistent with previous iteration)
+Adjusted by Kelly Criterion if historical data supports it (minimum 20 trades required)
+Fallback: 2% fixed fractional if insufficient history
+
+Exit Conditions:
+
+Stop loss: 2.0x ATR below entry for longs, 2.0x ATR above entry for shorts (trailing stop that adapts as ATR changes)
+Take profit: 3.0x ATR above entry for longs, 3.0x ATR below entry for shorts
+Time-based exit: Maximum hold time of 24 hours. If position hasn't hit stop or take profit within 24 hours, close at market price.
+Minimum hold time: 1 hour (don't exit immediately on noise)
+
+Entry Filtering:
+Apply the existing VPIN filter unchanged. Do NOT allow entries when VPIN spikes above 0.85 during the same candle the order flow signal triggers — this indicates true insider trading, not sentiment. Wait for VPIN to normalize.

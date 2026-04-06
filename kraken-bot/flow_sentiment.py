@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+import time
+
 from logic import calculate_rsi, calculate_atr
+
+_ONE_HOUR_MS = 3_600_000
+
+
+def _filter_trades_to_window(trades: list[dict], window_ms: int = _ONE_HOUR_MS) -> list[dict]:
+    if not trades:
+        return []
+    now_ms = int(time.time() * 1000)
+    cutoff = now_ms - window_ms
+    return [t for t in trades if (t.get("timestamp") or 0) >= cutoff]
 
 
 def compute_order_flow_imbalance(recent_trades: list[dict]) -> dict:
@@ -55,7 +67,8 @@ def evaluate_flow_sentiment(
     atr = calculate_atr(highs, lows, closes)
     rsi = calculate_rsi(closes, period=rsi_period)
 
-    flow = compute_order_flow_imbalance(recent_trades)
+    hourly_trades = _filter_trades_to_window(recent_trades, _ONE_HOUR_MS)
+    flow = compute_order_flow_imbalance(hourly_trades)
 
     result = {
         "strategy": "flow_sentiment",

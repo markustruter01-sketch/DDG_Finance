@@ -1690,6 +1690,20 @@ def run_cycle() -> None:
                     _swr_total = _swr.get("total", 0)
                     _swr_wr = _swr.get("win_rate", 1.0)
                     _swr_factor = 1.0
+
+                    if BOT_STRATEGY_TYPE == "flow_sentiment" and _swr_total >= 5 and _swr_wr <= 0.30:
+                        logger.info(
+                            f"SymbolWR | {symbol}: BLOCKED — win_rate={_swr_wr:.1%} over last "
+                            f"{_swr_total} trades ≤ 30% (flow_sentiment hard gate)"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4),
+                            "signal_type": "blocked_symbol_winrate",
+                            "has_position": False,
+                        })
+                        continue
+
                     if _swr_total >= 5 and _swr_wr < SYMBOL_WINRATE_PENALTY_THRESHOLD:
                         _swr_factor = SYMBOL_WINRATE_PENALTY_FACTOR
                         size_usd *= _swr_factor

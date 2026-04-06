@@ -461,6 +461,20 @@ async def _run_pipeline_inner(
                     f"{len(_new_allocs)} slots (regime={_llm_regime}, "
                     f"scan={_algo_result['scan_type']})"
                 )
+
+                if _llm_regime == "Bear":
+                    try:
+                        from portfolio.allocator import (
+                            _enforce_leveraged_fence,
+                            normalise_kelly_fractions,
+                        )
+                        _raw = [a.model_dump() for a in allocation.allocations]
+                        _raw = _enforce_leveraged_fence(_raw)
+                        _raw = normalise_kelly_fractions(_raw)
+                        allocation.allocations = [RegimeAllocationSlot.model_validate(s) for s in _raw]
+                        logger.info("Pipeline | Bear allocator fences applied to scanner output")
+                    except Exception as _fence_exc:
+                        logger.warning(f"Pipeline | Bear fence post-processing failed: {_fence_exc}")
         except Exception as _algo_exc:
             logger.warning(
                 f"Pipeline | Algo scanner failed (non-fatal), "

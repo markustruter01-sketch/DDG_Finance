@@ -53,6 +53,10 @@ RSI_OVERBOUGHT = 75.0
 RSI_FLOOR = 30.0
 CASH_TICKER = "SGOV"
 
+BEAR_INVERSE_ETFS: list[str] = ["SQQQ", "SH", "PSQ"]
+BEAR_INVERSE_MAX_TOTAL: float = 0.20
+BEAR_INVERSE_KELLY_CAP: float = 0.06
+
 REGIME_PARAMS: dict[str, dict] = {
     "bull": {
         "max_active": 9,
@@ -120,6 +124,96 @@ def _stop_take(
     stop = round(-min(max(vol_factor * stop_mult, 0.03), 0.08), 4)
     take = round(min(max(vol_factor * take_mult, 0.05), 0.20), 4)
     return stop, take
+
+
+def _scan_bear_inverse_etfs(
+    by_ticker: dict,
+    kelly_cap: float = BEAR_INVERSE_KELLY_CAP,
+    max_total: float = BEAR_INVERSE_MAX_TOTAL,
+) -> list[dict]:
+    """
+    Bear-regime active strategy: scan inverse ETFs (SQQQ, SH, PSQ) for
+    positive momentum. Only enters if both 20d and 60d returns are positive
+    (which they will be in a genuine bear market). Capped at kelly_cap per
+    position and max_total across all inverse ETFs.
+    """
+    slots = []
+    kelly_sum = 0.0
+
+    candidates = []
+    for ticker in BEAR_INVERSE_ETFS:
+        d = by_ticker.get(ticker)
+        if not d:
+            logger.debug(f"BearInverse | {ticker}: no data available — skip")
+            continue
+
+        ret_20 = d.get("return_20d_pct") or 0.0
+        ret_60 = d.get("return_60d_pct") or 0.0
+
+        if ret_20 <= 0 or ret_60 <= 0:
+            logger.info(
+                f"BearInverse | {ticker}: negative momentum "
+                f"(20d={ret_20:+.1f}%, 60d={ret_60:+.1f}%) — skip"
+            )
+            continue
+
+        rsi = d.get("rsi_14d")
+        if rsi is not None and rsi > RSI_OVERBOUGHT:
+            logger.info(f"BearInverse | {ticker}: RSI {rsi:.0f} > {RSI_OVERBOUGHT} — skip")
+            continue
+
+        score = _momentum_score(d)
+        conviction = _conviction_from_rsi(rsi) if rsi else 0.70
+
+        candidates.append({
+            "ticker": ticker,
+            "score": score,
+            "conviction": conviction,
+            "rsi": rsi or 50.0,
+            "volatility": d.get("annualized_volatility_20d_pct"),
+            "return_20d": ret_20,
+            "return_60d": ret_60,
+        })
+
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+
+    for c in candidates:
+        kelly = _half_kelly(c["conviction"], kelly_cap)
+        if kelly_sum + kelly > max_total:
+            kelly = round(max_total - kelly_sum, 4)
+        if kelly <= 0:
+            break
+
+        vol = c["volatility"] or 40.0
+        vol_factor = max(vol / 100.0, 0.02)
+        stop = round(-min(max(vol_factor * 1.0, 0.04), 0.10), 4)
+        take = round(min(max(vol_factor * 1.5, 0.06), 0.20), 4)
+
+        slots.append({
+            "slot": 0,
+            "ticker": c["ticker"],
+            "asset_class": "bear_hedge",
+            "conviction_score": round(c["conviction"], 2),
+            "kelly_fraction": kelly,
+            "thesis": (
+                f"Bear inverse ETF: {c['ticker']} "
+                f"20d={c['return_20d']:+.1f}% 60d={c['return_60d']:+.1f}% "
+                f"RSI={c['rsi']:.0f} — positive momentum confirms bear trend"
+            ),
+            "stop_loss_pct": stop,
+            "take_profit_pct": take,
+        })
+        kelly_sum += kelly
+
+    if slots:
+        logger.info(
+            f"BearInverse | {len(slots)} inverse ETF(s) selected: "
+            f"{[s['ticker'] for s in slots]} total_kelly={kelly_sum:.1%}"
+        )
+    else:
+        logger.info("BearInverse | No inverse ETFs qualify (need positive 20d+60d momentum)")
+
+    return slots
 
 
 def scan_momentum(
@@ -228,6 +322,17 @@ def scan_momentum(
         })
         kelly_sum += kelly
         seen_sectors[sector] = seen_sectors.get(sector, 0) + 1
+
+    if regime_lower == "bear":
+        inverse_slots = _scan_bear_inverse_etfs(by_ticker)
+        for inv_slot in inverse_slots:
+            if kelly_sum + inv_slot["kelly_fraction"] > MAX_KELLY_SUM:
+                inv_slot["kelly_fraction"] = round(MAX_KELLY_SUM - kelly_sum, 4)
+            if inv_slot["kelly_fraction"] <= 0:
+                break
+            inv_slot["slot"] = len(slots) + 1
+            slots.append(inv_slot)
+            kelly_sum += inv_slot["kelly_fraction"]
 
     if kelly_sum < MAX_KELLY_SUM:
         sgov_kelly = round(MAX_KELLY_SUM - kelly_sum, 4)

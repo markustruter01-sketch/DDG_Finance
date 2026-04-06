@@ -1,6 +1,6 @@
 """
-High-Yield Growth Vault — Profit Sweep  (v2 — PostgreSQL + DA-HWM)
---------------------------------------------------------------------
+High-Yield Growth Vault — Profit Sweep  (v3 — self-contained PostgreSQL)
+------------------------------------------------------------------------
 Automatically sweeps 20 % of new realised profits into JEPQ to generate
 compounding dividend income.
 
@@ -32,12 +32,22 @@ Guard rails
 
 Backend
 -------
-  Primary  : PostgreSQL (Replit managed DB, db/postgres.py)
+  Primary  : PostgreSQL (uses DATABASE_URL env var directly via psycopg2 —
+             no dependency on db.postgres import paths so this module works
+             correctly from any process, including kraken-bot)
   Fallback : SQLite at trade_journal.db
+
+Migration
+---------
+  On first call to init_vault_db() when PostgreSQL is available, any
+  existing SQLite vault_ledger accumulation is merged into PostgreSQL
+  (total_vaulted_usd and total_sweeps are summed) and the SQLite row is
+  zeroed so future writes never go there again.
 """
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import date
@@ -53,15 +63,54 @@ MIN_SWEEP    = 1.0
 
 SQLITE_DB_PATH = Path(__file__).parent.parent / "trade_journal.db"
 
+# Track whether we have already attempted the one-time SQLite→PG migration
+# so we do not repeat it every call within the same process.
+_MIGRATION_DONE: bool = False
+
 
 # ── Backend helpers ────────────────────────────────────────────────────────
 
 def _use_pg() -> bool:
+    """Return True when psycopg2 is importable AND a DSN is available.
+
+    This check is entirely self-contained — it does NOT import anything from
+    db.postgres, which would fail in the kraken-bot process because
+    kraken-bot/db.py (a flat file) shadows the trading-platform/db/ package.
+    """
     try:
-        from db.postgres import is_pg_available
-        return is_pg_available()
-    except Exception:
+        import psycopg2  # noqa: F401
+    except ImportError:
         return False
+    return bool(
+        os.environ.get("DATABASE_URL") or os.environ.get("PGHOST")
+    )
+
+
+def _build_dsn() -> str:
+    """Construct a psycopg2 DSN from environment variables."""
+    url = os.environ.get("DATABASE_URL")
+    if url:
+        return url
+    return (
+        f"postgresql://{os.environ['PGUSER']}:{os.environ['PGPASSWORD']}"
+        f"@{os.environ['PGHOST']}:{os.environ.get('PGPORT', 5432)}"
+        f"/{os.environ['PGDATABASE']}"
+    )
+
+
+@contextmanager
+def _pg_conn() -> Generator:
+    """Self-contained psycopg2 connection — no dependency on db.postgres."""
+    import psycopg2
+    conn = psycopg2.connect(_build_dsn())
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 @contextmanager
@@ -78,13 +127,33 @@ def _sqlite_conn() -> Generator[sqlite3.Connection, None, None]:
         conn.close()
 
 
-# ── Schema bootstrap (SQLite fallback) ────────────────────────────────────
+# ── Schema bootstrap ────────────────────────────────────────────────────────
+
+_PG_VAULT_DDL = """
+CREATE TABLE IF NOT EXISTS vault_ledger (
+    id                    INTEGER PRIMARY KEY CHECK (id = 1),
+    hwm                   DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_vaulted_usd     DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_sweeps          INTEGER NOT NULL DEFAULT 0,
+    vault_symbol          TEXT NOT NULL DEFAULT 'JEPQ',
+    last_sweep_date       DATE,
+    last_sweep_amount     DOUBLE PRECISION,
+    da_adjustment         DOUBLE PRECISION NOT NULL DEFAULT 0
+)
+"""
+
+
+def _ensure_pg_schema() -> None:
+    with _pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(_PG_VAULT_DDL)
+
 
 def _ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS vault_ledger (
             id                 INTEGER PRIMARY KEY CHECK (id = 1),
-            hwm                REAL NOT NULL,
+            hwm                REAL NOT NULL DEFAULT 0.0,
             total_vaulted_usd  REAL NOT NULL DEFAULT 0.0,
             total_sweeps       INTEGER NOT NULL DEFAULT 0,
             vault_symbol       TEXT NOT NULL DEFAULT 'JEPQ',
@@ -93,18 +162,91 @@ def _ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
             da_adjustment      REAL NOT NULL DEFAULT 0.0
         )
     """)
-    # migrate old rows missing da_adjustment
     try:
-        conn.execute("ALTER TABLE vault_ledger ADD COLUMN da_adjustment REAL NOT NULL DEFAULT 0.0")
+        conn.execute(
+            "ALTER TABLE vault_ledger ADD COLUMN da_adjustment REAL NOT NULL DEFAULT 0.0"
+        )
     except Exception:
         pass
 
 
+# ── One-time SQLite → PostgreSQL migration ─────────────────────────────────
+
+def _migrate_sqlite_to_pg() -> None:
+    """
+    If the SQLite vault_ledger has a non-zero total_vaulted_usd, merge it
+    into the PostgreSQL vault_ledger by adding the amounts, then zero the
+    SQLite row so this never fires again.
+
+    Idempotent: if the SQLite DB does not exist, has no row, or already
+    shows 0 vaulted, the function returns immediately.
+    """
+    global _MIGRATION_DONE
+    if _MIGRATION_DONE:
+        return
+    _MIGRATION_DONE = True
+
+    if not SQLITE_DB_PATH.exists():
+        return
+
+    try:
+        with _sqlite_conn() as conn:
+            _ensure_sqlite_schema(conn)
+            row = conn.execute(
+                "SELECT total_vaulted_usd, total_sweeps FROM vault_ledger WHERE id = 1"
+            ).fetchone()
+
+        if row is None:
+            return
+
+        sqlite_vaulted = float(row["total_vaulted_usd"] or 0)
+        sqlite_sweeps  = int(row["total_sweeps"] or 0)
+
+        if sqlite_vaulted <= 0:
+            return
+
+        logger.info(
+            f"Vault | Migrating SQLite→PG: ${sqlite_vaulted:.2f} across "
+            f"{sqlite_sweeps} sweeps"
+        )
+
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                # Ensure the PG row exists first
+                cur.execute(_PG_VAULT_DDL)
+                # Merge: add SQLite totals into whatever PG already has
+                cur.execute("""
+                    INSERT INTO vault_ledger
+                        (id, hwm, total_vaulted_usd, total_sweeps, vault_symbol,
+                         last_sweep_date, last_sweep_amount, da_adjustment)
+                    VALUES (1, 0, %s, %s, 'JEPQ', NULL, NULL, 0)
+                    ON CONFLICT (id) DO UPDATE SET
+                        total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
+                        total_sweeps      = vault_ledger.total_sweeps      + EXCLUDED.total_sweeps
+                """, (sqlite_vaulted, sqlite_sweeps))
+
+        # Zero out the SQLite row so this migration never fires again
+        with _sqlite_conn() as conn:
+            conn.execute(
+                "UPDATE vault_ledger SET total_vaulted_usd = 0.0, total_sweeps = 0 WHERE id = 1"
+            )
+
+        logger.info(
+            f"Vault | Migration complete — ${sqlite_vaulted:.2f} merged into "
+            f"PostgreSQL; SQLite row zeroed."
+        )
+
+    except Exception as exc:
+        logger.warning(f"Vault | SQLite→PG migration failed (non-fatal): {exc}")
+
+
+# ── Schema + migration entry point ─────────────────────────────────────────
+
 def init_vault_db() -> None:
     if _use_pg():
-        from db.postgres import ensure_schema
-        ensure_schema()
+        _ensure_pg_schema()
         logger.debug("Vault | vault_ledger table ensured (PostgreSQL)")
+        _migrate_sqlite_to_pg()
     else:
         with _sqlite_conn() as conn:
             _ensure_sqlite_schema(conn)
@@ -115,8 +257,7 @@ def init_vault_db() -> None:
 
 def get_vault_state() -> dict | None:
     if _use_pg():
-        from db.postgres import get_conn
-        with get_conn() as conn:
+        with _pg_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT * FROM vault_ledger WHERE id = 1")
                 row = cur.fetchone()
@@ -140,8 +281,7 @@ def _set_vault_state(
     da_adjustment: float = 0.0,
 ) -> None:
     if _use_pg():
-        from db.postgres import get_conn
-        with get_conn() as conn:
+        with _pg_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO vault_ledger

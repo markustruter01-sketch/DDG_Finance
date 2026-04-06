@@ -1804,8 +1804,89 @@ async def export_diagnostic_report():
 
     lines += _rs.section_learning_journal_metadata(lj_entries)
 
-    lines.append("@@SEC8@@")
-    h1("SECTION 8: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
+    lines.append("@@SEC_AI@@")
+    h1("SECTION 8: AI IMPACT TIMELINE \u2014 INTERVENTIONS & PERFORMANCE EFFECT")
+    try:
+        from routes.ai_impact import _get_conn as _ai_conn
+        _aic = _ai_conn()
+        try:
+            with _aic.cursor() as _aicur:
+                _aicur.execute("""
+                    SELECT id, ts, source, overall_verdict, critique_summary,
+                           vetoed_tickers, param_changes, equity_at_time
+                    FROM ai_interventions
+                    ORDER BY ts DESC
+                    LIMIT 50
+                """)
+                _ai_cols = [d[0] for d in _aicur.description]
+                _ai_rows = [dict(zip(_ai_cols, r)) for r in _aicur.fetchall()]
+        finally:
+            _aic.close()
+
+        if not _ai_rows:
+            lines.append("  No AI interventions recorded yet.")
+        else:
+            lines.append(f"  Total interventions in DB: {len(_ai_rows)} (showing most recent 50)")
+            lines.append("")
+
+            helped = 0
+            hurt = 0
+            neutral = 0
+
+            for iv in _ai_rows:
+                iv_ts = iv["ts"].strftime("%Y-%m-%d %H:%M UTC") if iv["ts"] else "Unknown"
+                source = iv.get("source") or "unknown"
+                verdict = iv.get("overall_verdict") or "N/A"
+                summary = iv.get("critique_summary") or "N/A"
+                eq = iv.get("equity_at_time")
+                vetoed = iv.get("vetoed_tickers")
+                params = iv.get("param_changes")
+
+                if isinstance(vetoed, str):
+                    try:
+                        import json as _jj
+                        vetoed = _jj.loads(vetoed)
+                    except Exception:
+                        pass
+                if isinstance(params, str):
+                    try:
+                        import json as _jj
+                        params = _jj.loads(params)
+                    except Exception:
+                        pass
+
+                lines.append(f"  [{iv_ts}] Source: {source} | Verdict: {verdict}")
+                if eq is not None:
+                    lines.append(f"    Equity at time: ${float(eq):,.2f}")
+                if summary and summary != "N/A":
+                    summary_short = summary[:300] + ("..." if len(summary) > 300 else "")
+                    lines.append(f"    Summary: {summary_short}")
+                if vetoed and isinstance(vetoed, list) and len(vetoed) > 0:
+                    lines.append(f"    Vetoed tickers: {', '.join(str(v) for v in vetoed)}")
+                if params and isinstance(params, dict) and len(params) > 0:
+                    param_str = ", ".join(f"{k}={v}" for k, v in list(params.items())[:10])
+                    lines.append(f"    Param changes: {param_str}")
+                lines.append("")
+
+            for iv in _ai_rows:
+                v = iv.get("overall_verdict", "")
+                if v and "helped" in str(v).lower():
+                    helped += 1
+                elif v and ("hurt" in str(v).lower() or "negative" in str(v).lower()):
+                    hurt += 1
+                else:
+                    neutral += 1
+
+            h2("AI IMPACT SUMMARY")
+            row("Total interventions:", str(len(_ai_rows)))
+            row("Helped:", str(helped))
+            row("Hurt:", str(hurt))
+            row("Neutral/Unknown:", str(neutral))
+    except Exception as _ai_exc:
+        lines.append(f"  [AI Impact Timeline unavailable: {_ai_exc}]")
+
+    lines.append("@@SEC9@@")
+    h1("SECTION 9: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
 
     h2("BOT #1: ORACLE (ALPACA) \u2014 HOW IT WORKS")
     lines += [
@@ -1934,8 +2015,9 @@ async def export_report_parts():
     p4 = (_grab("@@SEC1A@@", "@@CORR@@")
           + _grab("@@SEC6@@", "@@SEC1A@@")
           + _grab("@@KRAKEN_SUPP@@", "@@PART3@@")
-          + _grab("@@SEC7@@", "@@SEC8@@")
-          + _grab("@@SEC8@@", None))
+          + _grab("@@SEC7@@", "@@SEC_AI@@")
+          + _grab("@@SEC_AI@@", "@@SEC9@@")
+          + _grab("@@SEC9@@", None))
 
     result = {}
     for name, part_lines in [("p1", p1), ("p2", p2), ("p3", p3), ("p4", p4)]:

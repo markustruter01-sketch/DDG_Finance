@@ -33,7 +33,7 @@ import {
   Vault, ArrowUpRight, Coins, Target,
   ExternalLink, Radio, Bot, Zap,
   LayoutDashboard, ArrowUp, ArrowDown, ArrowUpDown, Layers,
-  ChevronDown, FileText,
+  ChevronDown, FileText, Mail,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -1358,6 +1358,62 @@ function ExportReportButton() {
   );
 }
 
+function EmailReportButton() {
+  const [loading, setLoading] = useState(false);
+
+  const handleEmail = async () => {
+    setLoading(true);
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/export/report-parts`);
+      if (!res.ok) throw new Error("Export failed");
+      const data = await res.json();
+
+      const labels: Record<string, string> = {
+        p1: "PART 1 — System Status + Oracle/Alpaca",
+        p2: "PART 2 — Kraken Fleet + Correlation Matrix",
+        p3: "PART 3 — Apex Predator + Navigator + Execution Quality",
+        p4: "PART 4 — Fleet Risk + Combined Summary + Journal + Strategy",
+      };
+
+      let body = "";
+      for (const key of ["p1", "p2", "p3", "p4"] as const) {
+        const part = data[key];
+        if (!part) continue;
+        body += `\n===== ${labels[key]} (${part.lines} lines) =====\n\n`;
+        body += part.text;
+        body += "\n\n";
+      }
+
+      const date = new Date().toISOString().slice(0, 10);
+      const subject = `AlgoEdge Trading Report — ${date}`;
+
+      const maxLen = 1_900_000;
+      if (body.length > maxLen) {
+        body = body.slice(0, maxLen) + "\n\n[Report truncated for email — use Export for full files]";
+      }
+
+      const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailto;
+    } catch {
+      alert("Failed to generate report for email — check that the trading API is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleEmail}
+      disabled={loading}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-xs font-mono text-muted-foreground hover:text-white transition-all disabled:opacity-50"
+    >
+      <Mail className="h-3.5 w-3.5" />
+      {loading ? "Preparing..." : "Email Report"}
+    </button>
+  );
+}
+
 function BottomNav() {
   const [, navigate] = useLocation();
   const streamColor = '#f43f5e';
@@ -1446,6 +1502,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex-1"><TradeWorkflowBar /></div>
                 <ExportReportButton />
+                <EmailReportButton />
               </div>
             </div>
           </SafeSection>

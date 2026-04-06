@@ -128,6 +128,10 @@ from config import (
     MAX_NEW_ENTRIES_PER_CYCLE,
     LOSS_STREAK_LIMIT,
     LOSS_STREAK_COOLDOWN_HOURS,
+    PAIR_SIZING_PENALIZED,
+    PAIR_SIZING_PENALIZED_GRADUATE_WIN_RATE,
+    PAIR_SIZING_PENALIZED_GRADUATE_MIN_TRADES,
+    PAIR_SIZING_BOOSTED,
 )
 
 import adaptive_params as _adaptive
@@ -188,6 +192,10 @@ logger.info(f"  Risk per trade : {RISK_FRACTION*100:.0f}% of equity")
 logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}% (fallback) | ATR dynamic: {ATR_STOP_MULTIPLIER}x ATR")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Blacklist      : {', '.join(BLACKLIST) if BLACKLIST else 'none'}")
+if PAIR_SIZING_PENALIZED:
+    logger.info(f"  Penalized pairs: {', '.join(f'{s}({m:.0%})' for s,m in PAIR_SIZING_PENALIZED.items())}")
+if PAIR_SIZING_BOOSTED:
+    logger.info(f"  Boosted pairs  : {', '.join(f'{s}({m:.0%})' for s,m in PAIR_SIZING_BOOSTED.items())}")
 logger.info(f"  Min position   : ${MIN_POSITION_USD:,.0f} (trades below this are rejected)")
 logger.info(f"  Min net profit : {MIN_NET_PROFIT_PCT*100:.1f}% (mean-reversion exit gate; covers 0.52% fees)")
 logger.info(f"  Circuit breaker: >{CB_PRICE_DROP_PCT*100:.0f}% drop in {CB_WINDOW_MINUTES}min → {CB_PAUSE_HOURS}hr pause")
@@ -1211,6 +1219,37 @@ def run_cycle() -> None:
 
     _ohlcv_cache_data: dict[str, list] = {}
 
+    _pair_win_rates: dict[str, dict] = {}
+    try:
+        _pair_win_rates = _db.get_pair_win_rates()
+    except Exception as _pwr_exc:
+        logger.debug(f"PairSizing | Could not load win rates: {_pwr_exc}")
+
+    _pair_sizing_mult: dict[str, float] = {}
+    for _ps_sym, _ps_penalty in PAIR_SIZING_PENALIZED.items():
+        _pw = _pair_win_rates.get(_ps_sym, {})
+        _pw_total = _pw.get("total", 0)
+        _pw_wr = _pw.get("win_rate", 0.0)
+        if (_pw_total >= PAIR_SIZING_PENALIZED_GRADUATE_MIN_TRADES
+                and _pw_wr >= PAIR_SIZING_PENALIZED_GRADUATE_WIN_RATE):
+            _pair_sizing_mult[_ps_sym] = 1.0
+            logger.info(
+                f"PairSizing | {_ps_sym}: GRADUATED — win_rate={_pw_wr:.1%} over "
+                f"{_pw_total} trades >= {PAIR_SIZING_PENALIZED_GRADUATE_WIN_RATE:.0%}/{PAIR_SIZING_PENALIZED_GRADUATE_MIN_TRADES} — "
+                f"sizing restored to 1.0×"
+            )
+        else:
+            _pair_sizing_mult[_ps_sym] = _ps_penalty
+    for _ps_sym, _ps_boost in PAIR_SIZING_BOOSTED.items():
+        _pair_sizing_mult[_ps_sym] = _ps_boost
+    if any(v != 1.0 for v in _pair_sizing_mult.values()):
+        _penalized = [f"{s}={m:.2f}×" for s, m in _pair_sizing_mult.items() if m < 1.0]
+        _boosted = [f"{s}={m:.2f}×" for s, m in _pair_sizing_mult.items() if m > 1.0]
+        if _penalized:
+            logger.info(f"PairSizing | Penalized: {', '.join(_penalized)}")
+        if _boosted:
+            logger.info(f"PairSizing | Boosted: {', '.join(_boosted)}")
+
     _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
     for _bl_sym in _blacklisted_open:
         logger.warning(
@@ -1615,13 +1654,17 @@ def run_cycle() -> None:
                         atr_multiplier=_sym_atr_mult,
                     )
                     size_usd *= _vol_size_scale
+                    _psm = _pair_sizing_mult.get(symbol, 1.0)
+                    if _psm != 1.0:
+                        size_usd *= _psm
 
                     if size_usd >= MIN_POSITION_USD:
                         _atr_stop = get_atr_stop_price(_scalp_side, current_price, sym_atr, multiplier=_sym_atr_mult)
+                        _psm_tag = f" [pair×{_psm:.2f}]" if _psm != 1.0 else ""
                         logger.info(
                             f"Scalp  | {_scalp_side.upper()} {symbol} | "
                             f"Strategy={BOT_STRATEGY_TYPE} conviction={_scalp_conviction:.2f} | "
-                            f"Size: ${size_usd:,.2f} [{_vol_tier}] | ATR stop: ${_atr_stop:,.4f}"
+                            f"Size: ${size_usd:,.2f} [{_vol_tier}]{_psm_tag} | ATR stop: ${_atr_stop:,.4f}"
                         )
                         if open_position(symbol, _scalp_side, size_usd, current_price):
                             _scalp_last_entry[symbol] = now_utc
@@ -1845,6 +1888,9 @@ def run_cycle() -> None:
                     atr_multiplier=_sym_atr_mult,
                 )
                 size_usd *= _vol_size_scale
+                _psm = _pair_sizing_mult.get(symbol, 1.0)
+                if _psm != 1.0:
+                    size_usd *= _psm
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
@@ -1944,6 +1990,9 @@ def run_cycle() -> None:
                     atr_multiplier=_sym_atr_mult,
                 )
                 size_usd *= _vol_size_scale
+                _psm = _pair_sizing_mult.get(symbol, 1.0)
+                if _psm != 1.0:
+                    size_usd *= _psm
                 if size_usd >= MIN_POSITION_USD:
                     _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
                     if not _ms_allowed:

@@ -686,3 +686,35 @@ def log_vpin_rejection(
         logger.debug(f"DB | VPIN rejection logged: {bot_id} {pair} VPIN={vpin_value:.3f} >= {threshold:.3f} ({direction})")
     except Exception as exc:
         logger.warning(f"DB | log_vpin_rejection failed: {exc}")
+
+
+def get_pair_win_rates() -> dict[str, dict]:
+    if not _is_available():
+        return {}
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT symbol,
+                           COUNT(*) AS total,
+                           SUM(CASE WHEN pnl_usd >= 0 THEN 1 ELSE 0 END) AS wins
+                    FROM   kraken_trades
+                    WHERE  bot_id = %s
+                    GROUP  BY symbol
+                    """,
+                    (bot_id,),
+                )
+                result = {}
+                for row in cur.fetchall():
+                    sym, total, wins = row
+                    result[sym] = {
+                        "total": total,
+                        "wins": wins or 0,
+                        "win_rate": (wins or 0) / total if total > 0 else 0.0,
+                    }
+                return result
+    except Exception as exc:
+        logger.warning(f"DB | get_pair_win_rates failed: {exc}")
+        return {}

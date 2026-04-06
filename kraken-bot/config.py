@@ -150,7 +150,28 @@ else:
     })
 
 
-BLACKLIST = ["ALGO/USD"]
+BLACKLIST = ["ALGO/USD", "OP/USD"]
+
+PAIR_SIZING_PENALIZED = {
+    "RENDER/USD": 0.50,
+    "ETH/USD":    0.50,
+    "SOL/USD":    0.50,
+    "W/USD":      0.50,
+    "VET/USD":    0.50,
+    "STX/USD":    0.50,
+    "SUI/USD":    0.50,
+}
+PAIR_SIZING_PENALIZED_GRADUATE_WIN_RATE = 0.35
+PAIR_SIZING_PENALIZED_GRADUATE_MIN_TRADES = 20
+
+PAIR_SIZING_BOOSTED = {
+    "TIA/USD":  1.25,
+    "IMX/USD":  1.25,
+    "SEI/USD":  1.25,
+    "TAO/USD":  1.25,
+    "ARB/USD":  1.25,
+    "DYM/USD":  1.25,
+}
 
 SYMBOLS = [
     "BTC/USD",

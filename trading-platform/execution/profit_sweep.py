@@ -174,31 +174,32 @@ def _ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
 
 _VAULT_MIGRATION_LOCK_ID = 7_429_384_756  # arbitrary stable advisory-lock key
 
+_PG_VAULT_MIGRATIONS_DDL = """
+CREATE TABLE IF NOT EXISTS vault_migrations (
+    key         TEXT PRIMARY KEY,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+)
+"""
+_VAULT_SQLITE_MIGRATION_KEY = "sqlite_to_pg_v1"
+
 
 def _migrate_sqlite_to_pg() -> None:
     """
     Merge any existing SQLite vault_ledger accumulation into PostgreSQL once.
 
-    Cross-process safety
-    --------------------
-    Uses a PostgreSQL advisory lock so that only one process (out of the three
-    concurrent bot processes) actually runs the migration.  The protocol is:
+    Fully idempotent and cross-process safe:
 
-      1. Call pg_try_advisory_lock(N) — atomic, session-scoped.
-         Returns True only for the one winner; all others get False.
-      2. Winner re-reads SQLite total.  If it's already 0 (migrated by a
-         previous deployment), skip and release.
-      3. Winner merges SQLite totals into PG, zeros SQLite row, releases lock.
+    1. In-process guard (_MIGRATION_DONE) short-circuits hot-reload re-runs.
+    2. PostgreSQL advisory lock (pg_try_advisory_lock) ensures only one
+       concurrent process proceeds when multiple bots start simultaneously.
+    3. Durable PG marker (vault_migrations table) persists across restarts:
+       if a process crashes after committing the vault_ledger merge but before
+       zeroing SQLite, the next restart finds the marker and skips — preventing
+       double-counting even in crash-recovery scenarios.
 
-    Advisory lock auto-releases if the connection closes (e.g. crash), so
-    subsequent restarts can always acquire it and will see SQLite = 0, skipping
-    cleanly.
-
-    In-process guard
-    ----------------
-    `_MIGRATION_DONE` prevents a second attempt within the *same* Python
-    process (e.g. hot-reload).  It does not protect across processes — that is
-    the advisory-lock's job.
+    Protocol:
+      a. Lock → b. Check durable marker → c. Read SQLite → d. Merge PG +
+      write marker (single commit) → e. Zero SQLite (best-effort) → f. Unlock
     """
     global _MIGRATION_DONE
     if _MIGRATION_DONE:
@@ -215,6 +216,12 @@ def _migrate_sqlite_to_pg() -> None:
         conn = psycopg2.connect(_build_dsn())
         conn.autocommit = False
 
+        # Ensure the migrations marker table exists.
+        with conn.cursor() as cur:
+            cur.execute(_PG_VAULT_MIGRATIONS_DDL)
+        conn.commit()
+
+        # Acquire advisory lock — only one process proceeds.
         with conn.cursor() as cur:
             cur.execute("SELECT pg_try_advisory_lock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
             acquired = cur.fetchone()[0]
@@ -226,7 +233,23 @@ def _migrate_sqlite_to_pg() -> None:
             conn.close()
             return
 
-        # We hold the lock — re-read SQLite to check if there's anything to do.
+        # Check durable marker — skip if already applied (crash-safe).
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM vault_migrations WHERE key = %s",
+                (_VAULT_SQLITE_MIGRATION_KEY,),
+            )
+            already_done = cur.fetchone() is not None
+
+        if already_done:
+            logger.debug("Vault | SQLite→PG migration already applied (durable marker) — skipped")
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            conn.commit()
+            conn.close()
+            return
+
+        # We hold the lock and the marker is absent — read SQLite.
         try:
             with _sqlite_conn() as sc:
                 _ensure_sqlite_schema(sc)
@@ -237,12 +260,19 @@ def _migrate_sqlite_to_pg() -> None:
             logger.warning(f"Vault | Could not read SQLite for migration: {exc}")
             with conn.cursor() as cur:
                 cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            conn.commit()
             conn.close()
             return
 
         if row is None or float(row["total_vaulted_usd"] or 0) <= 0:
+            # Nothing to migrate — write marker anyway so this path is fast on future restarts.
             with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO vault_migrations (key) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (_VAULT_SQLITE_MIGRATION_KEY,),
+                )
                 cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            conn.commit()
             conn.close()
             return
 
@@ -254,7 +284,7 @@ def _migrate_sqlite_to_pg() -> None:
             f"{sqlite_sweeps} sweeps"
         )
 
-        # Merge into PG — all inside one connection while we hold the lock.
+        # Merge vault_ledger + write durable marker in one atomic commit.
         with conn.cursor() as cur:
             cur.execute(_PG_VAULT_DDL)
             cur.execute("""
@@ -266,9 +296,13 @@ def _migrate_sqlite_to_pg() -> None:
                     total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
                     total_sweeps      = vault_ledger.total_sweeps      + EXCLUDED.total_sweeps
             """, (sqlite_vaulted, sqlite_sweeps))
+            cur.execute(
+                "INSERT INTO vault_migrations (key) VALUES (%s) ON CONFLICT DO NOTHING",
+                (_VAULT_SQLITE_MIGRATION_KEY,),
+            )
         conn.commit()
 
-        # Zero SQLite (best effort — advisory lock prevents double-apply even if this fails).
+        # Zero SQLite — best effort.  Even if this fails, the PG marker prevents re-run.
         try:
             with _sqlite_conn() as sc:
                 sc.execute(
@@ -276,7 +310,7 @@ def _migrate_sqlite_to_pg() -> None:
                 )
         except Exception as exc:
             logger.warning(
-                f"Vault | Could not zero SQLite row (non-fatal, lock prevents re-run): {exc}"
+                f"Vault | Could not zero SQLite row (non-fatal, PG marker prevents re-run): {exc}"
             )
 
         logger.info(

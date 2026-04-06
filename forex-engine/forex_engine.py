@@ -9,7 +9,7 @@ Strategy:
   2. Groq Macro Compass → USD_BULLISH / USD_BEARISH / NEUTRAL
   3. Technical filter → RSI extremes + ATR sizing
   4. Dynamic lot sizing → max 1.5% risk per trade
-  5. Bracket orders → SL = 1.5×ATR, TP = 3.0×ATR (1:2 R:R)
+  5. Bracket orders → SL = 2.0×ATR, TP = 3.0×ATR (1:1.5 R:R)
   6. Check open positions for SL/TP hits
   7. Capital Vault → Friday 4PM EST sweep
 """
@@ -358,12 +358,54 @@ def _prefetch_reference_prices():
             logger.warning(f"Forex | Failed to pre-fetch ref price {ref_sym}: {exc}")
 
 
+_PERMITTED_PAIRS = set(PAIRS)
+
 def _check_open_positions():
     positions = get_paper_positions()
     if not positions:
         return
 
     for pair, pos in list(positions.items()):
+        if pair not in _PERMITTED_PAIRS:
+            label = PAIR_LABELS.get(pair, pair)
+            logger.warning(f"Forex | NON-PERMITTED pair {label} — closing immediately")
+            try:
+                candles = fetch_h4_candles(pair, count=5)
+                if not candles.empty:
+                    cp = float(candles.iloc[-1]["Close"])
+                else:
+                    cp = pos["entry_price"]
+                result = paper_close_position(pair, cp, "non_permitted_pair", latest_prices=_latest_prices)
+                if result:
+                    try:
+                        _journal.log_trade_close(
+                            pair=label, exit_price=cp,
+                            pnl_pips=result.get("pnl_pips", 0), pnl_usd=result.get("pnl_usd", 0),
+                            final_trailing_sl=pos.get("trailing_sl"),
+                            reason="non_permitted_pair",
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        _db.record_trade(
+                            pair=label,
+                            direction=pos["direction"],
+                            entry_price=pos["entry_price"],
+                            exit_price=cp,
+                            pnl_usd=result.get("pnl_usd", 0),
+                            pnl_pips=result.get("pnl_pips", 0),
+                            reason="non_permitted_pair",
+                        )
+                    except Exception:
+                        pass
+                    logger.info(f"Forex | Closed non-permitted {label}: PnL ${result.get('pnl_usd', 0):+.2f}")
+            except Exception as exc:
+                logger.error(f"Forex | Failed to close non-permitted {label}: {exc}")
+            continue
+
+    for pair, pos in list(positions.items()):
+        if pair not in _PERMITTED_PAIRS:
+            continue
         try:
             direction = pos["direction"]
             entry = pos["entry_price"]

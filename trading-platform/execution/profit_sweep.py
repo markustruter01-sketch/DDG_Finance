@@ -361,14 +361,16 @@ def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20, s
     The `source` parameter identifies which bot produced the profit
     (e.g. "kraken_paper", "options_paper", "forex_paper").
 
+    No minimum threshold — every profitable trade, no matter how small,
+    has 20% recorded in the ledger.  This is pure bookkeeping; no real
+    Alpaca order is placed here, so the $1 Alpaca floor does not apply.
+
     Returns a dict with swept=True/False and the contributed amount.
     """
     if pnl_usd <= 0:
         return {"swept": False, "reason": "no_profit"}
 
-    amount = round(pnl_usd * sweep_rate, 2)
-    if amount < MIN_SWEEP:
-        return {"swept": False, "reason": f"below_minimum (${amount:.2f})"}
+    amount = round(pnl_usd * sweep_rate, 4)
 
     try:
         init_vault_db()

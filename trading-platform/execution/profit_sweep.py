@@ -172,14 +172,33 @@ def _ensure_sqlite_schema(conn: sqlite3.Connection) -> None:
 
 # ── One-time SQLite → PostgreSQL migration ─────────────────────────────────
 
+_VAULT_MIGRATION_LOCK_ID = 7_429_384_756  # arbitrary stable advisory-lock key
+
+
 def _migrate_sqlite_to_pg() -> None:
     """
-    If the SQLite vault_ledger has a non-zero total_vaulted_usd, merge it
-    into the PostgreSQL vault_ledger by adding the amounts, then zero the
-    SQLite row so this never fires again.
+    Merge any existing SQLite vault_ledger accumulation into PostgreSQL once.
 
-    Idempotent: if the SQLite DB does not exist, has no row, or already
-    shows 0 vaulted, the function returns immediately.
+    Cross-process safety
+    --------------------
+    Uses a PostgreSQL advisory lock so that only one process (out of the three
+    concurrent bot processes) actually runs the migration.  The protocol is:
+
+      1. Call pg_try_advisory_lock(N) — atomic, session-scoped.
+         Returns True only for the one winner; all others get False.
+      2. Winner re-reads SQLite total.  If it's already 0 (migrated by a
+         previous deployment), skip and release.
+      3. Winner merges SQLite totals into PG, zeros SQLite row, releases lock.
+
+    Advisory lock auto-releases if the connection closes (e.g. crash), so
+    subsequent restarts can always acquire it and will see SQLite = 0, skipping
+    cleanly.
+
+    In-process guard
+    ----------------
+    `_MIGRATION_DONE` prevents a second attempt within the *same* Python
+    process (e.g. hot-reload).  It does not protect across processes — that is
+    the advisory-lock's job.
     """
     global _MIGRATION_DONE
     if _MIGRATION_DONE:
@@ -189,46 +208,75 @@ def _migrate_sqlite_to_pg() -> None:
     if not SQLITE_DB_PATH.exists():
         return
 
+    conn = None
     try:
-        with _sqlite_conn() as conn:
-            _ensure_sqlite_schema(conn)
-            row = conn.execute(
-                "SELECT total_vaulted_usd, total_sweeps FROM vault_ledger WHERE id = 1"
-            ).fetchone()
+        import psycopg2
 
-        if row is None:
+        conn = psycopg2.connect(_build_dsn())
+        conn.autocommit = False
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            acquired = cur.fetchone()[0]
+
+        if not acquired:
+            logger.debug(
+                "Vault | SQLite→PG migration lock held by another process — skipped"
+            )
+            conn.close()
             return
 
-        sqlite_vaulted = float(row["total_vaulted_usd"] or 0)
+        # We hold the lock — re-read SQLite to check if there's anything to do.
+        try:
+            with _sqlite_conn() as sc:
+                _ensure_sqlite_schema(sc)
+                row = sc.execute(
+                    "SELECT total_vaulted_usd, total_sweeps FROM vault_ledger WHERE id = 1"
+                ).fetchone()
+        except Exception as exc:
+            logger.warning(f"Vault | Could not read SQLite for migration: {exc}")
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            conn.close()
+            return
+
+        if row is None or float(row["total_vaulted_usd"] or 0) <= 0:
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+            conn.close()
+            return
+
+        sqlite_vaulted = float(row["total_vaulted_usd"])
         sqlite_sweeps  = int(row["total_sweeps"] or 0)
-
-        if sqlite_vaulted <= 0:
-            return
 
         logger.info(
             f"Vault | Migrating SQLite→PG: ${sqlite_vaulted:.2f} across "
             f"{sqlite_sweeps} sweeps"
         )
 
-        with _pg_conn() as conn:
-            with conn.cursor() as cur:
-                # Ensure the PG row exists first
-                cur.execute(_PG_VAULT_DDL)
-                # Merge: add SQLite totals into whatever PG already has
-                cur.execute("""
-                    INSERT INTO vault_ledger
-                        (id, hwm, total_vaulted_usd, total_sweeps, vault_symbol,
-                         last_sweep_date, last_sweep_amount, da_adjustment)
-                    VALUES (1, 0, %s, %s, 'JEPQ', NULL, NULL, 0)
-                    ON CONFLICT (id) DO UPDATE SET
-                        total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
-                        total_sweeps      = vault_ledger.total_sweeps      + EXCLUDED.total_sweeps
-                """, (sqlite_vaulted, sqlite_sweeps))
+        # Merge into PG — all inside one connection while we hold the lock.
+        with conn.cursor() as cur:
+            cur.execute(_PG_VAULT_DDL)
+            cur.execute("""
+                INSERT INTO vault_ledger
+                    (id, hwm, total_vaulted_usd, total_sweeps, vault_symbol,
+                     last_sweep_date, last_sweep_amount, da_adjustment)
+                VALUES (1, 0, %s, %s, 'JEPQ', NULL, NULL, 0)
+                ON CONFLICT (id) DO UPDATE SET
+                    total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
+                    total_sweeps      = vault_ledger.total_sweeps      + EXCLUDED.total_sweeps
+            """, (sqlite_vaulted, sqlite_sweeps))
+        conn.commit()
 
-        # Zero out the SQLite row so this migration never fires again
-        with _sqlite_conn() as conn:
-            conn.execute(
-                "UPDATE vault_ledger SET total_vaulted_usd = 0.0, total_sweeps = 0 WHERE id = 1"
+        # Zero SQLite (best effort — advisory lock prevents double-apply even if this fails).
+        try:
+            with _sqlite_conn() as sc:
+                sc.execute(
+                    "UPDATE vault_ledger SET total_vaulted_usd = 0.0, total_sweeps = 0 WHERE id = 1"
+                )
+        except Exception as exc:
+            logger.warning(
+                f"Vault | Could not zero SQLite row (non-fatal, lock prevents re-run): {exc}"
             )
 
         logger.info(
@@ -238,6 +286,15 @@ def _migrate_sqlite_to_pg() -> None:
 
     except Exception as exc:
         logger.warning(f"Vault | SQLite→PG migration failed (non-fatal): {exc}")
+    finally:
+        if conn is not None and not conn.closed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_MIGRATION_LOCK_ID,))
+                conn.commit()
+            except Exception:
+                pass
+            conn.close()
 
 
 # ── Schema + migration entry point ─────────────────────────────────────────

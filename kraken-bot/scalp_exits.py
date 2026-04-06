@@ -1,3 +1,18 @@
+"""
+═══════════════════════════════════════════════════════════════════
+  DEPRECATED SCALPING EXIT MODULE
+  ────────────────────────────────
+  This scalp exit logic was used by Blackbeard and Calypso when
+  they ran scalping strategies.  Both strategies were structurally
+  unprofitable and have been retired.
+
+  Replaced by:
+    swing_exits.py  →  check_swing_exits()
+
+  This file is kept for reference only.  Do not import from it in
+  production code.
+═══════════════════════════════════════════════════════════════════
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone

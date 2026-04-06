@@ -1,3 +1,20 @@
+"""
+═══════════════════════════════════════════════════════════════════
+  DEPRECATED SCALPING STRATEGY MODULE
+  ────────────────────────────────────
+  These scalp evaluators (momentum_wave, liquidity_scout) were the
+  original entry strategies for Blackbeard and Calypso.  Both were
+  structurally unprofitable — Calypso had a profit factor of 0.318
+  and Blackbeard trended similarly.
+
+  Replaced by:
+    swing_strategies.py  →  evaluate_momentum_breakout (Blackbeard)
+                             evaluate_trend_following   (Calypso)
+
+  This file is kept for reference only.  Do not import from it in
+  production code.
+═══════════════════════════════════════════════════════════════════
+"""
 from __future__ import annotations
 
 from typing import Optional

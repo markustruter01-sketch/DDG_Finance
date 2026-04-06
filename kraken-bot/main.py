@@ -104,6 +104,7 @@ from config import (
     BOT_STRATEGY_LABEL,
     BOT_STRATEGY_TYPE,
     IS_SCALP_BOT,
+    IS_SWING_BOT,
     MARKET_CACHE_FILE,
     IS_PRIMARY_FETCHER,
     MARKET_CACHE_TTL,
@@ -132,6 +133,23 @@ from config import (
     PAIR_SIZING_PENALIZED_GRADUATE_WIN_RATE,
     PAIR_SIZING_PENALIZED_GRADUATE_MIN_TRADES,
     PAIR_SIZING_BOOSTED,
+    SWING_TP_ATR_MULT,
+    SWING_SL_ATR_MULT,
+    SWING_TRAIL_TRIGGER_ATR,
+    SWING_TRAIL_ATR_MULT,
+    SWING_MIN_HOLD_HOURS,
+    SWING_MAX_HOLD_HOURS,
+    MOMENTUM_LOOKBACK_CANDLES,
+    MOMENTUM_ATR_THRESHOLD,
+    VOLUME_MA_PERIOD,
+    TREND_EMA_FAST,
+    TREND_EMA_SLOW,
+    TREND_PULLBACK_ATR_MULT,
+    SYMBOL_WINRATE_LOOKBACK,
+    SYMBOL_WINRATE_PENALTY_THRESHOLD,
+    SYMBOL_WINRATE_RECOVERY_THRESHOLD,
+    SYMBOL_WINRATE_PENALTY_FACTOR,
+    PAPER_FEE_PCT,
 )
 
 import adaptive_params as _adaptive
@@ -152,8 +170,8 @@ from logic import (
     get_vol_state_size_scale,
 )
 
-from scalp_strategies import evaluate_momentum_wave, evaluate_liquidity_scout
-from scalp_exits import check_scalp_exits
+from swing_strategies import evaluate_momentum_breakout, evaluate_trend_following
+from swing_exits import check_swing_exits
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
 # but always imported so the module is ready to switch modes).
@@ -184,7 +202,12 @@ else:
     logger.info("  REAL MONEY — Real orders on Kraken Pro.")
 logger.info("=" * 65)
 logger.info(f"  Symbols        : {', '.join(SYMBOLS)}")
-logger.info(f"  Strategy type  : {BOT_STRATEGY_TYPE}" + (" (SCALP BOT — 1m candles, 15s loop)" if IS_SCALP_BOT else ""))
+_strategy_note = ""
+if IS_SCALP_BOT:
+    _strategy_note = " (SCALP BOT — 1m candles, 15s loop)"
+elif IS_SWING_BOT:
+    _strategy_note = f" (SWING BOT — {OHLCV_TIMEFRAME} candles, {LOOP_SLEEP_SECONDS}s loop)"
+logger.info(f"  Strategy type  : {BOT_STRATEGY_TYPE}{_strategy_note}")
 logger.info(f"  Timeframe      : {OHLCV_TIMEFRAME}")
 logger.info(f"  Cash reserve   : {CASH_RESERVE*100:.0f}% (always held back)")
 logger.info(f"  Max positions  : {MAX_POSITIONS}")
@@ -651,7 +674,7 @@ def refresh_equity() -> None:
         _prev_equity        = total_equity
         total_equity        = get_paper_equity(current_prices=latest_prices)
         last_equity_refresh = time.time()
-        if abs(total_equity - _prev_equity) > 0.5 or not IS_SCALP_BOT:
+        if abs(total_equity - _prev_equity) > 0.5 or not (IS_SCALP_BOT or IS_SWING_BOT):
             logger.info(f"Equity | Paper account → ${total_equity:,.2f} (simulated)")
 
     else:
@@ -986,11 +1009,11 @@ def get_ws_price(symbol: str) -> float | None:
 def _fetch_ohlcv_with_cache(symbol: str) -> list | None:
     """Fetch OHLCV data, using shared cache for non-primary bots.
 
-    Scalp bots (IS_SCALP_BOT=True) always fetch their own 1m candles
-    directly — the shared cache carries 1h data from DJ and is not
-    compatible with 1-minute timeframes.
+    Scalp/Swing bots always fetch their own candles directly — the shared
+    cache carries DJ's timeframe data and is not compatible with other
+    strategies' timeframes.
     """
-    if not IS_PRIMARY_FETCHER and not IS_SCALP_BOT:
+    if not IS_PRIMARY_FETCHER and not IS_SCALP_BOT and not IS_SWING_BOT:
         cache = _read_market_cache()
         if cache and symbol in cache.get("ohlcv", {}):
             return cache["ohlcv"][symbol]
@@ -1051,7 +1074,7 @@ def run_cycle() -> None:
 
     # ── Step 1: Refresh equity ───────────────────────────────────────────────
     _equity_stale = time.time() - last_equity_refresh >= EQUITY_REFRESH_INTERVAL
-    if _equity_stale or (IS_SCALP_BOT and PAPER_TRADING):
+    if _equity_stale or ((IS_SCALP_BOT or IS_SWING_BOT) and PAPER_TRADING):
         refresh_equity()
 
     # If we still have no equity figure, something is wrong — skip this cycle
@@ -1134,7 +1157,7 @@ def run_cycle() -> None:
 
     _crypto_fg = _regime_data.get("crypto_fear_greed")
     _extreme_fear = isinstance(_crypto_fg, (int, float)) and _crypto_fg <= 25
-    _bear_bias_override = _extreme_fear and IS_SCALP_BOT
+    _bear_bias_override = _extreme_fear and (IS_SCALP_BOT or IS_SWING_BOT)
     if _bear_bias_override and not _is_bear:
         _is_bear = True
         _regime_label = f"{_regime_label}+ExtremeFear"
@@ -1229,6 +1252,13 @@ def run_cycle() -> None:
         _pair_win_rates = _db.get_pair_win_rates()
     except Exception as _pwr_exc:
         logger.debug(f"PairSizing | Could not load win rates: {_pwr_exc}")
+
+    _symbol_recent_wr: dict[str, dict] = {}
+    if IS_SWING_BOT:
+        try:
+            _symbol_recent_wr = _db.get_pair_win_rates_recent(last_n=SYMBOL_WINRATE_LOOKBACK)
+        except Exception as _swr_exc:
+            logger.debug(f"SymbolWinRate | Could not load recent rates: {_swr_exc}")
 
     _pair_sizing_mult: dict[str, float] = {}
     for _ps_sym, _ps_penalty in PAIR_SIZING_PENALIZED.items():
@@ -1375,31 +1405,29 @@ def run_cycle() -> None:
                 else:
                     pos["best_price"] = min(pos["best_price"], current_price)
 
-                if IS_SCALP_BOT:
-                    # ── SCALP EXIT PATH (Blackbeard / Calypso) ─────────────
-                    _scalp_exit = check_scalp_exits(
+                if IS_SWING_BOT:
+                    # ── SWING EXIT PATH (Blackbeard / Calypso — new strategies) ──
+                    _swing_exit = check_swing_exits(
                         side=pos["side"],
                         entry_price=pos["entry_price"],
                         current_price=current_price,
                         best_price=pos["best_price"],
                         entry_time=pos.get("entry_time"),
-                        tp_pct=SCALP_TP_PCT,
-                        sl_pct=SCALP_SL_PCT,
-                        stagnancy_minutes=SCALP_STAGNANCY_MINUTES,
-                        stagnancy_deadzone=SCALP_STAGNANCY_DEADZONE,
-                        latency_tax_pct=LATENCY_TAX_PCT,
                         atr=sym_atr,
-                        atr_stop_price=pos.get("atr_stop_price"),
-                        fee_rate=SCALP_FEE_RATE,
+                        tp_atr_mult=SWING_TP_ATR_MULT,
+                        sl_atr_mult=SWING_SL_ATR_MULT,
+                        trail_trigger_atr=SWING_TRAIL_TRIGGER_ATR,
+                        trail_atr_mult=SWING_TRAIL_ATR_MULT,
+                        min_hold_hours=SWING_MIN_HOLD_HOURS,
+                        max_hold_hours=SWING_MAX_HOLD_HOURS,
+                        fee_rate=PAPER_FEE_PCT,
                     )
-                    if _scalp_exit:
-                        close_position(symbol, reason=_scalp_exit, atr=sym_atr)
+                    if _swing_exit:
+                        close_position(symbol, reason=_swing_exit, atr=sym_atr)
                         deployed_usd = sum(p["size_usd"] for p in open_positions.values())
-                        if _scalp_exit == "scalp_stagnant":
-                            _scalp_stagnant_exit[symbol] = now_utc
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                            "price": round(current_price, 4), "signal_type": f"exit_{_scalp_exit}",
+                            "price": round(current_price, 4), "signal_type": f"exit_{_swing_exit}",
                             "has_position": False,
                         })
                     else:
@@ -1408,9 +1436,17 @@ def run_cycle() -> None:
                             if pos["side"] == "long"
                             else (pos["entry_price"] - current_price) / pos["entry_price"]
                         )
+                        _hours = 0.0
+                        if pos.get("entry_time"):
+                            try:
+                                _et = datetime.fromisoformat(pos["entry_time"])
+                                _hours = (now_utc - _et).total_seconds() / 3600.0
+                            except Exception:
+                                pass
                         logger.debug(
                             f"Hold   | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.2f} | "
-                            f"Now: ${current_price:,.2f} | P&L: {_s_pnl*100:+.2f}%"
+                            f"Now: ${current_price:,.2f} | P&L: {_s_pnl*100:+.2f}% | "
+                            f"Held: {_hours:.1f}h"
                         )
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1548,10 +1584,10 @@ def run_cycle() -> None:
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
 
-            # ── SCALP ENTRY PATH (Blackbeard / Calypso) ──────────────────
-            # Scalp bots skip VPIN gate, contrarian scout, and tranches.
-            # They use their own evaluators and enter full-size positions.
-            if IS_SCALP_BOT:
+            # ── SWING ENTRY PATH (Blackbeard / Calypso — momentum & trend) ──
+            # Swing bots skip VPIN gate, contrarian scout, and tranches.
+            # They use swing evaluators and enter full-size positions.
+            if IS_SWING_BOT:
                 if len(open_positions) >= _effective_max_positions:
                     cycle_signals.append({
                         "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
@@ -1577,69 +1613,28 @@ def run_cycle() -> None:
                     })
                     continue
 
-                if BOT_STRATEGY_TYPE == "momentum_wave":
-                    _scalp_eval = evaluate_momentum_wave(
+                if BOT_STRATEGY_TYPE == "momentum_breakout":
+                    _swing_eval = evaluate_momentum_breakout(
                         candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
                         current_price=current_price,
-                        ema_fast=EMA_FAST, ema_mid=EMA_MID, ema_slow=EMA_SLOW,
-                        rvol_threshold=RVOL_THRESHOLD, rvol_period=RVOL_PERIOD,
+                        momentum_lookback=MOMENTUM_LOOKBACK_CANDLES,
+                        atr_threshold=MOMENTUM_ATR_THRESHOLD,
+                        volume_ma_period=VOLUME_MA_PERIOD,
                     )
                 else:
-                    _scalp_eval = evaluate_liquidity_scout(
+                    _swing_eval = evaluate_trend_following(
                         candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
                         current_price=current_price,
-                        keltner_ema_period=KELTNER_EMA_PERIOD, keltner_atr_mult=KELTNER_ATR_MULT,
-                        vwap_proximity_pct=VWAP_PROXIMITY_PCT,
+                        ema_fast_period=TREND_EMA_FAST,
+                        ema_slow_period=TREND_EMA_SLOW,
+                        pullback_atr_mult=TREND_PULLBACK_ATR_MULT,
                     )
 
-                _scalp_side = _scalp_eval.get("side")
-                _scalp_conviction = _scalp_eval.get("conviction", 0.0)
+                _swing_side = _swing_eval.get("side")
+                _swing_conviction = _swing_eval.get("conviction", 0.0)
 
-                if _scalp_conviction < MIN_CONVICTION and symbol in ("BTC/USD", "ETH/USD", "SOL/USD"):
-                    _ribbon = _scalp_eval.get("ribbon", {})
-                    _kelt = _scalp_eval.get("keltner", {})
-                    _vwap = _scalp_eval.get("vwap", 0)
-                    _eval_rsi = _scalp_eval.get("rsi", 0)
-                    logger.info(
-                        f"DEBUG  | {symbol} | conv={_scalp_conviction:.2f} "
-                        f"ribbon={_ribbon.get('signal','?')} spread={_ribbon.get('spread',0):.6f} "
-                        f"ema_f={_ribbon.get('ema_fast',0):.4f} ema_m={_ribbon.get('ema_mid',0):.4f} ema_s={_ribbon.get('ema_slow',0):.4f} "
-                        f"aligned_bear={_ribbon.get('aligned_bearish',False)} aligned_bull={_ribbon.get('aligned_bullish',False)} "
-                        f"rsi={_eval_rsi:.1f} rvol={_scalp_eval.get('rvol',0):.2f} "
-                        f"kelt_pos={_kelt.get('position',0):.3f} vwap={_vwap:.4f} price={current_price:.4f}"
-                    )
-
-                if _scalp_side and _scalp_conviction >= MIN_CONVICTION:
-                    _cooldown_seconds = SCALP_ENTRY_COOLDOWN_BARS * 60
-                    _last_entry = _scalp_last_entry.get(symbol)
-                    if _last_entry and (now_utc - _last_entry).total_seconds() < _cooldown_seconds:
-                        logger.debug(
-                            f"Scalp  | {symbol} | Cooldown active — "
-                            f"{_cooldown_seconds - (now_utc - _last_entry).total_seconds():.0f}s remaining"
-                        )
-                        cycle_signals.append({
-                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                            "price": round(current_price, 4), "signal_type": "entry_cooldown",
-                            "has_position": False,
-                        })
-                        continue
-
-                    _last_stagnant = _scalp_stagnant_exit.get(symbol)
-                    if _last_stagnant and STAGNANCY_COOLDOWN_MINUTES > 0:
-                        _stag_elapsed = (now_utc - _last_stagnant).total_seconds() / 60.0
-                        if _stag_elapsed < STAGNANCY_COOLDOWN_MINUTES:
-                            logger.debug(
-                                f"Scalp  | {symbol} | Stagnancy cooldown — "
-                                f"{STAGNANCY_COOLDOWN_MINUTES - _stag_elapsed:.0f}min remaining"
-                            )
-                            cycle_signals.append({
-                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
-                                "price": round(current_price, 4), "signal_type": "stagnancy_cooldown",
-                                "has_position": False,
-                            })
-                            continue
-
-                    if _is_bear and _scalp_side == "long":
+                if _swing_side and _swing_conviction >= MIN_CONVICTION:
+                    if _is_bear and _swing_side == "long":
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "long_blocked_bear_regime",
@@ -1647,46 +1642,61 @@ def run_cycle() -> None:
                         })
                         continue
 
+                    _swing_sl_pct = SWING_SL_ATR_MULT * sym_atr / current_price if current_price > 0 else 0.05
                     size_usd, _vol_tier, _eff_stop = get_position_size(
                         total_equity=total_equity,
                         entry_price=current_price,
                         deployed_usd=deployed_usd,
                         risk_fraction=RISK_FRACTION,
-                        stop_loss_pct=SCALP_SL_PCT,
+                        stop_loss_pct=_swing_sl_pct,
                         max_position_fraction=_effective_max_position_frac,
                         cash_reserve=CASH_RESERVE,
                         atr=sym_atr,
                         atr_multiplier=_sym_atr_mult,
                     )
                     size_usd *= _vol_size_scale
+
                     _psm = _pair_sizing_mult.get(symbol, 1.0)
                     if _psm != 1.0:
                         size_usd *= _psm
 
+                    _swr = _symbol_recent_wr.get(symbol, {})
+                    _swr_total = _swr.get("total", 0)
+                    _swr_wr = _swr.get("win_rate", 1.0)
+                    _swr_factor = 1.0
+                    if _swr_total >= 5 and _swr_wr < SYMBOL_WINRATE_PENALTY_THRESHOLD:
+                        _swr_factor = SYMBOL_WINRATE_PENALTY_FACTOR
+                        size_usd *= _swr_factor
+                        logger.info(
+                            f"SymbolWR | {symbol}: win_rate={_swr_wr:.1%} over last {_swr_total} trades "
+                            f"< {SYMBOL_WINRATE_PENALTY_THRESHOLD:.0%} — sizing ×{_swr_factor:.2f}"
+                        )
+
                     if size_usd >= MIN_POSITION_USD:
-                        _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, SCALP_TP_PCT)
+                        _swing_tp_pct = SWING_TP_ATR_MULT * sym_atr / current_price if current_price > 0 else 0.03
+                        _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, _swing_tp_pct)
                         if not _fee_ok:
                             logger.info(
-                                f"FeeGate | {symbol}: SKIP {_scalp_side.upper()} — "
-                                f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
-                                f"(need ${_rt_fees * 2.5:.2f})"
+                                f"FeeGate | {symbol}: SKIP {_swing_side.upper()} — "
+                                f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f}"
                             )
                             cycle_signals.append({
                                 "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                                 "price": round(current_price, 4),
-                                "signal_type": f"{_scalp_side}_blocked_fee_gate",
+                                "signal_type": f"{_swing_side}_blocked_fee_gate",
                                 "has_position": False,
                             })
                             continue
-                        _atr_stop = get_atr_stop_price(_scalp_side, current_price, sym_atr, multiplier=_sym_atr_mult)
+                        _atr_stop = get_atr_stop_price(_swing_side, current_price, sym_atr, multiplier=SWING_SL_ATR_MULT)
                         _psm_tag = f" [pair×{_psm:.2f}]" if _psm != 1.0 else ""
+                        _swr_tag = f" [symWR×{_swr_factor:.2f}]" if _swr_factor != 1.0 else ""
                         logger.info(
-                            f"Scalp  | {_scalp_side.upper()} {symbol} | "
-                            f"Strategy={BOT_STRATEGY_TYPE} conviction={_scalp_conviction:.2f} | "
-                            f"Size: ${size_usd:,.2f} [{_vol_tier}]{_psm_tag} | ATR stop: ${_atr_stop:,.4f}"
+                            f"Swing  | {_swing_side.upper()} {symbol} | "
+                            f"Strategy={BOT_STRATEGY_TYPE} conviction={_swing_conviction:.2f} | "
+                            f"Size: ${size_usd:,.2f} [{_vol_tier}]{_psm_tag}{_swr_tag} | "
+                            f"ATR stop: ${_atr_stop:,.4f} | SL={_swing_sl_pct*100:.2f}%"
                         )
-                        if open_position(symbol, _scalp_side, size_usd, current_price):
-                            _scalp_last_entry[symbol] = now_utc
+                        if open_position(symbol, _swing_side, size_usd, current_price):
                             _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
@@ -1696,35 +1706,35 @@ def run_cycle() -> None:
                             cycle_signals.append({
                                 "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                                 "price": round(current_price, 4),
-                                "signal_type": f"{_scalp_side}_entered",
+                                "signal_type": f"{_swing_side}_entered",
                                 "has_position": True, "size_usd": round(size_usd, 2),
-                                "vol_tier": _vol_tier, "conviction": _scalp_conviction,
+                                "vol_tier": _vol_tier, "conviction": _swing_conviction,
                             })
                         else:
                             cycle_signals.append({
                                 "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                                 "price": round(current_price, 4),
-                                "signal_type": f"{_scalp_side}_signal",
+                                "signal_type": f"{_swing_side}_signal",
                                 "has_position": False,
                             })
                     else:
-                        logger.debug(f"Scalp  | {symbol}: {_scalp_side.upper()} signal but size ${size_usd:.2f} too small")
+                        logger.debug(f"Swing  | {symbol}: {_swing_side.upper()} signal but size ${size_usd:.2f} too small")
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4),
-                            "signal_type": f"{_scalp_side}_signal_small",
+                            "signal_type": f"{_swing_side}_signal_small",
                             "has_position": False,
                         })
                 else:
                     logger.debug(
-                        f"Scalp  | {symbol} | No signal | Strategy={BOT_STRATEGY_TYPE} "
-                        f"conviction={_scalp_conviction:.2f} | Price: ${current_price:,.2f}"
+                        f"Swing  | {symbol} | No signal | Strategy={BOT_STRATEGY_TYPE} "
+                        f"conviction={_swing_conviction:.2f} | Price: ${current_price:,.2f}"
                     )
                     cycle_signals.append({
                         "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                         "price": round(current_price, 4), "signal_type": "watching", "has_position": False,
                     })
-                continue  # scalp entry path complete — skip mean-reversion entry below
+                continue  # swing entry path complete — skip mean-reversion entry below
 
             # ── MEAN-REVERSION ENTRY PATH (Davy Jones) ─────────────────────
 
@@ -2327,6 +2337,25 @@ def main() -> None:
 
     # Do an initial equity fetch before starting the loop
     refresh_equity()
+
+    # ── Swing bot transition: close any leftover scalp positions ──────────────
+    if IS_SWING_BOT and PAPER_TRADING:
+        _transition_positions = list(open_positions.keys()) if open_positions else []
+        if not _transition_positions:
+            _transition_positions = list(get_paper_positions().keys())
+        if _transition_positions:
+            logger.warning(
+                f"SwingTransition | Found {len(_transition_positions)} existing position(s) from "
+                f"previous scalp strategy — closing all for clean swing start"
+            )
+            for _ts in _transition_positions:
+                try:
+                    close_position(_ts, reason="swing_transition_cleanup")
+                    logger.info(f"SwingTransition | Closed {_ts}")
+                except Exception as _te:
+                    logger.error(f"SwingTransition | Failed to close {_ts}: {_te}")
+            deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+            logger.info("SwingTransition | Cleanup complete — starting fresh with swing strategy")
 
     # ── Outer restart loop ────────────────────────────────────────────────────
     while True:

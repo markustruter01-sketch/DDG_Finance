@@ -41,66 +41,73 @@ BOT_PROFILES = {
     "blackbeard": {
         "display_name": "Blackbeard's Fleet",
         "db_id": 2,
-        "strategy_type": "momentum_wave",
-        "strategy_label": "Momentum Wave Scalper",
-        "RSI_OVERSOLD": 45,
-        "RSI_OVERBOUGHT": 55,
+        "strategy_type": "momentum_breakout",
+        "strategy_label": "Momentum Breakout",
+        "RSI_OVERSOLD": 30,
+        "RSI_OVERBOUGHT": 70,
         "ZSCORE_ENTRY": 0.8,
         "CASH_RESERVE": 0.15,
-        "MAX_POSITION_FRACTION": 0.12,
-        "STOP_LOSS_PCT": 0.006,
-        "ATR_STOP_MULTIPLIER": 2.5,
+        "MAX_POSITION_FRACTION": 0.08,
+        "MAX_POSITIONS": 6,
+        "STOP_LOSS_PCT": 0.015,
+        "ATR_STOP_MULTIPLIER": 1.5,
         "VPIN_ENTRY_BLOCK": 0.88,
-        "OHLCV_TIMEFRAME": "1m",
-        "OHLCV_LIMIT": 120,
-        "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.026,
-        "SCALP_SL_PCT": 0.010,
-        "SCALP_STAGNANCY_MINUTES": 120,
-        "SCALP_STAGNANCY_DEADZONE": 0.003,
-        "LATENCY_TAX_BPS": 5,
-        "SCALP_FEE_RATE": 0.0026,
-        "EMA_FAST": 8,
-        "EMA_MID": 21,
-        "EMA_SLOW": 55,
-        "RVOL_THRESHOLD": 1.2,
-        "RVOL_PERIOD": 20,
-        "MIN_CONVICTION": 0.65,
-        "STAGNANCY_COOLDOWN_MINUTES": 45,
+        "OHLCV_TIMEFRAME": "1h",
+        "OHLCV_LIMIT": 100,
+        "LOOP_SLEEP_SECONDS": 60,
+        "SWING_TP_ATR_MULT": 3.0,
+        "SWING_SL_ATR_MULT": 1.5,
+        "SWING_TRAIL_TRIGGER_ATR": 1.0,
+        "SWING_TRAIL_ATR_MULT": 1.5,
+        "SWING_MIN_HOLD_HOURS": 4,
+        "SWING_MAX_HOLD_HOURS": 72,
+        "MOMENTUM_LOOKBACK_CANDLES": 4,
+        "MOMENTUM_ATR_THRESHOLD": 1.5,
+        "VOLUME_MA_PERIOD": 20,
+        "MIN_CONVICTION": 0.60,
         "MAX_NEW_ENTRIES_PER_CYCLE": 2,
-        "LOSS_STREAK_LIMIT": 10,
+        "LOSS_STREAK_LIMIT": 6,
         "LOSS_STREAK_COOLDOWN_HOURS": 8,
+        "SYMBOL_WINRATE_LOOKBACK": 15,
+        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.35,
+        "SYMBOL_WINRATE_RECOVERY_THRESHOLD": 0.40,
+        "SYMBOL_WINRATE_PENALTY_FACTOR": 0.70,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
         "db_id": 3,
-        "strategy_type": "liquidity_scout",
-        "strategy_label": "Liquidity Scout Scalper",
-        "RSI_OVERSOLD": 50,
-        "RSI_OVERBOUGHT": 50,
+        "strategy_type": "trend_following",
+        "strategy_label": "Trend Following",
+        "RSI_OVERSOLD": 40,
+        "RSI_OVERBOUGHT": 60,
         "ZSCORE_ENTRY": 0.6,
-        "CASH_RESERVE": 0.10,
-        "MAX_POSITION_FRACTION": 0.15,
-        "STOP_LOSS_PCT": 0.005,
-        "ATR_STOP_MULTIPLIER": 2.5,
+        "CASH_RESERVE": 0.15,
+        "MAX_POSITION_FRACTION": 0.06,
+        "MAX_POSITIONS": 5,
+        "STOP_LOSS_PCT": 0.020,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.88,
-        "OHLCV_TIMEFRAME": "1m",
-        "OHLCV_LIMIT": 120,
-        "LOOP_SLEEP_SECONDS": 15,
-        "SCALP_TP_PCT": 0.0195,
-        "SCALP_SL_PCT": 0.0045,
-        "SCALP_STAGNANCY_MINUTES": 90,
-        "SCALP_STAGNANCY_DEADZONE": 0.003,
-        "LATENCY_TAX_BPS": 5,
-        "SCALP_FEE_RATE": 0.0026,
-        "KELTNER_EMA_PERIOD": 20,
-        "KELTNER_ATR_MULT": 2.0,
-        "VWAP_PROXIMITY_PCT": 0.005,
-        "MIN_CONVICTION": 0.65,
-        "STAGNANCY_COOLDOWN_MINUTES": 45,
-        "MAX_NEW_ENTRIES_PER_CYCLE": 2,
-        "LOSS_STREAK_LIMIT": 8,
+        "OHLCV_TIMEFRAME": "1h",
+        "OHLCV_LIMIT": 200,
+        "LOOP_SLEEP_SECONDS": 120,
+        "SWING_TP_ATR_MULT": 4.0,
+        "SWING_SL_ATR_MULT": 2.0,
+        "SWING_TRAIL_TRIGGER_ATR": 2.0,
+        "SWING_TRAIL_ATR_MULT": 1.5,
+        "SWING_MIN_HOLD_HOURS": 8,
+        "SWING_MAX_HOLD_HOURS": 120,
+        "TREND_EMA_FAST": 30,
+        "TREND_EMA_SLOW": 75,
+        "TREND_PULLBACK_ATR_MULT": 0.5,
+        "VOLUME_MA_PERIOD": 20,
+        "MIN_CONVICTION": 0.60,
+        "MAX_NEW_ENTRIES_PER_CYCLE": 1,
+        "LOSS_STREAK_LIMIT": 5,
         "LOSS_STREAK_COOLDOWN_HOURS": 12,
+        "SYMBOL_WINRATE_LOOKBACK": 15,
+        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.35,
+        "SYMBOL_WINRATE_RECOVERY_THRESHOLD": 0.40,
+        "SYMBOL_WINRATE_PENALTY_FACTOR": 0.70,
     },
 }
 
@@ -115,6 +122,7 @@ BOT_DB_ID = _profile["db_id"]
 BOT_STRATEGY_LABEL = _profile["strategy_label"]
 BOT_STRATEGY_TYPE = _profile.get("strategy_type", "mean_reversion")
 IS_SCALP_BOT = BOT_STRATEGY_TYPE in ("momentum_wave", "liquidity_scout")
+IS_SWING_BOT = BOT_STRATEGY_TYPE in ("momentum_breakout", "trend_following")
 
 if PAPER_TRADING:
     print("\n" + "=" * 65)
@@ -240,7 +248,7 @@ OHLCV_LIMIT      = _profile.get("OHLCV_LIMIT", 100)
 
 CASH_RESERVE          = _profile.get("CASH_RESERVE", 0.20)
 MAX_POSITION_FRACTION = _profile.get("MAX_POSITION_FRACTION", 0.10)
-MAX_POSITIONS         = 8
+MAX_POSITIONS         = _profile.get("MAX_POSITIONS", 8)
 RISK_FRACTION         = 0.01
 STOP_LOSS_PCT         = _profile.get("STOP_LOSS_PCT", 0.015)
 ATR_STOP_MULTIPLIER   = _profile.get("ATR_STOP_MULTIPLIER", 1.5)
@@ -312,6 +320,26 @@ CB_PAUSE_HOURS    = 2
 
 LOSS_STREAK_LIMIT          = _profile.get("LOSS_STREAK_LIMIT", 10)
 LOSS_STREAK_COOLDOWN_HOURS = _profile.get("LOSS_STREAK_COOLDOWN_HOURS", 8)
+
+SWING_TP_ATR_MULT         = _profile.get("SWING_TP_ATR_MULT", 3.0)
+SWING_SL_ATR_MULT         = _profile.get("SWING_SL_ATR_MULT", 1.5)
+SWING_TRAIL_TRIGGER_ATR   = _profile.get("SWING_TRAIL_TRIGGER_ATR", 1.0)
+SWING_TRAIL_ATR_MULT      = _profile.get("SWING_TRAIL_ATR_MULT", 1.5)
+SWING_MIN_HOLD_HOURS      = _profile.get("SWING_MIN_HOLD_HOURS", 4)
+SWING_MAX_HOLD_HOURS      = _profile.get("SWING_MAX_HOLD_HOURS", 72)
+
+MOMENTUM_LOOKBACK_CANDLES = _profile.get("MOMENTUM_LOOKBACK_CANDLES", 4)
+MOMENTUM_ATR_THRESHOLD    = _profile.get("MOMENTUM_ATR_THRESHOLD", 1.5)
+VOLUME_MA_PERIOD          = _profile.get("VOLUME_MA_PERIOD", 20)
+
+TREND_EMA_FAST            = _profile.get("TREND_EMA_FAST", 30)
+TREND_EMA_SLOW            = _profile.get("TREND_EMA_SLOW", 75)
+TREND_PULLBACK_ATR_MULT   = _profile.get("TREND_PULLBACK_ATR_MULT", 0.5)
+
+SYMBOL_WINRATE_LOOKBACK           = _profile.get("SYMBOL_WINRATE_LOOKBACK", 15)
+SYMBOL_WINRATE_PENALTY_THRESHOLD  = _profile.get("SYMBOL_WINRATE_PENALTY_THRESHOLD", 0.35)
+SYMBOL_WINRATE_RECOVERY_THRESHOLD = _profile.get("SYMBOL_WINRATE_RECOVERY_THRESHOLD", 0.40)
+SYMBOL_WINRATE_PENALTY_FACTOR     = _profile.get("SYMBOL_WINRATE_PENALTY_FACTOR", 0.70)
 
 
 STATUS_FILE           = f"kraken-bot/{BOT_ID}_status.json"

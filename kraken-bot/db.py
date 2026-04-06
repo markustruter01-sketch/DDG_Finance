@@ -750,3 +750,43 @@ def get_pair_win_rates() -> dict[str, dict]:
     except Exception as exc:
         logger.warning(f"DB | get_pair_win_rates failed: {exc}")
         return {}
+
+
+def get_pair_win_rates_recent(last_n: int = 15) -> dict[str, dict]:
+    if not _is_available():
+        return {}
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    WITH ranked AS (
+                        SELECT symbol, pnl_usd,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY symbol ORDER BY closed_at DESC
+                               ) AS rn
+                        FROM   kraken_trades
+                        WHERE  bot_id = %s
+                    )
+                    SELECT symbol,
+                           COUNT(*) AS total,
+                           SUM(CASE WHEN pnl_usd >= 0 THEN 1 ELSE 0 END) AS wins
+                    FROM   ranked
+                    WHERE  rn <= %s
+                    GROUP  BY symbol
+                    """,
+                    (bot_id, last_n),
+                )
+                result = {}
+                for row in cur.fetchall():
+                    sym, total, wins = row
+                    result[sym] = {
+                        "total": total,
+                        "wins": wins or 0,
+                        "win_rate": (wins or 0) / total if total > 0 else 0.0,
+                    }
+                return result
+    except Exception as exc:
+        logger.warning(f"DB | get_pair_win_rates_recent failed: {exc}")
+        return {}

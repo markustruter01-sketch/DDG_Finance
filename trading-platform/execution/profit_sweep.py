@@ -331,6 +331,150 @@ def _migrate_sqlite_to_pg() -> None:
             conn.close()
 
 
+# ── One-time trade-history backfill ────────────────────────────────────────
+
+_VAULT_BACKFILL_LOCK_ID  = 7_429_384_757  # distinct from SQLite migration lock
+_VAULT_BACKFILL_KEY      = "kraken_forex_backfill_v1"
+
+
+def _backfill_from_trade_history() -> None:
+    """
+    One-time startup backfill: add missing 20% vault contributions from all
+    profitable Kraken and Forex trades recorded in the database.
+
+    Why this is needed
+    ------------------
+    Before Task #64 fixed profit_sweep._use_pg(), every Kraken/Forex per-trade
+    vault contribution was silently routed to SQLite instead of PostgreSQL.
+    The SQLite data in the *development* container was migrated by
+    _migrate_sqlite_to_pg(), but the *production* container's SQLite file
+    starts fresh on every deployment, so production vault_ledger only ever
+    accumulated the 4 Alpaca HWM sweeps that ran correctly from the beginning.
+
+    This function computes:
+        expected = SUM(kraken_trades.pnl_usd * 0.20 WHERE pnl_usd > 0)
+                 + SUM(forex_trades.pnl_usd  * 0.20 WHERE pnl_usd > 0)
+    and adds that full amount to vault_ledger in one atomic commit.  It then
+    writes the marker so it never fires again.
+
+    Safety
+    ------
+    • Advisory lock (distinct ID from SQLite migration) — one winner per restart burst.
+    • Durable PG marker — idempotent across restarts / crash-recovery.
+    • Non-fatal — all errors are caught and logged; startup continues normally.
+    """
+    conn = None
+    try:
+        import psycopg2
+
+        conn = psycopg2.connect(_build_dsn())
+        conn.autocommit = False
+
+        # Ensure migrations table exists (may have been created by _migrate_sqlite_to_pg,
+        # but _backfill can also be the first to run if SQLite migration was a no-op).
+        with conn.cursor() as cur:
+            cur.execute(_PG_VAULT_MIGRATIONS_DDL)
+        conn.commit()
+
+        # Try to acquire advisory lock.
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s)", (_VAULT_BACKFILL_LOCK_ID,))
+            acquired = cur.fetchone()[0]
+
+        if not acquired:
+            logger.debug("Vault | Trade backfill lock held by another process — skipped")
+            conn.close()
+            return
+
+        # Check durable marker — skip if already applied.
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM vault_migrations WHERE key = %s",
+                (_VAULT_BACKFILL_KEY,),
+            )
+            already_done = cur.fetchone() is not None
+
+        if already_done:
+            logger.debug("Vault | Trade backfill already applied (durable marker) — skipped")
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_BACKFILL_LOCK_ID,))
+            conn.commit()
+            conn.close()
+            return
+
+        # Compute expected contributions from trade tables.
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
+                "FROM kraken_trades WHERE pnl_usd > 0"
+            )
+            k_count, k_amount = cur.fetchone()
+
+            cur.execute(
+                "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
+                "FROM forex_trades WHERE pnl_usd > 0"
+            )
+            f_count, f_amount = cur.fetchone()
+
+        total_wins   = int(k_count or 0) + int(f_count or 0)
+        total_amount = float(k_amount or 0) + float(f_amount or 0)
+
+        if total_amount <= 0:
+            # Nothing to backfill — write marker so we skip cleanly on future startups.
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO vault_migrations (key) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (_VAULT_BACKFILL_KEY,),
+                )
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_BACKFILL_LOCK_ID,))
+            conn.commit()
+            conn.close()
+            return
+
+        logger.info(
+            f"Vault | Trade backfill: Kraken {k_count} wins ${float(k_amount):.2f} + "
+            f"Forex {f_count} wins ${float(f_amount):.2f} "
+            f"→ adding ${total_amount:.2f} to Growth Vault"
+        )
+
+        # Add backfill amount + write marker in one atomic commit.
+        with conn.cursor() as cur:
+            cur.execute(_PG_VAULT_DDL)
+            cur.execute("""
+                INSERT INTO vault_ledger
+                    (id, hwm, total_vaulted_usd, total_sweeps, vault_symbol,
+                     last_sweep_date, last_sweep_amount, da_adjustment)
+                VALUES (1, 0, %s, %s, 'JEPQ', CURRENT_DATE, %s, 0)
+                ON CONFLICT (id) DO UPDATE SET
+                    total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
+                    total_sweeps      = vault_ledger.total_sweeps      + EXCLUDED.total_sweeps,
+                    last_sweep_date   = EXCLUDED.last_sweep_date,
+                    last_sweep_amount = EXCLUDED.last_sweep_amount
+            """, (total_amount, total_wins, total_amount))
+            cur.execute(
+                "INSERT INTO vault_migrations (key) VALUES (%s) ON CONFLICT DO NOTHING",
+                (_VAULT_BACKFILL_KEY,),
+            )
+        conn.commit()
+
+        logger.info(
+            f"Vault | Trade backfill complete — ${total_amount:.2f} added "
+            f"({total_wins} historical wins). Growth Vault now reflects full history."
+        )
+
+    except Exception as exc:
+        logger.warning(f"Vault | Trade backfill failed (non-fatal): {exc}")
+    finally:
+        if conn is not None and not conn.closed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (_VAULT_BACKFILL_LOCK_ID,))
+                conn.commit()
+            except Exception:
+                pass
+            conn.close()
+
+
 # ── Schema + migration entry point ─────────────────────────────────────────
 
 def init_vault_db() -> None:
@@ -338,6 +482,7 @@ def init_vault_db() -> None:
         _ensure_pg_schema()
         logger.debug("Vault | vault_ledger table ensured (PostgreSQL)")
         _migrate_sqlite_to_pg()
+        _backfill_from_trade_history()
     else:
         with _sqlite_conn() as conn:
             _ensure_sqlite_schema(conn)

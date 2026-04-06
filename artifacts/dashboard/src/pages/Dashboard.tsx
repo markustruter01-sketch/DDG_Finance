@@ -1323,18 +1323,22 @@ function ExportReportButton() {
     setLoading(true);
     try {
       const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/export/report`);
+      const res = await fetch(`${base}/export/report-parts`);
       if (!res.ok) throw new Error("Export failed");
-      const disposition = res.headers.get("content-disposition") || "";
-      const match = disposition.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : `trading-report-${new Date().toISOString().slice(0, 10)}.txt`;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      const data = await res.json();
+
+      for (const key of ["p1", "p2", "p3", "p4"]) {
+        const part = data[key];
+        if (!part) continue;
+        const blob = new Blob([part.text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = part.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        await new Promise((r) => setTimeout(r, 300));
+      }
     } catch {
       alert("Export failed — check that the trading API is running.");
     } finally {
@@ -1349,7 +1353,7 @@ function ExportReportButton() {
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-xs font-mono text-muted-foreground hover:text-white transition-all disabled:opacity-50"
     >
       <FileText className="h-3.5 w-3.5" />
-      {loading ? "Exporting..." : "Export Report"}
+      {loading ? "Downloading 4 files..." : "Export Report"}
     </button>
   );
 }

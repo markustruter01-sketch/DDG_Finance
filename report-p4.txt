@@ -2,16 +2,16 @@
 ════════════════════════════════════════════════════════════════════════════════
   SECTION 1A: FLEET SUMMARY RISK DASHBOARD
 ════════════════════════════════════════════════════════════════════════════════
-    Combined fleet equity:              $592,554.92
-    Fleet all-time peak:                $592,554.92
+    Combined fleet equity:              $592,636.40
+    Fleet all-time peak:                $592,636.40
     Fleet drawdown from peak:           +-0.000%
     Best performing bot:                #5 Apex Predator ($0.00)
     Biggest drag on performance:        #4 Calypso ($-2,356.25)
-    Total open exposure (all bots):     $310,242.09
-      Alpaca (Oracle):                  $97,821.35
+    Total open exposure (all bots):     $300,251.82
+      Alpaca (Oracle):                  $97,831.14
       Kraken fleet:                     $112,912.44
       Options (Apex):                   $0.00
-      Forex (Navigator):                $99,508.30
+      Forex (Navigator):                $89,508.24
     Kill switch status:                 ARMED (normal)
     Bots in circuit breaker:            None
     Idle bots (0 positions):            #5 Apex Predator (0 positions)
@@ -20,16 +20,16 @@
 ════════════════════════════════════════════════════════════════════════════════
     Total starting capital:         $600,000.00 across 4 capital pools, 6 bots
 
-    Bot #1 Oracle (Alpaca):         $97,821.35  (-2.18% from $100k)
+    Bot #1 Oracle (Alpaca):         $97,831.14  (-2.17% from $100k)
     Bots #2-4 Kraken Fleet:         $294,913.12  (-1.70% from $300,000.00)
       - Davy Jones' Portfolio (#2): $99,322.84
       - Blackbeard's Fleet (#3):    $97,946.53
       - Calypso's Tide (#4):        $97,643.75
     Bot #5 Apex Predator:           $100,000.00  (+0.00% from $100k)
-    Bot #6 Navigator:               $99,820.45  (-0.18% from $100k)
+    Bot #6 Navigator:               $99,892.14  (-0.11% from $100k)
 
-    GRAND TOTAL EQUITY:             $592,554.92
-    COMBINED P&L:                   $-7,445.08 (-1.24%)
+    GRAND TOTAL EQUITY:             $592,636.40
+    COMBINED P&L:                   $-7,363.60 (-1.23%)
 
   CAPITAL POOLS:
     Pool 1: Alpaca US Equities     $100k  (Bot #1 Oracle)
@@ -75,7 +75,7 @@
     5. Not in RAG-derived blacklist for symbol+regime
 
 ── VPIN SHADOW LOG (Trades blocked by VPIN filter) ───────────────────────────
-  No VPIN rejections logged yet. Capturing from 2026-04-05 forward.
+  No VPIN rejections logged yet. Capturing from 2026-04-06 forward.
 
 ── VPIN CALIBRATION METRICS (Kraken Fleet) ───────────────────────────────────
   EXACT VPIN FORMULA:
@@ -88,7 +88,7 @@
     threshold = mean(30d_readings) + 1.5 * stddev(30d_readings)
     Floor: 0.60  |  Ceiling: 0.95
     Fallback: 0.82 (if < 100 historical observations)
-  VPIN history file not found. Capturing from 2026-04-05 forward.
+  VPIN history file not found. Capturing from 2026-04-06 forward.
 
   Total Kraken trades executed (VPIN allowed): 315
   Total VPIN-blocked entries: Not historically tracked — console logs only
@@ -133,8 +133,8 @@
 
 ── ROLLING PERFORMANCE METRICS (Kraken Fleet) ────────────────────────────────
     7-day rolling Sharpe ratio:         7.0968 (preliminary — under 30 days)
-    7-day rolling win rate:             +43.8%
-    7-day rolling avg P&L/trade:        $-33.32
+    7-day rolling win rate:             +45.5%
+    7-day rolling avg P&L/trade:        $-26.53
     Profit factor (all-time):           0.349
       Gross profit:                     $5,631.66
       Gross loss:                       $16,128.88
@@ -154,13 +154,13 @@
 ── LEARNING JOURNAL METADATA ─────────────────────────────────────────────────
   #     Age(d)  Confidence  Confirmed  Stale? Regime       Insight (truncated)
   ------------------------------------------------------------------------------------------
-  1          3        1.00         33   Fresh Crypto       Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's be
-  2          3        0.97         15   Fresh Crypto       Crypto market experiencing extreme fear with low on-chain demand.
+  1          4        1.00         33   Fresh Crypto       Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's be
+  2          4        0.97         15   Fresh Crypto       Crypto market experiencing extreme fear with low on-chain demand.
 
     Total insights:                     2
     Stale insights (>14 days):          0
-    Injection count tracking:           Not currently tracked. Capturing from 2026-04-05 forward.
-    Contradiction detection:            Not currently tracked. Capturing from 2026-04-05 forward.
+    Injection count tracking:           Not currently tracked. Capturing from 2026-04-06 forward.
+    Contradiction detection:            Not currently tracked. Capturing from 2026-04-06 forward.
 ════════════════════════════════════════════════════════════════════════════════
   SECTION 8: STRATEGY PARAMETERS — ALL 6 BOTS (for LLM context)
 ════════════════════════════════════════════════════════════════════════════════
@@ -226,7 +226,7 @@
 
 ════════════════════════════════════════════════════════════════════════════════
   END OF REPORT
-  Generated: 2026-04-05 23:45:27 UTC
+  Generated: 2026-04-06 05:09:58 UTC
   Suggested LLM prompt:
     "Review this trading report. Identify (1) what's working and why,
      (2) what's losing and the likely root cause, (3) specific parameter

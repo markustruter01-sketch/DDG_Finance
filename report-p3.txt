@@ -181,113 +181,105 @@
   ... (66 more omitted)
 
 ── DAILY EQUITY HISTORY (Apex Predator #5) ───────────────────────────────────
-  No equity history available. Capturing from 2026-04-05 forward.
+  No equity history available. Capturing from 2026-04-06 forward.
 
 ── CONSECUTIVE STREAK TRACKER (Apex Predator #5) ─────────────────────────────
-  No trade history for Apex Predator #5. Capturing from 2026-04-05 forward.
+  No trade history for Apex Predator #5. Capturing from 2026-04-06 forward.
 
 ── ROLLING PERFORMANCE METRICS (Apex Predator #5) ────────────────────────────
-  No trade data for Apex Predator #5. Capturing from 2026-04-05 forward.
+  No trade data for Apex Predator #5. Capturing from 2026-04-06 forward.
 ════════════════════════════════════════════════════════════════════════════════
   SECTION 5: THE NAVIGATOR — FOREX SWING ENGINE (Bot #6)
 ════════════════════════════════════════════════════════════════════════════════
 
 ── OVERVIEW ──────────────────────────────────────────────────────────────────
     Capital pool:                   Forex — Paper Trading (H4 Swing Strategy)
-    Bot status:                     idle
+    Bot status:                     news_blackout
     USD bias (Groq macro):          NEUTRAL
-    News blackout:                  NO
+    News blackout:                  YES — trading paused
     Cycles completed:               1
     Starting capital:               $100,000.00
-    Current equity:                 $99,820.45
-    Total P&L:                      $-179.55 (-0.18%)
+    Current equity:                 $99,892.14
+    Total P&L:                      $-107.86 (-0.11%)
     High water mark:                $100,000.00
     Vault (profit lock):            $0.00
-    Total trades:                   9
+    Total trades:                   10
     Wins:                           1
-    Win rate:                       +11.1%
-    Open positions:                 10
+    Win rate:                       +10.0%
+    Open positions:                 9
 
 ── CURRENT FOREX POSITIONS ───────────────────────────────────────────────────
 
   USD_CAD  SHORT
     Units:                          10,626
     Entry:                          1.39423
-    Current:                        1.39452
-    P&L:                            $-2.21 (-2.9 pips)
-    Stop loss:                      1.39695
+    Current:                        1.39363
+    P&L:                            $4.57 (+6.0 pips)
+    Stop loss:                      1.39638
     Take profit:                    1.38390
-
-  AUD_JPY  SHORT
-    Units:                          14,470
-    Entry:                          110.22800
-    Current:                        109.99300
-    P&L:                            $21.29 (+23.5 pips)
-    Stop loss:                      110.20800
-    Take profit:                    109.01900
 
   AUD_NZD  SHORT
     Units:                          14,467
     Entry:                          1.20844
-    Current:                        1.21081
-    P&L:                            $-19.50 (-23.7 pips)
-    Stop loss:                      1.21195
+    Current:                        1.21111
+    P&L:                            $-22.04 (-26.7 pips)
+    Stop loss:                      1.21142
     Take profit:                    1.20042
 
   EUR_JPY  SHORT
     Units:                          8,665
     Entry:                          184.06700
-    Current:                        183.86600
-    P&L:                            $10.90 (+20.1 pips)
-    Stop loss:                      184.25600
+    Current:                        183.89101
+    P&L:                            $9.56 (+17.6 pips)
+    Stop loss:                      184.20428
     Take profit:                    182.77401
 
   EUR_USD  LONG
     Units:                          9,222
     Entry:                          1.15221
-    Current:                        1.15128
-    P&L:                            $-8.56 (-9.3 pips)
-    Stop loss:                      1.14925
+    Current:                        1.15287
+    P&L:                            $6.13 (+6.6 pips)
+    Stop loss:                      1.15254
     Take profit:                    1.16365
 
   GBP_JPY  SHORT
     Units:                          7,561
     Entry:                          210.96100
-    Current:                        210.64999
-    P&L:                            $14.72 (+31.1 pips)
-    Stop loss:                      211.16486
+    Current:                        210.84399
+    P&L:                            $5.54 (+11.7 pips)
+    Stop loss:                      211.10543
     Take profit:                    209.37593
 
   GBP_USD  LONG
     Units:                          8,054
     Entry:                          1.31938
-    Current:                        1.31868
-    P&L:                            $-5.67 (-7.0 pips)
-    Stop loss:                      1.31573
+    Current:                        1.32148
+    P&L:                            $16.88 (+21.0 pips)
+    Stop loss:                      1.31696
     Take profit:                    1.33450
 
   NZD_CAD  LONG
     Units:                          18,687
     Entry:                          0.79365
-    Current:                        0.79277
-    P&L:                            $-11.79 (-8.8 pips)
-    Stop loss:                      0.79070
+    Current:                        0.79499
+    P&L:                            $17.97 (+13.4 pips)
+    Stop loss:                      0.79110
     Take profit:                    0.80689
 
   NZD_JPY  LONG
     Units:                          18,678
     Entry:                          90.88800
-    Current:                        90.82100
-    P&L:                            $-7.83 (-6.7 pips)
-    Stop loss:                      90.46828
+    Current:                        91.02100
+    P&L:                            $15.57 (+13.3 pips)
+    Stop loss:                      90.60372
     Take profit:                    92.16049
 
   NZD_USD  LONG
     Units:                          11,171
     Entry:                          0.56941
-    Current:                        0.56873
-    P&L:                            $-7.60 (-6.8 pips)
-    Stop loss:                      0.56702
+    Current:                        0.57065
+    P&L:                            $13.79 (+12.3 pips)
+    Stop loss:                      0.56800
     Take profit:                    0.57773
 
 ── FOREX TRADE HISTORY (all trades) ──────────────────────────────────────────
@@ -304,7 +296,7 @@
   8    2026-04-03T22:03   EURNZD=X     SHORT     2.02312    2.02312    $-10.63    +0.0  ?
   9    ?                  NZDJPY=X     LONG     90.88800    0.00000      $0.00    +0.0  ?
   10   ?                  AUDNZD=X     SHORT     1.20844    0.00000      $0.00    +0.0  ?
-  11   ?                  AUDJPY=X     SHORT   110.22800    0.00000      $0.00    +0.0  ?
+  11   2026-04-06T05:09   AUDJPY=X     SHORT   110.22800  110.25600    $-22.54    -2.8  ?
   12   ?                  GBPJPY=X     SHORT   210.96100    0.00000      $0.00    +0.0  ?
   13   ?                  EURJPY=X     SHORT   184.06700    0.00000      $0.00    +0.0  ?
   14   ?                  AUDNZD=X     SHORT     1.20852    0.00000      $0.00    +0.0  ?
@@ -379,6 +371,7 @@
   SEK=X                1   +0.0%       $-4.32      20.5h     0.07         0
   EURCAD=X             1   +0.0%       $-5.40      20.5h     0.18         0
   EURJPY=X             1   +0.0%      $-10.42      12.1h     0.01         0
+  AUDJPY=X             1   +0.0%      $-22.54      78.0h     0.05         0
   EURNZD=X             3   +0.0%      $-31.89       1.5h     0.00         0
   AUDNZD=X             1   +0.0%      $-38.77      17.6h     0.78         0
 
@@ -395,16 +388,16 @@
 ── CONSECUTIVE STREAK TRACKER (Navigator #6) ─────────────────────────────────
   [Reconstructed from historical data]
     Current streak:                     1 LOSS
-    Max win streak (all-time):          10
+    Max win streak (all-time):          7
     Max loss streak (all-time):         2
 
 ── ROLLING PERFORMANCE METRICS (Navigator #6) ────────────────────────────────
     7-day rolling Sharpe ratio:         0.0777 (preliminary — under 30 days)
-    7-day rolling win rate:             +11.1%
-    7-day rolling avg P&L/trade:        $-10.42
-    Profit factor (all-time):           0.008
+    7-day rolling win rate:             +10.0%
+    7-day rolling avg P&L/trade:        $-11.63
+    Profit factor (all-time):           0.006
       Gross profit:                     $0.74
-      Gross loss:                       $94.52
+      Gross loss:                       $117.06
   [Reconstructed from historical data]
 
 ════════════════════════════════════════════════════════════════════════════════

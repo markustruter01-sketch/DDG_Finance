@@ -1,6 +1,6 @@
 ════════════════════════════════════════════════════════════════════════════════
   QUANTITATIVE TRADING PLATFORM — AI DIAGNOSTIC REPORT
-  Generated: 2026-04-05 23:45:27 UTC
+  Generated: 2026-04-06 05:09:58 UTC
   PURPOSE: Paste into Claude / Gemini / ChatGPT for strategy analysis.
            Contains all trade history, AI reasoning, risk parameters,
            entry/exit conditions, and performance data for ALL 6 BOTS.
@@ -11,7 +11,7 @@
 ════════════════════════════════════════════════════════════════════════════════
   SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT
 ════════════════════════════════════════════════════════════════════════════════
-    Report timestamp:               2026-04-05 23:45:27 UTC
+    Report timestamp:               2026-04-06 05:09:58 UTC
     Market status:                  CLOSED (After Hours / Weekend)
     Kill switch:                    ARMED (not tripped — normal)
     Daily drawdown:                 +0.000% / +5.0% threshold
@@ -22,14 +22,13 @@
     Current market regime:          Unknown
 
   Scheduler (8 jobs):
-    • Auto Self-Heal Monitor                        next: 2026-04-05 23:47:14
-    • Crypto-Only 24/7 Cycle                        next: 2026-04-06 00:00:14
-    • Equity Curve Hourly Heartbeat                 next: 2026-04-06 00:45:14
-    • Fleet Commander (Evening Crypto 10:00 PM ET)  next: 2026-04-05 22:00:00
-    • Forex Navigator 4h Cycle                      next: 2026-04-05 23:45:14
-    • Learning Snapshot Auto-Export                 next: 2026-04-06 05:45:14
+    • Auto Self-Heal Monitor                        next: 2026-04-06 05:11:30
+    • Crypto-Only 24/7 Cycle                        next: 2026-04-06 05:24:30
+    • Equity Curve Hourly Heartbeat                 next: 2026-04-06 06:09:30
     • Fleet Commander (Pre-Market 4:15 AM ET)       next: 2026-04-06 04:15:00
     • Gemini Self-Critic Auditor (Pre-Market)       next: 2026-04-06 04:15:00
+    • Forex Navigator 4h Cycle                      next: 2026-04-06 05:09:30
+    • Learning Snapshot Auto-Export                 next: 2026-04-06 11:09:30
     • 15-Min Analysis & Execution Cycle             next: 2026-04-06 09:01:00
     • Fleet Commander (Post-Open 9:45 AM ET)        next: 2026-04-06 09:45:00
     • Apex Predator Intraday Scan (10am/12pm/2pm ET) next: 2026-04-06 10:00:00
@@ -38,6 +37,7 @@
     • Apex Predator Options Scan (3:30 PM ET)       next: 2026-04-06 15:30:00
     • Post-Mortem Reconciliation                    next: 2026-04-06 16:10:00
     • Fleet Commander (Post-Close 5:00 PM ET)       next: 2026-04-06 17:00:00
+    • Fleet Commander (Evening Crypto 10:00 PM ET)  next: 2026-04-06 22:00:00
 ════════════════════════════════════════════════════════════════════════════════
   SECTION 2: ALPACA BOT — QUANTITATIVE EQUITY PLATFORM (US Equities)
 ════════════════════════════════════════════════════════════════════════════════
@@ -45,10 +45,10 @@
 ── PORTFOLIO OVERVIEW ────────────────────────────────────────────────────────
     Capital pool:                   US Equity — Paper Trading via Alpaca
     Starting capital:               $100,000.00
-    Current equity:                 $97,821.35
-    Total P&L:                      $-2,178.65 (-2.18%)
+    Current equity:                 $97,831.14
+    Total P&L:                      $-2,168.86 (-2.17%)
     Available cash:                 $0.00
-    Buying power:                   $97,821.35
+    Buying power:                   $97,831.14
     Open positions:                 2
 
 ── CURRENT OPEN POSITIONS (ALPACA) ───────────────────────────────────────────
@@ -56,9 +56,9 @@
   JEPQ [PROFIT VAULT — protected from liquidation]
     Qty:                            0.777982 shares
     Avg entry price:                $54.50
-    Current price:                  $55.59
-    Market value:                   $43.25
-    Unrealized P&L:                 $0.85 (+2.00%)
+    Current price:                  $55.66
+    Market value:                   $43.30
+    Unrealized P&L:                 $0.90 (+2.13%)
     Asset class:                    unknown
     Conviction score:               N/A
     Kelly fraction:                 N/A
@@ -69,9 +69,9 @@
   SGOV
     Qty:                            973.594581 shares
     Avg entry price:                $100.39
-    Current price:                  $100.43
-    Market value:                   $97,778.10
-    Unrealized P&L:                 $38.94 (+0.04%)
+    Current price:                  $100.44
+    Market value:                   $97,787.84
+    Unrealized P&L:                 $48.68 (+0.05%)
     Asset class:                    unknown
     Conviction score:               N/A
     Kelly fraction:                 N/A

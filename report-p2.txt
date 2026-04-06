@@ -462,7 +462,7 @@
   [Computed from equity_snapshots daily returns]
   Data points per bot: {'alpaca': 6, 'kraken': 6, 'options': 0, 'forex': 3}
   Min required for correlation: 3 overlapping days
-  Computed at: 2026-04-05T23:45:28
+  Computed at: 2026-04-06T05:09:59
 
   Bot Pair                        Correlation       Flag
   -------------------------------------------------------

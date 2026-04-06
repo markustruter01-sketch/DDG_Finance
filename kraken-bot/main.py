@@ -145,6 +145,14 @@ from config import (
     TREND_EMA_FAST,
     TREND_EMA_SLOW,
     TREND_PULLBACK_ATR_MULT,
+    FLOW_IMBALANCE_LONG_THRESHOLD,
+    FLOW_IMBALANCE_SHORT_THRESHOLD,
+    FLOW_VPIN_MAX,
+    FLOW_VPIN_SPIKE_BLOCK,
+    FLOW_RSI_MIN,
+    FLOW_RSI_MAX,
+    FLOW_VOLUME_MA_PERIOD,
+    FLOW_VOLUME_MULT,
     SYMBOL_WINRATE_LOOKBACK,
     SYMBOL_WINRATE_PENALTY_THRESHOLD,
     SYMBOL_WINRATE_RECOVERY_THRESHOLD,
@@ -172,6 +180,7 @@ from logic import (
 
 from swing_strategies import evaluate_momentum_breakout, evaluate_trend_following
 from swing_exits import check_swing_exits
+from flow_sentiment import evaluate_flow_sentiment
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
 # but always imported so the module is ready to switch modes).
@@ -1346,9 +1355,11 @@ def run_cycle() -> None:
             # ── Microstructure signals (OFI / VAMP / VPIN) ────────────────────
             # Primary: order-book snapshot + recent trades (ccxt live data).
             # Fallback: OHLCV-based approximation when order-book fetch fails.
+            _sym_recent_trades: list[dict] = []
             try:
                 _ob     = exchange.fetch_order_book(symbol, limit=20)
                 _trades = exchange.fetch_trades(symbol, limit=200)
+                _sym_recent_trades = _trades
                 _ms = MicrostructureSignal.from_orderbook(
                     _ob, _trades, symbol=symbol,
                 )
@@ -1613,17 +1624,32 @@ def run_cycle() -> None:
                     })
                     continue
 
-                if BOT_STRATEGY_TYPE == "momentum_breakout":
-                    _swing_eval = evaluate_momentum_breakout(
-                        candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
+                if BOT_STRATEGY_TYPE == "flow_sentiment":
+                    _swing_eval = evaluate_flow_sentiment(
+                        recent_trades=_sym_recent_trades,
+                        closes=closes, highs=highs, lows=lows, volumes=volumes,
                         current_price=current_price,
-                        momentum_lookback=MOMENTUM_LOOKBACK_CANDLES,
+                        vpin=_ms.vpin,
+                        imbalance_long_threshold=FLOW_IMBALANCE_LONG_THRESHOLD,
+                        imbalance_short_threshold=FLOW_IMBALANCE_SHORT_THRESHOLD,
+                        vpin_max=FLOW_VPIN_MAX,
+                        vpin_spike_block=FLOW_VPIN_SPIKE_BLOCK,
+                        rsi_min=FLOW_RSI_MIN,
+                        rsi_max=FLOW_RSI_MAX,
+                        volume_ma_period=FLOW_VOLUME_MA_PERIOD,
+                        volume_mult=FLOW_VOLUME_MULT,
+                    )
+                elif BOT_STRATEGY_TYPE == "momentum_breakout":
+                    _swing_eval = evaluate_momentum_breakout(
+                        closes=closes, highs=highs, lows=lows, volumes=volumes,
+                        current_price=current_price,
+                        lookback_candles=MOMENTUM_LOOKBACK_CANDLES,
                         atr_threshold=MOMENTUM_ATR_THRESHOLD,
                         volume_ma_period=VOLUME_MA_PERIOD,
                     )
                 else:
                     _swing_eval = evaluate_trend_following(
-                        candles=candles, closes=closes, highs=highs, lows=lows, volumes=volumes,
+                        closes=closes, highs=highs, lows=lows, volumes=volumes,
                         current_price=current_price,
                         ema_fast_period=TREND_EMA_FAST,
                         ema_slow_period=TREND_EMA_SLOW,

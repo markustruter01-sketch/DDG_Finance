@@ -41,35 +41,40 @@ BOT_PROFILES = {
     "blackbeard": {
         "display_name": "Blackbeard's Fleet",
         "db_id": 2,
-        "strategy_type": "momentum_breakout",
-        "strategy_label": "Momentum Breakout",
+        "strategy_type": "flow_sentiment",
+        "strategy_label": "Flow Sentiment",
         "RSI_OVERSOLD": 30,
         "RSI_OVERBOUGHT": 70,
         "ZSCORE_ENTRY": 0.8,
         "CASH_RESERVE": 0.15,
         "MAX_POSITION_FRACTION": 0.08,
-        "MAX_POSITIONS": 6,
-        "STOP_LOSS_PCT": 0.015,
-        "ATR_STOP_MULTIPLIER": 1.5,
+        "MAX_POSITIONS": 5,
+        "STOP_LOSS_PCT": 0.02,
+        "ATR_STOP_MULTIPLIER": 2.0,
         "VPIN_ENTRY_BLOCK": 0.88,
         "OHLCV_TIMEFRAME": "1h",
         "OHLCV_LIMIT": 100,
         "LOOP_SLEEP_SECONDS": 60,
         "SWING_TP_ATR_MULT": 3.0,
-        "SWING_SL_ATR_MULT": 1.5,
-        "SWING_TRAIL_TRIGGER_ATR": 1.0,
+        "SWING_SL_ATR_MULT": 2.0,
+        "SWING_TRAIL_TRIGGER_ATR": 1.5,
         "SWING_TRAIL_ATR_MULT": 1.5,
-        "SWING_MIN_HOLD_HOURS": 4,
-        "SWING_MAX_HOLD_HOURS": 72,
-        "MOMENTUM_LOOKBACK_CANDLES": 4,
-        "MOMENTUM_ATR_THRESHOLD": 1.5,
-        "VOLUME_MA_PERIOD": 20,
+        "SWING_MIN_HOLD_HOURS": 1,
+        "SWING_MAX_HOLD_HOURS": 24,
+        "FLOW_IMBALANCE_LONG_THRESHOLD": 0.65,
+        "FLOW_IMBALANCE_SHORT_THRESHOLD": 0.35,
+        "FLOW_VPIN_MAX": 0.75,
+        "FLOW_VPIN_SPIKE_BLOCK": 0.85,
+        "FLOW_RSI_MIN": 40,
+        "FLOW_RSI_MAX": 60,
+        "FLOW_VOLUME_MA_PERIOD": 20,
+        "FLOW_VOLUME_MULT": 1.5,
         "MIN_CONVICTION": 0.60,
         "MAX_NEW_ENTRIES_PER_CYCLE": 2,
         "LOSS_STREAK_LIMIT": 6,
         "LOSS_STREAK_COOLDOWN_HOURS": 8,
         "SYMBOL_WINRATE_LOOKBACK": 15,
-        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.35,
+        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.30,
         "SYMBOL_WINRATE_RECOVERY_THRESHOLD": 0.40,
         "SYMBOL_WINRATE_PENALTY_FACTOR": 0.70,
     },
@@ -122,7 +127,7 @@ BOT_DB_ID = _profile["db_id"]
 BOT_STRATEGY_LABEL = _profile["strategy_label"]
 BOT_STRATEGY_TYPE = _profile.get("strategy_type", "mean_reversion")
 IS_SCALP_BOT = BOT_STRATEGY_TYPE in ("momentum_wave", "liquidity_scout")
-IS_SWING_BOT = BOT_STRATEGY_TYPE in ("momentum_breakout", "trend_following")
+IS_SWING_BOT = BOT_STRATEGY_TYPE in ("momentum_breakout", "trend_following", "flow_sentiment")
 
 if PAPER_TRADING:
     print("\n" + "=" * 65)
@@ -335,6 +340,15 @@ VOLUME_MA_PERIOD          = _profile.get("VOLUME_MA_PERIOD", 20)
 TREND_EMA_FAST            = _profile.get("TREND_EMA_FAST", 30)
 TREND_EMA_SLOW            = _profile.get("TREND_EMA_SLOW", 75)
 TREND_PULLBACK_ATR_MULT   = _profile.get("TREND_PULLBACK_ATR_MULT", 0.5)
+
+FLOW_IMBALANCE_LONG_THRESHOLD  = _profile.get("FLOW_IMBALANCE_LONG_THRESHOLD", 0.65)
+FLOW_IMBALANCE_SHORT_THRESHOLD = _profile.get("FLOW_IMBALANCE_SHORT_THRESHOLD", 0.35)
+FLOW_VPIN_MAX                  = _profile.get("FLOW_VPIN_MAX", 0.75)
+FLOW_VPIN_SPIKE_BLOCK          = _profile.get("FLOW_VPIN_SPIKE_BLOCK", 0.85)
+FLOW_RSI_MIN                   = _profile.get("FLOW_RSI_MIN", 40)
+FLOW_RSI_MAX                   = _profile.get("FLOW_RSI_MAX", 60)
+FLOW_VOLUME_MA_PERIOD          = _profile.get("FLOW_VOLUME_MA_PERIOD", 20)
+FLOW_VOLUME_MULT               = _profile.get("FLOW_VOLUME_MULT", 1.5)
 
 SYMBOL_WINRATE_LOOKBACK           = _profile.get("SYMBOL_WINRATE_LOOKBACK", 15)
 SYMBOL_WINRATE_PENALTY_THRESHOLD  = _profile.get("SYMBOL_WINRATE_PENALTY_THRESHOLD", 0.35)

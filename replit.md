@@ -44,7 +44,9 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 -   **Correlation Matrix**: Rolling 60-day Pearson correlation between all 4 bot classes (Alpaca, Kraken, Options, Forex). When max correlation > 0.85 (systemic shock), positions auto-scale to 50%. File: `correlation_state.json`.
 -   **WebSocket Feed**: `ws_feed.py` connects to `wss://ws.kraken.com/v2` for sub-second price updates with auto-reconnect (10x backoff). REST polling remains as fallback.
 -   **Dynamic VPIN**: `vpin_adaptive.py` replaces hardcoded 0.82 threshold with 30-day rolling mean + 1.5σ (floor 0.60, ceiling 0.95).
--   **Consecutive-Loss Circuit Breaker**: Per-bot loss streak tracking in `main.py`. Calypso=8 losses/12h cooldown, Blackbeard=10/8h, Davy Jones=12/6h. Blocks new entries only (existing positions still managed). Streak restored from DB on restart. Status reported as `paused_loss_streak` in heartbeat. Dashboard GlobalHUD shows blinking `{N}L` badge during cooldown.
+-   **Consecutive-Loss Circuit Breaker**: Per-bot loss streak tracking in `main.py`. Calypso=8 losses/12h cooldown, Blackbeard=6/8h, Davy Jones=12/6h. Blocks new entries only (existing positions still managed). Streak restored from DB on restart. Status reported as `paused_loss_streak` in heartbeat. Dashboard GlobalHUD shows blinking `{N}L` badge during cooldown.
+-   **Bot Strategies**: Davy Jones = `mean_reversion` (scalp), Blackbeard = `flow_sentiment` (swing, order flow imbalance + VPIN + RSI + volume), Calypso = `trend_following` (swing). Blackbeard and Calypso are swing bots (1h candles); Davy Jones is a scalp bot.
+-   **Flow Sentiment Strategy** (`flow_sentiment.py`): Blackbeard's strategy. Primary signal: order flow imbalance (buy_vol/total_vol >0.65 long, <0.35 short). Filters: VPIN <0.75, VPIN spike block >0.85, RSI 40-60, volume >1.5× 20-MA. Exits: 2.0× ATR SL, 3.0× ATR TP, 24h max hold, 1h min hold. Max 5 positions.
 
 ## Bot #5: Apex Predator Options Engine
 

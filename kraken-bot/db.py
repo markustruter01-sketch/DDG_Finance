@@ -688,6 +688,38 @@ def log_vpin_rejection(
         logger.warning(f"DB | log_vpin_rejection failed: {exc}")
 
 
+def get_daily_fees() -> dict:
+    """Return today's fee summary: total fees paid, trade count, and avg fee per trade."""
+    if not _is_available():
+        return {"total_fees_today": 0.0, "trades_today": 0, "avg_fee_per_trade": 0.0}
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(fees_usd), 0),
+                           COUNT(*)
+                    FROM   kraken_trades
+                    WHERE  bot_id = %s
+                      AND  closed_at::date = CURRENT_DATE
+                    """,
+                    (bot_id,),
+                )
+                row = cur.fetchone()
+                total_fees = float(row[0]) if row else 0.0
+                trade_count = int(row[1]) if row else 0
+                avg_fee = total_fees / trade_count if trade_count > 0 else 0.0
+                return {
+                    "total_fees_today": round(total_fees, 2),
+                    "trades_today": trade_count,
+                    "avg_fee_per_trade": round(avg_fee, 2),
+                }
+    except Exception as exc:
+        logger.warning(f"DB | get_daily_fees failed: {exc}")
+        return {"total_fees_today": 0.0, "trades_today": 0, "avg_fee_per_trade": 0.0}
+
+
 def get_pair_win_rates() -> dict[str, dict]:
     if not _is_available():
         return {}

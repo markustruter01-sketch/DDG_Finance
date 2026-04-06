@@ -206,6 +206,30 @@ def _apply_slippage(
     return (round(adjusted, 8), slip_pct)
 
 
+FEE_PROFIT_MULTIPLIER = 2.5
+
+
+def check_fee_profitability(
+    size_usd: float,
+    tp_pct: float,
+) -> tuple[bool, float, float]:
+    """
+    Pre-entry check: is the expected profit at take-profit at least
+    FEE_PROFIT_MULTIPLIER × the estimated round-trip fee cost?
+
+    Round-trip fees = entry fee + exit fee = 2 × (size_usd × PAPER_FEE_PCT).
+
+    Returns:
+        (passes, expected_profit, round_trip_fees)
+    """
+    from config import PAPER_FEE_PCT
+
+    round_trip_fees = 2 * size_usd * PAPER_FEE_PCT
+    expected_profit = size_usd * tp_pct
+    passes = expected_profit >= (FEE_PROFIT_MULTIPLIER * round_trip_fees)
+    return (passes, round(expected_profit, 2), round(round_trip_fees, 2))
+
+
 def paper_open_position(
     symbol: str,
     side: str,

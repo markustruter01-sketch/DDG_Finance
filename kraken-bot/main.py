@@ -164,6 +164,7 @@ from paper_engine import (
     paper_open_position,
     paper_scale_in_position,
     paper_close_position,
+    check_fee_profitability,
 )
 
 
@@ -526,6 +527,9 @@ def write_status(error: str | None = None) -> None:
         ("running" if not error else "error")
     )
 
+    # Daily fee summary
+    _daily_fees = _db.get_daily_fees()
+
     # Primary: PostgreSQL heartbeat
     _db.upsert_heartbeat(
         status=status_str,
@@ -545,6 +549,7 @@ def write_status(error: str | None = None) -> None:
                 "paused_until": ls_until,
                 "cooldown_hours": LOSS_STREAK_COOLDOWN_HOURS,
             },
+            "daily_fees": _daily_fees,
         },
         error=error,
     )
@@ -1659,6 +1664,20 @@ def run_cycle() -> None:
                         size_usd *= _psm
 
                     if size_usd >= MIN_POSITION_USD:
+                        _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, SCALP_TP_PCT)
+                        if not _fee_ok:
+                            logger.info(
+                                f"FeeGate | {symbol}: SKIP {_scalp_side.upper()} — "
+                                f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
+                                f"(need ${_rt_fees * 2.5:.2f})"
+                            )
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4),
+                                "signal_type": f"{_scalp_side}_blocked_fee_gate",
+                                "has_position": False,
+                            })
+                            continue
                         _atr_stop = get_atr_stop_price(_scalp_side, current_price, sym_atr, multiplier=_sym_atr_mult)
                         _psm_tag = f" [pair×{_psm:.2f}]" if _psm != 1.0 else ""
                         logger.info(
@@ -1895,6 +1914,19 @@ def run_cycle() -> None:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
                 if size_usd >= MIN_POSITION_USD:
+                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, TRAIL_PCT)
+                    if not _fee_ok:
+                        logger.info(
+                            f"FeeGate | {symbol}: SKIP LONG — "
+                            f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
+                            f"(need ${_rt_fees * 2.5:.2f})"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "long_blocked_fee_gate",
+                            "has_position": False,
+                        })
+                        continue
                     _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
                     _ms_allowed, _ms_reason = _ms.entry_filter(
                         side="long", vpin_block=_ms_vpin_override,
@@ -1994,6 +2026,19 @@ def run_cycle() -> None:
                 if _psm != 1.0:
                     size_usd *= _psm
                 if size_usd >= MIN_POSITION_USD:
+                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, TRAIL_PCT)
+                    if not _fee_ok:
+                        logger.info(
+                            f"FeeGate | {symbol}: SKIP SHORT — "
+                            f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
+                            f"(need ${_rt_fees * 2.5:.2f})"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "short_blocked_fee_gate",
+                            "has_position": False,
+                        })
+                        continue
                     _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
                     if not _ms_allowed:
                         logger.info(

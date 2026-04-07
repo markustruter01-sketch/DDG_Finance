@@ -31,8 +31,11 @@ from typing import Any
 
 
 # ── Token budget constants ─────────────────────────────────────────────────────
-TOKEN_BUDGET:     int = 900_000
-CHUNK_THRESHOLD:  int = int(TOKEN_BUDGET * 0.80)   # 720_000 chars before chunking
+# Claude has a 200k-token context window (~4 chars/token → ~800k chars).
+# TOKEN_BUDGET is set to 800k chars (200k tokens) — a reduction from the
+# former Gemini 900k budget.  CHUNK_THRESHOLD triggers chunking at 80%.
+TOKEN_BUDGET:     int = 800_000
+CHUNK_THRESHOLD:  int = int(TOKEN_BUDGET * 0.80)   # 640_000 chars before chunking
 CHARS_PER_TOKEN:  int = 4                           # conservative 4-char/token ratio
 _MAX_STR_LEN:     int = 400                         # max chars for any single string field
 

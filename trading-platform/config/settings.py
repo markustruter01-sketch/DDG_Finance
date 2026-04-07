@@ -22,9 +22,9 @@ class Settings(BaseSettings):
         description="Alpaca paper trading base URL",
     )
 
-    # --- LLM ---
-    groq_api_key: str = Field(..., description="Groq API key (free, llama3-70b-8192)")
-    anthropic_api_key: str = Field(default="", description="Claude API key (optional future use)")
+    # --- LLM: Claude (primary) ---
+    anthropic_api_key: str = Field(..., description="Anthropic Claude API key — sole LLM provider")
+    groq_api_key: str = Field(default="", description="Groq API key (retired — kept for env-var compat)")
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 
     # --- Trading Constraints ---
@@ -45,16 +45,23 @@ class Settings(BaseSettings):
         description="Ticker used to fill empty/low-conviction slots",
     )
 
-    # --- Groq Fallback ---
+    # --- Claude Fallback / Pacing ---
     regime_fallback_max_age_hours: float = Field(
         default=1.5,
-        description="How many hours a cached regime analysis remains valid for pipeline fallback when Groq is rate-limited",
+        description="How many hours a cached regime analysis remains valid for pipeline fallback when Claude is rate-limited",
     )
 
-    # --- Groq Budget Guardrails ---
+    # --- Claude Budget Guardrails ---
+    # Claude Sonnet pricing: ~$3/MTok input, $15/MTok output.
+    # Daily budget of 500,000 tokens ≈ ~$2/day at typical prompt/completion mix.
+    claude_daily_token_budget: int = Field(
+        default=500_000,
+        description="Daily token budget for Claude API calls. Resets at midnight UTC.",
+    )
+    # Keep groq_* names as aliases so existing env-var exports don't break
     groq_daily_token_budget: int = Field(
-        default=100000,
-        description="Daily token budget for Groq API (free tier = 100,000 TPD). Resets at midnight UTC.",
+        default=500_000,
+        description="Alias for claude_daily_token_budget (legacy env-var compat).",
     )
     groq_min_regime_interval_minutes: int = Field(
         default=90,
@@ -62,7 +69,7 @@ class Settings(BaseSettings):
     )
     groq_commentary_daily_cap: int = Field(
         default=4,
-        description="Max auto-triggered commentary refreshes per endpoint per day (Alpaca + Kraken counted separately). Force=true bypasses cap.",
+        description="Max auto-triggered commentary refreshes per endpoint per day. Force=true bypasses cap.",
     )
 
     # --- Throttling ---
@@ -86,7 +93,7 @@ class Settings(BaseSettings):
     @field_validator(
         "fred_api_key", "news_api_key",
         "alpaca_api_key", "alpaca_secret_key",
-        "groq_api_key", "anthropic_api_key", "deepseek_api_key",
+        "anthropic_api_key", "groq_api_key", "deepseek_api_key",
         mode="before",
     )
     @classmethod

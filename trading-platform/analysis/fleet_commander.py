@@ -1,8 +1,8 @@
 """
-analysis/fleet_commander.py — Gemini Fleet Commander (All-Bot Audit)
+analysis/fleet_commander.py — Claude Fleet Commander (All-Bot Audit)
 ====================================================================
 Runs 6× daily via APScheduler.  Fetches the full export report covering
-all 6 bots, sends it to Gemini for adversarial fleet-wide audit, and
+all 6 bots, sends it to Claude for adversarial fleet-wide audit, and
 returns structured parameter adjustment recommendations.
 
 Schedule (ET):  04:15, 09:45, 12:00, 15:00, 17:00, 22:00
@@ -19,13 +19,10 @@ from typing import Any
 
 import threading
 
-import requests
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
-from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL, _GeminiAuditResponse, _GeminiCondition
-
-_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+from analysis.gemini_auditor import _GeminiAuditResponse, _GeminiCondition
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _FLEET_AUDIT_FILE = _LOG_DIR / "fleet_audit.json"
@@ -76,7 +73,7 @@ FLEET COMPOSITION (6 bots, ~$600K total paper capital)
 ======================================================
 Bot #1 — Oracle/Alpaca (equities + crypto)
   • Alpaca paper-trading, 15-minute cycle
-  • Groq Llama-3.3-70B assigns conviction scores and writes trade theses
+  • Claude (claude-sonnet) assigns conviction scores and writes trade theses
   • 10-slot portfolio with 60% cash ring-fence
   • Kill switch at 5% daily drawdown
 
@@ -170,58 +167,32 @@ def _fetch_export_report() -> str | None:
     return None
 
 
-def _call_fleet_gemini(report_text: str) -> tuple[FleetCommanderResponse, dict]:
-    api_key = _gemini_api_key()
-    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+def _call_fleet_claude(report_text: str) -> tuple[FleetCommanderResponse, dict]:
+    from analysis.claude_client import call_claude
 
-    body = {
-        "system_instruction": {
-            "parts": [{"text": _FLEET_SYSTEM_PROMPT}]
-        },
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": f"FLEET DIAGNOSTIC REPORT\n{'='*60}\n{report_text}"}]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 8192,
-            "temperature": 0.7,
-        },
-    }
+    user_content = f"FLEET DIAGNOSTIC REPORT\n{'='*60}\n{report_text}"
 
     try:
-        resp = requests.post(
-            url,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": api_key,
-            },
-            json=body,
-            timeout=90,
+        raw = call_claude(
+            system_prompt=_FLEET_SYSTEM_PROMPT,
+            user_prompt=user_content,
+            temperature=0.7,
+            max_tokens=8192,
+            call_type="fleet_commander",
+            expect_json=True,
+            smart=True,
         )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
-
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}")
+    except Exception as exc:
+        raise RuntimeError(f"Claude API call failed: {exc}") from exc
 
     try:
-        data = resp.json()
-        token_usage = data.get("usageMetadata", {})
-        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError, ValueError) as exc:
-        raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
-
-    try:
-        parsed = json.loads(raw_text)
+        parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Gemini returned non-JSON: {raw_text[:200]}") from exc
+        raise RuntimeError(f"Claude returned non-JSON: {raw[:200]}") from exc
 
     try:
         result = FleetCommanderResponse(**parsed)
-        return result, token_usage
+        return result, {}
     except Exception as exc:
         raise RuntimeError(f"Fleet Commander response validation failed: {exc}") from exc
 
@@ -295,9 +266,6 @@ def _track_tokens(usage: dict) -> None:
         _daily_token_usage["total_tokens"] = 0
         _daily_token_usage["call_count"] = 0
 
-    _daily_token_usage["prompt_tokens"] += usage.get("promptTokenCount", 0)
-    _daily_token_usage["completion_tokens"] += usage.get("candidatesTokenCount", 0)
-    _daily_token_usage["total_tokens"] += usage.get("totalTokenCount", 0)
     _daily_token_usage["call_count"] += 1
 
 
@@ -327,8 +295,8 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     logger.info("FleetCommander | Starting fleet-wide audit")
 
-    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
-        logger.warning("FleetCommander | GOOGLE_GEMINI_API_KEY not set — skipping")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        logger.warning("FleetCommander | ANTHROPIC_API_KEY not set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     report = _fetch_export_report()
@@ -339,9 +307,9 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     logger.info(f"FleetCommander | Report size: {len(report):,} chars")
 
     try:
-        result, token_usage = _call_fleet_gemini(report)
+        result, token_usage = _call_fleet_claude(report)
     except RuntimeError as exc:
-        logger.warning(f"FleetCommander | Gemini call failed: {exc} — aborting (fail-open)")
+        logger.warning(f"FleetCommander | Claude call failed: {exc} — aborting (fail-open)")
         return {"status": "failed", "reason": str(exc)}
 
     _track_tokens(token_usage)

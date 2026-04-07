@@ -1,7 +1,7 @@
 """Fleet Commander interactive chat routes.
 
 Endpoints:
-  POST /fleet-commander/chat         — send a message or quick-action to Gemini
+  POST /fleet-commander/chat         — send a message or quick-action to Claude
   POST /fleet-commander/chat/approve — accept/decline a pending recommendation
   GET  /fleet-commander/chat/history — paginated conversation log
   GET  /fleet-commander/params       — current Kraken adaptive params for all bots
@@ -9,19 +9,17 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
-
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL
 from analysis.fleet_enforcer import (
     BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
@@ -29,8 +27,6 @@ from analysis.fleet_enforcer import (
 from db.postgres import is_pg_available, get_conn
 
 fleet_chat_router = APIRouter()
-
-_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 QUICK_ACTIONS = {
     "conservative": {
@@ -133,7 +129,7 @@ _BOT_DEFAULTS: dict[str, dict] = _load_bot_defaults()
 _CHAT_SYSTEM_PROMPT = """\
 You are the FLEET COMMANDER — an AI fleet management assistant for a quantitative trading platform.
 You have direct control over 3 Kraken crypto bots (Davy Jones, Blackbeard, Calypso) and advisory
-control over Oracle (Alpaca equities — you can veto tickers but Groq manages strategy).
+control over Oracle (Alpaca equities — you can veto tickers but Claude manages strategy).
 Apex Predator (options) and Navigator (forex) can only be put on HOLD.
 
 PARAMETER BOUNDS (your recommendations MUST stay within these):
@@ -320,40 +316,30 @@ async def _get_fleet_context() -> str:
     return sanitized
 
 
-async def _call_gemini_chat(messages: list[dict], fleet_context: str) -> str:
-    api_key = _gemini_api_key()
-    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+def _call_claude_chat(messages: list[dict], fleet_context: str) -> str:
+    from analysis.claude_client import call_claude
 
-    contents = []
-    for msg in messages[-10:]:
-        contents.append({
-            "role": "user" if msg["role"] == "user" else "model",
-            "parts": [{"text": msg["content"]}],
-        })
+    system_with_context = _CHAT_SYSTEM_PROMPT + f"\n\nCURRENT FLEET DATA:\n{fleet_context}"
 
-    body = {
-        "system_instruction": {
-            "parts": [{"text": _CHAT_SYSTEM_PROMPT + f"\n\nCURRENT FLEET DATA:\n{fleet_context}"}]
-        },
-        "contents": contents,
-        "generationConfig": {
-            "maxOutputTokens": 2048,
-            "temperature": 0.7,
-        },
-    }
+    recent = messages[-10:]
+    if recent:
+        history_lines = []
+        for msg in recent:
+            role = msg["role"].upper()
+            history_lines.append(f"[{role}]: {msg['content']}")
+        user_content = "\n\n".join(history_lines)
+    else:
+        user_content = "(no prior messages)"
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json=body,
-        )
-
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:300]}")
-
-    data = resp.json()
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+    return call_claude(
+        system_prompt=system_with_context,
+        user_prompt=user_content,
+        temperature=0.7,
+        max_tokens=2048,
+        call_type="fleet_chat",
+        expect_json=False,
+        smart=True,
+    )
 
 
 def _extract_recommendations(text: str) -> list[dict] | None:
@@ -439,12 +425,15 @@ async def fleet_chat(request: ChatRequest) -> dict:
     history = _get_history(limit=20)
 
     try:
-        reply_text = await _call_gemini_chat(
+        loop = asyncio.get_event_loop()
+        reply_text = await loop.run_in_executor(
+            None,
+            _call_claude_chat,
             [{"role": m["role"], "content": m["content"]} for m in history],
             fleet_context,
         )
     except Exception as exc:
-        logger.error(f"FleetChat | Gemini call failed: {exc}")
+        logger.error(f"FleetChat | Claude call failed: {exc}")
         error_reply = f"Fleet Commander is temporarily unavailable: {exc}"
         _save_message("assistant", error_reply, source="system")
         return {"reply": error_reply, "has_recommendations": False, "message_id": user_id}
@@ -455,7 +444,7 @@ async def fleet_chat(request: ChatRequest) -> dict:
         metadata["pending_recommendations"] = recommendations
         metadata["status"] = "pending_approval"
 
-    reply_id = _save_message("assistant", reply_text, source="gemini", metadata=metadata)
+    reply_id = _save_message("assistant", reply_text, source="claude", metadata=metadata)
 
     return {
         "reply": reply_text,

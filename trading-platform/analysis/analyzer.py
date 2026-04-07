@@ -11,7 +11,7 @@ Called every market session (or 15-min for crypto off-hours):
     3. Fetch 6-month data: FRED macro (cached 1hr) + Alpaca market prices
        (fresh, includes 3mo/6mo MA signals) + NewsAPI (cached 1hr).
     4. Assemble system prompt + user prompt with momentum signals.
-    5. Call Groq (llama-3.3-70b-versatile) for regime-switching JSON.
+    5. Call Claude (claude-sonnet) for regime-switching JSON.
     6. Validate with Pydantic (RegimeAnalysisOutput).
     7. Apply even-weighting override and normalise Kelly fractions.
     8. Return final RegimeAnalysisOutput.
@@ -32,7 +32,8 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from analysis.feedback_injection import build_system_prompt_with_feedback
-from analysis.groq_client import build_user_prompt, call_groq
+from analysis.groq_client import build_user_prompt
+from analysis.claude_client import call_claude
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
 from data.cache import fred_cache, news_cache
 from data.fred_client import fetch_macro_data
@@ -42,9 +43,9 @@ from portfolio.allocator import process_regime_llm_output, process_crypto_llm_ou
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GROQ REGIME FALLBACK CACHE
+# LLM REGIME FALLBACK CACHE
 # Persists the last successful regime analysis to disk so the pipeline can
-# continue operating when Groq is rate-limited (100k TPD shared budget).
+# continue operating if the LLM is temporarily unavailable.
 # ══════════════════════════════════════════════════════════════════════════════
 
 _REGIME_CACHE_FILE = Path(__file__).parent.parent / "data" / "last_regime_cache.json"
@@ -160,10 +161,10 @@ def get_regime_fallback() -> RegimeAnalysisOutput | None:
         return None
 
 
-def get_groq_status() -> dict:
+def get_llm_status() -> dict:
     """
     Return a status dict for the /status endpoint.
-    Shows when the last successful Groq call happened and whether the cache is usable.
+    Shows when the last successful LLM call happened and whether the cache is usable.
     """
     if _last_regime_cache is None:
         return {
@@ -526,7 +527,7 @@ async def run_analysis_cycle(
     )
 
     if dry_run:
-        logger.warning("DRY RUN: skipping actual Groq API call, returning mock output")
+        logger.warning("DRY RUN: skipping actual Claude API call, returning mock output")
         if crypto_only:
             raw_json = _mock_crypto_llm_response()
             output = process_crypto_llm_output(raw_json)
@@ -534,57 +535,18 @@ async def run_analysis_cycle(
             raw_json = _mock_regime_llm_response()
             output = process_regime_llm_output(raw_json)
     else:
-        from analysis.groq_budget import budget as _budget
-
         from analysis.llm_response_cache import llm_cache as _llm_cache
 
         if crypto_only:
-            if not _budget.can_call_crypto():
-                cached_crypto = get_crypto_fallback()
-                if cached_crypto is not None:
-                    age_min = round(
-                        (time.time() - (_last_crypto_cache or {}).get("saved_at", 0)) / 60
-                    )
-                    logger.info(
-                        f"Groq budget | Crypto call throttled — returning cached "
-                        f"CryptoAnalysisOutput ({age_min}min old)"
-                    )
-                    return cached_crypto
-                logger.warning(
-                    "Groq budget | Crypto call throttled but no cache available — "
-                    "proceeding with LLM call to avoid empty allocation"
-                )
             cache_key = _llm_cache.make_key("crypto", market_data)
-            hits_before = _llm_cache._hits
             output = _call_crypto_with_retry(
                 system_prompt, user_prompt, cache_key=cache_key
             )
-            if _llm_cache._hits == hits_before:   # no cache hit → real Groq call
-                _budget.record_crypto_call()
-            else:
-                logger.debug("LLMResponseCache | Crypto cache hit — skipping budget call counter")
         else:
-            if not _budget.can_call_regime():
-                cached_regime = get_regime_fallback()
-                if cached_regime is not None:
-                    logger.info(
-                        "Groq budget | Full-regime call throttled — returning cached regime "
-                        f"(age={round((time.time() - (_last_regime_cache or {}).get('saved_at', 0)) / 60)}min)"
-                    )
-                    return cached_regime
-                logger.warning(
-                    "Groq budget | Full-regime call throttled but no cache available — "
-                    "proceeding with LLM call to avoid empty allocation"
-                )
             cache_key = _llm_cache.make_key("regime", market_data)
-            hits_before = _llm_cache._hits
             output = _call_regime_with_retry(
                 system_prompt, user_prompt, cache_key=cache_key
             )
-            if _llm_cache._hits == hits_before:   # no cache hit → real Groq call
-                _budget.record_regime_call()
-            else:
-                logger.debug("LLMResponseCache | Regime cache hit — skipping budget call counter")
 
     logger.info("=" * 60)
     logger.info(f"ANALYSIS CYCLE COMPLETE ({mode_label})")
@@ -618,18 +580,20 @@ def _call_regime_with_retry(
         current_prompt = user_prompt
 
         for attempt in range(1, MAX_LLM_RETRIES + 1):
-            logger.info(f"Step 5/5 | Regime LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+            logger.info(f"Step 5/5 | Regime Claude call attempt {attempt}/{MAX_LLM_RETRIES}...")
             try:
-                raw_json = call_groq(
+                raw_json = call_claude(
                     system_prompt=system_prompt,
                     user_prompt=current_prompt,
                     temperature=0.2,
                     max_tokens=2048,
                     call_type="regime",
+                    expect_json=True,
+                    smart=True,
                 )
                 process_regime_llm_output(raw_json)   # validate — raises on bad JSON
                 if attempt > 1:
-                    logger.info(f"  LLM self-corrected on attempt {attempt}")
+                    logger.info(f"  Claude self-corrected on attempt {attempt}")
                 return raw_json
 
             except Exception as exc:
@@ -704,18 +668,20 @@ def _call_crypto_with_retry(
         current_prompt = user_prompt
 
         for attempt in range(1, MAX_LLM_RETRIES + 1):
-            logger.info(f"Step 5/5 | Crypto LLM call attempt {attempt}/{MAX_LLM_RETRIES}...")
+            logger.info(f"Step 5/5 | Crypto Claude call attempt {attempt}/{MAX_LLM_RETRIES}...")
             try:
-                raw_json = call_groq(
+                raw_json = call_claude(
                     system_prompt=system_prompt,
                     user_prompt=current_prompt,
                     temperature=0.2,
                     max_tokens=2048,
                     call_type="crypto",
+                    expect_json=True,
+                    smart=True,
                 )
                 process_crypto_llm_output(raw_json)   # validate — raises on bad JSON
                 if attempt > 1:
-                    logger.info(f"  LLM self-corrected on attempt {attempt}")
+                    logger.info(f"  Claude self-corrected on attempt {attempt}")
                 return raw_json
 
             except Exception as exc:

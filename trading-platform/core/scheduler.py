@@ -8,7 +8,7 @@ Five recurring jobs:
   Job 3 | Every 15 min (24/7)                   — Crypto-only cycle (only fires
           when stock market is CLOSED)
   Job 4 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
-  Job 5 | 04:15 ET daily (Mon-Fri)              — Gemini Self-Critic Auditor
+  Job 5 | 04:15 ET daily (Mon-Fri)              — Claude Self-Critic Auditor
 
 During market hours, Job 1 handles the full universe (ETFs + crypto).
 Outside market hours (nights, weekends, holidays), Job 3 handles crypto-only
@@ -106,12 +106,12 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
             minute=15,
             timezone="America/New_York",
         ),
-        id="gemini_self_critic",
-        name="Gemini Self-Critic Auditor (Pre-Market)",
+        id="claude_self_critic",
+        name="Claude Self-Critic Auditor (Pre-Market)",
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: gemini_self_critic (Mon–Fri 04:15 ET — pre-market veto run)")
+    logger.info("Scheduler | Registered: claude_self_critic (Mon–Fri 04:15 ET — pre-market veto run)")
 
 
 async def _intraday_cycle() -> None:

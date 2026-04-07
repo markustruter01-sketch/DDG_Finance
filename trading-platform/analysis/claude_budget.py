@@ -1,35 +1,34 @@
 """
-analysis/claude_budget.py  —  Claude Token Usage Tracker & Soft Throttle
-=========================================================================
-Claude is a paid-tier API — there is no hard daily token budget gate.
+analysis/claude_budget.py  —  Claude Token Usage Tracker
+=========================================================
+Claude is a paid-tier API.  This module provides:
 
-This module provides:
-  1. Token consumption tracking (for monitoring/dashboards).
-  2. Interval throttle on regime/crypto calls (pacing, not blocking).
-  3. A daily cap on auto-triggered commentary calls per endpoint.
-  4. NO hard budget exhaustion gate — budget_exhausted() always returns False.
+  • Token consumption tracking (for dashboards / monitoring).
+  • No hard budget gates — all can_call_*() / budget_exhausted() methods
+    are paid-tier no-ops that always allow calls.
+  • Full API-surface compatibility with the retired GroqBudget so that
+    existing call-sites continue to work unchanged during Task #67 migration.
 
-All counters reset at midnight UTC.  Interval and cap settings are read
-from settings.claude_regime_interval_minutes and claude_commentary_daily_cap
-(with legacy groq_* aliases as fallback).
-
-Usage:
-    from analysis.claude_budget import budget
-
-    budget.consume(tokens, call_type="regime")
-    budget.can_call_regime()              # True unless interval not elapsed
-    budget.record_regime_call()
-    budget.can_call_crypto()              # shares regime timer
-    budget.record_crypto_call()
-    budget.can_call_commentary(ep, force) # True unless daily cap hit
-    budget.record_commentary_call(ep)
-    budget.budget_exhausted()             # always False (paid tier)
-    budget.budget_status()                # dict for /status claude block
-    budget.token_usage_breakdown()        # per-type breakdown
+Public API (drop-in GroqBudget replacement)
+-------------------------------------------
+    consume(tokens, call_type)        → None
+    can_call_regime()                 → True (no-op)
+    record_regime_call()              → None (no-op)
+    can_call_crypto()                 → True (no-op)
+    record_crypto_call()              → None (no-op)
+    can_call_commentary(ep, force)    → True (no-op)
+    record_commentary_call(ep)        → None (no-op)
+    budget_exhausted()                → False (no-op)
+    next_regime_eligible_at_iso()     → None (no-op)
+    token_usage_breakdown()           → dict
+    budget_status()                   → dict
+    get_usage()                       → dict  (NEW — monitoring helper)
+    reset()                           → None  (NEW — testing helper)
 """
 
-import time
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from threading import Lock
 
 from loguru import logger
@@ -37,38 +36,22 @@ from loguru import logger
 from config.settings import settings
 
 
-def _regime_interval_minutes() -> int:
-    """Prefer claude_regime_interval_minutes; fall back to groq legacy alias."""
-    return settings.claude_regime_interval_minutes
-
-
-def _commentary_daily_cap() -> int:
-    """Prefer claude_commentary_daily_cap; fall back to groq legacy alias."""
-    return settings.claude_commentary_daily_cap
-
-
 class ClaudeBudget:
     """
-    Token usage tracker with soft interval/cap throttles.
+    Token usage tracker for Claude (paid tier).
 
-    Key design decisions vs. GroqBudget
-    ------------------------------------
-    • No hard budget gate — Claude is paid tier.  budget_exhausted() → False.
-    • can_call_regime/crypto only enforce the minimum interval (pacing).
-    • can_call_commentary enforces the per-endpoint daily call cap only.
-    • All token consumption is still tracked for reporting.
+    All gating methods (can_call_*, budget_exhausted) are strict no-ops
+    that always allow calls.  Token counts are tracked for monitoring only.
     """
 
     def __init__(self) -> None:
-        self._lock = Lock()
+        self._lock          = Lock()
         self._reset_day: int = self._today_utc()
         self._tokens_used: int = 0
         self._regime_calls: int = 0
         self._crypto_calls: int = 0
-        self._last_regime_call_at: float = 0.0
         self._commentary_calls: dict[str, int] = {}
         self._tokens_by_type: dict[str, int] = {}
-        self._budget_warned: set[str] = set()
 
     @staticmethod
     def _today_utc() -> int:
@@ -78,21 +61,17 @@ class ClaudeBudget:
         today = self._today_utc()
         if today != self._reset_day:
             old_day = self._reset_day
-            self._reset_day = today
-            self._tokens_used = 0
-            self._regime_calls = 0
-            self._crypto_calls = 0
+            self._reset_day      = today
+            self._tokens_used    = 0
+            self._regime_calls   = 0
+            self._crypto_calls   = 0
             self._commentary_calls = {}
-            self._tokens_by_type = {}
-            self._last_regime_call_at = 0.0
-            self._budget_warned = set()
+            self._tokens_by_type   = {}
             logger.info(
                 f"Claude budget | Daily counters reset ({old_day} → {today})"
             )
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Token tracking (monitoring only — not a gate)
-    # ──────────────────────────────────────────────────────────────────────────
+    # ── Token tracking ─────────────────────────────────────────────────────────
 
     def consume(self, tokens: int, call_type: str = "unknown") -> None:
         with self._lock:
@@ -106,144 +85,60 @@ class ClaudeBudget:
                 f"— running_total={self._tokens_used}"
             )
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Regime / crypto interval throttle
-    # ──────────────────────────────────────────────────────────────────────────
+    # ── Paid-tier no-ops — always allow calls ──────────────────────────────────
 
     def can_call_regime(self) -> bool:
-        """
-        True unless the minimum interval since the last regime call has not
-        elapsed yet.  No hard budget gate (paid tier).
-        """
-        with self._lock:
-            self._maybe_reset()
-            min_interval_min = _regime_interval_minutes()
-            if min_interval_min <= 0 or self._last_regime_call_at == 0.0:
-                return True
-            interval_s = min_interval_min * 60
-            elapsed    = time.time() - self._last_regime_call_at
-            if elapsed < interval_s:
-                wait_min = (interval_s - elapsed) / 60
-                logger.info(
-                    f"Claude budget | Regime call throttled — "
-                    f"{elapsed / 60:.1f}min since last call, "
-                    f"min={min_interval_min}min — eligible in {wait_min:.1f}min"
-                )
-                return False
-            return True
+        """No-op on paid tier — always True."""
+        return True
 
     def record_regime_call(self) -> None:
+        """No-op on paid tier."""
         with self._lock:
             self._maybe_reset()
-            self._last_regime_call_at = time.time()
             self._regime_calls += 1
-            logger.info(
-                f"Claude budget | Regime call #{self._regime_calls} recorded "
-                f"(total_tokens={self._tokens_used})"
-            )
 
     def can_call_crypto(self) -> bool:
-        """
-        Shares the same interval timer as can_call_regime().
-        True unless the minimum interval has not elapsed.
-        """
-        with self._lock:
-            self._maybe_reset()
-            min_interval_min = _regime_interval_minutes()
-            if min_interval_min <= 0 or self._last_regime_call_at == 0.0:
-                return True
-            interval_s = min_interval_min * 60
-            elapsed    = time.time() - self._last_regime_call_at
-            if elapsed < interval_s:
-                wait_min = (interval_s - elapsed) / 60
-                logger.info(
-                    f"Claude budget | Crypto call throttled — "
-                    f"{elapsed / 60:.1f}min since last LLM call, "
-                    f"min={min_interval_min}min — eligible in {wait_min:.1f}min"
-                )
-                return False
-            return True
+        """No-op on paid tier — always True."""
+        return True
 
     def record_crypto_call(self) -> None:
+        """No-op on paid tier."""
         with self._lock:
             self._maybe_reset()
-            self._last_regime_call_at = time.time()
             self._crypto_calls += 1
-            logger.info(
-                f"Claude budget | Crypto call #{self._crypto_calls} recorded "
-                f"(total_tokens={self._tokens_used})"
-            )
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Commentary daily cap
-    # ──────────────────────────────────────────────────────────────────────────
 
     def can_call_commentary(self, endpoint: str, force: bool = False) -> bool:
-        """
-        True unless the per-endpoint daily auto-refresh cap is exceeded.
-        force=True bypasses the cap (for manual refreshes via the dashboard).
-        No hard budget gate.
-        """
-        with self._lock:
-            self._maybe_reset()
-            if force:
-                return True
-            cap   = _commentary_daily_cap()
-            count = self._commentary_calls.get(endpoint, 0)
-            if count >= cap:
-                logger.info(
-                    f"Claude budget | Commentary[{endpoint}] throttled — "
-                    f"{count}/{cap} auto-refreshes today"
-                )
-                return False
-            return True
+        """No-op on paid tier — always True."""
+        return True
 
     def record_commentary_call(self, endpoint: str) -> None:
+        """No-op on paid tier — records count for monitoring only."""
         with self._lock:
             self._maybe_reset()
             self._commentary_calls[endpoint] = (
                 self._commentary_calls.get(endpoint, 0) + 1
             )
-            logger.info(
-                f"Claude budget | Commentary[{endpoint}] call "
-                f"#{self._commentary_calls[endpoint]} recorded"
-            )
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Paid-tier no-ops
-    # ──────────────────────────────────────────────────────────────────────────
 
     def budget_exhausted(self) -> bool:
         """Always False — Claude is a paid tier with no hard daily token cap."""
         return False
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Status / reporting
-    # ──────────────────────────────────────────────────────────────────────────
-
     def next_regime_eligible_at_iso(self) -> str | None:
-        min_interval_min = _regime_interval_minutes()
-        if min_interval_min <= 0 or self._last_regime_call_at == 0.0:
-            return None
-        interval_s = min_interval_min * 60
-        elapsed    = time.time() - self._last_regime_call_at
-        if elapsed >= interval_s:
-            return None
-        wait_s = interval_s - elapsed
-        dt = datetime.now(timezone.utc) + timedelta(seconds=wait_s)
-        return dt.isoformat()
+        """Always None — no interval throttle on paid tier."""
+        return None
+
+    # ── Status / reporting ─────────────────────────────────────────────────────
 
     def token_usage_breakdown(self) -> dict:
         """Return per-call-type token breakdown for the admin token-usage endpoint."""
         with self._lock:
             self._maybe_reset()
-            used      = self._tokens_used
             breakdown = dict(self._tokens_by_type)
             commentary_total = breakdown.pop("commentary", 0)
-            for ep_key in [k for k in breakdown if k.startswith("commentary/")]:
+            for ep_key in [k for k in list(breakdown) if k.startswith("commentary/")]:
                 commentary_total += breakdown.pop(ep_key)
             return {
-                "tokens_used_today":  used,
+                "tokens_used_today":  self._tokens_used,
                 "tokens_remaining":   None,
                 "token_budget_total": None,
                 "pct_used":           None,
@@ -265,14 +160,6 @@ class ClaudeBudget:
         """Return a dict suitable for the /status claude block."""
         with self._lock:
             self._maybe_reset()
-            min_interval_min = _regime_interval_minutes()
-            interval_s       = min_interval_min * 60
-            elapsed          = time.time() - self._last_regime_call_at
-            regime_eligible  = (
-                self._last_regime_call_at == 0.0
-                or min_interval_min <= 0
-                or elapsed >= interval_s
-            )
             by_type = dict(self._tokens_by_type)
             return {
                 "tokens_used_today":       self._tokens_used,
@@ -291,13 +178,43 @@ class ClaudeBudget:
                     "performance": by_type.get("performance", 0),
                     "unknown":     by_type.get("unknown", 0),
                 },
-                "regime_interval_min":     min_interval_min,
-                "commentary_daily_cap":    _commentary_daily_cap(),
-                "next_regime_eligible_at": self.next_regime_eligible_at_iso(),
-                "regime_call_eligible":    regime_eligible,
+                "regime_interval_min":     0,
+                "commentary_daily_cap":    None,
+                "next_regime_eligible_at": None,
+                "regime_call_eligible":    True,
                 "provider":                "claude",
                 "budget_exhausted":        False,
             }
+
+    def get_usage(self) -> dict:
+        """
+        Monitoring helper — returns a lightweight snapshot of today's usage.
+        Suitable for health-check endpoints and log-line reporting.
+        """
+        with self._lock:
+            self._maybe_reset()
+            return {
+                "date":             datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "tokens_used":      self._tokens_used,
+                "regime_calls":     self._regime_calls,
+                "crypto_calls":     self._crypto_calls,
+                "commentary_calls": dict(self._commentary_calls),
+                "by_type":          dict(self._tokens_by_type),
+                "provider":         "claude",
+            }
+
+    def reset(self) -> None:
+        """
+        Hard-reset all counters.  Intended for testing and admin tooling only.
+        """
+        with self._lock:
+            self._reset_day        = self._today_utc()
+            self._tokens_used      = 0
+            self._regime_calls     = 0
+            self._crypto_calls     = 0
+            self._commentary_calls = {}
+            self._tokens_by_type   = {}
+            logger.info("Claude budget | Counters manually reset via reset()")
 
 
 budget = ClaudeBudget()

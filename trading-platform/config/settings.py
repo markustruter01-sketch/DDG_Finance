@@ -26,15 +26,15 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(..., description="Anthropic Claude API key — sole LLM provider")
     claude_model_smart: str = Field(
         default="claude-sonnet-4-6",
-        description="Claude model for high-stakes calls: regime analysis, fleet audit, fleet chat",
+        description="High-stakes calls: regime analysis, fleet audit, fleet chat",
     )
     claude_model_fast: str = Field(
         default="claude-haiku-4-5",
-        description="Claude model for fast/cheap calls: commentary, learning journal, feedback injection",
+        description="Fast/cheap calls: commentary, learning journal, feedback injection",
     )
 
-    # --- Retired LLM keys (kept for env-var compat; not used by any active call path) ---
-    groq_api_key: str = Field(default="", description="Groq API key (retired — kept for env-var compat)")
+    # --- Retired LLM keys (kept for env-var compat only) ---
+    groq_api_key: str = Field(default="", description="Groq API key (retired)")
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 
     # --- Trading Constraints ---
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
     kill_switch_drawdown_pct: float = Field(
         default=0.05,
-        description="Portfolio daily drawdown % that triggers the kill switch (e.g. 0.05 = 5%)",
+        description="Portfolio daily drawdown % that triggers the kill switch",
     )
     total_capital_slots: int = Field(
         default=10,
@@ -55,32 +55,10 @@ class Settings(BaseSettings):
         description="Ticker used to fill empty/low-conviction slots",
     )
 
-    # --- Claude Pacing (interval throttle — NOT a hard budget gate) ---
+    # --- LLM Fallback ---
     regime_fallback_max_age_hours: float = Field(
         default=1.5,
-        description="How many hours a cached regime analysis remains valid when Claude is rate-limited",
-    )
-    claude_regime_interval_minutes: int = Field(
-        default=90,
-        description="Minimum minutes between regime/crypto Claude calls. 0 = disabled.",
-    )
-    claude_commentary_daily_cap: int = Field(
-        default=4,
-        description="Max auto-triggered commentary refreshes per endpoint per day. Force=true bypasses.",
-    )
-
-    # --- Legacy Groq pacing aliases (read by claude_budget shim for backward compat) ---
-    groq_daily_token_budget: int = Field(
-        default=500_000,
-        description="(Legacy alias) Daily token tracking budget — used for reporting only, not as a gate.",
-    )
-    groq_min_regime_interval_minutes: int = Field(
-        default=90,
-        description="(Legacy alias) Delegates to claude_regime_interval_minutes if that is not set.",
-    )
-    groq_commentary_daily_cap: int = Field(
-        default=4,
-        description="(Legacy alias) Delegates to claude_commentary_daily_cap if that is not set.",
+        description="How many hours a cached regime analysis remains valid when Claude is unavailable",
     )
 
     # --- Throttling ---

@@ -55,7 +55,7 @@ const WIN_TEMPLATES: Array<{
   { fn: (e) => `${e.bot} RSI divergence play pays off on ${e.symbol}`, icon: "🔍", color: "#d946ef" },
   { fn: (e) => `Cross-exchange arb detected by ${e.bot}: ${e.symbol} +$${e.pnlUsd.toFixed(2)}`, icon: "🔄", color: "#14b8a6" },
   { fn: (e) => `${e.bot}'s volume profile analysis wins again — ${e.symbol}`, icon: "📉", color: "#f472b6" },
-  { fn: (e) => `Gemini Fleet Commander confirms ${e.bot}'s ${e.symbol} was optimal`, icon: "🌟", color: "#facc15" },
+  { fn: (e) => `Claude Fleet Commander confirms ${e.bot}'s ${e.symbol} was optimal`, icon: "🌟", color: "#facc15" },
   { fn: (e) => `${e.bot} order flow analysis pays: ${e.symbol} closed in profit`, icon: "💹", color: "#34d399" },
   { fn: (_e, s) => `Fleet total PnL: $${s.totalPnl.toFixed(2)} across ${s.totalTrades} trades`, icon: "🏆", color: "#facc15" },
   { fn: (_e, s) => `Win rate holding at ${s.winRate.toFixed(1)}% — AI adapting in real-time`, icon: "📊", color: "#06b6d4" },

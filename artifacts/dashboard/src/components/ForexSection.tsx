@@ -113,7 +113,7 @@ export function ForexSection() {
           <CardContent className="p-3">
             <div className="text-[10px] font-medium text-muted-foreground mb-1">USD Bias</div>
             <div className={cn("text-sm font-mono font-bold", biasColor)}>{biasLabel}</div>
-            <div className="text-[9px] text-muted-foreground/50 mt-1">Groq Macro Compass</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-1">Claude Macro Compass</div>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/20 transition-all">
@@ -331,7 +331,7 @@ export function ForexSection() {
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Timeframe</div><div>H4 Swing Trading</div><div>23 FX Pairs (Majors + EM)</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Entry Signal</div><div>RSI &lt; 30 (oversold)</div><div>RSI &gt; 70 (overbought)</div></div>
             <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Risk</div><div>SL = 1.5x ATR · Trail 1.2x</div><div>TP = 3.0x ATR · BE @ 1x</div></div>
-            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Capital</div><div>1.5% risk per trade</div><div>Groq USD bias filter</div></div>
+            <div className="space-y-1"><div className="text-[9px] text-teal-400/50 uppercase font-semibold">Capital</div><div>1.5% risk per trade</div><div>Claude USD bias filter</div></div>
           </div>
         </CardContent>
       </Card>

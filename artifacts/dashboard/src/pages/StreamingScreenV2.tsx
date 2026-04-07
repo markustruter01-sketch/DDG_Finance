@@ -481,7 +481,7 @@ function NeuralFeed() {
 
     if (summary?.groq?.regime) {
       const oracleDecision = summary.auto_trading ? "HOLD" : "PASS";
-      const regimeParts = [`REGIME: ${summary.groq.regime}`, `Groq ${summary.groq.pct_used.toFixed(0)}% used`];
+      const regimeParts = [`REGIME: ${summary.groq.regime}`, `Claude ${summary.groq.pct_used.toFixed(0)}% used`];
       if (summary.market_open != null) regimeParts.push(`Market ${summary.market_open ? "OPEN" : "CLOSED"}`);
       regimeParts.push(`→ ${oracleDecision}`);
       newLines.push({
@@ -1050,7 +1050,7 @@ function DecisionPipelineBar() {
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>KILL SWITCH: <span style={{ color: killSwitch === "SAFE" ? "#22c55e" : "#ef4444", fontWeight: 700 }}>{killSwitch}</span></span>
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
-      <span>GROQ: <span style={{ color: "#a78bfa", fontWeight: 700 }}>{groqPct}%</span></span>
+      <span>CLAUDE: <span style={{ color: "#a78bfa", fontWeight: 700 }}>{groqPct}%</span></span>
       <span style={{ color: "rgba(255,255,255,0.06)" }}>│</span>
       <span>FLEET CYCLES: <span style={{ color: "#22d3ee", fontWeight: 700 }}>{totalCycles}</span></span>
       <span className="ml-auto text-[9px]" style={{ color: "rgba(148,163,184,0.3)" }}>

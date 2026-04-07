@@ -71,7 +71,7 @@ const FORMULA_SNIPPETS = [
 const TRADE_REASONS: Record<string, string[]> = {
   oracle: [
     "Regime model detected Bull signal with strong momentum indicators. EMA(21) crossed above EMA(50) confirming uptrend. Kelly criterion sized position at optimal risk-reward ratio.",
-    "GROQ analysis identified sector rotation opportunity. RSI recovering from oversold territory with volume confirmation. Position sized via half-Kelly for downside protection.",
+    "Claude analysis identified sector rotation opportunity. RSI recovering from oversold territory with volume confirmation. Position sized via half-Kelly for downside protection.",
     "AI regime classifier confirmed risk-on environment. Asset shows positive correlation divergence from SPY. Stop-loss set at ATR(14) × 2 below entry.",
   ],
   "davy-jones": [

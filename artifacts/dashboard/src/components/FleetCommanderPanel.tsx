@@ -76,7 +76,7 @@ export function FleetCommanderPanel() {
           </div>
           <div>
             <h3 className="font-semibold text-white">Fleet Commander</h3>
-            <p className="text-xs text-muted-foreground">Gemini AI audits all 6 bots, 6x daily</p>
+            <p className="text-xs text-muted-foreground">Claude AI audits all 6 bots, 6x daily</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -250,8 +250,8 @@ export function FleetCommanderPanel() {
                         {h.kraken_param_adjustments?.length > 0 && (
                           <span>{h.kraken_param_adjustments.length} param changes</span>
                         )}
-                        {h.token_usage?.totalTokenCount && (
-                          <span>{(h.token_usage.totalTokenCount / 1000).toFixed(1)}k tok</span>
+                        {h.token_usage?.total_tokens && (
+                          <span>{(h.token_usage.total_tokens / 1000).toFixed(1)}k tok</span>
                         )}
                         <span>{h.elapsed_seconds}s</span>
                       </div>

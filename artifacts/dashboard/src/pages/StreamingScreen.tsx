@@ -5,7 +5,7 @@ import { NerveCenter } from "@/components/streaming/NerveCenter";
 import { NewsIntelligence } from "@/components/streaming/NewsIntelligence";
 import { VaultDisplay } from "@/components/streaming/VaultDisplay";
 import { SalesTicker } from "@/components/streaming/SalesTicker";
-import { GeminiThinking } from "@/components/streaming/GeminiThinking";
+import { ClaudeThinking } from "@/components/streaming/ClaudeThinking";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { ProfitExplosion } from "@/components/streaming/ProfitExplosion";
 import { AchievementFeed } from "@/components/streaming/AchievementFeed";
@@ -74,7 +74,7 @@ export default function StreamingScreen() {
                 <NewsIntelligence />
               </div>
               <VaultDisplay />
-              <GeminiThinking />
+              <ClaudeThinking />
             </div>
           </div>
         </div>

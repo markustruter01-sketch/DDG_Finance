@@ -102,7 +102,7 @@ function SystemStatusBanner() {
       sysStatus = "ai_degraded";
       const cachedRegime = data.groq?.regime ? ` [${data.groq.regime}]` : "";
       const ageMin = data.groq?.cache_age_min != null ? ` · ${Math.round(data.groq.cache_age_min)}min ago` : "";
-      reason = `Groq rate-limited — using cached regime${cachedRegime}${ageMin} · Trading continues normally`;
+      reason = `Claude rate-limited — using cached regime${cachedRegime}${ageMin} · Trading continues normally`;
     } else {
       sysStatus = "online";
       const runCount = data.system_health.run_count;
@@ -118,16 +118,16 @@ function SystemStatusBanner() {
   const BudgetMeter = showBudgetMeter ? (
     <span
       className="ml-auto flex items-center gap-3 flex-shrink-0"
-      title={`Groq session tokens: ${groqUsed.toLocaleString()} used / ${groqTotal.toLocaleString()} total · Resets at midnight UTC`}
+      title={`Claude session tokens: ${groqUsed.toLocaleString()} used / ${groqTotal.toLocaleString()} total · Resets at midnight UTC`}
     >
       <span className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-violet-400/60 flex-shrink-0">
         <span className="w-1 h-1 rounded-full bg-violet-400/50 flex-shrink-0" />
-        <span>Gemini</span>
+        <span>Claude</span>
         <span className="text-violet-400/35">pre-mkt</span>
       </span>
       <span className="flex flex-col gap-0.5 flex-shrink-0">
         <span className="flex items-center gap-1.5">
-          <span className="text-[9px] uppercase font-semibold tracking-wider text-zinc-600">Groq</span>
+          <span className="text-[9px] uppercase font-semibold tracking-wider text-zinc-600">Claude</span>
           <span className={cn("text-[10px] font-mono font-semibold tabular-nums", groqBudgetColor)}>
             {groqRemainingLabel}
           </span>

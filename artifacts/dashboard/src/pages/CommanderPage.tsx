@@ -344,7 +344,7 @@ export default function CommanderPage() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-none">Fleet Commander</h1>
-              <p className="text-[10px] text-slate-500">Gemini-powered fleet control</p>
+              <p className="text-[10px] text-slate-500">Claude-powered fleet control</p>
             </div>
           </div>
           <button
@@ -392,7 +392,7 @@ export default function CommanderPage() {
                 </div>
                 <h2 className="text-lg font-bold text-white mb-1">Fleet Commander</h2>
                 <p className="text-sm text-slate-500 max-w-sm">
-                  Chat with Gemini to manage your trading fleet. Use quick actions above or type a command below.
+                  Chat with Claude to manage your trading fleet. Use quick actions above or type a command below.
                 </p>
               </div>
             )}

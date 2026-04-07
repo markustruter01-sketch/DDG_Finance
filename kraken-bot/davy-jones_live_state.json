@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-04-07T22:48:52.755338+00:00",
+  "last_updated": "2026-04-07T22:49:52.763023+00:00",
   "deployed_usd": 38711.65,
   "deployed_pct": 48.8,
   "deployable_ceiling_pct": 80.0,
@@ -783,6 +783,6 @@
       "MIN_NET_PROFIT_PCT": "++0.0010 \u2192 0.0130  [6 consecutive losses \u2014 raise profit floor to filter weak reversion signals]"
     },
     "adapted_at": "2026-04-07T22:45:58.677047+00:00",
-    "next_adapt_in_hours": 6.0
+    "next_adapt_in_hours": 5.9
   }
 }

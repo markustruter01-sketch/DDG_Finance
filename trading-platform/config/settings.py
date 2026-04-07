@@ -22,8 +22,18 @@ class Settings(BaseSettings):
         description="Alpaca paper trading base URL",
     )
 
-    # --- LLM: Claude (primary) ---
+    # --- LLM: Claude (sole provider) ---
     anthropic_api_key: str = Field(..., description="Anthropic Claude API key — sole LLM provider")
+    claude_model_smart: str = Field(
+        default="claude-sonnet-4-6",
+        description="Claude model for high-stakes calls: regime analysis, fleet audit, fleet chat",
+    )
+    claude_model_fast: str = Field(
+        default="claude-haiku-4-5",
+        description="Claude model for fast/cheap calls: commentary, learning journal, feedback injection",
+    )
+
+    # --- Retired LLM keys (kept for env-var compat; not used by any active call path) ---
     groq_api_key: str = Field(default="", description="Groq API key (retired — kept for env-var compat)")
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 
@@ -45,31 +55,32 @@ class Settings(BaseSettings):
         description="Ticker used to fill empty/low-conviction slots",
     )
 
-    # --- Claude Fallback / Pacing ---
+    # --- Claude Pacing (interval throttle — NOT a hard budget gate) ---
     regime_fallback_max_age_hours: float = Field(
         default=1.5,
-        description="How many hours a cached regime analysis remains valid for pipeline fallback when Claude is rate-limited",
+        description="How many hours a cached regime analysis remains valid when Claude is rate-limited",
+    )
+    claude_regime_interval_minutes: int = Field(
+        default=90,
+        description="Minimum minutes between regime/crypto Claude calls. 0 = disabled.",
+    )
+    claude_commentary_daily_cap: int = Field(
+        default=4,
+        description="Max auto-triggered commentary refreshes per endpoint per day. Force=true bypasses.",
     )
 
-    # --- Claude Budget Guardrails ---
-    # Claude Sonnet pricing: ~$3/MTok input, $15/MTok output.
-    # Daily budget of 500,000 tokens ≈ ~$2/day at typical prompt/completion mix.
-    claude_daily_token_budget: int = Field(
-        default=500_000,
-        description="Daily token budget for Claude API calls. Resets at midnight UTC.",
-    )
-    # Keep groq_* names as aliases so existing env-var exports don't break
+    # --- Legacy Groq pacing aliases (read by claude_budget shim for backward compat) ---
     groq_daily_token_budget: int = Field(
         default=500_000,
-        description="Alias for claude_daily_token_budget (legacy env-var compat).",
+        description="(Legacy alias) Daily token tracking budget — used for reporting only, not as a gate.",
     )
     groq_min_regime_interval_minutes: int = Field(
         default=90,
-        description="Minimum minutes between regime/crypto LLM calls. Enforces proactive budget pacing. 0 = disabled.",
+        description="(Legacy alias) Delegates to claude_regime_interval_minutes if that is not set.",
     )
     groq_commentary_daily_cap: int = Field(
         default=4,
-        description="Max auto-triggered commentary refreshes per endpoint per day. Force=true bypasses cap.",
+        description="(Legacy alias) Delegates to claude_commentary_daily_cap if that is not set.",
     )
 
     # --- Throttling ---

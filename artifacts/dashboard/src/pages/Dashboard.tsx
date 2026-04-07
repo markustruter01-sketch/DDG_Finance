@@ -1,5 +1,4 @@
 import { useMemo, useRef, useEffect, useState } from "react";
-import { useLocation } from "wouter";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary, usePlatformStatus,
@@ -31,8 +30,8 @@ import {
   WifiOff, AlertTriangle, Brain,
   RefreshCw, History,
   Vault, ArrowUpRight, Coins, Target,
-  ExternalLink, Radio, Bot, Zap,
-  LayoutDashboard, ArrowUp, ArrowDown, ArrowUpDown, Layers,
+  ExternalLink,
+  ArrowUp, ArrowDown, ArrowUpDown, Layers,
   ChevronDown, FileText, Mail,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1414,72 +1413,6 @@ function EmailReportButton() {
   );
 }
 
-function BottomNav() {
-  const [, navigate] = useLocation();
-  const streamColor = '#f43f5e';
-
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-1 pointer-events-none">
-      <div className="flex items-center justify-center gap-2 sm:gap-3 max-w-md mx-auto pointer-events-auto">
-        <button
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 shadow-lg scale-105"
-          style={{
-            background: `linear-gradient(135deg, #3b82f620, #3b82f610)`,
-            borderWidth: 1,
-            borderStyle: 'solid',
-            borderColor: `#3b82f650`,
-            boxShadow: `0 4px 24px #3b82f625, 0 0 0 1px #3b82f615`,
-          }}
-        >
-          <span style={{ color: '#3b82f6' }}><LayoutDashboard className="h-6 w-6" /></span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1" style={{ color: '#3b82f6' }}>Home</span>
-        </button>
-        <button
-          onClick={() => navigate('/commander')}
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-emerald-500/40 hover:bg-slate-800/80 group"
-        >
-          <span style={{ color: 'rgb(148,163,184)' }}>
-            <Bot className="h-6 w-6 group-hover:text-emerald-400 transition-colors" />
-          </span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-emerald-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
-            CMD
-          </span>
-        </button>
-        <button
-          onClick={() => navigate('/streaming')}
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 backdrop-blur-xl border border-white/[0.06] hover:border-rose-500/40 hover:bg-slate-800/80 group"
-        >
-          <span className="relative" style={{ color: 'rgb(148,163,184)' }}>
-            <Radio className="h-6 w-6 group-hover:text-rose-400 transition-colors" />
-            <span
-              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
-              style={{ background: streamColor, boxShadow: `0 0 6px ${streamColor}` }}
-            />
-          </span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-rose-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
-            Live
-          </span>
-        </button>
-        <button
-          onClick={() => navigate('/streaming-v2')}
-          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 min-w-[56px] sm:min-w-[64px] py-2.5 px-3 sm:px-4 bg-slate-900/80 border border-white/[0.06] hover:border-cyan-500/40 hover:bg-slate-800/80 group"
-        >
-          <span className="relative" style={{ color: 'rgb(148,163,184)' }}>
-            <Zap className="h-6 w-6 group-hover:text-cyan-400 transition-colors" />
-            <span
-              className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full animate-pulse"
-              style={{ background: '#22d3ee', boxShadow: '0 0 6px #22d3ee' }}
-            />
-          </span>
-          <span className="text-[9px] font-bold tracking-wider uppercase mt-1 group-hover:text-cyan-400 transition-colors" style={{ color: 'rgb(100,116,139)' }}>
-            Fleet
-          </span>
-        </button>
-      </div>
-    </nav>
-  );
-}
-
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -1573,8 +1506,6 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
       </main>
-
-      <BottomNav />
     </div>
   );
 }

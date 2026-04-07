@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
-  ArrowLeft, Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
+  Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
 import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
@@ -250,7 +249,6 @@ function ParamsPanel() {
 }
 
 export default function CommanderPage() {
-  const [, navigate] = useLocation();
   const [input, setInput] = useState("");
   const [showParams, setShowParams] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -340,22 +338,13 @@ export default function CommanderPage() {
     <div className="min-h-screen bg-slate-950 flex flex-col">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/95 backdrop-blur-xl px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors text-sm"
-            >
-              <ArrowLeft className="w-4 h-4" /> Dashboard
-            </button>
-            <div className="w-px h-5 bg-white/10" />
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-emerald-400" />
-              </div>
-              <div>
-                <h1 className="text-sm font-bold text-white leading-none">Fleet Commander</h1>
-                <p className="text-[10px] text-slate-500">Gemini-powered fleet control</p>
-              </div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-white leading-none">Fleet Commander</h1>
+              <p className="text-[10px] text-slate-500">Gemini-powered fleet control</p>
             </div>
           </div>
           <button

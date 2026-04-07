@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
+import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
 
 const StreamingScreen = lazy(() => import("@/pages/StreamingScreen"));
@@ -48,29 +49,32 @@ function StreamingLoader() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/streaming">
-        <ErrorBoundary label="Streaming" autoRecoverMs={2000}>
+    <>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/streaming">
+          <ErrorBoundary label="Streaming" autoRecoverMs={2000}>
+            <Suspense fallback={<StreamingLoader />}>
+              <StreamingScreen />
+            </Suspense>
+          </ErrorBoundary>
+        </Route>
+        <Route path="/streaming-v2">
+          <ErrorBoundary label="StreamingV2" autoRecoverMs={2000}>
+            <Suspense fallback={<StreamingLoader />}>
+              <StreamingScreenV2 />
+            </Suspense>
+          </ErrorBoundary>
+        </Route>
+        <Route path="/commander">
           <Suspense fallback={<StreamingLoader />}>
-            <StreamingScreen />
+            <CommanderPage />
           </Suspense>
-        </ErrorBoundary>
-      </Route>
-      <Route path="/streaming-v2">
-        <ErrorBoundary label="StreamingV2" autoRecoverMs={2000}>
-          <Suspense fallback={<StreamingLoader />}>
-            <StreamingScreenV2 />
-          </Suspense>
-        </ErrorBoundary>
-      </Route>
-      <Route path="/commander">
-        <Suspense fallback={<StreamingLoader />}>
-          <CommanderPage />
-        </Suspense>
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+      <GlobalNav />
+    </>
   );
 }
 

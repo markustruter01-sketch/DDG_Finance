@@ -1,7 +1,4 @@
-import { useLocation } from "wouter";
 import { useState, useEffect, useCallback } from "react";
-import { LayoutDashboard, Radio, Anchor, Globe, TrendingUp, LineChart, Settings, BarChart3 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { Scoreboard } from "@/components/streaming/Scoreboard";
 import { NerveCenter } from "@/components/streaming/NerveCenter";
@@ -35,69 +32,6 @@ function useViewportScale() {
   return scale;
 }
 
-const NAV_ITEMS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, color: "#3b82f6", path: "/" },
-  { id: "kraken", label: "Kraken", icon: Anchor, color: "#22d3ee" },
-  { id: "alpaca", label: "Alpaca", icon: TrendingUp, color: "#10b981" },
-  { id: "options", label: "Options", icon: BarChart3, color: "#f59e0b" },
-  { id: "forex", label: "Forex", icon: Globe, color: "#8b5cf6" },
-  { id: "analytics", label: "Analytics", icon: LineChart, color: "#6366f1" },
-  { id: "cmd", label: "CMD", icon: Settings, color: "#64748b" },
-  { id: "live", label: "Live", icon: Radio, color: "#f43f5e", active: true },
-];
-
-function StreamingNavBar() {
-  const [, navigate] = useLocation();
-
-  return (
-    <div className="shrink-0 px-3 py-1.5">
-      <div className="flex items-center justify-center gap-1.5 mx-auto">
-        {NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive = item.active;
-          const isLink = !!item.path;
-
-          return (
-            <button
-              key={item.id}
-              onClick={isLink ? () => navigate(item.path!) : undefined}
-              className={cn(
-                "relative flex flex-col items-center justify-center rounded-xl transition-all duration-200 min-w-[56px] py-1.5 px-3",
-                isActive
-                  ? "scale-105"
-                  : "bg-slate-900/60 border border-white/[0.06] hover:border-white/10 hover:bg-slate-800/60"
-              )}
-              style={isActive ? {
-                background: `linear-gradient(135deg, ${item.color}20, ${item.color}10)`,
-                borderWidth: 1,
-                borderStyle: "solid",
-                borderColor: `${item.color}50`,
-                boxShadow: `0 2px 12px ${item.color}25, 0 0 0 1px ${item.color}15`,
-              } : undefined}
-            >
-              <span className="relative" style={{ color: isActive ? item.color : "#64748b" }}>
-                <Icon className="h-4 w-4" />
-                {isActive && (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full animate-pulse"
-                    style={{ background: item.color, boxShadow: `0 0 4px ${item.color}` }}
-                  />
-                )}
-              </span>
-              <span
-                className="text-[7px] font-bold tracking-wider uppercase mt-0.5"
-                style={{ color: isActive ? item.color : "#475569" }}
-              >
-                {item.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export default function StreamingScreen() {
   const { trades, wins, losses } = useRealFeed(30);
   const celebrations = useRealCelebrations();
@@ -107,8 +41,6 @@ export default function StreamingScreen() {
   const recent24h = trades.filter(t => new Date(t.date).getTime() > cutoff24h);
   const wins24h = recent24h.filter(t => t.isWin).length;
   const losses24h = recent24h.filter(t => !t.isWin).length;
-
-  const [, setLocation] = useLocation();
 
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
@@ -123,21 +55,7 @@ export default function StreamingScreen() {
       >
         <AchievementFeed achievements={celebrations.achievements} />
         <div className="flex-1 flex flex-col p-3 gap-2 min-h-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setLocation("/")}
-              className="flex items-center gap-1 px-2 py-1 rounded border text-[10px] font-mono font-bold uppercase tracking-wider shrink-0"
-              style={{
-                borderColor: "rgba(148,163,184,0.2)",
-                color: "rgba(148,163,184,0.6)",
-                backgroundColor: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <span style={{ fontSize: 12 }}>←</span>
-              <span>Dashboard</span>
-            </button>
-            <div className="flex-1"><GlobalHUD /></div>
-          </div>
+          <GlobalHUD />
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
             <div className="col-span-3 min-h-0 flex flex-col">
@@ -149,7 +67,6 @@ export default function StreamingScreen() {
                 <NerveCenter wins24h={wins24h} losses24h={losses24h} />
               </div>
               <ProfitExplosion trade={celebrations.explosion} />
-              <StreamingNavBar />
             </div>
 
             <div className="col-span-3 min-h-0 flex flex-col gap-2">

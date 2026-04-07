@@ -1,6 +1,14 @@
 {
   "c8605efa03ac98aba55ef6e956991445": {
-    "raw_json": "{\n  \"market_regime\": \"Extreme Fear with potential contrarian buy signal\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Both BTC/USD and ETH/USD have negative momentum on the 6-month signal. Given the extreme fear in the market and the lack of positive momentum in both crypto pairs, it's best to preserve capital in SGOV.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
-    "saved_at": 1775520826.3878763
+    "raw_json": "{\n  \"market_regime\": \"Bearish with extreme fear, preserving capital\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
+    "saved_at": 1775553023.9392703
+  },
+  "65f28a7056eba3185cf681db883d1092": {
+    "raw_json": "{\n  \"market_regime\": \"Bearish with extreme fear, preserving capital in SGOV due to negative momentum in BTC/USD and mixed signals in ETH/USD\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Preserving capital in SGOV due to lack of positive momentum in both BTC/USD and ETH/USD, aligning with established learnings to avoid crypto investments during extreme fear and negative momentum.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
+    "saved_at": 1775567424.9192328
+  },
+  "bf104fb3e4bbf9902911a3fe3c03709b": {
+    "raw_json": "{\n  \"regime\": \"Sideways\",\n   \"regime_rationale\": \"The current market regime is classified as Sideways due to mixed macro signals, high uncertainty, and lack of clear trend in most assets. The elevated VIX and mixed momentum signals across different asset classes also support this classification.\",\n   \"allocations\": [\n       {\n           \"slot\": 1,\n           \"ticker\": \"SGOV\",\n           \"asset_class\": \"cash\",\n           \"conviction_score\": 1.0,\n           \"kelly_fraction\": 1.0,\n           \"thesis\": \"Given the high uncertainty and lack of clear trend, prioritizing capital preservation by allocating 100% to SGOV.\",\n           \"stop_loss_pct\": -0.07,\n           \"take_profit_pct\": 0.15\n       }\n   ]\n}",
+    "saved_at": 1775584993.701591
   }
 }

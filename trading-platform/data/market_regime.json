@@ -1,9 +1,9 @@
 {
-  "regime": "Bear",
-  "written_at": "2026-04-05T08:43:15.942306+00:00",
-  "cycle_number": 1,
+  "regime": "Sideways",
+  "written_at": "2026-04-07T18:46:18.226591+00:00",
+  "cycle_number": 43,
   "using_fallback": false,
   "regime_override": false,
-  "rationale": "Bear regime: elevated VIX (24.54), negative momentum on QQQ and XLK, recession signals.",
-  "vix": 24.54
+  "rationale": "The current market regime is classified as Sideways due to mixed macro signals, high uncertainty, and lack of clear trend in most assets. The elevated VIX and mixed momentum signals across different asset classes also support this classification.",
+  "vix": 24.17
 }

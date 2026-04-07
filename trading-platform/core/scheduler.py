@@ -99,7 +99,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
 
     scheduler.add_job(
-        func=_gemini_self_critic_job,
+        func=_claude_self_critic_job,
         trigger=CronTrigger(
             day_of_week="mon-fri",
             hour=4,
@@ -243,25 +243,25 @@ async def _daily_audit_job() -> None:
         logger.error(f"Scheduler | daily_audit CRASHED: {exc}")
 
 
-async def _gemini_self_critic_job() -> None:
+async def _claude_self_critic_job() -> None:
     """
-    Run the Gemini self-critic auditor pre-market (04:15 ET).
+    Run the Claude self-critic auditor pre-market (04:15 ET).
     Writes logs/veto_conditions.json so the executor can block vetoed tickers
     for the entire trading day.
     Runs in a thread executor to avoid blocking the asyncio event loop.
     """
-    logger.info("Scheduler | JOB STARTING: gemini_self_critic (Gemini Self-Critic Auditor)")
+    logger.info("Scheduler | JOB STARTING: claude_self_critic (Claude Self-Critic Auditor)")
     try:
         loop   = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, run_daily_self_critic)
         logger.info(
-            f"Scheduler | gemini_self_critic complete: "
+            f"Scheduler | claude_self_critic complete: "
             f"status={result.get('status')} "
             f"verdict={result.get('overall_verdict')} "
             f"vetoed={result.get('vetoed_tickers', [])}"
         )
     except Exception as exc:
-        logger.error(f"Scheduler | gemini_self_critic CRASHED: {exc}")
+        logger.error(f"Scheduler | claude_self_critic CRASHED: {exc}")
 
 
 def get_job_status() -> list[dict]:

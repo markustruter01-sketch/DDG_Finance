@@ -80,10 +80,17 @@ export function useRealFeed(maxTrades = 20) {
           bot = "Apex Predator"; icon = "🎯";
         }
 
-        const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
+        const cleaned = (t.ticker || "").replace("=X", "");
+        const sym = /USD$/.test(cleaned) && !cleaned.includes("/")
+          ? cleaned.replace(/USD$/, "/USD")
+          : cleaned;
+
+        const hasExplicitPnl = t.pnl_usd != null;
+        // Skip Kraken journal entries with no pnl_usd — they're covered by the
+        // Kraken status recent_trades path which always carries a proper dollar amount.
+        if (isKraken && !hasExplicitPnl) continue;
 
         const pnlUsd = t.pnl_usd ?? 0;
-        const hasExplicitPnl = t.pnl_usd != null;
         all.push({
           id: t.trade_id,
           bot,

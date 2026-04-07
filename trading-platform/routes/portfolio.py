@@ -490,14 +490,40 @@ Current open positions:
 
 @portfolio_router.get("/vault", tags=["Vault"])
 async def vault_state() -> dict:
-    from execution.profit_sweep import get_vault_state
+    from execution.profit_sweep import get_vault_state, _use_pg, _pg_conn
+    from datetime import datetime, timedelta
     state = get_vault_state()
     if state is None:
         return {
             "initialised": False,
             "message": "Vault not yet initialised — run a pipeline cycle to set the High Water Mark.",
         }
-    return {"initialised": True, **state}
+    vaulted_24h = 0.0
+    try:
+        if _use_pg():
+            cutoff = datetime.utcnow() - timedelta(hours=24)
+            with _pg_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT COALESCE(SUM(pnl_usd * 0.20), 0.0) FROM kraken_trades "
+                        "WHERE pnl_usd > 0 AND closed_at >= %s",
+                        (cutoff,),
+                    )
+                    row = cur.fetchone()
+                    vaulted_24h += float(row[0] or 0)
+                    try:
+                        cur.execute(
+                            "SELECT COALESCE(SUM(pnl_usd * 0.20), 0.0) FROM forex_trades "
+                            "WHERE pnl_usd > 0 AND exit_time >= %s",
+                            (cutoff,),
+                        )
+                        row2 = cur.fetchone()
+                        vaulted_24h += float(row2[0] or 0)
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return {"initialised": True, "vaulted_24h": round(vaulted_24h, 2), **state}
 
 
 @portfolio_router.post("/vault/sweep", tags=["Vault"])

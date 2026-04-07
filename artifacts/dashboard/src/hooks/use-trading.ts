@@ -400,6 +400,7 @@ export interface VaultState {
   vault_symbol?: string;
   last_sweep_date?: string | null;
   last_sweep_amount?: number | null;
+  vaulted_24h?: number;
   message?: string;
 }
 

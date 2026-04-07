@@ -3,9 +3,9 @@ analysis/micro_auditor.py — Lightweight Rules-Based Fleet Watchdog
 ====================================================================
 Runs every 15 minutes (piggybacks on intraday/crypto cycle cadence).
 Uses pure math and rule checks — ZERO AI calls.  Only escalates to the
-Gemini Fleet Commander when it detects an anomaly that needs AI judgment.
+Claude Fleet Commander when it detects an anomaly that needs AI judgment.
 
-96 oversight checks/day vs 6 Gemini calls = 16x more coverage,
+96 oversight checks/day vs 6 Claude calls = 16x more coverage,
 zero additional API token burn.
 
 Checks performed every cycle:
@@ -266,13 +266,13 @@ def _run_micro_audit_inner(escalate_to_gemini: bool) -> dict[str, Any]:
             from analysis.fleet_commander import run_fleet_commander
             logger.warning(
                 f"MicroAuditor | {high_count} HIGH + {medium_count} MEDIUM alerts — "
-                f"ESCALATING to Gemini Fleet Commander"
+                f"ESCALATING to Claude Fleet Commander"
             )
             fc_result = run_fleet_commander()
             escalated = True
-            logger.info(f"MicroAuditor | Gemini escalation complete: verdict={fc_result.get('overall_verdict')}")
+            logger.info(f"MicroAuditor | Claude Fleet Commander escalation complete: verdict={fc_result.get('overall_verdict')}")
         except Exception as e:
-            logger.error(f"MicroAuditor | Gemini escalation failed (fail-open): {e}")
+            logger.error(f"MicroAuditor | Claude Fleet Commander escalation failed (fail-open): {e}")
 
     elapsed = time.time() - start
 

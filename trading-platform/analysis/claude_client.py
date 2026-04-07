@@ -213,3 +213,97 @@ def call_claude(
         return content
 
     raise RuntimeError(f"Claude | [{call_type}] exhausted all retries")
+
+
+def call_claude_with_usage(
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float = 0.2,
+    max_tokens: int = 4096,
+    call_type: str = "unknown",
+    expect_json: bool = True,
+    smart: bool = False,
+) -> tuple[str, dict]:
+    """
+    Like call_claude() but also returns token usage as a second value.
+
+    Returns
+    -------
+    tuple[str, dict]
+        (response_text, {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int})
+    """
+    client  = _get_client()
+    model   = settings.claude_model_smart if smart else settings.claude_model_fast
+    system  = f"{_JSON_PREAMBLE}\n\n{system_prompt}" if expect_json else system_prompt
+
+    logger.info(
+        f"Claude | Sending request [{call_type}] model={model} "
+        f"temp={temperature} max_tokens={max_tokens} expect_json={expect_json}"
+    )
+
+    last_exc: Exception | None = None
+
+    for attempt, wait in enumerate([None] + _RETRY_WAITS):
+        if wait is not None:
+            logger.warning(
+                f"Claude | [{call_type}] retry {attempt}/{len(_RETRY_WAITS)} "
+                f"after {wait}s (prev: {last_exc})"
+            )
+            time.sleep(wait)
+
+        try:
+            response = client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+        except anthropic.RateLimitError as exc:
+            last_exc = exc
+            if attempt < len(_RETRY_WAITS):
+                continue
+            logger.error(
+                f"Claude | [{call_type}] RateLimitError after {attempt + 1} attempts: {exc}"
+            )
+            raise RuntimeError(f"Claude RateLimitError after retries: {exc}") from exc
+        except anthropic.APIStatusError as exc:
+            last_exc = exc
+            if exc.status_code >= 500 and attempt < len(_RETRY_WAITS):
+                continue
+            logger.error(
+                f"Claude | [{call_type}] APIStatusError HTTP {exc.status_code}: {exc}"
+            )
+            raise RuntimeError(f"Claude APIStatusError {exc.status_code}: {exc}") from exc
+        except anthropic.APIError as exc:
+            logger.error(f"Claude | [{call_type}] APIError: {exc}")
+            raise RuntimeError(f"Claude APIError: {exc}") from exc
+        except Exception as exc:
+            logger.error(f"Claude | [{call_type}] Unexpected error: {exc}")
+            raise RuntimeError(f"Claude call failed: {exc}") from exc
+
+        content       = response.content[0].text
+        input_tokens  = response.usage.input_tokens
+        output_tokens = response.usage.output_tokens
+        total_tokens  = input_tokens + output_tokens
+
+        logger.info(
+            f"Claude | Response received [{call_type}] model={model} — "
+            f"prompt_tokens={input_tokens} completion_tokens={output_tokens} "
+            f"total={total_tokens}"
+        )
+
+        _budget.consume(total_tokens, call_type=call_type)
+
+        usage = {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": total_tokens,
+        }
+
+        if expect_json:
+            return _extract_json(content), usage
+
+        return content, usage
+
+    raise RuntimeError(f"Claude | [{call_type}] exhausted all retries")

@@ -169,12 +169,12 @@ def _fetch_export_report() -> str | None:
 
 
 def _call_fleet_claude(report_text: str) -> tuple[FleetCommanderResponse, dict]:
-    from analysis.claude_client import call_claude
+    from analysis.claude_client import call_claude_with_usage
 
     user_content = f"FLEET DIAGNOSTIC REPORT\n{'='*60}\n{report_text}"
 
     try:
-        raw = call_claude(
+        raw, token_usage = call_claude_with_usage(
             system_prompt=_FLEET_SYSTEM_PROMPT,
             user_prompt=user_content,
             temperature=0.7,
@@ -193,7 +193,7 @@ def _call_fleet_claude(report_text: str) -> tuple[FleetCommanderResponse, dict]:
 
     try:
         result = FleetCommanderResponse(**parsed)
-        return result, {}
+        return result, token_usage
     except Exception as exc:
         raise RuntimeError(f"Fleet Commander response validation failed: {exc}") from exc
 
@@ -268,6 +268,9 @@ def _track_tokens(usage: dict) -> None:
         _daily_token_usage["call_count"] = 0
 
     _daily_token_usage["call_count"] += 1
+    _daily_token_usage["prompt_tokens"]     += usage.get("prompt_tokens", 0)
+    _daily_token_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+    _daily_token_usage["total_tokens"]      += usage.get("total_tokens", 0)
 
 
 def get_token_usage() -> dict:
@@ -336,7 +339,7 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
         f"vetoed={result.vetoed_tickers} "
         f"param_changes={len(result.kraken_param_adjustments)} "
         f"flags={len(result.critique_flags)} "
-        f"tokens={token_usage.get('totalTokenCount', 0)}"
+        f"tokens={token_usage.get('total_tokens', 0)}"
     )
 
     return {

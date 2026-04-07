@@ -473,7 +473,7 @@ async def run_analysis_cycle(
         current_regime=_cached_regime_str,       # Phase 3: regime-matched context injection
     )
 
-    logger.info("Step 5/5 | Calling Groq LLM (llama-3.3-70b-versatile)...")
+    logger.info("Step 5/5 | Calling Claude LLM...")
     # Build algo short context for Bear regime LLM awareness
     _algo_short_ctx: dict | None = None
     if not crypto_only:

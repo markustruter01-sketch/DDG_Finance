@@ -299,6 +299,29 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
             "cache_age_seconds": int(cache_age),
         }
 
+    from analysis.groq_budget import budget as _groq_budget
+    if not _groq_budget.can_call_commentary("kraken", force=force):
+        if bot_cache["text"]:
+            return {
+                "bot_id": bid,
+                "commentary": bot_cache["text"],
+                "generated_at": bot_cache["generated_at"],
+                "cached": True,
+                "cache_age_seconds": int(cache_age),
+                "throttled": True,
+                "budget_exhausted": _groq_budget.budget_exhausted(),
+            }
+        _exhausted = _groq_budget.budget_exhausted()
+        return {
+            "bot_id": bid,
+            "commentary": "AI narrative paused — daily token budget reached. Trades are running normally; all entry/exit decisions are purely algorithmic (Z-score, RSI, VPIN) and never depend on this commentary. Narrative resumes tomorrow at midnight UTC.",
+            "generated_at": None,
+            "cached": False,
+            "cache_age_seconds": 0,
+            "throttled": True,
+            "budget_exhausted": _exhausted,
+        }
+
     bot_ids_list = list(KRAKEN_BOT_PROFILES.keys())
     if not force:
         rr_bot = bot_ids_list[_deps._kraken_commentary_round_robin_idx % len(bot_ids_list)]
@@ -451,22 +474,28 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         "Direct, confident, nautical flair optional. Plain text only, no markdown."
     )
 
-    def _blocking_call() -> str:
-        from analysis.claude_client import call_claude
-        return call_claude(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+    def _blocking_call() -> tuple[str, int]:
+        from groq import Groq
+        from config.settings import settings as _settings
+        client = Groq(api_key=_settings.groq_api_key)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
             temperature=0.72,
             max_tokens=180,
-            call_type="commentary",
-            expect_json=False,
-            smart=False,
-        ).strip()
+        )
+        tokens = resp.usage.total_tokens if resp.usage else 0
+        return resp.choices[0].message.content.strip(), tokens
 
     try:
         loop = asyncio.get_event_loop()
-        commentary = await loop.run_in_executor(None, _blocking_call)
+        commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
+        _groq_budget.consume(tokens_used, call_type="commentary")
         if not force:
+            _groq_budget.record_commentary_call("kraken")
             _deps._kraken_commentary_round_robin_idx += 1
         from datetime import datetime, timezone
         generated_at = datetime.now(timezone.utc).isoformat()
@@ -475,7 +504,7 @@ Cycle #{kdata.get('cycle_count', 0)} | Cash reserve: {kdata.get('cash_reserve_pc
         if bid == "davy-jones":
             _deps._kraken_commentary_cache.update(new_cache)
         _persist_commentary_caches()
-        logger.info(f"Kraken AI commentary regenerated for {bid} (force={force})")
+        logger.info(f"Kraken AI commentary regenerated for {bid} (force={force}, tokens={tokens_used})")
         return {"bot_id": bid, "commentary": commentary, "generated_at": generated_at, "cached": False, "cache_age_seconds": 0}
     except Exception as exc:
         logger.error(f"Kraken AI commentary generation failed for {bid}: {exc}")

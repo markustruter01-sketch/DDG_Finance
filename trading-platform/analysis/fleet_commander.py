@@ -1,8 +1,8 @@
 """
-analysis/fleet_commander.py — Claude Fleet Commander (All-Bot Audit)
+analysis/fleet_commander.py — Gemini Fleet Commander (All-Bot Audit)
 ====================================================================
 Runs 6× daily via APScheduler.  Fetches the full export report covering
-all 6 bots, sends it to Claude for adversarial fleet-wide audit, and
+all 6 bots, sends it to Gemini for adversarial fleet-wide audit, and
 returns structured parameter adjustment recommendations.
 
 Schedule (ET):  04:15, 09:45, 12:00, 15:00, 17:00, 22:00
@@ -23,7 +23,9 @@ import requests
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
-from analysis.gemini_auditor import _GeminiAuditResponse, _GeminiCondition
+from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL, _GeminiAuditResponse, _GeminiCondition
+
+_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _FLEET_AUDIT_FILE = _LOG_DIR / "fleet_audit.json"
@@ -43,24 +45,10 @@ class KrakenBotParams(BaseModel):
     reasoning: str = ""
 
 
-class OracleParamRec(BaseModel):
-    conviction_threshold: float | None = None
-    max_positions: int | None = None
-    cash_reserve_pct: float | None = None
-    reasoning: str = ""
-
-
-class NavigatorParamRec(BaseModel):
-    position_size_usd: float | None = None
-    reasoning: str = ""
-
-
 class FleetCommanderResponse(BaseModel):
     vetoed_tickers: list[str] = Field(default_factory=list)
     conditions: list[_GeminiCondition] = Field(default_factory=list)
     kraken_param_adjustments: list[KrakenBotParams] = Field(default_factory=list)
-    oracle_param_adjustment: OracleParamRec | None = None
-    navigator_param_adjustment: NavigatorParamRec | None = None
     critique_summary: str = ""
     critique_flags: list[str] = Field(default_factory=list)
     overall_verdict: str = "CLEAN"
@@ -88,7 +76,7 @@ FLEET COMPOSITION (6 bots, ~$600K total paper capital)
 ======================================================
 Bot #1 — Oracle/Alpaca (equities + crypto)
   • Alpaca paper-trading, 15-minute cycle
-  • Claude (claude-sonnet) assigns conviction scores and writes trade theses
+  • Groq Llama-3.3-70B assigns conviction scores and writes trade theses
   • 10-slot portfolio with 60% cash ring-fence
   • Kill switch at 5% daily drawdown
 
@@ -115,20 +103,11 @@ YOUR AUDIT TARGETS (look hard for each)
 
 PARAMETER BOUNDS (your recommendations MUST stay within these)
 ==============================================================
-Kraken bots:
 ZSCORE_ENTRY:       [0.70, 1.50]  step=0.05
 ZSCORE_EXIT:        [0.10, 0.55]  step=0.02
 STOP_LOSS_PCT:      [0.008, 0.040] step=0.002
 TRAIL_PCT:          [0.030, 0.100] step=0.005
 MIN_NET_PROFIT_PCT: [0.006, 0.020] step=0.001
-
-Oracle (#1 Alpaca bot):
-conviction_threshold: [0.60, 0.95]  step=0.05  (lower = more trades, higher = selective)
-max_positions:        [1, 10]        step=1     (concurrent equity positions)
-cash_reserve_pct:     [0.30, 0.80]  step=0.05  (fraction kept as cash/SGOV)
-
-Navigator (#6 forex bot):
-position_size_usd: [5000, 25000] step=1000  (per-trade notional USD)
 
 OUTPUT FORMAT (strict JSON, no markdown fences)
 ===============================================
@@ -152,16 +131,6 @@ OUTPUT FORMAT (strict JSON, no markdown fences)
       "reasoning": "Trailing stop firing 45% of exits with thin avg win — give more room"
     }
   ],
-  "oracle_param_adjustment": {
-    "conviction_threshold": 0.80,
-    "max_positions": null,
-    "cash_reserve_pct": null,
-    "reasoning": "Conviction inflation detected — raise threshold to improve signal quality"
-  },
-  "navigator_param_adjustment": {
-    "position_size_usd": null,
-    "reasoning": "Navigator performing within expected bounds — no change needed"
-  },
   "critique_summary": "<2-4 sentence fleet-wide assessment>",
   "critique_flags": ["<specific issue 1>", "<specific issue 2>"],
   "overall_verdict": "CLEAN | CAUTION | HOLD",
@@ -201,28 +170,54 @@ def _fetch_export_report() -> str | None:
     return None
 
 
-def _call_fleet_claude(report_text: str) -> tuple[FleetCommanderResponse, dict]:
-    from analysis.claude_client import call_claude_with_usage
+def _call_fleet_gemini(report_text: str) -> tuple[FleetCommanderResponse, dict]:
+    api_key = _gemini_api_key()
+    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
 
-    user_content = f"FLEET DIAGNOSTIC REPORT\n{'='*60}\n{report_text}"
+    body = {
+        "system_instruction": {
+            "parts": [{"text": _FLEET_SYSTEM_PROMPT}]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": f"FLEET DIAGNOSTIC REPORT\n{'='*60}\n{report_text}"}]
+            }
+        ],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+            "temperature": 0.7,
+        },
+    }
 
     try:
-        raw, token_usage = call_claude_with_usage(
-            system_prompt=_FLEET_SYSTEM_PROMPT,
-            user_prompt=user_content,
-            temperature=0.7,
-            max_tokens=8192,
-            call_type="fleet_commander",
-            expect_json=True,
-            smart=True,
+        resp = requests.post(
+            url,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            json=body,
+            timeout=90,
         )
-    except Exception as exc:
-        raise RuntimeError(f"Claude API call failed: {exc}") from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}")
 
     try:
-        parsed = json.loads(raw)
+        data = resp.json()
+        token_usage = data.get("usageMetadata", {})
+        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
+
+    try:
+        parsed = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Claude returned non-JSON: {raw[:200]}") from exc
+        raise RuntimeError(f"Gemini returned non-JSON: {raw_text[:200]}") from exc
 
     try:
         result = FleetCommanderResponse(**parsed)
@@ -243,8 +238,6 @@ def _write_fleet_audit(result: FleetCommanderResponse, token_usage: dict,
         "vetoed_tickers": result.vetoed_tickers,
         "conditions": [c.model_dump(exclude_none=True) for c in result.conditions],
         "kraken_param_adjustments": [p.model_dump(exclude_none=True) for p in result.kraken_param_adjustments],
-        "oracle_param_adjustment": result.oracle_param_adjustment.model_dump(exclude_none=True) if result.oracle_param_adjustment else None,
-        "navigator_param_adjustment": result.navigator_param_adjustment.model_dump(exclude_none=True) if result.navigator_param_adjustment else None,
         "critique_summary": result.critique_summary,
         "critique_flags": result.critique_flags,
         "token_usage": token_usage,
@@ -302,10 +295,10 @@ def _track_tokens(usage: dict) -> None:
         _daily_token_usage["total_tokens"] = 0
         _daily_token_usage["call_count"] = 0
 
+    _daily_token_usage["prompt_tokens"] += usage.get("promptTokenCount", 0)
+    _daily_token_usage["completion_tokens"] += usage.get("candidatesTokenCount", 0)
+    _daily_token_usage["total_tokens"] += usage.get("totalTokenCount", 0)
     _daily_token_usage["call_count"] += 1
-    _daily_token_usage["prompt_tokens"]     += usage.get("prompt_tokens", 0)
-    _daily_token_usage["completion_tokens"] += usage.get("completion_tokens", 0)
-    _daily_token_usage["total_tokens"]      += usage.get("total_tokens", 0)
 
 
 def get_token_usage() -> dict:
@@ -334,8 +327,8 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     logger.info("FleetCommander | Starting fleet-wide audit")
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        logger.warning("FleetCommander | ANTHROPIC_API_KEY not set — skipping")
+    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
+        logger.warning("FleetCommander | GOOGLE_GEMINI_API_KEY not set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     report = _fetch_export_report()
@@ -346,9 +339,9 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     logger.info(f"FleetCommander | Report size: {len(report):,} chars")
 
     try:
-        result, token_usage = _call_fleet_claude(report)
+        result, token_usage = _call_fleet_gemini(report)
     except RuntimeError as exc:
-        logger.warning(f"FleetCommander | Claude call failed: {exc} — aborting (fail-open)")
+        logger.warning(f"FleetCommander | Gemini call failed: {exc} — aborting (fail-open)")
         return {"status": "failed", "reason": str(exc)}
 
     _track_tokens(token_usage)
@@ -374,7 +367,7 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
         f"vetoed={result.vetoed_tickers} "
         f"param_changes={len(result.kraken_param_adjustments)} "
         f"flags={len(result.critique_flags)} "
-        f"tokens={token_usage.get('total_tokens', 0)}"
+        f"tokens={token_usage.get('totalTokenCount', 0)}"
     )
 
     return {

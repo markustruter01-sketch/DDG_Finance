@@ -439,21 +439,26 @@ Current open positions:
         "Reference specific tickers or data when available. Direct, no filler. Plain text only."
     )
 
-    def _blocking_call() -> str:
-        from analysis.claude_client import call_claude
-        return call_claude(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+    def _blocking_call() -> tuple[str, int]:
+        from groq import Groq
+        from config.settings import settings as _settings
+        client = Groq(api_key=_settings.groq_api_key)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
             temperature=0.72,
             max_tokens=150,
-            call_type="commentary",
-            expect_json=False,
-            smart=False,
         )
+        tokens = resp.usage.total_tokens if resp.usage else 0
+        return resp.choices[0].message.content.strip(), tokens
 
     try:
         loop = asyncio.get_event_loop()
-        commentary = await loop.run_in_executor(None, _blocking_call)
+        commentary, tokens_used = await loop.run_in_executor(None, _blocking_call)
+        _groq_budget.consume(tokens_used, call_type="commentary")
         if not force:
             _groq_budget.record_commentary_call("alpaca")
         from datetime import datetime, timezone

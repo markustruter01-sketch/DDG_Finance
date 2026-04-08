@@ -300,7 +300,7 @@ export function AIImpactTimeline() {
           <CardTitle className="flex items-center gap-2 text-sm">
             <Brain className="h-4 w-4 text-violet-400" />
             <span>AI Impact Timeline</span>
-            <span className="text-[10px] text-zinc-500 font-normal ml-1">Claude Fleet Commander Interventions</span>
+            <span className="text-[10px] text-zinc-500 font-normal ml-1">Gemini Fleet Commander Interventions</span>
           </CardTitle>
         </div>
       </CardHeader>

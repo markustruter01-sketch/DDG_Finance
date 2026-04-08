@@ -3,12 +3,12 @@
   "score": 25.0,
   "confidence": 0.75,
   "equity_contagion": false,
-  "equity_regime": "Sideways",
+  "equity_regime": "Bear",
   "correlation_with_equity": -0.807,
   "crypto_fear_greed": 11,
-  "btc_24h_change_pct": -1.76,
+  "btc_24h_change_pct": -0.33,
   "btc_dominance": 56.6,
   "previous_regime": "Crypto-Bear",
   "regime_changed": false,
-  "written_at": "2026-04-07T18:46:19.136041+00:00"
+  "written_at": "2026-04-07T00:58:47.254264+00:00"
 }

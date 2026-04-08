@@ -7,7 +7,6 @@ import {
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
 import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
-import { ParameterControlPanel } from "@/components/ParameterControlPanel";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
@@ -345,7 +344,7 @@ export default function CommanderPage() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-none">Fleet Commander</h1>
-              <p className="text-[10px] text-slate-500">Claude-powered fleet control</p>
+              <p className="text-[10px] text-slate-500">Gemini-powered fleet control</p>
             </div>
           </div>
           <button
@@ -393,7 +392,7 @@ export default function CommanderPage() {
                 </div>
                 <h2 className="text-lg font-bold text-white mb-1">Fleet Commander</h2>
                 <p className="text-sm text-slate-500 max-w-sm">
-                  Chat with Claude to manage your trading fleet. Use quick actions above or type a command below.
+                  Chat with Gemini to manage your trading fleet. Use quick actions above or type a command below.
                 </p>
               </div>
             )}
@@ -456,15 +455,11 @@ export default function CommanderPage() {
         {showParams && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 340, opacity: 1 }}
+            animate={{ width: 300, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            className="border-l border-white/[0.06] overflow-y-auto p-4 hidden lg:block space-y-6"
-            style={{ minWidth: 280 }}
+            className="border-l border-white/[0.06] overflow-y-auto p-4 hidden lg:block"
           >
             <ParamsPanel />
-            <div className="border-t border-white/[0.06] pt-4">
-              <ParameterControlPanel />
-            </div>
           </motion.aside>
         )}
       </div>

@@ -76,14 +76,14 @@ export function FleetCommanderPanel() {
           </div>
           <div>
             <h3 className="font-semibold text-white">Fleet Commander</h3>
-            <p className="text-xs text-muted-foreground">Claude AI audits all 6 bots, 6x daily</p>
+            <p className="text-xs text-muted-foreground">Gemini AI audits all 6 bots, 6x daily</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {tokenToday && tokenToday.call_count > 0 && (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/5 text-xs text-muted-foreground">
               <Zap className="w-3 h-3 text-amber-400" />
-              <span>{((tokenToday.total_tokens ?? tokenToday.totalTokenCount ?? 0) / 1000).toFixed(1)}k tokens</span>
+              <span>{(tokenToday.total_tokens / 1000).toFixed(1)}k tokens</span>
               <span className="text-white/30">|</span>
               <span>{tokenToday.call_count} calls today</span>
             </div>
@@ -250,8 +250,8 @@ export function FleetCommanderPanel() {
                         {h.kraken_param_adjustments?.length > 0 && (
                           <span>{h.kraken_param_adjustments.length} param changes</span>
                         )}
-                        {(h.token_usage?.total_tokens ?? h.token_usage?.totalTokenCount) && (
-                          <span>{((h.token_usage.total_tokens ?? h.token_usage.totalTokenCount) / 1000).toFixed(1)}k tok</span>
+                        {h.token_usage?.totalTokenCount && (
+                          <span>{(h.token_usage.totalTokenCount / 1000).toFixed(1)}k tok</span>
                         )}
                         <span>{h.elapsed_seconds}s</span>
                       </div>

@@ -1,5 +1,5 @@
 """
-analysis/gemini_auditor.py  —  Claude Daily Self-Critic Auditor
+analysis/gemini_auditor.py  —  Gemini Daily Self-Critic Auditor
 ================================================================
 Runs once per day at 04:15 AM ET (before market open) via the APScheduler
 job registered in core/scheduler.py.
@@ -10,9 +10,9 @@ Responsibilities
      degradations and performance summary from PostgreSQL.
   2. Sanitizes and compacts the payload (gemini_context_sanitizer).
   3. If the payload exceeds 80 % of the token budget, chunks the equity
-     time-series into 8-hour windows and calls Claude once per chunk,
+     time-series into 8-hour windows and calls Gemini once per chunk,
      then merges the results (union of vetoed tickers / conditions).
-  4. Calls Claude (claude-sonnet) with an adversarial "Self-Critic"
+  4. Calls Gemini (gemini-3-flash-preview) with an adversarial "Self-Critic"
      system prompt that looks for:
        • Conviction-score inflation or inconsistency
        • Regime-label contradictions vs. equity/PnL behaviour
@@ -24,7 +24,7 @@ Responsibilities
 
 Fail-open behaviour
 -------------------
-  If Claude is unavailable, the DB query fails, or the response cannot be
+  If Gemini is unavailable, the DB query fails, or the response cannot be
   parsed, the function logs a WARNING and exits cleanly — no partial file
   is written and the previous veto_conditions.json is left untouched.
 
@@ -47,6 +47,7 @@ Output schema (veto_conditions.json)
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -55,6 +56,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
+import requests
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
@@ -71,8 +73,9 @@ _LOG_DIR    = Path(__file__).parent.parent / "logs"
 _VETO_FILE  = _LOG_DIR / "veto_conditions.json"
 _LOG_DIR.mkdir(exist_ok=True)
 
-# ── Inter-chunk delay ──────────────────────────────────────────────────────────
-_CLAUDE_CALL_DELAY_SEC = 2.0        # brief pause between chunked calls
+# ── Gemini model ───────────────────────────────────────────────────────────────
+_GEMINI_MODEL          = "gemini-3-flash-preview"
+_GEMINI_CALL_DELAY_SEC = 300.0      # 5-minute spacing between chunk calls (rate limit safety)
 
 # ── Lookback window ────────────────────────────────────────────────────────────
 _LOOKBACK_HOURS = 28                # yesterday + a few pre-market hours of today
@@ -127,7 +130,7 @@ find problems, not to validate good work.
 Platform description
 --------------------
 • Alpaca paper-trading (equities + ETFs) + Alpaca crypto, 15-minute cycle
-• Claude (claude-sonnet) assigns conviction scores (0–1) and writes trade theses
+• Groq Llama-3.3-70B assigns conviction scores (0–1) and writes trade theses
 • Regime detection: Bull / Bear / Sideways / Crypto
 • 10-slot portfolio with ring-fenced 60 % cash
 • Kill switch at 5 % daily drawdown
@@ -171,42 +174,83 @@ Rules
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SECTION 3 ── Claude client
+# SECTION 3 ── Gemini REST client (direct Google API, user's own key)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _call_claude_auditor(user_payload: str, system_prompt: str | None = None) -> _GeminiAuditResponse:
-    """
-    Send a single audit request to Claude and return a validated response model.
+_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
-    Raises RuntimeError on API/parse errors so callers can handle fail-open.
-    """
-    from analysis.claude_client import call_claude
 
+def _gemini_api_key() -> str:
+    key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
+    if not key:
+        raise RuntimeError("GOOGLE_GEMINI_API_KEY is not set")
+    return key
+
+
+def _call_gemini(user_payload: str, system_prompt: str | None = None) -> _GeminiAuditResponse:
+    """
+    Send a single audit request to Gemini and return a validated response model.
+
+    Raises RuntimeError on HTTP/parse errors so callers can handle fail-open.
+    """
+    api_key = _gemini_api_key()
     prompt = system_prompt or _SYSTEM_PROMPT
 
-    try:
-        raw = call_claude(
-            system_prompt=prompt,
-            user_prompt=user_payload,
-            temperature=0.7,
-            max_tokens=8192,
-            call_type="self_critic",
-            expect_json=True,
-            smart=True,
-        )
-    except Exception as exc:
-        raise RuntimeError(f"Claude API call failed: {exc}") from exc
+    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+    body = {
+        "system_instruction": {
+            "parts": [{"text": prompt}]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": user_payload}]
+            }
+        ],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+            "temperature": 0.7,
+        },
+    }
 
     try:
-        parsed = json.loads(raw)
+        resp = requests.post(
+            url,
+            headers={
+                "Content-Type":   "application/json",
+                "x-goog-api-key": api_key,
+            },
+            json=body,
+            timeout=90,
+        )
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
+
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}"
+        )
+
+    token_usage = {}
+    try:
+        data = resp.json()
+        token_usage = data.get("usageMetadata", {})
+        raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
+
+    try:
+        parsed = json.loads(raw_text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Claude returned non-JSON: {raw[:200]}") from exc
+        raise RuntimeError(f"Gemini returned non-JSON: {raw_text[:200]}") from exc
 
     try:
         result = _GeminiAuditResponse(**parsed)
+        result._token_usage = token_usage
         return result
     except Exception as exc:
-        raise RuntimeError(f"Claude response failed Pydantic validation: {exc}") from exc
+        raise RuntimeError(f"Gemini response failed Pydantic validation: {exc}") from exc
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -230,7 +274,7 @@ def _fetch_audit_data(since: datetime) -> dict[str, Any]:
     from db.postgres import get_conn, is_pg_available
 
     if not is_pg_available():
-        logger.warning("ClaudeAuditor | PostgreSQL unavailable — skipping DB fetch")
+        logger.warning("GeminiAuditor | PostgreSQL unavailable — skipping DB fetch")
         return {}
 
     since_str = since.isoformat()
@@ -317,7 +361,7 @@ def _fetch_audit_data(since: datetime) -> dict[str, Any]:
         }
 
     except Exception as exc:
-        logger.warning(f"ClaudeAuditor | DB fetch error: {exc}")
+        logger.warning(f"GeminiAuditor | DB fetch error: {exc}")
         return {}
 
 
@@ -432,10 +476,10 @@ def run_daily_self_critic() -> dict[str, Any]:
     the veto file (fail-open: trading proceeds normally).
     """
     started_at = datetime.now(timezone.utc)
-    logger.info("ClaudeAuditor | Starting daily self-critic run")
+    logger.info("GeminiAuditor | Starting daily self-critic run")
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        logger.warning("ClaudeAuditor | ANTHROPIC_API_KEY not set — skipping")
+    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
+        logger.warning("GeminiAuditor | GOOGLE_GEMINI_API_KEY not set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     # ── Fetch DB data ─────────────────────────────────────────────────────────
@@ -443,13 +487,13 @@ def run_daily_self_critic() -> dict[str, Any]:
     audit_data = _fetch_audit_data(since)
 
     if not audit_data:
-        logger.warning("ClaudeAuditor | No data fetched from DB — skipping")
+        logger.warning("GeminiAuditor | No data fetched from DB — skipping")
         return {"status": "skipped", "reason": "no_data"}
 
     # ── Sanitize context ──────────────────────────────────────────────────────
     full_context = sanitize_daily_context(audit_data)
     token_est    = estimate_tokens(full_context)
-    logger.info(f"ClaudeAuditor | Context size: {len(full_context):,} chars "
+    logger.info(f"GeminiAuditor | Context size: {len(full_context):,} chars "
                 f"≈ {token_est:,} tokens (budget={TOKEN_BUDGET:,})")
 
     # ── Choose single-call vs chunked path ────────────────────────────────────
@@ -457,12 +501,12 @@ def run_daily_self_critic() -> dict[str, Any]:
 
     if token_est < CHUNK_THRESHOLD:
         # ── Single call ───────────────────────────────────────────────────────
-        logger.info("ClaudeAuditor | Payload within budget — single Claude call")
+        logger.info("GeminiAuditor | Payload within budget — single Gemini call")
         try:
-            resp = _call_claude_auditor(full_context)
+            resp = _call_gemini(full_context)
             responses.append(resp)
         except RuntimeError as exc:
-            logger.warning(f"ClaudeAuditor | Claude call failed: {exc} — aborting (fail-open)")
+            logger.warning(f"GeminiAuditor | Gemini call failed: {exc} — aborting (fail-open)")
             return {"status": "failed", "reason": str(exc)}
 
     else:
@@ -480,23 +524,23 @@ def run_daily_self_critic() -> dict[str, Any]:
 
         if not chunks:
             # Both time-series sources are empty or un-timestamped — treat
-            # the full context as a single oversized chunk and let Claude
-            # handle it.
+            # the full context as a single oversized chunk and let Gemini
+            # handle it (it will stay within model context limits at 720K+ chars).
             logger.warning(
-                "ClaudeAuditor | No chunkable time-series found — "
+                "GeminiAuditor | No chunkable time-series found — "
                 "sending full context as single chunk"
             )
             chunks = [equity_records or audit_data.get("trades", [])]
 
         num_chunks = len(chunks)
         logger.info(
-            f"ClaudeAuditor | Adaptive chunking: splitting into {num_chunks} 8-hour blocks "
-            f"(inter-chunk delay: {_CLAUDE_CALL_DELAY_SEC:.0f}s)"
+            f"GeminiAuditor | Adaptive chunking: splitting into {num_chunks} 8-hour blocks "
+            f"(inter-chunk delay: {_GEMINI_CALL_DELAY_SEC:.0f}s)"
         )
 
         for idx, chunk in enumerate(chunks, start=1):
             # Reconstruct the full data dict with the current chunk's time-series
-            # so Claude sees trades, degradations and performance in every call.
+            # so Gemini sees trades, degradations and performance in every call.
             chunk_data = {
                 **audit_data,
                 "equity_curve": chunk,
@@ -504,20 +548,20 @@ def run_daily_self_critic() -> dict[str, Any]:
             }
             chunk_ctx = sanitize_daily_context(chunk_data)
             logger.info(
-                f"ClaudeAuditor | Block {idx}/{num_chunks}: "
+                f"GeminiAuditor | Block {idx}/{num_chunks}: "
                 f"{estimate_tokens(chunk_ctx):,} tokens"
             )
             try:
-                resp = _call_claude_auditor(chunk_ctx)
+                resp = _call_gemini(chunk_ctx)
                 responses.append(resp)
             except RuntimeError as exc:
                 logger.warning(
-                    f"ClaudeAuditor | Block {idx} Claude call failed: {exc} — aborting"
+                    f"GeminiAuditor | Block {idx} Gemini call failed: {exc} — aborting"
                 )
                 return {"status": "failed", "reason": str(exc), "chunk": idx}
 
             if idx < num_chunks:
-                time.sleep(_CLAUDE_CALL_DELAY_SEC)
+                time.sleep(_GEMINI_CALL_DELAY_SEC)
 
     # ── Merge + write ─────────────────────────────────────────────────────────
     final = _merge_responses(responses)
@@ -525,12 +569,12 @@ def run_daily_self_critic() -> dict[str, Any]:
     try:
         _write_veto_file(final, generated_at=started_at)
     except Exception as exc:
-        logger.warning(f"ClaudeAuditor | Failed to write veto file: {exc} — aborting")
+        logger.warning(f"GeminiAuditor | Failed to write veto file: {exc} — aborting")
         return {"status": "failed", "reason": f"write_error: {exc}"}
 
     elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
     logger.info(
-        f"ClaudeAuditor | Complete in {elapsed:.1f}s — "
+        f"GeminiAuditor | Complete in {elapsed:.1f}s — "
         f"verdict={final.overall_verdict} "
         f"vetoed={final.vetoed_tickers} "
         f"flags={len(final.critique_flags)}"
@@ -557,7 +601,7 @@ def get_last_gemini_audit() -> dict[str, Any]:
     if not _VETO_FILE.exists():
         return {
             "status":       "not_run",
-            "message":      "Claude self-critic has not run yet today",
+            "message":      "Gemini self-critic has not run yet today",
             "file_exists":  False,
         }
 

@@ -1,149 +1,94 @@
 """
-Regression tests for ClaudeBudget (paid-tier no-op semantics).
-Previously tested GroqBudget free-tier enforcement; updated for Claude
-migration (Task #66).  The groq_budget module is now a shim that re-exports
-ClaudeBudget — all tests verify paid-tier no-op behavior.
-
+Regression tests for GroqBudget: covers zero-budget enforcement with force=True
+and the daily commentary cap behaviour.
 Run from trading-platform/:
     python3 -m pytest tests/test_groq_budget.py -v
 """
 
 import importlib
 import sys
+import types
 import unittest
 from unittest.mock import patch, MagicMock
 
 
-def _fresh_budget():
-    """Return a fresh ClaudeBudget instance (via the shim) with clean state."""
-    for mod in list(sys.modules):
-        if mod in ("analysis.claude_budget", "analysis.groq_budget"):
-            del sys.modules[mod]
-    gb_mod = importlib.import_module("analysis.groq_budget")
-    instance = gb_mod.GroqBudget()
-    return instance, gb_mod
+def _make_budget(tokens_used: int, daily_budget: int = 100_000, daily_cap: int = 10):
+    """
+    Return a fresh GroqBudget instance with _tokens_used pre-set and
+    settings mocked to the supplied limits.
+    """
+    import threading
+
+    fake_settings = MagicMock()
+    fake_settings.groq_daily_token_budget = daily_budget
+    fake_settings.groq_commentary_daily_cap = daily_cap
+
+    # Import the module fresh each call to avoid cross-test state leakage.
+    if "analysis.groq_budget" in sys.modules:
+        del sys.modules["analysis.groq_budget"]
+
+    with patch.dict("sys.modules", {"core.config": MagicMock(settings=fake_settings)}):
+        gb_mod = importlib.import_module("analysis.groq_budget")
+        gb = gb_mod.GroqBudget.__new__(gb_mod.GroqBudget)
+        gb._lock = threading.Lock()
+        gb._reset_day = gb_mod.GroqBudget._today_utc()
+        gb._tokens_used = tokens_used
+        gb._regime_calls = 0
+        gb._crypto_calls = 0
+        gb._last_regime_call_at = 0.0
+        gb._commentary_calls = {}
+        gb._budget_warned = set()
+        return gb, fake_settings
 
 
-class TestPaidTierNoOps(unittest.TestCase):
-    """All gating methods must be no-ops on Claude's paid tier."""
+class TestForceBypassRespectsBudget(unittest.TestCase):
+    def test_force_true_blocked_at_zero_budget(self):
+        """force=True must NOT bypass the check when remaining tokens == 0."""
+        gb, settings = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        with patch("analysis.groq_budget.settings", settings):
+            result = gb.can_call_commentary("alpaca", force=True)
+        self.assertFalse(result, "force=True should NOT allow calls when budget is fully exhausted")
 
-    def setUp(self):
-        self.gb, _ = _fresh_budget()
+    def test_force_true_allowed_when_budget_remains(self):
+        """force=True bypasses the daily call cap when budget has tokens left."""
+        gb, settings = _make_budget(tokens_used=0, daily_budget=100_000, daily_cap=1)
+        with patch("analysis.groq_budget.settings", settings):
+            gb._commentary_calls["alpaca"] = 1  # already hit the cap once
+            result = gb.can_call_commentary("alpaca", force=True)
+        self.assertTrue(result, "force=True should bypass daily call cap when budget remains")
 
-    def test_budget_exhausted_always_false(self):
-        """budget_exhausted() must always return False on paid tier."""
-        self.assertFalse(self.gb.budget_exhausted())
+    def test_budget_exhausted_flag_accurate(self):
+        """budget_exhausted() returns True iff tokens_used >= daily_budget."""
+        gb_full, s1 = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        gb_part, s2 = _make_budget(tokens_used=50_000,  daily_budget=100_000)
 
-    def test_can_call_regime_always_true(self):
-        """can_call_regime() must always return True regardless of call count."""
-        for _ in range(20):
-            self.assertTrue(self.gb.can_call_regime())
-            self.gb.record_regime_call()
+        with patch("analysis.groq_budget.settings", s1):
+            self.assertTrue(gb_full.budget_exhausted())
+        with patch("analysis.groq_budget.settings", s2):
+            self.assertFalse(gb_part.budget_exhausted())
 
-    def test_can_call_crypto_always_true(self):
-        """can_call_crypto() must always return True regardless of call count."""
-        for _ in range(20):
-            self.assertTrue(self.gb.can_call_crypto())
-            self.gb.record_crypto_call()
+    def test_cap_reached_does_not_set_budget_exhausted(self):
+        """Hitting daily call cap should NOT make budget_exhausted() return True."""
+        gb, settings = _make_budget(tokens_used=1_000, daily_budget=100_000, daily_cap=5)
+        with patch("analysis.groq_budget.settings", settings):
+            gb._commentary_calls["kraken"] = 5  # cap reached, budget fine
+            can_call = gb.can_call_commentary("kraken", force=False)
+            exhausted = gb.budget_exhausted()
+        self.assertFalse(can_call,  "should be blocked by daily cap")
+        self.assertFalse(exhausted, "budget_exhausted should be False when blocked by cap, not budget")
 
-    def test_can_call_commentary_always_true(self):
-        """can_call_commentary() must always return True regardless of cap."""
-        ep = "alpaca"
-        for _ in range(50):
-            self.assertTrue(self.gb.can_call_commentary(ep))
-            self.gb.record_commentary_call(ep)
-
-    def test_can_call_commentary_force_always_true(self):
-        """force=True must always return True on paid tier."""
-        for _ in range(10):
-            self.assertTrue(self.gb.can_call_commentary("alpaca", force=True))
-
-    def test_next_regime_eligible_at_iso_always_none(self):
-        """No interval throttle on paid tier — should always return None."""
-        self.assertIsNone(self.gb.next_regime_eligible_at_iso())
-        self.gb.record_regime_call()
-        self.assertIsNone(self.gb.next_regime_eligible_at_iso())
-
-
-class TestTokenTracking(unittest.TestCase):
-    """Token consumption must still be tracked for monitoring."""
-
-    def setUp(self):
-        self.gb, _ = _fresh_budget()
-
-    def test_consume_accumulates(self):
-        """consume() must accumulate token counts."""
-        self.gb.consume(1_000, call_type="regime")
-        self.gb.consume(500,   call_type="commentary")
-        usage = self.gb.get_usage()
-        self.assertEqual(usage["tokens_used"], 1_500)
-
-    def test_consume_tracks_by_type(self):
-        """consume() must record tokens per call_type."""
-        self.gb.consume(2_000, call_type="regime")
-        self.gb.consume(800,   call_type="audit")
-        usage = self.gb.get_usage()
-        self.assertEqual(usage["by_type"].get("regime", 0), 2_000)
-        self.assertEqual(usage["by_type"].get("audit", 0), 800)
-
-    def test_budget_status_provider_claude(self):
-        """budget_status() must report provider='claude'."""
-        status = self.gb.budget_status()
-        self.assertEqual(status["provider"], "claude")
-
-    def test_budget_status_tokens_remaining_none(self):
-        """tokens_remaining must be None — no hard budget on paid tier."""
-        status = self.gb.budget_status()
-        self.assertIsNone(status["tokens_remaining"])
-
-    def test_budget_status_regime_call_eligible_true(self):
-        """regime_call_eligible must always be True on paid tier."""
-        status = self.gb.budget_status()
-        self.assertTrue(status["regime_call_eligible"])
-
-
-class TestResetAndGetUsage(unittest.TestCase):
-    """reset() and get_usage() must work as documented."""
-
-    def setUp(self):
-        self.gb, _ = _fresh_budget()
-
-    def test_reset_clears_all_counters(self):
-        """reset() must zero all tracking counters."""
-        self.gb.consume(5_000, call_type="regime")
-        self.gb.record_regime_call()
-        self.gb.record_commentary_call("kraken")
-        self.gb.reset()
-        usage = self.gb.get_usage()
-        self.assertEqual(usage["tokens_used"], 0)
-        self.assertEqual(usage["regime_calls"], 0)
-        self.assertEqual(usage["commentary_calls"], {})
-        self.assertEqual(usage["by_type"], {})
-
-    def test_get_usage_has_required_keys(self):
-        """get_usage() must return all required monitoring keys."""
-        usage = self.gb.get_usage()
-        for key in ("date", "tokens_used", "regime_calls", "crypto_calls",
-                    "commentary_calls", "by_type", "provider"):
-            self.assertIn(key, usage, f"Missing key: {key}")
-
-    def test_get_usage_provider_claude(self):
-        """get_usage() must report provider='claude'."""
-        self.assertEqual(self.gb.get_usage()["provider"], "claude")
-
-
-class TestShimIdentity(unittest.TestCase):
-    """groq_budget shim must re-export ClaudeBudget without wrapping."""
-
-    def test_groq_budget_is_claude_budget(self):
-        from analysis.groq_budget import GroqBudget
-        from analysis.claude_budget import ClaudeBudget
-        self.assertIs(GroqBudget, ClaudeBudget)
-
-    def test_groq_budget_singleton_is_claude_singleton(self):
-        from analysis.groq_budget import budget as g_budget
-        from analysis.claude_budget import budget as c_budget
-        self.assertIs(g_budget, c_budget)
+    def test_one_shot_warning_per_endpoint(self):
+        """Budget-exhausted warning state is recorded exactly once per endpoint."""
+        gb, settings = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        with patch("analysis.groq_budget.settings", settings):
+            self.assertNotIn("alpaca", gb._budget_warned)
+            gb.can_call_commentary("alpaca", force=True)
+            self.assertIn("alpaca", gb._budget_warned, "_budget_warned should record endpoint after first call")
+            gb.can_call_commentary("alpaca", force=True)
+            self.assertIn("alpaca", gb._budget_warned, "_budget_warned should still contain endpoint on second call")
+            # Also verify a different endpoint gets its own independent entry
+            gb.can_call_commentary("kraken", force=True)
+            self.assertIn("kraken", gb._budget_warned)
 
 
 class TestDedupKeyStability(unittest.TestCase):

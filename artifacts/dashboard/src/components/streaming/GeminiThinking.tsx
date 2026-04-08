@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useFleetCommanderStatus } from "@/hooks/use-trading";
 
-const CLAUDE_THOUGHTS = [
+const GEMINI_THOUGHTS = [
   {
     title: "Cross-Fleet Correlation Alert",
     body: "Detected a recurring pattern of losing BTC/USD shorts in the last 48 hours across Davy Jones and Blackbeard. Injecting RAG context into both bots' next analysis cycle to bias away from counter-trend shorts until momentum confirms a reversal. Additionally, cross-referencing on-chain flow data from Glassnode shows net exchange outflows increasing — historically a bullish signal that contradicts our short bias. Recommending both bots reduce BTC short conviction by 40% until the momentum regime shifts back to bearish.",
@@ -33,7 +33,7 @@ const CLAUDE_THOUGHTS = [
   },
   {
     title: "Macro Compass — USD Weakness",
-    body: "Claude Macro Compass update indicates USD weakening on soft NFP expectations. The DXY broke below its 50-day EMA for the first time in 3 weeks. Adjusting Navigator's directional bias to favor long EUR/USD (target: 1.0920) and long AUD/USD (target: 0.6680) setups while reducing conviction on USD/JPY longs until the employment data confirms. Additionally, running Monte Carlo simulations on Navigator's forex book shows 73% probability of positive week if USD continues to weaken at current pace. Position sizing increased by 15% on high-conviction EUR/USD setup.",
+    body: "Groq-powered Macro Compass update indicates USD weakening on soft NFP expectations. The DXY broke below its 50-day EMA for the first time in 3 weeks. Adjusting Navigator's directional bias to favor long EUR/USD (target: 1.0920) and long AUD/USD (target: 0.6680) setups while reducing conviction on USD/JPY longs until the employment data confirms. Additionally, running Monte Carlo simulations on Navigator's forex book shows 73% probability of positive week if USD continues to weaken at current pace. Position sizing increased by 15% on high-conviction EUR/USD setup.",
   },
   {
     title: "Stop-Loss Optimization — Calypso",
@@ -45,20 +45,20 @@ const CLAUDE_THOUGHTS = [
   },
 ];
 
-export function ClaudeThinking() {
+export function GeminiThinking() {
   const [thoughtIdx, setThoughtIdx] = useState(0);
   const [key, setKey] = useState(0);
   const { data: auditStatus } = useFleetCommanderStatus();
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setThoughtIdx(Math.floor(Math.random() * CLAUDE_THOUGHTS.length));
+      setThoughtIdx(Math.floor(Math.random() * GEMINI_THOUGHTS.length));
       setKey((k) => k + 1);
     }, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  const thought = CLAUDE_THOUGHTS[thoughtIdx];
+  const thought = GEMINI_THOUGHTS[thoughtIdx];
 
   return (
     <div className="rounded-lg border border-violet-500/20 bg-violet-950/20 p-4 relative overflow-hidden flex-1 flex flex-col min-h-0">
@@ -69,7 +69,7 @@ export function ClaudeThinking() {
             className="text-[15px] uppercase tracking-wider font-black text-white"
             style={{ textShadow: "0 0 20px rgba(167,139,250,0.6), 0 0 40px rgba(139,92,246,0.3)" }}
           >
-            Claude Fleet Commander
+            Gemini Fleet Commander
           </span>
           <span className="text-[8px] uppercase tracking-widest font-bold -mt-0.5" style={{ color: "rgba(167,139,250,0.5)" }}>AI Orchestrator · Quant Brain</span>
         </div>

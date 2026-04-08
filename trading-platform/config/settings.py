@@ -22,19 +22,9 @@ class Settings(BaseSettings):
         description="Alpaca paper trading base URL",
     )
 
-    # --- LLM: Claude (sole provider) ---
-    anthropic_api_key: str = Field(..., description="Anthropic Claude API key — sole LLM provider")
-    claude_model_smart: str = Field(
-        default="claude-sonnet-4-6",
-        description="High-stakes calls: regime analysis, fleet audit, fleet chat",
-    )
-    claude_model_fast: str = Field(
-        default="claude-haiku-4-5",
-        description="Fast/cheap calls: commentary, learning journal, feedback injection",
-    )
-
-    # --- Retired LLM keys (kept for env-var compat only) ---
-    groq_api_key: str = Field(default="", description="Groq API key (retired)")
+    # --- LLM ---
+    groq_api_key: str = Field(..., description="Groq API key (free, llama3-70b-8192)")
+    anthropic_api_key: str = Field(default="", description="Claude API key (optional future use)")
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 
     # --- Trading Constraints ---
@@ -44,7 +34,7 @@ class Settings(BaseSettings):
     )
     kill_switch_drawdown_pct: float = Field(
         default=0.05,
-        description="Portfolio daily drawdown % that triggers the kill switch",
+        description="Portfolio daily drawdown % that triggers the kill switch (e.g. 0.05 = 5%)",
     )
     total_capital_slots: int = Field(
         default=10,
@@ -55,10 +45,24 @@ class Settings(BaseSettings):
         description="Ticker used to fill empty/low-conviction slots",
     )
 
-    # --- LLM Fallback ---
+    # --- Groq Fallback ---
     regime_fallback_max_age_hours: float = Field(
         default=1.5,
-        description="How many hours a cached regime analysis remains valid when Claude is unavailable",
+        description="How many hours a cached regime analysis remains valid for pipeline fallback when Groq is rate-limited",
+    )
+
+    # --- Groq Budget Guardrails ---
+    groq_daily_token_budget: int = Field(
+        default=100000,
+        description="Daily token budget for Groq API (free tier = 100,000 TPD). Resets at midnight UTC.",
+    )
+    groq_min_regime_interval_minutes: int = Field(
+        default=90,
+        description="Minimum minutes between regime/crypto LLM calls. Enforces proactive budget pacing. 0 = disabled.",
+    )
+    groq_commentary_daily_cap: int = Field(
+        default=4,
+        description="Max auto-triggered commentary refreshes per endpoint per day (Alpaca + Kraken counted separately). Force=true bypasses cap.",
     )
 
     # --- Throttling ---
@@ -82,7 +86,7 @@ class Settings(BaseSettings):
     @field_validator(
         "fred_api_key", "news_api_key",
         "alpaca_api_key", "alpaca_secret_key",
-        "anthropic_api_key", "groq_api_key", "deepseek_api_key",
+        "groq_api_key", "anthropic_api_key", "deepseek_api_key",
         mode="before",
     )
     @classmethod

@@ -8,7 +8,7 @@ Five recurring jobs:
   Job 3 | Every 15 min (24/7)                   — Crypto-only cycle (only fires
           when stock market is CLOSED)
   Job 4 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
-  Job 5 | 04:15 ET daily (Mon-Fri)              — Claude Self-Critic Auditor
+  Job 5 | 04:15 ET daily (Mon-Fri)              — Gemini Self-Critic Auditor
 
 During market hours, Job 1 handles the full universe (ETFs + crypto).
 Outside market hours (nights, weekends, holidays), Job 3 handles crypto-only
@@ -99,19 +99,19 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
 
     scheduler.add_job(
-        func=_claude_self_critic_job,
+        func=_gemini_self_critic_job,
         trigger=CronTrigger(
             day_of_week="mon-fri",
             hour=4,
             minute=15,
             timezone="America/New_York",
         ),
-        id="claude_self_critic",
-        name="Claude Self-Critic Auditor (Pre-Market)",
+        id="gemini_self_critic",
+        name="Gemini Self-Critic Auditor (Pre-Market)",
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: claude_self_critic (Mon–Fri 04:15 ET — pre-market veto run)")
+    logger.info("Scheduler | Registered: gemini_self_critic (Mon–Fri 04:15 ET — pre-market veto run)")
 
 
 async def _intraday_cycle() -> None:
@@ -243,25 +243,25 @@ async def _daily_audit_job() -> None:
         logger.error(f"Scheduler | daily_audit CRASHED: {exc}")
 
 
-async def _claude_self_critic_job() -> None:
+async def _gemini_self_critic_job() -> None:
     """
-    Run the Claude self-critic auditor pre-market (04:15 ET).
+    Run the Gemini self-critic auditor pre-market (04:15 ET).
     Writes logs/veto_conditions.json so the executor can block vetoed tickers
     for the entire trading day.
     Runs in a thread executor to avoid blocking the asyncio event loop.
     """
-    logger.info("Scheduler | JOB STARTING: claude_self_critic (Claude Self-Critic Auditor)")
+    logger.info("Scheduler | JOB STARTING: gemini_self_critic (Gemini Self-Critic Auditor)")
     try:
         loop   = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, run_daily_self_critic)
         logger.info(
-            f"Scheduler | claude_self_critic complete: "
+            f"Scheduler | gemini_self_critic complete: "
             f"status={result.get('status')} "
             f"verdict={result.get('overall_verdict')} "
             f"vetoed={result.get('vetoed_tickers', [])}"
         )
     except Exception as exc:
-        logger.error(f"Scheduler | claude_self_critic CRASHED: {exc}")
+        logger.error(f"Scheduler | gemini_self_critic CRASHED: {exc}")
 
 
 def get_job_status() -> list[dict]:

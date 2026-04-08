@@ -146,10 +146,10 @@ def _llm_regime_critique(
     vix_proxy: float,
 ) -> dict:
     """
-    Call Claude at temperature=0.7 to critique the primary bot's regime call.
+    Call Groq at temperature=0.7 to critique the primary bot's regime call.
     Returns the parsed JSON verdict dict.  Falls back to a neutral verdict on any error.
     """
-    from analysis.claude_client import call_claude
+    from groq import Groq
 
     user_prompt = f"""\
 PRIMARY BOT REGIME CLASSIFICATION:
@@ -166,17 +166,29 @@ or ATR is expanding >15%.  A 'Bull' call is suspicious when ATR is expanding >20
 Flag any mismatch between the claimed regime and the heuristics above."""
 
     try:
-        raw = call_claude(
-            system_prompt=_AUDITOR_SYSTEM_PROMPT,
-            user_prompt=user_prompt,
-            temperature=0.7,
-            max_tokens=500,
-            call_type="audit",
-            expect_json=True,
-            smart=False,
+        client = Groq(api_key=settings.groq_api_key)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _AUDITOR_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
+            temperature=0.7,      # adversarial — higher than primary bot's 0.2
+            max_tokens=500,       # tight cap to conserve TPD budget
+            response_format={"type": "json_object"},
         )
-        logger.info("Auditor LLM | Regime critique complete")
-        return json.loads(raw)
+        usage = response.usage
+        total_tokens = usage.total_tokens if usage else 0
+        logger.info(
+            f"Auditor LLM | Regime critique complete — "
+            f"tokens: prompt={usage.prompt_tokens} completion={usage.completion_tokens}"
+        )
+        try:
+            from analysis.groq_budget import budget as _budget
+            _budget.consume(total_tokens, call_type="audit")
+        except Exception:
+            pass
+        return json.loads(response.choices[0].message.content)
     except Exception as exc:
         logger.warning(f"Auditor LLM | Critique failed: {exc} — returning neutral verdict")
         return {
@@ -1382,21 +1394,29 @@ Write a 3-5 sentence plain-English performance briefing comparing both bots.
 If trade counts are low (< 3), note that data is limited.
 Be specific about which bot is outperforming and why the numbers suggest that."""
 
-    narrative = "Performance analysis unavailable — Claude call failed."
+    narrative = "Performance analysis unavailable — Groq call failed."
     try:
-        from analysis.claude_client import call_claude
-        narrative = call_claude(
-            system_prompt=_PERFORMANCE_NARRATIVE_PROMPT,
-            user_prompt=user_prompt,
+        from groq import Groq
+        client = Groq(api_key=settings.groq_api_key)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _PERFORMANCE_NARRATIVE_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
             temperature=0.5,
             max_tokens=300,
-            call_type="performance",
-            expect_json=False,
-            smart=False,
-        ).strip()
+        )
+        perf_tokens = response.usage.total_tokens if response.usage else 0
+        narrative = response.choices[0].message.content.strip()
         logger.info(f"PerfAnalysis | Narrative generated ({len(narrative)} chars)")
+        try:
+            from analysis.groq_budget import budget as _budget
+            _budget.consume(perf_tokens, call_type="performance")
+        except Exception:
+            pass
     except Exception as exc:
-        logger.error(f"PerfAnalysis | Claude call failed: {exc}")
+        logger.error(f"PerfAnalysis | Groq call failed: {exc}")
 
     _last_performance_report = {
         "status":       "ok",

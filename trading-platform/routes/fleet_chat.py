@@ -1,7 +1,7 @@
 """Fleet Commander interactive chat routes.
 
 Endpoints:
-  POST /fleet-commander/chat         — send a message or quick-action to Claude
+  POST /fleet-commander/chat         — send a message or quick-action to Gemini
   POST /fleet-commander/chat/approve — accept/decline a pending recommendation
   GET  /fleet-commander/chat/history — paginated conversation log
   GET  /fleet-commander/params       — current Kraken adaptive params for all bots
@@ -9,17 +9,19 @@ Endpoints:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL
 from analysis.fleet_enforcer import (
     BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
@@ -27,6 +29,8 @@ from analysis.fleet_enforcer import (
 from db.postgres import is_pg_available, get_conn
 
 fleet_chat_router = APIRouter()
+
+_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 QUICK_ACTIONS = {
     "conservative": {
@@ -129,25 +133,15 @@ _BOT_DEFAULTS: dict[str, dict] = _load_bot_defaults()
 _CHAT_SYSTEM_PROMPT = """\
 You are the FLEET COMMANDER — an AI fleet management assistant for a quantitative trading platform.
 You have direct control over 3 Kraken crypto bots (Davy Jones, Blackbeard, Calypso) and advisory
-control over Oracle (Alpaca equities) and Navigator (forex).
-Apex Predator (options) can only be put on HOLD.
+control over Oracle (Alpaca equities — you can veto tickers but Groq manages strategy).
+Apex Predator (options) and Navigator (forex) can only be put on HOLD.
 
 PARAMETER BOUNDS (your recommendations MUST stay within these):
-
-Kraken bots (Davy Jones, Blackbeard, Calypso):
 ZSCORE_ENTRY:       [0.70, 1.50]  step=0.05
 ZSCORE_EXIT:        [0.10, 0.55]  step=0.02
 STOP_LOSS_PCT:      [0.008, 0.040] step=0.002
 TRAIL_PCT:          [0.030, 0.100] step=0.005
 MIN_NET_PROFIT_PCT: [0.006, 0.020] step=0.001
-
-Oracle (#1 Alpaca equity bot):
-conviction_threshold: [0.60, 0.95] step=0.05
-max_positions:        [1, 10]      step=1
-cash_reserve_pct:     [0.30, 0.80] step=0.05
-
-Navigator (#6 forex bot):
-position_size_usd: [5000, 25000] step=1000
 
 RULES:
 - Maximum ±1 step change per parameter per approval cycle
@@ -159,8 +153,6 @@ RULES:
 {"recommendations": [{"bot_id": "davy_jones", "params": {"ZSCORE_ENTRY": 1.05}, "reasoning": "..."}]}
 ```
 
-- For Oracle changes use bot_id "oracle" and params like {"conviction_threshold": 0.80}
-- For Navigator changes use bot_id "navigator" and params like {"position_size_usd": 12000}
 - If no parameter changes are needed, say so clearly
 - Respond conversationally but precisely — this is a trading command center
 """
@@ -328,30 +320,40 @@ async def _get_fleet_context() -> str:
     return sanitized
 
 
-def _call_claude_chat(messages: list[dict], fleet_context: str) -> str:
-    from analysis.claude_client import call_claude
+async def _call_gemini_chat(messages: list[dict], fleet_context: str) -> str:
+    api_key = _gemini_api_key()
+    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
 
-    system_with_context = _CHAT_SYSTEM_PROMPT + f"\n\nCURRENT FLEET DATA:\n{fleet_context}"
+    contents = []
+    for msg in messages[-10:]:
+        contents.append({
+            "role": "user" if msg["role"] == "user" else "model",
+            "parts": [{"text": msg["content"]}],
+        })
 
-    recent = messages[-10:]
-    if recent:
-        history_lines = []
-        for msg in recent:
-            role = msg["role"].upper()
-            history_lines.append(f"[{role}]: {msg['content']}")
-        user_content = "\n\n".join(history_lines)
-    else:
-        user_content = "(no prior messages)"
+    body = {
+        "system_instruction": {
+            "parts": [{"text": _CHAT_SYSTEM_PROMPT + f"\n\nCURRENT FLEET DATA:\n{fleet_context}"}]
+        },
+        "contents": contents,
+        "generationConfig": {
+            "maxOutputTokens": 2048,
+            "temperature": 0.7,
+        },
+    }
 
-    return call_claude(
-        system_prompt=system_with_context,
-        user_prompt=user_content,
-        temperature=0.7,
-        max_tokens=2048,
-        call_type="fleet_chat",
-        expect_json=False,
-        smart=True,
-    )
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:300]}")
+
+    data = resp.json()
+    return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def _extract_recommendations(text: str) -> list[dict] | None:
@@ -437,84 +439,28 @@ async def fleet_chat(request: ChatRequest) -> dict:
     history = _get_history(limit=20)
 
     try:
-        loop = asyncio.get_event_loop()
-        reply_text = await loop.run_in_executor(
-            None,
-            _call_claude_chat,
+        reply_text = await _call_gemini_chat(
             [{"role": m["role"], "content": m["content"]} for m in history],
             fleet_context,
         )
     except Exception as exc:
-        logger.error(f"FleetChat | Claude call failed: {exc}")
+        logger.error(f"FleetChat | Gemini call failed: {exc}")
         error_reply = f"Fleet Commander is temporarily unavailable: {exc}"
         _save_message("assistant", error_reply, source="system")
         return {"reply": error_reply, "has_recommendations": False, "message_id": user_id}
 
     recommendations = _extract_recommendations(reply_text)
     metadata: dict[str, Any] = {}
-    applied_directives: list[dict] = []
-
     if recommendations:
-        # Auto-apply oracle/navigator directives immediately; queue kraken for approval
-        auto_applied = []
-        needs_approval = []
+        metadata["pending_recommendations"] = recommendations
+        metadata["status"] = "pending_approval"
 
-        for rec in recommendations:
-            bot_id = rec.get("bot_id", "").lower().strip()
-            reasoning = rec.get("reasoning", "Fleet Commander directive")
-            params = rec.get("params", {})
-
-            if bot_id == "oracle":
-                try:
-                    from analysis.claude_parameter_advisor import apply_oracle_params, ORACLE_BOUNDS
-                    oracle_params = {k: v for k, v in params.items() if k in ORACLE_BOUNDS or k == "paused"}
-                    if oracle_params:
-                        ok = apply_oracle_params(oracle_params, reasoning, source="fleet_chat_auto")
-                        if ok:
-                            auto_applied.append({"bot_id": "oracle", "changes": oracle_params, "status": "applied"})
-                        else:
-                            needs_approval.append(rec)
-                    else:
-                        needs_approval.append(rec)
-                except Exception as exc:
-                    logger.warning(f"FleetChat | Auto-apply oracle failed: {exc}")
-                    needs_approval.append(rec)
-
-            elif bot_id == "navigator":
-                try:
-                    from analysis.claude_parameter_advisor import apply_navigator_params, NAVIGATOR_BOUNDS
-                    nav_params = {k: v for k, v in params.items() if k in NAVIGATOR_BOUNDS or k == "paused"}
-                    if nav_params:
-                        ok = apply_navigator_params(nav_params, reasoning, source="fleet_chat_auto")
-                        if ok:
-                            auto_applied.append({"bot_id": "navigator", "changes": nav_params, "status": "applied"})
-                        else:
-                            needs_approval.append(rec)
-                    else:
-                        needs_approval.append(rec)
-                except Exception as exc:
-                    logger.warning(f"FleetChat | Auto-apply navigator failed: {exc}")
-                    needs_approval.append(rec)
-
-            else:
-                # Kraken bots require operator approval
-                needs_approval.append(rec)
-
-        applied_directives = auto_applied
-
-        if needs_approval:
-            metadata["pending_recommendations"] = needs_approval
-            metadata["status"] = "pending_approval"
-        if auto_applied:
-            metadata["auto_applied"] = auto_applied
-
-    reply_id = _save_message("assistant", reply_text, source="claude", metadata=metadata)
+    reply_id = _save_message("assistant", reply_text, source="gemini", metadata=metadata)
 
     return {
         "reply": reply_text,
         "has_recommendations": bool(recommendations),
         "recommendations": recommendations,
-        "applied_directives": applied_directives,
         "message_id": reply_id,
     }
 
@@ -562,44 +508,6 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
 
     for rec in recs:
         bot_id = rec.get("bot_id", "").lower().strip()
-        reasoning = rec.get("reasoning", "Manual chat approval")
-        param_changes = rec.get("params", {})
-
-        # ── Oracle parameter changes ───────────────────────────────────────────
-        if bot_id == "oracle":
-            try:
-                from analysis.claude_parameter_advisor import apply_oracle_params, ORACLE_BOUNDS
-                oracle_params = {k: v for k, v in param_changes.items() if k in ORACLE_BOUNDS}
-                if oracle_params:
-                    ok = apply_oracle_params(oracle_params, reasoning, source="manual_chat")
-                    if ok:
-                        changes_applied.append({"bot_id": "oracle", "changes": oracle_params})
-                    else:
-                        changes_failed.append({"bot_id": "oracle", "reason": "db_write_failed"})
-                else:
-                    changes_failed.append({"bot_id": "oracle", "reason": "no_valid_params"})
-            except Exception as exc:
-                changes_failed.append({"bot_id": "oracle", "reason": str(exc)})
-            continue
-
-        # ── Navigator parameter changes ────────────────────────────────────────
-        if bot_id == "navigator":
-            try:
-                from analysis.claude_parameter_advisor import apply_navigator_params, NAVIGATOR_BOUNDS
-                nav_params = {k: v for k, v in param_changes.items() if k in NAVIGATOR_BOUNDS}
-                if nav_params:
-                    ok = apply_navigator_params(nav_params, reasoning, source="manual_chat")
-                    if ok:
-                        changes_applied.append({"bot_id": "navigator", "changes": nav_params})
-                    else:
-                        changes_failed.append({"bot_id": "navigator", "reason": "db_write_failed"})
-                else:
-                    changes_failed.append({"bot_id": "navigator", "reason": "no_valid_params"})
-            except Exception as exc:
-                changes_failed.append({"bot_id": "navigator", "reason": str(exc)})
-            continue
-
-        # ── Kraken bot parameter changes ──────────────────────────────────────
         db_id = BOT_ID_TO_DB_ID.get(bot_id)
         if not db_id:
             changes_failed.append({"bot_id": bot_id, "reason": "unknown_bot_id"})
@@ -611,6 +519,7 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
             continue
 
         new_params = dict(current)
+        param_changes = rec.get("params", {})
         applied = {}
 
         for pname, target in param_changes.items():
@@ -626,6 +535,7 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
             applied[pname] = {"before": cur_val, "after": new_val}
 
         if applied:
+            reasoning = rec.get("reasoning", "Manual chat approval")
             ok = _write_kraken_params(db_id, bot_id, new_params, f"manual_chat: {reasoning}")
             if ok:
                 changes_applied.append({"bot_id": bot_id, "changes": applied})

@@ -729,7 +729,7 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
 
 def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20, source: str = "kraken_paper") -> dict:
     """
-    Record a per-trade vault contribution (atomic — race-condition safe).
+    Record a per-trade vault contribution.
 
     Called after each profitable paper trade closes.  sweep_rate % of
     each winning trade's gross PnL is earmarked for the Growth Vault (JEPQ).
@@ -741,55 +741,34 @@ def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20, s
     has 20% recorded in the ledger.  This is pure bookkeeping; no real
     Alpaca order is placed here, so the $1 Alpaca floor does not apply.
 
-    Uses an atomic SQL increment (+=) instead of read-modify-write to prevent
-    lost updates when multiple Kraken bots close trades simultaneously.
-
     Returns a dict with swept=True/False and the contributed amount.
     """
     if pnl_usd <= 0:
         return {"swept": False, "reason": "no_profit"}
 
     amount = round(pnl_usd * sweep_rate, 4)
-    today = str(date.today())
 
     try:
         init_vault_db()
+        state = get_vault_state()
 
-        if _use_pg():
-            with _pg_conn() as conn:
-                with conn.cursor() as cur:
-                    # Upsert with atomic += to prevent race conditions across bots
-                    cur.execute("""
-                        INSERT INTO vault_ledger
-                            (id, hwm, total_vaulted_usd, total_sweeps, vault_symbol,
-                             last_sweep_date, last_sweep_amount, da_adjustment)
-                        VALUES (1, 0.0, %s, 1, 'JEPQ', %s, %s, 0.0)
-                        ON CONFLICT (id) DO UPDATE SET
-                            total_vaulted_usd = vault_ledger.total_vaulted_usd + EXCLUDED.total_vaulted_usd,
-                            total_sweeps      = vault_ledger.total_sweeps + 1,
-                            last_sweep_date   = EXCLUDED.last_sweep_date,
-                            last_sweep_amount = EXCLUDED.last_sweep_amount
-                    """, (amount, today, amount))
+        if state is None:
+            _set_vault_state(
+                hwm=0.0,
+                total_vaulted_usd=amount,
+                total_sweeps=1,
+                last_sweep_date=str(date.today()),
+                last_sweep_amount=amount,
+            )
         else:
-            # SQLite is single-writer — original approach is safe
-            state = get_vault_state()
-            if state is None:
-                _set_vault_state(
-                    hwm=0.0,
-                    total_vaulted_usd=amount,
-                    total_sweeps=1,
-                    last_sweep_date=today,
-                    last_sweep_amount=amount,
-                )
-            else:
-                _set_vault_state(
-                    hwm=float(state["hwm"]),
-                    total_vaulted_usd=float(state["total_vaulted_usd"]) + amount,
-                    total_sweeps=int(state["total_sweeps"]) + 1,
-                    last_sweep_date=today,
-                    last_sweep_amount=amount,
-                    da_adjustment=float(state.get("da_adjustment", 0.0)),
-                )
+            _set_vault_state(
+                hwm=float(state["hwm"]),
+                total_vaulted_usd=float(state["total_vaulted_usd"]) + amount,
+                total_sweeps=int(state["total_sweeps"]) + 1,
+                last_sweep_date=str(date.today()),
+                last_sweep_amount=amount,
+                da_adjustment=float(state.get("da_adjustment", 0.0)),
+            )
 
         logger.info(
             f"Vault | {source} contribution: ${amount:.2f} "

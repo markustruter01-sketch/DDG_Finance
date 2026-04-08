@@ -30,7 +30,7 @@ export function CombinedPortfolioSummary() {
       await navigator.clipboard.writeText(result.report);
       toast({
         title: "Report Copied to Clipboard",
-        description: `${result.line_count.toLocaleString()} lines · ${Math.round(result.char_count / 1000)}k chars · Paste into Claude for analysis.`,
+        description: `${result.line_count.toLocaleString()} lines · ${Math.round(result.char_count / 1000)}k chars · Paste into Claude or Gemini for analysis.`,
       });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Export Failed", description: err?.message ?? "Could not generate report." });

@@ -73,7 +73,7 @@ def _get_signal_guard_status() -> dict | None:
 
 @system_router.get("/status")
 async def status() -> dict:
-    from analysis.analyzer import get_llm_status as _get_llm_status, get_emergency_regime_status as _get_emergency
+    from analysis.analyzer import get_groq_status as _get_groq_status, get_emergency_regime_status as _get_emergency
     from analysis.groq_budget import budget as _groq_budget
     from core.market_clock import is_alpaca_maintenance_window
     market_open = is_market_open()
@@ -85,7 +85,7 @@ async def status() -> dict:
         trading_mode = "full_market"
     else:
         trading_mode = "crypto_only"
-    groq_status = _get_llm_status()
+    groq_status = _get_groq_status()
     groq_status["using_fallback"] = last_run.get("groq_using_fallback", False)
     groq_status.update(_groq_budget.budget_status())
     return {
@@ -856,9 +856,9 @@ async def status_summary() -> dict:
 
     groq_info: dict[str, Any] | None = None
     try:
-        from analysis.analyzer import get_llm_status as _get_llm_status
+        from analysis.analyzer import get_groq_status as _get_groq_status
         from analysis.groq_budget import budget as _groq_budget
-        groq_info = _get_llm_status()
+        groq_info = _get_groq_status()
         groq_info["using_fallback"] = last.get("groq_using_fallback", False)
         groq_info.update(_groq_budget.budget_status())
     except Exception:

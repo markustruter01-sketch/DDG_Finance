@@ -344,7 +344,25 @@ def _prefetch_reference_prices():
             logger.warning(f"Forex | Failed to pre-fetch ref price {ref_sym}: {exc}")
 
 
-_PERMITTED_PAIRS = set(PAIRS)
+# ── HARD PAIR WHITELIST ──────────────────────────────────────────────────────
+# This frozenset is the SINGLE SOURCE OF TRUTH for which pairs Navigator is
+# permitted to hold or enter.  It is intentionally NOT derived from forex_config.PAIRS
+# so that editing the config cannot silently expand the universe.
+# To add a pair you must edit BOTH this constant AND forex_config.PAIRS.
+# Mandate: EUR/USD · GBP/USD · USD/JPY · AUD/USD · USD/CAD  (5 majors only)
+# ────────────────────────────────────────────────────────────────────────────
+_PERMITTED_PAIRS: frozenset[str] = frozenset({
+    "EURUSD=X",   # EUR/USD
+    "GBPUSD=X",   # GBP/USD
+    "JPY=X",      # USD/JPY
+    "AUDUSD=X",   # AUD/USD
+    "CAD=X",      # USD/CAD
+})
+
+logger.info(
+    f"Navigator | Hard pair whitelist active: "
+    + ", ".join(sorted(_PERMITTED_PAIRS))
+)
 
 def _check_open_positions():
     positions = get_paper_positions()
@@ -449,7 +467,7 @@ def _check_open_positions():
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on LONG {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
-                    _GAIN_LOCK_PAIRS = {"ZAR=X", "EURUSD=X"}
+                    _GAIN_LOCK_PAIRS = {"EURUSD=X"}
                     if pair in _GAIN_LOCK_PAIRS:
                         unrealized_gain = current_price - entry
                         if unrealized_gain > 0:
@@ -459,7 +477,7 @@ def _check_open_positions():
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
                                 logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on LONG — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
-                    _IMMEDIATE_BE_PAIRS = {"AUDJPY=X"}
+                    _IMMEDIATE_BE_PAIRS: frozenset[str] = frozenset()
                     if pair in _IMMEDIATE_BE_PAIRS:
                         pip_size_be = PIP_SIZE.get(pair, 0.01)
                         be_price = round(entry + (pip_size_be * 2), 5)
@@ -488,7 +506,7 @@ def _check_open_positions():
                         field_updates["trailing_sl"] = pos["trailing_sl"]
                         logger.info(f"Forex | TRAIL SL ratcheted on SHORT {PAIR_LABELS.get(pair, pair)} — trailing SL → {pos['trailing_sl']:.5f}")
 
-                    _GAIN_LOCK_PAIRS_SHORT = {"ZAR=X", "EURUSD=X"}
+                    _GAIN_LOCK_PAIRS_SHORT = {"EURUSD=X"}
                     if pair in _GAIN_LOCK_PAIRS_SHORT:
                         unrealized_gain = entry - current_price
                         if unrealized_gain > 0:
@@ -498,7 +516,7 @@ def _check_open_positions():
                                 field_updates["trailing_sl"] = pos["trailing_sl"]
                                 logger.info(f"Forex | {PAIR_LABELS.get(pair, pair)} 50% gain-lock ratchet on SHORT — trailing SL → {pos['trailing_sl']:.5f} (locks 50% of +{unrealized_gain:.5f})")
 
-                    _IMMEDIATE_BE_PAIRS_SHORT = {"AUDJPY=X"}
+                    _IMMEDIATE_BE_PAIRS_SHORT: frozenset[str] = frozenset()
                     if pair in _IMMEDIATE_BE_PAIRS_SHORT:
                         pip_size_be = PIP_SIZE.get(pair, 0.01)
                         be_price = round(entry - (pip_size_be * 2), 5)
@@ -700,6 +718,15 @@ def _run_cycle_inner() -> dict:
 
         for pair in PAIRS:
             if pair in positions:
+                continue
+
+            # Hard whitelist gate — belt-and-suspenders even if PAIRS is edited
+            if pair not in _PERMITTED_PAIRS:
+                logger.error(
+                    f"Navigator | ENTRY BLOCKED: {pair} is not in the hard pair whitelist "
+                    f"({', '.join(sorted(_PERMITTED_PAIRS))}). "
+                    f"Update _PERMITTED_PAIRS in forex_engine.py to permit this pair."
+                )
                 continue
 
             label = PAIR_LABELS[pair]

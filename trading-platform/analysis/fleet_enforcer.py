@@ -7,7 +7,7 @@ Alpaca veto conditions to veto_conditions.json.
 
 Safety guarantees:
   - All values clamped to BOUNDS from adaptive_params config
-  - Maximum ±1 step change per parameter per audit cycle
+  - Maximum ±1 step change per parameter per audit cycle (steps are 4x expanded)
   - Every change logged with before/after values and reasoning
   - Fail-open: if enforcement fails, bots continue with existing params
 """
@@ -32,11 +32,11 @@ BOUNDS = {
 }
 
 STEPS = {
-    "ZSCORE_ENTRY":       0.05,
-    "ZSCORE_EXIT":        0.02,
-    "STOP_LOSS_PCT":      0.002,
-    "TRAIL_PCT":          0.005,
-    "MIN_NET_PROFIT_PCT": 0.001,
+    "ZSCORE_ENTRY":       0.20,
+    "ZSCORE_EXIT":        0.08,
+    "STOP_LOSS_PCT":      0.008,
+    "TRAIL_PCT":          0.020,
+    "MIN_NET_PROFIT_PCT": 0.004,
 }
 
 FEE_PCT = 0.0026

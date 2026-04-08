@@ -4,13 +4,13 @@ Called by fleet_commander.py during each audit cycle to produce parameter adjust
 suggestions.  The operator must explicitly approve all changes before they are persisted.
 
 Oracle parameters:
-  conviction_threshold  [0.60, 0.95]  step=0.05
-  max_positions         [1,    10]    step=1
-  cash_reserve_pct      [0.30, 0.80]  step=0.05
+  conviction_threshold  [0.60, 0.95]  step=0.20
+  max_positions         [1,    10]    step=4
+  cash_reserve_pct      [0.30, 0.80]  step=0.20
   paused                bool          kill-switch
 
 Navigator parameters:
-  position_size_usd     [5000, 25000] step=1000
+  position_size_usd     [5000, 25000] step=4000
   paused                bool          kill-switch
 
 All operator overrides expire after OVERRIDE_TTL_HOURS (default 24 h).
@@ -42,9 +42,9 @@ ORACLE_BOUNDS: dict[str, tuple[float, float]] = {
 }
 
 ORACLE_STEPS: dict[str, float] = {
-    "conviction_threshold": 0.05,
-    "max_positions":        1.0,
-    "cash_reserve_pct":     0.05,
+    "conviction_threshold": 0.20,
+    "max_positions":        4.0,
+    "cash_reserve_pct":     0.20,
 }
 
 ORACLE_DEFAULTS: dict[str, float] = {
@@ -58,7 +58,7 @@ NAVIGATOR_BOUNDS: dict[str, tuple[float, float]] = {
 }
 
 NAVIGATOR_STEPS: dict[str, float] = {
-    "position_size_usd": 1000.0,
+    "position_size_usd": 4000.0,
 }
 
 NAVIGATOR_DEFAULTS: dict[str, float] = {
@@ -528,10 +528,10 @@ def get_oracle_adjustment(fleet_context: str) -> OracleParamAdjustment:
         '  "reasoning": "<brief explanation>",\n'
         '  "no_change": <true if no changes recommended>\n\n'
         "RULES:\n"
-        "- conviction_threshold: [0.60, 0.95] step=0.05. Lower = more trades, higher = selective.\n"
-        "- max_positions: [1, 10] step=1. Concurrent equity positions allowed.\n"
-        "- cash_reserve_pct: [0.30, 0.80] step=0.05. Fraction to keep as cash/SGOV.\n"
-        "- Maximum ±1 step change per parameter per cycle.\n"
+        "- conviction_threshold: [0.60, 0.95] step=0.20. Lower = more trades, higher = selective.\n"
+        "- max_positions: [1, 10] step=4. Concurrent equity positions allowed.\n"
+        "- cash_reserve_pct: [0.30, 0.80] step=0.20. Fraction to keep as cash/SGOV.\n"
+        "- Move each parameter at most one step (as listed above) per cycle.\n"
         "- Only recommend changes if there is clear data-driven justification.\n"
         "- If no changes are needed, set no_change=true and leave params null.\n"
     )
@@ -572,8 +572,8 @@ def get_navigator_adjustment(fleet_context: str) -> NavigatorParamAdjustment:
         '  "reasoning": "<brief explanation>",\n'
         '  "no_change": <true if no changes recommended>\n\n'
         "RULES:\n"
-        "- position_size_usd: [5000, 25000] step=1000. Per-trade notional in USD.\n"
-        "- Maximum ±1 step change per cycle.\n"
+        "- position_size_usd: [5000, 25000] step=4000. Per-trade notional in USD.\n"
+        "- Move at most one step (4000 USD) per cycle.\n"
         "- Only recommend changes with clear data-driven justification.\n"
         "- If no changes are needed, set no_change=true and position_size_usd=null.\n"
     )

@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import StreamingScreen from "@/pages/StreamingScreen";
 import StreamingScreenV2 from "@/pages/StreamingScreenV2";
+import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 
-type SubPage = "a" | "b";
+type SubPage = "a" | "b" | "c";
+
+const SUB_PAGES: SubPage[] = ["a", "b", "c"];
+
+function nextPage(current: SubPage): SubPage {
+  const idx = SUB_PAGES.indexOf(current);
+  return SUB_PAGES[(idx + 1) % SUB_PAGES.length];
+}
 
 const STORAGE_KEY = "stream-prefs";
 
@@ -42,6 +50,7 @@ export default function StreamPage() {
       const params = new URLSearchParams(window.location.search);
       const sub = params.get("sub");
       if (sub === "b") return "b";
+      if (sub === "c") return "c";
     } catch {}
     return "a";
   }
@@ -82,7 +91,7 @@ export default function StreamPage() {
       intervalRef.current = setInterval(() => {
         progressStartRef.current = Date.now();
         setProgress(0);
-        setActive((prev) => (prev === "a" ? "b" : "a"));
+        setActive((prev) => nextPage(prev));
       }, secs * 1000);
     },
     [clearCycle]
@@ -113,6 +122,30 @@ export default function StreamPage() {
     savePrefs(updated);
   }
 
+  const tabs: { id: SubPage; label: string; activeGrad: string; activeColor: string; activeBorder: string }[] = [
+    {
+      id: "a",
+      label: "Live",
+      activeGrad: "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.2))",
+      activeColor: "#a5b4fc",
+      activeBorder: "rgba(99,102,241,0.4)",
+    },
+    {
+      id: "b",
+      label: "Fleet",
+      activeGrad: "linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.15))",
+      activeColor: "#67e8f9",
+      activeBorder: "rgba(34,211,238,0.3)",
+    },
+    {
+      id: "c",
+      label: "Bots",
+      activeGrad: "linear-gradient(135deg, rgba(16,185,129,0.25), rgba(34,211,238,0.12))",
+      activeColor: "#34d399",
+      activeBorder: "rgba(16,185,129,0.4)",
+    },
+  ];
+
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex flex-col">
       <div
@@ -124,34 +157,34 @@ export default function StreamPage() {
         }}
       >
         <div className="flex items-center gap-1 px-4">
-          <button
-            onClick={() => setActive("a")}
-            className="px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
-            style={{
-              background:
-                active === "a"
-                  ? "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.2))"
-                  : "transparent",
-              color: active === "a" ? "#a5b4fc" : "rgba(148,163,184,0.5)",
-              border: active === "a" ? "1px solid rgba(99,102,241,0.4)" : "1px solid transparent",
-            }}
-          >
-            Live
-          </button>
-          <button
-            onClick={() => setActive("b")}
-            className="px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
-            style={{
-              background:
-                active === "b"
-                  ? "linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.15))"
-                  : "transparent",
-              color: active === "b" ? "#67e8f9" : "rgba(148,163,184,0.5)",
-              border: active === "b" ? "1px solid rgba(34,211,238,0.3)" : "1px solid transparent",
-            }}
-          >
-            Fleet
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActive(tab.id)}
+              className="px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
+              style={{
+                background: active === tab.id ? tab.activeGrad : "transparent",
+                color: active === tab.id ? tab.activeColor : "rgba(148,163,184,0.5)",
+                border: active === tab.id ? `1px solid ${tab.activeBorder}` : "1px solid transparent",
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Page indicator dots */}
+        <div className="flex items-center gap-1 ml-2">
+          {tabs.map((tab) => (
+            <span
+              key={tab.id}
+              className="w-1 h-1 rounded-full transition-all"
+              style={{
+                background: active === tab.id ? tab.activeColor : "rgba(148,163,184,0.2)",
+                boxShadow: active === tab.id ? `0 0 4px ${tab.activeColor}` : "none",
+              }}
+            />
+          ))}
         </div>
 
         <div className="ml-auto flex items-center gap-3 px-4">
@@ -200,8 +233,18 @@ export default function StreamPage() {
             className="absolute top-0 left-0 h-full transition-none"
             style={{
               width: `${progress}%`,
-              background: "linear-gradient(90deg, #6366f1, #22d3ee)",
-              boxShadow: "0 0 8px rgba(99,102,241,0.6)",
+              background:
+                active === "a"
+                  ? "linear-gradient(90deg, #6366f1, #a78bfa)"
+                  : active === "b"
+                    ? "linear-gradient(90deg, #22d3ee, #a855f7)"
+                    : "linear-gradient(90deg, #10b981, #22d3ee)",
+              boxShadow:
+                active === "a"
+                  ? "0 0 8px rgba(99,102,241,0.6)"
+                  : active === "b"
+                    ? "0 0 8px rgba(34,211,238,0.6)"
+                    : "0 0 8px rgba(16,185,129,0.6)",
             }}
           />
         </div>
@@ -213,6 +256,9 @@ export default function StreamPage() {
         </div>
         <div style={{ display: active === "b" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingScreenV2 />
+        </div>
+        <div style={{ display: active === "c" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingBotsScreen />
         </div>
       </div>
     </div>

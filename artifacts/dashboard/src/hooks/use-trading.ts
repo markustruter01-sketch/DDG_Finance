@@ -224,6 +224,12 @@ export interface StatusSummary {
   kill_switch_tripped: boolean;
   alpaca_maintenance: boolean;
   trading_mode: string;
+  afterhours_crypto?: {
+    active: boolean;
+    position_count: number;
+    unrealized_pnl: number;
+    positions: { symbol: string; market_value: number; unrealized_pl: number; qty: number }[];
+  };
   groq: {
     pct_used: number;
     tokens_used_today: number;

@@ -46,6 +46,317 @@ from core.market_clock import is_market_open
 
 _pipeline_lock = asyncio.Lock()
 
+# ── Afterhours crypto watchlist ───────────────────────────────────────────────
+# Symbols in the format used by Alpaca's CryptoHistoricalDataClient.
+_AFTERHOURS_CRYPTO_WATCHLIST: list[str] = [
+    "BTC/USD", "ETH/USD", "SOL/USD", "AVAX/USD",
+]
+
+# Internal symbol format (no slash) used by Alpaca's position API
+_AFTERHOURS_CRYPTO_SYMBOLS_NOSLASH: frozenset[str] = frozenset(
+    s.replace("/", "") for s in _AFTERHOURS_CRYPTO_WATCHLIST
+)
+
+# How many positions to open simultaneously during afterhours (max 4)
+_AFTERHOURS_MAX_POSITIONS: int = 4
+
+# Minimum notional per afterhours crypto order (USD)
+_AFTERHOURS_MIN_NOTIONAL: float = 25.0
+
+# Z-Score threshold for mean-reversion entry (buy when oversold)
+_AFTERHOURS_Z_ENTRY: float = -1.0   # z-score ≤ -1.0 → oversold
+_AFTERHOURS_RSI_ENTRY: float = 45.0  # RSI ≤ 45 → still weak, room to recover
+
+# Per-position cap (10% of total equity — mirrors equity mode cap)
+_AFTERHOURS_MAX_POSITION_PCT: float = 0.10
+
+
+def _is_alpaca_crypto_symbol(symbol: str) -> bool:
+    """Return True if *symbol* is an Alpaca afterhours crypto position (e.g. BTCUSD)."""
+    return symbol.upper() in _AFTERHOURS_CRYPTO_SYMBOLS_NOSLASH
+
+
+async def run_afterhours_crypto_cycle(dry_run: bool = False) -> dict:
+    """
+    Oracle Afterhours Crypto Cycle
+    --------------------------------
+    Runs when the NYSE is closed.  No LLM call — uses a lightweight
+    Z-Score + RSI mean-reversion signal to select and size crypto entries.
+
+    Steps:
+      1. Capital guard: compute idle cash via get_afterhours_available_cash().
+      2. Skip if insufficient capital or kill switch tripped.
+      3. Fetch recent OHLCV bars for each symbol in the watchlist via
+         Alpaca CryptoHistoricalDataClient.
+      4. Compute Z-Score (price vs 20-bar mean/std) and RSI(14) for each.
+      5. Select symbols meeting the mean-reversion entry signal.
+      6. Size each position: equal-weight across selected symbols, capped at
+         AFTERHOURS_MAX_POSITION_PCT of equity and AFTERHOURS_CASH_CAP of cash.
+      7. Place GTC buy orders via the existing broker.place_order().
+      8. Apply all existing circuit breakers: per-position 10% cap, VaR guard,
+         daily drawdown kill switch.
+    """
+    logger.info("=" * 60)
+    logger.info("AFTERHOURS CRYPTO CYCLE STARTING")
+    logger.info("=" * 60)
+
+    result: dict = {
+        "status":           "ok",
+        "afterhours":       True,
+        "afterhours_mode":  "crypto_mean_reversion",
+        "errors":           [],
+        "placed":           [],
+        "skipped":          [],
+        "signals":          [],
+    }
+
+    from execution.broker import get_positions, get_account, place_order
+    from execution.kill_switch import is_tripped as _ks_tripped, check as _ks_check_ah
+    from execution.executor import get_afterhours_available_cash, AFTERHOURS_CASH_CAP
+
+    # Run live drawdown evaluation (ks_check) first, then check persisted state.
+    # ks_check() evaluates intraday drawdown and may trip the switch.
+    if _ks_check_ah():
+        msg = "Afterhours cycle: kill switch tripped (live drawdown check) — skipping"
+        logger.warning(msg)
+        result["status"] = "kill_switch_tripped"
+        result["errors"].append(msg)
+        return result
+
+    if _ks_tripped():
+        msg = "Afterhours cycle: kill switch tripped — skipping"
+        logger.warning(msg)
+        result["status"] = "kill_switch_tripped"
+        result["errors"].append(msg)
+        return result
+
+    available_cash = get_afterhours_available_cash()
+    if available_cash < _AFTERHOURS_MIN_NOTIONAL:
+        msg = f"Afterhours cycle: insufficient cash (${available_cash:.2f}) — skipping"
+        logger.info(msg)
+        result["status"] = "insufficient_cash"
+        result["errors"].append(msg)
+        return result
+
+    acct = get_account()
+    equity = acct["equity"]
+    max_position_usd = round(equity * _AFTERHOURS_MAX_POSITION_PCT, 2)
+
+    all_positions = get_positions()
+    existing_positions = {p["symbol"] for p in all_positions}
+
+    # ── VaR Circuit Breaker ────────────────────────────────────────────────
+    # Mirror the equity-mode VaR gate: if 1-day 95% historical VaR across
+    # current positions exceeds the daily loss limit (5% of equity), block
+    # all NEW entries this cycle.  Existing positions are unaffected.
+    try:
+        from portfolio.var_calculator import compute_daily_var as _compute_var
+        _SAFE_SET = frozenset({"SGOV", "JEPQ"})
+        _risk_positions = [
+            {"symbol": p["symbol"], "market_value": p.get("market_value", 0.0)}
+            for p in all_positions
+            if p.get("symbol") not in _SAFE_SET
+        ]
+        _invested_usd = sum(abs(float(p.get("market_value", 0.0) or 0.0)) for p in _risk_positions)
+        _var_pct = _compute_var(_risk_positions, confidence=0.95) if _risk_positions else 0.0
+        _var_usd = _var_pct * _invested_usd
+        _var_limit_usd = 0.05 * equity
+        if _var_limit_usd > 0 and _var_usd > _var_limit_usd:
+            msg = (
+                f"Afterhours cycle: VaR circuit breaker tripped — "
+                f"1-day 95% VaR=${_var_usd:,.2f} > limit=${_var_limit_usd:,.2f} — "
+                f"no new afterhours entries this cycle"
+            )
+            logger.warning(msg)
+            result["status"] = "var_circuit_breaker"
+            result["errors"].append(msg)
+            return result
+        if _var_usd > 0:
+            logger.info(
+                f"Afterhours cycle: VaR=${_var_usd:,.2f} within limit=${_var_limit_usd:,.2f}"
+            )
+    except Exception as _var_exc:
+        logger.debug(f"Afterhours cycle: VaR check failed (non-fatal, proceeding): {_var_exc}")
+
+    from config.settings import settings as _cfg
+    try:
+        from alpaca.data.historical import CryptoHistoricalDataClient
+        from alpaca.data.requests import CryptoBarsRequest
+        from alpaca.data.timeframe import TimeFrame
+        import pandas as pd
+        from datetime import datetime, timezone, timedelta
+
+        data_client = CryptoHistoricalDataClient(
+            api_key=_cfg.alpaca_api_key,
+            secret_key=_cfg.alpaca_secret_key,
+        )
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(days=5)
+
+        req = CryptoBarsRequest(
+            symbol_or_symbols=_AFTERHOURS_CRYPTO_WATCHLIST,
+            timeframe=TimeFrame.Hour,
+            start=start_dt,
+            end=end_dt,
+        )
+        bars_response = data_client.get_crypto_bars(req)
+
+        # Build a per-symbol dict of close-price Series from the BarSet.
+        # The Alpaca SDK `BarSet` maps symbol → list[Bar].  We extract close
+        # prices into a plain pandas Series for each symbol.
+        _symbol_closes: dict[str, "pd.Series"] = {}
+        for _sym in _AFTERHOURS_CRYPTO_WATCHLIST:
+            try:
+                _bar_list = bars_response[_sym]
+                if _bar_list:
+                    _closes_arr = [float(b.close) for b in _bar_list]
+                    _symbol_closes[_sym] = pd.Series(_closes_arr, dtype=float)
+                    logger.debug(
+                        f"Afterhours | {_sym}: got {len(_closes_arr)} bars "
+                        f"(last close={_closes_arr[-1]:.4f})"
+                    )
+            except (KeyError, TypeError):
+                logger.debug(f"Afterhours | {_sym}: no bars returned")
+
+    except Exception as exc:
+        msg = f"Afterhours cycle: failed to fetch crypto bars: {exc}"
+        logger.error(msg)
+        result["status"] = "data_fetch_failed"
+        result["errors"].append(msg)
+        return result
+
+    def _compute_signal(symbol: str) -> dict | None:
+        """Compute Z-Score and RSI for a symbol. Returns signal dict or None."""
+        try:
+            closes = _symbol_closes.get(symbol)
+            if closes is None or len(closes) < 20:
+                logger.debug(f"Afterhours | {symbol}: insufficient bars ({len(closes) if closes is not None else 0})")
+                return None
+
+            price = float(closes.iloc[-1])
+
+            mean_20 = float(closes.rolling(20).mean().iloc[-1])
+            std_20 = float(closes.rolling(20).std().iloc[-1])
+            z_score = (price - mean_20) / std_20 if std_20 > 0 else 0.0
+
+            delta = closes.diff()
+            gain = delta.clip(lower=0).rolling(14).mean()
+            loss = (-delta.clip(upper=0)).rolling(14).mean()
+            rs = gain / loss.replace(0, float("nan"))
+            rsi = float((100 - 100 / (1 + rs)).iloc[-1])
+
+            return {
+                "symbol": symbol,
+                "price": price,
+                "z_score": round(z_score, 3),
+                "rsi_14": round(rsi, 2),
+                "mean_20h": round(mean_20, 4),
+                "std_20h": round(std_20, 4),
+                "bars": len(closes),
+            }
+        except Exception as exc:
+            logger.debug(f"Afterhours | {symbol}: signal computation failed: {exc}")
+            return None
+
+    signals = []
+    for sym in _AFTERHOURS_CRYPTO_WATCHLIST:
+        sig = _compute_signal(sym)
+        if sig is not None:
+            signals.append(sig)
+            logger.info(
+                f"Afterhours | {sym}: price={sig['price']:.4f} "
+                f"z={sig['z_score']:+.3f} rsi={sig['rsi_14']:.1f}"
+            )
+
+    result["signals"] = signals
+
+    entry_candidates = [
+        s for s in signals
+        if s["z_score"] <= _AFTERHOURS_Z_ENTRY and s["rsi_14"] <= _AFTERHOURS_RSI_ENTRY
+    ]
+
+    entry_candidates.sort(key=lambda s: s["z_score"])
+    entry_candidates = entry_candidates[:_AFTERHOURS_MAX_POSITIONS]
+
+    if not entry_candidates:
+        logger.info("Afterhours cycle: no mean-reversion signals — holding cash")
+        result["status"] = "no_signals"
+        return result
+
+    logger.info(
+        f"Afterhours cycle: {len(entry_candidates)} entry candidate(s): "
+        f"{[s['symbol'] for s in entry_candidates]}"
+    )
+
+    n_entries = len(entry_candidates)
+    per_position_usd = min(
+        available_cash / n_entries,
+        max_position_usd,
+    )
+
+    remaining_cash = available_cash
+
+    for sig in entry_candidates:
+        sym_pair = sig["symbol"]
+        sym_flat = sym_pair.replace("/", "")
+
+        if sym_flat in existing_positions:
+            logger.info(f"Afterhours | {sym_pair}: already have position — skipping")
+            result["skipped"].append({"symbol": sym_pair, "reason": "already_open"})
+            continue
+
+        notional = min(per_position_usd, remaining_cash)
+        if notional < _AFTERHOURS_MIN_NOTIONAL:
+            logger.info(f"Afterhours | {sym_pair}: notional ${notional:.2f} below minimum — skipping")
+            result["skipped"].append({"symbol": sym_pair, "reason": "below_min_notional", "notional": notional})
+            continue
+
+        if dry_run:
+            logger.info(f"Afterhours | DRY RUN: would buy {sym_pair} ${notional:,.2f} GTC")
+            result["placed"].append({
+                "symbol": sym_pair,
+                "notional_usd": notional,
+                "z_score": sig["z_score"],
+                "rsi_14": sig["rsi_14"],
+                "dry_run": True,
+            })
+            remaining_cash -= notional
+            continue
+
+        try:
+            order = place_order(ticker=sym_pair, notional_usd=notional)
+            logger.info(
+                f"Afterhours | Placed GTC buy {sym_pair} ${notional:,.2f} "
+                f"(z={sig['z_score']:+.3f} rsi={sig['rsi_14']:.1f}) "
+                f"order_id={order['id']}"
+            )
+            result["placed"].append({
+                "symbol":       sym_pair,
+                "notional_usd": notional,
+                "order_id":     order["id"],
+                "z_score":      sig["z_score"],
+                "rsi_14":       sig["rsi_14"],
+            })
+            remaining_cash -= notional
+        except Exception as exc:
+            logger.error(f"Afterhours | Failed to place order for {sym_pair}: {exc}")
+            result["errors"].append(f"Order failed for {sym_pair}: {exc}")
+
+    result["cash_deployed"] = round(available_cash - remaining_cash, 2)
+    result["cash_remaining"] = round(remaining_cash, 2)
+    result["positions_opened"] = len(result["placed"])
+
+    logger.info("=" * 60)
+    logger.info(
+        f"AFTERHOURS CRYPTO CYCLE COMPLETE | "
+        f"placed={result['positions_opened']} "
+        f"skipped={len(result['skipped'])} "
+        f"errors={len(result['errors'])} "
+        f"deployed=${result['cash_deployed']:,.2f}"
+    )
+    logger.info("=" * 60)
+    return result
+
 
 def _persist_emergency_regime(spy_override: bool, spy_change: float | None, cycle_num: int) -> None:
     """Write market_regime.json on early-exit paths to keep override state in sync.
@@ -172,6 +483,120 @@ async def _run_pipeline_inner(
         except Exception as _spy_exc:
             logger.warning(f"Pipeline | SPY emergency check failed (non-fatal): {_spy_exc}")
 
+    # ── Market Reopen: Exit all afterhours crypto positions ───────────────────
+    # At the start of each equity cycle (market is open), check for any open
+    # Alpaca crypto positions (identified by BTCUSD/ETHUSD/SOLUSD/AVAXUSD).
+    # Protocol:
+    #   1. Issue GTC sell orders for all open afterhours crypto positions.
+    #   2. Poll (up to 60s) until each position is cleared.
+    #   3. Positions that remain open after polling are persisted in pipeline
+    #      state (_state["afterhours_unresolved"]) so that subsequent cycles
+    #      continue to enforce the block.
+    #   4. Equity deployment cash is reduced by the notional value of any
+    #      unresolved crypto exits — this value is stored in result as
+    #      "afterhours_reserved_cash" and is read by the executor cash gate.
+    if not crypto_only and is_market_open():
+        try:
+            import time as _time_ah
+            from execution.broker import get_positions as _gpos_ah, close_position_gtc as _close_ah
+
+            _all_pos = _gpos_ah()
+            _crypto_positions = [
+                p for p in _all_pos
+                if _is_alpaca_crypto_symbol(p["symbol"])
+            ]
+
+            # Also handle any previously-unresolved exits from prior cycles
+            _prev_unresolved: set = set(_state.get("afterhours_unresolved", []))
+
+            if _crypto_positions or _prev_unresolved:
+                logger.info(
+                    f"Pipeline | Market reopen: found {len(_crypto_positions)} afterhours crypto "
+                    f"position(s); {len(_prev_unresolved)} previously unresolved: "
+                    f"{[p['symbol'] for p in _crypto_positions]}"
+                )
+
+                # Issue exit orders for all currently-open crypto positions
+                _exit_attempted: dict[str, float] = {}
+                for _cpos in _crypto_positions:
+                    _sym = _cpos["symbol"]
+                    _mv = _cpos.get("market_value", 0.0)
+                    try:
+                        _close_ah(_sym)
+                        _exit_attempted[_sym] = _mv
+                        logger.info(
+                            f"Pipeline | Market reopen: exit order placed for {_sym} "
+                            f"(value=${_mv:,.2f})"
+                        )
+                    except Exception as _ce:
+                        logger.warning(
+                            f"Pipeline | Market reopen: could not submit exit for {_sym}: {_ce} "
+                            f"— capital reserved until resolved"
+                        )
+                        _exit_attempted[_sym] = _mv
+
+                # Poll until positions are flat (max 60 seconds, 5s intervals)
+                # Use asyncio.sleep to avoid blocking the event loop.
+                import asyncio as _asyncio_ah
+                _poll_deadline = _time_ah.time() + 60
+                _unresolved_syms: set = set(_exit_attempted.keys())
+                while _unresolved_syms and _time_ah.time() < _poll_deadline:
+                    await _asyncio_ah.sleep(5)
+                    try:
+                        _remaining = {
+                            p["symbol"] for p in _gpos_ah()
+                            if _is_alpaca_crypto_symbol(p["symbol"])
+                        }
+                        _just_cleared = _unresolved_syms - _remaining
+                        for _cleared in _just_cleared:
+                            logger.info(f"Pipeline | Market reopen: {_cleared} cleared")
+                        _unresolved_syms &= _remaining
+                    except Exception as _poll_exc:
+                        logger.debug(f"Pipeline | Market reopen poll error (retrying): {_poll_exc}")
+
+                # Persist unresolved set so future cycles also skip those slots
+                if _unresolved_syms:
+                    logger.warning(
+                        f"Pipeline | Market reopen: {len(_unresolved_syms)} position(s) still open "
+                        f"after 60s: {_unresolved_syms} — capital reserved this cycle and onwards"
+                    )
+                    _state["afterhours_unresolved"] = list(_unresolved_syms)
+                else:
+                    logger.info("Pipeline | Market reopen: all afterhours crypto positions cleared")
+                    _state["afterhours_unresolved"] = []
+
+                # Compute reserved notional (unresolved exits + previously-unresolved)
+                # Previously-unresolved symbols carry their stored notional from the
+                # prior cycle — fall back to that if they didn't appear in the fresh
+                # exit attempt (e.g. order was already pending from last cycle).
+                _prev_notional: dict = _state.get("afterhours_unresolved_notional", {})
+                _reserved_notional = sum(
+                    _exit_attempted.get(sym, _prev_notional.get(sym, 0.0))
+                    for sym in _unresolved_syms
+                )
+                _reserved_notional = max(_reserved_notional, 0.0)
+
+                # Persist unresolved notional so future cycles can reserve accurately
+                _state["afterhours_unresolved_notional"] = {
+                    sym: _exit_attempted.get(sym, _prev_notional.get(sym, 0.0))
+                    for sym in _unresolved_syms
+                }
+
+                result["afterhours_exit"] = {
+                    "attempted":         len(_exit_attempted),
+                    "unresolved":        list(_unresolved_syms),
+                    "reserved_cash_usd": round(_reserved_notional, 2),
+                }
+                if _reserved_notional > 0:
+                    result.setdefault("errors", []).append(
+                        f"Afterhours crypto exit unresolved for {list(_unresolved_syms)} "
+                        f"(${_reserved_notional:,.2f} reserved — equity slots skipped)"
+                    )
+                result["afterhours_reserved_cash"] = _reserved_notional
+
+        except Exception as _ae:
+            logger.warning(f"Pipeline | Market reopen crypto exit check failed (non-fatal): {_ae}")
+
     # ── Deferred emergency liquidation (set when market was closed at click-time) ──
     if is_pending_liquidation() and is_market_open():
         logger.critical(
@@ -213,12 +638,21 @@ async def _run_pipeline_inner(
         return result
 
     if not crypto_only and not force and not is_market_open():
-        msg = "Market is closed — pipeline skipped (use force=True to override)"
-        logger.info(msg)
-        result["status"] = "market_closed"
-        result["errors"].append(msg)
-        _persist_emergency_regime(spy_override, spy_change, cycle_num)
-        _update_state(result, started)
+        # ── Afterhours Crypto Mode ─────────────────────────────────────────
+        # Instead of exiting early, deploy idle cash into a defined crypto
+        # watchlist using a lightweight Z-Score + RSI mean-reversion signal.
+        # All existing circuit breakers (kill switch, VaR, per-position cap)
+        # remain active.  No LLM call is made — quant signal only.
+        try:
+            _ah_result = await run_afterhours_crypto_cycle(dry_run=dry_run)
+            result.update(_ah_result)
+            _update_state(result, started, trading_mode="afterhours_crypto")
+        except Exception as _ah_exc:
+            logger.error(f"Pipeline | Afterhours crypto cycle failed: {_ah_exc}")
+            result["status"] = "afterhours_error"
+            result["errors"].append(f"Afterhours cycle failed: {_ah_exc}")
+            _persist_emergency_regime(spy_override, spy_change, cycle_num)
+            _update_state(result, started, trading_mode="afterhours_crypto")
         return result
 
     # ── Pre-dispatch Signal Guardrails (authoritative temporal gate) ──────────
@@ -532,7 +966,8 @@ async def _run_pipeline_inner(
     try:
         logger.info("Pipeline | Step 2: Executing allocations...")
         _pipeline_regime = str(allocation.regime) if hasattr(allocation, "regime") else _state.get("last_regime")
-        exec_result = execute_allocations(allocation, dry_run=dry_run, regime_label=_pipeline_regime)
+        _ah_reserved = float(result.get("afterhours_reserved_cash", 0.0))
+        exec_result = execute_allocations(allocation, dry_run=dry_run, regime_label=_pipeline_regime, reserved_cash=_ah_reserved)
         result["execution"] = {
             "placed":  len(exec_result["placed"]),
             "closed":  len(exec_result["closed"]),

@@ -462,16 +462,18 @@ export function MiniSparkline({ data, color, w = 60, h = 20 }: { data: number[];
 
 export function tradingModeLabel(mode: string | undefined): string {
   switch (mode) {
-    case "full_market": return "FULL MARKET";
-    case "crypto_only": return "CRYPTO ONLY";
+    case "full_market":       return "FULL MARKET";
+    case "crypto_only":       return "CRYPTO ONLY";
+    case "afterhours_crypto": return "CRYPTO AFTER-HOURS";
     default: return "IDLE";
   }
 }
 
 export function tradingModeColor(mode: string | undefined): string {
   switch (mode) {
-    case "full_market": return "text-green-400";
-    case "crypto_only": return "text-purple-400";
+    case "full_market":       return "text-green-400";
+    case "crypto_only":       return "text-purple-400";
+    case "afterhours_crypto": return "text-indigo-400";
     default: return "text-zinc-500";
   }
 }

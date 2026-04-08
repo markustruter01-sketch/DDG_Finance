@@ -84,10 +84,34 @@ async def status() -> dict:
     elif market_open:
         trading_mode = "full_market"
     else:
-        trading_mode = "crypto_only"
+        trading_mode = "afterhours_crypto"
     groq_status = _get_groq_status()
     groq_status["using_fallback"] = last_run.get("groq_using_fallback", False)
     groq_status.update(_groq_budget.budget_status())
+
+    _afterhours_crypto_positions = []
+    _afterhours_unrealized_pnl = 0.0
+    if trading_mode == "afterhours_crypto":
+        try:
+            from execution.broker import get_positions as _gah_pos
+            from core.pipeline import _is_alpaca_crypto_symbol
+            _all_pos = _gah_pos()
+            _afterhours_crypto_positions = [
+                {
+                    "symbol":        p["symbol"],
+                    "market_value":  p.get("market_value", 0.0),
+                    "unrealized_pl": p.get("unrealized_pl", 0.0),
+                    "qty":           p.get("qty", 0.0),
+                }
+                for p in _all_pos
+                if _is_alpaca_crypto_symbol(p["symbol"])
+            ]
+            _afterhours_unrealized_pnl = sum(
+                p["unrealized_pl"] for p in _afterhours_crypto_positions
+            )
+        except Exception:
+            pass
+
     return {
         "market": {
             "is_open":   market_open,
@@ -99,6 +123,12 @@ async def status() -> dict:
         "auto_trading":   is_auto_trading_enabled(),
         "cycle_interval": last_run.get("cycle_interval", "15min"),
         "trading_mode":   trading_mode,
+        "afterhours_crypto": {
+            "active":           trading_mode == "afterhours_crypto",
+            "positions":        _afterhours_crypto_positions,
+            "position_count":   len(_afterhours_crypto_positions),
+            "unrealized_pnl":   round(_afterhours_unrealized_pnl, 2),
+        },
         "data_cache":     get_cache_stats(),
         "blackout":       is_blackout_active(),
         "groq":           groq_status,
@@ -876,7 +906,34 @@ async def status_summary() -> dict:
     elif market_open:
         trading_mode = "full_market"
     else:
-        trading_mode = "crypto_only"
+        trading_mode = "afterhours_crypto"
+
+    _ah_summary: dict = {
+        "active":         trading_mode == "afterhours_crypto",
+        "position_count": 0,
+        "unrealized_pnl": 0.0,
+        "positions":      [],
+    }
+    if trading_mode == "afterhours_crypto":
+        try:
+            from execution.broker import get_positions as _gah_pos2
+            from core.pipeline import _is_alpaca_crypto_symbol as _is_ah_sym2
+            _ah_pos2 = _gah_pos2()
+            _ah_crypto2 = [
+                {
+                    "symbol":        p["symbol"],
+                    "market_value":  p.get("market_value", 0.0),
+                    "unrealized_pl": p.get("unrealized_pl", 0.0),
+                    "qty":           p.get("qty", 0.0),
+                }
+                for p in _ah_pos2
+                if _is_ah_sym2(p["symbol"])
+            ]
+            _ah_summary["position_count"] = len(_ah_crypto2)
+            _ah_summary["unrealized_pnl"] = round(sum(p["unrealized_pl"] for p in _ah_crypto2), 2)
+            _ah_summary["positions"] = _ah_crypto2
+        except Exception:
+            pass
 
     return {
         "system_health": {
@@ -895,6 +952,7 @@ async def status_summary() -> dict:
         "kill_switch_tripped": ks.get("tripped", False),
         "alpaca_maintenance": alpaca_maintenance,
         "trading_mode": trading_mode,
+        "afterhours_crypto": _ah_summary,
         "groq": groq_info,
         "emergency_regime": emergency_regime,
         "scheduler_jobs": jobs,

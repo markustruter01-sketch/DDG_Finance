@@ -2,6 +2,7 @@ import { useState } from "react";
 import { cn, formatCurrency, formatCryptoPrice } from "@/lib/utils";
 import { MarketStatusBadge, isAssetCrypto, HEALTH_COLOR_MAP, RollingPnl } from "@/lib/dashboard-shared";
 import type { LivePosition } from "@/hooks/use-trading";
+import { useStatusSummary } from "@/hooks/use-trading";
 import { Badge } from "@/components/ui";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogOut, RefreshCw, Sparkles, X } from "lucide-react";
@@ -320,7 +321,17 @@ export function AlpacaPositionsPanel({
   closingSymbol: string | null;
 }) {
   const [open, setOpen] = useState(true);
-  if (positions.length === 0) return null;
+  const { data: statusData } = useStatusSummary();
+
+  const tradingMode = statusData?.trading_mode;
+  const isAfterhoursMode = tradingMode === "afterhours_crypto";
+  const isEquityMode = tradingMode === "full_market";
+  const ahData = statusData?.afterhours_crypto;
+  const ahPositionCount = ahData?.position_count ?? 0;
+  const ahUnrealizedPnl = ahData?.unrealized_pnl ?? 0;
+
+  // Return null only when there are no positions AND no afterhours mode badge to show
+  if (positions.length === 0 && !isAfterhoursMode) return null;
 
   const longPositions  = positions.filter(p => (p.side ?? "long").toLowerCase() !== "short");
   const shortPositions = positions.filter(p => (p.side ?? "long").toLowerCase() === "short");
@@ -340,6 +351,30 @@ export function AlpacaPositionsPanel({
         <span className="text-[9px] text-muted-foreground/30 ml-1">equity positions</span>
         {shortPositions.length > 0 && (
           <Badge variant="outline" className="text-[8px] px-1 py-0 border-red-500/30 text-red-400/70 ml-1">{shortPositions.length} short</Badge>
+        )}
+        {isEquityMode && (
+          <span
+            title="NYSE is open — Oracle is running in equity mode"
+            className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-green-500/25 bg-green-500/8 text-green-400/70"
+          >
+            📈 Equity Mode
+          </span>
+        )}
+        {isAfterhoursMode && (
+          <span
+            title={`NYSE is closed — Oracle is in Crypto After-Hours mode${ahPositionCount > 0 ? ` · ${ahPositionCount} crypto position${ahPositionCount !== 1 ? "s" : ""} · P&L: ${ahUnrealizedPnl >= 0 ? "+" : ""}$${Math.abs(ahUnrealizedPnl).toFixed(2)}` : ""}`}
+            className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
+          >
+            🌙 Crypto After-Hours
+            {ahPositionCount > 0 && (
+              <span className="text-indigo-300/70 font-mono">{ahPositionCount}</span>
+            )}
+            {ahPositionCount > 0 && ahUnrealizedPnl !== 0 && (
+              <span className={cn("font-mono", ahUnrealizedPnl >= 0 ? "text-green-400/70" : "text-red-400/70")}>
+                {ahUnrealizedPnl >= 0 ? "+" : ""}{formatCurrency(ahUnrealizedPnl)}
+              </span>
+            )}
+          </span>
         )}
         <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", isPnlUp ? "text-green-400" : "text-red-400")}>
           {isPnlUp ? "+" : ""}{formatCurrency(totalPnl)}

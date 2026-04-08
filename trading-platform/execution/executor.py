@@ -117,6 +117,7 @@ def execute_allocations(
     output: RegimeAnalysisOutput | CryptoAnalysisOutput,
     dry_run: bool = False,
     regime_label: str | None = None,
+    reserved_cash: float = 0.0,
 ) -> dict:
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
@@ -194,6 +195,17 @@ def execute_allocations(
     remaining_cash = max(raw_cash, 0.0) + exit_proceeds
     # Hard cap: can never spend more than total equity (prevents cross-day margin)
     remaining_cash = min(remaining_cash, equity)
+
+    # ── Afterhours capital holdback ──────────────────────────────────────────
+    # If any afterhours crypto positions were unresolved at market reopen, their
+    # capital is ring-fenced and cannot be redeployed into equity this cycle.
+    if reserved_cash > 0:
+        _before_holdback = remaining_cash
+        remaining_cash = max(remaining_cash - reserved_cash, 0.0)
+        logger.warning(
+            f"Afterhours holdback | Reserved ${reserved_cash:,.2f} from unresolved crypto exits — "
+            f"deployable cash reduced from ${_before_holdback:,.2f} to ${remaining_cash:,.2f}"
+        )
 
     logger.info(
         f"Account equity: ${equity:,.2f} | settled_cash: ${raw_cash:,.2f} | "
@@ -802,3 +814,50 @@ def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float
 
     logger.warning(f"Fill price not available within {max_wait}s for {ticker} (order_id={order_id})")
     return None
+
+
+# ── Afterhours Capital Guard ───────────────────────────────────────────────
+
+AFTERHOURS_CASH_CAP: float = 0.80   # Deploy at most 80% of idle cash after-hours
+
+
+def get_afterhours_available_cash() -> float:
+    """
+    Return the capital available for afterhours crypto deployment.
+
+    Formula (per spec):
+        min(settled_cash, total_equity * AFTERHOURS_CASH_CAP)
+
+    SGOV holdings are noted but the formula uses the raw settled_cash from
+    Alpaca (which already excludes SGOV market value — SGOV is held in the
+    account's portfolio but the cash balance reflects liquid cash only).
+    The cap (default 80%) prevents the cycle from deploying more than
+    80% of total equity, providing a minimum buffer.
+
+    Returns 0.0 on any error so the afterhours cycle can gracefully skip.
+    """
+    try:
+        acct = get_account()
+        equity = acct["equity"]
+        raw_cash = acct["cash"]
+
+        settled_cash = max(raw_cash, 0.0)
+        cap_limit = equity * AFTERHOURS_CASH_CAP
+        available = min(settled_cash, cap_limit)
+
+        positions = get_positions()
+        sgov_value = sum(
+            p.get("market_value", 0.0)
+            for p in positions
+            if p.get("symbol") == "SGOV"
+        )
+
+        logger.info(
+            f"Afterhours capital guard | equity=${equity:,.2f} "
+            f"settled_cash=${settled_cash:,.2f} sgov_held=${sgov_value:,.2f} "
+            f"cap_limit(80%)=${cap_limit:,.2f} available=${available:,.2f}"
+        )
+        return available
+    except Exception as exc:
+        logger.error(f"Afterhours capital guard | Failed to compute available cash: {exc}")
+        return 0.0

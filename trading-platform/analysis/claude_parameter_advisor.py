@@ -69,15 +69,17 @@ NAVIGATOR_DEFAULTS: dict[str, float] = {
 # ── Pydantic output models ────────────────────────────────────────────────────
 
 class OracleParamAdjustment(BaseModel):
-    conviction_threshold: float | None = Field(None, description="Minimum conviction [0.60-0.95] step 0.05")
-    max_positions: int | None = Field(None, description="Max concurrent positions [1-10] step 1")
-    cash_reserve_pct: float | None = Field(None, description="Cash reserve fraction [0.30-0.80] step 0.05")
+    conviction_threshold: float | None = Field(None, description="Minimum conviction [0.60-0.95] step 0.20")
+    max_positions: int | None = Field(None, description="Max concurrent positions [1-10] step 4")
+    cash_reserve_pct: float | None = Field(None, description="Cash reserve fraction [0.30-0.80] step 0.20")
+    paused: bool | None = Field(None, description="True to halt Oracle trading, False to resume")
     reasoning: str = Field("", description="Why these changes are recommended")
     no_change: bool = Field(False, description="True if no parameter changes are recommended")
 
 
 class NavigatorParamAdjustment(BaseModel):
-    position_size_usd: float | None = Field(None, description="Per-trade size USD [5000-25000] step 1000")
+    position_size_usd: float | None = Field(None, description="Per-trade size USD [5000-25000] step 4000")
+    paused: bool | None = Field(None, description="True to halt Navigator trading, False to resume")
     reasoning: str = Field("", description="Why these changes are recommended")
     no_change: bool = Field(False, description="True if no parameter changes are recommended")
 
@@ -529,13 +531,15 @@ def get_oracle_adjustment(fleet_context: str) -> OracleParamAdjustment:
         '  "conviction_threshold": <float or null>,\n'
         '  "max_positions": <int or null>,\n'
         '  "cash_reserve_pct": <float or null>,\n'
+        '  "paused": <true to halt trading | false to resume | null if no change>,\n'
         '  "reasoning": "<brief explanation>",\n'
-        '  "no_change": <true if no changes recommended>\n\n'
+        '  "no_change": <true if no parameter changes are recommended>\n\n'
         "RULES:\n"
         "- conviction_threshold: [0.60, 0.95] step=0.20. Lower = more trades, higher = selective.\n"
         "- max_positions: [1, 10] step=4. Concurrent equity positions allowed.\n"
         "- cash_reserve_pct: [0.30, 0.80] step=0.20. Fraction to keep as cash/SGOV.\n"
-        "- Move each parameter at most one step (as listed above) per cycle.\n"
+        "- paused: set true only in extreme adverse conditions (crash, circuit-breaker). false to resume.\n"
+        "- Move each numeric parameter at most one step (as listed above) per cycle.\n"
         "- Only recommend changes if there is clear data-driven justification.\n"
         "- If no changes are needed, set no_change=true and leave params null.\n"
     )
@@ -556,7 +560,7 @@ def get_oracle_adjustment(fleet_context: str) -> OracleParamAdjustment:
             max_tokens=512,
             call_type="oracle_param_advisor",
             expect_json=True,
-            smart=False,
+            smart=True,
         )
         data = json.loads(raw) if isinstance(raw, str) else raw
         return OracleParamAdjustment.model_validate(data)
@@ -573,10 +577,12 @@ def get_navigator_adjustment(fleet_context: str) -> NavigatorParamAdjustment:
         "Review the fleet context and current Navigator parameters, then decide if adjustments "
         "are warranted.  Output ONLY a JSON object with these fields:\n"
         '  "position_size_usd": <float or null>,\n'
+        '  "paused": <true to halt trading | false to resume | null if no change>,\n'
         '  "reasoning": "<brief explanation>",\n'
         '  "no_change": <true if no changes recommended>\n\n'
         "RULES:\n"
         "- position_size_usd: [5000, 25000] step=4000. Per-trade notional in USD.\n"
+        "- paused: set true only in extreme adverse conditions. false to resume.\n"
         "- Move at most one step (4000 USD) per cycle.\n"
         "- Only recommend changes with clear data-driven justification.\n"
         "- If no changes are needed, set no_change=true and position_size_usd=null.\n"
@@ -596,7 +602,7 @@ def get_navigator_adjustment(fleet_context: str) -> NavigatorParamAdjustment:
             max_tokens=256,
             call_type="navigator_param_advisor",
             expect_json=True,
-            smart=False,
+            smart=True,
         )
         data = json.loads(raw) if isinstance(raw, str) else raw
         return NavigatorParamAdjustment.model_validate(data)
@@ -608,13 +614,15 @@ def get_navigator_adjustment(fleet_context: str) -> NavigatorParamAdjustment:
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _clamp_step(current: float, target: float, lo: float, hi: float, step: float) -> float:
-    """Move current toward target by at most one step, then clamp to [lo, hi]."""
-    if target > current:
+    """Move current toward target by at most one step, then clamp to [lo, hi].
+
+    If the delta is already within one step, go directly to target (no overshoot).
+    """
+    diff = target - current
+    if abs(diff) <= step:
+        new_val = target
+    elif diff > 0:
         new_val = current + step
-    elif target < current:
-        new_val = current - step
     else:
-        new_val = current
-    new_val = max(lo, min(hi, new_val))
-    precision = max(0, -int(f"{step:.10f}".rstrip("0").find(".") - len(f"{step:.10f}".rstrip("0"))) + 1) if "." in f"{step}" else 0
-    return round(new_val, precision if precision > 0 else 6)
+        new_val = current - step
+    return round(max(lo, min(hi, new_val)), 6)

@@ -23,9 +23,7 @@ import requests
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator
 
-from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL, _GeminiAuditResponse, _GeminiCondition
-
-_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+from analysis.gemini_auditor import _gemini_api_key, _gemini_base_url, _GEMINI_MODEL, _GeminiAuditResponse, _GeminiCondition
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _FLEET_AUDIT_FILE = _LOG_DIR / "fleet_audit.json"
@@ -174,7 +172,7 @@ def _fetch_export_report() -> str | None:
 
 def _call_fleet_gemini(report_text: str) -> tuple[FleetCommanderResponse, dict]:
     api_key = _gemini_api_key()
-    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+    url = f"{_gemini_base_url()}/models/{_GEMINI_MODEL}:generateContent"
 
     body = {
         "system_instruction": {
@@ -329,8 +327,8 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     logger.info("FleetCommander | Starting fleet-wide audit")
 
-    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
-        logger.warning("FleetCommander | GOOGLE_GEMINI_API_KEY not set — skipping")
+    if not (os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY") or os.environ.get("GOOGLE_GEMINI_API_KEY")):
+        logger.warning("FleetCommander | No Gemini API key set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     report = _fetch_export_report()

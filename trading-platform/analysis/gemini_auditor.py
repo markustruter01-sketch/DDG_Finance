@@ -180,10 +180,31 @@ Rules
 _GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
+def _gemini_base_url() -> str:
+    """Return the Gemini REST base URL.
+
+    Prefers the Replit AI Integration proxy (AI_INTEGRATIONS_GEMINI_BASE_URL)
+    which uses the subscription plan with no free-tier rate limits.
+    Falls back to the direct Google API only if the integration var is absent.
+    """
+    return os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL") or _GOOGLE_GEMINI_BASE
+
+
 def _gemini_api_key() -> str:
-    key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
+    """Return the Gemini API key.
+
+    Prefers the Replit AI Integration key (AI_INTEGRATIONS_GEMINI_API_KEY)
+    which authenticates against the proxy and carries no per-key quota.
+    Falls back to the user's own GOOGLE_GEMINI_API_KEY.
+    """
+    key = (
+        os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_GEMINI_API_KEY", "")
+    )
     if not key:
-        raise RuntimeError("GOOGLE_GEMINI_API_KEY is not set")
+        raise RuntimeError(
+            "No Gemini API key available — set AI_INTEGRATIONS_GEMINI_API_KEY or GOOGLE_GEMINI_API_KEY"
+        )
     return key
 
 
@@ -196,7 +217,7 @@ def _call_gemini(user_payload: str, system_prompt: str | None = None) -> _Gemini
     api_key = _gemini_api_key()
     prompt = system_prompt or _SYSTEM_PROMPT
 
-    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+    url = f"{_gemini_base_url()}/models/{_GEMINI_MODEL}:generateContent"
     body = {
         "system_instruction": {
             "parts": [{"text": prompt}]
@@ -478,8 +499,8 @@ def run_daily_self_critic() -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     logger.info("GeminiAuditor | Starting daily self-critic run")
 
-    if not os.environ.get("GOOGLE_GEMINI_API_KEY"):
-        logger.warning("GeminiAuditor | GOOGLE_GEMINI_API_KEY not set — skipping")
+    if not (os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY") or os.environ.get("GOOGLE_GEMINI_API_KEY")):
+        logger.warning("GeminiAuditor | No Gemini API key set — skipping")
         return {"status": "skipped", "reason": "env_vars_missing"}
 
     # ── Fetch DB data ─────────────────────────────────────────────────────────

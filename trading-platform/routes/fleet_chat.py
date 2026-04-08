@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from analysis.gemini_auditor import _gemini_api_key, _GEMINI_MODEL
+from analysis.gemini_auditor import _gemini_api_key, _gemini_base_url, _GEMINI_MODEL
 from analysis.fleet_enforcer import (
     BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
@@ -29,8 +29,6 @@ from analysis.fleet_enforcer import (
 from db.postgres import is_pg_available, get_conn
 
 fleet_chat_router = APIRouter()
-
-_GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 QUICK_ACTIONS = {
     "conservative": {
@@ -322,7 +320,7 @@ async def _get_fleet_context() -> str:
 
 async def _call_gemini_chat(messages: list[dict], fleet_context: str) -> str:
     api_key = _gemini_api_key()
-    url = f"{_GOOGLE_GEMINI_BASE}/models/{_GEMINI_MODEL}:generateContent"
+    url = f"{_gemini_base_url()}/models/{_GEMINI_MODEL}:generateContent"
 
     contents = []
     for msg in messages[-10:]:

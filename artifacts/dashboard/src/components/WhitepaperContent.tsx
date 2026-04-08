@@ -39,7 +39,7 @@ export function WhitepaperContent() {
         <Table
           headers={["Component", "Purpose", "Technology"]}
           rows={[
-            ["Alpaca AI Platform (Bot #1)", "Equities + crypto, LLM-driven regime allocation", "Python / FastAPI / Groq Llama 3.3 70B"],
+            ["Alpaca AI Platform (Bot #1)", "Equities + crypto, LLM-driven regime allocation", "Python / FastAPI / Claude Haiku"],
             ["Davy Jones (Bot #2)", "24/7 crypto mean-reversion with microstructure alpha", "Python / ccxt / Kraken Pro"],
             ["Blackbeard (Bot #3)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
             ["Calypso (Bot #4)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
@@ -179,7 +179,7 @@ export function WhitepaperContent() {
             5-day avg < 20-day avg + sentiment = Greed
             YES → Downgrade "Greed" to "Neutral"
 
-  GROQ BUDGET TRACKER
+  CLAUDE BUDGET TRACKER
   ──────────────────────────────────────────────────
    [■■■■■■■░░░░░░░░░░░░░] 35,000 / 100,000 tokens used today
    Min 90min between regime calls  |  Max 4 commentary calls/day
@@ -197,33 +197,33 @@ export function WhitepaperContent() {
             <li>Friday 14:00 → Monday 09:30 ET (weekend illiquidity)</li>
             <li>±30 minutes around: FOMC, NFP, CPI, PCE, Jobs Report</li>
           </ul>
-          <p>When hard-blocked: entire cycle skipped, cached regime returned, zero Groq tokens consumed.</p>
+          <p>When hard-blocked: entire cycle skipped, cached regime returned, zero Claude tokens consumed.</p>
         </SubSection>
 
         <SubSection title="Guard 3: Price-to-Sentiment Divergence (SOFT)">
           <p>When SPY's 5-day average volume is below its 20-day average AND sentiment is "Greed" or "Extreme Greed": the sentiment band is downgraded one step. Prevents the AI from acting on bullish crowd sentiment during low-conviction, low-volume conditions.</p>
         </SubSection>
 
-        <SubSection title="Groq Daily Token Budget Manager">
+        <SubSection title="Claude Daily Token Budget Manager">
           <Table
             headers={["Constraint", "Default", "Env Variable"]}
             rows={[
-              ["Min interval between regime calls", "90 minutes", "GROQ_MIN_REGIME_INTERVAL_MINUTES"],
-              ["Max auto commentary calls/day", "4 per endpoint", "GROQ_COMMENTARY_DAILY_CAP"],
-              ["Hard daily token cap", "100,000 tokens", "GROQ_DAILY_TOKEN_BUDGET"],
+              ["Min interval between regime calls", "90 minutes", "CLAUDE_MIN_REGIME_INTERVAL_MINUTES"],
+              ["Max auto commentary calls/day", "4 per endpoint", "CLAUDE_COMMENTARY_DAILY_CAP"],
+              ["Hard daily token cap", "100,000 tokens", "CLAUDE_DAILY_TOKEN_BUDGET"],
             ]}
           />
           <p>All counters reset at midnight UTC. The <Mono>force=True</Mono> flag on commentary bypasses the daily cap but never the hard token budget.</p>
         </SubSection>
 
         <SubSection title="LLM Response Cache (90-min TTL)">
-          <p>Prevents redundant Groq calls when market signals haven't materially changed:</p>
+          <p>Prevents redundant Claude calls when market signals haven't materially changed:</p>
           <ul className="list-disc ml-6 space-y-1 text-sm">
             <li><strong>Cache key:</strong> MD5 hash of <Mono>(call_type + momentum_fingerprint + news_fingerprint)</Mono></li>
             <li><strong>TTL:</strong> 90 minutes (configurable via <Mono>LLM_CACHE_TTL_MINUTES</Mono>)</li>
             <li><strong>Backing:</strong> <Mono>data/llm_response_cache.json</Mono> — survives short restarts</li>
           </ul>
-          <p>Expected savings: 1–3 Groq calls/day on quiet days where signals are stable across consecutive 15-minute cycles.</p>
+          <p>Expected savings: 1–3 Claude calls/day on quiet days where signals are stable across consecutive 15-minute cycles.</p>
         </SubSection>
 
         <SubSection title="Cycle State Persistence &amp; Degradation Tracker">
@@ -239,7 +239,7 @@ export function WhitepaperContent() {
   THE LEARNING LOOP (every 15 min during market hours)
   ──────────────────────────────────────────────────────
   ┌─────────────────┐   ┌──────────────────┐
-  │ 5 Recent LOSSES │──▶│                  │──▶ Groq Llama 3.3 70B
+  │ 5 Recent LOSSES │──▶│                  │──▶ Claude Haiku
   │ 3 Recent WINS   │──▶│  PROMPT BUILDER  │       │
   │ Market data     │──▶│  + Sentiment     │    Allocations
   │ News headlines  │──▶│  + Econ Calendar │    → Orders
@@ -278,22 +278,22 @@ export function WhitepaperContent() {
           </ul>
         </SubSection>
 
-        <SubSection title="Phase 4: Groq Inference">
-          <p>Model: <Mono>Llama 3.3 70B Versatile</Mono> at temperature 0.4. Output: structured JSON allocation plan — regime label, slot allocations with conviction scores (0–1), take-profit/stop-loss levels, natural-language theses. Validated against Pydantic schemas before any order is placed. Invalid JSON = cycle abort.</p>
+        <SubSection title="Phase 4: Claude Inference">
+          <p>Model: <Mono>claude-haiku-3-5</Mono> at temperature 0.4. Output: structured JSON allocation plan — regime label, slot allocations with conviction scores (0–1), take-profit/stop-loss levels, natural-language theses. Validated against Pydantic schemas before any order is placed. Invalid JSON = cycle abort.</p>
         </SubSection>
       </Section>
 
-      {/* Section 5 — Gemini Auditor */}
-      <Section title="Gemini Daily Self-Critic Auditor (Stage 3)">
+      {/* Section 5 — Claude Auditor */}
+      <Section title="Claude Daily Self-Critic Auditor (Stage 3)">
         <SimpleBox>
-          <p>Every morning at 4:15 AM, before the market opens, a second AI (Google's Gemini) looks at yesterday's trades and asks: "Did my colleague do something stupid?" It writes a report card and flags any stocks it thinks should be blocked for today.</p>
+          <p>Every morning at 4:15 AM, before the market opens, a second Claude AI looks at yesterday's trades and asks: "Did my colleague do something stupid?" It writes a report card and flags any stocks it thinks should be blocked for today.</p>
           <AsciiDiagram>{`
-  GEMINI SELF-CRITIC AUDITOR (runs 4:15 AM ET daily)
+  CLAUDE SELF-CRITIC AUDITOR (runs 4:15 AM ET daily)
   ──────────────────────────────────────────────────────
    Yesterday's data: trades + equity curve + system events
               │
               ▼
-   [GEMINI FLASH AI] — adversarial audit
+   [CLAUDE AI] — adversarial audit
    Checks: inflated conviction? bad regime? wash-sale blindness?
               │
               ▼  veto_conditions.json
@@ -305,23 +305,23 @@ export function WhitepaperContent() {
               │
               ▼
    Today's trading AI reads this → blocks vetoed tickers
-   If Gemini is offline → fail-open → trading proceeds normally ✅
+   If Claude is offline → fail-open → trading proceeds normally ✅
           `}</AsciiDiagram>
         </SimpleBox>
 
         <SubSection title="Audit Pipeline">
           <ol className="list-decimal ml-6 space-y-2 text-sm">
             <li><strong>Data collection:</strong> Prior day's trade records, equity snapshots, degradation events from PostgreSQL</li>
-            <li><strong>Sanitization:</strong> <Mono>gemini_context_sanitizer.py</Mono> compacts payload, redacts secrets, truncates thesis strings</li>
-            <li><strong>Token budget:</strong> If payload &gt; 80% of context window, equity time-series chunked into 8-hour windows; Gemini called per chunk; results merged (union of vetoes)</li>
-            <li><strong>Adversarial prompting:</strong> System prompt instructs Gemini to act as a hostile auditor</li>
+            <li><strong>Sanitization:</strong> <Mono>claude_context_sanitizer.py</Mono> compacts payload, redacts secrets, truncates thesis strings</li>
+            <li><strong>Token budget:</strong> If payload &gt; 80% of context window, equity time-series chunked into 8-hour windows; Claude called per chunk; results merged (union of vetoes)</li>
+            <li><strong>Adversarial prompting:</strong> System prompt instructs Claude to act as a hostile auditor</li>
             <li><strong>Response validation:</strong> Pydantic schema — invalid JSON = no file written</li>
           </ol>
         </SubSection>
 
         <SubSection title="Seven Adversarial Audit Targets">
           <Table
-            headers={["Audit Target", "What Gemini Looks For"]}
+            headers={["Audit Target", "What Claude Looks For"]}
             rows={[
               ["Conviction inflation", "Scores clustered above 0.85 with mediocre outcomes"],
               ["Regime contradiction", "Bear regime label with aggressive crypto buys"],
@@ -336,8 +336,8 @@ export function WhitepaperContent() {
 
         <SubSection title="Output Schema &amp; Veto Enforcer">
           <p>Output written to <Mono>logs/veto_conditions.json</Mono> atomically (temp file → rename). The <Mono>core/veto_enforcer.py</Mono> reads it before every order with a 5-minute in-process cache.</p>
-          <p><strong>Fail-open guarantee:</strong> If Gemini is unreachable, the DB query fails, or JSON can't be parsed — the previous <Mono>veto_conditions.json</Mono> is left untouched and <Mono>is_vetoed()</Mono> returns <Mono>False</Mono>. The auditor's absence never blocks the primary bot.</p>
-          <p>Model: <Mono>gemini-3-flash-preview</Mono> via Replit AI Integrations proxy — never calls <Mono>gemini.google.com</Mono> directly.</p>
+          <p><strong>Fail-open guarantee:</strong> If Claude is unreachable, the DB query fails, or JSON can't be parsed — the previous <Mono>veto_conditions.json</Mono> is left untouched and <Mono>is_vetoed()</Mono> returns <Mono>False</Mono>. The auditor's absence never blocks the primary bot.</p>
+          <p>Model: <Mono>claude-haiku-3-5</Mono> via Anthropic API — sole AI provider for all platform intelligence.</p>
         </SubSection>
       </Section>
 
@@ -352,7 +352,7 @@ export function WhitepaperContent() {
   2. 🚦 SIGNAL GUARDS (HARD)    — Temporal quarantine → skip cycle
   3. 🛑 KILL SWITCH (5%)        — Daily drawdown too big → liquidate ALL
   4. 🛑 VaR CIRCUIT BREAKER     — Portfolio risk too high → block new entries
-  5. 🛑 GEMINI VETO             — Ticker blocked by auditor → skip
+  5. 🛑 CLAUDE VETO             — Ticker blocked by auditor → skip
   6. 🛑 WASH SALE (30d)         — Recent loss in similar ticker → skip
   7. 🚦 ZERO-KELLY FILTER       — Negative edge → force SGOV
   8. 🚦 OVERHEATED GUARD        — Z>2 / RSI>75 → cut 50%, reroute
@@ -629,7 +629,7 @@ export function WhitepaperContent() {
       {/* Section 12 — Bot #6: The Navigator Forex */}
       <Section title="Bot #6: The Navigator — Forex Swing-Trading Engine">
         <SimpleBox>
-          <p>A Groq-assisted forex swing trader that holds positions for hours to days across five major currency pairs. It uses RSI and ATR indicators on 4-hour candles, combined with an AI "Compass" that reads macro news to determine directional bias. The vault system automatically sweeps 20% of profits above the high-water mark into a separate reserve.</p>
+          <p>A Claude-assisted forex swing trader that holds positions for hours to days across five major currency pairs. It uses RSI and ATR indicators on 4-hour candles, combined with an AI "Compass" that reads macro news to determine directional bias. The vault system automatically sweeps 20% of profits above the high-water mark into a separate reserve.</p>
           <AsciiDiagram>{`
   FOREX SWING STRATEGY (4-hour cycle)
   ──────────────────────────────────────────────────────────────
@@ -639,7 +639,7 @@ export function WhitepaperContent() {
    ┌──────────────────────────────────────────┐
    │ RSI(14) < 30  →  Oversold → BUY         │
    │ RSI(14) > 70  →  Overbought → SELL      │
-   │ Groq Compass bias must AGREE             │
+   │ Claude Compass bias must AGREE           │
    │ Max 5 positions open simultaneously      │
    └──────────────────────────────────────────┘
 
@@ -667,9 +667,9 @@ export function WhitepaperContent() {
           <p><strong>USD-base pair handling:</strong> For JPY=X and CHF=X, P&amp;L is calculated by dividing by the exit price to convert from the foreign currency to USD. This affects <Mono>get_positions()</Mono>, <Mono>get_paper_equity()</Mono>, and the live state writer.</p>
         </SubSection>
 
-        <SubSection title="Groq Compass (AI Directional Bias)">
-          <p>Before scanning for entries, the engine calls Groq Llama 3.3 70B with a macro-economic prompt. The AI returns a directional bias per pair: <Mono>bullish</Mono>, <Mono>bearish</Mono>, or <Mono>neutral</Mono>. Technical RSI signals must align with the AI bias for an entry to fire.</p>
-          <p><strong>Throttle &amp; fallback:</strong> If Groq rate-limits or throws an exception, the engine falls back to the most recently cached bias. The system never blocks on a failed AI call.</p>
+        <SubSection title="Claude Compass (AI Directional Bias)">
+          <p>Before scanning for entries, the engine calls Claude with a macro-economic prompt. The AI returns a directional bias per pair: <Mono>bullish</Mono>, <Mono>bearish</Mono>, or <Mono>neutral</Mono>. Technical RSI signals must align with the AI bias for an entry to fire.</p>
+          <p><strong>Throttle &amp; fallback:</strong> If Claude rate-limits or throws an exception, the engine falls back to the most recently cached bias. The system never blocks on a failed AI call.</p>
         </SubSection>
 
         <SubSection title="Risk &amp; Vault System">
@@ -725,33 +725,34 @@ export function WhitepaperContent() {
         </SubSection>
       </Section>
 
-      {/* Section 14 — Groq / Hardware */}
-      <Section title="AI Inference: Groq LPU &amp; Llama 3.3 70B">
+      {/* Section 14 — Claude / AI */}
+      <Section title="AI Inference: Claude by Anthropic">
         <SimpleBox>
-          <p>The AI runs on Groq's special chip, which is purpose-built for AI reasoning. It's dramatically faster than traditional AI hardware. This matters because market windows are short — a slow AI means stale decisions.</p>
+          <p>The AI runs on Anthropic's Claude — the sole AI provider for all platform intelligence. Claude Haiku handles high-frequency decisions (regime calls, allocation plans) while Claude Sonnet is used for deeper strategic analysis.</p>
         </SimpleBox>
 
-        <SubSection title="Groq LPU Architecture">
-          <p>Traditional GPUs co-locate compute with High Bandwidth Memory (HBM) externally. Groq co-locates SRAM with compute on-die, providing ~24× memory bandwidth advantage (~80 TB/s vs. H100's 3.35 TB/s).</p>
+        <SubSection title="Claude Model Tiers">
+          <p>The platform uses two Claude models in a tiered cost/performance structure.</p>
           <Table
-            headers={["Metric", "Groq LPU (Llama 3.3 70B)", "Traditional GPU"]}
+            headers={["Metric", "Claude Haiku (default)", "Claude Sonnet (smart)"]}
             rows={[
-              ["Inference speed", "~300–500 tokens/sec", "~60–150 tokens/sec"],
-              ["Latency (TTFT)", "~0.2–0.3 seconds", "~0.5–1.0+ seconds"],
-              ["Determinism", "Zero variance (clockwork)", "Variable (jitter)"],
+              ["Use case", "Regime calls, allocations, audits", "Deep fleet commander analysis"],
+              ["Speed", "Fastest — sub-second TTFT", "Moderate — higher quality"],
+              ["Token cost", "Low — budget-friendly at scale", "Higher — reserved for complex tasks"],
+              ["JSON reliability", "High — structured output", "Highest — best reasoning"],
             ]}
           />
-          <p><strong>Zero variance</strong> is the critical property: if a task is scheduled for 280ms, it takes exactly 280ms every time. Traditional AI has "jitter" that can delay time-sensitive allocations.</p>
+          <p><strong>Smart mode:</strong> Pass <Mono>smart=True</Mono> to <Mono>call_claude_with_usage()</Mono> to upgrade any call to Sonnet. Default is Haiku for cost efficiency.</p>
         </SubSection>
 
-        <SubSection title="Llama 3.3 70B Performance">
+        <SubSection title="Claude Performance Benchmarks">
           <Table
             headers={["Benchmark", "Accuracy", "Financial Utility"]}
             rows={[
-              ["MMLU", "86.0%", "General macro reasoning"],
-              ["MATH", "77.0%", "Quantitative validation"],
-              ["HumanEval", "88.4%", "JSON structure formatting"],
-              ["MGSM", "91.1%", "Multi-step problem solving"],
+              ["MMLU", "88.2%", "General macro reasoning"],
+              ["MATH", "80.9%", "Quantitative validation"],
+              ["HumanEval", "88.1%", "JSON structure formatting"],
+              ["Multi-step reasoning", "Top-tier", "Allocation thesis quality"],
             ]}
           />
         </SubSection>
@@ -781,7 +782,7 @@ export function WhitepaperContent() {
               ["Portfolio equity / positions", "30s", "Balance freshness vs. API load"],
               ["Growth vault / auditor report", "60s", "Lower volatility, less frequent"],
               ["Correlation matrix / sentiment", "120s", "Computed rarely, no high-freq need"],
-              ["AI commentary", "25-min staleTime + 90s manual poll", "Respects Groq token budget"],
+              ["AI commentary", "25-min staleTime + 90s manual poll", "Respects Claude token budget"],
             ]}
           />
         </SubSection>
@@ -845,12 +846,12 @@ export function WhitepaperContent() {
               ["Crypto-only", "Every 15min, 24/7 — only when NYSE closed", "BTC/USD, ETH/USD on Alpaca GTC"],
               ["Post-mortem", "16:10 ET weekdays", "Close positions, P&L, journal update, profit sweep"],
               ["Daily auditor", "16:30 ET weekdays", "Inspector Rekt full audit"],
-              ["Gemini self-critic", "04:15 AM ET", "Pre-market audit, veto_conditions.json write"],
+              ["Claude self-critic", "04:15 AM ET", "Pre-market audit, veto_conditions.json write"],
               ["Auto-heal monitor", "Every 2min, always active", "Self-healing for degraded components"],
               ["Learning snapshot", "Every 6 hours", "Export learning data for cross-restart seeding"],
               ["Equity heartbeat", "Every 1 hour", "Combined equity snapshot (Alpaca + Kraken + Forex)"],
               ["Apex Predator scan", "3:30 PM ET daily", "Options volatility squeeze scan → long straddle"],
-              ["Forex Navigator cycle", "Every 4 hours (immediate first)", "Forex pair scan → RSI + Groq → entry/exit"],
+              ["Forex Navigator cycle", "Every 4 hours (immediate first)", "Forex pair scan → RSI + Claude → entry/exit"],
             ]}
           />
           <p>All jobs paused by default on startup. Operator must explicitly enable auto-trading. The system never starts trading autonomously on launch.</p>
@@ -889,15 +890,15 @@ export function WhitepaperContent() {
             headers={["Module", "Tests", "Coverage"]}
             rows={[
               ["test_signal_guard", "~45", "3 guards, edge cases, integration"],
-              ["test_groq_budget", "~30", "Token counting, rate limits, midnight resets"],
+              ["test_claude_budget", "~30", "Token counting, rate limits, midnight resets"],
               ["test_llm_cache", "~30", "Cache hit/miss, TTL, fingerprinting"],
               ["test_shared_lib", "~45", "RiskProfile, ExitBracket, CB, VaR parametric"],
               ["test_data_integrity", "~50", "Snapshot validation, staleness, NaN, correlation"],
-              ["test_gemini_auditor", "~50", "Response parsing, veto logic, fail-open, chunking"],
+              ["test_claude_auditor", "~50", "Response parsing, veto logic, fail-open, chunking"],
               ["test_microstructure", "~117", "OFI/VAMP/VPIN order-book + OHLCV fallback + ExecutorVaRGate"],
             ]}
           />
-          <p><strong>Design principles:</strong> All external dependencies mocked (yfinance, Groq, Gemini, Alpaca, Kraken, PostgreSQL). Zero live network calls. Fully deterministic — no random seeds, no timing dependencies.</p>
+          <p><strong>Design principles:</strong> All external dependencies mocked (yfinance, Claude, Alpaca, Kraken, PostgreSQL). Zero live network calls. Fully deterministic — no random seeds, no timing dependencies.</p>
         </SubSection>
       </Section>
 
@@ -913,7 +914,7 @@ export function WhitepaperContent() {
             ["4", "Signal guard: consensus + divergence (SOFT)", "Filter headlines / adjust sentiment"],
             ["5", "Kill switch: daily drawdown ≥ 5%", "Liquidate all positions, halt day"],
             ["6", "VaR circuit breaker: var_usd > limit_usd", "Block all new entries for cycle"],
-            ["7", "Gemini veto enforcer", "Skip specific ticker, redirect to SGOV"],
+            ["7", "Claude veto enforcer", "Skip specific ticker, redirect to SGOV"],
             ["8", "Wash sale compliance (30-day)", "Skip order, redirect to SGOV"],
             ["9", "Zero-Kelly filter (Kelly ≤ 0)", "Force SGOV allocation"],
             ["10", "Overheated guard (Z>2 or RSI>75)", "Cut 50%, reroute to SGOV"],
@@ -926,7 +927,7 @@ export function WhitepaperContent() {
 
         <div className="mt-4 p-4 bg-indigo-950/40 border border-indigo-500/20 rounded-lg text-xs text-slate-400">
           <span className="text-indigo-300 font-semibold">System Status: </span>
-          Hybrid Agentic Architecture Stages 0–4 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Telegram/Discord alert system active with configurable frequency.
+          Hybrid Agentic Architecture Stages 0–4 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Claude self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Telegram/Discord alert system active with configurable frequency.
         </div>
       </Section>
 

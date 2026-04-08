@@ -42,7 +42,7 @@ const WIN_TEMPLATES: Array<{
   { fn: (e) => `${e.bot} sniper entry on ${e.symbol} pays off: +$${e.pnlUsd.toFixed(2)}`, icon: "🔫", color: "#10b981" },
   { fn: (e) => `Quant Brain confirms: ${e.bot}'s ${e.symbol} thesis was correct`, icon: "🧠", color: "#8b5cf6" },
   { fn: (e) => `${e.bot} alpha captured on ${e.symbol} — AI edge confirmed`, icon: "⚡", color: "#f59e0b" },
-  { fn: (e) => `GROQ analysis validated: ${e.bot} wins on ${e.symbol}`, icon: "🤖", color: "#3b82f6" },
+  { fn: (e) => `Claude analysis validated: ${e.bot} wins on ${e.symbol}`, icon: "🤖", color: "#3b82f6" },
   { fn: (e) => `${e.bot} regime detection nailed it — ${e.symbol} profit locked`, icon: "📊", color: "#06b6d4" },
   { fn: (e) => `Neural journal updated: ${e.bot} +$${e.pnlUsd.toFixed(2)} on ${e.symbol}`, icon: "📓", color: "#a78bfa" },
   { fn: (e) => `${e.bot} risk management on point — ${e.symbol} closed green`, icon: "🛡️", color: "#14b8a6" },

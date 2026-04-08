@@ -57,7 +57,7 @@ export function VaultDisplay() {
                     border: "1px solid rgba(74,222,128,0.2)",
                   }}
                 >
-                  {formatUsdPrecise(vaulted24h)} <span style={{ color: "rgba(74,222,128,0.6)" }}>24h</span>
+                  {formatUsdPrecise(vaulted24h)} <span style={{ color: "rgba(74,222,128,0.6)" }}>today</span>
                 </span>
               )}
             </div>

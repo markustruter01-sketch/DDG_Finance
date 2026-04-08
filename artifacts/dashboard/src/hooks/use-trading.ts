@@ -408,7 +408,7 @@ export function useVault() {
   return useQuery<VaultState>({
     queryKey: ["/vault"],
     queryFn: async () => (await api.get("/vault")).data,
-    refetchInterval: useVisibleInterval(60000),
+    refetchInterval: useVisibleInterval(10_000),
   });
 }
 
@@ -1551,9 +1551,9 @@ export function useForexVault() {
   return useQuery<{ vault_total_usd: number; sweeps: ForexVaultSweep[] }>({
     queryKey: ["/forex/vault"],
     queryFn: async () => (await api.get("/forex/vault")).data,
-    refetchInterval: useVisibleInterval(30_000),
+    refetchInterval: useVisibleInterval(10_000),
     retry: false,
-    staleTime: 20_000,
+    staleTime: 5_000,
   });
 }
 

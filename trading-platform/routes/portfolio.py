@@ -501,13 +501,17 @@ async def vault_state() -> dict:
     vaulted_24h = 0.0
     try:
         if _use_pg():
-            cutoff = datetime.utcnow() - timedelta(hours=24)
+            # Use today's UTC midnight as cutoff so contributions only drop off
+            # at the daily reset — not gradually throughout the day as with a
+            # rolling 24h window. This makes the figure monotonically increasing
+            # within a calendar day.
+            today_utc = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             with _pg_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         "SELECT COALESCE(SUM(pnl_usd * 0.20), 0.0) FROM kraken_trades "
                         "WHERE pnl_usd > 0 AND closed_at >= %s",
-                        (cutoff,),
+                        (today_utc,),
                     )
                     row = cur.fetchone()
                     vaulted_24h += float(row[0] or 0)
@@ -515,7 +519,7 @@ async def vault_state() -> dict:
                         cur.execute(
                             "SELECT COALESCE(SUM(pnl_usd * 0.20), 0.0) FROM forex_trades "
                             "WHERE pnl_usd > 0 AND exit_time >= %s",
-                            (cutoff,),
+                            (today_utc,),
                         )
                         row2 = cur.fetchone()
                         vaulted_24h += float(row2[0] or 0)

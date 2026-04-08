@@ -15,7 +15,6 @@ import json
 import requests
 from loguru import logger
 
-from config.settings import settings
 from analysis.groq_budget import budget as _budget
 from analysis.input_sanitizer import sanitize_news_payload
 

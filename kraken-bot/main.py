@@ -303,10 +303,17 @@ last_equity_refresh: float = 0.0
 # Circuit breaker: when set to a future datetime, all trading is paused.
 circuit_breaker_until: datetime | None = None
 
-# Consecutive-loss circuit breaker: counts losing trades in a row.
-# When the streak reaches LOSS_STREAK_LIMIT, trading pauses for LOSS_STREAK_COOLDOWN_HOURS.
+# Consecutive-loss tracker.
+# When the streak reaches LOSS_STREAK_LIMIT, a Gemini emergency rebalance fires
+# instead of pausing the bot.  All currently-losing positions are closed and Gemini
+# proposes new parameters with 5× the normal adjustment room.
 consecutive_losses: int = 0
-loss_streak_paused_until: datetime | None = None
+loss_streak_paused_until: datetime | None = None   # kept for backward-compat status only
+
+# Set to True when LOSS_STREAK_LIMIT is hit; consumed at the START of the next cycle.
+_pending_emergency_rebalance: bool = False
+# Guard to prevent re-entrant calls while closing positions during the rebalance.
+_emergency_rebalance_in_progress: bool = False
 
 SCALP_ENTRY_COOLDOWN_BARS = 10
 _scalp_last_entry: dict[str, datetime] = {}
@@ -548,19 +555,18 @@ def write_status(error: str | None = None) -> None:
     cb_active = circuit_breaker_until is not None and datetime.now(tz=timezone.utc) < circuit_breaker_until
     cb_until  = circuit_breaker_until.isoformat() if cb_active else None
 
-    ls_active = loss_streak_paused_until is not None and datetime.now(tz=timezone.utc) < loss_streak_paused_until
-    ls_until  = loss_streak_paused_until.isoformat() if ls_active else None
-
     paused = is_bot_paused()
     status_str = (
-        "paused_dashboard"         if paused     else
-        "paused_circuit_breaker"   if cb_active  else
-        "paused_loss_streak"       if ls_active  else
+        "paused_dashboard"       if paused    else
+        "paused_circuit_breaker" if cb_active else
         ("running" if not error else "error")
     )
 
     # Daily fee summary
     _daily_fees = _db.get_daily_fees()
+
+    # Reflect last emergency rebalance timestamp from adaptive_params module
+    _last_er_at = getattr(_adaptive, "_last_emergency_rebalance_at", None)
 
     # Primary: PostgreSQL heartbeat
     _db.upsert_heartbeat(
@@ -571,15 +577,16 @@ def write_status(error: str | None = None) -> None:
         paper_trading=PAPER_TRADING,
         bot_paused=paused,
         circuit_breaker={
-            "active": cb_active or ls_active,
-            "paused_until": cb_until or ls_until,
+            "active": cb_active,
+            "paused_until": cb_until,
             "flash_crash": {"active": cb_active, "paused_until": cb_until},
             "loss_streak": {
                 "consecutive_losses": consecutive_losses,
                 "limit": LOSS_STREAK_LIMIT,
-                "active": ls_active,
-                "paused_until": ls_until,
-                "cooldown_hours": LOSS_STREAK_COOLDOWN_HOURS,
+                "active": False,          # bot no longer pauses on losing streak
+                "paused_until": None,
+                "rebalance_pending": _pending_emergency_rebalance,
+                "last_rebalanced_at": _last_er_at.isoformat() if _last_er_at else None,
             },
             "daily_fees": _daily_fees,
         },
@@ -709,25 +716,7 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
     PAPER mode → calls paper_engine.paper_open_position()
     LIVE mode  → places a real market order via ccxt
     """
-    global open_positions, consecutive_losses, loss_streak_paused_until
-
-    if loss_streak_paused_until is not None:
-        now_utc = datetime.now(tz=timezone.utc)
-        if now_utc < loss_streak_paused_until:
-            remaining_min = (loss_streak_paused_until - now_utc).total_seconds() / 60
-            logger.warning(
-                f"LossStreak | BLOCKED entry {side.upper()} {symbol} — "
-                f"{consecutive_losses} consecutive losses, "
-                f"cooldown expires in {remaining_min:.0f}min"
-            )
-            return False
-        else:
-            logger.info(
-                f"LossStreak | Cooldown expired — resetting streak counter "
-                f"(was {consecutive_losses} losses)"
-            )
-            consecutive_losses = 0
-            loss_streak_paused_until = None
+    global open_positions, consecutive_losses
 
     if PAPER_TRADING:
         # ── Paper: simulate the fill at current price ─────────────────────────
@@ -775,8 +764,21 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
 
 
 def _track_loss_streak(pnl_usd: float) -> None:
-    """Update consecutive loss counter and trigger cooldown if limit reached."""
-    global consecutive_losses, loss_streak_paused_until
+    """
+    Update consecutive-loss counter.
+
+    When LOSS_STREAK_LIMIT is reached, set _pending_emergency_rebalance=True so
+    that the START of the next cycle will:
+      1. Close all currently-losing positions.
+      2. Call Gemini with 5× expanded parameter bounds to rebalance in real time.
+
+    The bot is NEVER paused — it stays active throughout.
+    """
+    global consecutive_losses, _pending_emergency_rebalance, _emergency_rebalance_in_progress
+    # Ignore trades that occurred while the rebalance close-out is in progress
+    # (those forced closes would otherwise reset / inflate the streak counter).
+    if _emergency_rebalance_in_progress:
+        return
     if pnl_usd >= 0:
         if consecutive_losses > 0:
             logger.info(f"LossStreak | Win resets streak (was {consecutive_losses})")
@@ -785,16 +787,88 @@ def _track_loss_streak(pnl_usd: float) -> None:
     consecutive_losses += 1
     logger.info(
         f"LossStreak | Loss #{consecutive_losses} "
-        f"(limit={LOSS_STREAK_LIMIT}, cooldown={LOSS_STREAK_COOLDOWN_HOURS}h)"
+        f"(limit={LOSS_STREAK_LIMIT})"
     )
     if consecutive_losses >= LOSS_STREAK_LIMIT:
-        now_utc = datetime.now(tz=timezone.utc)
-        loss_streak_paused_until = now_utc + timedelta(hours=LOSS_STREAK_COOLDOWN_HOURS)
         logger.warning(
-            f"LossStreak | CIRCUIT BREAKER TRIGGERED — {consecutive_losses} consecutive losses! "
-            f"All new entries paused until {loss_streak_paused_until.strftime('%Y-%m-%d %H:%M UTC')} "
-            f"({LOSS_STREAK_COOLDOWN_HOURS}h cooldown)"
+            f"LossStreak | STREAK LIMIT HIT — {consecutive_losses} consecutive losses! "
+            f"Queuing Gemini emergency rebalance for next cycle (bot stays active)."
         )
+        _pending_emergency_rebalance = True
+
+
+def _do_emergency_rebalance() -> None:
+    """
+    Called at the START of the next cycle after LOSS_STREAK_LIMIT is reached.
+
+    Steps:
+      1. Identify all open positions that are currently underwater.
+      2. Force-close each losing position (reason='loss_streak_rebalance').
+      3. Call _adaptive.gemini_emergency_rebalance() with the losing-position
+         metadata so Gemini has full context.
+      4. Reset the consecutive-loss counter — the bot resumes normally.
+    """
+    global consecutive_losses, _emergency_rebalance_in_progress
+
+    logger.warning(
+        f"LossStreak | EMERGENCY REBALANCE STARTING "
+        f"({consecutive_losses} consecutive losses) — "
+        "closing losing positions and calling Gemini..."
+    )
+
+    _emergency_rebalance_in_progress = True
+    streak = consecutive_losses   # capture before reset
+
+    # ── Step 1: identify losing positions ─────────────────────────────────────
+    losing_meta: list[dict] = []
+    symbols_to_close: list[str] = []
+
+    current_positions = get_paper_positions() if PAPER_TRADING else dict(open_positions)
+    for sym, pos in current_positions.items():
+        price = latest_prices.get(sym, pos.get("entry_price", 0))
+        if not price:
+            continue
+        entry  = pos.get("entry_price", price)
+        side   = pos.get("side", "long")
+        if side == "long":
+            pnl_pct = (price - entry) / entry * 100
+        else:
+            pnl_pct = (entry - price) / entry * 100
+        if pnl_pct < 0:
+            symbols_to_close.append(sym)
+            losing_meta.append({
+                "symbol":            sym,
+                "side":              side,
+                "entry_price":       entry,
+                "unrealized_pnl_pct": round(pnl_pct, 2),
+            })
+
+    logger.warning(
+        f"LossStreak | Closing {len(symbols_to_close)} losing position(s): "
+        f"{', '.join(symbols_to_close) or 'none'}"
+    )
+
+    # ── Step 2: close them ────────────────────────────────────────────────────
+    for sym in symbols_to_close:
+        try:
+            close_position(sym, reason="loss_streak_rebalance")
+        except Exception as exc:
+            logger.error(f"LossStreak | Failed to close {sym}: {exc}")
+
+    _emergency_rebalance_in_progress = False
+
+    # ── Step 3: Gemini rebalance ──────────────────────────────────────────────
+    try:
+        _adaptive.gemini_emergency_rebalance(
+            consecutive_losses=streak,
+            losing_positions=losing_meta,
+        )
+    except Exception as exc:
+        logger.error(f"LossStreak | Gemini rebalance call failed: {exc} — params unchanged")
+
+    # ── Step 4: reset streak so the bot resumes trading normally ─────────────
+    consecutive_losses = 0
+    logger.warning("LossStreak | Emergency rebalance complete — bot resuming normal operation.")
 
 
 def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
@@ -1144,6 +1218,16 @@ def run_cycle() -> None:
     # ── Pull current adaptive parameters (self-tuning layer) ─────────────────
     # maybe_adapt() only does real work every 6 hours; otherwise returns fast.
     _adaptive.maybe_adapt()
+
+    # ── Emergency Gemini rebalance (replaces losing-streak shutdown) ──────────
+    # If LOSS_STREAK_LIMIT was hit during the *previous* cycle, execute the
+    # rebalance now: close all losing positions, then let Gemini propose new
+    # params with 5× the normal adjustment room.  The flag is consumed once.
+    global _pending_emergency_rebalance
+    if _pending_emergency_rebalance:
+        _pending_emergency_rebalance = False
+        _do_emergency_rebalance()
+
     _ap = _adaptive.get_active_params()
     _zscore_entry       = _ap["ZSCORE_ENTRY"]
     _zscore_exit        = _ap["ZSCORE_EXIT"]
@@ -2305,7 +2389,7 @@ def main() -> None:
     so the health monitor never sees the bot as stale, even during slow cycles.
     """
     import threading
-    global total_equity, consecutive_losses, loss_streak_paused_until
+    global total_equity, consecutive_losses, loss_streak_paused_until, _pending_emergency_rebalance
 
     _start_health_server()
 
@@ -2334,6 +2418,9 @@ def main() -> None:
         logger.debug("Tranches | No pending tranches to restore from DB")
 
     # ── Restore consecutive-loss streak from recent trade history ──────────────
+    # We restore the counter so status reporting is accurate, but we no longer
+    # activate a cooldown on restart.  If the streak is at or above the limit,
+    # queue an emergency Gemini rebalance for the very first cycle instead.
     try:
         _recent = _db.get_recent_trades(limit=LOSS_STREAK_LIMIT + 5)
         _streak = 0
@@ -2349,12 +2436,10 @@ def main() -> None:
                 f"(limit={LOSS_STREAK_LIMIT})"
             )
             if _streak >= LOSS_STREAK_LIMIT:
-                loss_streak_paused_until = datetime.now(tz=timezone.utc) + timedelta(
-                    hours=LOSS_STREAK_COOLDOWN_HOURS
-                )
+                _pending_emergency_rebalance = True
                 logger.warning(
-                    f"LossStreak | Streak {_streak} >= limit {LOSS_STREAK_LIMIT} on startup — "
-                    f"cooldown active until {loss_streak_paused_until.strftime('%Y-%m-%d %H:%M UTC')}"
+                    f"LossStreak | Streak {_streak} >= limit on startup — "
+                    f"Gemini emergency rebalance queued for first cycle (no cooldown)"
                 )
     except Exception as _ls_exc:
         logger.warning(f"LossStreak | Could not restore streak from DB: {_ls_exc}")

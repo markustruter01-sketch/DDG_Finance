@@ -454,6 +454,169 @@ def get_active_params() -> dict[str, float]:
     return dict(_active)
 
 
+# Timestamp of the last emergency Gemini rebalance (None if never triggered).
+_last_emergency_rebalance_at: datetime | None = None
+
+# Absolute safety floors/ceilings for 5× expanded bounds.
+_EMERGENCY_FLOORS = {
+    "ZSCORE_ENTRY":       0.30,
+    "ZSCORE_EXIT":        0.05,
+    "STOP_LOSS_PCT":      0.004,
+    "TRAIL_PCT":          0.015,
+    "MIN_NET_PROFIT_PCT": FEE_FLOOR,
+}
+_EMERGENCY_CEILINGS = {
+    "ZSCORE_ENTRY":       3.00,
+    "ZSCORE_EXIT":        1.50,
+    "STOP_LOSS_PCT":      0.15,
+    "TRAIL_PCT":          0.30,
+    "MIN_NET_PROFIT_PCT": 0.08,
+}
+
+
+def gemini_emergency_rebalance(
+    consecutive_losses: int,
+    losing_positions: list[dict] | None = None,
+) -> dict[str, float]:
+    """
+    Triggered when the losing-streak limit is hit instead of shutting the bot down.
+
+    - Computes 5× expanded parameter bounds (Gemini gets 5× more adjustment room).
+    - Calls Gemini via the Replit proxy to propose new parameter values.
+    - Persists the result to PostgreSQL so the next cycle picks them up immediately.
+    - Returns the new active params dict.
+    """
+    global _active, _last_emergency_rebalance_at
+
+    # ── 5× expanded bounds ───────────────────────────────────────────────────
+    expanded_bounds: dict[str, tuple[float, float]] = {}
+    for name in DEFAULTS:
+        lo, hi   = BOUNDS[name]
+        default  = DEFAULTS[name]
+        lo_dev   = default - lo      # normal downward room from default
+        hi_dev   = hi - default      # normal upward room from default
+        exp_lo   = max(_EMERGENCY_FLOORS[name],   default - 5.0 * lo_dev)
+        exp_hi   = min(_EMERGENCY_CEILINGS[name], default + 5.0 * hi_dev)
+        expanded_bounds[name] = (round(exp_lo, 6), round(exp_hi, 6))
+
+    # ── Metrics for context ───────────────────────────────────────────────────
+    trades  = _load_trades_for_adaptation()
+    metrics = _compute_metrics(trades) if len(trades) >= MIN_TRADES else None
+
+    # ── Build Gemini prompt ───────────────────────────────────────────────────
+    params_desc = "\n".join(
+        f"  {k}: current={_active.get(k, DEFAULTS[k]):.4f}  "
+        f"default={DEFAULTS[k]:.4f}  "
+        f"normal_range=[{BOUNDS[k][0]:.4f},{BOUNDS[k][1]:.4f}]  "
+        f"EMERGENCY_range=[{expanded_bounds[k][0]:.4f},{expanded_bounds[k][1]:.4f}]"
+        for k in DEFAULTS
+    )
+
+    metrics_desc = ""
+    if metrics:
+        metrics_desc = (
+            f"\nRecent performance (last {metrics['n']} trades):\n"
+            f"  win_rate={metrics['win_rate']:.0%}  profit_factor={metrics['profit_factor']:.2f}\n"
+            f"  avg_win={metrics['avg_win_pct']:.2f}%  avg_loss={metrics['avg_loss_pct']:.2f}%\n"
+            f"  stop_loss_rate={metrics['stop_loss_rate']:.0%}  "
+            f"trailing_rate={metrics['trailing_rate']:.0%}"
+        )
+
+    positions_desc = ""
+    if losing_positions:
+        positions_desc = f"\nLosing positions being closed ({len(losing_positions)}):\n"
+        for p in losing_positions:
+            positions_desc += (
+                f"  {p.get('symbol')} {str(p.get('side','')).upper()}  "
+                f"entry={p.get('entry_price', 0):.4f}  "
+                f"unrealized_pnl={p.get('unrealized_pnl_pct', 0):.2f}%\n"
+            )
+
+    system_prompt = (
+        "You are an emergency trading parameter optimizer for a 24/7 cryptocurrency "
+        "mean-reversion bot running on Kraken. The bot has hit its losing-streak "
+        "circuit breaker. Your job is to propose new parameters that stop the losses "
+        "and help the bot recover.\n\n"
+        "This is an EMERGENCY rebalance — you have 5× the normal parameter range. "
+        "Make decisive, meaningful changes that directly address the losing streak.\n\n"
+        "Return ONLY a valid JSON object with exactly these numeric keys:\n"
+        "  ZSCORE_ENTRY, ZSCORE_EXIT, STOP_LOSS_PCT, TRAIL_PCT, MIN_NET_PROFIT_PCT\n\n"
+        "Parameter meanings:\n"
+        "  ZSCORE_ENTRY      — entry z-score threshold (higher = more selective entries)\n"
+        "  ZSCORE_EXIT       — exit z-score on mean reversion (lower = let winners run)\n"
+        "  STOP_LOSS_PCT     — hard stop fraction (e.g. 0.02 = 2% loss cut)\n"
+        "  TRAIL_PCT         — trailing stop fraction (higher = more room before trailing)\n"
+        "  MIN_NET_PROFIT_PCT — minimum net profit required to exit (filters weak signals)\n\n"
+        "All values MUST be within the EMERGENCY_range bounds. "
+        "Return ONLY the JSON object — no explanation, no markdown."
+    )
+
+    user_prompt = (
+        f"EMERGENCY REBALANCE — {consecutive_losses} consecutive losing trades.\n\n"
+        f"Current parameters and available ranges:\n{params_desc}\n"
+        f"{metrics_desc}{positions_desc}\n"
+        "Diagnose what is causing the losing streak from the metrics, then propose new "
+        "parameter values within EMERGENCY_range that will stop the losses. "
+        "You have 5× the normal adjustment room — use it decisively."
+    )
+
+    # ── Call Gemini ───────────────────────────────────────────────────────────
+    try:
+        from analysis.groq_client import call_groq
+        raw = call_groq(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=0.2,
+            max_tokens=8192,
+            call_type="emergency_rebalance",
+        )
+        proposed = json.loads(raw)
+    except Exception as exc:
+        logger.error(
+            f"Adaptive | Emergency Gemini rebalance failed: {exc} — current params unchanged"
+        )
+        return dict(_active)
+
+    # ── Validate and apply ────────────────────────────────────────────────────
+    new_params = dict(_active)
+    reasons: dict[str, str] = {}
+    for name, (exp_lo, exp_hi) in expanded_bounds.items():
+        if name not in proposed:
+            continue
+        try:
+            raw_val = float(proposed[name])
+        except (TypeError, ValueError):
+            continue
+        clamped = max(exp_lo, min(exp_hi, raw_val))
+        old = new_params[name]
+        new_params[name] = round(clamped, 6)
+        if clamped != old:
+            reasons[name] = (
+                f"Emergency rebalance ({consecutive_losses} losses): "
+                f"{old:.4f} → {clamped:.4f} "
+                f"[Gemini={raw_val:.4f}, 5× bounds=[{exp_lo:.4f},{exp_hi:.4f}]]"
+            )
+            logger.warning(
+                f"Adaptive | EMERGENCY {name}: {old:.4f} → {clamped:.4f}  "
+                f"(Gemini proposed {raw_val:.4f}, 5× bounds=[{exp_lo:.4f},{exp_hi:.4f}])"
+            )
+
+    # Safety: MIN_NET_PROFIT_PCT must never fall below fee floor
+    if new_params.get("MIN_NET_PROFIT_PCT", 0) < FEE_FLOOR:
+        new_params["MIN_NET_PROFIT_PCT"] = round(FEE_FLOOR, 6)
+
+    _active = new_params
+    _last_reason.update(reasons)
+    _last_emergency_rebalance_at = datetime.now(tz=timezone.utc)
+    _save(_active, metrics)
+
+    logger.warning(
+        f"Adaptive | EMERGENCY REBALANCE COMPLETE ({consecutive_losses} consecutive losses): "
+        + ", ".join(f"{k}={v:.4f}" for k, v in _active.items())
+    )
+    return dict(_active)
+
+
 def status_snapshot() -> dict:
     """Return a dashboard-friendly snapshot of the adaptive parameter state."""
     return {
@@ -462,6 +625,10 @@ def status_snapshot() -> dict:
         "reasons":      dict(_last_reason),
         "adapted_at":   datetime.fromtimestamp(_last_adapted_at, tz=timezone.utc).isoformat()
                         if _last_adapted_at else None,
+        "last_emergency_rebalance_at": (
+            _last_emergency_rebalance_at.isoformat()
+            if _last_emergency_rebalance_at else None
+        ),
         "next_adapt_in_hours": max(
             0,
             round(

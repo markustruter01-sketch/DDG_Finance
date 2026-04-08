@@ -21,13 +21,22 @@ Usage:
     budget.budget_status()               # dict for the /status groq block
 """
 
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from loguru import logger
 
-from config.settings import settings
+try:
+    from config.settings import settings as _cfg_settings
+except (ImportError, ModuleNotFoundError):
+    class _cfg_settings:  # type: ignore[no-redef]
+        groq_daily_token_budget: int = int(os.environ.get("GROQ_DAILY_TOKEN_BUDGET", "10000000"))
+        groq_min_regime_interval_minutes: int = int(os.environ.get("GROQ_MIN_REGIME_INTERVAL_MINUTES", "90"))
+        groq_commentary_daily_cap: int = int(os.environ.get("GROQ_COMMENTARY_DAILY_CAP", "4"))
+
+settings = _cfg_settings
 
 
 class GroqBudget:

@@ -1,5 +1,6 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, type ForexPosition } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { ParameterScale } from "@/components/ParameterScale";
 
 const STARTING_BALANCE = 100_000;
 
@@ -54,9 +55,13 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
   const { equity, color, glow } = bot;
   const truePnl = equity != null ? equity - STARTING_BALANCE : null;
 
-  const effectiveStrategyConfig: ConfigRow[] = bot.krakenBotKey
-    ? buildKrakenStrategyConfig(bot.krakenBotKey, fleetParams, color)
-    : (bot.strategyConfig ?? []);
+  // Kraken bots: use live bounds + current from fleet params (same as normal bots page)
+  const krakenBotData = bot.krakenBotKey ? fleetParams?.bots?.[bot.krakenBotKey] : undefined;
+  const krakenCurrent: Record<string, number> = krakenBotData?.current ?? {};
+  const krakenBounds: Record<string, BotParamBounds> = krakenBotData?.bounds ?? {};
+
+  // Non-Kraken bots: use static strategyConfig text rows
+  const effectiveStrategyConfig: ConfigRow[] = bot.krakenBotKey ? [] : (bot.strategyConfig ?? []);
   const totalTrades = bot.winCount + bot.lossCount;
   const winRate = totalTrades > 0 ? (bot.winCount / totalTrades) * 100 : null;
 
@@ -207,8 +212,53 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       </div>
 
-      {/* Strategy Config strip */}
-      {effectiveStrategyConfig.length > 0 && (
+      {/* Parameters — Kraken bots: ParameterScale sliders (same as normal bots page) */}
+      {bot.krakenBotKey && (
+        <>
+          <div className="mx-3 mb-1" style={{ height: 1, background: `${color}10` }} />
+          <div className="px-3 pb-2">
+            <div
+              className="text-[7px] font-black uppercase tracking-widest mb-2"
+              style={{ color: `${color}60` }}
+            >
+              PARAMETERS
+            </div>
+            <div className="space-y-2">
+              {PARAM_ORDER.map((param) => {
+                const cfg = PARAM_LABELS[param];
+                const b = krakenBounds[param];
+                const val = krakenCurrent[param];
+                if (!cfg) return null;
+                if (!b || val == null) {
+                  return (
+                    <div key={param}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] text-slate-400 font-mono">{cfg.label}</span>
+                        <span className="text-[10px] font-mono text-slate-600">···</span>
+                      </div>
+                      <div className="relative h-2 rounded-full bg-slate-800/80" />
+                    </div>
+                  );
+                }
+                return (
+                  <ParameterScale
+                    key={param}
+                    label={cfg.label}
+                    min={b.min}
+                    max={b.max}
+                    current={val}
+                    format={cfg.format}
+                    color={color}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Strategy Config strip — non-Kraken bots: text label:value rows */}
+      {!bot.krakenBotKey && effectiveStrategyConfig.length > 0 && (
         <>
           <div className="mx-3 mb-1" style={{ height: 1, background: `${color}10` }} />
           <div className="px-3 pb-2">
@@ -299,7 +349,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
       )}
 
       {/* Top position hint — non-Kraken bots only */}
-      {bot.openPositionsList == null && bot.topPair && effectiveStrategyConfig.length === 0 && (
+      {!bot.krakenBotKey && bot.topPair && (
         <div className="mt-auto px-3 pb-3">
           <div
             className="text-[9px] font-bold truncate px-2 py-1 rounded"
@@ -310,18 +360,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       )}
 
-      {bot.openPositionsList == null && bot.topPair && effectiveStrategyConfig.length > 0 && (
-        <div className="px-3 pb-2 mt-auto">
-          <div
-            className="text-[9px] font-bold truncate px-2 py-0.5 rounded"
-            style={{ background: `${color}10`, color: `${color}aa`, border: `1px solid ${color}18` }}
-          >
-            ⬡ {bot.topPair}
-          </div>
-        </div>
-      )}
-
-      {bot.openPositionsList == null && !bot.topPair && effectiveStrategyConfig.length === 0 && <div className="mt-auto" />}
+      {!bot.krakenBotKey && !bot.topPair && effectiveStrategyConfig.length === 0 && <div className="mt-auto" />}
     </div>
   );
 }
@@ -335,26 +374,6 @@ const PARAM_LABELS: Record<string, { label: string; format: (v: number) => strin
   MIN_NET_PROFIT_PCT: { label: "Min Profit", format: (v) => `${(v * 100).toFixed(2)}%` },
 };
 
-function buildKrakenStrategyConfig(
-  botKey: string,
-  fleetParams: ReturnType<typeof useFleetParams>["data"],
-  color: string
-): ConfigRow[] {
-  const botParams = fleetParams?.bots?.[botKey];
-  if (!botParams?.current || Object.keys(botParams.current).length === 0) {
-    return PARAM_ORDER.map((param) => ({
-      label: PARAM_LABELS[param]?.label ?? param,
-      value: "···",
-      color: "#475569",
-    }));
-  }
-  return PARAM_ORDER.map((param) => {
-    const val = botParams.current[param];
-    const cfg = PARAM_LABELS[param];
-    if (val == null || !cfg) return null;
-    return { label: cfg.label, value: cfg.format(val), color } as ConfigRow;
-  }).filter((r): r is ConfigRow => r !== null);
-}
 
 export default function StreamingBotsScreen() {
   const { data: portfolio } = usePortfolio();

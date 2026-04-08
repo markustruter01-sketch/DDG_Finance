@@ -25,6 +25,7 @@ from routes._deps import (
     _heal_lock,
     _add_heal_entry,
     _get_forex_engine,
+    _get_options_engine,
 )
 
 system_router = APIRouter(tags=["System"])
@@ -838,13 +839,15 @@ async def status_summary() -> dict:
         pass
 
     try:
-        import importlib
-        opts = importlib.import_module("options_engine")
-        opts_state = opts.get_state()
-        bot_statuses["apex-predator"] = {
-            "display_name": "Apex Predator",
-            "status": "paused" if opts_state.get("paused") else "running",
-        }
+        opts = _get_options_engine()
+        if opts is not None:
+            opts_state = opts.get_state()
+            bot_statuses["apex-predator"] = {
+                "display_name": "Apex Predator",
+                "status": "paused" if opts_state.get("paused") else "running",
+            }
+        else:
+            bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}
     except Exception as _apex_exc:
         logger.debug(f"[STATUS] Apex Predator state unavailable: {_apex_exc}")
         bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}

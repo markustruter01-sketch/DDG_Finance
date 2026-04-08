@@ -114,6 +114,29 @@ def _persist_commentary_caches() -> None:
         logger.warning(f"Commentary cache | Failed to persist to disk: {exc}")
 
 
+_OPTIONS_ENGINE_PATH = os.path.join(_REPO_ROOT, "trading-platform")
+if _OPTIONS_ENGINE_PATH not in sys.path:
+    sys.path.insert(0, _OPTIONS_ENGINE_PATH)
+
+_options_engine_module = None
+def _get_options_engine():
+    """Lazy singleton for the options_engine module (Apex Predator, Bot #5)."""
+    global _options_engine_module
+    if _options_engine_module is not None:
+        return _options_engine_module
+    try:
+        import importlib.util as _ilu4
+        _opts_path = os.path.join(_REPO_ROOT, "trading-platform", "options_engine.py")
+        spec = _ilu4.spec_from_file_location("options_engine", _opts_path)
+        mod = _ilu4.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _options_engine_module = mod
+        return mod
+    except Exception as exc:
+        logger.debug(f"Options engine import failed: {exc}")
+        return None
+
+
 _FOREX_ENGINE_PATH = os.path.join(_REPO_ROOT, "forex-engine")
 if _FOREX_ENGINE_PATH not in sys.path:
     sys.path.append(_FOREX_ENGINE_PATH)

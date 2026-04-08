@@ -30,6 +30,8 @@ const BOT_META: Record<string, { color: string; icon: string; strategy: string }
   },
 };
 
+const STARTING_BALANCE = 100_000;
+
 interface BotCardProps {
   botId: string;
   displayName: string;
@@ -37,12 +39,10 @@ interface BotCardProps {
   previousParams?: Record<string, number>;
 }
 
-function fmt(v: number) {
-  return v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`;
-}
-
-function fmtPct(v: number) {
-  return v >= 0 ? `+${v.toFixed(2)}%` : `${v.toFixed(2)}%`;
+function fmtPnl(v: number) {
+  const abs = Math.abs(v);
+  if (abs >= 1000) return v >= 0 ? `+$${(abs / 1000).toFixed(1)}k` : `-$${(abs / 1000).toFixed(1)}k`;
+  return v >= 0 ? `+$${abs.toFixed(2)}` : `-$${abs.toFixed(2)}`;
 }
 
 export function BotCard({ botId, displayName, strategyLabel, previousParams }: BotCardProps) {
@@ -50,12 +50,16 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
   const { data: perf, isLoading: perfLoading } = useKrakenPerformance(botId);
   const { data: fleetParams } = useFleetParams();
 
-  const meta = BOT_META[botId] || { color: "#6b7280", icon: "🤖", strategy: strategyLabel || "Automated trading bot" };
-  const botParams = fleetParams?.bots?.[botId];
-  const current = botParams?.current || {};
-  const bounds = botParams?.bounds || {};
+  const botKey = botId.replace(/-/g, "_");
+  const meta = BOT_META[botKey] ?? { color: "#6b7280", icon: "🤖", strategy: strategyLabel ?? "Automated trading bot" };
+  const botParams = fleetParams?.bots?.[botKey] ?? fleetParams?.bots?.[botId];
+  const current = botParams?.current ?? {};
+  const bounds = botParams?.bounds ?? {};
 
   const isLoading = statusLoading || perfLoading;
+
+  const currentEquity = perf?.current_equity ?? status?.total_equity_usd ?? 0;
+  const truePnl = currentEquity > 0 ? currentEquity - STARTING_BALANCE : null;
 
   return (
     <div
@@ -90,9 +94,11 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
           </div>
           <p className="text-[10px] text-slate-500 mt-0.5 truncate">{meta.strategy}</p>
         </div>
-        {status && (
+        {currentEquity > 0 && (
           <div className="text-right flex-shrink-0">
-            <div className="text-xs font-mono font-bold text-white">${status.total_equity_usd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+            <div className="text-xs font-mono font-bold text-white">
+              ${currentEquity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </div>
             <div className="text-[10px] text-slate-500">equity</div>
           </div>
         )}
@@ -119,7 +125,7 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
                   return (
                     <ParameterScale
                       key={param}
-                      label={cfg?.label || param}
+                      label={cfg?.label ?? param}
                       min={b.min}
                       max={b.max}
                       current={val}
@@ -139,24 +145,27 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
               <div className="text-[11px] text-slate-600 italic">No open positions</div>
             ) : (
               <div className="space-y-1.5">
-                {status.open_positions.slice(0, 3).map((pos) => (
-                  <div key={pos.symbol} className="flex items-center justify-between gap-2 text-[11px]">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Anchor className="w-2.5 h-2.5 flex-shrink-0" style={{ color: meta.color }} />
-                      <span className="font-mono font-bold text-white">{pos.symbol}</span>
-                      <span className="text-slate-500 text-[10px]">@{pos.entry_price.toFixed(4)}</span>
+                {status.open_positions.slice(0, 3).map((pos) => {
+                  const pnl = pos.unrealized_pnl_usd ?? 0;
+                  return (
+                    <div key={pos.symbol} className="flex items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Anchor className="w-2.5 h-2.5 flex-shrink-0" style={{ color: meta.color }} />
+                        <span className="font-mono font-bold text-white">{pos.symbol}</span>
+                        <span className="text-slate-500 text-[10px]">@{pos.entry_price.toFixed(4)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-slate-400 text-[10px]">${(pos.size_usd ?? 0).toFixed(0)}</span>
+                        <span
+                          className="font-mono font-bold text-[11px]"
+                          style={{ color: pnl >= 0 ? "#10b981" : "#ef4444" }}
+                        >
+                          {fmtPnl(pnl)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-slate-400 text-[10px]">${pos.size_usd.toFixed(0)}</span>
-                      <span
-                        className="font-mono font-bold text-[11px]"
-                        style={{ color: pos.unrealized_pnl_usd >= 0 ? "#10b981" : "#ef4444" }}
-                      >
-                        {fmt(pos.unrealized_pnl_usd)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {status.open_positions.length > 3 && (
                   <div className="text-[10px] text-slate-600">+{status.open_positions.length - 3} more</div>
                 )}
@@ -173,20 +182,20 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
                 <div>
                   <div className="text-[9px] text-slate-600 uppercase tracking-wider">Total Equity</div>
                   <div className="text-[12px] font-mono font-bold text-white">
-                    ${perf.current_equity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    ${currentEquity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </div>
                 </div>
                 <div>
                   <div className="text-[9px] text-slate-600 uppercase tracking-wider">Total P&L</div>
                   <div
                     className="text-[12px] font-mono font-bold flex items-center gap-1"
-                    style={{ color: (perf.total_pnl_usd ?? 0) >= 0 ? "#10b981" : "#ef4444" }}
+                    style={{ color: truePnl != null && truePnl >= 0 ? "#10b981" : "#ef4444" }}
                   >
-                    {(perf.total_pnl_usd ?? 0) >= 0
+                    {truePnl != null && truePnl >= 0
                       ? <TrendingUp className="w-3 h-3" />
                       : <TrendingDown className="w-3 h-3" />
                     }
-                    ${Math.abs(perf.total_pnl_usd ?? 0).toFixed(2)}
+                    {truePnl != null ? fmtPnl(truePnl) : "—"}
                   </div>
                 </div>
                 <div>

@@ -20,6 +20,33 @@ interface StreamPrefs {
   intervalSeconds: number;
 }
 
+function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number | null; subPage: SubPage | null } {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const autoParam = params.get("auto");
+    const intervalParam = params.get("interval");
+    const subParam = params.get("sub");
+
+    const autoCycle = autoParam === "1" ? true : autoParam === "0" ? false : null;
+
+    let intervalSeconds: number | null = null;
+    if (intervalParam !== null) {
+      const parsed = parseInt(intervalParam, 10);
+      if (!isNaN(parsed)) {
+        intervalSeconds = Math.max(5, Math.min(120, parsed));
+      }
+    }
+
+    let subPage: SubPage | null = null;
+    if (subParam === "b" || subParam === "c" || subParam === "d") subPage = subParam;
+    else if (subParam === "a") subPage = "a";
+
+    return { autoCycle, intervalSeconds, subPage };
+  } catch {
+    return { autoCycle: null, intervalSeconds: null, subPage: null };
+  }
+}
+
 function loadPrefs(): StreamPrefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -30,7 +57,7 @@ function loadPrefs(): StreamPrefs {
         intervalSeconds:
           typeof parsed.intervalSeconds === "number" &&
           parsed.intervalSeconds >= 5 &&
-          parsed.intervalSeconds <= 60
+          parsed.intervalSeconds <= 120
             ? parsed.intervalSeconds
             : 10,
       };
@@ -46,21 +73,29 @@ function savePrefs(prefs: StreamPrefs) {
 }
 
 export default function StreamPage() {
+  const urlParams = useRef(parseUrlParams());
+  const urlControlled = urlParams.current.autoCycle !== null || urlParams.current.intervalSeconds !== null;
+
   function getInitialSubPage(): SubPage {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const sub = params.get("sub");
-      if (sub === "b") return "b";
-      if (sub === "c") return "c";
-      if (sub === "d") return "d";
-    } catch {}
+    if (urlParams.current.subPage) return urlParams.current.subPage;
     return "a";
   }
 
+  const stored = useRef<StreamPrefs>(loadPrefs());
+
+  function getInitialAutoCycle(): boolean {
+    if (urlParams.current.autoCycle !== null) return urlParams.current.autoCycle;
+    return stored.current.autoCycle;
+  }
+
+  function getInitialInterval(): number {
+    if (urlParams.current.intervalSeconds !== null) return urlParams.current.intervalSeconds;
+    return stored.current.intervalSeconds;
+  }
+
   const [active, setActive] = useState<SubPage>(getInitialSubPage);
-  const prefs = useRef<StreamPrefs>(loadPrefs());
-  const [autoCycle, setAutoCycle] = useState(prefs.current.autoCycle);
-  const [intervalSeconds, setIntervalSeconds] = useState(prefs.current.intervalSeconds);
+  const [autoCycle, setAutoCycle] = useState<boolean>(getInitialAutoCycle);
+  const [intervalSeconds, setIntervalSeconds] = useState<number>(getInitialInterval);
   const [progress, setProgress] = useState(0);
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -111,17 +146,17 @@ export default function StreamPage() {
   function handleToggleAutoCycle() {
     const next = !autoCycle;
     setAutoCycle(next);
-    const updated = { autoCycle: next, intervalSeconds };
-    prefs.current = updated;
-    savePrefs(updated);
+    if (!urlControlled) {
+      savePrefs({ autoCycle: next, intervalSeconds });
+    }
   }
 
   function handleIntervalChange(val: number) {
-    const clamped = Math.max(5, Math.min(60, val));
+    const clamped = Math.max(5, Math.min(120, val));
     setIntervalSeconds(clamped);
-    const updated = { autoCycle, intervalSeconds: clamped };
-    prefs.current = updated;
-    savePrefs(updated);
+    if (!urlControlled) {
+      savePrefs({ autoCycle, intervalSeconds: clamped });
+    }
   }
 
   const tabs: { id: SubPage; label: string; activeGrad: string; activeColor: string; activeBorder: string; progressGrad: string; progressGlow: string }[] = [

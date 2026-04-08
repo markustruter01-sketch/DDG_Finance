@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import {
   Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
+  ScanSearch, Copy, ClipboardCheck,
 } from "lucide-react";
 import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
 
@@ -34,6 +35,81 @@ const QUICK_ACTIONS = [
   { id: "pause_losing", label: "Pause Losers", icon: Pause, color: "#8b5cf6", desc: "Pause bots with negative PnL" },
   { id: "reset_defaults", label: "Reset Defaults", icon: RotateCcw, color: "#6b7280", desc: "Step toward factory params" },
 ];
+
+function parseAuditFindings(text: string): { number: number; category: string; title: string; prompt: string }[] {
+  const findings: { number: number; category: string; title: string; prompt: string }[] = [];
+  const findingRegex = /\*{1,2}#(\d+)\s*[—–\-]\s*\[([^\]]+)\]\s*([^\n*]+?)\*{0,2}\s*\n/g;
+  let match;
+  while ((match = findingRegex.exec(text)) !== null) {
+    const num = parseInt(match[1], 10);
+    const category = match[2].trim();
+    const title = match[3].replace(/\*+/g, "").trim();
+    const afterHeader = text.slice(match.index + match[0].length);
+    const promptMatch = afterHeader.match(/^[\s\n]*>\s*"([\s\S]*?)"\s*(?:\n|$)/);
+    let prompt = "";
+    if (promptMatch) {
+      prompt = promptMatch[1].replace(/\s+/g, " ").trim();
+    } else {
+      const promptFallback = afterHeader.match(/^[\s\n]*>\s*([\s\S]*?)(?:\n\n|$)/);
+      if (promptFallback) {
+        prompt = promptFallback[1].replace(/^["']|["']$/g, "").replace(/\s+/g, " ").trim();
+      }
+    }
+    findings.push({ number: num, category, title, prompt });
+  }
+  return findings;
+}
+
+function AuditFindingCard({ finding }: { finding: { number: number; category: string; title: string; prompt: string } }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!finding.prompt) return;
+    navigator.clipboard.writeText(finding.prompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const categoryColors: Record<string, string> = {
+    Security: "text-red-400 bg-red-500/10 border-red-500/30",
+    Performance: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+    Bug: "text-orange-400 bg-orange-500/10 border-orange-500/30",
+    Architecture: "text-blue-400 bg-blue-500/10 border-blue-500/30",
+    "Error Handling": "text-purple-400 bg-purple-500/10 border-purple-500/30",
+    "Code Quality": "text-slate-400 bg-slate-500/10 border-slate-500/30",
+    Testing: "text-teal-400 bg-teal-500/10 border-teal-500/30",
+  };
+
+  const catStyle = categoryColors[finding.category] || "text-slate-400 bg-slate-500/10 border-slate-500/30";
+
+  return (
+    <div className="rounded-lg border border-white/[0.07] bg-slate-900/60 p-3 mb-2">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-mono text-slate-500">#{finding.number}</span>
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${catStyle}`}>
+            {finding.category}
+          </span>
+          <span className="text-xs text-slate-200 font-medium">{finding.title}</span>
+        </div>
+      </div>
+      {finding.prompt && (
+        <div className="mt-1.5 rounded-md bg-slate-800/60 border border-white/[0.05] p-2.5 flex items-start gap-2">
+          <p className="flex-1 text-[11px] text-slate-300 font-mono leading-relaxed">{finding.prompt}</p>
+          <button
+            onClick={handleCopy}
+            title="Copy Replit prompt"
+            className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/50 transition-all text-[10px] font-semibold"
+          >
+            {copied ? <ClipboardCheck className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatParamName(name: string): string {
   return name.replace(/_/g, " ").replace(/PCT/g, "%").replace(/MIN NET PROFIT/g, "Min Profit");
@@ -92,6 +168,8 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParam
   const hasRecs = meta.status === "pending_approval" && Array.isArray(meta.pending_recommendations);
   const wasApproved = meta.status === "approved";
   const wasDeclined = meta.status === "declined";
+  const isAudit = Boolean(meta.audit);
+  const auditFindings = isAudit ? parseAuditFindings(msg.content) : [];
 
   return (
     <motion.div
@@ -99,20 +177,47 @@ function MessageBubble({ msg, onApprove, onDecline, isApproving, currentBotParam
       animate={{ opacity: 1, y: 0 }}
       className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}
     >
-      <div className={`flex gap-2.5 max-w-[85%] ${isUser ? "flex-row-reverse" : ""}`}>
+      <div className={`flex gap-2.5 ${isAudit ? "max-w-[96%] w-full" : "max-w-[85%]"} ${isUser ? "flex-row-reverse" : ""}`}>
         <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center mt-0.5 ${
-          isUser ? "bg-blue-500/20 border border-blue-500/30" : "bg-emerald-500/20 border border-emerald-500/30"
+          isUser ? "bg-blue-500/20 border border-blue-500/30" : isAudit ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-emerald-500/20 border border-emerald-500/30"
         }`}>
-          {isUser ? <User className="w-3.5 h-3.5 text-blue-400" /> : <Bot className="w-3.5 h-3.5 text-emerald-400" />}
+          {isUser ? <User className="w-3.5 h-3.5 text-blue-400" /> : isAudit ? <ScanSearch className="w-3.5 h-3.5 text-indigo-400" /> : <Bot className="w-3.5 h-3.5 text-emerald-400" />}
         </div>
-        <div>
+        <div className={isAudit ? "flex-1 min-w-0" : ""}>
           <div className={`rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
             isUser
               ? "bg-blue-600/20 border border-blue-500/20 text-blue-100"
+              : isAudit
+              ? "bg-indigo-950/60 border border-indigo-500/20 text-slate-200"
               : "bg-slate-800/80 border border-white/[0.06] text-slate-200"
           }`}>
             {isUser ? (
               <div className="whitespace-pre-wrap">{msg.content}</div>
+            ) : isAudit ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-indigo-500/20">
+                  <ScanSearch className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Code Audit Results</span>
+                  {(meta.file_count as number) > 0 && (
+                    <span className="text-[10px] text-slate-500 ml-auto">{meta.file_count as number} files scanned</span>
+                  )}
+                </div>
+                <div className="prose prose-invert prose-sm max-w-none [&_p]:mb-2 [&_p]:leading-relaxed [&_strong]:text-white mb-3">
+                  <ReactMarkdown>{
+                    (() => {
+                      const firstFinding = msg.content.search(/\*{1,2}#\d+\s*[—–\-]/);
+                      return firstFinding > 0 ? msg.content.slice(0, firstFinding).trim() : msg.content.split("\n")[0];
+                    })()
+                  }</ReactMarkdown>
+                </div>
+                {auditFindings.length > 0 && (
+                  <div>
+                    {auditFindings.map(f => (
+                      <AuditFindingCard key={f.number} finding={f} />
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="prose prose-invert prose-sm max-w-none [&_p]:mb-1.5 [&_p]:leading-relaxed [&_strong]:text-white [&_code]:bg-slate-700/50 [&_code]:px-1 [&_code]:rounded [&_code]:text-emerald-300 [&_ul]:mb-1.5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_pre]:bg-slate-900 [&_pre]:rounded-lg [&_pre]:p-2 [&_pre]:text-xs [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs">
                 <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -322,6 +427,21 @@ export default function CommanderPage() {
     },
   });
 
+  const auditMutation = useMutation({
+    mutationFn: async () => {
+      const resp = await fetch(`${BASE}/fleet-commander/code-audit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      return resp.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["fleet-chat-history"] });
+      scrollToBottom();
+    },
+  });
+
   const handleSend = () => {
     const msg = input.trim();
     if (!msg || chatMutation.isPending) return;
@@ -332,6 +452,11 @@ export default function CommanderPage() {
   const handleQuickAction = (actionId: string) => {
     if (chatMutation.isPending) return;
     chatMutation.mutate({ quick_action: actionId });
+  };
+
+  const handleCodeAudit = () => {
+    if (auditMutation.isPending || chatMutation.isPending) return;
+    auditMutation.mutate();
   };
 
   return (
@@ -367,7 +492,7 @@ export default function CommanderPage() {
                   <button
                     key={action.id}
                     onClick={() => handleQuickAction(action.id)}
-                    disabled={chatMutation.isPending}
+                    disabled={chatMutation.isPending || auditMutation.isPending}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.08] bg-slate-900/60 hover:bg-slate-800/80 transition-all disabled:opacity-40 group"
                   >
                     <Icon className="w-3.5 h-3.5 transition-colors" style={{ color: action.color }} />
@@ -375,6 +500,19 @@ export default function CommanderPage() {
                   </button>
                 );
               })}
+              <button
+                onClick={handleCodeAudit}
+                disabled={auditMutation.isPending || chatMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-indigo-500/30 bg-indigo-950/40 hover:bg-indigo-900/60 transition-all disabled:opacity-40 group"
+              >
+                {auditMutation.isPending
+                  ? <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                  : <ScanSearch className="w-3.5 h-3.5 text-indigo-400" />
+                }
+                <span className="text-indigo-300 group-hover:text-indigo-100 transition-colors">
+                  {auditMutation.isPending ? "Auditing…" : "Code Audit"}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -427,6 +565,22 @@ export default function CommanderPage() {
               </motion.div>
             )}
 
+            {auditMutation.isPending && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start mb-3">
+                <div className="flex gap-2.5 w-full max-w-[96%]">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
+                    <ScanSearch className="w-3.5 h-3.5 text-indigo-400" />
+                  </div>
+                  <div className="flex-1 rounded-xl px-3.5 py-2.5 bg-indigo-950/60 border border-indigo-500/20">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                      <span className="text-sm text-indigo-300">Scanning codebase and auditing with Gemini… (30–90s)</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             <div ref={chatEndRef} />
           </div>
 
@@ -438,12 +592,12 @@ export default function CommanderPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                 placeholder="Ask Fleet Commander..."
-                disabled={chatMutation.isPending}
+                disabled={chatMutation.isPending || auditMutation.isPending}
                 className="flex-1 bg-slate-900/80 border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 transition-colors disabled:opacity-50"
               />
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || chatMutation.isPending}
+                disabled={!input.trim() || chatMutation.isPending || auditMutation.isPending}
                 className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/50 transition-all disabled:opacity-30"
               >
                 <Send className="w-4 h-4" />

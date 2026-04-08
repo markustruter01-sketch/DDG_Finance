@@ -5,12 +5,14 @@ Endpoints:
   POST /fleet-commander/chat/approve — accept/decline a pending recommendation
   GET  /fleet-commander/chat/history — paginated conversation log
   GET  /fleet-commander/params       — current Kraken adaptive params for all bots
+  POST /fleet-commander/code-audit   — crawl monorepo source, send to Gemini, return Replit prompts
 """
 
 from __future__ import annotations
 
 import json
 import os
+import pathlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -672,3 +674,291 @@ async def _handle_reset_defaults() -> dict:
     _save_message("user", "[Quick Action: Reset to Defaults]", source="manual_chat")
     _save_message("assistant", reply, source="system", metadata={"reset_results": reset_results})
     return {"reply": reply, "has_recommendations": False, "reset_results": reset_results}
+
+
+# ---------------------------------------------------------------------------
+# Code Audit — crawl monorepo source, review with Gemini, return Replit prompts
+# ---------------------------------------------------------------------------
+
+_CODE_AUDIT_CACHE_PATH = pathlib.Path("/tmp/fleet_code_audit_latest.json")
+
+_AUDIT_EXTENSIONS = {".py", ".ts", ".tsx", ".js"}
+_AUDIT_CONFIG_FILES = {
+    "pyproject.toml", "package.json", "tsconfig.json", "tsconfig.base.json",
+    "pnpm-workspace.yaml", ".env.example",
+}
+_AUDIT_SKIP_DIRS = {
+    "node_modules", "__pycache__", ".git", "dist", "build", ".next", "coverage",
+    "attached_assets", "data", "screenshots", "sedwfJKhP", ".venv", "venv",
+    ".local",
+}
+_AUDIT_SKIP_PATTERNS = {
+    ".min.js", ".min.css", ".map", ".lock", ".csv", ".png", ".jpg", ".jpeg",
+    ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot",
+}
+
+_MAX_FILE_BYTES = 60_000
+_CHUNK_CHARS = 700_000
+
+_CODE_AUDIT_CHUNK_SYSTEM_PROMPT = """\
+You are a senior software engineer performing a code audit of a quantitative trading platform monorepo.
+Review the provided source files (chunk {chunk_num} of {total_chunks}) and identify real problems —
+security vulnerabilities, performance bugs, architectural weaknesses, and missing error handling.
+
+OUTPUT FORMAT — return a JSON array of finding objects only. No other text.
+
+[
+  {{
+    "severity": "critical|high|medium|low",
+    "category": "Security|Performance|Bug|Architecture|Error Handling|Code Quality|Testing",
+    "title": "Short title (≤ 10 words)",
+    "file": "relative/path/to/file.py",
+    "prompt": "Complete Replit agent instruction including file path and exact change needed."
+  }}
+]
+
+Rules:
+- Each prompt must be self-contained and actionable immediately by a Replit agent.
+- Include the exact file path in every prompt field.
+- Return ONLY real, high-impact issues. No trivial style suggestions.
+- Return an empty array [] if you find no noteworthy issues in this chunk.
+- Return valid JSON only — no markdown, no extra text.
+"""
+
+_CODE_AUDIT_SYNTHESIS_PROMPT = """\
+You are a senior software engineer. Below are raw code audit findings from multiple passes over a
+quantitative trading platform monorepo. Deduplicate, rank by severity, and produce the final report.
+
+OUTPUT FORMAT — respond in exactly this structure:
+
+Start with: "I found N issues across the full codebase. Here are your Replit prompts to fix them:"
+
+Then for each finding (ordered critical → high → medium → low):
+
+**#N — [Category] Short title**
+> "Complete Replit agent instruction including the file path and exact change needed."
+
+Rules:
+- Remove exact duplicates, keep the most informative description of near-duplicates.
+- Aim for 5–15 total findings. Drop low-value items if there are too many.
+- Do not add findings that were not in the input.
+- Output only the formatted list. No other commentary.
+
+RAW FINDINGS:
+{findings_json}
+"""
+
+
+def _collect_source_files(repo_root: pathlib.Path) -> list[tuple[str, str]]:
+    """Walk the entire monorepo and collect (rel_path, content) for all relevant source files.
+
+    Files larger than _MAX_FILE_BYTES are included but truncated at that limit.
+    ALL eligible files are collected — no total-size cap is enforced here; chunking
+    is handled by the caller (_build_audit_chunks).
+    """
+    files: list[tuple[str, str]] = []
+
+    for dirpath, dirnames, filenames in os.walk(repo_root):
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if d not in _AUDIT_SKIP_DIRS and not d.startswith(".")
+        )
+
+        rel_dir = pathlib.Path(dirpath).relative_to(repo_root)
+
+        for fname in sorted(filenames):
+            fpath = pathlib.Path(dirpath) / fname
+            rel_path = str(rel_dir / fname)
+
+            suffix = fpath.suffix.lower()
+            skip = any(rel_path.endswith(p) for p in _AUDIT_SKIP_PATTERNS)
+            if skip:
+                continue
+
+            is_source = suffix in _AUDIT_EXTENSIONS
+            is_config = fname in _AUDIT_CONFIG_FILES
+
+            if not is_source and not is_config:
+                continue
+
+            try:
+                raw = fpath.read_bytes()
+                if len(raw) > _MAX_FILE_BYTES:
+                    content = raw[:_MAX_FILE_BYTES].decode("utf-8", errors="replace") + "\n[... file truncated at 60KB ...]"
+                else:
+                    content = raw.decode("utf-8", errors="replace")
+            except Exception:
+                continue
+
+            files.append((rel_path, content))
+
+    return files
+
+
+def _build_audit_chunks(files: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
+    """Split file list into chunks that each fit within _CHUNK_CHARS."""
+    chunks: list[list[tuple[str, str]]] = []
+    current_chunk: list[tuple[str, str]] = []
+    current_size = 0
+
+    for rel_path, content in files:
+        entry_size = len(rel_path) + len(content) + 30
+        if current_chunk and current_size + entry_size > _CHUNK_CHARS:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_size = 0
+        current_chunk.append((rel_path, content))
+        current_size += entry_size
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def _build_chunk_prompt(files: list[tuple[str, str]], chunk_num: int, total_chunks: int) -> str:
+    system = _CODE_AUDIT_CHUNK_SYSTEM_PROMPT.format(chunk_num=chunk_num, total_chunks=total_chunks)
+    parts = [
+        f"Audit chunk {chunk_num}/{total_chunks}. "
+        "Review these source files and return a JSON array of findings:\n\n"
+    ]
+    for rel_path, content in files:
+        parts.append(f"--- FILE: {rel_path} ---\n{content}\n\n")
+    return system, "".join(parts)
+
+
+async def _call_gemini_chunk_audit(system_prompt: str, user_prompt: str) -> list[dict]:
+    api_key = _gemini_api_key()
+    url = f"{_gemini_base_url()}/models/{_GEMINI_MODEL}:generateContent"
+
+    body = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.2},
+    }
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:400]}")
+
+    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    cleaned = text
+    if cleaned.startswith("```"):
+        cleaned = "\n".join(cleaned.split("\n")[1:])
+        if cleaned.endswith("```"):
+            cleaned = cleaned[: cleaned.rfind("```")]
+
+    try:
+        findings = json.loads(cleaned)
+        if isinstance(findings, list):
+            return findings
+    except (json.JSONDecodeError, KeyError):
+        pass
+    return []
+
+
+async def _call_gemini_synthesis(all_findings: list[dict]) -> str:
+    api_key = _gemini_api_key()
+    url = f"{_gemini_base_url()}/models/{_GEMINI_MODEL}:generateContent"
+
+    findings_json = json.dumps(all_findings, indent=2)
+    user_prompt = _CODE_AUDIT_SYNTHESIS_PROMPT.format(findings_json=findings_json)
+
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.3},
+    }
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            json=body,
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:400]}")
+
+    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _load_cached_audit() -> dict | None:
+    try:
+        if _CODE_AUDIT_CACHE_PATH.exists():
+            return json.loads(_CODE_AUDIT_CACHE_PATH.read_text())
+    except Exception:
+        pass
+    return None
+
+
+def _save_cached_audit(result: dict) -> None:
+    try:
+        _CODE_AUDIT_CACHE_PATH.write_text(json.dumps(result))
+    except Exception as exc:
+        logger.warning(f"CodeAudit | cache write failed: {exc}")
+
+
+@fleet_chat_router.post("/fleet-commander/code-audit", tags=["Fleet Commander"])
+async def fleet_code_audit() -> dict:
+    """Crawl ALL monorepo source files, audit in chunks via Gemini, synthesise findings."""
+    repo_root = pathlib.Path(__file__).resolve().parent.parent.parent
+
+    logger.info("CodeAudit | Starting full source collection…")
+    files = _collect_source_files(repo_root)
+    if not files:
+        raise HTTPException(500, "No source files found to audit")
+
+    chunks = _build_audit_chunks(files)
+    total_chunks = len(chunks)
+    logger.info(f"CodeAudit | {len(files)} files split into {total_chunks} chunk(s) for Gemini")
+
+    all_findings: list[dict] = []
+    for i, chunk_files in enumerate(chunks, start=1):
+        logger.info(f"CodeAudit | Processing chunk {i}/{total_chunks} ({len(chunk_files)} files)…")
+        try:
+            system_prompt, user_prompt = _build_chunk_prompt(chunk_files, i, total_chunks)
+            chunk_findings = await _call_gemini_chunk_audit(system_prompt, user_prompt)
+            logger.info(f"CodeAudit | Chunk {i} returned {len(chunk_findings)} finding(s)")
+            all_findings.extend(chunk_findings)
+        except Exception as exc:
+            logger.warning(f"CodeAudit | Chunk {i} failed: {exc} — continuing")
+
+    if not all_findings:
+        reply_text = "I found 0 issues. The codebase appears clean across all scanned files."
+    else:
+        logger.info(f"CodeAudit | Synthesising {len(all_findings)} raw finding(s) into final report…")
+        try:
+            reply_text = await _call_gemini_synthesis(all_findings)
+        except Exception as exc:
+            logger.error(f"CodeAudit | Synthesis failed: {exc}")
+            raise HTTPException(502, f"Gemini synthesis failed: {exc}")
+
+    ts = datetime.now(timezone.utc).isoformat()
+    cached = {"text": reply_text, "ts": ts, "file_count": len(files), "chunk_count": total_chunks}
+    _save_cached_audit(cached)
+
+    _save_message("user", "[Quick Action: Code Audit]", source="manual_chat")
+    _save_message(
+        "assistant",
+        reply_text,
+        source="gemini",
+        metadata={"audit": True, "ts": ts, "file_count": len(files), "chunk_count": total_chunks},
+    )
+
+    return {"text": reply_text, "ts": ts, "file_count": len(files), "chunk_count": total_chunks}
+
+
+@fleet_chat_router.get("/fleet-commander/code-audit/latest", tags=["Fleet Commander"])
+async def fleet_code_audit_latest() -> dict:
+    """Return the most recent code audit result without re-running."""
+    cached = _load_cached_audit()
+    if not cached:
+        raise HTTPException(404, "No audit has been run yet")
+    return cached

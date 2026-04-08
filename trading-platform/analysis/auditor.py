@@ -41,9 +41,9 @@ Report
 
 LLM usage
 ---------
-  Uses the same GROQ_API_KEY / llama-3.3-70b-versatile model as the primary
-  bot but at temperature=0.7 (more critical / adversarial) and with a strict
-  2,000-token response cap to minimise TPD consumption.
+  Uses the same Gemini (gemini-3-flash-preview) model as the primary bot
+  but at temperature=0.7 (more critical / adversarial) and with a strict
+  2,000-token response cap to minimise API consumption.
   The LLM is only invoked for check #1 (regime critique) and only when the
   heuristic pre-check detects a potential mismatch — saving tokens when
   everything looks normal.

@@ -56,7 +56,7 @@ BOT_PROFILES = {
         "OHLCV_LIMIT": 100,
         "LOOP_SLEEP_SECONDS": 60,
         "SWING_TP_ATR_MULT": 3.0,
-        "SWING_SL_ATR_MULT": 2.0,
+        "SWING_SL_ATR_MULT": 2.5,
         "SWING_TRAIL_TRIGGER_ATR": 1.5,
         "SWING_TRAIL_ATR_MULT": 1.5,
         "SWING_MIN_HOLD_HOURS": 1,

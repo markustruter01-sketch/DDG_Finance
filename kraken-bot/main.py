@@ -258,6 +258,8 @@ logger.info(f"  Max positions  : {MAX_POSITIONS}")
 logger.info(f"  Max per trade  : {MAX_POSITION_FRACTION*100:.0f}% of equity")
 logger.info(f"  Risk per trade : {RISK_FRACTION*100:.0f}% of equity")
 logger.info(f"  Stop loss      : {STOP_LOSS_PCT*100:.0f}% (fallback) | ATR dynamic: {ATR_STOP_MULTIPLIER}x ATR")
+if IS_SWING_BOT:
+    logger.info(f"  Swing SL mult  : {SWING_SL_ATR_MULT}x ATR | TP mult: {SWING_TP_ATR_MULT}x ATR")
 logger.info(f"  Trailing profit: {TRAIL_PCT*100:.0f}%")
 logger.info(f"  Blacklist      : {', '.join(BLACKLIST) if BLACKLIST else 'none'}")
 if PAIR_SIZING_PENALIZED:

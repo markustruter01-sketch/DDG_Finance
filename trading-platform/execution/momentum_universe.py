@@ -13,7 +13,7 @@ TECHNOLOGY: list[str] = [
     "CRM", "ORCL", "ADBE", "INTC", "CSCO", "TXN", "QCOM", "MU", "AMAT",
     "LRCX", "KLAC", "MRVL", "SNPS", "CDNS", "NOW", "PANW", "CRWD", "FTNT",
     "NET", "DDOG", "ZS", "PLTR", "ARM", "SMCI", "DELL", "HPE", "UBER",
-    "ABNB", "DASH", "SHOP", "SQ", "SNOW", "COIN", "MSTR",
+    "ABNB", "DASH", "SHOP", "XYZ", "SNOW", "COIN", "MSTR",
 ]
 
 FINANCIALS: list[str] = [

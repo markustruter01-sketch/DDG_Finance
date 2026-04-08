@@ -52,7 +52,7 @@ WATCHLIST = [
     "CSCO", "TXN", "AMAT", "LRCX", "KLAC", "MRVL", "SNPS", "CDNS",
     "ARM", "PLTR", "COIN", "SHOP", "SNOW", "CRWD", "DDOG", "NET",
     "PANW", "ZS", "FTNT", "UBER", "ABNB", "DASH", "RBLX", "SPOT",
-    "SQ", "SMCI", "DELL", "MSTR",
+    "XYZ", "SMCI", "DELL", "MSTR",
     "JPM", "BAC", "GS", "MS", "C", "WFC", "SCHW", "BLK",
     "V", "MA", "AXP", "PYPL", "COF", "USB", "AIG", "MET",
     "JNJ", "UNH", "LLY", "PFE", "ABBV", "MRK", "TMO", "ABT",

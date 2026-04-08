@@ -3,6 +3,7 @@ import StreamingScreen from "@/pages/StreamingScreen";
 import StreamingScreenV2 from "@/pages/StreamingScreenV2";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
+import { useFleetParams } from "@/hooks/use-trading";
 
 type SubPage = "a" | "b" | "c" | "d";
 
@@ -92,6 +93,8 @@ export default function StreamPage() {
     if (urlParams.current.intervalSeconds !== null) return urlParams.current.intervalSeconds;
     return stored.current.intervalSeconds;
   }
+
+  useFleetParams();
 
   const [active, setActive] = useState<SubPage>(getInitialSubPage);
   const [autoCycle, setAutoCycle] = useState<boolean>(getInitialAutoCycle);

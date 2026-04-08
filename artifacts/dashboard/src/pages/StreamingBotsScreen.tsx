@@ -42,6 +42,7 @@ interface BotCardData {
   topPair?: string;
   strategyConfig?: ConfigRow[];
   openPositionsList?: OpenPosSummary[];
+  krakenBotKey?: string;
 }
 
 interface StreamBotCardProps {
@@ -49,8 +50,13 @@ interface StreamBotCardProps {
 }
 
 function StreamBotCard({ bot }: StreamBotCardProps) {
+  const { data: fleetParams } = useFleetParams();
   const { equity, color, glow } = bot;
   const truePnl = equity != null ? equity - STARTING_BALANCE : null;
+
+  const effectiveStrategyConfig: ConfigRow[] = bot.krakenBotKey
+    ? buildKrakenStrategyConfig(bot.krakenBotKey, fleetParams, color)
+    : (bot.strategyConfig ?? []);
   const totalTrades = bot.winCount + bot.lossCount;
   const winRate = totalTrades > 0 ? (bot.winCount / totalTrades) * 100 : null;
 
@@ -202,7 +208,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
       </div>
 
       {/* Strategy Config strip */}
-      {bot.strategyConfig && bot.strategyConfig.length > 0 && (
+      {effectiveStrategyConfig.length > 0 && (
         <>
           <div className="mx-3 mb-1" style={{ height: 1, background: `${color}10` }} />
           <div className="px-3 pb-2">
@@ -213,7 +219,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
               STRATEGY CONFIG
             </div>
             <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-              {bot.strategyConfig.map((row) => (
+              {effectiveStrategyConfig.map((row) => (
                 <div key={row.label} className="flex items-center gap-1 min-w-0">
                   <span
                     className="text-[7px] font-bold uppercase tracking-wide shrink-0"
@@ -293,7 +299,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
       )}
 
       {/* Top position hint — non-Kraken bots only */}
-      {bot.openPositionsList == null && bot.topPair && !bot.strategyConfig && (
+      {bot.openPositionsList == null && bot.topPair && effectiveStrategyConfig.length === 0 && (
         <div className="mt-auto px-3 pb-3">
           <div
             className="text-[9px] font-bold truncate px-2 py-1 rounded"
@@ -304,7 +310,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       )}
 
-      {bot.openPositionsList == null && bot.topPair && bot.strategyConfig && (
+      {bot.openPositionsList == null && bot.topPair && effectiveStrategyConfig.length > 0 && (
         <div className="px-3 pb-2 mt-auto">
           <div
             className="text-[9px] font-bold truncate px-2 py-0.5 rounded"
@@ -315,7 +321,7 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       )}
 
-      {bot.openPositionsList == null && !bot.topPair && !bot.strategyConfig && <div className="mt-auto" />}
+      {bot.openPositionsList == null && !bot.topPair && effectiveStrategyConfig.length === 0 && <div className="mt-auto" />}
     </div>
   );
 }
@@ -335,7 +341,13 @@ function buildKrakenStrategyConfig(
   color: string
 ): ConfigRow[] {
   const botParams = fleetParams?.bots?.[botKey];
-  if (!botParams?.current || Object.keys(botParams.current).length === 0) return [];
+  if (!botParams?.current || Object.keys(botParams.current).length === 0) {
+    return PARAM_ORDER.map((param) => ({
+      label: PARAM_LABELS[param]?.label ?? param,
+      value: "···",
+      color: "#475569",
+    }));
+  }
   return PARAM_ORDER.map((param) => {
     const val = botParams.current[param];
     const cfg = PARAM_LABELS[param];
@@ -352,7 +364,6 @@ export default function StreamingBotsScreen() {
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: fleetParams } = useFleetParams();
   const { data: optionsState } = useOptionsState();
   const { data: optionsPosRaw } = useOptionsPositions();
   const { data: forexState } = useForexState();
@@ -421,7 +432,7 @@ export default function StreamingBotsScreen() {
       lossCount: davyPerf?.loss_count ?? 0,
       openPositions: davyStatus?.open_positions?.length ?? 0,
       topPair: davyTopPair,
-      strategyConfig: buildKrakenStrategyConfig("davy_jones", fleetParams, "#f59e0b"),
+      krakenBotKey: "davy_jones",
       openPositionsList: davyStatus?.open_positions,
     },
     {
@@ -437,7 +448,7 @@ export default function StreamingBotsScreen() {
       lossCount: bbPerf?.loss_count ?? 0,
       openPositions: bbStatus?.open_positions?.length ?? 0,
       topPair: bbTopPair,
-      strategyConfig: buildKrakenStrategyConfig("blackbeard", fleetParams, "#ef4444"),
+      krakenBotKey: "blackbeard",
       openPositionsList: bbStatus?.open_positions,
     },
     {
@@ -453,7 +464,7 @@ export default function StreamingBotsScreen() {
       lossCount: caPerf?.loss_count ?? 0,
       openPositions: caStatus?.open_positions?.length ?? 0,
       topPair: caTopPair,
-      strategyConfig: buildKrakenStrategyConfig("calypso", fleetParams, "#8b5cf6"),
+      krakenBotKey: "calypso",
       openPositionsList: caStatus?.open_positions,
     },
     {

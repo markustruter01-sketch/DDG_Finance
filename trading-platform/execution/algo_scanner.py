@@ -58,6 +58,15 @@ BEAR_INVERSE_ETFS: list[str] = ["SQQQ", "SH", "PSQ"]
 BEAR_INVERSE_MAX_TOTAL: float = 0.20
 BEAR_INVERSE_KELLY_CAP: float = 0.06
 
+BEAR_SAFE_UNIVERSE: list[str] = ["GLD", "TLT", "XLU", "XLP", "XLV", "SQQQ", "SH"]
+BEAR_SAFE_MAX_ACTIVE: int = 2
+BEAR_SAFE_ACTIVE_POOL: float = 0.40
+BEAR_SAFE_SGOV_FLOOR: float = 0.60
+BEAR_SAFE_RSI_LOWER: float = 35.0
+BEAR_SAFE_RSI_UPPER: float = 65.0
+BEAR_SAFE_STOP_PCT: float = -0.03
+BEAR_SAFE_TAKE_PCT: float = 0.05
+
 REGIME_PARAMS: dict[str, dict] = {
     "bull": {
         "max_active": 9,
@@ -218,6 +227,104 @@ def _scan_bear_inverse_etfs(
     return slots
 
 
+def _scan_bear_safe(by_ticker: dict) -> list[dict]:
+    """
+    Bear-regime partial deployment: scan BEAR_SAFE_UNIVERSE for up to 2
+    high-conviction defensive positions, then guarantee a 60% SGOV floor.
+
+    Rules:
+      - Universe: GLD, TLT, XLU, XLP, XLV, SQQQ, SH
+      - Filter: positive composite momentum score AND RSI in [35, 65]
+      - Rank by composite momentum score, take top BEAR_SAFE_MAX_ACTIVE (2)
+      - Each position allocated an equal share of the 40% active pool
+      - Fixed stop: -3%   fixed take: +5%
+      - SGOV floor: 60% (or 100% if no asset qualifies)
+    """
+    candidates = []
+    for ticker in BEAR_SAFE_UNIVERSE:
+        d = by_ticker.get(ticker)
+        if not d:
+            logger.debug(f"BearSafe | {ticker}: no data — skip")
+            continue
+
+        rsi = d.get("rsi_14d")
+        if rsi is None or not (BEAR_SAFE_RSI_LOWER <= rsi <= BEAR_SAFE_RSI_UPPER):
+            logger.debug(
+                f"BearSafe | {ticker}: RSI={rsi} outside "
+                f"[{BEAR_SAFE_RSI_LOWER:.0f}, {BEAR_SAFE_RSI_UPPER:.0f}] — skip"
+            )
+            continue
+
+        score = _momentum_score(d)
+        if score <= 0:
+            logger.info(
+                f"BearSafe | {ticker}: composite score {score:.2f} ≤ 0 — skip"
+            )
+            continue
+
+        candidates.append({
+            "ticker": ticker,
+            "score": score,
+            "rsi": rsi,
+            "return_5d":  d.get("return_5d_pct")  or 0.0,
+            "return_20d": d.get("return_20d_pct") or 0.0,
+            "return_60d": d.get("return_60d_pct") or 0.0,
+        })
+
+    candidates.sort(key=lambda x: x["score"], reverse=True)
+    top = candidates[:BEAR_SAFE_MAX_ACTIVE]
+
+    slots: list[dict] = []
+
+    if top:
+        per_position_kelly = round(BEAR_SAFE_ACTIVE_POOL / len(top), 4)
+        for i, c in enumerate(top):
+            slots.append({
+                "slot":             i + 1,
+                "ticker":           c["ticker"],
+                "asset_class":      "bear_defensive",
+                "conviction_score": round(_conviction_from_rsi(c["rsi"]), 2),
+                "kelly_fraction":   per_position_kelly,
+                "thesis": (
+                    f"BearSafe rank #{i + 1}: score={c['score']:.2f} "
+                    f"5d={c['return_5d']:+.1f}% 20d={c['return_20d']:+.1f}% "
+                    f"60d={c['return_60d']:+.1f}% RSI={c['rsi']:.0f}"
+                ),
+                "stop_loss_pct":   BEAR_SAFE_STOP_PCT,
+                "take_profit_pct": BEAR_SAFE_TAKE_PCT,
+            })
+        active_kelly = sum(s["kelly_fraction"] for s in slots)
+        logger.info(
+            f"BearSafe | {len(top)} active: "
+            f"{[s['ticker'] for s in slots]} "
+            f"kelly={per_position_kelly:.1%} each, total={active_kelly:.1%}"
+        )
+    else:
+        logger.info(
+            "BearSafe | No qualifying assets in bear-safe universe "
+            "(need positive score + RSI 35–65) — 100% SGOV fallback"
+        )
+        active_kelly = 0.0
+
+    sgov_kelly = round(max(BEAR_SAFE_SGOV_FLOOR, 1.0 - active_kelly), 4)
+    slots.append({
+        "slot":             len(slots) + 1,
+        "ticker":           CASH_TICKER,
+        "asset_class":      "cash",
+        "conviction_score": 1.0,
+        "kelly_fraction":   sgov_kelly,
+        "thesis": (
+            "Bear 60% SGOV floor — capital preservation"
+            if top else
+            "Bear 100% SGOV — no qualifying defensive assets"
+        ),
+        "stop_loss_pct":   -0.01,
+        "take_profit_pct":  0.01,
+    })
+
+    return slots
+
+
 def scan_momentum(
     momentum_data: dict,
     regime: str,
@@ -226,6 +333,11 @@ def scan_momentum(
     regime_lower = (regime or "sideways").lower()
     if regime_lower in ("risk-off",):
         regime_lower = "bear"
+
+    if regime_lower == "bear":
+        by_ticker = momentum_data.get("by_ticker", {})
+        return _scan_bear_safe(by_ticker)
+
     params = REGIME_PARAMS.get(regime_lower, REGIME_PARAMS["sideways"])
 
     max_active = params["max_active"]

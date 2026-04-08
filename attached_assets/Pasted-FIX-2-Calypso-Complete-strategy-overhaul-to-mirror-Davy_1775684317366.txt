@@ -1,0 +1,37 @@
+FIX 2 — Calypso: Complete strategy overhaul to mirror Davy Jones with market cap tiered position sizing
+Calypso has proven structurally unprofitable across multiple strategy iterations. Rebuild it as a conservative mean reversion bot directly modelled on Davy Jones' proven architecture, but with market cap tiered position sizing across the full pair universe rather than pair restrictions. The goal is two conservative mean reversion bots running in parallel — Davy Jones on its existing approach, Calypso on the same logic but with market cap awareness baked into every position size decision.
+Strategy logic (identical to Davy Jones):
+Strategy name: mean_reversion_conservative
+Entry conditions:
+
+Z-score entry threshold: -2.0 for longs, +2.0 for shorts
+VPIN must be below dynamic threshold
+RSI confirmation: below 35 for longs, above 65 for shorts
+All three conditions must be simultaneously true before any entry is allowed
+
+Position sizing: NOT a flat percentage — determined by market cap tier as follows:
+Tier 1 — Large Cap (maximum 10% of equity per position):
+BTC/USD, ETH/USD, BNB/USD, SOL/USD, XRP/USD
+These assets have the deepest liquidity, tightest spreads, and most reliable mean reversion signals. Largest position sizes are warranted.
+Tier 2 — Mid Cap (maximum 7% of equity per position):
+ADA/USD, AVAX/USD, DOT/USD, LINK/USD, ATOM/USD, LTC/USD, UNI/USD, NEAR/USD, APT/USD, INJ/USD, RUNE/USD, TON/USD, ENA/USD, HBAR/USD, CRV/USD, SNX/USD, AAVE/USD, BCH/USD
+These assets have reasonable liquidity and reliable signals but more volatility than Tier 1. Medium position sizes balance opportunity against risk.
+Tier 3 — Small Cap (maximum 5% of equity per position):
+All remaining pairs in the universe: DYM/USD, TIA/USD, ARB/USD, POL/USD, STRK/USD, TAO/USD, SEI/USD, SHIB/USD, IMX/USD, GRT/USD, FIL/USD, ENS/USD, PEPE/USD, WLD/USD, W/USD, SUI/USD, JUP/USD, ONDO/USD, PYTH/USD, STX/USD, TRX/USD, DOGE/USD, BNB/USD crosslistings, and any other pairs not in Tier 1 or Tier 2
+These assets have thinner liquidity, wider spreads, and noisier signals. Smaller position sizes protect against fee drag and slippage on thin order books.
+Permanently blacklisted pairs (never trade regardless of signals):
+
+OP/USD: 0% win rate across 8 trades spanning multiple market regimes — structural issue with this pair, not regime-dependent
+RENDER/USD: 9.1% win rate and -$841 loss — consistently poor across all conditions, likely a liquidity or spread structural problem on Kraken
+
+All other pairs remain in the tradeable universe and are selected purely on signal quality, not historical performance. The market cap tier determines how much capital is deployed when a signal triggers, not whether a signal is taken.
+Risk parameters:
+Maximum simultaneous positions: 6
+Stop loss: 2.0x ATR from entry
+Take profit: 3.0x ATR from entry
+Trailing stop: activates after 1.5x ATR in profit, trails at 1.5x ATR from best price
+Circuit breaker: pause after 7 consecutive losses, 10-hour cooldown
+Maximum hold time: 48 hours — exit via stale_exit if neither stop nor take profit triggered
+Minimum profit threshold before entry:
+Before entering any trade, calculate expected profit at take profit target. Expected profit must exceed estimated round-trip fee by at least 2.5x. At current fee levels (~$37 per trade), minimum expected profit must be at least $92 before the entry is allowed. If position sizing for a Tier 3 pair would not generate $92 at the take profit target, skip the trade entirely. This prevents fee drag on small positions in thin markets.
+Close all currently open Calypso positions cleanly at market on the next cycle before activating the new strategy. Do not carry old positions into the new strategy. Confirm in the logs that the first new entries are using market cap tiered sizing and mean reversion signals, not any remnant of the old scalping or momentum logic.

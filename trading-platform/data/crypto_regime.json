@@ -6,9 +6,9 @@
   "equity_regime": "Bear",
   "correlation_with_equity": -0.809,
   "crypto_fear_greed": 17,
-  "btc_24h_change_pct": 3.86,
+  "btc_24h_change_pct": 4.14,
   "btc_dominance": 56.8,
   "previous_regime": "Crypto-Bear",
   "regime_changed": false,
-  "written_at": "2026-04-08T04:48:09.589258+00:00"
+  "written_at": "2026-04-08T05:15:09.874403+00:00"
 }

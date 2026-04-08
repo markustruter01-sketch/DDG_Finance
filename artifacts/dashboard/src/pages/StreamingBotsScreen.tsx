@@ -13,6 +13,12 @@ function fmtEq(v: number) {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
+interface ConfigRow {
+  label: string;
+  value: string;
+  color?: string;
+}
+
 interface BotCardData {
   id: string;
   name: string;
@@ -26,6 +32,7 @@ interface BotCardData {
   lossCount: number;
   openPositions: number;
   topPair?: string;
+  strategyConfig?: ConfigRow[];
 }
 
 interface StreamBotCardProps {
@@ -185,8 +192,41 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       </div>
 
+      {/* Strategy Config strip */}
+      {bot.strategyConfig && bot.strategyConfig.length > 0 && (
+        <>
+          <div className="mx-3 mb-1" style={{ height: 1, background: `${color}10` }} />
+          <div className="px-3 pb-2">
+            <div
+              className="text-[7px] font-black uppercase tracking-widest mb-1"
+              style={{ color: `${color}60` }}
+            >
+              STRATEGY CONFIG
+            </div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+              {bot.strategyConfig.map((row) => (
+                <div key={row.label} className="flex items-center gap-1 min-w-0">
+                  <span
+                    className="text-[7px] font-bold uppercase tracking-wide shrink-0"
+                    style={{ color: "rgba(148,163,184,0.4)" }}
+                  >
+                    {row.label}:
+                  </span>
+                  <span
+                    className="text-[8px] font-black font-mono truncate"
+                    style={{ color: row.color ?? "rgba(203,213,225,0.7)" }}
+                  >
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* Top position hint */}
-      {bot.topPair && (
+      {bot.topPair && !bot.strategyConfig && (
         <div className="mt-auto px-3 pb-3">
           <div
             className="text-[9px] font-bold truncate px-2 py-1 rounded"
@@ -197,7 +237,18 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       )}
 
-      {!bot.topPair && <div className="mt-auto" />}
+      {bot.topPair && bot.strategyConfig && (
+        <div className="px-3 pb-2 mt-auto">
+          <div
+            className="text-[9px] font-bold truncate px-2 py-0.5 rounded"
+            style={{ background: `${color}10`, color: `${color}aa`, border: `1px solid ${color}18` }}
+          >
+            ⬡ {bot.topPair}
+          </div>
+        </div>
+      )}
+
+      {!bot.topPair && !bot.strategyConfig && <div className="mt-auto" />}
     </div>
   );
 }
@@ -242,6 +293,8 @@ export default function StreamingBotsScreen() {
   const fleetTotal = allEquities.length === 6 ? allEquities.reduce((s, e) => s + e, 0) : null;
   const fleetPnl = fleetTotal != null ? fleetTotal - 600_000 : null;
 
+  const usdBias = forexState?.usd_bias ?? "NEUTRAL";
+
   const bots: BotCardData[] = [
     {
       id: "oracle",
@@ -256,6 +309,12 @@ export default function StreamingBotsScreen() {
       lossCount: 0,
       openPositions: oraclePositions.length,
       topPair: oracleTopPair,
+      strategyConfig: [
+        { label: "Conviction", value: "≥0.65", color: "#22d3ee" },
+        { label: "Slots", value: "8 max", color: "#94a3b8" },
+        { label: "Kill Switch", value: "−12%", color: "#f87171" },
+        { label: "Stop", value: "ATR 2.0×", color: "#94a3b8" },
+      ],
     },
     {
       id: "davy-jones",
@@ -312,6 +371,28 @@ export default function StreamingBotsScreen() {
       lossCount: (optionsState?.total_trades ?? 0) - (optionsState?.total_wins ?? 0),
       openPositions: apexPositionsArr.length,
       topPair: apexTopPair,
+      strategyConfig: [
+        {
+          label: "Cap Fence",
+          value: `${((optionsState?.capital_fence_pct ?? 0.05) * 100).toFixed(0)}%`,
+          color: "#f97316",
+        },
+        {
+          label: "Fenced",
+          value: `$${(optionsState?.fenced_capital ?? 5000).toLocaleString()}`,
+          color: "#94a3b8",
+        },
+        {
+          label: "Circuit Brk",
+          value: optionsState?.circuit_breaker_active ? "ACTIVE" : "OFF",
+          color: optionsState?.circuit_breaker_active ? "#f87171" : "#10b981",
+        },
+        {
+          label: "Mode",
+          value: optionsState?.paper_mode ? "PAPER" : "LIVE",
+          color: optionsState?.paper_mode ? "#fbbf24" : "#10b981",
+        },
+      ],
     },
     {
       id: "navigator",
@@ -326,6 +407,28 @@ export default function StreamingBotsScreen() {
       lossCount: (forexState?.total_trades ?? 0) - (forexState?.total_wins ?? 0),
       openPositions: rawForexPos.length,
       topPair: navTopPair,
+      strategyConfig: [
+        {
+          label: "USD Bias",
+          value: usdBias,
+          color: usdBias === "LONG" ? "#10b981" : usdBias === "SHORT" ? "#f87171" : "#94a3b8",
+        },
+        {
+          label: "News Blkout",
+          value: forexState?.news_blackout ? "ACTIVE" : "OFF",
+          color: forexState?.news_blackout ? "#fbbf24" : "#10b981",
+        },
+        {
+          label: "Circuit Brk",
+          value: forexState?.circuit_breaker_active ? "ACTIVE" : "OFF",
+          color: forexState?.circuit_breaker_active ? "#f87171" : "#10b981",
+        },
+        {
+          label: "HWM",
+          value: `$${(forexState?.hwm_usd ?? 100000).toLocaleString()}`,
+          color: "#94a3b8",
+        },
+      ],
     },
   ];
 

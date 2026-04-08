@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import StreamingScreen from "@/pages/StreamingScreen";
 import StreamingScreenV2 from "@/pages/StreamingScreenV2";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
+import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 
-type SubPage = "a" | "b" | "c";
+type SubPage = "a" | "b" | "c" | "d";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -51,6 +52,7 @@ export default function StreamPage() {
       const sub = params.get("sub");
       if (sub === "b") return "b";
       if (sub === "c") return "c";
+      if (sub === "d") return "d";
     } catch {}
     return "a";
   }
@@ -122,13 +124,15 @@ export default function StreamPage() {
     savePrefs(updated);
   }
 
-  const tabs: { id: SubPage; label: string; activeGrad: string; activeColor: string; activeBorder: string }[] = [
+  const tabs: { id: SubPage; label: string; activeGrad: string; activeColor: string; activeBorder: string; progressGrad: string; progressGlow: string }[] = [
     {
       id: "a",
       label: "Live",
       activeGrad: "linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.2))",
       activeColor: "#a5b4fc",
       activeBorder: "rgba(99,102,241,0.4)",
+      progressGrad: "linear-gradient(90deg, #6366f1, #a78bfa)",
+      progressGlow: "rgba(99,102,241,0.6)",
     },
     {
       id: "b",
@@ -136,6 +140,8 @@ export default function StreamPage() {
       activeGrad: "linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.15))",
       activeColor: "#67e8f9",
       activeBorder: "rgba(34,211,238,0.3)",
+      progressGrad: "linear-gradient(90deg, #22d3ee, #a855f7)",
+      progressGlow: "rgba(34,211,238,0.6)",
     },
     {
       id: "c",
@@ -143,8 +149,21 @@ export default function StreamPage() {
       activeGrad: "linear-gradient(135deg, rgba(16,185,129,0.25), rgba(34,211,238,0.12))",
       activeColor: "#34d399",
       activeBorder: "rgba(16,185,129,0.4)",
+      progressGrad: "linear-gradient(90deg, #10b981, #22d3ee)",
+      progressGlow: "rgba(16,185,129,0.6)",
+    },
+    {
+      id: "d",
+      label: "Health",
+      activeGrad: "linear-gradient(135deg, rgba(239,68,68,0.25), rgba(245,158,11,0.15))",
+      activeColor: "#fca5a5",
+      activeBorder: "rgba(239,68,68,0.4)",
+      progressGrad: "linear-gradient(90deg, #ef4444, #f59e0b)",
+      progressGlow: "rgba(239,68,68,0.6)",
     },
   ];
+
+  const activeTab = tabs.find((t) => t.id === active)!;
 
   return (
     <div className="h-screen w-screen bg-slate-950 overflow-hidden flex flex-col">
@@ -233,18 +252,8 @@ export default function StreamPage() {
             className="absolute top-0 left-0 h-full transition-none"
             style={{
               width: `${progress}%`,
-              background:
-                active === "a"
-                  ? "linear-gradient(90deg, #6366f1, #a78bfa)"
-                  : active === "b"
-                    ? "linear-gradient(90deg, #22d3ee, #a855f7)"
-                    : "linear-gradient(90deg, #10b981, #22d3ee)",
-              boxShadow:
-                active === "a"
-                  ? "0 0 8px rgba(99,102,241,0.6)"
-                  : active === "b"
-                    ? "0 0 8px rgba(34,211,238,0.6)"
-                    : "0 0 8px rgba(16,185,129,0.6)",
+              background: activeTab.progressGrad,
+              boxShadow: `0 0 8px ${activeTab.progressGlow}`,
             }}
           />
         </div>
@@ -259,6 +268,9 @@ export default function StreamPage() {
         </div>
         <div style={{ display: active === "c" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingBotsScreen />
+        </div>
+        <div style={{ display: active === "d" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingHealthScreen />
         </div>
       </div>
     </div>

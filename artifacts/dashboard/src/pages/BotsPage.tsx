@@ -32,6 +32,12 @@ interface GenericPosition {
   entry_price?: number;
 }
 
+interface StrategyConfigRow {
+  label: string;
+  value: string;
+  color?: string;
+}
+
 interface GenericBotCardProps {
   name: string;
   icon: string;
@@ -45,11 +51,13 @@ interface GenericBotCardProps {
   isLoading?: boolean;
   paused?: boolean;
   totalTrades?: number;
+  strategyConfig?: StrategyConfigRow[];
 }
 
 function GenericBotCard({
   name, icon, color, strategy, equity,
   winCount, lossCount, winRate, positions, isLoading, paused, totalTrades,
+  strategyConfig,
 }: GenericBotCardProps) {
   const truePnl = equity != null && equity > 0 ? equity - STARTING_BALANCE : null;
 
@@ -181,6 +189,30 @@ function GenericBotCard({
               </div>
             </div>
           </div>
+
+          {strategyConfig && strategyConfig.length > 0 && (
+            <div className="px-4 py-3">
+              <div
+                className="text-[10px] font-bold uppercase tracking-wider mb-2"
+                style={{ color: `${color}80` }}
+              >
+                Strategy Config
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {strategyConfig.map((row) => (
+                  <div key={row.label}>
+                    <div className="text-[9px] text-slate-600 uppercase tracking-wider">{row.label}</div>
+                    <div
+                      className="text-[11px] font-mono font-bold"
+                      style={{ color: row.color ?? "#cbd5e1" }}
+                    >
+                      {row.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -280,6 +312,56 @@ export default function BotsPage() {
   const navLosses = navTotalTrades - navWins;
   const navWinRate = navTotalTrades > 0 ? (navWins / navTotalTrades) * 100 : null;
 
+  const oracleStrategyConfig: StrategyConfigRow[] = [
+    { label: "Conviction", value: "≥0.65 threshold", color: "#22d3ee" },
+    { label: "Position Slots", value: "8 max", color: "#cbd5e1" },
+    { label: "Kill Switch", value: "−12% drawdown", color: "#f87171" },
+    { label: "Stop Type", value: "ATR 2.0× ratchet", color: "#94a3b8" },
+  ];
+
+  const apexStrategyConfig: StrategyConfigRow[] = [
+    {
+      label: "Capital Fence",
+      value: `${((optionsState?.capital_fence_pct ?? 0.05) * 100).toFixed(0)}%  ($${(optionsState?.fenced_capital ?? 5000).toLocaleString()})`,
+      color: "#f97316",
+    },
+    {
+      label: "Circuit Breaker",
+      value: optionsState?.circuit_breaker_active ? "ACTIVE" : "OFF",
+      color: optionsState?.circuit_breaker_active ? "#f87171" : "#10b981",
+    },
+    {
+      label: "Paper Mode",
+      value: optionsState?.paper_mode ? "YES" : "LIVE",
+      color: optionsState?.paper_mode ? "#fbbf24" : "#10b981",
+    },
+    { label: "Strategy", value: "Vol. squeeze + condors", color: "#94a3b8" },
+  ];
+
+  const usdBias = forexState?.usd_bias ?? "NEUTRAL";
+  const navStrategyConfig: StrategyConfigRow[] = [
+    {
+      label: "USD Bias",
+      value: usdBias,
+      color: usdBias === "LONG" ? "#10b981" : usdBias === "SHORT" ? "#f87171" : "#94a3b8",
+    },
+    {
+      label: "News Blackout",
+      value: forexState?.news_blackout ? "ACTIVE" : "OFF",
+      color: forexState?.news_blackout ? "#fbbf24" : "#10b981",
+    },
+    {
+      label: "Circuit Breaker",
+      value: forexState?.circuit_breaker_active ? "ACTIVE" : "OFF",
+      color: forexState?.circuit_breaker_active ? "#f87171" : "#10b981",
+    },
+    {
+      label: "HWM",
+      value: `$${(forexState?.hwm_usd ?? 100000).toLocaleString()}`,
+      color: "#94a3b8",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-950 pb-24">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/95 backdrop-blur-xl px-4 py-3">
@@ -311,6 +393,7 @@ export default function BotsPage() {
             lossCount={undefined}
             winRate={null}
             totalTrades={undefined}
+            strategyConfig={oracleStrategyConfig}
           />
 
           {krakenLoading ? (
@@ -342,6 +425,7 @@ export default function BotsPage() {
             lossCount={apexLosses}
             winRate={apexWinRate}
             totalTrades={apexTotalTrades}
+            strategyConfig={apexStrategyConfig}
           />
 
           <GenericBotCard
@@ -357,6 +441,7 @@ export default function BotsPage() {
             lossCount={navLosses}
             winRate={navWinRate}
             totalTrades={navTotalTrades}
+            strategyConfig={navStrategyConfig}
           />
 
         </div>

@@ -163,8 +163,10 @@ def _fetch_export_report() -> str | None:
     try:
         resp = requests.get("http://localhost:8000/trading-api/export/report", timeout=30)
         if resp.status_code == 200:
-            data = resp.json()
-            return data.get("report", "")
+            text = resp.text.strip()
+            if text:
+                return text
+            logger.warning("FleetCommander | Export report returned empty body")
     except Exception as exc:
         logger.warning(f"FleetCommander | Failed to fetch export report: {exc}")
     return None

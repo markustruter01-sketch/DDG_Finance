@@ -183,22 +183,31 @@ _GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 def _gemini_base_url() -> str:
     """Return the Gemini REST base URL.
 
-    Always uses the direct Google API endpoint so calls go through the user's
-    own paid Google subscription.
+    Prefers the Replit AI Integrations proxy (AI_INTEGRATIONS_GEMINI_BASE_URL)
+    which carries a large shared quota.  Falls back to the direct Google API
+    endpoint when the proxy is not configured.
     """
+    proxy = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "").rstrip("/")
+    if proxy:
+        return proxy
     return _GOOGLE_GEMINI_BASE
 
 
 def _gemini_api_key() -> str:
     """Return the Gemini API key.
 
-    Uses the user's own GOOGLE_GEMINI_API_KEY so API calls are billed directly
-    to the user's Google account and not routed through any third-party proxy.
+    Prefers the Replit AI Integrations proxy key (AI_INTEGRATIONS_GEMINI_API_KEY).
+    Falls back to the user's own GOOGLE_GEMINI_API_KEY when the proxy is not
+    configured.
     """
+    proxy_key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", "")
+    if proxy_key:
+        return proxy_key
     key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
     if not key:
         raise RuntimeError(
-            "No Gemini API key available — set GOOGLE_GEMINI_API_KEY"
+            "No Gemini API key available — set GOOGLE_GEMINI_API_KEY or "
+            "configure the Replit AI Integrations proxy"
         )
     return key
 

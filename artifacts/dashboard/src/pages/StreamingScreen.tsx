@@ -43,7 +43,7 @@ export default function StreamingScreen() {
   const losses24h = recent24h.filter(t => !t.isWin).length;
 
   return (
-    <div className="h-screen w-screen bg-slate-950 overflow-hidden flex items-center justify-center">
+    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <div
         style={{
           width: REF_W,

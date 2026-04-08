@@ -1062,7 +1062,7 @@ function DecisionPipelineBar() {
 
 export default function StreamingScreenV2() {
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ backgroundColor: "#020617" }}>
+    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <style>{`
         @keyframes ping {
           75%, 100% { transform: scale(2); opacity: 0; }

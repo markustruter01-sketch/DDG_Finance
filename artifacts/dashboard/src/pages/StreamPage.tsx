@@ -54,7 +54,7 @@ function loadPrefs(): StreamPrefs {
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : false,
+        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : true,
         intervalSeconds:
           typeof parsed.intervalSeconds === "number" &&
           parsed.intervalSeconds >= 5 &&
@@ -64,7 +64,7 @@ function loadPrefs(): StreamPrefs {
       };
     }
   } catch {}
-  return { autoCycle: false, intervalSeconds: 10 };
+  return { autoCycle: true, intervalSeconds: 10 };
 }
 
 function savePrefs(prefs: StreamPrefs) {
@@ -204,7 +204,7 @@ export default function StreamPage() {
   const activeTab = tabs.find((t) => t.id === active)!;
 
   return (
-    <div className="h-screen w-screen bg-slate-950 overflow-hidden flex flex-col">
+    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div
         className="flex items-center shrink-0 z-20 relative"
         style={{

@@ -105,6 +105,9 @@ from config import (
     BOT_STRATEGY_TYPE,
     IS_SCALP_BOT,
     IS_SWING_BOT,
+    CALYPSO_TIER1_MAX,
+    CALYPSO_TIER2_MAX,
+    CALYPSO_TIER3_MAX,
     MARKET_CACHE_FILE,
     IS_PRIMARY_FETCHER,
     MARKET_CACHE_TTL,
@@ -196,6 +199,33 @@ from paper_engine import (
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# STRATEGY FLAGS & MARKET-CAP TIER LOOKUP (mean_reversion_conservative)
+# ══════════════════════════════════════════════════════════════════════════════
+
+IS_MRC_BOT = BOT_STRATEGY_TYPE == "mean_reversion_conservative"
+
+_MRC_TIER1 = frozenset({
+    "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
+})
+_MRC_TIER2 = frozenset({
+    "ADA/USD", "AVAX/USD", "DOT/USD", "LINK/USD", "ATOM/USD", "LTC/USD",
+    "UNI/USD", "NEAR/USD", "APT/USD", "INJ/USD", "RUNE/USD", "TON/USD",
+    "ENA/USD", "HBAR/USD", "CRV/USD", "SNX/USD", "AAVE/USD", "BCH/USD",
+})
+
+_MRC_MIN_PROFIT_USD = 92.0
+
+
+def _mrc_tier_max_frac(symbol: str) -> float:
+    """Return the market-cap-tier max position fraction for this symbol."""
+    if symbol in _MRC_TIER1:
+        return CALYPSO_TIER1_MAX
+    if symbol in _MRC_TIER2:
+        return CALYPSO_TIER2_MAX
+    return CALYPSO_TIER3_MAX
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STARTUP BANNER
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -216,6 +246,11 @@ if IS_SCALP_BOT:
     _strategy_note = " (SCALP BOT — 1m candles, 15s loop)"
 elif IS_SWING_BOT:
     _strategy_note = f" (SWING BOT — {OHLCV_TIMEFRAME} candles, {LOOP_SLEEP_SECONDS}s loop)"
+elif IS_MRC_BOT:
+    _strategy_note = (
+        f" (MRC BOT — mean-reversion entry | ATR exits | "
+        f"Tier1≤{CALYPSO_TIER1_MAX*100:.0f}% Tier2≤{CALYPSO_TIER2_MAX*100:.0f}% Tier3≤{CALYPSO_TIER3_MAX*100:.0f}%)"
+    )
 logger.info(f"  Strategy type  : {BOT_STRATEGY_TYPE}{_strategy_note}")
 logger.info(f"  Timeframe      : {OHLCV_TIMEFRAME}")
 logger.info(f"  Cash reserve   : {CASH_RESERVE*100:.0f}% (always held back)")
@@ -1553,6 +1588,59 @@ def run_cycle() -> None:
 
                 # ── MEAN-REVERSION EXIT PATH (Davy Jones) ──────────────────
 
+                # ── MRC EXIT (Calypso conservative): swing-style exits ────
+                # Uses explicit ATR TP/SL/trailing/max-hold rather than
+                # z-score reversal, so calypso exits are time-bounded.
+                if IS_MRC_BOT:
+                    _mrc_exit = check_swing_exits(
+                        side=pos["side"],
+                        entry_price=pos["entry_price"],
+                        current_price=current_price,
+                        best_price=pos["best_price"],
+                        entry_time=pos.get("entry_time"),
+                        atr=sym_atr,
+                        tp_atr_mult=SWING_TP_ATR_MULT,
+                        sl_atr_mult=SWING_SL_ATR_MULT,
+                        trail_trigger_atr=SWING_TRAIL_TRIGGER_ATR,
+                        trail_atr_mult=SWING_TRAIL_ATR_MULT,
+                        min_hold_hours=0,
+                        max_hold_hours=SWING_MAX_HOLD_HOURS,
+                        fee_rate=PAPER_FEE_PCT,
+                    )
+                    if _mrc_exit:
+                        close_position(symbol, reason=_mrc_exit, atr=sym_atr)
+                        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": f"exit_{_mrc_exit}",
+                            "has_position": False,
+                        })
+                    else:
+                        _s_pnl = (
+                            (current_price - pos["entry_price"]) / pos["entry_price"]
+                            if pos["side"] == "long"
+                            else (pos["entry_price"] - current_price) / pos["entry_price"]
+                        )
+                        _s_hours = 0.0
+                        if pos.get("entry_time"):
+                            try:
+                                _s_et = datetime.fromisoformat(pos["entry_time"])
+                                _s_hours = (now_utc - _s_et).total_seconds() / 3600.0
+                            except Exception:
+                                pass
+                        logger.debug(
+                            f"Hold   | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.2f} | "
+                            f"Now: ${current_price:,.2f} | P&L: {_s_pnl*100:+.2f}% | "
+                            f"Held: {_s_hours:.1f}h/{SWING_MAX_HOLD_HOURS}h"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "hold",
+                            "has_position": True, "pnl_pct": round(_s_pnl * 100, 2),
+                            "side": pos["side"],
+                        })
+                    continue
+
                 if symbol in _pending_tranches:
                     for _t in _pending_tranches[symbol]:
                         if _t.get("filled"):
@@ -2029,32 +2117,39 @@ def run_cycle() -> None:
 
             # LONG signal: price is unusually low + RSI is oversold
             if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+                _long_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
+                _long_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
                     stop_loss_pct=_stop_loss_pct,
-                    max_position_fraction=_effective_max_position_frac,
+                    max_position_fraction=_long_max_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=_sym_atr_mult,
+                    atr_multiplier=_long_sl_mult,
                 )
                 size_usd *= _vol_size_scale
                 _psm = _pair_sizing_mult.get(symbol, 1.0)
                 if _psm != 1.0:
                     size_usd *= _psm
-                if _deep_oversold and _ms.vpin > _effective_vpin_cap:
+                if _deep_oversold and _ms.vpin > _effective_vpin_cap and not IS_MRC_BOT:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
                 if size_usd >= MIN_POSITION_USD:
-                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, TRAIL_PCT)
-                    if not _fee_ok:
-                        logger.info(
-                            f"FeeGate | {symbol}: SKIP LONG — "
-                            f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
-                            f"(need ${_rt_fees * 2.5:.2f})"
+                    _long_tp_pct = (SWING_TP_ATR_MULT * sym_atr / current_price
+                                    if IS_MRC_BOT and current_price > 0
+                                    else TRAIL_PCT)
+                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, _long_tp_pct)
+                    if not _fee_ok or (IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD):
+                        _fee_reason = (
+                            f"expected profit ${_exp_profit:.2f} < $92 hard floor"
+                            if IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD
+                            else f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
+                                 f"(need ${_rt_fees * 2.5:.2f})"
                         )
+                        logger.info(f"FeeGate | {symbol}: SKIP LONG — {_fee_reason}")
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "long_blocked_fee_gate",
@@ -2086,9 +2181,13 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
-                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
-                    _tranches  = build_tranche_orders("long", size_usd, current_price)
-                    _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
+                    _atr_stop  = get_atr_stop_price("long", current_price, sym_atr, multiplier=_long_sl_mult)
+                    if IS_MRC_BOT:
+                        _tranches = []
+                        _t1_size  = size_usd
+                    else:
+                        _tranches = build_tranche_orders("long", size_usd, current_price)
+                        _t1_size  = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(
@@ -2144,29 +2243,36 @@ def run_cycle() -> None:
 
             # SHORT signal: price is unusually high + RSI is overbought
             elif sym_z_score > _zscore_entry and sym_rsi > RSI_OVERBOUGHT:
+                _short_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
+                _short_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(
                     total_equity=total_equity,
                     entry_price=current_price,
                     deployed_usd=deployed_usd,
                     risk_fraction=RISK_FRACTION,
                     stop_loss_pct=_stop_loss_pct,
-                    max_position_fraction=_effective_max_position_frac,
+                    max_position_fraction=_short_max_frac,
                     cash_reserve=CASH_RESERVE,
                     atr=sym_atr,
-                    atr_multiplier=_sym_atr_mult,
+                    atr_multiplier=_short_sl_mult,
                 )
                 size_usd *= _vol_size_scale
                 _psm = _pair_sizing_mult.get(symbol, 1.0)
                 if _psm != 1.0:
                     size_usd *= _psm
                 if size_usd >= MIN_POSITION_USD:
-                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, TRAIL_PCT)
-                    if not _fee_ok:
-                        logger.info(
-                            f"FeeGate | {symbol}: SKIP SHORT — "
-                            f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
-                            f"(need ${_rt_fees * 2.5:.2f})"
+                    _short_tp_pct = (SWING_TP_ATR_MULT * sym_atr / current_price
+                                     if IS_MRC_BOT and current_price > 0
+                                     else TRAIL_PCT)
+                    _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, _short_tp_pct)
+                    if not _fee_ok or (IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD):
+                        _fee_reason = (
+                            f"expected profit ${_exp_profit:.2f} < $92 hard floor"
+                            if IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD
+                            else f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f} "
+                                 f"(need ${_rt_fees * 2.5:.2f})"
                         )
+                        logger.info(f"FeeGate | {symbol}: SKIP SHORT — {_fee_reason}")
                         cycle_signals.append({
                             "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                             "price": round(current_price, 4), "signal_type": "short_blocked_fee_gate",
@@ -2195,9 +2301,13 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue  # skip this entry
-                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=_sym_atr_mult)
-                    _tranches  = build_tranche_orders("short", size_usd, current_price)
-                    _t1_size   = _tranches[0]["size_usd"] if _tranches else size_usd
+                    _atr_stop  = get_atr_stop_price("short", current_price, sym_atr, multiplier=_short_sl_mult)
+                    if IS_MRC_BOT:
+                        _tranches = []
+                        _t1_size  = size_usd
+                    else:
+                        _tranches = build_tranche_orders("short", size_usd, current_price)
+                        _t1_size  = _tranches[0]["size_usd"] if _tranches else size_usd
                     # ExitBracket: log expected exit levels (audit only).
                     # Existing check_stops() logic is the source of truth.
                     _bracket = ExitBracket(

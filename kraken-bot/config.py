@@ -81,38 +81,30 @@ BOT_PROFILES = {
     "calypso": {
         "display_name": "Calypso's Tide",
         "db_id": 3,
-        "strategy_type": "trend_following",
-        "strategy_label": "Trend Following",
-        "RSI_OVERSOLD": 40,
-        "RSI_OVERBOUGHT": 60,
-        "ZSCORE_ENTRY": 0.6,
-        "CASH_RESERVE": 0.15,
-        "MAX_POSITION_FRACTION": 0.06,
-        "MAX_POSITIONS": 5,
+        "strategy_type": "mean_reversion_conservative",
+        "strategy_label": "Conservative",
+        "RSI_OVERSOLD": 35,
+        "RSI_OVERBOUGHT": 65,
+        "ZSCORE_ENTRY": 2.0,
+        "CASH_RESERVE": 0.20,
+        "MAX_POSITION_FRACTION": 0.05,
+        "MAX_POSITIONS": 6,
         "STOP_LOSS_PCT": 0.020,
         "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.88,
+        "VPIN_ENTRY_BLOCK": 0.82,
         "OHLCV_TIMEFRAME": "1h",
-        "OHLCV_LIMIT": 200,
-        "LOOP_SLEEP_SECONDS": 120,
-        "SWING_TP_ATR_MULT": 4.0,
+        "OHLCV_LIMIT": 100,
+        "LOOP_SLEEP_SECONDS": 60,
+        "LOSS_STREAK_LIMIT": 7,
+        "LOSS_STREAK_COOLDOWN_HOURS": 10,
+        "SWING_TP_ATR_MULT": 3.0,
         "SWING_SL_ATR_MULT": 2.0,
-        "SWING_TRAIL_TRIGGER_ATR": 2.0,
+        "SWING_TRAIL_TRIGGER_ATR": 1.5,
         "SWING_TRAIL_ATR_MULT": 1.5,
-        "SWING_MIN_HOLD_HOURS": 8,
-        "SWING_MAX_HOLD_HOURS": 120,
-        "TREND_EMA_FAST": 30,
-        "TREND_EMA_SLOW": 75,
-        "TREND_PULLBACK_ATR_MULT": 0.5,
-        "VOLUME_MA_PERIOD": 20,
-        "MIN_CONVICTION": 0.60,
-        "MAX_NEW_ENTRIES_PER_CYCLE": 1,
-        "LOSS_STREAK_LIMIT": 5,
-        "LOSS_STREAK_COOLDOWN_HOURS": 12,
-        "SYMBOL_WINRATE_LOOKBACK": 15,
-        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.35,
-        "SYMBOL_WINRATE_RECOVERY_THRESHOLD": 0.40,
-        "SYMBOL_WINRATE_PENALTY_FACTOR": 0.70,
+        "SWING_MAX_HOLD_HOURS": 48,
+        "CALYPSO_TIER1_MAX": 0.10,
+        "CALYPSO_TIER2_MAX": 0.07,
+        "CALYPSO_TIER3_MAX": 0.05,
     },
 }
 
@@ -163,10 +155,9 @@ else:
     })
 
 
-BLACKLIST = ["ALGO/USD", "OP/USD"]
+BLACKLIST = ["ALGO/USD", "OP/USD", "RENDER/USD"]
 
 PAIR_SIZING_PENALIZED = {
-    "RENDER/USD": 0.50,
     "ETH/USD":    0.50,
     "SOL/USD":    0.50,
     "W/USD":      0.50,
@@ -354,6 +345,11 @@ SYMBOL_WINRATE_LOOKBACK           = _profile.get("SYMBOL_WINRATE_LOOKBACK", 15)
 SYMBOL_WINRATE_PENALTY_THRESHOLD  = _profile.get("SYMBOL_WINRATE_PENALTY_THRESHOLD", 0.35)
 SYMBOL_WINRATE_RECOVERY_THRESHOLD = _profile.get("SYMBOL_WINRATE_RECOVERY_THRESHOLD", 0.40)
 SYMBOL_WINRATE_PENALTY_FACTOR     = _profile.get("SYMBOL_WINRATE_PENALTY_FACTOR", 0.70)
+
+
+CALYPSO_TIER1_MAX = _profile.get("CALYPSO_TIER1_MAX", 0.05)
+CALYPSO_TIER2_MAX = _profile.get("CALYPSO_TIER2_MAX", 0.05)
+CALYPSO_TIER3_MAX = _profile.get("CALYPSO_TIER3_MAX", 0.05)
 
 
 STATUS_FILE           = f"kraken-bot/{BOT_ID}_status.json"

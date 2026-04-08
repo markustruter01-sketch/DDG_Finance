@@ -26,6 +26,7 @@ import {
   ExternalLink,
   FileText, Mail,
   DollarSign, Percent, Bot, BarChart2,
+  Code, ShieldCheck, Copy, Check, X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -994,6 +995,379 @@ function EmailReportButton() {
   );
 }
 
+interface CodePart {
+  filename: string;
+  text: string;
+  chars: number;
+  part: number;
+  total_parts: number;
+}
+
+interface AuditFindingCode {
+  path: string;
+  status: "ok" | "missing" | "mismatch" | "not_exported";
+  live_hash: string | null;
+  export_hash: string | null;
+}
+
+interface AuditResult {
+  summary: {
+    total: number;
+    ok: number;
+    missing: number;
+    mismatches: number;
+    not_exported: number;
+    all_verified: boolean;
+  };
+  findings: AuditFindingCode[];
+}
+
+function ExportCodeButton() {
+  const [loading, setLoading] = useState(false);
+  const [parts, setParts] = useState<CodePart[] | null>(null);
+  const [copied, setCopied] = useState<number | null>(null);
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/export/code-parts`);
+      if (!res.ok) throw new Error("Export failed");
+      const data: Record<string, CodePart> = await res.json();
+      const ordered = Object.values(data).sort((a, b) => a.part - b.part);
+      setParts(ordered);
+
+      for (const part of ordered) {
+        const blob = new Blob([part.text], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = part.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch {
+      alert("Code export failed — check that the trading API is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyPart = async (part: CodePart) => {
+    try {
+      await navigator.clipboard.writeText(part.text);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = part.text;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setCopied(part.part);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const closeModal = () => setParts(null);
+
+  return (
+    <>
+      <button
+        onClick={handleExport}
+        disabled={loading}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-500/30 bg-violet-500/[0.06] hover:bg-violet-500/[0.12] text-xs font-mono text-violet-400 hover:text-violet-300 transition-all disabled:opacity-50"
+      >
+        <Code className="h-3.5 w-3.5" />
+        {loading ? "Exporting..." : "Export Code"}
+      </button>
+
+      {parts && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: "rgba(0,0,0,0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={closeModal}
+        >
+          <div
+            style={{
+              backgroundColor: "#0d1117",
+              border: "1px solid rgba(139,92,246,0.3)",
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "640px",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              fontFamily: "monospace",
+              color: "#e6edf3",
+              boxShadow: "0 0 40px rgba(139,92,246,0.15)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "1rem 1.25rem",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#a78bfa" }}>
+                Code Export — Downloaded {parts.length} file{parts.length !== 1 ? "s" : ""}
+              </span>
+              <button
+                onClick={closeModal}
+                style={{ background: "transparent", border: "none", color: "#8b949e", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0.25rem" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ overflowY: "auto", padding: "0.75rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+              <p style={{ fontSize: "0.75rem", color: "#8b949e", margin: "0 0 0.5rem 0" }}>
+                Upload each file to Claude — one part per context window. Each part is ≤80k characters and splits only at file boundaries.
+              </p>
+              {parts.map((part) => (
+                <div
+                  key={part.part}
+                  style={{
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "0.5rem",
+                    padding: "0.625rem 0.875rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <span style={{ fontSize: "0.8rem", color: "#a78bfa", fontWeight: 600 }}>{part.filename}</span>
+                    <span style={{ fontSize: "0.7rem", color: "#8b949e" }}>
+                      {part.chars.toLocaleString()} chars
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => copyPart(part)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      background: copied === part.part ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${copied === part.part ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.1)"}`,
+                      borderRadius: "0.375rem",
+                      color: copied === part.part ? "#a78bfa" : "#8b949e",
+                      cursor: "pointer",
+                      fontSize: "0.72rem",
+                      padding: "0.35rem 0.625rem",
+                      transition: "all 0.15s",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {copied === part.part ? <Check style={{ width: "0.75rem", height: "0.75rem" }} /> : <Copy style={{ width: "0.75rem", height: "0.75rem" }} />}
+                    {copied === part.part ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: "0.875rem 1.25rem", borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={closeModal}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "0.375rem",
+                  color: "#8b949e",
+                  cursor: "pointer",
+                  fontSize: "0.78rem",
+                  fontFamily: "monospace",
+                  padding: "0.45rem 0.9rem",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AuditExportButton() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<AuditResult | null>(null);
+
+  const handleAudit = async () => {
+    setLoading(true);
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/export/code-audit`);
+      if (!res.ok) throw new Error("Audit failed");
+      const data: AuditResult = await res.json();
+      setResult(data);
+    } catch {
+      alert("Audit failed — check that the trading API is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeModal = () => setResult(null);
+
+  return (
+    <>
+      <button
+        onClick={handleAudit}
+        disabled={loading}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] hover:bg-emerald-500/[0.12] text-xs font-mono text-emerald-400 hover:text-emerald-300 transition-all disabled:opacity-50"
+      >
+        <ShieldCheck className="h-3.5 w-3.5" />
+        {loading ? "Auditing..." : "Audit Export"}
+      </button>
+
+      {result && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            backgroundColor: "rgba(0,0,0,0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={closeModal}
+        >
+          <div
+            style={{
+              backgroundColor: "#0d1117",
+              border: `1px solid ${result.summary.all_verified ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+              borderRadius: "12px",
+              width: "100%",
+              maxWidth: "640px",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              fontFamily: "monospace",
+              color: "#e6edf3",
+              boxShadow: result.summary.all_verified ? "0 0 40px rgba(34,197,94,0.1)" : "0 0 40px rgba(239,68,68,0.1)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "1rem 1.25rem",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {result.summary.all_verified ? (
+                  <ShieldCheck style={{ width: "1rem", height: "1rem", color: "#22c55e" }} />
+                ) : (
+                  <X style={{ width: "1rem", height: "1rem", color: "#ef4444" }} />
+                )}
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: result.summary.all_verified ? "#22c55e" : "#ef4444" }}>
+                  {result.summary.all_verified
+                    ? `All ${result.summary.ok} files verified — export is byte-exact`
+                    : `${result.summary.mismatches} mismatch${result.summary.mismatches !== 1 ? "es" : ""}${result.summary.missing > 0 ? `, ${result.summary.missing} missing` : ""} found`}
+                </span>
+              </div>
+              <button
+                onClick={closeModal}
+                style={{ background: "transparent", border: "none", color: "#8b949e", cursor: "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0.25rem" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: "1.5rem", padding: "0.75rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: "0.72rem" }}>
+              <span style={{ color: "#22c55e" }}>✓ {result.summary.ok} OK</span>
+              {result.summary.mismatches > 0 && <span style={{ color: "#ef4444" }}>✗ {result.summary.mismatches} mismatch{result.summary.mismatches !== 1 ? "es" : ""}</span>}
+              {result.summary.missing > 0 && <span style={{ color: "#f59e0b" }}>⚠ {result.summary.missing} missing</span>}
+              {result.summary.not_exported > 0 && <span style={{ color: "#6b7280" }}>○ {result.summary.not_exported} not yet exported</span>}
+              <span style={{ color: "#8b949e" }}>total: {result.summary.total}</span>
+            </div>
+
+            <div style={{ overflowY: "auto", padding: "0.5rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              {result.findings.map((f) => (
+                <div
+                  key={f.path}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "0.5rem",
+                    padding: "0.375rem 0.5rem",
+                    borderRadius: "0.375rem",
+                    background: f.status === "ok" ? "transparent"
+                      : f.status === "mismatch" ? "rgba(239,68,68,0.06)"
+                      : f.status === "not_exported" ? "rgba(107,114,128,0.06)"
+                      : "rgba(245,158,11,0.06)",
+                  }}
+                >
+                  <span style={{ fontSize: "0.75rem", marginTop: "0.05rem", flexShrink: 0, color: f.status === "ok" ? "#22c55e" : f.status === "mismatch" ? "#ef4444" : f.status === "not_exported" ? "#6b7280" : "#f59e0b" }}>
+                    {f.status === "ok" ? "✓" : f.status === "mismatch" ? "✗" : f.status === "not_exported" ? "○" : "⚠"}
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
+                    <span style={{ fontSize: "0.72rem", color: f.status === "ok" ? "#8b949e" : f.status === "mismatch" ? "#fca5a5" : f.status === "not_exported" ? "#6b7280" : "#fcd34d", wordBreak: "break-all" }}>
+                      {f.path}
+                    </span>
+                    {f.status === "mismatch" && (
+                      <span style={{ fontSize: "0.65rem", color: "#6b7280" }}>
+                        live: {f.live_hash?.slice(0, 16)}… export: {f.export_hash?.slice(0, 16)}…
+                      </span>
+                    )}
+                    {f.status === "missing" && (
+                      <span style={{ fontSize: "0.65rem", color: "#6b7280" }}>file not found on disk</span>
+                    )}
+                    {f.status === "not_exported" && (
+                      <span style={{ fontSize: "0.65rem", color: "#6b7280" }}>run Export Code first to establish baseline</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding: "0.875rem 1.25rem", borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={closeModal}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "0.375rem",
+                  color: "#8b949e",
+                  cursor: "pointer",
+                  fontSize: "0.78rem",
+                  fontFamily: "monospace",
+                  padding: "0.45rem 0.9rem",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -1017,6 +1391,8 @@ export default function Dashboard() {
                 <div className="flex-1"><TradeWorkflowBar /></div>
                 <ExportReportButton />
                 <EmailReportButton />
+                <ExportCodeButton />
+                <AuditExportButton />
               </div>
             </div>
           </SafeSection>

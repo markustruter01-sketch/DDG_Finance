@@ -69,3 +69,6 @@ trading-platform/logs/*.md
 trading-platform/trade_journal.db
 trading-platform/_options_state/trades.db
 *.db
+kraken-bot/blackbeard_live_state.json
+kraken-bot/calypso_live_state.json
+kraken-bot/davy-jones_live_state.json

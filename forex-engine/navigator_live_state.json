@@ -1,17 +1,17 @@
 {
-  "last_updated": "2026-04-08T01:03:56.074847+00:00",
+  "last_updated": "2026-04-08T01:04:03.274409+00:00",
   "status": "idle",
   "cycle_count": 1,
-  "usd_bias": "USD_BULLISH",
+  "usd_bias": "NEUTRAL",
   "news_blackout": false,
-  "equity_usd": 97302.83,
+  "equity_usd": 97301.85,
   "paper_trading": true,
   "positions": [
     {
       "pair": "USD_CAD",
       "direction": "long",
       "entry_price": 1.38365,
-      "current_price": 1.38446,
+      "current_price": 1.38432,
       "sl_price": 1.38035,
       "tp_price": 1.39077,
       "original_sl": 1.37891,
@@ -20,8 +20,8 @@
       "lowest_price": null,
       "units": 9728,
       "size_usd": 9728.0,
-      "unrealized_pnl_usd": 5.69,
-      "unrealized_pnl_pips": 8.1,
+      "unrealized_pnl_usd": 4.71,
+      "unrealized_pnl_pips": 6.7,
       "entry_time": "2026-04-08T00:11:43.838611+00:00"
     },
     {
@@ -94,7 +94,7 @@
     }
   ],
   "scan_results": [],
-  "last_scan": "2026-04-08T01:03:56.056195+00:00",
+  "last_scan": "2026-04-08T01:04:03.261547+00:00",
   "summary": {
     "starting_balance_usd": 100000.0,
     "cash_usd": 48602.82,

@@ -181,43 +181,48 @@ _GOOGLE_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 
 def _gemini_base_url() -> str:
-    """Return the Gemini REST base URL.
-
-    Prefers the Replit AI Integrations proxy (AI_INTEGRATIONS_GEMINI_BASE_URL)
-    which carries a large shared quota.  Falls back to the direct Google API
-    endpoint when the proxy is not configured.
-    """
-    proxy = os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL", "").rstrip("/")
-    if proxy:
-        return proxy
+    """Return the Gemini REST base URL (direct Google API, user's own key)."""
     return _GOOGLE_GEMINI_BASE
 
 
 def _gemini_api_key() -> str:
-    """Return the Gemini API key.
-
-    Prefers the Replit AI Integrations proxy key (AI_INTEGRATIONS_GEMINI_API_KEY).
-    Falls back to the user's own GOOGLE_GEMINI_API_KEY when the proxy is not
-    configured.
-    """
-    proxy_key = os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY", "")
-    if proxy_key:
-        return proxy_key
+    """Return the Gemini API key from GOOGLE_GEMINI_API_KEY env var."""
     key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
     if not key:
         raise RuntimeError(
-            "No Gemini API key available — set GOOGLE_GEMINI_API_KEY or "
-            "configure the Replit AI Integrations proxy"
+            "No Gemini API key available — set GOOGLE_GEMINI_API_KEY"
         )
     return key
+
+
+def _is_daily_quota_error(status_code: int, body: str) -> bool:
+    """Return True when the 429 is a daily/billing cap (retrying won't help)."""
+    if status_code != 429:
+        return False
+    body_lower = body.lower()
+    return any(
+        phrase in body_lower
+        for phrase in ("billing", "plan", "exceeded your current quota", "quota_exceeded")
+    )
+
+
+def _gemini_retry_wait(attempt: int) -> float:
+    """Exponential backoff in seconds: 30 → 60 → 120."""
+    return 30.0 * (2 ** attempt)
 
 
 def _call_gemini(user_payload: str, system_prompt: str | None = None) -> _GeminiAuditResponse:
     """
     Send a single audit request to Gemini and return a validated response model.
 
+    Retries up to 3 times with exponential backoff on transient 429 rate-limit
+    errors.  Daily/billing quota exhaustion is detected immediately and raises
+    without retrying so the caller can fail-open fast.
+
     Raises RuntimeError on HTTP/parse errors so callers can handle fail-open.
     """
+    import time as _time
+
     api_key = _gemini_api_key()
     prompt = system_prompt or _SYSTEM_PROMPT
 
@@ -239,20 +244,39 @@ def _call_gemini(user_payload: str, system_prompt: str | None = None) -> _Gemini
         },
     }
 
-    try:
-        resp = requests.post(
-            url,
-            headers={
-                "Content-Type":   "application/json",
-                "x-goog-api-key": api_key,
-            },
-            json=body,
-            timeout=90,
-        )
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
+    _MAX_RETRIES = 3
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = requests.post(
+                url,
+                headers={
+                    "Content-Type":   "application/json",
+                    "x-goog-api-key": api_key,
+                },
+                json=body,
+                timeout=90,
+            )
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
 
-    if resp.status_code != 200:
+        if resp.status_code == 200:
+            break
+
+        if _is_daily_quota_error(resp.status_code, resp.text):
+            raise RuntimeError(
+                "Gemini daily quota reached — the AI assistant will be "
+                "available again tomorrow. No retry attempted."
+            )
+
+        if resp.status_code == 429 and attempt < _MAX_RETRIES:
+            wait = _gemini_retry_wait(attempt)
+            logger.warning(
+                f"Gemini rate-limited (attempt {attempt + 1}/{_MAX_RETRIES}), "
+                f"retrying in {wait:.0f}s…"
+            )
+            _time.sleep(wait)
+            continue
+
         raise RuntimeError(
             f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}"
         )

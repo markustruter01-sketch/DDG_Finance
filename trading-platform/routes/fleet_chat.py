@@ -10,6 +10,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import pathlib
@@ -23,7 +24,13 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from analysis.gemini_auditor import _gemini_api_key, _gemini_base_url, _GEMINI_MODEL
+from analysis.gemini_auditor import (
+    _gemini_api_key,
+    _gemini_base_url,
+    _GEMINI_MODEL,
+    _is_daily_quota_error,
+    _gemini_retry_wait,
+)
 from analysis.fleet_enforcer import (
     BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
@@ -342,14 +349,33 @@ async def _call_gemini_chat(messages: list[dict], fleet_context: str) -> str:
         },
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json=body,
-        )
+    _MAX_RETRIES = 3
+    for attempt in range(_MAX_RETRIES + 1):
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                url,
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                json=body,
+            )
 
-    if resp.status_code != 200:
+        if resp.status_code == 200:
+            break
+
+        if _is_daily_quota_error(resp.status_code, resp.text):
+            raise RuntimeError(
+                "Gemini daily quota reached — Fleet Commander will be back online "
+                "tomorrow. Your Google API free tier renews at midnight Pacific."
+            )
+
+        if resp.status_code == 429 and attempt < _MAX_RETRIES:
+            wait = _gemini_retry_wait(attempt)
+            logger.warning(
+                f"FleetChat | Gemini rate-limited (attempt {attempt + 1}/{_MAX_RETRIES}), "
+                f"retrying in {wait:.0f}s…"
+            )
+            await asyncio.sleep(wait)
+            continue
+
         raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:300]}")
 
     data = resp.json()
@@ -445,7 +471,11 @@ async def fleet_chat(request: ChatRequest) -> dict:
         )
     except Exception as exc:
         logger.error(f"FleetChat | Gemini call failed: {exc}")
-        error_reply = f"Fleet Commander is temporarily unavailable: {exc}"
+        exc_str = str(exc)
+        if "daily quota" in exc_str.lower() or "quota reached" in exc_str.lower():
+            error_reply = exc_str
+        else:
+            error_reply = f"Fleet Commander is temporarily unavailable — please try again shortly."
         _save_message("assistant", error_reply, source="system")
         return {"reply": error_reply, "has_recommendations": False, "message_id": user_id}
 
@@ -837,14 +867,32 @@ async def _call_gemini_chunk_audit(system_prompt: str, user_prompt: str) -> list
         "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.2},
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json=body,
-        )
+    _MAX_RETRIES = 3
+    for attempt in range(_MAX_RETRIES + 1):
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                url,
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                json=body,
+            )
 
-    if resp.status_code != 200:
+        if resp.status_code == 200:
+            break
+
+        if _is_daily_quota_error(resp.status_code, resp.text):
+            raise RuntimeError(
+                "Gemini daily quota reached — code audit unavailable until tomorrow."
+            )
+
+        if resp.status_code == 429 and attempt < _MAX_RETRIES:
+            wait = _gemini_retry_wait(attempt)
+            logger.warning(
+                f"CodeAudit | Gemini rate-limited (attempt {attempt + 1}/{_MAX_RETRIES}), "
+                f"retrying in {wait:.0f}s…"
+            )
+            await asyncio.sleep(wait)
+            continue
+
         raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:400]}")
 
     text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
@@ -876,14 +924,32 @@ async def _call_gemini_synthesis(all_findings: list[dict]) -> str:
         "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.3},
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-            json=body,
-        )
+    _MAX_RETRIES = 3
+    for attempt in range(_MAX_RETRIES + 1):
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                url,
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                json=body,
+            )
 
-    if resp.status_code != 200:
+        if resp.status_code == 200:
+            break
+
+        if _is_daily_quota_error(resp.status_code, resp.text):
+            raise RuntimeError(
+                "Gemini daily quota reached — audit synthesis unavailable until tomorrow."
+            )
+
+        if resp.status_code == 429 and attempt < _MAX_RETRIES:
+            wait = _gemini_retry_wait(attempt)
+            logger.warning(
+                f"AuditSynth | Gemini rate-limited (attempt {attempt + 1}/{_MAX_RETRIES}), "
+                f"retrying in {wait:.0f}s…"
+            )
+            await asyncio.sleep(wait)
+            continue
+
         raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:400]}")
 
     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]

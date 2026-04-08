@@ -249,7 +249,7 @@ export default function StreamPage() {
             <input
               type="number"
               min={5}
-              max={60}
+              max={120}
               value={intervalSeconds}
               onChange={(e) => handleIntervalChange(Number(e.target.value))}
               className="w-14 bg-slate-900 border rounded text-xs font-mono text-center text-white outline-none focus:ring-1"

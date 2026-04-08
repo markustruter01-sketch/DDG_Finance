@@ -497,18 +497,22 @@ def get_all_active_overrides() -> dict[str, Any]:
 
     return {
         "oracle": {
-            "params": oracle,
+            "current": oracle,
             "defaults": ORACLE_DEFAULTS,
             "bounds": {k: {"min": v[0], "max": v[1], "step": ORACLE_STEPS[k]} for k, v in ORACLE_BOUNDS.items()},
             "has_active_override": _is_active(oracle),
             "seconds_remaining": _seconds_remaining(oracle),
+            "override_expires_at": oracle.get("override_expires_at"),
+            "override_set_at": oracle.get("override_set_at"),
         },
         "navigator": {
-            "params": navigator,
+            "current": navigator,
             "defaults": NAVIGATOR_DEFAULTS,
             "bounds": {k: {"min": v[0], "max": v[1], "step": NAVIGATOR_STEPS[k]} for k, v in NAVIGATOR_BOUNDS.items()},
             "has_active_override": _is_active(navigator),
             "seconds_remaining": _seconds_remaining(navigator),
+            "override_expires_at": navigator.get("override_expires_at"),
+            "override_set_at": navigator.get("override_set_at"),
         },
     }
 

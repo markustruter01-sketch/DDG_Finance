@@ -23,6 +23,16 @@ from typing import Any
 
 from loguru import logger
 
+KRAKEN_DEFAULTS: dict[str, float] = {
+    "ZSCORE_ENTRY":       1.0,
+    "ZSCORE_EXIT":        0.45,
+    "STOP_LOSS_PCT":      0.015,
+    "TRAIL_PCT":          0.03,
+    "MIN_NET_PROFIT_PCT": 0.008,
+}
+
+OVERRIDE_TTL_HOURS = 24
+
 BOUNDS = {
     "ZSCORE_ENTRY":       (0.70, 1.50),
     "ZSCORE_EXIT":        (0.10, 0.55),
@@ -65,7 +75,8 @@ def _limit_step(current: float, target: float, param_name: str) -> float:
     return _clamp(param_name, round(current + direction * step, 6))
 
 
-def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
+def _load_current_kraken_params(db_id: int) -> dict | None:
+    """Load Kraken params from DB, auto-reverting if the override TTL has expired."""
     try:
         import psycopg2
         db_url = os.environ.get("DATABASE_URL")
@@ -75,7 +86,8 @@ def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT params FROM kraken_adaptive_params WHERE id = %s",
+                    """SELECT params, paused, override_expires_at, override_set_at
+                       FROM kraken_adaptive_params WHERE id = %s""",
                     (db_id,)
                 )
                 row = cur.fetchone()
@@ -83,43 +95,152 @@ def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
             conn.close()
         if not row:
             return None
+
         params = row[0] if isinstance(row[0], dict) else json.loads(row[0] or "{}")
+        paused = bool(row[1]) if row[1] is not None else False
+        override_expires_at = row[2]
+        override_set_at = row[3]
+
+        # Auto-revert if override has expired
+        if override_expires_at is not None:
+            now = datetime.now(timezone.utc)
+            exp = override_expires_at if override_expires_at.tzinfo else override_expires_at.replace(tzinfo=timezone.utc)
+            if now >= exp:
+                logger.info(
+                    f"FleetEnforcer | Override expired for db_id={db_id} "
+                    f"(expired at {exp.isoformat()}) — reverting to defaults"
+                )
+                _revert_kraken_to_defaults(db_id)
+                params = dict(KRAKEN_DEFAULTS)
+                paused = False
+                override_expires_at = None
+                override_set_at = None
+
+        params["paused"] = paused
+        if override_expires_at is not None:
+            params["override_expires_at"] = override_expires_at.isoformat()
+        if override_set_at is not None:
+            params["override_set_at"] = override_set_at.isoformat()
+
         return params
     except Exception as exc:
         logger.warning(f"FleetEnforcer | Failed to load params for db_id={db_id}: {exc}")
         return None
 
 
-def _write_kraken_params(db_id: int, bot_id_str: str, params: dict, reasoning: str) -> bool:
+def _revert_kraken_to_defaults(db_id: int) -> None:
+    """Reset a Kraken bot's params to factory defaults and clear override TTL."""
+    try:
+        import psycopg2
+        db_url = os.environ.get("DATABASE_URL")
+        if not db_url:
+            return
+        conn = psycopg2.connect(db_url)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE kraken_adaptive_params SET
+                           params               = %s,
+                           paused               = FALSE,
+                           override_expires_at  = NULL,
+                           override_set_at      = NULL,
+                           adapted_at           = NOW()
+                       WHERE id = %s""",
+                    (json.dumps(KRAKEN_DEFAULTS), db_id)
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning(f"FleetEnforcer | Failed to revert defaults for db_id={db_id}: {exc}")
+
+
+def _write_kraken_params(
+    db_id: int,
+    bot_id_str: str,
+    params: dict,
+    reasoning: str,
+    ttl_hours: int = OVERRIDE_TTL_HOURS,
+    source: str = "fleet_commander",
+) -> bool:
+    """Write Kraken params with TTL expiry, paused flag, and audit trail."""
     try:
         import psycopg2
         db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return False
+
+        # Separate trading params from meta-fields
+        paused = bool(params.get("paused", False))
+        clean_params = {k: v for k, v in params.items()
+                        if k in BOUNDS and isinstance(v, (int, float))}
+
+        # Load existing params for audit diff
+        existing = _load_current_kraken_params(db_id) or {}
+
         conn = psycopg2.connect(db_url)
         try:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO kraken_adaptive_params
-                        (id, bot_id, params, metrics, reasons, adapted_at, lookback_n)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), 0)
+                        (id, bot_id, params, metrics, reasons, adapted_at, lookback_n,
+                         paused, override_set_at, override_expires_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW(), 0, %s, NOW(),
+                            NOW() + (%s * INTERVAL '1 hour'))
                     ON CONFLICT (id) DO UPDATE SET
-                        params     = EXCLUDED.params,
-                        reasons    = EXCLUDED.reasons,
-                        adapted_at = NOW()
+                        params              = EXCLUDED.params,
+                        reasons             = EXCLUDED.reasons,
+                        adapted_at          = NOW(),
+                        paused              = EXCLUDED.paused,
+                        override_set_at     = NOW(),
+                        override_expires_at = NOW() + (%s * INTERVAL '1 hour')
                     """,
                     (
-                        db_id,
-                        bot_id_str,
-                        json.dumps(params),
+                        db_id, bot_id_str,
+                        json.dumps(clean_params),
                         json.dumps({}),
                         json.dumps({"fleet_commander": reasoning}),
+                        paused,
+                        ttl_hours,
+                        ttl_hours,
                     ),
                 )
             conn.commit()
         finally:
             conn.close()
+
+        # Write audit entries for changed params
+        try:
+            from analysis.claude_parameter_advisor import _write_audit
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+            for param_name, new_val in clean_params.items():
+                old_val = existing.get(param_name)
+                if old_val is None or abs(float(old_val) - float(new_val)) > 1e-8:
+                    _write_audit(
+                        bot_id=bot_id_str,
+                        param_name=param_name,
+                        old_val=old_val,
+                        new_val=new_val,
+                        reasoning=reasoning,
+                        source=source,
+                        expires_at=expires_at,
+                    )
+            # Audit paused toggle separately
+            old_paused = existing.get("paused", False)
+            if bool(old_paused) != paused:
+                _write_audit(
+                    bot_id=bot_id_str,
+                    param_name="paused",
+                    old_val=old_paused,
+                    new_val=paused,
+                    reasoning=reasoning,
+                    source=source,
+                    expires_at=expires_at,
+                )
+        except Exception as ae:
+            logger.debug(f"FleetEnforcer | Audit write failed (non-fatal): {ae}")
+
         return True
     except Exception as exc:
         logger.warning(f"FleetEnforcer | Failed to write params for {bot_id_str}: {exc}")
@@ -216,7 +337,10 @@ def enforce_fleet_recommendations(response) -> dict[str, Any]:
                 )
 
         if param_changes:
-            success = _write_kraken_params(db_id, bot_id, updated, adj.reasoning)
+            success = _write_kraken_params(
+                db_id, bot_id, updated, adj.reasoning,
+                source="fleet_commander",
+            )
             changes_applied.append({
                 "bot_id": bot_id,
                 "db_id": db_id,

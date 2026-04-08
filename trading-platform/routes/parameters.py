@@ -10,11 +10,17 @@ POST /parameters/oracle/reset       — reset Oracle params to factory defaults
 POST /parameters/navigator/reset    — reset Navigator params to factory defaults
 POST /parameters/oracle/pause       — toggle Oracle paused state
 POST /parameters/navigator/pause    — toggle Navigator paused state
+POST /parameters/kraken/{bot_id}    — apply Kraken param overrides (24h expiry + audit)
+POST /parameters/kraken/{bot_id}/pause — toggle Kraken bot paused state
 POST /parameters/{bot_id}/reset     — unified reset for oracle | navigator | kraken bots
 GET  /parameters/audit              — audit history alias (all bots, recent N rows)
 """
 
 from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -51,6 +57,17 @@ class NavigatorParamRequest(BaseModel):
     ttl_hours: int = Field(24, ge=1, le=168, description="Override TTL in hours (1-168)")
 
 
+class KrakenParamRequest(BaseModel):
+    ZSCORE_ENTRY: float | None = Field(None, ge=0.70, le=1.50)
+    ZSCORE_EXIT: float | None = Field(None, ge=0.10, le=0.55)
+    STOP_LOSS_PCT: float | None = Field(None, ge=0.008, le=0.040)
+    TRAIL_PCT: float | None = Field(None, ge=0.030, le=0.100)
+    MIN_NET_PROFIT_PCT: float | None = Field(None, ge=0.006, le=0.020)
+    paused: bool | None = Field(None, description="Kill-switch: pause this Kraken bot")
+    reasoning: str = Field("Operator override", description="Why this change is being made")
+    ttl_hours: int = Field(24, ge=1, le=168, description="Override TTL in hours (1-168)")
+
+
 class PauseRequest(BaseModel):
     paused: bool
     reasoning: str = Field("Operator pause toggle")
@@ -66,23 +83,65 @@ def _navigator_bounds_view() -> dict:
     return {k: {"min": v[0], "max": v[1], "step": NAVIGATOR_STEPS[k]} for k, v in NAVIGATOR_BOUNDS.items()}
 
 
-def _get_kraken_active_overrides() -> dict:
-    """Return current Kraken adaptive params for all 3 bots."""
+def _compute_seconds_remaining(expires_at_str: str | None) -> int | None:
+    if not expires_at_str:
+        return None
     try:
-        from analysis.fleet_enforcer import _load_current_kraken_params, BOT_ID_TO_DB_ID, BOUNDS, STEPS
+        exp = datetime.fromisoformat(expires_at_str)
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        secs = int((exp - datetime.now(timezone.utc)).total_seconds())
+        return max(0, secs)
+    except Exception:
+        return None
+
+
+def _get_kraken_active_overrides() -> dict:
+    """Return current Kraken adaptive params for all 3 bots with TTL and paused state."""
+    try:
+        from analysis.fleet_enforcer import _load_current_kraken_params, BOT_ID_TO_DB_ID, BOUNDS, STEPS, KRAKEN_DEFAULTS
         result = {}
         for bot_key, db_id in BOT_ID_TO_DB_ID.items():
             params = _load_current_kraken_params(db_id)
-            if params:
+            if params is not None:
+                expires_at = params.get("override_expires_at")
+                secs = _compute_seconds_remaining(expires_at)
+                clean_params = {k: v for k, v in params.items() if k in BOUNDS}
                 result[bot_key] = {
-                    "params": params,
+                    "params": clean_params,
                     "bounds": {k: {"min": v[0], "max": v[1], "step": STEPS[k]} for k, v in BOUNDS.items()},
-                    "has_active_override": True,
-                    "seconds_remaining": None,
+                    "defaults": KRAKEN_DEFAULTS,
+                    "has_active_override": secs is not None and secs > 0,
+                    "seconds_remaining": secs,
+                    "override_expires_at": expires_at,
+                    "override_set_at": params.get("override_set_at"),
+                    "paused": bool(params.get("paused", False)),
                 }
         return result
     except Exception:
         return {}
+
+
+def _kraken_bot_id_to_key(bot_id: str) -> str | None:
+    mapping = {
+        "davy-jones": "davy_jones",
+        "davy_jones":  "davy_jones",
+        "blackbeard":  "blackbeard",
+        "calypso":     "calypso",
+    }
+    return mapping.get(bot_id.lower().strip())
+
+
+def _write_kraken_control_json(bot_key: str, paused: bool) -> None:
+    """Write the kraken control.json so the running bot picks up the pause state immediately."""
+    try:
+        bid = bot_key.replace("_", "-")
+        ctrl_path = Path(f"../kraken-bot/{bid}_control.json")
+        if not ctrl_path.exists():
+            ctrl_path = Path("../kraken-bot/control.json")
+        ctrl_path.write_text(json.dumps({"bot_paused": paused}, indent=2))
+    except Exception:
+        pass
 
 
 # ── GET endpoints ─────────────────────────────────────────────────────────────
@@ -141,7 +200,7 @@ async def get_audit(limit: int = 50) -> dict:
     return {"history": rows, "count": len(rows)}
 
 
-# ── POST endpoints ────────────────────────────────────────────────────────────
+# ── Oracle / Navigator POST endpoints ─────────────────────────────────────────
 
 @parameters_router.post("/oracle")
 async def update_oracle(request: OracleParamRequest) -> dict:
@@ -213,6 +272,101 @@ async def pause_navigator(request: PauseRequest) -> dict:
     return {"status": "ok", "paused": request.paused, "current": get_navigator_params()}
 
 
+# ── Kraken POST endpoints ──────────────────────────────────────────────────────
+
+@parameters_router.post("/kraken/{bot_id}")
+async def update_kraken_params(bot_id: str, request: KrakenParamRequest) -> dict:
+    """Apply parameter overrides to a Kraken bot with 24h TTL and full audit trail."""
+    bot_key = _kraken_bot_id_to_key(bot_id)
+    if not bot_key:
+        raise HTTPException(404, f"Unknown Kraken bot: {bot_id}. Valid: davy-jones, blackbeard, calypso")
+
+    from analysis.fleet_enforcer import BOT_ID_TO_DB_ID, _write_kraken_params, _load_current_kraken_params, BOUNDS
+    db_id = BOT_ID_TO_DB_ID.get(bot_key)
+    if not db_id:
+        raise HTTPException(404, f"No DB ID for bot: {bot_key}")
+
+    # Build params dict from request
+    params: dict = {}
+    for field in ("ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"):
+        val = getattr(request, field)
+        if val is not None:
+            params[field] = val
+
+    if request.paused is not None:
+        params["paused"] = request.paused
+
+    if not params:
+        raise HTTPException(400, "No parameters provided")
+
+    # Merge with existing to preserve non-updated keys
+    existing = _load_current_kraken_params(db_id) or {}
+    for k in BOUNDS:
+        if k not in params and k in existing:
+            params[k] = existing[k]
+
+    ok = _write_kraken_params(
+        db_id, bot_key, params,
+        reasoning=request.reasoning,
+        ttl_hours=request.ttl_hours,
+        source="operator_ui",
+    )
+    if not ok:
+        raise HTTPException(500, f"Failed to apply {bot_id} parameters")
+
+    # Also update control.json if paused toggled
+    if request.paused is not None:
+        _write_kraken_control_json(bot_key, request.paused)
+
+    updated = _load_current_kraken_params(db_id) or {}
+    return {
+        "status": "ok",
+        "bot_id": bot_id,
+        "applied": params,
+        "current": {k: v for k, v in updated.items() if k in BOUNDS},
+        "override_expires_at": updated.get("override_expires_at"),
+        "paused": bool(updated.get("paused", False)),
+    }
+
+
+@parameters_router.post("/kraken/{bot_id}/pause")
+async def pause_kraken(bot_id: str, request: PauseRequest) -> dict:
+    """Pause or resume a Kraken bot (writes to DB + control.json immediately)."""
+    bot_key = _kraken_bot_id_to_key(bot_id)
+    if not bot_key:
+        raise HTTPException(404, f"Unknown Kraken bot: {bot_id}. Valid: davy-jones, blackbeard, calypso")
+
+    from analysis.fleet_enforcer import BOT_ID_TO_DB_ID, _write_kraken_params, _load_current_kraken_params, BOUNDS
+    db_id = BOT_ID_TO_DB_ID.get(bot_key)
+    if not db_id:
+        raise HTTPException(404, f"No DB ID for bot: {bot_key}")
+
+    # Load existing params and preserve them
+    existing = _load_current_kraken_params(db_id) or {}
+    params = {k: existing[k] for k in BOUNDS if k in existing}
+    params["paused"] = request.paused
+
+    ok = _write_kraken_params(
+        db_id, bot_key, params,
+        reasoning=request.reasoning,
+        ttl_hours=24,
+        source="operator_ui_pause",
+    )
+    if not ok:
+        raise HTTPException(500, f"Failed to toggle pause state for {bot_id}")
+
+    # Immediately propagate to running bot via control.json
+    _write_kraken_control_json(bot_key, request.paused)
+
+    return {
+        "status": "ok",
+        "bot_id": bot_id,
+        "paused": request.paused,
+    }
+
+
+# ── Reset endpoints ────────────────────────────────────────────────────────────
+
 @parameters_router.post("/oracle/reset")
 async def reset_oracle() -> dict:
     ok = reset_oracle_params(source="operator_ui_reset")
@@ -247,22 +401,18 @@ async def reset_bot_params(bot_id: str) -> dict:
         return {"status": "ok", "bot_id": "navigator", "current": get_navigator_params()}
 
     # Kraken bots
-    kraken_map = {"davy-jones": "davy_jones", "davy_jones": "davy_jones",
-                  "blackbeard": "blackbeard", "calypso": "calypso"}
-    bot_key = kraken_map.get(bot_id)
+    bot_key = _kraken_bot_id_to_key(bot_id)
     if not bot_key:
         raise HTTPException(404, f"Unknown bot_id: {bot_id}. Valid: oracle, navigator, davy-jones, blackbeard, calypso")
 
     try:
-        from analysis.fleet_enforcer import BOT_ID_TO_DB_ID, _write_kraken_params
-        from routes.fleet_chat import _BOT_DEFAULTS
+        from analysis.fleet_enforcer import BOT_ID_TO_DB_ID, _revert_kraken_to_defaults, KRAKEN_DEFAULTS
         db_id = BOT_ID_TO_DB_ID.get(bot_key)
         if not db_id:
             raise HTTPException(404, f"No DB ID for bot: {bot_key}")
-        defaults = _BOT_DEFAULTS.get(bot_key, {})
-        ok = _write_kraken_params(db_id, bot_key, defaults, "operator_ui_reset")
-        if not ok:
-            raise HTTPException(500, f"Failed to reset {bot_id} parameters")
-        return {"status": "ok", "bot_id": bot_id, "applied_defaults": defaults}
+        _revert_kraken_to_defaults(db_id)
+        # Also unpause via control.json
+        _write_kraken_control_json(bot_key, False)
+        return {"status": "ok", "bot_id": bot_id, "applied_defaults": KRAKEN_DEFAULTS}
     except ImportError as exc:
         raise HTTPException(500, f"Internal error: {exc}")

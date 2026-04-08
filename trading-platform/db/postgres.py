@@ -423,6 +423,9 @@ _PARAM_MIGRATION_SQL = [
     "UPDATE ai_parameter_audit SET parameter_name = param_name WHERE parameter_name IS NULL",
     # Kraken adaptive params: add paused column
     "ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE",
+    # Kraken adaptive params: add override TTL tracking
+    "ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS override_set_at TIMESTAMPTZ",
+    "ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS override_expires_at TIMESTAMPTZ",
 ]
 
 

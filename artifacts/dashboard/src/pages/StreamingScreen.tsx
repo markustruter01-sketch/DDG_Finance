@@ -33,7 +33,7 @@ function useViewportScale() {
 }
 
 export default function StreamingScreen() {
-  const { trades, wins, losses } = useRealFeed(30);
+  const { trades, wins, losses, openPositions } = useRealFeed(30);
   const celebrations = useRealCelebrations();
   const scale = useViewportScale();
 
@@ -59,7 +59,7 @@ export default function StreamingScreen() {
 
           <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
             <div className="col-span-3 min-h-0 flex flex-col">
-              <Scoreboard wins={wins} losses={losses} recentTrades={trades} />
+              <Scoreboard wins={wins} losses={losses} recentTrades={trades} openPositions={openPositions} />
             </div>
 
             <div className="col-span-6 min-h-0 flex flex-col gap-1.5 relative">

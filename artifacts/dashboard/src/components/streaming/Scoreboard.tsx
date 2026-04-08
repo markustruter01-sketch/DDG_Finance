@@ -1,12 +1,13 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import type { RealTrade } from "./useRealFeed";
+import type { RealTrade, OpenPosition } from "./useRealFeed";
 import { onTradePulse } from "./tradePulseEvents";
 
 interface ScoreboardProps {
   wins: number;
   losses: number;
   recentTrades: RealTrade[];
+  openPositions: OpenPosition[];
 }
 
 function formatPnlUsd(v: number): string {
@@ -30,7 +31,8 @@ function timeAgo(dateStr: string): string {
 
 const RELOAD_INTERVAL = 15000;
 const STAGGER_DELAY = 0.06;
-const MAX_VISIBLE = 20;
+const MAX_CLOSED = 6;
+const MAX_OPEN = 6;
 
 const BOT_COLORS: Record<string, string> = {
   "Oracle": "#8b5cf6",
@@ -113,7 +115,86 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
   );
 }
 
-export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
+function OpenPositionRow({ position }: { position: OpenPosition }) {
+  const usdPositive = position.pnlUsd >= 0;
+  const pctPositive = position.pnlPct >= 0;
+  const netPositive = position.pnlUsd !== 0 ? usdPositive : pctPositive;
+  const usdColor = usdPositive ? "#00ff88" : "#ff8c00";
+  const pctColor = netPositive ? "#00ff88" : "#ff8c00";
+  const bgColor = netPositive ? "rgba(34,197,94,0.03)" : "rgba(249,115,22,0.03)";
+  const botColor = BOT_COLORS[position.bot] ?? "#64748b";
+
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-2 border-b font-mono"
+      style={{ backgroundColor: bgColor, borderBottomColor: "rgba(255,255,255,0.04)" }}
+    >
+      <span
+        className="shrink-0 flex items-center gap-1.5 rounded-lg px-2 py-1"
+        style={{
+          backgroundColor: `${botColor}18`,
+          border: `1px solid ${botColor}35`,
+        }}
+      >
+        <span style={{ fontSize: 14, lineHeight: 1 }}>{position.icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.05em", lineHeight: 1, color: botColor }}>
+          {getBotAbbrev(position.bot)}
+        </span>
+      </span>
+      {position.side && (
+        <span
+          className="shrink-0 rounded px-1 py-0.5"
+          style={{
+            fontSize: 9,
+            fontWeight: 900,
+            letterSpacing: "0.05em",
+            lineHeight: 1,
+            color: position.side === "short" ? "#f87171" : "#4ade80",
+            backgroundColor: position.side === "short" ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.1)",
+            border: `1px solid ${position.side === "short" ? "rgba(248,113,113,0.2)" : "rgba(74,222,128,0.2)"}`,
+          }}
+        >
+          {position.side === "short" ? "SHORT" : "LONG"}
+        </span>
+      )}
+      <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(203,213,225,0.85)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {position.symbol}
+      </span>
+      <span className="ml-auto flex items-center gap-2 shrink-0">
+        {position.pnlUsd !== 0 && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: usdColor }}>
+            {formatPnlUsd(position.pnlUsd)}
+          </span>
+        )}
+        <span style={{ fontSize: 12, fontWeight: 700, color: pctColor }}>
+          {pctPositive ? "+" : ""}{position.pnlPct.toFixed(2)}%
+        </span>
+        <LiveDot />
+      </span>
+    </div>
+  );
+}
+
+function LiveDot() {
+  return (
+    <span className="shrink-0 flex items-center gap-1">
+      <motion.span
+        style={{
+          display: "inline-block",
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          backgroundColor: "#22d3ee",
+          boxShadow: "0 0 6px rgba(34,211,238,0.8)",
+        }}
+        animate={{ opacity: [1, 0.3, 1] }}
+        transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+      />
+    </span>
+  );
+}
+
+export function Scoreboard({ wins, losses, recentTrades, openPositions }: ScoreboardProps) {
   const [cycle, setCycle] = useState(0);
   const [visibleCount, setVisibleCount] = useState(recentTrades.length);
   const [winPulse, setWinPulse] = useState(false);
@@ -141,14 +222,15 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
   }, []);
 
   useEffect(() => {
-    if (visibleCount >= Math.min(recentTrades.length, MAX_VISIBLE)) return;
+    if (visibleCount >= Math.min(recentTrades.length, MAX_CLOSED)) return;
     const timer = setTimeout(() => {
       setVisibleCount((c) => c + 1);
     }, STAGGER_DELAY * 1000);
     return () => clearTimeout(timer);
   }, [visibleCount, recentTrades.length, cycle]);
 
-  const visible = recentTrades.slice(0, MAX_VISIBLE);
+  const visibleClosed = recentTrades.slice(0, MAX_CLOSED);
+  const visibleOpen = openPositions.slice(0, MAX_OPEN);
 
   return (
     <div className="flex flex-col gap-2 flex-1 min-h-0">
@@ -237,12 +319,33 @@ export function Scoreboard({ wins, losses, recentTrades }: ScoreboardProps) {
           </motion.span>
           <span className="text-[13px] font-mono font-bold px-2.5 py-0.5 rounded-md border border-cyan-400/20" style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>{recentTrades.length}</span>
         </div>
-        <div className="flex-1 overflow-auto min-h-0">
-            {visible.slice(0, visibleCount).map((trade) => (
-              <TradeRow key={`${cycle}-${trade.id}`} trade={trade} cycle={cycle} />
-            ))}
+        <div className="overflow-hidden" style={{ flex: "1 1 0" }}>
+          {visibleClosed.slice(0, visibleCount).map((trade) => (
+            <TradeRow key={`${cycle}-${trade.id}`} trade={trade} cycle={cycle} />
+          ))}
           {recentTrades.length === 0 && (
             <div className="text-[12px] font-mono text-center py-6" style={{ color: "rgba(148,163,184,0.3)" }}>No closed trades yet</div>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-cyan-500/10 bg-slate-900/60 min-h-0 flex flex-col" style={{ flex: "1 1 0" }}>
+        <div className="px-3 py-2.5 border-b border-white/10 shrink-0 flex items-center justify-between">
+          <span
+            className="text-[16px] uppercase font-black tracking-wider flex items-center gap-2"
+            style={{ color: "#22d3ee", textShadow: "0 0 10px rgba(34,211,238,0.2)" }}
+          >
+            Open Trades
+            <LiveDot />
+          </span>
+          <span className="text-[13px] font-mono font-bold px-2.5 py-0.5 rounded-md border border-cyan-400/20" style={{ color: "#22d3ee", backgroundColor: "rgba(34,211,238,0.1)" }}>{openPositions.length}</span>
+        </div>
+        <div className="overflow-hidden" style={{ flex: "1 1 0" }}>
+          {visibleOpen.map((pos) => (
+            <OpenPositionRow key={pos.id} position={pos} />
+          ))}
+          {openPositions.length === 0 && (
+            <div className="text-[12px] font-mono text-center py-6" style={{ color: "rgba(148,163,184,0.2)" }}>No open positions</div>
           )}
         </div>
       </div>

@@ -713,7 +713,7 @@ function ExportReportButton() {
 
 function EmailReportButton() {
   const [loading, setLoading] = useState(false);
-  const [modal, setModal] = useState<{ subject: string; body: string; mailto: string } | null>(null);
+  const [modal, setModal] = useState<{ subject: string; body: string } | null>(null);
   const [copied, setCopied] = useState<"subject" | "body" | null>(null);
 
   const handleEmail = async () => {
@@ -748,8 +748,7 @@ function EmailReportButton() {
         body = body.slice(0, maxLen) + "\n\n[Report truncated — use Export Report for full files]";
       }
 
-      const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      setModal({ subject, body, mailto });
+      setModal({ subject, body });
     } catch {
       alert("Failed to generate report for email — check that the trading API is running.");
     } finally {
@@ -777,15 +776,7 @@ function EmailReportButton() {
     }
   };
 
-  const openMailto = () => {
-    if (!modal) return;
-    const a = document.createElement("a");
-    a.href = modal.mailto;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
+  const closeModal = () => setModal(null);
 
   return (
     <>
@@ -810,87 +801,187 @@ function EmailReportButton() {
             justifyContent: "center",
             padding: "16px",
           }}
-          onClick={() => setModal(null)}
+          onClick={closeModal}
         >
           <div
             style={{
-              backgroundColor: "#0a0f1a",
-              border: "1px solid rgba(59,130,246,0.25)",
+              backgroundColor: "#0d1117",
+              border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: "12px",
               width: "100%",
-              maxWidth: "720px",
-              maxHeight: "85vh",
+              maxWidth: "680px",
+              maxHeight: "90vh",
               display: "flex",
               flexDirection: "column",
-              boxShadow: "0 0 60px rgba(59,130,246,0.1)",
+              fontFamily: "monospace",
+              color: "#e6edf3",
+              boxShadow: "0 0 40px rgba(0,0,0,0.8)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <span style={{ fontFamily: "monospace", fontSize: "13px", fontWeight: 700, color: "#e2e8f0", letterSpacing: "0.05em" }}>
-                EMAIL REPORT READY
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "1rem 1.25rem",
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#58a6ff" }}>
+                Email Report Ready
               </span>
               <button
-                onClick={() => setModal(null)}
-                style={{ background: "none", border: "none", color: "rgba(148,163,184,0.7)", cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "2px 6px" }}
+                onClick={closeModal}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#8b949e",
+                  cursor: "pointer",
+                  fontSize: "1.1rem",
+                  lineHeight: 1,
+                  padding: "0.25rem",
+                }}
               >
-                ×
+                ✕
               </button>
             </div>
 
             {/* Subject row */}
-            <div style={{ padding: "14px 20px 0", display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontFamily: "monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(148,163,184,0.5)", whiteSpace: "nowrap" }}>
-                Subject
-              </span>
-              <div style={{ flex: 1, fontFamily: "monospace", fontSize: "12px", color: "#94a3b8", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "6px", padding: "7px 10px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {modal.subject}
+            <div style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                <span style={{ fontSize: "0.7rem", color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Subject
+                </span>
               </div>
-              <button
-                onClick={() => copyText(modal.subject, "subject")}
-                style={{ fontFamily: "monospace", fontSize: "10px", padding: "6px 10px", borderRadius: "6px", border: "1px solid rgba(59,130,246,0.3)", background: copied === "subject" ? "rgba(34,197,94,0.15)" : "rgba(59,130,246,0.08)", color: copied === "subject" ? "#4ade80" : "#60a5fa", cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}
-              >
-                {copied === "subject" ? "✓ Copied" : "Copy"}
-              </button>
-            </div>
-
-            {/* Body label + copy */}
-            <div style={{ padding: "12px 20px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: "monospace", fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(148,163,184,0.5)" }}>
-                Body — {modal.body.length.toLocaleString()} chars
-              </span>
-              <button
-                onClick={() => copyText(modal.body, "body")}
-                style={{ fontFamily: "monospace", fontSize: "10px", padding: "5px 10px", borderRadius: "6px", border: "1px solid rgba(59,130,246,0.3)", background: copied === "body" ? "rgba(34,197,94,0.15)" : "rgba(59,130,246,0.08)", color: copied === "body" ? "#4ade80" : "#60a5fa", cursor: "pointer", transition: "all 0.15s" }}
-              >
-                {copied === "body" ? "✓ Copied" : "Copy Body"}
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  readOnly
+                  value={modal.subject}
+                  style={{
+                    flex: 1,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "0.375rem",
+                    color: "#e6edf3",
+                    fontFamily: "monospace",
+                    fontSize: "0.8rem",
+                    padding: "0.4rem 0.6rem",
+                    outline: "none",
+                  }}
+                />
+                <button
+                  onClick={() => copyText(modal.subject, "subject")}
+                  style={{
+                    background: copied === "subject" ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "0.375rem",
+                    color: copied === "subject" ? "#4ade80" : "#8b949e",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontFamily: "monospace",
+                    padding: "0.4rem 0.75rem",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {copied === "subject" ? "✓ Copied" : "Copy"}
+                </button>
+              </div>
             </div>
 
             {/* Body textarea */}
-            <div style={{ flex: 1, minHeight: 0, padding: "0 20px" }}>
+            <div style={{ padding: "0.875rem 1.25rem", flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                <span style={{ fontSize: "0.7rem", color: "#8b949e", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Body — {modal.body.length.toLocaleString()} chars
+                </span>
+                <button
+                  onClick={() => copyText(modal.body, "body")}
+                  style={{
+                    background: copied === "body" ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: "0.375rem",
+                    color: copied === "body" ? "#4ade80" : "#8b949e",
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                    fontFamily: "monospace",
+                    padding: "0.3rem 0.65rem",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {copied === "body" ? "✓ Copied" : "Copy Body"}
+                </button>
+              </div>
               <textarea
                 readOnly
                 value={modal.body}
-                style={{ width: "100%", height: "340px", resize: "none", fontFamily: "monospace", fontSize: "11px", lineHeight: 1.6, color: "rgba(148,163,184,0.75)", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "6px", padding: "10px", outline: "none", boxSizing: "border-box" }}
+                style={{
+                  flex: 1,
+                  minHeight: "280px",
+                  maxHeight: "380px",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "0.375rem",
+                  color: "#8b949e",
+                  fontFamily: "monospace",
+                  fontSize: "0.72rem",
+                  lineHeight: 1.5,
+                  padding: "0.6rem 0.75rem",
+                  resize: "none",
+                  outline: "none",
+                  overflowY: "auto",
+                }}
               />
             </div>
 
             {/* Footer */}
-            <div style={{ padding: "14px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: "10px", justifyContent: "flex-end" }}>
-              <span style={{ fontFamily: "monospace", fontSize: "10px", color: "rgba(148,163,184,0.4)", marginRight: "auto" }}>
-                Copy subject + body, then paste into your email client
-              </span>
-              <button
-                onClick={openMailto}
-                style={{ fontFamily: "monospace", fontSize: "11px", padding: "7px 14px", borderRadius: "6px", border: "1px solid rgba(59,130,246,0.35)", background: "rgba(59,130,246,0.1)", color: "#60a5fa", cursor: "pointer" }}
+            <div
+              style={{
+                display: "flex",
+                gap: "0.5rem",
+                justifyContent: "flex-end",
+                padding: "0.875rem 1.25rem",
+                borderTop: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <a
+                href={`mailto:?subject=${encodeURIComponent(modal.subject)}&body=${encodeURIComponent(modal.body)}`}
+                style={{
+                  background: "rgba(88,166,255,0.12)",
+                  border: "1px solid rgba(88,166,255,0.3)",
+                  borderRadius: "0.375rem",
+                  color: "#58a6ff",
+                  cursor: "pointer",
+                  fontSize: "0.78rem",
+                  fontFamily: "monospace",
+                  padding: "0.45rem 0.9rem",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  transition: "background 0.15s",
+                }}
               >
-                Open Email Client ↗
-              </button>
+                <Mail style={{ width: "0.85rem", height: "0.85rem" }} />
+                Open Email Client
+              </a>
               <button
-                onClick={() => setModal(null)}
-                style={{ fontFamily: "monospace", fontSize: "11px", padding: "7px 14px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "rgba(148,163,184,0.7)", cursor: "pointer" }}
+                onClick={closeModal}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "0.375rem",
+                  color: "#8b949e",
+                  cursor: "pointer",
+                  fontSize: "0.78rem",
+                  fontFamily: "monospace",
+                  padding: "0.45rem 0.9rem",
+                  transition: "color 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#e6edf3")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#8b949e")}
               >
                 Close
               </button>

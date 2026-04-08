@@ -1,18 +1,14 @@
 import { useMemo, useRef, useEffect, useState } from "react";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
-  useStatusSummary, usePlatformStatus,
+  useStatusSummary,
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useOptionsState, useForexState,
-  useOptionsPositions, useForexPositions,
-  useJournal, useRecentTrades, useForexTrades,
-  useVault, useManualSweep, useEquityCurve,
+  useJournal, useEquityCurve,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
 import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
-import { FleetCommanderPanel } from "@/components/FleetCommanderPanel";
-import { RiskMetricsPanel } from "@/components/RiskMetricsPanel";
 import { AIImpactTimeline } from "@/components/AIImpactTimeline";
 import { SystemDegradationLog } from "@/components/SystemDegradationLog";
 import { BlackoutBanner } from "@/components/EconomicCalendarBanner";
@@ -20,7 +16,6 @@ import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   EXPECTED_JOBS, tradingModeLabel, tradingModeColor,
-  BOT_THEMES,
 } from "@/lib/dashboard-shared";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -28,13 +23,11 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import {
   Activity, ShieldAlert, TrendingUp,
   WifiOff, AlertTriangle, Brain,
-  RefreshCw, History,
-  Vault, ArrowUpRight, Coins, Target,
   ExternalLink,
-  ArrowUp, ArrowDown, ArrowUpDown, Layers,
-  ChevronDown, FileText, Mail,
+  FileText, Mail,
+  DollarSign, Percent, Bot, BarChart2,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine,
@@ -356,98 +349,94 @@ function PositionChangeNotifier() {
   return null;
 }
 
-const FLEET_BOTS = [
-  { id: "oracle",       label: "Oracle #1",    icon: "🔮", accent: "#818cf8", type: "alpaca" as const },
-  { id: "davy-jones",   label: "Davy Jones #2", icon: "⚓", accent: "#22d3ee", type: "kraken" as const },
-  { id: "blackbeard",   label: "Blackbeard #3", icon: "🏴‍☠️", accent: "#f97316", type: "kraken" as const },
-  { id: "calypso",      label: "Calypso #4",   icon: "🌊", accent: "#a855f7", type: "kraken" as const },
-  { id: "apex-predator", label: "Apex #5",     icon: "🎯", accent: "#ef4444", type: "options" as const },
-  { id: "navigator",    label: "Navigator #6", icon: "🧭", accent: "#14b8a6", type: "forex" as const },
-];
 
-function FleetStatusBar() {
+function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
-  const { data: platformStatus } = usePlatformStatus();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
+  const { data: journal } = useJournal();
+
+  const alpacaEquity = summary?.portfolio_totals?.equity ?? 0;
+  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
+  const optionsEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? 100_000;
+  const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
+  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
+
+  const krakenPnl = fleetSummary?.bots?.reduce((s, b) => s + (b.pnl_usd ?? 0), 0) ?? 0;
+  const optionsPnl = optionsState?.total_pnl ?? 0;
+  const forexPnl = forexState?.total_pnl ?? 0;
+  const totalPnl = krakenPnl + optionsPnl + forexPnl;
+
+  const alpacaWins = journal?.summary?.wins ?? 0;
+  const alpacaTotal = journal?.summary?.total ?? 0;
+  const allPerfs = [davyPerf, bbPerf, caPerf].filter(Boolean);
+  const krakenWins = allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
+  const krakenTotal = allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
+  const optionsWins = optionsState?.total_wins ?? 0;
+  const optionsTotal = optionsState?.total_trades ?? 0;
+  const forexWins = forexState?.total_wins ?? 0;
+  const forexTotal = forexState?.total_trades ?? 0;
+  const totalWins = alpacaWins + krakenWins + optionsWins + forexWins;
+  const totalTrades = alpacaTotal + krakenTotal + optionsTotal + forexTotal;
+  const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
+
+  const botStatuses = summary?.bot_statuses ?? {};
+  const activeBotCount = Object.values(botStatuses).filter(
+    (b) => b.status === "running" || b.status === "idle"
+  ).length;
+  const totalBotCount = (fleetSummary?.bot_count ?? 3) + 3;
 
   const regime = summary?.groq?.regime ?? null;
   const tradingMode = summary?.trading_mode;
 
-  const getBotData = (botDef: typeof FLEET_BOTS[number]) => {
-    if (botDef.type === "alpaca") {
-      return {
-        equity: summary?.portfolio_totals?.equity ?? null,
-        pnl: null as number | null,
-        positions: summary?.position_count ?? 0,
-        online: summary != null,
-        status: tradingMode === "full_market" ? "running" : tradingMode === "crypto_only" ? "paused" : "idle",
-        cycles: summary?.system_health?.run_count ?? 0,
-        lastCycle: platformStatus?.last_run?.last_run_utc ?? null,
-      };
-    }
-    if (botDef.type === "kraken") {
-      const bot = fleetSummary?.bots?.find(b => b.bot_id === botDef.id);
-      const perf = botDef.id === "davy-jones" ? davyPerf : botDef.id === "blackbeard" ? bbPerf : caPerf;
-      const lastTrade = perf?.recent_trades?.[0]?.closed_at ?? null;
-      return {
-        equity: bot?.equity_usd ?? null,
-        pnl: bot?.pnl_usd ?? null,
-        positions: bot?.trades ?? 0,
-        online: bot != null,
-        status: perf?.bot_status ?? (bot ? "running" : "offline"),
-        cycles: perf?.cycle_count ?? 0,
-        lastCycle: lastTrade,
-      };
-    }
-    if (botDef.type === "options") {
-      return {
-        equity: optionsState?.total_equity ?? optionsState?.paper_equity ?? null,
-        pnl: optionsState?.total_pnl ?? null,
-        positions: optionsState?.positions_count ?? 0,
-        online: optionsState?.status === "running" || optionsState?.status === "idle",
-        status: optionsState?.paused ? "paused" : optionsState?.status ?? "offline",
-        cycles: optionsState?.cycle_count ?? 0,
-        lastCycle: optionsState?.last_scan ?? null,
-      };
-    }
-    return {
-      equity: forexState?.total_equity ?? forexState?.paper_equity ?? null,
-      pnl: forexState?.total_pnl ?? null,
-      positions: forexState?.position_count ?? 0,
-      online: forexState?.status === "running" || forexState?.status === "idle",
-      status: forexState?.paused ? "paused" : forexState?.status ?? "offline",
-      cycles: forexState?.cycle_count ?? 0,
-      lastCycle: forexState?.last_scan ?? null,
-    };
-  };
-
-  const normalizeStatus = (s: string) => {
-    if (s === "running" || s === "idle") return "running";
-    if (s.startsWith("paused")) return "paused";
-    return "offline";
-  };
-
-  const statusColor = (s: string) => {
-    const ns = normalizeStatus(s);
-    if (ns === "running") return "text-green-400";
-    if (ns === "paused") return "text-amber-400";
-    return "text-slate-500";
-  };
+  const kpis = [
+    {
+      label: "Fleet Equity",
+      value: formatCurrency(grandTotal),
+      sub: `${totalBotCount} bots · 4 capital pools`,
+      icon: <DollarSign className="h-4 w-4 text-blue-400" />,
+      accent: "border-blue-500/20 bg-blue-500/5",
+      valueColor: "text-white",
+    },
+    {
+      label: "Total P&L",
+      value: `${totalPnl >= 0 ? "+" : ""}${formatCurrency(totalPnl)}`,
+      sub: "kraken + options + forex",
+      icon: <BarChart2 className="h-4 w-4 text-emerald-400" />,
+      accent: totalPnl >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5",
+      valueColor: totalPnl >= 0 ? "text-emerald-400" : "text-red-400",
+    },
+    {
+      label: "Fleet Win Rate",
+      value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—",
+      sub: `${totalWins}W / ${totalTrades - totalWins}L across all bots`,
+      icon: <Percent className="h-4 w-4 text-amber-400" />,
+      accent: combinedWinRate != null && combinedWinRate >= 50 ? "border-amber-500/20 bg-amber-500/5" : "border-red-500/20 bg-red-500/5",
+      valueColor: combinedWinRate != null && combinedWinRate >= 50 ? "text-amber-400" : "text-red-400",
+    },
+    {
+      label: "Active Bots",
+      value: `${activeBotCount} / ${totalBotCount}`,
+      sub: tradingMode ? tradingModeLabel(tradingMode) : "—",
+      icon: <Bot className="h-4 w-4 text-violet-400" />,
+      accent: "border-violet-500/20 bg-violet-500/5",
+      valueColor: "text-violet-400",
+    },
+  ];
 
   return (
-    <div className="rounded-xl border border-white/5 bg-slate-900/40 overflow-hidden">
+    <div className="space-y-2">
       {regime && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-white/[0.02] border-b border-white/5 text-[9px]">
+        <div className="flex items-center gap-2 text-[9px]">
           <span className="text-muted-foreground/50 uppercase tracking-wider font-semibold">Regime</span>
-          <span className="font-mono text-white/70">{regime}</span>
+          <span className="font-mono text-white/60">{regime}</span>
           {tradingMode && (
             <>
-              <span className="text-muted-foreground/30">|</span>
+              <span className="text-muted-foreground/30">·</span>
               <span className={cn("font-mono font-semibold", tradingModeColor(tradingMode))}>
                 {tradingModeLabel(tradingMode)}
               </span>
@@ -455,39 +444,27 @@ function FleetStatusBar() {
           )}
         </div>
       )}
-      <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-white/5">
-        {FLEET_BOTS.map((bot) => {
-          const d = getBotData(bot);
-          const pnlUp = (d.pnl ?? 0) >= 0;
-          return (
-            <div key={bot.id} className="px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-xs">{bot.icon}</span>
-                <span className="text-[9px] font-bold text-white/80 truncate uppercase tracking-wider">{bot.label.split(" ")[0]}</span>
-                <span
-                  className={cn("ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0", d.online ? "bg-green-500" : "bg-slate-600")}
-                />
-              </div>
-              <div className="text-[10px] font-mono text-white/60 tabular-nums">
-                {d.equity != null ? formatCurrency(d.equity) : "—"}
-              </div>
-              <div className={cn("text-[9px] font-mono font-semibold tabular-nums", pnlUp ? "text-green-400/70" : "text-red-400/70")}>
-                {d.pnl != null ? `${pnlUp ? "+" : ""}${formatCurrency(d.pnl)}` : "—"}
-              </div>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className={cn("text-[8px] font-semibold uppercase tracking-wider", statusColor(d.status))}>
-                  {normalizeStatus(d.status) === "running" ? "RUN" : normalizeStatus(d.status) === "paused" ? "PAUSE" : "OFF"}
-                </span>
-                <span className="text-[8px] text-muted-foreground/40 font-mono">c{d.cycles}</span>
-                {d.lastCycle && (
-                  <span className="text-[7px] text-muted-foreground/30 font-mono ml-auto" title={d.lastCycle}>
-                    {(() => { try { const dt = new Date(d.lastCycle); const now = Date.now(); const mins = Math.floor((now - dt.getTime()) / 60000); return mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`; } catch { return ""; } })()}
-                  </span>
-                )}
-              </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((kpi) => (
+          <div
+            key={kpi.label}
+            className={cn(
+              "rounded-xl border px-5 py-4 flex flex-col gap-2",
+              kpi.accent
+            )}
+          >
+            <div className="flex items-center gap-2">
+              {kpi.icon}
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                {kpi.label}
+              </span>
             </div>
-          );
-        })}
+            <div className={cn("text-2xl font-mono font-bold tabular-nums leading-none", kpi.valueColor)}>
+              {kpi.value}
+            </div>
+            <div className="text-[10px] text-muted-foreground/50">{kpi.sub}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -671,650 +648,6 @@ function LiveEquityCurveSection() {
   );
 }
 
-type PositionSortKey = "bot" | "pnl" | "size" | "symbol";
-type SortDir = "asc" | "desc";
-
-interface UnifiedPosition {
-  id: string;
-  bot: string;
-  botLabel: string;
-  botColor: string;
-  symbol: string;
-  side: string;
-  qty: number;
-  entryPrice: number;
-  currentPrice: number;
-  sizeUsd: number;
-  pnlUsd: number;
-  pnlPct: number;
-  entryTime: string | null;
-}
-
-const BOT_COLORS: Record<string, string> = {
-  oracle: "#f59e0b",
-  "davy-jones": "#3b82f6",
-  blackbeard: "#a855f7",
-  calypso: "#ec4899",
-  "apex-predator": "#ef4444",
-  navigator: "#14b8a6",
-};
-
-function formatTimeHeld(entryTime: string | null): string {
-  if (!entryTime) return "—";
-  const ms = Date.now() - new Date(entryTime).getTime();
-  if (ms < 0) return "—";
-  const mins = Math.floor(ms / 60000);
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ${hrs % 24}h`;
-}
-
-function ConsolidatedPositionsTable() {
-  const { data: alpacaData } = useLivePositions();
-  const { data: davyStatus } = useKrakenStatus("davy-jones");
-  const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: optionsData } = useOptionsPositions();
-  const { data: forexData } = useForexPositions();
-
-  const [sortKey, setSortKey] = useState<PositionSortKey>("pnl");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [filterBot, setFilterBot] = useState<string>("all");
-
-  const positions = useMemo<UnifiedPosition[]>(() => {
-    const rows: UnifiedPosition[] = [];
-
-    for (const p of alpacaData?.positions ?? []) {
-      rows.push({
-        id: `oracle-${p.symbol}`,
-        bot: "oracle",
-        botLabel: "Oracle #1",
-        botColor: BOT_COLORS.oracle,
-        symbol: p.symbol,
-        side: p.side === "long" ? "L" : "S",
-        qty: p.qty ?? 0,
-        entryPrice: p.avg_entry_price ?? 0,
-        currentPrice: p.current_price ?? 0,
-        sizeUsd: p.market_value ?? 0,
-        pnlUsd: p.unrealized_pl ?? 0,
-        pnlPct: (p.unrealized_plpc ?? 0) * 100,
-        entryTime: null,
-      });
-    }
-
-    const krakenSources: [string, string, typeof davyStatus][] = [
-      ["davy-jones", "Davy Jones #2", davyStatus],
-      ["blackbeard", "Blackbeard #3", bbStatus],
-      ["calypso", "Calypso #4", caStatus],
-    ];
-    for (const [botId, label, status] of krakenSources) {
-      for (const p of status?.open_positions ?? []) {
-        rows.push({
-          id: `${botId}-${p.symbol}`,
-          bot: botId,
-          botLabel: label,
-          botColor: BOT_COLORS[botId],
-          symbol: p.symbol,
-          side: p.side === "long" ? "L" : "S",
-          qty: p.qty ?? 0,
-          entryPrice: p.entry_price ?? 0,
-          currentPrice: p.current_price ?? 0,
-          sizeUsd: p.size_usd ?? 0,
-          pnlUsd: p.unrealized_pnl_usd ?? 0,
-          pnlPct: (p.unrealized_pnl_pct ?? 0) * 100,
-          entryTime: p.entry_time,
-        });
-      }
-    }
-
-    for (const p of optionsData?.positions ?? []) {
-      rows.push({
-        id: `apex-${p.id}`,
-        bot: "apex-predator",
-        botLabel: "Apex #5",
-        botColor: BOT_COLORS["apex-predator"],
-        symbol: `${p.symbol} ${p.strategy}`,
-        side: "L",
-        qty: p.contracts ?? 0,
-        entryPrice: p.premium_per_contract ?? 0,
-        currentPrice: (p.current_value ?? 0) / Math.max(p.contracts ?? 1, 1),
-        sizeUsd: p.total_cost ?? 0,
-        pnlUsd: p.unrealized_pnl ?? 0,
-        pnlPct: (p.unrealized_pnl_pct ?? 0) * 100,
-        entryTime: p.opened_at ?? p.scanned_at,
-      });
-    }
-
-    for (const p of forexData?.positions ?? []) {
-      rows.push({
-        id: `nav-${p.pair}`,
-        bot: "navigator",
-        botLabel: "Navigator #6",
-        botColor: BOT_COLORS.navigator,
-        symbol: p.pair,
-        side: p.direction === "long" ? "L" : "S",
-        qty: p.units ?? 0,
-        entryPrice: p.entry_price ?? 0,
-        currentPrice: p.current_price ?? 0,
-        sizeUsd: p.size_usd ?? 0,
-        pnlUsd: p.unrealized_pnl_usd ?? 0,
-        pnlPct: ((p.unrealized_pnl_usd ?? 0) / Math.max(p.size_usd ?? 1, 1)) * 100,
-        entryTime: p.entry_time,
-      });
-    }
-
-    return rows;
-  }, [alpacaData, davyStatus, bbStatus, caStatus, optionsData, forexData]);
-
-  const filtered = filterBot === "all" ? positions : positions.filter(p => p.bot === filterBot);
-
-  const sorted = useMemo(() => {
-    const arr = [...filtered];
-    const dir = sortDir === "asc" ? 1 : -1;
-    arr.sort((a, b) => {
-      switch (sortKey) {
-        case "bot": return dir * a.botLabel.localeCompare(b.botLabel);
-        case "symbol": return dir * a.symbol.localeCompare(b.symbol);
-        case "pnl": return dir * (a.pnlUsd - b.pnlUsd);
-        case "size": return dir * (a.sizeUsd - b.sizeUsd);
-        default: return 0;
-      }
-    });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  const toggleSort = (key: PositionSortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("desc"); }
-  };
-
-  const sortIcon = (key: PositionSortKey) => {
-    if (sortKey !== key) return <ArrowUpDown className="h-3 w-3 opacity-30" />;
-    return sortDir === "asc"
-      ? <ArrowUp className="h-3 w-3 text-amber-400" />
-      : <ArrowDown className="h-3 w-3 text-amber-400" />;
-  };
-
-  const activeBots = [...new Set(positions.map(p => p.bot))];
-
-  return (
-    <div className="bg-[#0d1117] border border-white/8 rounded-lg overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-amber-400" />
-          <h3 className="text-sm font-semibold text-white/90">Live Open Positions</h3>
-          <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-mono">{positions.length}</span>
-        </div>
-        <div className="flex items-center gap-1 flex-wrap">
-          <button
-            onClick={() => setFilterBot("all")}
-            className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors ${filterBot === "all" ? "bg-amber-500/20 text-amber-400" : "bg-white/5 text-white/40 hover:text-white/60"}`}
-          >All</button>
-          {activeBots.map(botId => {
-            const def = FLEET_BOTS.find(b => b.id === botId);
-            return (
-              <button
-                key={botId}
-                onClick={() => setFilterBot(botId)}
-                className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider transition-colors ${filterBot === botId ? "bg-amber-500/20 text-amber-400" : "bg-white/5 text-white/40 hover:text-white/60"}`}
-              >{def?.icon} {def?.label.split(" ")[0] ?? botId}</button>
-            );
-          })}
-        </div>
-      </div>
-
-      {sorted.length === 0 ? (
-        <div className="py-10 text-center text-white/30 text-xs font-mono">No open positions</div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-[10px] uppercase text-white/40 tracking-wider">
-                <th className="text-left px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("bot")}>
-                  <span className="flex items-center gap-1">Bot {sortIcon("bot")}</span>
-                </th>
-                <th className="text-left px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("symbol")}>
-                  <span className="flex items-center gap-1">Symbol {sortIcon("symbol")}</span>
-                </th>
-                <th className="text-center px-3 py-2">Side</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Entry</th>
-                <th className="text-right px-3 py-2">Current</th>
-                <th className="text-right px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("size")}>
-                  <span className="flex items-center gap-1 justify-end">Size {sortIcon("size")}</span>
-                </th>
-                <th className="text-right px-3 py-2 cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
-                  <span className="flex items-center gap-1 justify-end">P&L {sortIcon("pnl")}</span>
-                </th>
-                <th className="text-right px-3 py-2">Held</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(pos => (
-                <tr key={pos.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
-                  <td className="px-3 py-2">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: pos.botColor }} />
-                      <span className="text-white/70 font-medium">{pos.botLabel}</span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 font-mono text-white/90 font-semibold">{pos.symbol}</td>
-                  <td className="px-3 py-2 text-center">
-                    <span className={`font-mono font-semibold ${pos.side === "L" ? "text-green-400" : "text-red-400"}`}>{pos.side}</span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-white/70">{(pos.qty ?? 0).toLocaleString()}</td>
-                  <td className="px-3 py-2 text-right font-mono text-white/60">${pos.entryPrice.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-white/80">${pos.currentPrice.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-white/70">${pos.sizeUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex flex-col items-end">
-                      <span className={`font-mono font-semibold ${pos.pnlUsd >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        {pos.pnlUsd >= 0 ? "+" : ""}{pos.pnlUsd.toFixed(2)}
-                      </span>
-                      <span className={`text-[10px] ${pos.pnlPct >= 0 ? "text-green-400/60" : "text-red-400/60"}`}>
-                        {pos.pnlPct >= 0 ? "+" : ""}{pos.pnlPct.toFixed(2)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-white/50 text-[10px]">{formatTimeHeld(pos.entryTime)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type TradeFilter = "all" | "oracle" | "davy-jones" | "blackbeard" | "calypso" | "apex-predator" | "navigator";
-
-function CombinedTradeHistorySection() {
-  const { data: alpacaData, isLoading: alpacaLoading } = useRecentTrades(50);
-  const { data: davyPerf } = useKrakenPerformance("davy-jones");
-  const { data: bbPerf } = useKrakenPerformance("blackbeard");
-  const { data: caPerf } = useKrakenPerformance("calypso");
-  const { data: forexData, isLoading: forexLoading } = useForexTrades();
-  const { data: optionsState } = useOptionsState();
-  const [filter, setFilter] = useState<TradeFilter>("all");
-
-  const combined = useMemo(() => {
-    const alpacaRows = (alpacaData?.trades ?? []).map((t) => ({
-      source: "oracle" as const,
-      botId: "oracle" as const,
-      symbol: t.symbol,
-      side: t.pnl_pct >= 0 ? "long" : "short",
-      entry: null as number | null,
-      exit: null as number | null,
-      pnl_pct: t.pnl_pct,
-      pnl_usd: t.pnl_usd,
-      closed_at: t.closed_at,
-      reason: t.exit_reason ?? "",
-      is_win: (t.pnl_usd ?? 0) > 0,
-    }));
-    const makeKrakenRows = (trades: Array<{ symbol: string; side: string; entry_price: number; exit_price: number; pnl_pct: number; pnl_usd: number; reason: string; closed_at: string }> | undefined, botId: "davy-jones" | "blackbeard" | "calypso") =>
-      (trades ?? []).map((t) => ({
-        source: "kraken" as const,
-        botId,
-        symbol: t.symbol.replace("/USD", ""),
-        side: t.side,
-        entry: t.entry_price as number | null,
-        exit: t.exit_price as number | null,
-        pnl_pct: t.pnl_pct,
-        pnl_usd: t.pnl_usd,
-        closed_at: t.closed_at,
-        reason: t.reason ?? "",
-        is_win: (t.pnl_usd ?? 0) > 0,
-      }));
-    const davyRows = makeKrakenRows(davyPerf?.recent_trades, "davy-jones");
-    const bbRows = makeKrakenRows(bbPerf?.recent_trades, "blackbeard");
-    const caRows = makeKrakenRows(caPerf?.recent_trades, "calypso");
-    const forexRows = (forexData?.trades ?? [])
-      .filter(t => t.status === "closed" && t.exit_time)
-      .map((t) => ({
-        source: "forex" as const,
-        botId: "navigator" as const,
-        symbol: t.pair,
-        side: t.direction,
-        entry: t.entry_price as number | null,
-        exit: t.exit_price as number | null,
-        pnl_pct: t.pnl_usd != null && t.entry_price > 0 ? (t.pnl_usd / (t.units * t.entry_price)) * 100 : 0,
-        pnl_usd: t.pnl_usd,
-        closed_at: t.exit_time!,
-        reason: "",
-        is_win: (t.pnl_usd ?? 0) > 0,
-      }));
-    return [...alpacaRows, ...davyRows, ...bbRows, ...caRows, ...forexRows]
-      .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
-      .slice(0, 80);
-  }, [alpacaData, davyPerf, bbPerf, caPerf, forexData]);
-
-  const filtered = filter === "all" ? combined : combined.filter(t => t.botId === filter);
-  const isLoading = alpacaLoading || forexLoading;
-  const wins = filtered.filter((t) => t.is_win).length;
-  const losses = filtered.length - wins;
-  const totalPnlUsd = filtered.reduce((s, t) => s + (t.pnl_usd ?? 0), 0);
-  const winRate = filtered.length > 0 ? Math.round((wins / filtered.length) * 100) : null;
-
-  const fmtDate = (s: string) => {
-    try {
-      const d = new Date(s);
-      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-    } catch {
-      return s.slice(0, 10);
-    }
-  };
-
-  const filterTabs: { id: TradeFilter; label: string; icon: string; color: string }[] = [
-    { id: "all",            label: "All",        icon: "",   color: "#3b82f6" },
-    { id: "oracle",         label: "Oracle",     icon: "🔮", color: "#818cf8" },
-    { id: "davy-jones",     label: "Davy Jones", icon: "⚓", color: "#22d3ee" },
-    { id: "blackbeard",     label: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
-    { id: "calypso",        label: "Calypso",    icon: "🌊", color: "#a855f7" },
-    { id: "apex-predator",  label: "Apex",       icon: "🎯", color: "#ef4444" },
-    { id: "navigator",      label: "Navigator",  icon: "🧭", color: "#14b8a6" },
-  ];
-
-  const sourceConfig: Record<string, { badge: string; badgeStyle: string }> = {
-    oracle:           { badge: "ORC", badgeStyle: "text-indigo-400 border-indigo-500/20 bg-indigo-500/5" },
-    "davy-jones":     { badge: "DJ",  badgeStyle: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5" },
-    blackbeard:       { badge: "BB",  badgeStyle: "text-orange-400 border-orange-500/20 bg-orange-500/5" },
-    calypso:          { badge: "CA",  badgeStyle: "text-purple-400 border-purple-500/20 bg-purple-500/5" },
-    "apex-predator":  { badge: "APX", badgeStyle: "text-red-400 border-red-500/20 bg-red-500/5" },
-    navigator:        { badge: "NAV", badgeStyle: "text-teal-400 border-teal-500/20 bg-teal-500/5" },
-  };
-
-  return (
-    <Card className="border-white/5 overflow-hidden">
-      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 sm:py-4">
-        <CardTitle className="flex flex-wrap items-center gap-2 fluid-heading">
-          <History className="h-4 w-4 text-primary" />
-          <span>Closed Trades</span>
-          {filtered.length > 0 && (
-            <div className="flex items-center gap-2 ml-auto">
-              <span className="text-[10px] font-mono text-green-400">{wins}W</span>
-              <span className="text-[10px] text-muted-foreground/40">/</span>
-              <span className="text-[10px] font-mono text-red-400">{losses}L</span>
-              {winRate != null && (
-                <span className={cn("text-[10px] font-mono font-bold border px-1.5 py-0.5 rounded-full",
-                  winRate >= 50 ? "text-green-400 border-green-500/20 bg-green-500/5" : "text-amber-400 border-amber-500/20 bg-amber-500/5"
-                )}>{winRate}% win</span>
-              )}
-              <span className={cn("text-xs font-mono font-semibold", totalPnlUsd >= 0 ? "text-green-400" : "text-red-400")}>
-                {totalPnlUsd >= 0 ? "+" : ""}{formatCurrency(totalPnlUsd)}
-              </span>
-            </div>
-          )}
-        </CardTitle>
-        <div className="flex items-center gap-1 mt-2">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={cn(
-                "px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all uppercase tracking-wider",
-                filter === tab.id
-                  ? "text-white"
-                  : "text-muted-foreground/50 hover:text-muted-foreground"
-              )}
-              style={filter === tab.id ? { backgroundColor: `${tab.color}25`, color: tab.color, border: `1px solid ${tab.color}40` } : undefined}
-            >
-              {tab.icon && <span className="mr-1">{tab.icon}</span>}
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-xs text-muted-foreground/50">
-            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            Loading trades…
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-            <History className="h-7 w-7 text-muted-foreground/15" />
-            <p className="text-xs text-muted-foreground/50">
-              {filter === "apex-predator" ? "No trade history available" : "No closed trades yet"}
-            </p>
-            <p className="text-[10px] text-muted-foreground/30">
-              {filter === "apex-predator" ? "Apex Predator reports aggregate stats only" : "History will appear here as positions close"}
-            </p>
-          </div>
-        ) : (
-          <div className="max-h-80 overflow-y-auto overflow-x-auto divide-y divide-white/5">
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-x-2 px-4 py-2 text-[9px] uppercase tracking-wider text-muted-foreground/50 sticky top-0 bg-slate-950/80 backdrop-blur-sm z-10 min-w-[640px]">
-              <span>Bot</span>
-              <span>Asset</span>
-              <span>Side</span>
-              <span className="text-right hidden md:block">Entry</span>
-              <span className="text-right hidden md:block">Exit</span>
-              <span className="text-right">P&amp;L %</span>
-              <span className="text-right hidden sm:block">P&amp;L $</span>
-              <span className="hidden lg:block">Reason</span>
-              <span className="text-right">Date</span>
-            </div>
-            {filtered.map((t, i) => {
-              const sc = sourceConfig[t.botId] ?? sourceConfig.oracle;
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-x-2 items-center px-4 py-2 text-[11px] transition-colors hover:bg-white/[0.02] min-w-[640px]",
-                    t.is_win ? "border-l-2 border-green-500/20" : "border-l-2 border-red-500/20"
-                  )}
-                >
-                  <span className={cn("text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0", sc.badgeStyle)}>
-                    {sc.badge}
-                  </span>
-                  <span className="font-mono font-bold text-white/90 truncate">{t.symbol}</span>
-                  <span className={cn(
-                    "text-[8px] font-semibold uppercase tracking-wider px-1 py-0.5 rounded shrink-0",
-                    t.side === "long"
-                      ? "text-green-400/80 bg-green-500/10"
-                      : "text-red-400/80 bg-red-500/10"
-                  )}>
-                    {t.side === "long" ? "L" : "S"}
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/50 text-right tabular-nums shrink-0 hidden md:block">
-                    {t.entry != null ? formatCurrency(t.entry) : "—"}
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/50 text-right tabular-nums shrink-0 hidden md:block">
-                    {t.exit != null ? formatCurrency(t.exit) : "—"}
-                  </span>
-                  <span className={cn("font-mono font-bold text-right tabular-nums shrink-0",
-                    t.is_win ? "text-green-400" : "text-red-400"
-                  )}>
-                    {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
-                  </span>
-                  <span className={cn("font-mono text-right tabular-nums text-[10px] shrink-0 hidden sm:block",
-                    t.pnl_usd != null
-                      ? t.is_win ? "text-green-400/60" : "text-red-400/60"
-                      : "text-muted-foreground/30"
-                  )}>
-                    {t.pnl_usd != null
-                      ? `${t.pnl_usd >= 0 ? "+" : ""}${formatCurrency(t.pnl_usd)}`
-                      : "—"}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground/40 truncate max-w-[80px] hidden lg:block" title={t.reason || undefined}>
-                    {t.reason || "—"}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground/50 font-mono text-right shrink-0">
-                    {fmtDate(t.closed_at)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function VaultPanel() {
-  const { data, isLoading } = useVault();
-  const sweep = useManualSweep();
-  const [lastResult, setLastResult] = useState<string | null>(null);
-
-  const handleSweep = async (dryRun: boolean) => {
-    const res = await sweep.mutateAsync(dryRun);
-    const r = res?.result;
-    if (r?.swept) {
-      setLastResult(`✓ Swept $${r.sweep_amount?.toFixed(2)} → ${r.vault_symbol} | New HWM: $${r.new_hwm?.toFixed(2)}`);
-    } else if (r?.reason === "first_run_hwm_initialised") {
-      setLastResult(`HWM initialised at $${r.hwm?.toFixed(2)}`);
-    } else if (r?.reason === "no_new_profit") {
-      setLastResult(`No new profit above HWM — vault unchanged`);
-    } else if (r?.reason === "sweep_below_minimum") {
-      setLastResult(`Eligible profit too small ($${r.sweep_amount?.toFixed(4)}) — minimum not met`);
-    } else {
-      setLastResult(r?.reason ?? "No action taken");
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5">
-        <CardContent className="p-5">
-          <div className="h-16 animate-pulse bg-white/5 rounded-lg" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const vaultSymbol = data?.vault_symbol ?? "JEPQ";
-  const isInit      = data?.initialised ?? false;
-  const hwm         = data?.hwm ?? 0;
-  const totalVaulted = data?.total_vaulted_usd ?? 0;
-  const totalSweeps  = data?.total_sweeps ?? 0;
-  const lastSweepAmt = data?.last_sweep_amount;
-  const lastSweepDate = data?.last_sweep_date;
-
-  return (
-    <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-amber-500/20 transition-all duration-500 relative overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-      <div className="absolute top-2 right-2 opacity-5">
-        <Vault className="h-16 w-16 text-amber-400" />
-      </div>
-
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <Vault className="h-3.5 w-3.5 text-amber-400" />
-          </div>
-          <span className="text-xs font-semibold text-amber-400/90 tracking-wider uppercase">
-            High-Yield Growth Vault
-          </span>
-          <span className="ml-auto text-[10px] font-mono text-amber-400/60 bg-amber-500/10 px-1.5 py-0.5 rounded">
-            {vaultSymbol}
-          </span>
-        </div>
-
-        {!isInit ? (
-          <p className="text-xs text-muted-foreground">
-            Vault not initialised — run an analysis cycle to set the High Water Mark.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/3 rounded-lg p-3 border border-white/5">
-                <div className="text-[10px] font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                  <Target className="h-3 w-3" /> High Water Mark
-                </div>
-                <div className="text-lg font-mono font-bold text-white">
-                  {formatCurrency(hwm)}
-                </div>
-              </div>
-              <div className="bg-amber-500/5 rounded-lg p-3 border border-amber-500/10">
-                <div className="text-[10px] font-medium text-amber-400/70 mb-1 flex items-center gap-1">
-                  <Coins className="h-3 w-3" /> Total Vaulted
-                </div>
-                <div className="text-lg font-mono font-bold text-amber-400">
-                  {formatCurrency(totalVaulted)}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-muted-foreground bg-white/3 rounded-lg px-3 py-2 border border-white/5">
-              <span className="flex items-center gap-1.5">
-                <ArrowUpRight className="h-3 w-3 text-green-400" />
-                {totalSweeps} sweep{totalSweeps !== 1 ? "s" : ""} completed
-              </span>
-              {lastSweepDate && lastSweepAmt && (
-                <span className="font-mono text-[10px] text-amber-400/70">
-                  Last: +{formatCurrency(lastSweepAmt)} on {lastSweepDate}
-                </span>
-              )}
-            </div>
-
-            <div className="text-[10px] text-muted-foreground/60 bg-white/2 rounded px-2 py-1.5 border border-white/5 leading-relaxed">
-              20% of new profits above HWM auto-swept into {vaultSymbol}. Vault shares are
-              protected — the AI cannot sell them.
-            </div>
-
-            {lastResult && (
-              <div className="text-[10px] font-mono text-green-400/80 bg-green-500/5 border border-green-500/10 rounded px-2 py-1.5">
-                {lastResult}
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleSweep(false)}
-                disabled={sweep.isPending}
-                className="flex-1 text-[11px] font-medium py-1.5 px-3 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/20 text-amber-400 transition-all disabled:opacity-50"
-              >
-                {sweep.isPending ? "Running…" : "Run Sweep"}
-              </button>
-              <button
-                onClick={() => handleSweep(true)}
-                disabled={sweep.isPending}
-                className="text-[11px] font-medium py-1.5 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-muted-foreground transition-all disabled:opacity-50"
-              >
-                Dry Run
-              </button>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CollapsibleSection({ title, icon, defaultOpen = false, children }: { title: string; icon?: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-xl border border-white/[0.06] bg-gradient-to-br from-slate-900/40 to-slate-950/40 overflow-hidden">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          {icon}
-          <span className="text-sm font-semibold text-white/80 tracking-wide">{title}</span>
-        </div>
-        <ChevronDown className={cn("h-4 w-4 text-muted-foreground/50 transition-transform duration-200", isOpen && "rotate-180")} />
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="px-1 pb-1">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function ExportReportButton() {
   const [loading, setLoading] = useState(false);
 
@@ -1427,7 +760,7 @@ export default function Dashboard() {
       </div>
       <ActivityTicker />
 
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 pb-28">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 pb-28">
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
           <SafeSection label="Trade Controls">
             <div className="relative rounded-2xl border border-primary/20 bg-gradient-to-br from-slate-900/80 to-slate-950/80 px-4 sm:px-7 py-4 sm:py-5 shadow-[0_0_60px_rgba(59,130,246,0.05)] overflow-hidden">
@@ -1442,20 +775,14 @@ export default function Dashboard() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
-          <SafeSection label="Fleet Status">
-            <FleetStatusBar />
+          <SafeSection label="Fleet KPIs">
+            <FleetKPISummary />
           </SafeSection>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
           <SafeSection label="Fleet Performance">
             <FleetPerformanceHero />
-          </SafeSection>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.07 }}>
-          <SafeSection label="AI Impact Timeline">
-            <AIImpactTimeline />
           </SafeSection>
         </motion.div>
 
@@ -1466,41 +793,12 @@ export default function Dashboard() {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
-          <SafeSection label="Live Positions">
-            <CollapsibleSection title="Live Open Positions" icon={<Layers className="h-4 w-4 text-blue-400/60" />} defaultOpen={false}>
-              <ConsolidatedPositionsTable />
-            </CollapsibleSection>
+          <SafeSection label="AI Impact Timeline">
+            <AIImpactTimeline />
           </SafeSection>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
-          <SafeSection label="Closed Trades">
-            <CollapsibleSection title="Closed Trade History" icon={<History className="h-4 w-4 text-amber-400/60" />} defaultOpen={false}>
-              <CombinedTradeHistorySection />
-            </CollapsibleSection>
-          </SafeSection>
-        </motion.div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <motion.div className="lg:col-span-2" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
-            <SafeSection label="Fleet Commander">
-              <FleetCommanderPanel />
-            </SafeSection>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
-            <SafeSection label="Vault">
-              <VaultPanel />
-            </SafeSection>
-          </motion.div>
-        </div>
-
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
-          <SafeSection label="Risk Metrics">
-            <RiskMetricsPanel />
-          </SafeSection>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
           <SafeSection label="System Health Log">
             <SystemDegradationLog />
           </SafeSection>
@@ -1509,3 +807,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

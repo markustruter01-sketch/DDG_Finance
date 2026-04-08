@@ -353,9 +353,9 @@ function PositionChangeNotifier() {
 function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
   const { data: portfolio } = usePortfolio();
-  const { data: fleetSummary } = useKrakenFleetSummary();
-  const { data: optionsState } = useOptionsState();
-  const { data: forexState } = useForexState();
+  const { data: fleetSummary, isLoading: krakenLoading } = useKrakenFleetSummary();
+  const { data: optionsState, isLoading: optionsLoading } = useOptionsState();
+  const { data: forexState, isLoading: forexLoading } = useForexState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
@@ -370,7 +370,8 @@ function FleetKPISummary() {
 
   // Only include equity pools that have actually loaded. krakenFleetEquity = 0 while
   // the Kraken summary API is still fetching — never add that to the grand total yet.
-  const krakenReady = krakenFleetEquity > 0;
+  const krakenReady = !krakenLoading && krakenFleetEquity > 0;
+  const anyLoading = krakenLoading || optionsLoading || forexLoading;
   const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
     + (krakenReady ? krakenFleetEquity : 0)
     + optionsEquity
@@ -407,11 +408,11 @@ function FleetKPISummary() {
   const kpis = [
     {
       label: "Fleet Equity",
-      value: formatCurrency(grandTotal),
+      value: anyLoading ? "—" : formatCurrency(grandTotal),
       sub: `${totalBotCount} bots · 4 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
-      valueColor: "text-white",
+      valueColor: anyLoading ? "text-slate-500" : "text-white",
     },
     {
       label: "Total P&L",

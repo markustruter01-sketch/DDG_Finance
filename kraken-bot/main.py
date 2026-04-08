@@ -2421,10 +2421,31 @@ def main() -> None:
     # We restore the counter so status reporting is accurate, but we no longer
     # activate a cooldown on restart.  If the streak is at or above the limit,
     # queue an emergency Gemini rebalance for the very first cycle instead.
+    #
+    # IMPORTANT: filter out losses that occurred BEFORE the last emergency
+    # rebalance — those were already handled and must not trigger a second one.
     try:
+        _last_er_at = _adaptive.get_last_emergency_rebalance_at()
         _recent = _db.get_recent_trades(limit=LOSS_STREAK_LIMIT + 5)
         _streak = 0
         for _rt in _recent:
+            # Skip trades that predate the last emergency rebalance
+            if _last_er_at is not None:
+                _closed = _rt.get("closed_at")
+                if _closed is not None:
+                    # closed_at may be a datetime or ISO string
+                    if isinstance(_closed, str):
+                        from datetime import datetime as _dt
+                        try:
+                            _closed = _dt.fromisoformat(_closed)
+                        except Exception:
+                            _closed = None
+                    if _closed is not None:
+                        import datetime as _dtmod
+                        if _closed.tzinfo is None:
+                            _closed = _closed.replace(tzinfo=_dtmod.timezone.utc)
+                        if _closed <= _last_er_at:
+                            break  # all older trades are pre-rebalance; streak is clean
             if (_rt.get("pnl_usd") or 0) < 0:
                 _streak += 1
             else:
@@ -2441,6 +2462,11 @@ def main() -> None:
                     f"LossStreak | Streak {_streak} >= limit on startup — "
                     f"Gemini emergency rebalance queued for first cycle (no cooldown)"
                 )
+        elif _last_er_at is not None:
+            logger.info(
+                f"LossStreak | All recent losses predate last emergency rebalance "
+                f"({_last_er_at.isoformat()}) — streak cleared, no rebalance needed"
+            )
     except Exception as _ls_exc:
         logger.warning(f"LossStreak | Could not restore streak from DB: {_ls_exc}")
 

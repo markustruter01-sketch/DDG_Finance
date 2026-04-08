@@ -365,8 +365,12 @@ def _load_persisted() -> dict | None:
 
 def _save(params: dict, metrics: dict | None) -> None:
     """Persist adapted params to PostgreSQL (primary). JSON file is NOT written."""
+    # Embed _er_at so the streak-reset survives restarts
+    params_with_meta = dict(params)
+    if _last_emergency_rebalance_at is not None:
+        params_with_meta["_er_at"] = _last_emergency_rebalance_at.isoformat()
     payload = {
-        "params":       params,
+        "params":       params_with_meta,
         "defaults":     DEFAULTS,
         "bounds":       {k: list(v) for k, v in BOUNDS.items()},
         "reasons":      dict(_last_reason),
@@ -386,9 +390,17 @@ def initialise() -> None:
     Call once at bot startup. Loads persisted params if they exist, otherwise
     starts from factory defaults and writes an initial snapshot.
     """
-    global _active
+    global _active, _last_emergency_rebalance_at
     persisted = _load_persisted()
     if persisted:
+        # Restore last emergency rebalance timestamp from embedded _er_at field
+        er_at_iso = persisted.pop("_er_at", None)
+        if er_at_iso:
+            try:
+                _last_emergency_rebalance_at = datetime.fromisoformat(er_at_iso)
+                logger.info(f"Adaptive | Restored last emergency rebalance at {er_at_iso}")
+            except Exception:
+                pass
         # Validate each key is still within current bounds before trusting it
         clean = {}
         for k, default in DEFAULTS.items():
@@ -401,6 +413,11 @@ def initialise() -> None:
         _active = dict(DEFAULTS)
         _save(_active, None)
         logger.info("Adaptive | No persisted params found — starting from factory defaults")
+
+
+def get_last_emergency_rebalance_at() -> "datetime | None":
+    """Return the UTC datetime of the last emergency rebalance, or None if never run."""
+    return _last_emergency_rebalance_at
 
 
 def _load_trades_for_adaptation() -> list[dict]:

@@ -563,15 +563,18 @@ async def _auto_heal_check() -> None:
             _degraded = True
             _severity = "critical"
         elif last_status == "analysis_failed":
-            _groq_exhausted_ah = False
-            try:
-                from analysis.groq_budget import budget as _gb_ah
-                _groq_exhausted_ah = _gb_ah.budget_exhausted()
-            except Exception:
-                pass
-            if not _groq_exhausted_ah:
-                _degraded = True
-                _severity = "error"
+            if not _mkt_open:
+                mark_resolved("platform_core", "auto_heal_detected")
+            else:
+                _groq_exhausted_ah = False
+                try:
+                    from analysis.groq_budget import budget as _gb_ah
+                    _groq_exhausted_ah = _gb_ah.budget_exhausted()
+                except Exception:
+                    pass
+                if not _groq_exhausted_ah:
+                    _degraded = True
+                    _severity = "error"
 
         if _degraded:
             record_degradation(
@@ -842,7 +845,8 @@ async def status_summary() -> dict:
             "display_name": "Apex Predator",
             "status": "paused" if opts_state.get("paused") else "running",
         }
-    except Exception:
+    except Exception as _apex_exc:
+        logger.debug(f"[STATUS] Apex Predator state unavailable: {_apex_exc}")
         bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}
 
     try:

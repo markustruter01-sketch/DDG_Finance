@@ -217,6 +217,11 @@ def _get_state() -> dict:
     return _load_json(STATE_FILE, default)
 
 
+def get_state() -> dict:
+    """Public interface for external status queries (used by the status summary endpoint)."""
+    return _get_state()
+
+
 def _save_state(state: dict):
     _save_json(STATE_FILE, state)
 

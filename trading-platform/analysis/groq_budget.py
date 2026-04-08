@@ -1,10 +1,10 @@
 """
-Groq Daily Token Budget Manager
+LLM Budget Manager (Gemini)
 ---------------------------------
-Tracks daily token consumption across all Groq API calls and enforces:
+Tracks daily token consumption across all Gemini API calls and enforces:
   1. A minimum interval between regime/crypto LLM calls (default 90 min).
   2. A daily cap on auto-triggered commentary calls per endpoint (default 4/day).
-  3. A hard daily token budget (default 100,000 TPD — free-tier limit).
+  3. A daily token budget (default 10M — effectively unlimited for Gemini).
 
 All counters reset at midnight UTC. Settings are fully configurable via
 settings.py (env vars GROQ_DAILY_TOKEN_BUDGET, GROQ_MIN_REGIME_INTERVAL_MINUTES,

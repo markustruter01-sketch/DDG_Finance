@@ -285,7 +285,7 @@ app = FastAPI(
     description=(
         "AI-driven macro quant trading system. "
         "FRED macro + Alpaca market data + NewsAPI → "
-        "Groq LLM (Llama 3.3 70B) → Kelly-sized 10-slot allocation → "
+        "Gemini (gemini-3-flash-preview) → Kelly-sized 10-slot allocation → "
         "Alpaca paper trading execution."
     ),
     version="3.0.0",

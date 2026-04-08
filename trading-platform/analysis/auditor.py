@@ -166,29 +166,40 @@ or ATR is expanding >15%.  A 'Bull' call is suspicious when ATR is expanding >20
 Flag any mismatch between the claimed regime and the heuristics above."""
 
     try:
-        client = Groq(api_key=settings.groq_api_key)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": _AUDITOR_SYSTEM_PROMPT},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.7,      # adversarial — higher than primary bot's 0.2
-            max_tokens=500,       # tight cap to conserve TPD budget
-            response_format={"type": "json_object"},
+        from analysis.gemini_auditor import _gemini_base_url, _gemini_api_key
+        import requests as _req
+        _url = f"{_gemini_base_url()}/models/gemini-3-flash-preview:generateContent"
+        _body = {
+            "system_instruction": {"parts": [{"text": _AUDITOR_SYSTEM_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 8192,
+                "temperature": 0.7,
+            },
+        }
+        _resp = _req.post(
+            _url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": _gemini_api_key()},
+            json=_body,
+            timeout=60,
         )
-        usage = response.usage
-        total_tokens = usage.total_tokens if usage else 0
+        if _resp.status_code != 200:
+            raise RuntimeError(f"Gemini HTTP {_resp.status_code}: {_resp.text[:200]}")
+        _data = _resp.json()
+        _usage = _data.get("usageMetadata", {})
+        _total = _usage.get("totalTokenCount", 0)
+        _text = _data["candidates"][0]["content"]["parts"][0]["text"]
         logger.info(
             f"Auditor LLM | Regime critique complete — "
-            f"tokens: prompt={usage.prompt_tokens} completion={usage.completion_tokens}"
+            f"tokens: prompt={_usage.get('promptTokenCount','?')} completion={_usage.get('candidatesTokenCount','?')}"
         )
         try:
             from analysis.groq_budget import budget as _budget
-            _budget.consume(total_tokens, call_type="audit")
+            _budget.consume(_total, call_type="audit")
         except Exception:
             pass
-        return json.loads(response.choices[0].message.content)
+        return json.loads(_text)
     except Exception as exc:
         logger.warning(f"Auditor LLM | Critique failed: {exc} — returning neutral verdict")
         return {
@@ -1394,21 +1405,31 @@ Write a 3-5 sentence plain-English performance briefing comparing both bots.
 If trade counts are low (< 3), note that data is limited.
 Be specific about which bot is outperforming and why the numbers suggest that."""
 
-    narrative = "Performance analysis unavailable — Groq call failed."
+    narrative = "Performance analysis unavailable — LLM call failed."
     try:
-        from groq import Groq
-        client = Groq(api_key=settings.groq_api_key)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": _PERFORMANCE_NARRATIVE_PROMPT},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=0.5,
-            max_tokens=300,
+        from analysis.gemini_auditor import _gemini_base_url, _gemini_api_key
+        import requests as _req
+        _url = f"{_gemini_base_url()}/models/gemini-3-flash-preview:generateContent"
+        _body = {
+            "system_instruction": {"parts": [{"text": _PERFORMANCE_NARRATIVE_PROMPT}]},
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": 8192,
+                "temperature": 0.5,
+            },
+        }
+        _resp = _req.post(
+            _url,
+            headers={"Content-Type": "application/json", "x-goog-api-key": _gemini_api_key()},
+            json=_body,
+            timeout=60,
         )
-        perf_tokens = response.usage.total_tokens if response.usage else 0
-        narrative = response.choices[0].message.content.strip()
+        if _resp.status_code != 200:
+            raise RuntimeError(f"Gemini HTTP {_resp.status_code}: {_resp.text[:200]}")
+        _data = _resp.json()
+        _usage = _data.get("usageMetadata", {})
+        perf_tokens = _usage.get("totalTokenCount", 0)
+        narrative = _data["candidates"][0]["content"]["parts"][0]["text"].strip()
         logger.info(f"PerfAnalysis | Narrative generated ({len(narrative)} chars)")
         try:
             from analysis.groq_budget import budget as _budget
@@ -1416,7 +1437,7 @@ Be specific about which bot is outperforming and why the numbers suggest that.""
         except Exception:
             pass
     except Exception as exc:
-        logger.error(f"PerfAnalysis | Groq call failed: {exc}")
+        logger.error(f"PerfAnalysis | Gemini call failed: {exc}")
 
     _last_performance_report = {
         "status":       "ok",

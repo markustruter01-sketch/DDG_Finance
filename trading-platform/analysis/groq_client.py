@@ -1,29 +1,44 @@
 """
-Groq LLM Client — Regime-Switching Architecture
--------------------------------------------------
-Uses Groq API (llama-3.3-70b-versatile) as the reasoning engine.
+LLM Client — Regime-Switching Architecture
+-------------------------------------------
+Routes all calls through Gemini via the Replit AI Integration proxy
+(AI_INTEGRATIONS_GEMINI_BASE_URL / AI_INTEGRATIONS_GEMINI_API_KEY).
+Falls back to the direct Google API (GOOGLE_GEMINI_API_KEY) if the
+integration vars are absent.
 
-The user prompt now surfaces momentum signals (3-month MA, 6-month MA)
-prominently so the LLM can apply the Bull/Bear/Sideways allocation rules.
+Public interface is identical to the old Groq-backed version so no
+callers need to change.
 """
 
-from groq import Groq
+import json
+
+import requests
 from loguru import logger
 
 from config.settings import settings
 from analysis.groq_budget import budget as _budget
 from analysis.input_sanitizer import sanitize_news_payload
 
-MODEL = "llama-3.3-70b-versatile"
+_GEMINI_FALLBACK_BASE = "https://generativelanguage.googleapis.com/v1beta"
+MODEL = "gemini-3-flash-preview"
 
-_client: Groq | None = None
+
+def _base_url() -> str:
+    import os
+    return os.environ.get("AI_INTEGRATIONS_GEMINI_BASE_URL") or _GEMINI_FALLBACK_BASE
 
 
-def _get_client() -> Groq:
-    global _client
-    if _client is None:
-        _client = Groq(api_key=settings.groq_api_key)
-    return _client
+def _api_key() -> str:
+    import os
+    key = (
+        os.environ.get("AI_INTEGRATIONS_GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_GEMINI_API_KEY", "")
+    )
+    if not key:
+        raise RuntimeError(
+            "No Gemini API key available — set AI_INTEGRATIONS_GEMINI_API_KEY or GOOGLE_GEMINI_API_KEY"
+        )
+    return key
 
 
 def call_groq(
@@ -32,35 +47,73 @@ def call_groq(
     temperature: float = 0.2,
     max_tokens: int = 4096,
     call_type: str = "unknown",
+    json_mode: bool = True,
 ) -> str:
-    client = _get_client()
-    logger.info(f"Groq | Sending request to {MODEL} (temp={temperature}, type={call_type})")
+    """
+    Send a request to Gemini and return the response text.
+
+    Keeps the same signature as the old call_groq() so all callers work unchanged.
+    `json_mode=True` requests JSON output via Gemini's responseMimeType.
+    """
+    api_key = _api_key()
+    url = f"{_base_url()}/models/{MODEL}:generateContent"
+
+    generation_config: dict = {
+        "maxOutputTokens": max_tokens,
+        "temperature": temperature,
+    }
+    if json_mode:
+        generation_config["responseMimeType"] = "application/json"
+
+    body = {
+        "system_instruction": {
+            "parts": [{"text": system_prompt}]
+        },
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": user_prompt}],
+            }
+        ],
+        "generationConfig": generation_config,
+    }
+
+    logger.info(f"Gemini | Sending request to {MODEL} (temp={temperature}, type={call_type})")
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format={"type": "json_object"},
+        resp = requests.post(
+            url,
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key,
+            },
+            json=body,
+            timeout=90,
         )
-        content = response.choices[0].message.content
-        usage = response.usage
-        logger.info(
-            f"Groq | Response received [{call_type}] — "
-            f"prompt_tokens={usage.prompt_tokens} "
-            f"completion_tokens={usage.completion_tokens} "
-            f"total={usage.total_tokens}"
-        )
-        _budget.consume(usage.total_tokens, call_type=call_type)
-        return content
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
 
-    except Exception as exc:
-        logger.error(f"Groq | API call failed: {exc}")
-        raise RuntimeError(f"Groq API call failed: {exc}") from exc
+    if resp.status_code != 200:
+        raise RuntimeError(f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}")
+
+    try:
+        data = resp.json()
+        usage = data.get("usageMetadata", {})
+        total_tokens = (
+            usage.get("totalTokenCount")
+            or (usage.get("promptTokenCount", 0) + usage.get("candidatesTokenCount", 0))
+        )
+        content = data["candidates"][0]["content"]["parts"][0]["text"]
+        logger.info(
+            f"Gemini | Response received [{call_type}] — "
+            f"prompt_tokens={usage.get('promptTokenCount', '?')} "
+            f"completion_tokens={usage.get('candidatesTokenCount', '?')} "
+            f"total={total_tokens}"
+        )
+        _budget.consume(total_tokens or 0, call_type=call_type)
+        return content
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
 
 
 def _momentum_badge(d: dict) -> str:
@@ -150,9 +203,6 @@ def build_user_prompt(
         lines.append("   → The execution engine will automatically cut any overheated allocation by 50% as a hard guard.")
         lines.append("")
 
-    # ── Algo Short Scanner Context ────────────────────────────────────────────
-    # Only injected when the scanner is active (Bear/RISK-OFF) and has results.
-    # Informs the LLM about existing short positions to avoid double-dipping.
     if algo_short_context and algo_short_context.get("activated"):
         lines.append("=== ALGORITHMIC SHORT SCANNER REPORT (Bear/RISK-OFF) ===")
         open_shorts = algo_short_context.get("open_shorts", [])

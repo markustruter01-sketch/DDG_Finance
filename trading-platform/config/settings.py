@@ -53,8 +53,8 @@ class Settings(BaseSettings):
 
     # --- Groq Budget Guardrails ---
     groq_daily_token_budget: int = Field(
-        default=100000,
-        description="Daily token budget for Groq API (free tier = 100,000 TPD). Resets at midnight UTC.",
+        default=10_000_000,
+        description="Daily token budget for the LLM (now Gemini via Replit proxy — effectively unlimited). Interval throttle still applies. Resets at midnight UTC.",
     )
     groq_min_regime_interval_minutes: int = Field(
         default=90,

@@ -59,7 +59,9 @@ def call_groq(
     url = f"{_base_url()}/models/{MODEL}:generateContent"
 
     generation_config: dict = {
-        "maxOutputTokens": max_tokens,
+        # Gemini's reasoning uses output-token headroom; enforce a floor of 8192
+        # so the model never exhausts its budget before writing the actual JSON body.
+        "maxOutputTokens": max(max_tokens, 8192),
         "temperature": temperature,
     }
     if json_mode:

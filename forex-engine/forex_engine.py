@@ -134,11 +134,12 @@ def _check_news_blackout() -> bool:
 
 
 def _gemini_compass_fallback(rag_block: str = "") -> tuple[str, str]:
-    import requests as _req
-
-    api_key = os.environ.get("GOOGLE_GEMINI_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("GOOGLE_GEMINI_API_KEY not set")
+    """
+    Fallback USD-bias call routed through the Replit AI Integration proxy
+    (AI_INTEGRATIONS_GEMINI_BASE_URL / AI_INTEGRATIONS_GEMINI_API_KEY).
+    No longer touches GOOGLE_GEMINI_API_KEY or the direct Google API.
+    """
+    from analysis.groq_client import call_groq
 
     system_prompt = (
         "You are a Forex Macro Compass. Your ONLY job is to determine the directional bias "
@@ -161,29 +162,14 @@ def _gemini_compass_fallback(rag_block: str = "") -> tuple[str, str]:
         f"{rag_block}"
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-    body = {
-        "system_instruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "maxOutputTokens": 256,
-            "temperature": 0.1,
-        },
-    }
-
-    resp = _req.post(
-        url,
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        json=body,
-        timeout=30,
+    raw = call_groq(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        temperature=0.1,
+        max_tokens=8192,
+        call_type="forex_compass_fallback",
     )
-    if resp.status_code != 200:
-        raise RuntimeError(f"Gemini HTTP {resp.status_code}: {resp.text[:200]}")
-
-    data = resp.json()
-    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-    result = json.loads(raw_text)
+    result = json.loads(raw)
 
     bias = result.get("bias", "NEUTRAL").upper()
     thesis = result.get("thesis", "")

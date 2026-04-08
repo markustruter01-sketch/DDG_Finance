@@ -741,13 +741,23 @@ function EmailReportButton() {
       const date = new Date().toISOString().slice(0, 10);
       const subject = `AlgoEdge Trading Report — ${date}`;
 
-      const maxLen = 1_900_000;
+      // Keep body within mailto URL limits (~2MB encoded max across all browsers).
+      // encodeURIComponent expands 3-4x, so cap raw body at 100k chars.
+      const maxLen = 100_000;
       if (body.length > maxLen) {
-        body = body.slice(0, maxLen) + "\n\n[Report truncated for email — use Export for full files]";
+        body = body.slice(0, maxLen) + "\n\n[Report truncated — use Export Report for full files]";
       }
 
       const mailto = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.location.href = mailto;
+
+      // Use anchor-click instead of window.location.href — more reliable across
+      // browsers and iframe security contexts (user gesture can expire during fetch).
+      const a = document.createElement("a");
+      a.href = mailto;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch {
       alert("Failed to generate report for email — check that the trading API is running.");
     } finally {

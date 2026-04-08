@@ -54,12 +54,18 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/bots" component={BotsPage} />
-        <Route path="/stream" component={StreamPage} />
+        <Route path="/stream">
+          <ErrorBoundary label="Stream" autoRecoverMs={2000}>
+            <Suspense fallback={<StreamingLoader />}>
+              <StreamPage />
+            </Suspense>
+          </ErrorBoundary>
+        </Route>
         <Route path="/streaming">
-          <Redirect to="/stream" />
+          <Redirect to="/stream?sub=a" />
         </Route>
         <Route path="/streaming-v2">
-          <Redirect to="/stream" />
+          <Redirect to="/stream?sub=b" />
         </Route>
         <Route path="/commander">
           <Suspense fallback={<StreamingLoader />}>

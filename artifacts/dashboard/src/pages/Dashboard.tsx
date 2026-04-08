@@ -4,7 +4,7 @@ import {
   useStatusSummary,
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useOptionsState, useForexState,
-  useJournal, useEquityCurve,
+  usePortfolio, useJournal, useEquityCurve,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
@@ -352,6 +352,7 @@ function PositionChangeNotifier() {
 
 function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
+  const { data: portfolio } = usePortfolio();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
@@ -360,16 +361,26 @@ function FleetKPISummary() {
   const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: journal } = useJournal();
 
-  const alpacaEquity = summary?.portfolio_totals?.equity ?? 0;
+  // Oracle equity comes from the Alpaca portfolio endpoint, not from /status
+  // (which does not include portfolio_totals).
+  const alpacaEquity = portfolio?.account?.equity ?? 0;
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? 100_000;
   const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
-  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
 
-  const krakenPnl = fleetSummary?.bots?.reduce((s, b) => s + (b.pnl_usd ?? 0), 0) ?? 0;
-  const optionsPnl = optionsState?.total_pnl ?? 0;
-  const forexPnl = forexState?.total_pnl ?? 0;
-  const totalPnl = krakenPnl + optionsPnl + forexPnl;
+  // Only include equity pools that have actually loaded. krakenFleetEquity = 0 while
+  // the Kraken summary API is still fetching — never add that to the grand total yet.
+  const krakenReady = krakenFleetEquity > 0;
+  const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
+    + (krakenReady ? krakenFleetEquity : 0)
+    + optionsEquity
+    + forexEquity;
+
+  // True P&L = current equity across all 6 bots minus the $600k starting capital.
+  // Guard: do not show until all four equity pools have loaded.
+  // Do NOT use realized trade P&L — those are closed-trade sums only.
+  const equitiesReady = alpacaEquity > 0 && krakenReady && optionsState != null && forexState != null;
+  const totalPnl: number | null = equitiesReady ? grandTotal - 600_000 : null;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -404,11 +415,21 @@ function FleetKPISummary() {
     },
     {
       label: "Total P&L",
-      value: `${totalPnl >= 0 ? "+" : ""}${formatCurrency(totalPnl)}`,
-      sub: "kraken + options + forex",
+      value: totalPnl != null
+        ? `${totalPnl >= 0 ? "+" : ""}${formatCurrency(totalPnl)}`
+        : "—",
+      sub: "all 6 bots · vs $600k capital",
       icon: <BarChart2 className="h-4 w-4 text-emerald-400" />,
-      accent: totalPnl >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5",
-      valueColor: totalPnl >= 0 ? "text-emerald-400" : "text-red-400",
+      accent: totalPnl == null
+        ? "border-slate-500/20 bg-slate-500/5"
+        : totalPnl >= 0
+          ? "border-emerald-500/20 bg-emerald-500/5"
+          : "border-red-500/20 bg-red-500/5",
+      valueColor: totalPnl == null
+        ? "text-slate-500"
+        : totalPnl >= 0
+          ? "text-emerald-400"
+          : "text-red-400",
     },
     {
       label: "Fleet Win Rate",

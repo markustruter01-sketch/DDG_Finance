@@ -564,7 +564,10 @@ async def run_analysis_cycle(
             else:
                 logger.debug("LLMResponseCache | Crypto cache hit — skipping budget call counter")
         else:
-            if not _budget.can_call_regime():
+            _cache_age_min = 0.0
+            if _last_regime_cache is not None:
+                _cache_age_min = (time.time() - _last_regime_cache.get("saved_at", 0)) / 60
+            if not _budget.can_call_regime(cache_age_min=_cache_age_min):
                 cached_regime = get_regime_fallback()
                 if cached_regime is not None:
                     logger.info(

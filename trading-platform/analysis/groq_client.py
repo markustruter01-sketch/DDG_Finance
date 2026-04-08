@@ -92,9 +92,13 @@ def call_groq(
             timeout=90,
         )
     except requests.RequestException as exc:
+        if call_type in ("regime", "crypto"):
+            _budget.record_regime_failure()
         raise RuntimeError(f"Gemini HTTP request failed: {exc}") from exc
 
     if resp.status_code != 200:
+        if call_type in ("regime", "crypto"):
+            _budget.record_regime_failure()
         raise RuntimeError(f"Gemini returned HTTP {resp.status_code}: {resp.text[:300]}")
 
     try:
@@ -114,6 +118,8 @@ def call_groq(
         _budget.consume(total_tokens or 0, call_type=call_type)
         return content
     except (KeyError, IndexError, ValueError) as exc:
+        if call_type in ("regime", "crypto"):
+            _budget.record_regime_failure()
         raise RuntimeError(f"Unexpected Gemini response structure: {exc}") from exc
 
 

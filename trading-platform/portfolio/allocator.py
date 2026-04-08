@@ -461,8 +461,9 @@ def _apply_sideways_controls(allocations: list[dict]) -> list[dict]:
     )
 
     logger.info(
-        f"Allocator | Sideways controls applied: {len(non_sgov)} position(s) | "
-        f"deployed={total_deployed:.1%} | SGOV={sgov_target:.1%}"
+        f"Allocator | Sideways controls applied | "
+        f"kept {len(non_sgov)}/{SIDEWAYS_MAX_POSITIONS} slots | "
+        f"deployed cap {total_deployed:.0%} | SGOV kelly {sgov_target:.3f}"
     )
     return _renumber_slots(result)
 
@@ -470,7 +471,7 @@ def _apply_sideways_controls(allocations: list[dict]) -> list[dict]:
 # ── Bear Regime Controls ──────────────────────────────────────────────────────
 
 BEAR_KELLY_MULTIPLIER = 0.50   # Additional position-size haircut in Bear/RISK-OFF
-SAFE_HAVEN_TICKERS    = {"GLD", "TLT"}   # Safe-haven assets checked for positive momentum
+SAFE_HAVEN_TICKERS    = {"GLD", "TLT", "XLU", "XLP", "XLV"}   # Safe-haven assets checked for positive momentum in Bear regime
 
 
 def _apply_bear_half_kelly(allocations: list[dict]) -> list[dict]:

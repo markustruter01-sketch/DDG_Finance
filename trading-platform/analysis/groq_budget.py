@@ -97,11 +97,16 @@ class GroqBudget:
                     f"Groq budget | ⚠️  {pct:.1f}% of daily token budget consumed"
                 )
 
-    def can_call_regime(self) -> bool:
+    def can_call_regime(self, cache_age_min: float = 0.0) -> bool:
         """
         True if both conditions are satisfied:
           - Daily token budget not exhausted
           - Minimum interval since last regime call has elapsed (or 0 = disabled)
+
+        Args:
+            cache_age_min: Age of the current regime cache in minutes. If > 360
+                           (6 hours stale), the throttle interval is bypassed so a
+                           refresh is forced regardless of when the last call ran.
         """
         with self._lock:
             self._maybe_reset()
@@ -112,6 +117,16 @@ class GroqBudget:
                     "Groq budget | Regime call blocked — daily token budget exhausted"
                 )
                 return False
+
+            # Stale-cache override: if the cache is > 6 hours old, bypass the
+            # interval throttle unconditionally so we never get locked out of a
+            # refresh by a prior failed call that still advanced the timer.
+            if cache_age_min > 360:
+                logger.info(
+                    f"Groq budget | Stale-cache override: cache_age={cache_age_min:.0f}min > 360 "
+                    "— bypassing throttle to force refresh"
+                )
+                return True
 
             min_interval_min = settings.groq_min_regime_interval_minutes
             if min_interval_min <= 0:
@@ -139,6 +154,24 @@ class GroqBudget:
             logger.info(
                 f"Groq budget | Full-regime call #{self._regime_calls} recorded "
                 f"(used={self._tokens_used}/{settings.groq_daily_token_budget})"
+            )
+
+    def record_regime_failure(self) -> None:
+        """
+        Record a FAILED regime/crypto LLM call.
+        Instead of advancing the timer by the full 90-min interval (which would
+        lock out retries for 90 minutes even after a transient error), this sets
+        the timer so the throttle clears in ~15 minutes — a short retry window.
+        """
+        with self._lock:
+            self._maybe_reset()
+            interval_s = settings.groq_min_regime_interval_minutes * 60
+            # Set timer as if the call happened (interval - 15min) ago so the
+            # next can_call_regime() check clears in ~15 minutes.
+            self._last_regime_call_at = time.time() - (interval_s - 15 * 60)
+            logger.warning(
+                "Groq budget | Regime/crypto call FAILED — "
+                "next retry eligible in ~15 min (failure retry window)"
             )
 
     def can_call_crypto(self) -> bool:

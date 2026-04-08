@@ -1,18 +1,19 @@
 import { useEffect, lazy, Suspense } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
+import BotsPage from "@/pages/BotsPage";
+import StreamPage from "@/pages/StreamPage";
 import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
 
-const StreamingScreen = lazy(() => import("@/pages/StreamingScreen"));
-const StreamingScreenV2 = lazy(() => import("@/pages/StreamingScreenV2"));
-const CommanderPage = lazy(() => import("@/pages/CommanderPage"));
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
+
+const CommanderPage = lazy(() => import("@/pages/CommanderPage"));
 
 installVisibilityListener();
 
@@ -52,19 +53,13 @@ function Router() {
     <>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/bots" component={BotsPage} />
+        <Route path="/stream" component={StreamPage} />
         <Route path="/streaming">
-          <ErrorBoundary label="Streaming" autoRecoverMs={2000}>
-            <Suspense fallback={<StreamingLoader />}>
-              <StreamingScreen />
-            </Suspense>
-          </ErrorBoundary>
+          <Redirect to="/stream" />
         </Route>
         <Route path="/streaming-v2">
-          <ErrorBoundary label="StreamingV2" autoRecoverMs={2000}>
-            <Suspense fallback={<StreamingLoader />}>
-              <StreamingScreenV2 />
-            </Suspense>
-          </ErrorBoundary>
+          <Redirect to="/stream" />
         </Route>
         <Route path="/commander">
           <Suspense fallback={<StreamingLoader />}>

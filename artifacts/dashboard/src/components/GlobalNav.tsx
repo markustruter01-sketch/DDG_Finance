@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, Radio, Zap, Bot } from "lucide-react";
+import { LayoutDashboard, Radio, Bot, Terminal } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -11,26 +11,26 @@ const NAV_ITEMS = [
     pulse: false,
   },
   {
-    id:    "live",
-    label: "Live",
-    path:  "/streaming",
-    icon:  Radio,
-    color: "#f43f5e",
-    pulse: true,
+    id:    "bots",
+    label: "Bots",
+    path:  "/bots",
+    icon:  Bot,
+    color: "#a855f7",
+    pulse: false,
   },
   {
-    id:    "fleet",
-    label: "Fleet",
-    path:  "/streaming-v2",
-    icon:  Zap,
-    color: "#22d3ee",
-    pulse: true,
+    id:    "stream",
+    label: "Stream",
+    path:  "/stream",
+    icon:  Radio,
+    color: "#f43f5e",
+    pulse: false,
   },
   {
     id:    "commander",
     label: "CMD",
     path:  "/commander",
-    icon:  Bot,
+    icon:  Terminal,
     color: "#10b981",
     pulse: false,
   },

@@ -958,3 +958,116 @@ async def status_summary() -> dict:
         "scheduler_jobs": jobs,
         "auto_trading": is_auto_trading_enabled(),
     }
+
+
+@system_router.get("/regime/retrospective")
+async def regime_retrospective(days: int = 10) -> dict:
+    """
+    Compare old regime thresholds (VIX>25 = Bear) vs new three-condition gate
+    (Bear requires VIX>30 AND SPY 20d return negative AND SPY below SMA-50)
+    over the last `days` trading days.
+    """
+    import datetime
+    try:
+        import yfinance as yf
+    except ImportError:
+        raise HTTPException(status_code=503, detail="yfinance not available")
+
+    try:
+        lookback_days = max(days + 60, 80)   # need 50+ bars of history for SMA-50
+        end   = datetime.datetime.utcnow()
+        start = end - datetime.timedelta(days=lookback_days)
+
+        spy_hist = yf.download("SPY", start=start, end=end, progress=False)
+        vix_hist = yf.download("^VIX", start=start, end=end, progress=False)
+
+        if spy_hist.empty or vix_hist.empty:
+            raise HTTPException(status_code=503, detail="Could not fetch SPY / VIX history")
+
+        spy_close = spy_hist["Close"].squeeze()
+        vix_close = vix_hist["Close"].squeeze()
+
+        # Align on common dates
+        common_dates = spy_close.index.intersection(vix_close.index)
+        spy_close = spy_close.loc[common_dates]
+        vix_close = vix_close.loc[common_dates]
+
+        # Keep only last `days` bars
+        spy_close = spy_close.iloc[-days:]
+        vix_close = vix_close.iloc[-days:]
+
+        # Precompute SMA-50 and 20-day returns for the full aligned series
+        spy_full = spy_hist["Close"].squeeze().loc[common_dates]
+
+        rows = []
+        for i, (date, spy_px) in enumerate(spy_close.items()):
+            spy_px    = float(spy_px)
+            vix       = float(vix_close.loc[date])
+
+            # position in the full aligned series
+            full_idx  = list(spy_full.index).index(date)
+
+            # 20-day return
+            if full_idx >= 20:
+                spy_ret20 = (spy_px / float(spy_full.iloc[full_idx - 20]) - 1) * 100
+            else:
+                spy_ret20 = None
+
+            # SMA-50
+            if full_idx >= 50:
+                sma_50 = float(spy_full.iloc[full_idx - 49: full_idx + 1].mean())
+                above_sma50 = spy_px > sma_50
+            else:
+                sma_50, above_sma50 = None, None
+
+            # ── Old threshold: VIX > 25 → Bear, VIX > 18 → Sideways, else Bull
+            if vix > 25:
+                old_regime = "Bear"
+            elif vix > 18:
+                old_regime = "Sideways"
+            else:
+                old_regime = "Bull"
+
+            # ── New threshold: all three conditions required for Bear
+            bear_conditions_met = (
+                vix > 30
+                and (spy_ret20 is not None and spy_ret20 < 0)
+                and (above_sma50 is False)
+            )
+            bull_conditions_met = (
+                vix < 20
+                and (spy_ret20 is not None and spy_ret20 >= 0)
+                and (above_sma50 is True)
+            )
+            if bear_conditions_met:
+                new_regime = "Bear"
+            elif bull_conditions_met:
+                new_regime = "Bull"
+            else:
+                new_regime = "Sideways"
+
+            rows.append({
+                "date":          date.strftime("%Y-%m-%d"),
+                "spy_price":     round(spy_px, 2),
+                "vix":           round(vix, 2),
+                "spy_ret_20d":   round(spy_ret20, 2) if spy_ret20 is not None else None,
+                "sma_50":        round(sma_50, 2) if sma_50 is not None else None,
+                "above_sma50":   above_sma50,
+                "old_regime":    old_regime,
+                "new_regime":    new_regime,
+                "regime_changed": old_regime != new_regime,
+            })
+
+        changes = sum(1 for r in rows if r["regime_changed"])
+        return {
+            "days_analysed": len(rows),
+            "regime_changes": changes,
+            "old_threshold": "VIX>25→Bear | VIX>18→Sideways | else Bull",
+            "new_threshold": "Bear=ALL(VIX>30, SPY_20d<0, SPY<SMA-50) | Bull=ALL(VIX<20, SPY_20d≥0, SPY>SMA-50) | else Sideways",
+            "rows": rows,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

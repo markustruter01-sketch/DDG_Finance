@@ -64,6 +64,7 @@ ETF_TICKERS: list[str] = [t for cat in ETF_CATEGORIES for t in UNIVERSE[cat]]
 CRYPTO_SPOT_TICKERS: list[str] = UNIVERSE["crypto_spot"]
 
 EMA_20_PERIOD   = 20
+SMA_50_BARS     = 50
 MA_3MO_BARS     = 63
 MA_6MO_BARS     = 126
 MA_200D_BARS    = 200
@@ -82,19 +83,28 @@ def get_cached_market_data() -> dict | None:
 
 def get_spy_ema_anchor() -> dict:
     """
-    Convenience helper — returns the SPY EMA-20 anchor data from cache.
+    Convenience helper — returns the SPY EMA-20 and SMA-50 anchor data from cache.
 
     Returns a dict with keys:
         spy_price        : float | None
         spy_ema_20d      : float | None
+        spy_sma_50d      : float | None
+        spy_ret_20d      : float | None  (20-day return in %)
         spy_above_ema_20 : bool | None   (None = insufficient data)
+        spy_above_sma_50 : bool | None   (None = insufficient data)
     """
     if _cached_market_data is None:
-        return {"spy_price": None, "spy_ema_20d": None, "spy_above_ema_20": None}
+        return {
+            "spy_price": None, "spy_ema_20d": None, "spy_sma_50d": None,
+            "spy_ret_20d": None, "spy_above_ema_20": None, "spy_above_sma_50": None,
+        }
     return {
-        "spy_price":        _cached_market_data.get("spy_price"),
-        "spy_ema_20d":      _cached_market_data.get("spy_ema_20d"),
-        "spy_above_ema_20": _cached_market_data.get("spy_above_ema_20"),
+        "spy_price":         _cached_market_data.get("spy_price"),
+        "spy_ema_20d":       _cached_market_data.get("spy_ema_20d"),
+        "spy_sma_50d":       _cached_market_data.get("spy_sma_50d"),
+        "spy_ret_20d":       _cached_market_data.get("spy_ret_20d"),
+        "spy_above_ema_20":  _cached_market_data.get("spy_above_ema_20"),
+        "spy_above_sma_50":  _cached_market_data.get("spy_above_sma_50"),
     }
 
 
@@ -213,6 +223,11 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         std_200  = float(np.std(window_200, ddof=0))
         z_score_200d = round((latest_price - sma_200) / std_200, 3) if std_200 > 0 else 0.0
 
+    # ── SMA-50 (Bear regime anchor — SPY below 50-day SMA = Bear condition) ──
+    sma_50d: float | None = None
+    if len(closes) >= SMA_50_BARS:
+        sma_50d = round(float(sum(closes[-SMA_50_BARS:]) / SMA_50_BARS), 4)
+
     # ── EMA-20 (SPY Regime Anchor + general signal) ──────────────────────────
     ema_20d: float | None = _compute_ema(closes, EMA_20_PERIOD)
 
@@ -237,6 +252,7 @@ def _compute_metrics(ticker: str, bars: list[dict]) -> dict[str, Any]:
         "volatility_20d_annualised_pct": volatility_20d,
         "ma_3mo":                        round(ma_3mo, 4) if ma_3mo else None,
         "ma_6mo":                        round(ma_6mo, 4) if ma_6mo else None,
+        "sma_50d":                       sma_50d,
         "ema_20d":                       ema_20d,
         "momentum_3mo":                  momentum_3mo,
         "momentum_6mo":                  momentum_6mo,
@@ -358,9 +374,11 @@ async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> d
     )
 
     # ── SPY 20-Day EMA Anchor (top-level cache keys) ─────────────────────────
-    spy_data    = by_ticker.get("SPY", {})
-    spy_price   = spy_data.get("latest_price")
-    spy_ema_20d = spy_data.get("ema_20d")
+    spy_data     = by_ticker.get("SPY", {})
+    spy_price    = spy_data.get("latest_price")
+    spy_ema_20d  = spy_data.get("ema_20d")
+    spy_sma_50d  = spy_data.get("sma_50d")
+    spy_ret_20d  = spy_data.get("return_20d_pct")
 
     if spy_price is not None and spy_ema_20d is not None:
         spy_above_ema_20: bool | None = spy_price > spy_ema_20d
@@ -374,13 +392,28 @@ async def fetch_market_data(period: str = "6mo", crypto_only: bool = False) -> d
         spy_above_ema_20 = None
         logger.warning("SPY EMA Anchor | Insufficient SPY data to compute EMA-20 — anchor unavailable")
 
+    # ── SPY 50-Day SMA (Bear regime anchor — used in new three-condition Bear gate) ──
+    if spy_price is not None and spy_sma_50d is not None:
+        spy_above_sma_50: bool | None = spy_price > spy_sma_50d
+        direction50 = "ABOVE" if spy_above_sma_50 else "BELOW"
+        logger.info(
+            f"SPY SMA-50 | price=${spy_price:.2f} | SMA-50=${spy_sma_50d:.2f} | "
+            f"SPY is {direction50} its 50-Day SMA"
+        )
+    else:
+        spy_above_sma_50 = None
+        logger.warning("SPY SMA-50 | Insufficient SPY data — anchor unavailable")
+
     result = {
-        "by_ticker":        by_ticker,
-        "by_category":      by_category,
-        # SPY Regime Anchor (consumed by allocator)
-        "spy_price":        spy_price,
-        "spy_ema_20d":      spy_ema_20d,
-        "spy_above_ema_20": spy_above_ema_20,
+        "by_ticker":         by_ticker,
+        "by_category":       by_category,
+        # SPY Regime Anchors (consumed by allocator and user prompt)
+        "spy_price":         spy_price,
+        "spy_ema_20d":       spy_ema_20d,
+        "spy_sma_50d":       spy_sma_50d,
+        "spy_ret_20d":       spy_ret_20d,
+        "spy_above_ema_20":  spy_above_ema_20,
+        "spy_above_sma_50":  spy_above_sma_50,
     }
 
     global _cached_market_data

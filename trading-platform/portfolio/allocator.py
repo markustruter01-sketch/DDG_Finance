@@ -398,6 +398,75 @@ def _enforce_leveraged_fence(allocations: list[dict]) -> list[dict]:
     return allocations
 
 
+# ── Sideways Regime Controls ─────────────────────────────────────────────────
+
+SIDEWAYS_MAX_DEPLOYED     = 0.70   # 70% max deployed in Sideways (vs 82% in Bull)
+SIDEWAYS_MAX_POSITION_PCT = 0.08   # 8% per position cap (vs 10% in Bull)
+SIDEWAYS_SGOV_FLOOR       = 0.30   # 30% minimum SGOV floor in Sideways
+SIDEWAYS_MAX_POSITIONS    = 6      # max active (non-SGOV) positions
+
+
+def _apply_sideways_controls(allocations: list[dict]) -> list[dict]:
+    """
+    Sideways regime capital deployment.
+    Rules:
+      - Max 6 active (non-SGOV) positions
+      - Per-position kelly cap: 8%
+      - Total non-SGOV deployment ≤ 70%
+      - Inject SGOV floor so that SGOV represents the remaining ≥ 30%
+    """
+    non_sgov = [s for s in allocations if s["ticker"] != "SGOV" and s["kelly_fraction"] > 0]
+    sgov     = [s for s in allocations if s["ticker"] == "SGOV"]
+
+    # 1. Cap to max 6 positions (drop weakest conviction beyond limit)
+    if len(non_sgov) > SIDEWAYS_MAX_POSITIONS:
+        non_sgov.sort(key=lambda s: s.get("conviction_score", 0), reverse=True)
+        dropped = non_sgov[SIDEWAYS_MAX_POSITIONS:]
+        non_sgov = non_sgov[:SIDEWAYS_MAX_POSITIONS]
+        for d in dropped:
+            logger.info(
+                f"Allocator | Sideways: dropped {d['ticker']} (position #{SIDEWAYS_MAX_POSITIONS + 1}+ — max 6)"
+            )
+
+    # 2. Per-position 8% cap
+    for slot in non_sgov:
+        if slot["kelly_fraction"] > SIDEWAYS_MAX_POSITION_PCT:
+            logger.info(
+                f"Allocator | Sideways: {slot['ticker']} capped "
+                f"{slot['kelly_fraction']:.1%} → {SIDEWAYS_MAX_POSITION_PCT:.0%}"
+            )
+            slot["kelly_fraction"] = SIDEWAYS_MAX_POSITION_PCT
+
+    # 3. Total deployment cap at 70%
+    total_deployed = sum(s["kelly_fraction"] for s in non_sgov)
+    if total_deployed > SIDEWAYS_MAX_DEPLOYED:
+        scale = SIDEWAYS_MAX_DEPLOYED / total_deployed
+        for slot in non_sgov:
+            slot["kelly_fraction"] = round(slot["kelly_fraction"] * scale, 4)
+        logger.info(
+            f"Allocator | Sideways: total deployment scaled {total_deployed:.1%} → {SIDEWAYS_MAX_DEPLOYED:.0%}"
+        )
+        total_deployed = SIDEWAYS_MAX_DEPLOYED
+
+    # 4. Inject SGOV floor for remaining 30%+
+    sgov_target = max(SIDEWAYS_SGOV_FLOOR, round(1.0 - total_deployed, 4))
+    result = non_sgov + sgov
+    result = _inject_sgov_slot(
+        result,
+        sgov_target,
+        thesis=(
+            f"Sideways regime: {SIDEWAYS_SGOV_FLOOR:.0%} SGOV floor — "
+            f"{total_deployed:.0%} deployed across {len(non_sgov)} position(s)."
+        ),
+    )
+
+    logger.info(
+        f"Allocator | Sideways controls applied: {len(non_sgov)} position(s) | "
+        f"deployed={total_deployed:.1%} | SGOV={sgov_target:.1%}"
+    )
+    return _renumber_slots(result)
+
+
 # ── Bear Regime Controls ──────────────────────────────────────────────────────
 
 BEAR_KELLY_MULTIPLIER = 0.50   # Additional position-size haircut in Bear/RISK-OFF
@@ -568,6 +637,17 @@ def process_regime_llm_output(raw_json: str) -> RegimeAnalysisOutput:
 
     # Step 6: Normalise so non-SGOV total ≤ 1.0
     allocations = normalise_kelly_fractions(allocations)
+
+    # ── Sideways Regime Controls ──────────────────────────────────────────────
+    # 70% deployed, 8% per position, 30% SGOV floor, max 6 positions.
+    _SIDEWAYS_REGIMES_ALLOC = {"Sideways", "sideways", "SIDEWAYS"}
+    if regime in _SIDEWAYS_REGIMES_ALLOC:
+        logger.info(
+            f"Allocator | Sideways Regime ('{regime}') — applying Sideways controls "
+            f"(70% deployed, 8% cap, 30% SGOV floor, max 6 positions)"
+        )
+        allocations = _apply_sideways_controls(allocations)
+        allocations = normalise_kelly_fractions(allocations)
 
     # ── Bear Regime Controls (steps 6a & 6b) ─────────────────────────────────
     # Only applied when the Alpaca bot has confirmed a Bear or RISK-OFF regime.

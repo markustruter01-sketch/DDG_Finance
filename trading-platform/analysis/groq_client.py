@@ -153,6 +153,65 @@ def build_user_prompt(
             lines.append("  Held Symbols: NONE (fully in cash)")
         lines.append("")
 
+    if not crypto_only:
+        # ── REGIME SIGNALS — key three-condition gate for Bull/Sideways/Bear ──
+        try:
+            from data.yfinance_client import get_spy_ema_anchor as _spy_anchor
+            _spy = _spy_anchor()
+            _vix_val: float | None = None
+            if macro_data:
+                for _sid, _mv in macro_data.items():
+                    if "VIX" in _mv.get("name", "").upper() or _sid == "VIXCLS":
+                        try:
+                            _vix_val = float(_mv["value"])
+                        except (TypeError, ValueError):
+                            pass
+                        break
+            lines.append("=== REGIME SIGNALS (apply mechanically to determine Bull/Sideways/Bear) ===")
+            if _vix_val is not None:
+                if _vix_val < 20:
+                    _vix_label = "LOW (<20) → Bull condition MET"
+                elif _vix_val <= 30:
+                    _vix_label = f"ELEVATED (20–30) → Sideways condition MET (NOT Bear)"
+                else:
+                    _vix_label = f"HIGH (>30) → Bear condition MET"
+                lines.append(f"  VIX: {_vix_val:.1f}  [{_vix_label}]")
+            else:
+                lines.append("  VIX: unavailable")
+            _spy_price  = _spy.get("spy_price")
+            _spy_sma_50 = _spy.get("spy_sma_50d")
+            _spy_ret_20 = _spy.get("spy_ret_20d")
+            _above_sma  = _spy.get("spy_above_sma_50")
+            if _spy_price is not None:
+                _ret_str   = f"{_spy_ret_20:+.2f}%" if _spy_ret_20 is not None else "n/a"
+                _ret_label = ("POSITIVE → Bull/Sideways condition MET" if (_spy_ret_20 or 0) >= 0
+                              else "NEGATIVE → Bear condition MET")
+                lines.append(f"  SPY 20-day return: {_ret_str}  [{_ret_label}]")
+                if _spy_sma_50 is not None:
+                    _sma_label = ("ABOVE SMA-50 → Bull/Sideways condition MET" if _above_sma
+                                  else "BELOW SMA-50 → Bear condition MET")
+                    lines.append(
+                        f"  SPY vs 50-day SMA: ${_spy_price:.2f} vs SMA-50 ${_spy_sma_50:.2f}  [{_sma_label}]"
+                    )
+            # Derived regime assessment
+            _bear_all  = (_vix_val is not None and _vix_val > 30
+                          and (_spy_ret_20 or 0) < 0
+                          and _above_sma is False)
+            _bull_all  = (_vix_val is not None and _vix_val < 20
+                          and (_spy_ret_20 or 0) >= 0
+                          and _above_sma is True)
+            if _bear_all:
+                _regime_assess = "→ BEAR (all three Bear conditions confirmed)"
+            elif _bull_all:
+                _regime_assess = "→ BULL (all three Bull conditions confirmed)"
+            else:
+                _regime_assess = "→ SIDEWAYS (not all Bear or all Bull conditions met simultaneously)"
+            lines.append(f"  Regime assessment: {_regime_assess}")
+            lines.append("")
+        except Exception as _exc:
+            lines.append(f"  [Regime signals unavailable: {_exc}]")
+            lines.append("")
+
     if not crypto_only and macro_data:
         lines.append("=== MACROECONOMIC INDICATORS (FRED) ===")
         for sid, v in macro_data.items():

@@ -452,9 +452,61 @@ async def fleet_chat(request: ChatRequest) -> dict:
 
     recommendations = _extract_recommendations(reply_text)
     metadata: dict[str, Any] = {}
+    applied_directives: list[dict] = []
+
     if recommendations:
-        metadata["pending_recommendations"] = recommendations
-        metadata["status"] = "pending_approval"
+        # Auto-apply oracle/navigator directives immediately; queue kraken for approval
+        auto_applied = []
+        needs_approval = []
+
+        for rec in recommendations:
+            bot_id = rec.get("bot_id", "").lower().strip()
+            reasoning = rec.get("reasoning", "Fleet Commander directive")
+            params = rec.get("params", {})
+
+            if bot_id == "oracle":
+                try:
+                    from analysis.claude_parameter_advisor import apply_oracle_params, ORACLE_BOUNDS
+                    oracle_params = {k: v for k, v in params.items() if k in ORACLE_BOUNDS or k == "paused"}
+                    if oracle_params:
+                        ok = apply_oracle_params(oracle_params, reasoning, source="fleet_chat_auto")
+                        if ok:
+                            auto_applied.append({"bot_id": "oracle", "changes": oracle_params, "status": "applied"})
+                        else:
+                            needs_approval.append(rec)
+                    else:
+                        needs_approval.append(rec)
+                except Exception as exc:
+                    logger.warning(f"FleetChat | Auto-apply oracle failed: {exc}")
+                    needs_approval.append(rec)
+
+            elif bot_id == "navigator":
+                try:
+                    from analysis.claude_parameter_advisor import apply_navigator_params, NAVIGATOR_BOUNDS
+                    nav_params = {k: v for k, v in params.items() if k in NAVIGATOR_BOUNDS or k == "paused"}
+                    if nav_params:
+                        ok = apply_navigator_params(nav_params, reasoning, source="fleet_chat_auto")
+                        if ok:
+                            auto_applied.append({"bot_id": "navigator", "changes": nav_params, "status": "applied"})
+                        else:
+                            needs_approval.append(rec)
+                    else:
+                        needs_approval.append(rec)
+                except Exception as exc:
+                    logger.warning(f"FleetChat | Auto-apply navigator failed: {exc}")
+                    needs_approval.append(rec)
+
+            else:
+                # Kraken bots require operator approval
+                needs_approval.append(rec)
+
+        applied_directives = auto_applied
+
+        if needs_approval:
+            metadata["pending_recommendations"] = needs_approval
+            metadata["status"] = "pending_approval"
+        if auto_applied:
+            metadata["auto_applied"] = auto_applied
 
     reply_id = _save_message("assistant", reply_text, source="claude", metadata=metadata)
 
@@ -462,6 +514,7 @@ async def fleet_chat(request: ChatRequest) -> dict:
         "reply": reply_text,
         "has_recommendations": bool(recommendations),
         "recommendations": recommendations,
+        "applied_directives": applied_directives,
         "message_id": reply_id,
     }
 

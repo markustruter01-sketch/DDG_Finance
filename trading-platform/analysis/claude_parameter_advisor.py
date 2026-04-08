@@ -7,14 +7,20 @@ Oracle parameters:
   conviction_threshold  [0.60, 0.95]  step=0.05
   max_positions         [1,    10]    step=1
   cash_reserve_pct      [0.30, 0.80]  step=0.05
+  paused                bool          kill-switch
 
 Navigator parameters:
   position_size_usd     [5000, 25000] step=1000
+  paused                bool          kill-switch
+
+All operator overrides expire after OVERRIDE_TTL_HOURS (default 24 h).
+At expiry the system auto-reverts to factory defaults.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from loguru import logger
@@ -22,6 +28,10 @@ from pydantic import BaseModel, Field
 
 from analysis.claude_client import call_claude
 from db.postgres import is_pg_available, get_conn
+
+# ── Override TTL ──────────────────────────────────────────────────────────────
+
+OVERRIDE_TTL_HOURS: int = 24
 
 # ── Bounds & steps ────────────────────────────────────────────────────────────
 
@@ -37,12 +47,22 @@ ORACLE_STEPS: dict[str, float] = {
     "cash_reserve_pct":     0.05,
 }
 
+ORACLE_DEFAULTS: dict[str, float] = {
+    "conviction_threshold": 0.75,
+    "max_positions":        10.0,
+    "cash_reserve_pct":     0.60,
+}
+
 NAVIGATOR_BOUNDS: dict[str, tuple[float, float]] = {
     "position_size_usd": (5000.0, 25000.0),
 }
 
 NAVIGATOR_STEPS: dict[str, float] = {
     "position_size_usd": 1000.0,
+}
+
+NAVIGATOR_DEFAULTS: dict[str, float] = {
+    "position_size_usd": 10000.0,
 }
 
 
@@ -62,97 +82,225 @@ class NavigatorParamAdjustment(BaseModel):
     no_change: bool = Field(False, description="True if no parameter changes are recommended")
 
 
-# ── DB helpers ────────────────────────────────────────────────────────────────
+# ── Expiry helpers ────────────────────────────────────────────────────────────
 
-def get_oracle_params() -> dict[str, float]:
-    """Load current Oracle parameters from DB, falling back to defaults."""
-    defaults = {"conviction_threshold": 0.75, "max_positions": 10, "cash_reserve_pct": 0.60}
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _expiry_ts() -> datetime:
+    return _now_utc() + timedelta(hours=OVERRIDE_TTL_HOURS)
+
+
+# ── DB read helpers (expiry-aware) ────────────────────────────────────────────
+
+def get_oracle_params() -> dict[str, Any]:
+    """Load current Oracle parameters from DB, auto-reverting expired overrides."""
+    defaults: dict[str, Any] = {**ORACLE_DEFAULTS, "paused": False,
+                                 "override_set_at": None, "override_expires_at": None}
     if not is_pg_available():
         return defaults
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT conviction_threshold, max_positions, cash_reserve_pct FROM oracle_parameters WHERE id = 1"
+                    """SELECT conviction_threshold, max_positions, cash_reserve_pct,
+                              paused, override_set_at, override_expires_at
+                       FROM oracle_parameters WHERE id = 1"""
                 )
                 row = cur.fetchone()
-        if row:
-            return {
-                "conviction_threshold": float(row[0]),
-                "max_positions":        int(row[1]),
-                "cash_reserve_pct":     float(row[2]),
-            }
+        if not row:
+            return defaults
+
+        expires_at = row[5]
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at and _now_utc() > expires_at:
+            logger.info("ParameterAdvisor | Oracle override expired — auto-reverting to defaults")
+            _revert_oracle_to_defaults()
+            return {**ORACLE_DEFAULTS, "paused": False, "override_set_at": None, "override_expires_at": None}
+
+        return {
+            "conviction_threshold": float(row[0]),
+            "max_positions":        int(row[1]),
+            "cash_reserve_pct":     float(row[2]),
+            "paused":               bool(row[3]) if row[3] is not None else False,
+            "override_set_at":      row[4].isoformat() if row[4] else None,
+            "override_expires_at":  expires_at.isoformat() if expires_at else None,
+        }
     except Exception as exc:
         logger.warning(f"ParameterAdvisor | get_oracle_params failed: {exc}")
     return defaults
 
 
-def get_navigator_params() -> dict[str, float]:
-    """Load current Navigator parameters from DB, falling back to defaults."""
-    defaults = {"position_size_usd": 10000.0}
+def get_navigator_params() -> dict[str, Any]:
+    """Load current Navigator parameters from DB, auto-reverting expired overrides."""
+    defaults: dict[str, Any] = {**NAVIGATOR_DEFAULTS, "paused": False,
+                                 "override_set_at": None, "override_expires_at": None}
     if not is_pg_available():
         return defaults
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT position_size_usd FROM navigator_parameters WHERE id = 1")
+                cur.execute(
+                    """SELECT position_size_usd, paused, override_set_at, override_expires_at
+                       FROM navigator_parameters WHERE id = 1"""
+                )
                 row = cur.fetchone()
-        if row:
-            return {"position_size_usd": float(row[0])}
+        if not row:
+            return defaults
+
+        expires_at = row[3]
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at and _now_utc() > expires_at:
+            logger.info("ParameterAdvisor | Navigator override expired — auto-reverting to defaults")
+            _revert_navigator_to_defaults()
+            return {**NAVIGATOR_DEFAULTS, "paused": False, "override_set_at": None, "override_expires_at": None}
+
+        return {
+            "position_size_usd": float(row[0]),
+            "paused":            bool(row[1]) if row[1] is not None else False,
+            "override_set_at":   row[2].isoformat() if row[2] else None,
+            "override_expires_at": expires_at.isoformat() if expires_at else None,
+        }
     except Exception as exc:
         logger.warning(f"ParameterAdvisor | get_navigator_params failed: {exc}")
     return defaults
+
+
+def _revert_oracle_to_defaults() -> None:
+    """Auto-revert Oracle to factory defaults after expiry (no audit entry needed)."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE oracle_parameters SET
+                         conviction_threshold = 0.75, max_positions = 10,
+                         cash_reserve_pct = 0.60, paused = FALSE,
+                         override_set_at = NULL, override_expires_at = NULL,
+                         updated_at = NOW(), updated_by = 'expiry_revert'
+                       WHERE id = 1"""
+                )
+    except Exception as exc:
+        logger.error(f"ParameterAdvisor | Oracle expiry revert failed: {exc}")
+
+
+def _revert_navigator_to_defaults() -> None:
+    """Auto-revert Navigator to factory defaults after expiry."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE navigator_parameters SET
+                         position_size_usd = 10000, paused = FALSE,
+                         override_set_at = NULL, override_expires_at = NULL,
+                         updated_at = NOW(), updated_by = 'expiry_revert'
+                       WHERE id = 1"""
+                )
+    except Exception as exc:
+        logger.error(f"ParameterAdvisor | Navigator expiry revert failed: {exc}")
+
+
+# ── DB write helpers ──────────────────────────────────────────────────────────
+
+def _write_audit(
+    bot_id: str,
+    param_name: str,
+    old_val: Any,
+    new_val: Any,
+    reasoning: str,
+    source: str,
+    expires_at: datetime | None,
+) -> None:
+    """Write a single row to ai_parameter_audit with enriched columns."""
+    try:
+        old_num = float(old_val) if old_val is not None else None
+        new_num = float(new_val) if new_val is not None else None
+    except (TypeError, ValueError):
+        old_num = new_num = None
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO ai_parameter_audit
+                           (bot_id, param_name, parameter_name, old_value, new_value,
+                            old_value_num, new_value_num, reasoning, approved_by, source, expires_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        bot_id, param_name, param_name,
+                        str(old_val), str(new_val),
+                        old_num, new_num,
+                        reasoning, "operator", source,
+                        expires_at,
+                    ),
+                )
+    except Exception as exc:
+        logger.warning(f"ParameterAdvisor | audit write failed for {bot_id}/{param_name}: {exc}")
 
 
 def apply_oracle_params(
     params: dict[str, Any],
     reasoning: str,
     source: str = "fleet_commander",
+    ttl_hours: int = OVERRIDE_TTL_HOURS,
 ) -> bool:
-    """Clamp-and-step then persist Oracle params.  Writes audit trail.  Returns success."""
+    """Clamp-and-step then persist Oracle params with 24h expiry. Writes enriched audit trail."""
     if not is_pg_available():
         logger.warning("ParameterAdvisor | DB unavailable — cannot apply Oracle params")
         return False
     try:
         current = get_oracle_params()
         updates: dict[str, Any] = {}
-        audit_rows: list[tuple] = []
+        audit_entries: list[tuple] = []
 
+        # Handle paused toggle
+        if "paused" in params:
+            new_paused = bool(params["paused"])
+            if new_paused != current.get("paused", False):
+                updates["paused"] = new_paused
+                audit_entries.append(("paused", current.get("paused"), new_paused))
+
+        # Handle numeric params
         for key, val in params.items():
-            if key not in ORACLE_BOUNDS:
+            if key == "paused" or key not in ORACLE_BOUNDS:
                 continue
             lo, hi = ORACLE_BOUNDS[key]
             step = ORACLE_STEPS[key]
-            cur_val = current.get(key, lo)
+            cur_val = float(current.get(key, lo))
             new_val = _clamp_step(cur_val, float(val), lo, hi, step)
             if key == "max_positions":
                 new_val = int(round(new_val))
             if new_val != cur_val:
                 updates[key] = new_val
-                audit_rows.append((
-                    "oracle", key, str(cur_val), str(new_val), reasoning, "operator", source,
-                ))
+                audit_entries.append((key, cur_val, new_val))
 
         if not updates:
             logger.info("ParameterAdvisor | Oracle params: no effective changes after clamping")
             return True
+
+        now = _now_utc()
+        expires = now + timedelta(hours=ttl_hours)
 
         set_clause = ", ".join(f"{k} = %s" for k in updates)
         values = list(updates.values()) + ["fleet_commander"]
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"UPDATE oracle_parameters SET {set_clause}, updated_at = NOW(), updated_by = %s WHERE id = 1",
-                    values,
+                    f"""UPDATE oracle_parameters SET {set_clause},
+                        updated_at = NOW(), updated_by = %s,
+                        override_set_at = NOW(), override_expires_at = %s
+                       WHERE id = 1""",
+                    values + [expires],
                 )
-                for row in audit_rows:
-                    cur.execute(
-                        """INSERT INTO ai_parameter_audit
-                               (bot_id, param_name, old_value, new_value, reasoning, approved_by, source)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        row,
-                    )
-        logger.info(f"ParameterAdvisor | Oracle params applied: {updates}")
+
+        for param_name, old_v, new_v in audit_entries:
+            _write_audit("oracle", param_name, old_v, new_v, reasoning, source, expires)
+
+        logger.info(f"ParameterAdvisor | Oracle params applied: {updates} (expires {expires.isoformat()})")
         return True
     except Exception as exc:
         logger.error(f"ParameterAdvisor | apply_oracle_params failed: {exc}")
@@ -163,71 +311,118 @@ def apply_navigator_params(
     params: dict[str, Any],
     reasoning: str,
     source: str = "fleet_commander",
+    ttl_hours: int = OVERRIDE_TTL_HOURS,
 ) -> bool:
-    """Clamp-and-step then persist Navigator params.  Writes audit trail.  Returns success."""
+    """Clamp-and-step then persist Navigator params with 24h expiry. Writes enriched audit trail."""
     if not is_pg_available():
         logger.warning("ParameterAdvisor | DB unavailable — cannot apply Navigator params")
         return False
     try:
         current = get_navigator_params()
         updates: dict[str, Any] = {}
-        audit_rows: list[tuple] = []
+        audit_entries: list[tuple] = []
+
+        if "paused" in params:
+            new_paused = bool(params["paused"])
+            if new_paused != current.get("paused", False):
+                updates["paused"] = new_paused
+                audit_entries.append(("paused", current.get("paused"), new_paused))
 
         for key, val in params.items():
-            if key not in NAVIGATOR_BOUNDS:
+            if key == "paused" or key not in NAVIGATOR_BOUNDS:
                 continue
             lo, hi = NAVIGATOR_BOUNDS[key]
             step = NAVIGATOR_STEPS[key]
-            cur_val = current.get(key, lo)
+            cur_val = float(current.get(key, lo))
             new_val = _clamp_step(cur_val, float(val), lo, hi, step)
             if new_val != cur_val:
                 updates[key] = new_val
-                audit_rows.append((
-                    "navigator", key, str(cur_val), str(new_val), reasoning, "operator", source,
-                ))
+                audit_entries.append((key, cur_val, new_val))
 
         if not updates:
             logger.info("ParameterAdvisor | Navigator params: no effective changes after clamping")
             return True
+
+        now = _now_utc()
+        expires = now + timedelta(hours=ttl_hours)
 
         set_clause = ", ".join(f"{k} = %s" for k in updates)
         values = list(updates.values()) + ["fleet_commander"]
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f"UPDATE navigator_parameters SET {set_clause}, updated_at = NOW(), updated_by = %s WHERE id = 1",
-                    values,
+                    f"""UPDATE navigator_parameters SET {set_clause},
+                        updated_at = NOW(), updated_by = %s,
+                        override_set_at = NOW(), override_expires_at = %s
+                       WHERE id = 1""",
+                    values + [expires],
                 )
-                for row in audit_rows:
-                    cur.execute(
-                        """INSERT INTO ai_parameter_audit
-                               (bot_id, param_name, old_value, new_value, reasoning, approved_by, source)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                        row,
-                    )
-        logger.info(f"ParameterAdvisor | Navigator params applied: {updates}")
+
+        for param_name, old_v, new_v in audit_entries:
+            _write_audit("navigator", param_name, old_v, new_v, reasoning, source, expires)
+
+        logger.info(f"ParameterAdvisor | Navigator params applied: {updates} (expires {expires.isoformat()})")
         return True
     except Exception as exc:
         logger.error(f"ParameterAdvisor | apply_navigator_params failed: {exc}")
         return False
 
 
+def set_oracle_paused(paused: bool, reasoning: str = "Operator pause toggle") -> bool:
+    """Convenience: toggle Oracle paused state."""
+    return apply_oracle_params({"paused": paused}, reasoning=reasoning, source="operator_ui")
+
+
+def set_navigator_paused(paused: bool, reasoning: str = "Operator pause toggle") -> bool:
+    """Convenience: toggle Navigator paused state."""
+    return apply_navigator_params({"paused": paused}, reasoning=reasoning, source="operator_ui")
+
+
 def reset_oracle_params(source: str = "operator_reset") -> bool:
-    """Reset Oracle parameters to factory defaults."""
-    return apply_oracle_params(
-        {"conviction_threshold": 0.75, "max_positions": 10, "cash_reserve_pct": 0.60},
-        reasoning="Reset to factory defaults",
-        source=source,
-    )
+    """Reset Oracle parameters to factory defaults (clears expiry)."""
+    if not is_pg_available():
+        return False
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE oracle_parameters SET
+                         conviction_threshold = 0.75, max_positions = 10,
+                         cash_reserve_pct = 0.60, paused = FALSE,
+                         override_set_at = NULL, override_expires_at = NULL,
+                         updated_at = NOW(), updated_by = %s
+                       WHERE id = 1""",
+                    (source,),
+                )
+        _write_audit("oracle", "reset", "all", "factory_defaults", "Reset to factory defaults", source, None)
+        logger.info("ParameterAdvisor | Oracle params reset to defaults")
+        return True
+    except Exception as exc:
+        logger.error(f"ParameterAdvisor | reset_oracle_params failed: {exc}")
+        return False
 
 
 def reset_navigator_params(source: str = "operator_reset") -> bool:
-    """Reset Navigator parameters to factory defaults."""
-    return apply_navigator_params(
-        {"position_size_usd": 10000.0},
-        reasoning="Reset to factory defaults",
-        source=source,
-    )
+    """Reset Navigator parameters to factory defaults (clears expiry)."""
+    if not is_pg_available():
+        return False
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE navigator_parameters SET
+                         position_size_usd = 10000, paused = FALSE,
+                         override_set_at = NULL, override_expires_at = NULL,
+                         updated_at = NOW(), updated_by = %s
+                       WHERE id = 1""",
+                    (source,),
+                )
+        _write_audit("navigator", "reset", "all", "factory_defaults", "Reset to factory defaults", source, None)
+        logger.info("ParameterAdvisor | Navigator params reset to defaults")
+        return True
+    except Exception as exc:
+        logger.error(f"ParameterAdvisor | reset_navigator_params failed: {exc}")
+        return False
 
 
 def get_parameter_audit_history(limit: int = 50) -> list[dict]:
@@ -238,27 +433,84 @@ def get_parameter_audit_history(limit: int = 50) -> list[dict]:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT ts, bot_id, param_name, old_value, new_value, reasoning, approved_by, source
+                    """SELECT ts, bot_id,
+                              COALESCE(parameter_name, param_name) AS parameter_name,
+                              old_value, new_value,
+                              old_value_num, new_value_num,
+                              reasoning, approved_by, source, expires_at
                        FROM ai_parameter_audit ORDER BY ts DESC LIMIT %s""",
                     (limit,),
                 )
                 rows = cur.fetchall()
         return [
             {
-                "ts":          r[0].isoformat(),
-                "bot_id":      r[1],
-                "param_name":  r[2],
-                "old_value":   r[3],
-                "new_value":   r[4],
-                "reasoning":   r[5],
-                "approved_by": r[6],
-                "source":      r[7],
+                "ts":             r[0].isoformat(),
+                "bot_id":         r[1],
+                "parameter_name": r[2],
+                "param_name":     r[2],
+                "old_value":      r[3],
+                "new_value":      r[4],
+                "old_value_num":  r[5],
+                "new_value_num":  r[6],
+                "reasoning":      r[7],
+                "approved_by":    r[8],
+                "source":         r[9],
+                "expires_at":     r[10].isoformat() if r[10] else None,
             }
             for r in rows
         ]
     except Exception as exc:
         logger.warning(f"ParameterAdvisor | get_parameter_audit_history failed: {exc}")
         return []
+
+
+def get_all_active_overrides() -> dict[str, Any]:
+    """Return all currently active (non-expired) parameter overrides for all bots."""
+    oracle = get_oracle_params()
+    navigator = get_navigator_params()
+    now = _now_utc()
+
+    def _is_active(params: dict) -> bool:
+        exp = params.get("override_expires_at")
+        if not exp:
+            return False
+        try:
+            exp_dt = datetime.fromisoformat(exp)
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            return now < exp_dt
+        except Exception:
+            return False
+
+    def _seconds_remaining(params: dict) -> int | None:
+        exp = params.get("override_expires_at")
+        if not exp:
+            return None
+        try:
+            exp_dt = datetime.fromisoformat(exp)
+            if exp_dt.tzinfo is None:
+                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+            secs = int((exp_dt - now).total_seconds())
+            return max(0, secs)
+        except Exception:
+            return None
+
+    return {
+        "oracle": {
+            "params": oracle,
+            "defaults": ORACLE_DEFAULTS,
+            "bounds": {k: {"min": v[0], "max": v[1], "step": ORACLE_STEPS[k]} for k, v in ORACLE_BOUNDS.items()},
+            "has_active_override": _is_active(oracle),
+            "seconds_remaining": _seconds_remaining(oracle),
+        },
+        "navigator": {
+            "params": navigator,
+            "defaults": NAVIGATOR_DEFAULTS,
+            "bounds": {k: {"min": v[0], "max": v[1], "step": NAVIGATOR_STEPS[k]} for k, v in NAVIGATOR_BOUNDS.items()},
+            "has_active_override": _is_active(navigator),
+            "seconds_remaining": _seconds_remaining(navigator),
+        },
+    }
 
 
 # ── Claude advisory calls ─────────────────────────────────────────────────────
@@ -287,7 +539,8 @@ def get_oracle_adjustment(fleet_context: str) -> OracleParamAdjustment:
         f"Current Oracle parameters:\n"
         f"  conviction_threshold: {current['conviction_threshold']}\n"
         f"  max_positions: {current['max_positions']}\n"
-        f"  cash_reserve_pct: {current['cash_reserve_pct']}\n\n"
+        f"  cash_reserve_pct: {current['cash_reserve_pct']}\n"
+        f"  paused: {current.get('paused', False)}\n\n"
         f"Fleet context:\n{fleet_context}\n\n"
         "Should any Oracle parameters be adjusted?  Respond with JSON only."
     )
@@ -326,7 +579,8 @@ def get_navigator_adjustment(fleet_context: str) -> NavigatorParamAdjustment:
     )
     user = (
         f"Current Navigator parameters:\n"
-        f"  position_size_usd: {current['position_size_usd']}\n\n"
+        f"  position_size_usd: {current['position_size_usd']}\n"
+        f"  paused: {current.get('paused', False)}\n\n"
         f"Fleet context:\n{fleet_context}\n\n"
         "Should any Navigator parameters be adjusted?  Respond with JSON only."
     )

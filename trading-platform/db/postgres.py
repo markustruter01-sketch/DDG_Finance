@@ -404,6 +404,27 @@ ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS options_equity DOUBLE PREC
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS forex_equity   DOUBLE PRECISION NOT NULL DEFAULT 0;
 """
 
+# Phase 2: Parameter control system migrations
+_PARAM_MIGRATION_SQL = [
+    # 24h expiry + paused lever for oracle_parameters
+    "ALTER TABLE oracle_parameters ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE oracle_parameters ADD COLUMN IF NOT EXISTS override_set_at TIMESTAMPTZ",
+    "ALTER TABLE oracle_parameters ADD COLUMN IF NOT EXISTS override_expires_at TIMESTAMPTZ",
+    # 24h expiry + paused lever for navigator_parameters
+    "ALTER TABLE navigator_parameters ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE navigator_parameters ADD COLUMN IF NOT EXISTS override_set_at TIMESTAMPTZ",
+    "ALTER TABLE navigator_parameters ADD COLUMN IF NOT EXISTS override_expires_at TIMESTAMPTZ",
+    # Audit table enhancements: parameter_name alias + expires_at
+    "ALTER TABLE ai_parameter_audit ADD COLUMN IF NOT EXISTS parameter_name TEXT",
+    "ALTER TABLE ai_parameter_audit ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ",
+    "ALTER TABLE ai_parameter_audit ADD COLUMN IF NOT EXISTS old_value_num DOUBLE PRECISION",
+    "ALTER TABLE ai_parameter_audit ADD COLUMN IF NOT EXISTS new_value_num DOUBLE PRECISION",
+    # Back-fill parameter_name from param_name for existing rows
+    "UPDATE ai_parameter_audit SET parameter_name = param_name WHERE parameter_name IS NULL",
+    # Kraken adaptive params: add paused column
+    "ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS paused BOOLEAN NOT NULL DEFAULT FALSE",
+]
+
 
 def ensure_schema() -> None:
     """
@@ -462,6 +483,19 @@ def ensure_schema() -> None:
         logger.info("DB | Oracle/Navigator parameter seed rows ensured")
     except Exception as exc:
         logger.error(f"DB | Oracle/Navigator parameter seed failed (non-fatal): {exc}")
+
+    # Phase 2: parameter control system column additions
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for stmt in _PARAM_MIGRATION_SQL:
+                    try:
+                        cur.execute(stmt)
+                    except Exception as inner_exc:
+                        logger.warning(f"DB | Param migration stmt skipped: {inner_exc}")
+        logger.info("DB | Parameter control system migrations applied")
+    except Exception as exc:
+        logger.error(f"DB | Parameter control migrations failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

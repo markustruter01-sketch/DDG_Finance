@@ -52,6 +52,7 @@ Thumbs.db
 kraken_training_data.csv
 
 # Runtime state files — regenerated automatically, should not be tracked
+trading-platform/_code_export_hashes.json
 kraken-bot/status.json
 kraken-bot/paper_portfolio.json
 trading-platform/data/commentary_cache.json

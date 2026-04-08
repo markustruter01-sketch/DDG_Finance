@@ -43,10 +43,24 @@ class KrakenBotParams(BaseModel):
     reasoning: str = ""
 
 
+class OracleParamRec(BaseModel):
+    conviction_threshold: float | None = None
+    max_positions: int | None = None
+    cash_reserve_pct: float | None = None
+    reasoning: str = ""
+
+
+class NavigatorParamRec(BaseModel):
+    position_size_usd: float | None = None
+    reasoning: str = ""
+
+
 class FleetCommanderResponse(BaseModel):
     vetoed_tickers: list[str] = Field(default_factory=list)
     conditions: list[_GeminiCondition] = Field(default_factory=list)
     kraken_param_adjustments: list[KrakenBotParams] = Field(default_factory=list)
+    oracle_param_adjustment: OracleParamRec | None = None
+    navigator_param_adjustment: NavigatorParamRec | None = None
     critique_summary: str = ""
     critique_flags: list[str] = Field(default_factory=list)
     overall_verdict: str = "CLEAN"
@@ -101,11 +115,20 @@ YOUR AUDIT TARGETS (look hard for each)
 
 PARAMETER BOUNDS (your recommendations MUST stay within these)
 ==============================================================
+Kraken bots:
 ZSCORE_ENTRY:       [0.70, 1.50]  step=0.05
 ZSCORE_EXIT:        [0.10, 0.55]  step=0.02
 STOP_LOSS_PCT:      [0.008, 0.040] step=0.002
 TRAIL_PCT:          [0.030, 0.100] step=0.005
 MIN_NET_PROFIT_PCT: [0.006, 0.020] step=0.001
+
+Oracle (#1 Alpaca bot):
+conviction_threshold: [0.60, 0.95]  step=0.05  (lower = more trades, higher = selective)
+max_positions:        [1, 10]        step=1     (concurrent equity positions)
+cash_reserve_pct:     [0.30, 0.80]  step=0.05  (fraction kept as cash/SGOV)
+
+Navigator (#6 forex bot):
+position_size_usd: [5000, 25000] step=1000  (per-trade notional USD)
 
 OUTPUT FORMAT (strict JSON, no markdown fences)
 ===============================================
@@ -129,6 +152,16 @@ OUTPUT FORMAT (strict JSON, no markdown fences)
       "reasoning": "Trailing stop firing 45% of exits with thin avg win — give more room"
     }
   ],
+  "oracle_param_adjustment": {
+    "conviction_threshold": 0.80,
+    "max_positions": null,
+    "cash_reserve_pct": null,
+    "reasoning": "Conviction inflation detected — raise threshold to improve signal quality"
+  },
+  "navigator_param_adjustment": {
+    "position_size_usd": null,
+    "reasoning": "Navigator performing within expected bounds — no change needed"
+  },
   "critique_summary": "<2-4 sentence fleet-wide assessment>",
   "critique_flags": ["<specific issue 1>", "<specific issue 2>"],
   "overall_verdict": "CLEAN | CAUTION | HOLD",
@@ -210,6 +243,8 @@ def _write_fleet_audit(result: FleetCommanderResponse, token_usage: dict,
         "vetoed_tickers": result.vetoed_tickers,
         "conditions": [c.model_dump(exclude_none=True) for c in result.conditions],
         "kraken_param_adjustments": [p.model_dump(exclude_none=True) for p in result.kraken_param_adjustments],
+        "oracle_param_adjustment": result.oracle_param_adjustment.model_dump(exclude_none=True) if result.oracle_param_adjustment else None,
+        "navigator_param_adjustment": result.navigator_param_adjustment.model_dump(exclude_none=True) if result.navigator_param_adjustment else None,
         "critique_summary": result.critique_summary,
         "critique_flags": result.critique_flags,
         "token_usage": token_usage,

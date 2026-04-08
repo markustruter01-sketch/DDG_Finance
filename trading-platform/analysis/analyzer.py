@@ -280,6 +280,20 @@ async def run_analysis_cycle(
     logger.info(f"ANALYSIS CYCLE STARTING ({mode_label})")
     logger.info("=" * 60)
 
+    # ── Load Oracle DB params and override settings defaults ───────────────────
+    try:
+        from analysis.claude_parameter_advisor import get_oracle_params as _get_oracle_params
+        _oracle_db = _get_oracle_params()
+        _settings.conviction_threshold = _oracle_db["conviction_threshold"]
+        _settings.total_capital_slots   = int(_oracle_db["max_positions"])
+        logger.info(
+            f"Oracle params | conviction_threshold={_settings.conviction_threshold} "
+            f"max_positions={_settings.total_capital_slots} "
+            f"cash_reserve_pct={_oracle_db.get('cash_reserve_pct', 0.60)}"
+        )
+    except Exception as _op_exc:
+        logger.warning(f"Oracle params | Could not load from DB, using settings defaults: {_op_exc}")
+
     logger.info("Step 1/5 | Querying Alpaca for account state (buying power + positions)...")
     loop = asyncio.get_event_loop()
     try:

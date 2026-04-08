@@ -231,6 +231,46 @@ def enforce_fleet_recommendations(response) -> dict[str, Any]:
                 "reasoning": adj.reasoning,
             })
 
+    # ── Apply Oracle parameter recommendations ────────────────────────────────
+    oracle_applied: dict = {}
+    oracle_adj = getattr(response, "oracle_param_adjustment", None)
+    if oracle_adj is not None:
+        try:
+            from analysis.claude_parameter_advisor import apply_oracle_params
+            oracle_params: dict = {}
+            if oracle_adj.conviction_threshold is not None:
+                oracle_params["conviction_threshold"] = oracle_adj.conviction_threshold
+            if oracle_adj.max_positions is not None:
+                oracle_params["max_positions"] = oracle_adj.max_positions
+            if oracle_adj.cash_reserve_pct is not None:
+                oracle_params["cash_reserve_pct"] = oracle_adj.cash_reserve_pct
+            if oracle_params:
+                ok = apply_oracle_params(
+                    oracle_params, oracle_adj.reasoning, source="fleet_commander"
+                )
+                oracle_applied = {"params": oracle_params, "written": ok, "reasoning": oracle_adj.reasoning}
+                logger.info(f"FleetEnforcer | Oracle params applied: {oracle_params} ok={ok}")
+        except Exception as _oe:
+            logger.warning(f"FleetEnforcer | Oracle param enforcement failed: {_oe}")
+
+    # ── Apply Navigator parameter recommendations ─────────────────────────────
+    navigator_applied: dict = {}
+    nav_adj = getattr(response, "navigator_param_adjustment", None)
+    if nav_adj is not None:
+        try:
+            from analysis.claude_parameter_advisor import apply_navigator_params
+            nav_params: dict = {}
+            if nav_adj.position_size_usd is not None:
+                nav_params["position_size_usd"] = nav_adj.position_size_usd
+            if nav_params:
+                ok = apply_navigator_params(
+                    nav_params, nav_adj.reasoning, source="fleet_commander"
+                )
+                navigator_applied = {"params": nav_params, "written": ok, "reasoning": nav_adj.reasoning}
+                logger.info(f"FleetEnforcer | Navigator params applied: {nav_params} ok={ok}")
+        except Exception as _ne:
+            logger.warning(f"FleetEnforcer | Navigator param enforcement failed: {_ne}")
+
     veto_written = False
     should_write_veto = (
         response.vetoed_tickers
@@ -252,6 +292,8 @@ def enforce_fleet_recommendations(response) -> dict[str, Any]:
     return {
         "kraken_changes_applied": changes_applied,
         "kraken_changes_skipped": changes_skipped,
+        "oracle_applied": oracle_applied,
+        "navigator_applied": navigator_applied,
         "veto_conditions_written": veto_written,
         "total_param_changes": sum(len(c["changes"]) for c in changes_applied),
     }

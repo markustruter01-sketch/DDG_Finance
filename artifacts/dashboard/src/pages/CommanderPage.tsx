@@ -7,6 +7,7 @@ import {
   Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
 } from "lucide-react";
 import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
+import { ParameterControlPanel } from "@/components/ParameterControlPanel";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
@@ -455,11 +456,15 @@ export default function CommanderPage() {
         {showParams && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 300, opacity: 1 }}
+            animate={{ width: 340, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            className="border-l border-white/[0.06] overflow-y-auto p-4 hidden lg:block"
+            className="border-l border-white/[0.06] overflow-y-auto p-4 hidden lg:block space-y-6"
+            style={{ minWidth: 280 }}
           >
             <ParamsPanel />
+            <div className="border-t border-white/[0.06] pt-4">
+              <ParameterControlPanel />
+            </div>
           </motion.aside>
         )}
       </div>

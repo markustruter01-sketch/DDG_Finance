@@ -16,5 +16,23 @@
     "side": "SELL",
     "reason": "take_profit",
     "timestamp": "2026-04-07T22:45:55.200561+00:00"
+  },
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "USD_CAD",
+    "pnl_pct": 0,
+    "pnl_usd": 59.77,
+    "side": "SELL",
+    "reason": "take_profit",
+    "timestamp": "2026-04-08T00:11:42.611786+00:00"
+  },
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "USD_CAD",
+    "pnl_pct": 0,
+    "pnl_usd": 59.77,
+    "side": "SELL",
+    "reason": "take_profit",
+    "timestamp": "2026-04-08T00:11:42.614825+00:00"
   }
 ]

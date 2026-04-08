@@ -566,6 +566,97 @@ export function useFleetParams() {
   });
 }
 
+// ── Parameter Control (Oracle / Navigator) ────────────────────────────────
+
+export interface ParamBound {
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface BotParameterData {
+  bot: string;
+  current: Record<string, number>;
+  bounds: Record<string, ParamBound>;
+  defaults: Record<string, number>;
+}
+
+export interface ParameterAuditEntry {
+  ts: string;
+  bot_id: string;
+  param_name: string;
+  old_value: string;
+  new_value: string;
+  reasoning: string;
+  approved_by: string;
+  source: string;
+}
+
+export function useOracleParams() {
+  return useQuery<BotParameterData>({
+    queryKey: ["parameters/oracle"],
+    queryFn: async () => (await api.get("/parameters/oracle")).data,
+    refetchInterval: useVisibleInterval(30_000),
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useNavigatorParams() {
+  return useQuery<BotParameterData>({
+    queryKey: ["parameters/navigator"],
+    queryFn: async () => (await api.get("/parameters/navigator")).data,
+    refetchInterval: useVisibleInterval(30_000),
+    staleTime: 15_000,
+    retry: 1,
+  });
+}
+
+export function useParameterAudit(limit = 50) {
+  return useQuery<{ history: ParameterAuditEntry[]; count: number }>({
+    queryKey: ["parameters/audit", limit],
+    queryFn: async () => (await api.get(`/parameters/audit?limit=${limit}`)).data,
+    refetchInterval: useVisibleInterval(60_000),
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
+export function useUpdateOracleParams() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { conviction_threshold?: number; max_positions?: number; cash_reserve_pct?: number; reasoning?: string }) =>
+      (await api.post("/parameters/oracle", data)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["parameters/oracle"] });
+      qc.invalidateQueries({ queryKey: ["parameters/audit"] });
+    },
+  });
+}
+
+export function useUpdateNavigatorParams() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { position_size_usd?: number; reasoning?: string }) =>
+      (await api.post("/parameters/navigator", data)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["parameters/navigator"] });
+      qc.invalidateQueries({ queryKey: ["parameters/audit"] });
+    },
+  });
+}
+
+export function useResetBotParams(bot: "oracle" | "navigator") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post(`/parameters/${bot}/reset`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`parameters/${bot}`] });
+      qc.invalidateQueries({ queryKey: ["parameters/audit"] });
+    },
+  });
+}
+
 export function useTriggerFleetCommander() {
   const qc = useQueryClient();
   return useMutation({

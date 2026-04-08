@@ -357,6 +357,39 @@ CREATE TABLE IF NOT EXISTS vpin_rejections (
 );
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
+
+-- Oracle (Alpaca) bot strategy parameters — Claude-controlled levers
+CREATE TABLE IF NOT EXISTS oracle_parameters (
+    id                   INTEGER PRIMARY KEY DEFAULT 1,
+    conviction_threshold DOUBLE PRECISION NOT NULL DEFAULT 0.75,
+    max_positions        INTEGER NOT NULL DEFAULT 10,
+    cash_reserve_pct     DOUBLE PRECISION NOT NULL DEFAULT 0.60,
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by           TEXT NOT NULL DEFAULT 'system'
+);
+
+-- Navigator (forex) bot parameters — Claude-controlled levers
+CREATE TABLE IF NOT EXISTS navigator_parameters (
+    id                      INTEGER PRIMARY KEY DEFAULT 1,
+    position_size_usd       DOUBLE PRECISION NOT NULL DEFAULT 10000,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by              TEXT NOT NULL DEFAULT 'system'
+);
+
+-- Audit log: every Claude-recommended parameter change across all bots
+CREATE TABLE IF NOT EXISTS ai_parameter_audit (
+    id          BIGSERIAL PRIMARY KEY,
+    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bot_id      TEXT NOT NULL,
+    param_name  TEXT NOT NULL,
+    old_value   TEXT NOT NULL,
+    new_value   TEXT NOT NULL,
+    reasoning   TEXT,
+    approved_by TEXT NOT NULL DEFAULT 'operator',
+    source      TEXT NOT NULL DEFAULT 'fleet_commander'
+);
+CREATE INDEX IF NOT EXISTS idx_ai_param_audit_ts     ON ai_parameter_audit (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_param_audit_bot_id ON ai_parameter_audit (bot_id);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -412,6 +445,23 @@ def ensure_schema() -> None:
         logger.info("DB | Kraken multi-bot migrations applied")
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO oracle_parameters (id, conviction_threshold, max_positions, cash_reserve_pct, updated_by)
+                       VALUES (1, 0.75, 10, 0.60, 'system')
+                       ON CONFLICT (id) DO NOTHING"""
+                )
+                cur.execute(
+                    """INSERT INTO navigator_parameters (id, position_size_usd, updated_by)
+                       VALUES (1, 10000, 'system')
+                       ON CONFLICT (id) DO NOTHING"""
+                )
+        logger.info("DB | Oracle/Navigator parameter seed rows ensured")
+    except Exception as exc:
+        logger.error(f"DB | Oracle/Navigator parameter seed failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

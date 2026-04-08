@@ -8,6 +8,7 @@ from .forex import forex_router
 from .alerts import alerts_router
 from .fleet_chat import fleet_chat_router
 from .ai_impact import ai_impact_router
+from .parameters import parameters_router
 
 ALL_ROUTERS = [
     system_router,
@@ -20,4 +21,5 @@ ALL_ROUTERS = [
     alerts_router,
     fleet_chat_router,
     ai_impact_router,
+    parameters_router,
 ]

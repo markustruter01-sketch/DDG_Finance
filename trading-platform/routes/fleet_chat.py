@@ -129,15 +129,25 @@ _BOT_DEFAULTS: dict[str, dict] = _load_bot_defaults()
 _CHAT_SYSTEM_PROMPT = """\
 You are the FLEET COMMANDER — an AI fleet management assistant for a quantitative trading platform.
 You have direct control over 3 Kraken crypto bots (Davy Jones, Blackbeard, Calypso) and advisory
-control over Oracle (Alpaca equities — you can veto tickers but Claude manages strategy).
-Apex Predator (options) and Navigator (forex) can only be put on HOLD.
+control over Oracle (Alpaca equities) and Navigator (forex).
+Apex Predator (options) can only be put on HOLD.
 
 PARAMETER BOUNDS (your recommendations MUST stay within these):
+
+Kraken bots (Davy Jones, Blackbeard, Calypso):
 ZSCORE_ENTRY:       [0.70, 1.50]  step=0.05
 ZSCORE_EXIT:        [0.10, 0.55]  step=0.02
 STOP_LOSS_PCT:      [0.008, 0.040] step=0.002
 TRAIL_PCT:          [0.030, 0.100] step=0.005
 MIN_NET_PROFIT_PCT: [0.006, 0.020] step=0.001
+
+Oracle (#1 Alpaca equity bot):
+conviction_threshold: [0.60, 0.95] step=0.05
+max_positions:        [1, 10]      step=1
+cash_reserve_pct:     [0.30, 0.80] step=0.05
+
+Navigator (#6 forex bot):
+position_size_usd: [5000, 25000] step=1000
 
 RULES:
 - Maximum ±1 step change per parameter per approval cycle
@@ -149,6 +159,8 @@ RULES:
 {"recommendations": [{"bot_id": "davy_jones", "params": {"ZSCORE_ENTRY": 1.05}, "reasoning": "..."}]}
 ```
 
+- For Oracle changes use bot_id "oracle" and params like {"conviction_threshold": 0.80}
+- For Navigator changes use bot_id "navigator" and params like {"position_size_usd": 12000}
 - If no parameter changes are needed, say so clearly
 - Respond conversationally but precisely — this is a trading command center
 """
@@ -497,6 +509,44 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
 
     for rec in recs:
         bot_id = rec.get("bot_id", "").lower().strip()
+        reasoning = rec.get("reasoning", "Manual chat approval")
+        param_changes = rec.get("params", {})
+
+        # ── Oracle parameter changes ───────────────────────────────────────────
+        if bot_id == "oracle":
+            try:
+                from analysis.claude_parameter_advisor import apply_oracle_params, ORACLE_BOUNDS
+                oracle_params = {k: v for k, v in param_changes.items() if k in ORACLE_BOUNDS}
+                if oracle_params:
+                    ok = apply_oracle_params(oracle_params, reasoning, source="manual_chat")
+                    if ok:
+                        changes_applied.append({"bot_id": "oracle", "changes": oracle_params})
+                    else:
+                        changes_failed.append({"bot_id": "oracle", "reason": "db_write_failed"})
+                else:
+                    changes_failed.append({"bot_id": "oracle", "reason": "no_valid_params"})
+            except Exception as exc:
+                changes_failed.append({"bot_id": "oracle", "reason": str(exc)})
+            continue
+
+        # ── Navigator parameter changes ────────────────────────────────────────
+        if bot_id == "navigator":
+            try:
+                from analysis.claude_parameter_advisor import apply_navigator_params, NAVIGATOR_BOUNDS
+                nav_params = {k: v for k, v in param_changes.items() if k in NAVIGATOR_BOUNDS}
+                if nav_params:
+                    ok = apply_navigator_params(nav_params, reasoning, source="manual_chat")
+                    if ok:
+                        changes_applied.append({"bot_id": "navigator", "changes": nav_params})
+                    else:
+                        changes_failed.append({"bot_id": "navigator", "reason": "db_write_failed"})
+                else:
+                    changes_failed.append({"bot_id": "navigator", "reason": "no_valid_params"})
+            except Exception as exc:
+                changes_failed.append({"bot_id": "navigator", "reason": str(exc)})
+            continue
+
+        # ── Kraken bot parameter changes ──────────────────────────────────────
         db_id = BOT_ID_TO_DB_ID.get(bot_id)
         if not db_id:
             changes_failed.append({"bot_id": bot_id, "reason": "unknown_bot_id"})
@@ -508,7 +558,6 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
             continue
 
         new_params = dict(current)
-        param_changes = rec.get("params", {})
         applied = {}
 
         for pname, target in param_changes.items():
@@ -524,7 +573,6 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
             applied[pname] = {"before": cur_val, "after": new_val}
 
         if applied:
-            reasoning = rec.get("reasoning", "Manual chat approval")
             ok = _write_kraken_params(db_id, bot_id, new_params, f"manual_chat: {reasoning}")
             if ok:
                 changes_applied.append({"bot_id": bot_id, "changes": applied})

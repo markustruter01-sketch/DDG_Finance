@@ -75,3 +75,4 @@ kraken-bot/davy-jones_live_state.json
 
 # Transient kraken bot runtime state
 kraken-bot/*_live_state.json
+kraken-bot/_market_cache.json

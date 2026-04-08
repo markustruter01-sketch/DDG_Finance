@@ -168,7 +168,10 @@ class GroqBudget:
             interval_s = settings.groq_min_regime_interval_minutes * 60
             # Set timer as if the call happened (interval - 15min) ago so the
             # next can_call_regime() check clears in ~15 minutes.
-            self._last_regime_call_at = time.time() - (interval_s - 15 * 60)
+            # Clamp to avoid negative offset when interval < 15 min (edge-case
+            # in low-throttle test configs).
+            offset = max(interval_s - 15 * 60, 0)
+            self._last_regime_call_at = time.time() - offset
             logger.warning(
                 "Groq budget | Regime/crypto call FAILED — "
                 "next retry eligible in ~15 min (failure retry window)"

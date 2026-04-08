@@ -40,6 +40,7 @@ from data.fred_client import fetch_macro_data
 from data.news_client import fetch_news
 from data.yfinance_client import fetch_market_data
 from portfolio.allocator import process_regime_llm_output, process_crypto_llm_output
+from core.market_clock import is_market_open as _is_market_open
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -723,8 +724,11 @@ def _call_crypto_with_retry(
         )
 
     # ── Cache integration via get_or_call ─────────────────────────────────────
+    # Off-hours crypto: extend TTL to 4 h — BTC/ETH move slowly overnight.
+    # During market hours keep 90 min so daytime crypto cycles stay responsive.
+    _crypto_ttl = 90 if _is_market_open() else 240
     if cache_key:
-        raw_json = _llm_cache.get_or_call(cache_key, _fetch_raw_crypto_json, ttl_minutes=90)
+        raw_json = _llm_cache.get_or_call(cache_key, _fetch_raw_crypto_json, ttl_minutes=_crypto_ttl)
     else:
         raw_json = _fetch_raw_crypto_json()
 

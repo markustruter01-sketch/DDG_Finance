@@ -1,6 +1,6 @@
 {
   "c8605efa03ac98aba55ef6e956991445": {
-    "raw_json": "{\n  \"market_regime\": \"Bearish/Neutral - Major crypto assets fail dual-momentum filter with prices below 6-month moving averages.\",\n  \"allocations\": [\n    {\n      \"slot\": 1,\n      \"ticker\": \"SGOV\",\n      \"asset_class\": \"cash\",\n      \"conviction_score\": 1.0,\n      \"kelly_fraction\": 1.0,\n      \"thesis\": \"Both BTC/USD and ETH/USD exhibit negative 6-month momentum; capital is preserved in SGOV to avoid downside risk in a high-fear environment.\",\n      \"stop_loss_pct\": -0.07,\n      \"take_profit_pct\": 0.15\n    }\n  ]\n}",
-    "saved_at": 1775685270.7965362
+    "raw_json": "{\n  \"market_regime\": \"Bearish/Neutral - Major crypto assets fail dual-momentum filter with prices below 6-month moving averages.\",\n  \"allocations\": [\n    {\n      \"slot\": 1,\n      \"ticker\": \"SGOV\",\n      \"asset_class\": \"cash\",\n      \"conviction_score\": 1.0,\n      \"kelly_fraction\": 1.0,\n      \"thesis\": \"Both BTC/USD and ETH/USD fail the 6-month momentum filter; preserving capital in SGOV per established risk management protocols and extreme fear sentiment.\",\n      \"stop_loss_pct\": -0.07,\n      \"take_profit_pct\": 0.15\n    }\n  ]\n}",
+    "saved_at": 1775695733.781005
   }
 }

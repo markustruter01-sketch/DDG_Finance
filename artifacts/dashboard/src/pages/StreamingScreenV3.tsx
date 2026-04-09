@@ -3,7 +3,6 @@ import {
   useStatusSummary,
   useKrakenFleetSummary,
   useKrakenPerformance,
-  useKrakenStatus,
   useOptionsState,
   useForexState,
   useVault,
@@ -230,11 +229,9 @@ function LeftColumn() {
   const { data: djPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
-  const { data: djStatus } = useKrakenStatus("davy-jones");
-  const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { trades: allTrades } = useRealFeed(200);
 
   const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
   const alpacaEq = summary?.portfolio_totals?.equity ?? alpacaStart;
@@ -242,43 +239,44 @@ function LeftColumn() {
   const oracleWins = journal?.summary?.wins ?? 0;
   const oracleLosses = journal?.summary?.losses ?? 0;
 
-  const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+  const apexStart = optState?.starting_capital ?? 100_000;
+  const apexEq = optState?.total_equity ?? optState?.paper_equity ?? apexStart;
+  const apexPnlAll = apexEq - apexStart;
 
-  const oracleTodayTrades = useMemo(() => {
-    if (!journal?.trades) return { wins: 0, losses: 0, pnl: 0 };
-    let w = 0, l = 0, pnl = 0;
-    for (const t of journal.trades) {
-      if (t.date && new Date(t.date).getTime() >= cutoff24h && (t.status === "Closed_Win" || t.status === "Closed_Loss")) {
-        pnl += t.pnl_usd ?? 0;
-        if (t.status === "Closed_Win") w++; else l++;
-      }
-    }
-    return { wins: w, losses: l, pnl };
-  }, [journal]);
+  const fxStart = fxState?.starting_capital ?? 100_000;
+  const fxEq = fxState?.total_equity ?? fxState?.paper_equity ?? fxStart;
+  const navPnlAll = fxEq - fxStart;
 
-  function krakenTodayStats(status: typeof djStatus) {
-    if (!status?.recent_trades) return { pnl: 0, wins: 0, losses: 0 };
-    let pnl = 0, w = 0, l = 0;
-    for (const t of status.recent_trades) {
-      if (t.closed_at && new Date(t.closed_at).getTime() >= cutoff24h) {
-        pnl += t.pnl_usd ?? 0;
-        if ((t.pnl_usd ?? 0) >= 0) w++; else l++;
-      }
+  const todayByBot = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const map: Record<string, { pnl: number; wins: number; losses: number }> = {};
+    for (const t of allTrades) {
+      if (!t.date || new Date(t.date).getTime() < cutoff) continue;
+      if (!map[t.bot]) map[t.bot] = { pnl: 0, wins: 0, losses: 0 };
+      map[t.bot].pnl += t.pnlUsd;
+      if (t.isWin) map[t.bot].wins++; else map[t.bot].losses++;
     }
-    return { pnl, wins: w, losses: l };
+    return map;
+  }, [allTrades]);
+
+  function todayStats(botName: string) {
+    return todayByBot[botName] ?? { pnl: 0, wins: 0, losses: 0 };
   }
 
-  const djToday = krakenTodayStats(djStatus);
-  const bbToday = krakenTodayStats(bbStatus);
-  const caToday = krakenTodayStats(caStatus);
+  const oToday = todayStats("Oracle");
+  const djToday = todayStats("Davy Jones");
+  const bbToday = todayStats("Blackbeard");
+  const caToday = todayStats("Calypso");
+  const apToday = todayStats("Apex Predator");
+  const navToday = todayStats("Navigator");
 
   const bots = [
-    { meta: BOT_META[0], pnlToday: oracleTodayTrades.pnl, pnlAllTime: oraclePnlAll, wins: oracleWins, losses: oracleLosses, todayWins: oracleTodayTrades.wins, todayLosses: oracleTodayTrades.losses },
+    { meta: BOT_META[0], pnlToday: oToday.pnl, pnlAllTime: oraclePnlAll, wins: oracleWins, losses: oracleLosses, todayWins: oToday.wins, todayLosses: oToday.losses },
     { meta: BOT_META[1], pnlToday: djToday.pnl, pnlAllTime: djPerf?.total_pnl_usd ?? 0, wins: djPerf?.win_count ?? 0, losses: djPerf?.loss_count ?? 0, todayWins: djToday.wins, todayLosses: djToday.losses },
     { meta: BOT_META[2], pnlToday: bbToday.pnl, pnlAllTime: bbPerf?.total_pnl_usd ?? 0, wins: bbPerf?.win_count ?? 0, losses: bbPerf?.loss_count ?? 0, todayWins: bbToday.wins, todayLosses: bbToday.losses },
     { meta: BOT_META[3], pnlToday: caToday.pnl, pnlAllTime: caPerf?.total_pnl_usd ?? 0, wins: caPerf?.win_count ?? 0, losses: caPerf?.loss_count ?? 0, todayWins: caToday.wins, todayLosses: caToday.losses },
-    { meta: BOT_META[4], pnlToday: 0, pnlAllTime: optState?.total_pnl ?? 0, wins: optState?.total_wins ?? 0, losses: (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0), todayWins: 0, todayLosses: 0 },
-    { meta: BOT_META[5], pnlToday: 0, pnlAllTime: fxState?.total_pnl ?? 0, wins: fxState?.total_wins ?? 0, losses: (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0), todayWins: 0, todayLosses: 0 },
+    { meta: BOT_META[4], pnlToday: apToday.pnl, pnlAllTime: apexPnlAll, wins: optState?.total_wins ?? 0, losses: (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0), todayWins: apToday.wins, todayLosses: apToday.losses },
+    { meta: BOT_META[5], pnlToday: navToday.pnl, pnlAllTime: navPnlAll, wins: fxState?.total_wins ?? 0, losses: (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0), todayWins: navToday.wins, todayLosses: navToday.losses },
   ];
 
   return (

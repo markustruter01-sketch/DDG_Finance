@@ -4,11 +4,11 @@
   "confidence": 0.75,
   "equity_contagion": false,
   "equity_regime": "Bear",
-  "correlation_with_equity": -0.81,
-  "crypto_fear_greed": 17,
-  "btc_24h_change_pct": -1.41,
-  "btc_dominance": 57.0,
+  "correlation_with_equity": -0.811,
+  "crypto_fear_greed": 14,
+  "btc_24h_change_pct": -1.27,
+  "btc_dominance": 56.9,
   "previous_regime": "Crypto-Bear",
   "regime_changed": false,
-  "written_at": "2026-04-08T23:53:04.303896+00:00"
+  "written_at": "2026-04-09T00:48:55.526021+00:00"
 }

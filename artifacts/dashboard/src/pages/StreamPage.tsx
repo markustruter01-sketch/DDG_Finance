@@ -3,12 +3,13 @@ import StreamingScreen from "@/pages/StreamingScreen";
 import StreamingScreenV2 from "@/pages/StreamingScreenV2";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
+import StreamingScreenV3 from "@/pages/StreamingScreenV3";
 import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 
-type SubPage = "a" | "b" | "c" | "d";
+type SubPage = "a" | "b" | "c" | "d" | "e";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c", "d"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -40,7 +41,7 @@ function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number 
     }
 
     let subPage: SubPage | null = null;
-    if (subParam === "b" || subParam === "c" || subParam === "d") subPage = subParam;
+    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e") subPage = subParam;
     else if (subParam === "a") subPage = "a";
 
     return { autoCycle, intervalSeconds, subPage };
@@ -200,6 +201,15 @@ export default function StreamPage() {
       progressGrad: "linear-gradient(90deg, #ef4444, #f59e0b)",
       progressGlow: "rgba(239,68,68,0.6)",
     },
+    {
+      id: "e",
+      label: "V2",
+      activeGrad: "linear-gradient(135deg, rgba(52,211,153,0.25), rgba(34,211,238,0.15))",
+      activeColor: "#6ee7b7",
+      activeBorder: "rgba(52,211,153,0.4)",
+      progressGrad: "linear-gradient(90deg, #34d399, #22d3ee)",
+      progressGlow: "rgba(52,211,153,0.6)",
+    },
   ];
 
   const activeTab = tabs.find((t) => t.id === active)!;
@@ -311,9 +321,12 @@ export default function StreamPage() {
         <div style={{ display: active === "d" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingHealthScreen />
         </div>
+        <div style={{ display: active === "e" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingScreenV3 />
+        </div>
       </div>
 
-      <ClippyAssistant active={active} />
+      {active !== "e" && <ClippyAssistant active={active} />}
     </div>
   );
 }

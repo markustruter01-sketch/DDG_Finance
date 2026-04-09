@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 
-type SubPage = "a" | "b" | "c" | "d";
+type SubPage = "a" | "b" | "c" | "d" | "e";
 
 const MESSAGES: Record<SubPage, string> = {
   a: "Our robots are making live trades right now! Watch the green numbers — that means we're winning! 🤖",
   b: "All 6 trading robots in one view! Each one is a market specialist working 24 hours a day! 💪",
   c: "Here are each robot's current open trades and strategy settings — like peeking at their game plan! 📋",
   d: "Mission control! Every green node means that system is running perfectly. Red means trouble! 🟢",
+  e: "Version Two — cleaner layout, bigger numbers, all the real-time data that matters at a glance! 📊",
 };
 
 interface ClippyAssistantProps {

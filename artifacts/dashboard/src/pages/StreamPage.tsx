@@ -4,6 +4,7 @@ import StreamingScreenV2 from "@/pages/StreamingScreenV2";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import { useFleetParams } from "@/hooks/use-trading";
+import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 
 type SubPage = "a" | "b" | "c" | "d";
 
@@ -311,6 +312,8 @@ export default function StreamPage() {
           <StreamingHealthScreen />
         </div>
       </div>
+
+      <ClippyAssistant active={active} />
     </div>
   );
 }

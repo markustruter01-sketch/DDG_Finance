@@ -44,6 +44,7 @@ interface BotCardData {
   strategyConfig?: ConfigRow[];
   openPositionsList?: OpenPosSummary[];
   krakenBotKey?: string;
+  isBest?: boolean;
 }
 
 interface StreamBotCardProps {
@@ -52,7 +53,7 @@ interface StreamBotCardProps {
 
 function StreamBotCard({ bot }: StreamBotCardProps) {
   const { data: fleetParams } = useFleetParams();
-  const { equity, color, glow } = bot;
+  const { equity, color, glow, isBest } = bot;
   const truePnl = equity != null ? equity - STARTING_BALANCE : null;
 
   // Kraken bots: use live bounds + current from fleet params (same as normal bots page)
@@ -77,19 +78,40 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
     : "#f87171";
 
   return (
+    <>
+      {isBest && (
+        <style>{`
+          @keyframes fireGlow {
+            0%   { box-shadow: 0 0 12px 3px #ff4500, 0 0 28px 8px #ff6a00, 0 0 50px 16px #ffd700; border-color: #ff4500; }
+            25%  { box-shadow: 0 0 18px 5px #ff6a00, 0 0 38px 10px #ff4500, 0 0 65px 18px #ff8c00; border-color: #ff6a00; }
+            50%  { box-shadow: 0 0 22px 6px #ffd700, 0 0 44px 12px #ff6a00, 0 0 75px 22px #ff4500; border-color: #ffd700; }
+            75%  { box-shadow: 0 0 18px 5px #ff8c00, 0 0 36px 10px #ffd700, 0 0 60px 18px #ff6a00; border-color: #ff8c00; }
+            100% { box-shadow: 0 0 12px 3px #ff4500, 0 0 28px 8px #ff6a00, 0 0 50px 16px #ffd700; border-color: #ff4500; }
+          }
+        `}</style>
+      )}
     <div
       className="flex-1 min-w-0 flex flex-col relative overflow-hidden"
-      style={{
-        background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(2,6,23,0.99) 100%)",
-        border: `1px solid ${color}22`,
-        borderTop: `2px solid ${color}`,
-        borderRadius: 10,
-      }}
+      style={
+        isBest
+          ? {
+              background: "linear-gradient(180deg, rgba(30,10,5,0.98) 0%, rgba(2,6,23,0.99) 100%)",
+              border: "2px solid #ff4500",
+              borderRadius: 10,
+              animation: "fireGlow 1.8s ease-in-out infinite",
+            }
+          : {
+              background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(2,6,23,0.99) 100%)",
+              border: `1px solid ${color}22`,
+              borderTop: `2px solid ${color}`,
+              borderRadius: 10,
+            }
+      }
     >
       {/* Subtle glow behind top border */}
       <div
         className="absolute top-0 left-0 right-0 h-16 pointer-events-none"
-        style={{ background: `linear-gradient(180deg, ${color}0d 0%, transparent 100%)` }}
+        style={{ background: isBest ? "linear-gradient(180deg, rgba(255,80,0,0.12) 0%, transparent 100%)" : `linear-gradient(180deg, ${color}0d 0%, transparent 100%)` }}
       />
 
       {/* Header */}
@@ -141,24 +163,24 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
       </div>
 
-      {/* P&L */}
+      {/* P&L — 4× bigger */}
       <div className="px-3 pb-2">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 mb-0.5">
           {truePnl != null && (
             truePnl >= 0
-              ? <TrendingUp className="w-3 h-3 shrink-0" style={{ color: pnlColor }} />
-              : <TrendingDown className="w-3 h-3 shrink-0" style={{ color: pnlColor }} />
+              ? <TrendingUp className="w-4 h-4 shrink-0" style={{ color: pnlColor }} />
+              : <TrendingDown className="w-4 h-4 shrink-0" style={{ color: pnlColor }} />
           )}
           <span
-            className="text-sm font-black font-mono tracking-tight"
-            style={{ color: pnlColor }}
+            className="font-black font-mono tracking-tight leading-none"
+            style={{ color: pnlColor, fontSize: 52 }}
           >
             {truePnl != null ? fmtK(truePnl) : "—"}
           </span>
-          <span className="text-[9px] font-bold" style={{ color: "rgba(148,163,184,0.4)" }}>
-            ALL-TIME
-          </span>
         </div>
+        <span className="text-[9px] font-bold" style={{ color: "rgba(148,163,184,0.4)" }}>
+          ALL-TIME P&L
+        </span>
       </div>
 
       {/* Divider */}
@@ -290,78 +312,100 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </>
       )}
 
-      {/* Open positions list (Kraken bots) */}
-      {bot.openPositionsList != null && (
-        <>
-          <div className="mx-3 mb-1" style={{ height: 1, background: `${color}10` }} />
-          <div className="px-3 pb-2 mt-auto">
-            <div
-              className="text-[7px] font-black uppercase tracking-widest mb-1"
-              style={{ color: `${color}60` }}
+      {/* Open Trades Panel — large, readable, all positions */}
+      <div className="mx-3 mb-1" style={{ height: 1, background: `${color}15` }} />
+      <div className="px-3 pb-3 flex-1 min-h-0 flex flex-col">
+        <div
+          className="text-[9px] font-black uppercase tracking-widest mb-2 flex items-center gap-1.5"
+          style={{ color: `${color}` }}
+        >
+          <span>⬡</span>
+          <span>Open Trades</span>
+          {bot.openPositionsList != null && bot.openPositionsList.length > 0 && (
+            <span
+              className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: `${color}18`, color: `${color}cc` }}
             >
-              OPEN POSITIONS
-            </div>
-            {bot.openPositionsList.length === 0 ? (
-              <div className="text-[8px] font-bold" style={{ color: "rgba(148,163,184,0.35)" }}>
-                No open positions
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                {bot.openPositionsList.slice(0, 3).map((pos) => {
-                  const pnlColor = pos.unrealized_pnl_usd >= 0 ? "#34d399" : "#f87171";
-                  const pnlStr = pos.unrealized_pnl_usd >= 0
-                    ? `+$${Math.abs(pos.unrealized_pnl_usd).toFixed(0)}`
-                    : `-$${Math.abs(pos.unrealized_pnl_usd).toFixed(0)}`;
-                  return (
-                    <div key={pos.symbol} className="flex items-center justify-between gap-1 min-w-0">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span
-                          className="text-[7px] font-black uppercase shrink-0"
-                          style={{ color: pos.side === "long" ? "#34d399" : "#f87171" }}
-                        >
-                          {pos.side === "long" ? "▲" : "▼"}
-                        </span>
-                        <span className="text-[8px] font-black font-mono truncate text-white">
-                          {pos.symbol.replace("/USD", "").replace("USD", "")}
-                        </span>
-                        <span className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.4)" }}>
-                          @{pos.entry_price < 1 ? pos.entry_price.toFixed(4) : pos.entry_price.toFixed(2)}
-                        </span>
-                      </div>
-                      <span
-                        className="text-[8px] font-black font-mono shrink-0"
-                        style={{ color: pnlColor }}
-                      >
-                        {pnlStr}
-                      </span>
-                    </div>
-                  );
-                })}
-                {bot.openPositionsList.length > 3 && (
-                  <div className="text-[7px] font-bold" style={{ color: "rgba(148,163,184,0.35)" }}>
-                    +{bot.openPositionsList.length - 3} more
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Top position hint — non-Kraken bots only */}
-      {!bot.krakenBotKey && bot.topPair && (
-        <div className="mt-auto px-3 pb-3">
-          <div
-            className="text-[9px] font-bold truncate px-2 py-1 rounded"
-            style={{ background: `${color}12`, color: `${color}cc`, border: `1px solid ${color}20` }}
-          >
-            ⬡ {bot.topPair}
-          </div>
+              {bot.openPositionsList.length}
+            </span>
+          )}
         </div>
-      )}
 
-      {!bot.krakenBotKey && !bot.topPair && effectiveStrategyConfig.length === 0 && <div className="mt-auto" />}
+        {bot.openPositionsList == null || bot.openPositionsList.length === 0 ? (
+          <div
+            className="flex-1 flex items-center justify-center rounded-lg"
+            style={{ border: `1px dashed ${color}18`, minHeight: 52 }}
+          >
+            <span className="text-xs font-bold italic" style={{ color: "rgba(148,163,184,0.3)" }}>
+              No open trades
+            </span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5 overflow-auto" style={{ maxHeight: 220 }}>
+            {bot.openPositionsList.map((pos, i) => {
+              const positivePnl = pos.unrealized_pnl_usd >= 0;
+              const posPnlColor = positivePnl ? "#34d399" : "#f87171";
+              const pnlStr = positivePnl
+                ? `+$${Math.abs(pos.unrealized_pnl_usd).toFixed(0)}`
+                : `-$${Math.abs(pos.unrealized_pnl_usd).toFixed(0)}`;
+              const ticker = pos.symbol.replace("/USD", "").replace("USD", "");
+              const entryFmt = pos.entry_price === 0
+                ? "—"
+                : pos.entry_price < 1
+                  ? pos.entry_price.toFixed(4)
+                  : pos.entry_price.toFixed(2);
+              const sizeFmt = pos.size_usd != null && pos.size_usd > 0
+                ? `$${Math.round(pos.size_usd).toLocaleString()}`
+                : null;
+              return (
+                <div
+                  key={`${pos.symbol}-${i}`}
+                  className="rounded-lg px-2.5 py-2 flex items-center gap-2"
+                  style={{
+                    background: positivePnl ? "rgba(52,211,153,0.06)" : "rgba(248,113,113,0.06)",
+                    border: `1px solid ${positivePnl ? "rgba(52,211,153,0.14)" : "rgba(248,113,113,0.14)"}`,
+                  }}
+                >
+                  {/* Direction badge */}
+                  <div
+                    className="shrink-0 w-5 h-5 rounded flex items-center justify-center"
+                    style={{
+                      background: pos.side === "long" ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.15)",
+                    }}
+                  >
+                    <span
+                      className="text-[10px] font-black"
+                      style={{ color: pos.side === "long" ? "#34d399" : "#f87171" }}
+                    >
+                      {pos.side === "long" ? "▲" : "▼"}
+                    </span>
+                  </div>
+
+                  {/* Symbol + entry */}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-black font-mono text-white leading-tight truncate">
+                      {ticker}
+                    </div>
+                    <div className="text-[10px] font-mono leading-tight" style={{ color: "rgba(148,163,184,0.55)" }}>
+                      @{entryFmt}{sizeFmt ? ` · ${sizeFmt}` : ""}
+                    </div>
+                  </div>
+
+                  {/* Unrealized P&L */}
+                  <div
+                    className="shrink-0 text-sm font-black font-mono"
+                    style={{ color: posPnlColor }}
+                  >
+                    {pnlStr}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
+    </>
   );
 }
 
@@ -391,6 +435,13 @@ export default function StreamingBotsScreen() {
   const oracleEquity = portfolio?.account?.equity ?? null;
   const oraclePositions = (portfolio?.positions ?? []).filter((p) => (p.market_value ?? 0) > 10);
   const oracleTopPair = oraclePositions[0]?.symbol;
+  const oracleOpenList: OpenPosSummary[] = oraclePositions.map((p) => ({
+    symbol: p.symbol,
+    side: ((p.qty ?? 0) >= 0 ? "long" : "short") as "long" | "short",
+    entry_price: p.avg_entry_price ?? 0,
+    unrealized_pnl_usd: p.unrealized_pl ?? 0,
+    size_usd: p.market_value ?? 0,
+  }));
 
   const davyEquity = davyPerf?.current_equity ?? davyStatus?.total_equity_usd ?? null;
   const davyTopPair = davyStatus?.open_positions?.[0]?.symbol;
@@ -404,12 +455,26 @@ export default function StreamingBotsScreen() {
   const apexEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? null;
   const apexPositionsArr = Array.isArray(optionsPosRaw) ? optionsPosRaw : [];
   const apexTopPair = apexPositionsArr[0]?.symbol;
+  const apexOpenList: OpenPosSummary[] = apexPositionsArr.map((p) => ({
+    symbol: p.symbol,
+    side: "long" as const,
+    entry_price: p.premium_per_contract ?? 0,
+    unrealized_pnl_usd: p.unrealized_pnl ?? 0,
+    size_usd: p.total_cost ?? 0,
+  }));
 
   const navEquity = forexState?.total_equity ?? forexState?.paper_equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
     ? (forexPosRaw as ForexPosition[])
     : ((forexPosRaw as { positions?: ForexPosition[] } | null)?.positions ?? []);
   const navTopPair = rawForexPos[0]?.pair;
+  const navOpenList: OpenPosSummary[] = rawForexPos.map((p) => ({
+    symbol: p.pair,
+    side: (p.direction === "long" ? "long" : "short") as "long" | "short",
+    entry_price: p.entry_price ?? 0,
+    unrealized_pnl_usd: p.unrealized_pnl_usd ?? 0,
+    size_usd: p.size_usd ?? 0,
+  }));
 
   const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity].filter((e): e is number => e != null);
   const fleetTotal = allEquities.length === 6 ? allEquities.reduce((s, e) => s + e, 0) : null;
@@ -431,6 +496,7 @@ export default function StreamingBotsScreen() {
       lossCount: 0,
       openPositions: oraclePositions.length,
       topPair: oracleTopPair,
+      openPositionsList: oracleOpenList,
       strategyConfig: [
         { label: "Conviction", value: "≥0.65", color: "#22d3ee" },
         { label: "Slots", value: "8 max", color: "#94a3b8" },
@@ -499,6 +565,7 @@ export default function StreamingBotsScreen() {
       lossCount: (optionsState?.total_trades ?? 0) - (optionsState?.total_wins ?? 0),
       openPositions: apexPositionsArr.length,
       topPair: apexTopPair,
+      openPositionsList: apexOpenList,
       strategyConfig: [
         {
           label: "Cap Fence",
@@ -535,6 +602,7 @@ export default function StreamingBotsScreen() {
       lossCount: (forexState?.total_trades ?? 0) - (forexState?.total_wins ?? 0),
       openPositions: rawForexPos.length,
       topPair: navTopPair,
+      openPositionsList: navOpenList,
       strategyConfig: [
         {
           label: "USD Bias",
@@ -559,6 +627,15 @@ export default function StreamingBotsScreen() {
       ],
     },
   ];
+
+  const bestBotId = bots.reduce<string | null>((best, bot) => {
+    if (bot.equity == null) return best;
+    const pnl = bot.equity - STARTING_BALANCE;
+    if (best === null) return bot.id;
+    const bestBot = bots.find((b) => b.id === best);
+    const bestPnl = bestBot?.equity != null ? bestBot.equity - STARTING_BALANCE : -Infinity;
+    return pnl > bestPnl ? bot.id : best;
+  }, null);
 
   const fleetPnlColor = fleetPnl == null ? "#94a3b8" : fleetPnl >= 0 ? "#34d399" : "#f87171";
 
@@ -612,7 +689,7 @@ export default function StreamingBotsScreen() {
       {/* Bot cards row */}
       <div className="flex-1 min-h-0 flex gap-2.5 p-3">
         {bots.map((bot) => (
-          <StreamBotCard key={bot.id} bot={bot} />
+          <StreamBotCard key={bot.id} bot={{ ...bot, isBest: bot.id === bestBotId }} />
         ))}
       </div>
 

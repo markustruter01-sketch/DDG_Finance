@@ -7,7 +7,7 @@ const MESSAGES: Record<SubPage, string> = {
   b: "All 6 trading robots in one view! Each one is a market specialist working 24 hours a day! 💪",
   c: "Here are each robot's current open trades and strategy settings — like peeking at their game plan! 📋",
   d: "Mission control! Every green node means that system is running perfectly. Red means trouble! 🟢",
-  e: "Version Two — cleaner layout, bigger numbers, all the real-time data that matters at a glance! 📊",
+  e: "The ultimate command center! Every bot's P&L, all open trades, live news, and our AI brain — all in one place! 🚀",
 };
 
 interface ClippyAssistantProps {

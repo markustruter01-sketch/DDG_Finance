@@ -1,8 +1,8 @@
 {
   "matrix": {
-    "alpaca_vs_kraken": -0.8112,
+    "alpaca_vs_kraken": -0.8131,
     "alpaca_vs_options": null,
-    "alpaca_vs_forex": -0.168,
+    "alpaca_vs_forex": -0.1395,
     "kraken_vs_options": null,
     "kraken_vs_forex": -0.4399,
     "options_vs_forex": null
@@ -19,5 +19,5 @@
     "forex": 6
   },
   "rolling_window_days": 60,
-  "computed_at": "2026-04-09T00:49:01.628010+00:00"
+  "computed_at": "2026-04-09T01:03:53.146539+00:00"
 }

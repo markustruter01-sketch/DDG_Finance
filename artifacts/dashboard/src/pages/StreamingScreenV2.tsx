@@ -66,7 +66,7 @@ function HeroStrip() {
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: sentiment } = useSentiment();
-  const { data: curve } = useEquityCurve(100);
+  const { data: curve } = useEquityCurve(1500);
   const { wins, losses, totalTrades } = useRealFeed(50);
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
@@ -76,17 +76,32 @@ function HeroStrip() {
   const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
 
   const pnl24h = useMemo(() => {
-    if (!curve?.snapshots?.length) return { value: 0, pct: 0 };
+    if (!curve?.snapshots?.length) return { value: 0, pct: 0, label: "24H P&L" };
     const now = Date.now();
-    const cutoff = now - 24 * 60 * 60 * 1000;
+    const cutoff24h = now - 24 * 60 * 60 * 1000;
     const snaps = curve.snapshots;
-    const baseline = snaps.find(s => new Date(s.ts).getTime() >= cutoff) ?? snaps[0];
-    const latest = snaps[snaps.length - 1];
-    if (!baseline || !latest) return { value: 0, pct: 0 };
-    const delta = latest.total_equity - baseline.total_equity;
+
+    const oldestSnap = snaps[0];
+    const oldestAgeMs = now - new Date(oldestSnap.ts).getTime();
+    const oldestAgeHours = oldestAgeMs / (60 * 60 * 1000);
+
+    let baseline: typeof snaps[0];
+    let label: string;
+
+    if (oldestAgeHours >= 20) {
+      const exactBaseline = snaps.find(s => new Date(s.ts).getTime() >= cutoff24h);
+      baseline = exactBaseline ?? oldestSnap;
+      label = "24H P&L";
+    } else {
+      baseline = oldestSnap;
+      const windowH = Math.floor(oldestAgeHours);
+      label = windowH > 0 ? `${windowH}H P&L` : "P&L";
+    }
+
+    const delta = totalEquity - baseline.total_equity;
     const pct = baseline.total_equity > 0 ? (delta / baseline.total_equity) * 100 : 0;
-    return { value: delta, pct };
-  }, [curve]);
+    return { value: delta, pct, label };
+  }, [curve, totalEquity]);
 
   const [prevPnl, setPrevPnl] = useState(0);
   const pnlDelta = pnl24h.value - prevPnl;
@@ -114,7 +129,7 @@ function HeroStrip() {
       <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
 
       <div>
-        <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>24h P&L</div>
+        <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>{pnl24h.label}</div>
         <div className="flex items-baseline gap-1.5">
           <AnimatedValue
             value={fmtPnl(pnl24h.value)}

@@ -41,6 +41,7 @@ export function GlobalHUD() {
         >
           info@digitaldynamics-group.com
         </a>
+        {" "}— We built the entire system from scratch with AI systems in 1 day, 5 days total with parameter adjustments.
       </p>
 
       {/* Branding badge */}

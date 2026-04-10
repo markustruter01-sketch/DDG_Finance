@@ -334,7 +334,8 @@ export function GlobalHUD() {
               <span className="font-bold" style={{ color: C.yellow }}>Stocks</span> and{" "}
               <span className="font-bold" style={{ color: C.cyan }}>Crypto</span> to{" "}
               <span className="font-bold" style={{ color: C.violet }}>FOREX</span> and{" "}
-              <span className="font-bold" style={{ color: C.orange }}>Futures</span>, our bots handle it all. Want to launch your own? Message us today—no coding or trading experience required.
+              <span className="font-bold" style={{ color: C.orange }}>Futures</span>, our bots handle it all. Want to launch your own? Message us today—no coding or trading experience required. Reach us at{" "}
+              <a href="mailto:info@digitaldynamics-group.com" className="font-bold hover:underline" style={{ color: C.cyan }}>info@digitaldynamics-group.com</a>.
             </p>
           </motion.div>
         </div>

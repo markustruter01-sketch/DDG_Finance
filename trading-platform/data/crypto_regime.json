@@ -1,14 +1,14 @@
 {
-  "crypto_regime": "Crypto-Bear",
-  "score": 23.0,
+  "crypto_regime": "Crypto-Risk-Off",
+  "score": 15.0,
   "confidence": 0.75,
   "equity_contagion": false,
   "equity_regime": "Bear",
   "correlation_with_equity": -0.813,
   "crypto_fear_greed": 16,
-  "btc_24h_change_pct": 2.18,
+  "btc_24h_change_pct": 1.86,
   "btc_dominance": 57.2,
   "previous_regime": "Crypto-Bear",
-  "regime_changed": false,
-  "written_at": "2026-04-10T01:42:21.961513+00:00"
+  "regime_changed": true,
+  "written_at": "2026-04-10T01:57:10.757183+00:00"
 }

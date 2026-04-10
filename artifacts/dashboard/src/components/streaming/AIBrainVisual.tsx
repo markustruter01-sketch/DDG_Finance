@@ -69,14 +69,19 @@ export function AIBrainVisual() {
   const [statusVisible, setStatusVisible] = useState(true);
 
   useEffect(() => {
-    const id = setInterval(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const intervalId = setInterval(() => {
       setStatusVisible(false);
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         setStatusIdx(i => (i + 1) % STATUS_MESSAGES.length);
         setStatusVisible(true);
+        timeoutId = null;
       }, 420);
     }, 3000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(intervalId);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+    };
   }, []);
 
   const edges = useMemo(() => {

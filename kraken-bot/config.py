@@ -24,6 +24,7 @@ BOT_PROFILES = {
         "db_id": 1,
         "strategy_type": "mean_reversion",
         "strategy_label": "Conservative",
+        "BLACKLIST": ["ALGO/USD", "OP/USD", "RENDER/USD"],
         "RSI_OVERSOLD": 40,
         "RSI_OVERBOUGHT": 60,
         "ZSCORE_ENTRY": 1.0,
@@ -43,6 +44,7 @@ BOT_PROFILES = {
         "db_id": 2,
         "strategy_type": "flow_sentiment",
         "strategy_label": "Flow Sentiment",
+        "BLACKLIST": ["ALGO/USD", "OP/USD", "RENDER/USD"],
         "RSI_OVERSOLD": 30,
         "RSI_OVERBOUGHT": 70,
         "ZSCORE_ENTRY": 0.8,
@@ -82,7 +84,8 @@ BOT_PROFILES = {
         "display_name": "Calypso's Tide",
         "db_id": 3,
         "strategy_type": "mean_reversion_conservative",
-        "strategy_label": "Conservative",
+        "strategy_label": "mean_reversion_conservative",
+        "BLACKLIST": [],
         "RSI_OVERSOLD": 35,
         "RSI_OVERBOUGHT": 65,
         "ZSCORE_ENTRY": 2.0,
@@ -155,7 +158,7 @@ else:
     })
 
 
-BLACKLIST = ["ALGO/USD", "OP/USD", "RENDER/USD"]
+BLACKLIST = _profile.get("BLACKLIST", ["ALGO/USD", "OP/USD", "RENDER/USD"])
 
 PAIR_SIZING_PENALIZED = {
     "ETH/USD":    0.50,

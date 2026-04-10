@@ -236,7 +236,7 @@ def section_trade_mechanics_kraken() -> list[str]:
         "    Base: 10-15% of equity per position (varies by bot aggression profile)",
         "    Davy Jones (Conservative): smaller sizes, tighter stops",
         "    Blackbeard (Aggressive): larger sizes, wider stops",
-        "    Calypso (Most Aggressive): largest sizes, widest stops",
+        "    Calypso (mean_reversion_conservative): market-cap tiered sizing, Z≥2 + VPIN + RSI triple gate, 48h max hold",
         "    Max simultaneous positions: 10 per bot",
         "",
         "  CIRCUIT BREAKER:",

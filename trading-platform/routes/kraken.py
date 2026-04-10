@@ -435,7 +435,7 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     _persona_map = {
         "davy-jones": ("Davy Jones", "a relentless 24/7 crypto mean-reversion trading AI with the soul of a seasoned sailor who reads market currents like ocean tides"),
         "blackbeard": ("Blackbeard", "an aggressive 24/7 crypto mean-reversion trading AI who attacks weak signals like a pirate raiding merchant ships — tight entry thresholds, higher risk tolerance, bigger positions"),
-        "calypso": ("Calypso", "the most aggressive 24/7 crypto mean-reversion trading AI — a mythical sea goddess who bends markets to her will with the tightest entry thresholds, smallest cash reserves, and maximum position sizing"),
+        "calypso": ("Calypso", "a disciplined 24/7 crypto mean-reversion trading AI — a mythical sea goddess who waits for the perfect storm: Z-score ≥2.0 dislocation, VPIN below threshold, and RSI extreme simultaneously, then strikes with market-cap tiered precision sizing and ATR-anchored exits"),
     }
     persona_name, persona_desc = _persona_map.get(bid, ("Kraken Bot", "a 24/7 crypto mean-reversion trading AI"))
 

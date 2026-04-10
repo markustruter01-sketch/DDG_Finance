@@ -1946,7 +1946,7 @@ async def export_diagnostic_report():
 
     h2("BOTS #2-4: KRAKEN FLEET \u2014 HOW THEY WORK")
     lines += [
-        "  Bots:              #2 Davy Jones (Conservative), #3 Blackbeard (Aggressive), #4 Calypso (Most Aggressive)",
+        "  Bots:              #2 Davy Jones (Conservative), #3 Blackbeard (Aggressive), #4 Calypso (mean_reversion_conservative)",
         "  Execution:         Kraken exchange (paper trading simulation, $100k each)",
         "  Strategy:          Mean reversion + momentum with VPIN microstructure filter",
         "  Pairs:             35+ crypto pairs (BTC, ETH, XRP, SOL, BNB, ADA, DOT, AVAX, etc.)",

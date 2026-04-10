@@ -30,7 +30,7 @@ _kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, 
 KRAKEN_BOT_PROFILES = {
     "davy-jones": {"display_name": "Davy Jones' Portfolio", "db_id": 1, "strategy_label": "Conservative", "port": 8085},
     "blackbeard": {"display_name": "Blackbeard's Fleet", "db_id": 2, "strategy_label": "Aggressive", "port": 8086},
-    "calypso":    {"display_name": "Calypso's Tide", "db_id": 3, "strategy_label": "Most Aggressive", "port": 8087},
+    "calypso":    {"display_name": "Calypso's Tide", "db_id": 3, "strategy_label": "mean_reversion_conservative", "port": 8087},
 }
 
 _kraken_commentary_caches: dict[str, dict[str, Any]] = {

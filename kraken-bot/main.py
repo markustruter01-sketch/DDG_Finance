@@ -2158,7 +2158,12 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue
-                    _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
+                    # MRC bot: VPIN always enforced — no bypass even in deep-oversold.
+                    # (Spec: all 3 conditions — Z-score, VPIN, RSI — must be met simultaneously.)
+                    if IS_MRC_BOT:
+                        _ms_vpin_override = _effective_vpin_cap
+                    else:
+                        _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
                     _ms_allowed, _ms_reason = _ms.entry_filter(
                         side="long", vpin_block=_ms_vpin_override,
                     )

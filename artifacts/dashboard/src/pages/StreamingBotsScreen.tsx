@@ -82,11 +82,11 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
       {isBest && (
         <style>{`
           @keyframes fireGlow {
-            0%   { box-shadow: 0 0 12px 3px #ff4500, 0 0 28px 8px #ff6a00, 0 0 50px 16px #ffd700; border-color: #ff4500; }
-            25%  { box-shadow: 0 0 18px 5px #ff6a00, 0 0 38px 10px #ff4500, 0 0 65px 18px #ff8c00; border-color: #ff6a00; }
-            50%  { box-shadow: 0 0 22px 6px #ffd700, 0 0 44px 12px #ff6a00, 0 0 75px 22px #ff4500; border-color: #ffd700; }
-            75%  { box-shadow: 0 0 18px 5px #ff8c00, 0 0 36px 10px #ffd700, 0 0 60px 18px #ff6a00; border-color: #ff8c00; }
-            100% { box-shadow: 0 0 12px 3px #ff4500, 0 0 28px 8px #ff6a00, 0 0 50px 16px #ffd700; border-color: #ff4500; }
+            0%   { box-shadow: 0 0 4px 1px #ff4500, 0 0 8px 2px #ff6a00, 0 0 15px 5px #ffd700; border-color: #ff4500; }
+            25%  { box-shadow: 0 0 5px 2px #ff6a00, 0 0 11px 3px #ff4500, 0 0 20px 5px #ff8c00; border-color: #ff6a00; }
+            50%  { box-shadow: 0 0 7px 2px #ffd700, 0 0 13px 4px #ff6a00, 0 0 23px 7px #ff4500; border-color: #ffd700; }
+            75%  { box-shadow: 0 0 5px 2px #ff8c00, 0 0 11px 3px #ffd700, 0 0 18px 5px #ff6a00; border-color: #ff8c00; }
+            100% { box-shadow: 0 0 4px 1px #ff4500, 0 0 8px 2px #ff6a00, 0 0 15px 5px #ffd700; border-color: #ff4500; }
           }
         `}</style>
       )}

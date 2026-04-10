@@ -285,30 +285,32 @@ export function AIBrainVisual() {
         </line>
 
         {/* Status strip */}
-        <line x1={60} y1={470} x2={940} y2={470} stroke="#1e293b" strokeWidth={1} />
-        <text x={88} y={490} fontFamily="'Courier New',monospace" fontSize={10} fill="#22d3ee" opacity={0.52} letterSpacing="1">
+        <line x1={60} y1={462} x2={940} y2={462} stroke="rgba(99,102,241,0.25)" strokeWidth={1} />
+        <rect x={60} y={463} width={880} height={44} fill="rgba(2,6,23,0.55)" />
+
+        <text x={88} y={491} fontFamily="'Courier New',monospace" fontSize={12} fill="#22d3ee" opacity={0.7} letterSpacing="2">
           GEMINI-3
         </text>
-        <text x={912} y={490} textAnchor="end" fontFamily="'Courier New',monospace" fontSize={10} fill="#a78bfa" opacity={0.52} letterSpacing="1">
+        <text x={912} y={491} textAnchor="end" fontFamily="'Courier New',monospace" fontSize={12} fill="#a78bfa" opacity={0.7} letterSpacing="2">
           CLAUDE-4
         </text>
         <text
-          x={500} y={490}
+          x={500} y={491}
           textAnchor="middle"
           fontFamily="'Courier New',monospace"
-          fontSize={11}
-          fill="rgba(148,163,184,0.78)"
-          letterSpacing="2"
+          fontSize={14}
+          fill="#cbd5e1"
+          letterSpacing="4"
           style={{ opacity: statusVisible ? 1 : 0, transition: "opacity 0.42s ease" }}
         >
           {STATUS_MESSAGES[statusIdx]}
         </text>
 
         {/* Corner decorators */}
-        <text x={68} y={510} fontFamily="monospace" fontSize={9} fill="rgba(34,211,238,0.25)" letterSpacing="1">
+        <text x={68} y={504} fontFamily="monospace" fontSize={9} fill="rgba(34,211,238,0.35)" letterSpacing="1">
           [{new Date().toISOString().slice(0,10)}]
         </text>
-        <text x={932} y={510} textAnchor="end" fontFamily="monospace" fontSize={9} fill="rgba(167,139,250,0.25)" letterSpacing="1">
+        <text x={932} y={504} textAnchor="end" fontFamily="monospace" fontSize={9} fill="rgba(167,139,250,0.35)" letterSpacing="1">
           DIGITAL DYNAMICS v2.0
         </text>
       </svg>

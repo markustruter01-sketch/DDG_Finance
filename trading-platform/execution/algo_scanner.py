@@ -84,7 +84,7 @@ REGIME_PARAMS: dict[str, dict] = {
         "take_multiplier": 1.6,
         "sector_filter": None,
         "rsi_upper": 72.0,
-        "min_conviction": 0.60,
+        "min_conviction": 0.50,
     },
     "bear": {
         "max_active": 4,
@@ -369,11 +369,21 @@ def scan_momentum(
         if d.get("is_overheated"):
             skipped_filter += 1
             continue
-        if d.get("momentum_3mo") != "positive":
-            skipped_filter += 1
-            continue
 
         score = _momentum_score(d)
+
+        if regime_lower == "bull":
+            # Bull: require confirmed positive 3-month trend
+            if d.get("momentum_3mo") != "positive":
+                skipped_filter += 1
+                continue
+        else:
+            # Sideways: use composite_score > 0 — allows recovering stocks whose
+            # 3-month momentum is still negative but 5d/20d returns are turning up
+            if score <= 0:
+                skipped_filter += 1
+                continue
+
         conviction = _conviction_from_rsi(rsi)
         if conviction < min_conviction:
             skipped_filter += 1

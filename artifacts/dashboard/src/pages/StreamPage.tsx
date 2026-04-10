@@ -326,7 +326,7 @@ export default function StreamPage() {
         </div>
       </div>
 
-      <ClippyAssistant active={active} />
+      {active !== "a" && <ClippyAssistant active={active} />}
     </div>
   );
 }

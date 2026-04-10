@@ -58,21 +58,21 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           display: "flex",
           flexDirection: "column",
           alignItems: "flex-start",
-          gap: 10,
+          gap: 14,
           pointerEvents: "none",
           userSelect: "none",
         }}
       >
-        {/* Speech bubble */}
+        {/* Speech bubble — 35% larger */}
         <div
           style={{
             opacity: visible ? 1 : 0,
             transition: "opacity 0.25s ease",
-            maxWidth: 264,
+            maxWidth: 356,
             background: "linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.95))",
             border: "1px solid rgba(99,102,241,0.35)",
-            borderRadius: 14,
-            padding: "12px 16px",
+            borderRadius: 19,
+            padding: "16px 22px",
             boxShadow: "0 5px 28px rgba(0,0,0,0.6), 0 0 14px rgba(99,102,241,0.15)",
             position: "relative",
           }}
@@ -80,7 +80,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           <p
             style={{
               margin: 0,
-              fontSize: 13,
+              fontSize: 18,
               lineHeight: 1.5,
               color: "rgba(226,232,240,0.92)",
               fontWeight: 600,
@@ -93,39 +93,39 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           <div
             style={{
               position: "absolute",
-              bottom: -10,
-              left: 26,
+              bottom: -14,
+              left: 35,
               width: 0,
               height: 0,
-              borderLeft: "10px solid transparent",
-              borderRight: "5px solid transparent",
-              borderTop: "10px solid rgba(99,102,241,0.35)",
+              borderLeft: "14px solid transparent",
+              borderRight: "7px solid transparent",
+              borderTop: "14px solid rgba(99,102,241,0.35)",
             }}
           />
           <div
             style={{
               position: "absolute",
-              bottom: -8,
-              left: 28,
+              bottom: -11,
+              left: 38,
               width: 0,
               height: 0,
-              borderLeft: "8px solid transparent",
-              borderRight: "4px solid transparent",
-              borderTop: "8px solid rgba(15,23,42,0.97)",
+              borderLeft: "11px solid transparent",
+              borderRight: "5px solid transparent",
+              borderTop: "11px solid rgba(15,23,42,0.97)",
             }}
           />
         </div>
 
-        {/* Clippy mascot SVG */}
+        {/* Clippy mascot SVG — 35% larger */}
         <div
           style={{
-            marginLeft: 10,
+            marginLeft: 14,
             animation: "clippyFloat 3.5s ease-in-out infinite",
           }}
         >
           <svg
-            width={65}
-            height={86}
+            width={88}
+            height={116}
             viewBox="0 0 54 72"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"

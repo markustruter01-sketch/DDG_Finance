@@ -34,7 +34,7 @@ export function GlobalHUD() {
         <span style={{ color: "#22d3ee", fontWeight: 700 }}>Crypto</span>,{" "}
         <span style={{ color: "#a78bfa", fontWeight: 700 }}>FOREX</span> &amp;{" "}
         <span style={{ color: "#fb923c", fontWeight: 700 }}>Futures</span>.{" "}
-        Want to build your own? No experience required — reach out to us at{" "}
+        Want to build your own for just $49? No experience required — reach out to us at{" "}
         <a
           href="mailto:info@digitaldynamics-group.com"
           style={{ color: "#22d3ee", fontWeight: 700, textDecoration: "none" }}

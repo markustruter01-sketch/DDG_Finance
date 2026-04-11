@@ -1431,12 +1431,19 @@ def run_cycle() -> None:
     # ≥10 trades) → halve size. If strongly favourable (PF > 1.5 over ≥20) →
     # boost 25%. Otherwise normal. Multiplier is logged and applied to all entries.
     try:
-        from regime_tracker import calculate_regime_size_multiplier as _calc_regime_mult
+        from regime_tracker import (
+            calculate_regime_size_multiplier as _calc_regime_mult,
+            normalise_regime as _normalise_regime,
+        )
+        _regime_label_canonical = _normalise_regime(_regime_label)
         _regime_size_mult, _regime_mult_reason = _calc_regime_mult(BOT_ID, _regime_label)
     except Exception as _rmt_exc:
+        _regime_label_canonical = _regime_label
         _regime_size_mult, _regime_mult_reason = 1.0, f"regime multiplier unavailable: {_rmt_exc}"
     if _regime_size_mult != 1.0:
         logger.info(f"RegimeSizing | {_regime_mult_reason}")
+    else:
+        logger.debug(f"RegimeSizing | {_regime_mult_reason}")
 
     _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
     for _bl_sym in _blacklisted_open:
@@ -1936,7 +1943,7 @@ def run_cycle() -> None:
                             f"ATR stop: ${_atr_stop:,.4f} | SL={_swing_sl_pct*100:.2f}%"
                         )
                         if open_position(symbol, _swing_side, size_usd, current_price,
-                                         regime_at_entry=_regime_label, entry_zscore=sym_z_score):
+                                         regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
                             _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
@@ -2106,7 +2113,7 @@ def run_cycle() -> None:
                         )
                     _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
                     if open_position(symbol, "long", _scout_size, current_price,
-                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
@@ -2242,7 +2249,7 @@ def run_cycle() -> None:
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "long", _t1_size, current_price,
-                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
@@ -2365,7 +2372,7 @@ def run_cycle() -> None:
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "short", _t1_size, current_price,
-                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:

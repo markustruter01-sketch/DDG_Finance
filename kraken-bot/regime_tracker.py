@@ -12,6 +12,15 @@ Multiplier rules:
   profit_factor < 0.8  AND trades >= 10  → 0.50  (halve size — regime hurting us)
   profit_factor > 1.50 AND trades >= 20  → 1.25  (boost size — regime favouring us)
   else                                   → 1.00  (normal sizing)
+
+Regime normalisation:
+  All raw regime labels (e.g. "Crypto-Risk-Off", "Crypto [Reconstructed]",
+  "Crypto-Bull") are mapped to canonical labels before any comparison:
+    "Crypto"   — any label containing "crypto"
+    "Bear"     — any label containing "bear"
+    "Bull"     — any label containing "bull"
+    "Sideways" — any label containing "sideways"
+    "Unknown"  — everything else / None
 """
 
 from __future__ import annotations
@@ -28,6 +37,42 @@ _DB_URL = os.environ.get("DATABASE_URL")
 _CRYPTO_REGIME_FILE = Path(__file__).parent.parent / "trading-platform" / "data" / "crypto_regime.json"
 _MARKET_REGIME_FILE = Path(__file__).parent.parent / "trading-platform" / "data" / "market_regime.json"
 
+# ---------------------------------------------------------------------------
+# Canonical regime labels
+# ---------------------------------------------------------------------------
+CANONICAL_REGIMES = ("Crypto", "Bear", "Bull", "Sideways", "Unknown")
+
+
+def normalise_regime(regime_label: str | None) -> str:
+    """
+    Map any raw regime label variant to one of the canonical labels:
+      Crypto | Bear | Bull | Sideways | Unknown
+
+    Examples:
+      "Crypto-Risk-Off"          → "Crypto"
+      "Crypto [Reconstructed]"   → "Crypto"
+      "Crypto-Bull"              → "Crypto"   (crypto takes priority)
+      "Bear [Reconstructed]"     → "Bear"
+      "Sideways"                 → "Sideways"
+      None / ""                  → "Unknown"
+    """
+    if not regime_label:
+        return "Unknown"
+    label = regime_label.strip().lower()
+    if "crypto" in label:
+        return "Crypto"
+    if "bear" in label:
+        return "Bear"
+    if "bull" in label:
+        return "Bull"
+    if "sideways" in label:
+        return "Sideways"
+    return "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Internal DB helper
+# ---------------------------------------------------------------------------
 
 def _pg_query(sql: str, params: tuple = ()) -> list[dict]:
     if not _DB_URL:
@@ -48,10 +93,18 @@ def _pg_query(sql: str, params: tuple = ()) -> list[dict]:
         return []
 
 
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def get_current_regime() -> str:
     """
-    Return the current crypto regime label.
-    Primary: crypto_regime.json — fallback: market_regime.json — fallback: 'Unknown'
+    Return the current crypto regime label (raw, from JSON files).
+    Callers should pass this through normalise_regime() before comparison.
+
+    Primary  : crypto_regime.json
+    Fallback : market_regime.json
+    Default  : 'Unknown'
     """
     try:
         if _CRYPTO_REGIME_FILE.exists():
@@ -78,14 +131,17 @@ def get_regime_performance_matrix(bot_id: str) -> dict[str, dict[str, Any]]:
     """
     Calculate per-regime performance metrics from kraken_trades for a specific bot.
 
-    Returns a dict keyed by regime name:
+    All raw regime labels are normalised before aggregation, so variants like
+    "Crypto [Reconstructed]" and "Crypto-Risk-Off" are merged under "Crypto".
+
+    Returns a dict keyed by canonical regime name:
     {
-      "Crypto-Bull": {
-        "total_trades": 42,
-        "win_rate": 0.52,
-        "avg_pnl_usd": 12.4,
-        "profit_factor": 1.35,
-        "total_pnl_usd": 520.8,
+      "Crypto": {
+        "total_trades": 89,
+        "win_rate": 0.27,
+        "avg_pnl_usd": -50.50,
+        "profit_factor": 0.22,
+        "total_pnl_usd": -4495.0,
       },
       ...
     }
@@ -94,39 +150,44 @@ def get_regime_performance_matrix(bot_id: str) -> dict[str, dict[str, Any]]:
         """
         SELECT
             COALESCE(NULLIF(regime_at_entry, ''), 'Unknown') AS regime,
-            COUNT(*)::int                                      AS total_trades,
-            COUNT(*) FILTER (WHERE pnl_usd > 0)::int          AS wins,
-            SUM(pnl_usd)                                       AS total_pnl_usd,
-            SUM(pnl_usd) FILTER (WHERE pnl_usd > 0)           AS gross_profit,
-            ABS(SUM(pnl_usd) FILTER (WHERE pnl_usd <= 0))     AS gross_loss,
-            AVG(pnl_usd)                                       AS avg_pnl_usd
+            pnl_usd
         FROM kraken_trades
         WHERE bot_id = %s
-        GROUP BY 1
-        ORDER BY total_trades DESC
         """,
         (bot_id,),
     )
 
-    matrix: dict[str, dict[str, Any]] = {}
+    # Aggregate in Python after normalising regime labels
+    buckets: dict[str, dict] = {}
     for row in rows:
-        regime = str(row["regime"])
-        gross_profit = float(row["gross_profit"] or 0.0)
-        gross_loss   = float(row["gross_loss"]   or 0.0)
-        total_trades = int(row["total_trades"])
-        wins         = int(row["wins"])
+        canon = normalise_regime(str(row["regime"]))
+        pnl   = float(row["pnl_usd"] or 0.0)
+        if canon not in buckets:
+            buckets[canon] = {"pnls": [], "wins": 0}
+        buckets[canon]["pnls"].append(pnl)
+        if pnl > 0:
+            buckets[canon]["wins"] += 1
 
+    matrix: dict[str, dict[str, Any]] = {}
+    for regime, data in buckets.items():
+        pnls         = data["pnls"]
+        n            = len(pnls)
+        wins         = data["wins"]
+        gross_profit = sum(p for p in pnls if p > 0)
+        gross_loss   = abs(sum(p for p in pnls if p < 0))
+        total_pnl    = sum(pnls)
+        avg_pnl      = total_pnl / n if n > 0 else 0.0
         profit_factor = (
             gross_profit / gross_loss if gross_loss > 0 else
             (float("inf") if gross_profit > 0 else 0.0)
         )
 
         matrix[regime] = {
-            "total_trades":  total_trades,
-            "win_rate":      round(wins / total_trades, 4) if total_trades > 0 else 0.0,
-            "avg_pnl_usd":   round(float(row["avg_pnl_usd"] or 0.0), 2),
+            "total_trades":  n,
+            "win_rate":      round(wins / n, 4) if n > 0 else 0.0,
+            "avg_pnl_usd":   round(avg_pnl, 2),
             "profit_factor": round(profit_factor, 3) if profit_factor != float("inf") else 99.99,
-            "total_pnl_usd": round(float(row["total_pnl_usd"] or 0.0), 2),
+            "total_pnl_usd": round(total_pnl, 2),
             "gross_profit":  round(gross_profit, 2),
             "gross_loss":    round(gross_loss, 2),
         }
@@ -138,28 +199,32 @@ def calculate_regime_size_multiplier(bot_id: str, current_regime: str) -> tuple[
     """
     Deterministic regime-based position sizing multiplier.
 
-    Reads the last 20+ trades in the current regime for this bot,
-    calculates the profit factor, and applies the sizing rules.
+    Normalises current_regime to a canonical label, then reads the last 30
+    trades from that canonical regime for this bot.
 
     Returns: (multiplier, reason_string)
     """
+    canonical = normalise_regime(current_regime)
+
+    if canonical == "Unknown":
+        return (1.0, f"Regime '{current_regime}' normalised to Unknown — normal sizing")
+
+    # Build a LIKE pattern that matches all stored variants of this canonical regime
+    # e.g. canonical="Crypto" → matches "Crypto [Reconstructed]", "Crypto-Risk-Off", etc.
     rows = _pg_query(
         """
         SELECT pnl_usd
         FROM kraken_trades
         WHERE bot_id = %s
-          AND (
-            regime_at_entry = %s
-            OR regime_at_entry LIKE %s
-          )
+          AND LOWER(COALESCE(regime_at_entry, '')) LIKE %s
         ORDER BY closed_at DESC
         LIMIT 30
         """,
-        (bot_id, current_regime, f"%{current_regime}%"),
+        (bot_id, f"%{canonical.lower()}%"),
     )
 
     if not rows:
-        return (1.0, f"No trade history in regime '{current_regime}' — normal sizing")
+        return (1.0, f"No trade history for canonical regime '{canonical}' — normal sizing")
 
     pnls = [float(r["pnl_usd"]) for r in rows]
     n = len(pnls)
@@ -171,20 +236,23 @@ def calculate_regime_size_multiplier(bot_id: str, current_regime: str) -> tuple[
         (99.99 if gross_profit > 0 else 0.0)
     )
 
+    raw_label = current_regime if current_regime != canonical else canonical
+
     if profit_factor < 0.8 and n >= 10:
         return (
             0.5,
-            f"REGIME CAUTION: profit_factor={profit_factor:.2f} < 0.8 over {n} trades "
-            f"in '{current_regime}' — halving position sizes",
+            f"REGIME CAUTION: PF={profit_factor:.2f} < 0.80 over {n} trades in "
+            f"'{canonical}' (raw: '{raw_label}') — halving position sizes",
         )
     elif profit_factor > 1.5 and n >= 20:
         return (
             1.25,
-            f"REGIME BOOST: profit_factor={profit_factor:.2f} > 1.5 over {n} trades "
-            f"in '{current_regime}' — increasing position sizes 25%",
+            f"REGIME BOOST: PF={profit_factor:.2f} > 1.50 over {n} trades in "
+            f"'{canonical}' (raw: '{raw_label}') — increasing sizes 25%",
         )
     else:
         return (
             1.0,
-            f"Regime '{current_regime}': profit_factor={profit_factor:.2f} over {n} trades — normal sizing",
+            f"Regime '{canonical}' (raw: '{raw_label}'): PF={profit_factor:.2f} "
+            f"over {n} trades — normal sizing",
         )

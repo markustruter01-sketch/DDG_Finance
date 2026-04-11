@@ -1178,78 +1178,96 @@ def section_regime_performance_matrix(bot_label: str, bot_id: str) -> list[str]:
     lines: list[str] = []
     _h2(lines, f"REGIME PERFORMANCE MATRIX — {bot_label}")
 
-    rows = _pg_query(
-        """
-        SELECT
-            COALESCE(NULLIF(regime_at_entry, ''), 'Unknown') AS regime,
-            COUNT(*)::int                                       AS total_trades,
-            COUNT(*) FILTER (WHERE pnl_usd > 0)::int           AS wins,
-            SUM(pnl_usd)                                        AS total_pnl,
-            SUM(pnl_usd) FILTER (WHERE pnl_usd > 0)            AS gross_profit,
-            ABS(SUM(pnl_usd) FILTER (WHERE pnl_usd <= 0))      AS gross_loss,
-            AVG(pnl_usd)                                        AS avg_pnl
-        FROM kraken_trades
-        WHERE bot_id = %s
-        GROUP BY 1
-        ORDER BY total_trades DESC
-        """,
-        (bot_id,),
-    )
-
-    if not rows:
-        lines.append("  No trade data available for regime analysis.")
-        return lines
-
-    lines.append("")
-    lines.append(
-        f"  {'Regime':<32} {'Trades':>7} {'Win%':>7} {'AvgP&L':>9} "
-        f"{'ProfFact':>9} {'TotalP&L':>11}"
-    )
-    lines.append("  " + "-" * 80)
-
+    # Load normaliser from regime_tracker — used for both display and comparison
     total_mult = 1.0
     mult_reason = "No current regime data"
+    current_regime_raw = "Unknown"
+    current_regime_canonical = "Unknown"
+    _normalise = None
 
     try:
         import sys, os
         _kb_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "kraken-bot")
         if _kb_path not in sys.path:
             sys.path.insert(0, _kb_path)
-        from regime_tracker import get_current_regime, calculate_regime_size_multiplier
-        current_regime = get_current_regime()
-        total_mult, mult_reason = calculate_regime_size_multiplier(bot_id, current_regime)
+        from regime_tracker import (
+            get_current_regime,
+            calculate_regime_size_multiplier,
+            normalise_regime,
+        )
+        _normalise = normalise_regime
+        current_regime_raw = get_current_regime()
+        current_regime_canonical = normalise_regime(current_regime_raw)
+        total_mult, mult_reason = calculate_regime_size_multiplier(bot_id, current_regime_raw)
     except Exception as exc:
-        current_regime = "Unknown"
         mult_reason = f"regime_tracker unavailable: {exc}"
 
-    for row in rows:
-        regime    = str(row["regime"])
-        n         = int(row["total_trades"])
-        wins      = int(row["wins"])
-        total_pnl = float(row["total_pnl"] or 0)
-        gross_p   = float(row["gross_profit"] or 0)
-        gross_l   = float(row["gross_loss"]   or 0)
-        avg_pnl   = float(row["avg_pnl"]      or 0)
+    # Fetch raw trade rows — normalise and aggregate in Python so all variants
+    # (e.g. "Crypto [Reconstructed]", "Crypto-Risk-Off") merge under "Crypto"
+    raw_rows = _pg_query(
+        """
+        SELECT
+            COALESCE(NULLIF(regime_at_entry, ''), 'Unknown') AS regime,
+            pnl_usd
+        FROM kraken_trades
+        WHERE bot_id = %s
+        """,
+        (bot_id,),
+    )
+
+    if not raw_rows:
+        lines.append("  No trade data available for regime analysis.")
+        return lines
+
+    # Aggregate by canonical regime label
+    buckets: dict = {}
+    for row in raw_rows:
+        canon = _normalise(str(row["regime"])) if _normalise else str(row["regime"])
+        pnl   = float(row["pnl_usd"] or 0.0)
+        if canon not in buckets:
+            buckets[canon] = {"pnls": [], "wins": 0}
+        buckets[canon]["pnls"].append(pnl)
+        if pnl > 0:
+            buckets[canon]["wins"] += 1
+
+    # Sort by trade count descending
+    sorted_regimes = sorted(buckets.items(), key=lambda kv: len(kv[1]["pnls"]), reverse=True)
+
+    lines.append("")
+    lines.append(
+        f"  {'Regime':<18} {'Trades':>7} {'Win%':>7} {'AvgP&L':>9} "
+        f"{'ProfFact':>9} {'TotalP&L':>11}"
+    )
+    lines.append("  " + "-" * 65)
+
+    for canon, data in sorted_regimes:
+        pnls      = data["pnls"]
+        n         = len(pnls)
+        wins      = data["wins"]
+        total_pnl = sum(pnls)
+        avg_pnl   = total_pnl / n if n > 0 else 0.0
+        gross_p   = sum(p for p in pnls if p > 0)
+        gross_l   = abs(sum(p for p in pnls if p < 0))
         win_rate  = wins / n if n > 0 else 0.0
         pf        = gross_p / gross_l if gross_l > 0 else (99.99 if gross_p > 0 else 0.0)
         pf_str    = f"{pf:.2f}" if pf < 99 else "∞"
 
-        # Flag active regime
-        regime_label = regime
-        if current_regime and current_regime.lower() in regime.lower():
-            regime_label = f"► {regime}"
+        # Mark currently active regime
+        is_active = (canon == current_regime_canonical)
+        regime_display = f"► {canon}" if is_active else f"  {canon}"
 
         lines.append(
-            f"  {regime_label:<32} {n:>7} {win_rate:>6.1%} {avg_pnl:>+9.2f} "
+            f"  {regime_display:<18} {n:>7} {win_rate:>6.1%} {avg_pnl:>+9.2f} "
             f"{pf_str:>9} {total_pnl:>+11.2f}"
         )
 
     lines.append("")
-    lines.append(f"  Current regime detected : {current_regime}")
-    lines.append(f"  Active size multiplier  : {total_mult:.2f}×")
-    lines.append(f"  Reason                  : {mult_reason}")
+    lines.append(f"  Current regime (raw)      : {current_regime_raw}")
+    lines.append(f"  Current regime (canonical): {current_regime_canonical}")
+    lines.append(f"  Active size multiplier    : {total_mult:.2f}×")
+    lines.append(f"  Reason                    : {mult_reason}")
     lines.append("")
-    lines.append("  Note: All historical trades tagged [Reconstructed] from equity_snapshots.")
-    lines.append("  New trades from this session onward will carry live regime labels.")
+    lines.append("  Historical trades backfilled from equity_snapshots.")
+    lines.append("  New trades carry live canonical regime labels (e.g. 'Crypto', 'Bear').")
 
     return lines

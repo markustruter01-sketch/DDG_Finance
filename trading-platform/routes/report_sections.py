@@ -269,7 +269,7 @@ def section_trade_mechanics_apex() -> list[str]:
         "    iv_min = 5th percentile of chain IVs",
         "    iv_max = 95th percentile of chain IVs",
         "    ivr = ((current_iv - iv_min) / (iv_max - iv_min)) * 100",
-        "    THRESHOLD: IVR < 20 (implied volatility is compressed)",
+        "    THRESHOLD: IVR < 25 (implied volatility is compressed)",
         "",
         "  BOLLINGER BAND SQUEEZE FORMULA:",
         "    SMA = 20-day Simple Moving Average",
@@ -280,7 +280,7 @@ def section_trade_mechanics_apex() -> list[str]:
         "    SQUEEZE = True when current_bandwidth <= 1.05 * min_bandwidth_126d",
         "",
         "  ENTRY CONDITIONS (ALL must be True):",
-        "    1. IVR < 20",
+        "    1. IVR < 25",
         "    2. Bollinger Band squeeze detected",
         "    3. Option chain has valid ATM strikes with 30-45 DTE",
         "    4. Deployed capital < capital fence (5% of equity)",
@@ -848,7 +848,7 @@ def section_apex_scan_log() -> list[str]:
                 setups = scan_results_raw.get("setups_found", 0)
                 entries = scan_results_raw.get("entries_taken", 0)
                 lines.append(f"  Tickers evaluated: {evaluated}")
-                lines.append(f"  Setups found (IVR<20 + squeeze): {setups}")
+                lines.append(f"  Setups found (IVR<25 + squeeze): {setups}")
                 lines.append(f"  Entries taken: {entries}")
                 scanner_detail = scan_results_raw.get("scanner_detail", [])
 

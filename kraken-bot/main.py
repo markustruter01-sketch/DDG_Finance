@@ -323,6 +323,11 @@ price_history: dict[str, deque] = {
     sym: deque(maxlen=100) for sym in SYMBOLS
 }
 
+# Stage 2: OHLCV close-price cache used by correlation_tracker.
+# Populated each cycle as candles are fetched; persists across cycles so
+# open-position symbols always have data even if not scanned in this cycle.
+_closes_cache: dict[str, list[float]] = {}
+
 # Stateful circuit-breaker instance from shared/ — tracks pause window and
 # observation count in memory across cycles.  One per-symbol breaker so each
 # pair can trip independently without halting the whole bot.
@@ -1445,6 +1450,16 @@ def run_cycle() -> None:
     else:
         logger.debug(f"RegimeSizing | {_regime_mult_reason}")
 
+    # ── Stage 2: Correlation-Aware Portfolio Sizing ────────────────────────
+    # Load the penalty function once per cycle; applied at each entry point.
+    try:
+        from correlation_tracker import get_entry_correlation_penalty as _get_corr_penalty
+        _corr_sizing_active = True
+    except Exception as _ct_exc:
+        _get_corr_penalty = None
+        _corr_sizing_active = False
+        logger.debug(f"CorrSizing | correlation_tracker unavailable: {_ct_exc}")
+
     _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
     for _bl_sym in _blacklisted_open:
         logger.warning(
@@ -1469,6 +1484,9 @@ def run_cycle() -> None:
             lows          = [c[3] for c in candles]
             volumes       = [c[5] for c in candles]
             current_price = closes[-1]
+
+            # Stage 2: keep close-price history for correlation calculations
+            _closes_cache[symbol] = closes
 
             if IS_PRIMARY_FETCHER:
                 _ohlcv_cache_data[symbol] = candles
@@ -1891,6 +1909,15 @@ def run_cycle() -> None:
                         size_usd *= _psm
                     if _regime_size_mult != 1.0:
                         size_usd *= _regime_size_mult
+                    if _corr_sizing_active and _get_corr_penalty and open_positions:
+                        _corr_scale, _corr_reason = _get_corr_penalty(
+                            symbol, list(open_positions.keys()), _closes_cache
+                        )
+                        if _corr_scale != 1.0:
+                            size_usd *= _corr_scale
+                            logger.info(f"CorrSizing | SWING {symbol}: {_corr_reason}")
+                        else:
+                            logger.debug(f"CorrSizing | SWING {symbol}: {_corr_reason}")
 
                     _swr = _symbol_recent_wr.get(symbol, {})
                     _swr_total = _swr.get("total", 0)
@@ -2172,6 +2199,15 @@ def run_cycle() -> None:
                     size_usd *= _psm
                 if _regime_size_mult != 1.0:
                     size_usd *= _regime_size_mult
+                if _corr_sizing_active and _get_corr_penalty and open_positions:
+                    _corr_scale, _corr_reason = _get_corr_penalty(
+                        symbol, list(open_positions.keys()), _closes_cache
+                    )
+                    if _corr_scale != 1.0:
+                        size_usd *= _corr_scale
+                        logger.info(f"CorrSizing | LONG {symbol}: {_corr_reason}")
+                    else:
+                        logger.debug(f"CorrSizing | LONG {symbol}: {_corr_reason}")
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap and not IS_MRC_BOT:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
@@ -2306,6 +2342,15 @@ def run_cycle() -> None:
                     size_usd *= _psm
                 if _regime_size_mult != 1.0:
                     size_usd *= _regime_size_mult
+                if _corr_sizing_active and _get_corr_penalty and open_positions:
+                    _corr_scale, _corr_reason = _get_corr_penalty(
+                        symbol, list(open_positions.keys()), _closes_cache
+                    )
+                    if _corr_scale != 1.0:
+                        size_usd *= _corr_scale
+                        logger.info(f"CorrSizing | SHORT {symbol}: {_corr_reason}")
+                    else:
+                        logger.debug(f"CorrSizing | SHORT {symbol}: {_corr_reason}")
                 if size_usd >= MIN_POSITION_USD:
                     _short_tp_pct = (SWING_TP_ATR_MULT * sym_atr / current_price
                                      if IS_MRC_BOT and current_price > 0

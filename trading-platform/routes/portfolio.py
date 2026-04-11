@@ -1547,6 +1547,8 @@ async def export_diagnostic_report():
     lines += _rs.section_regime_performance("Kraken Fleet", source="kraken")
     for _rpm_bid, _rpm_prof in KRAKEN_BOT_PROFILES.items():
         lines += _rs.section_regime_performance_matrix(_rpm_prof["display_name"], _rpm_bid)
+    for _cas_bid, _cas_prof in KRAKEN_BOT_PROFILES.items():
+        lines += _rs.section_correlation_aware_sizing(_cas_prof["display_name"], _cas_bid)
     for _streak_bid, _streak_prof in KRAKEN_BOT_PROFILES.items():
         _streak_name = _streak_prof["display_name"]
         lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)

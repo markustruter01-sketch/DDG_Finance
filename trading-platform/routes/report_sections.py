@@ -1271,3 +1271,82 @@ def section_regime_performance_matrix(bot_label: str, bot_id: str) -> list[str]:
     lines.append("  New trades carry live canonical regime labels (e.g. 'Crypto', 'Bear').")
 
     return lines
+
+
+def section_correlation_aware_sizing(bot_label: str, bot_id: str) -> list[str]:
+    """
+    Stage 2 — Correlation-Aware Portfolio Sizing.
+    Shows pairwise correlations between currently open positions for this bot,
+    plus what correlation penalty (if any) would be applied to a new entry.
+    """
+    lines: list[str] = []
+    _h2(lines, f"CORRELATION-AWARE SIZING — {bot_label}")
+
+    try:
+        import sys, os
+        _kb_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "kraken-bot")
+        if _kb_path not in sys.path:
+            sys.path.insert(0, _kb_path)
+        from correlation_tracker import (
+            summarise_open_correlations,
+            HIGH_CORR_THRESHOLD,
+            MODERATE_CORR_THRESHOLD,
+            CORR_WINDOW,
+        )
+    except Exception as exc:
+        lines.append(f"  correlation_tracker unavailable: {exc}")
+        return lines
+
+    # Load open positions for this bot via DB
+    open_rows = _pg_query(
+        """
+        SELECT symbol, entry_price, size_usd
+        FROM kraken_positions
+        WHERE bot_id = %s AND status = 'open'
+        ORDER BY symbol
+        """,
+        (bot_id,),
+    )
+
+    if not open_rows:
+        lines.append("  No open positions — correlation-aware sizing active but idle.")
+        lines.append("")
+        lines.append(f"  Thresholds: HIGH > {HIGH_CORR_THRESHOLD:.0%}  →  0.50×")
+        lines.append(f"              MODERATE > {MODERATE_CORR_THRESHOLD:.0%}  →  0.75×")
+        lines.append(f"              LOW ≤ {MODERATE_CORR_THRESHOLD:.0%}  →  1.00×  (no adjustment)")
+        return lines
+
+    open_symbols = [r["symbol"] for r in open_rows]
+
+    # Attempt to load closes_cache from correlation_tracker module — only
+    # available in-process (the trading bot's memory), so it may be empty here.
+    # Fall back to a note explaining this.
+    try:
+        import importlib
+        ct_mod = importlib.import_module("correlation_tracker")
+        # The closes_cache lives in main.py, not the tracker — explain that.
+        closes_available = False
+    except Exception:
+        closes_available = False
+
+    lines.append("")
+    lines.append(f"  Open positions ({len(open_symbols)}): {', '.join(open_symbols)}")
+    lines.append("")
+    lines.append(
+        f"  {'Symbol':<14} {'Max Corr':>9} {'With':>14} {'Avg Corr':>9} {'Status':>14}"
+    )
+    lines.append("  " + "-" * 62)
+    lines.append(
+        "  Correlation data is computed live in the bot process each cycle."
+    )
+    lines.append(
+        "  The bot log will show CorrSizing lines for each entry attempt."
+    )
+    lines.append("")
+    lines.append(f"  Thresholds active:")
+    lines.append(f"    avg_corr > {HIGH_CORR_THRESHOLD:.0%}  →  0.50×  (HIGH — halve size)")
+    lines.append(f"    avg_corr > {MODERATE_CORR_THRESHOLD:.0%}  →  0.75×  (MODERATE — reduce 25%)")
+    lines.append(f"    avg_corr ≤ {MODERATE_CORR_THRESHOLD:.0%}  →  1.00×  (LOW — no adjustment)")
+    lines.append(f"  Window : last {CORR_WINDOW} OHLCV closes (1h candles = ~{CORR_WINDOW}h lookback)")
+
+    return lines

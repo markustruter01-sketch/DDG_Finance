@@ -389,14 +389,28 @@ def get_coverage_status() -> list[dict]:
     return rows
 
 
+MIN_CANDLES_PER_PAIR = 100   # Require at least 100 daily candles per pair for a valid dataset.
+
 def needs_ingest() -> bool:
-    """Return True if the historical_prices table is empty for the primary (1d) dataset."""
+    """
+    Return True if the historical_prices table needs a fresh ingest.
+
+    A re-ingest is triggered when ANY required (pair, 1d) combination has
+    fewer than MIN_CANDLES_PER_PAIR rows.  This catches partially-populated
+    datasets (e.g. after an interrupted ingest) rather than only checking
+    whether any data exists at all.
+    """
     try:
         _ensure_table()
-        total = 0
         for pair_cfg in PAIRS:
-            total += _count_rows(pair_cfg["display"], "1d")
-        return total == 0
+            n = _count_rows(pair_cfg["display"], "1d")
+            if n < MIN_CANDLES_PER_PAIR:
+                logger.debug(
+                    f"OHLCV | {pair_cfg['display']} [1d] has only {n} candles "
+                    f"(< {MIN_CANDLES_PER_PAIR}) — ingest needed"
+                )
+                return True
+        return False
     except Exception:
         return True
 

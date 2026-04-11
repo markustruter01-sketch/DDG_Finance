@@ -212,8 +212,8 @@ def _ensure_table() -> None:
                 with _pg_conn() as conn:
                     with conn.cursor() as cur:
                         cur.execute(stmt)
-            except Exception:
-                pass
+            except Exception as mig_exc:
+                logger.warning(f"Backtest | Migration skipped (likely already applied): {mig_exc!r}")
         logger.debug("Backtest | Table ensured: kraken_backtest_results")
     except Exception as exc:
         logger.error(f"Backtest | Table creation failed: {exc}")

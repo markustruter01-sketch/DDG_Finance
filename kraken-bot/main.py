@@ -746,7 +746,14 @@ def refresh_equity() -> None:
 # ORDER EXECUTION HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def open_position(symbol: str, side: str, size_usd: float, current_price: float) -> bool:
+def open_position(
+    symbol: str,
+    side: str,
+    size_usd: float,
+    current_price: float,
+    regime_at_entry: str = "Unknown",
+    entry_zscore: float | None = None,
+) -> bool:
     """
     Open a position — simulated (paper mode) or real (live mode).
 
@@ -757,7 +764,11 @@ def open_position(symbol: str, side: str, size_usd: float, current_price: float)
 
     if PAPER_TRADING:
         # ── Paper: simulate the fill at current price ─────────────────────────
-        success = paper_open_position(symbol, side, size_usd, current_price)
+        success = paper_open_position(
+            symbol, side, size_usd, current_price,
+            regime_at_entry=regime_at_entry,
+            entry_zscore=entry_zscore,
+        )
         if success:
             # Sync in-memory state from the paper engine's persisted state
             open_positions = get_paper_positions()
@@ -1415,6 +1426,18 @@ def run_cycle() -> None:
         if _boosted:
             logger.info(f"PairSizing | Boosted: {', '.join(_boosted)}")
 
+    # ── Regime-based position sizing multiplier (Stage 1D) ────────────────────
+    # Deterministic rule: if this regime has been unfavourable (PF < 0.8 over
+    # ≥10 trades) → halve size. If strongly favourable (PF > 1.5 over ≥20) →
+    # boost 25%. Otherwise normal. Multiplier is logged and applied to all entries.
+    try:
+        from regime_tracker import calculate_regime_size_multiplier as _calc_regime_mult
+        _regime_size_mult, _regime_mult_reason = _calc_regime_mult(BOT_ID, _regime_label)
+    except Exception as _rmt_exc:
+        _regime_size_mult, _regime_mult_reason = 1.0, f"regime multiplier unavailable: {_rmt_exc}"
+    if _regime_size_mult != 1.0:
+        logger.info(f"RegimeSizing | {_regime_mult_reason}")
+
     _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
     for _bl_sym in _blacklisted_open:
         logger.warning(
@@ -1859,6 +1882,8 @@ def run_cycle() -> None:
                     _psm = _pair_sizing_mult.get(symbol, 1.0)
                     if _psm != 1.0:
                         size_usd *= _psm
+                    if _regime_size_mult != 1.0:
+                        size_usd *= _regime_size_mult
 
                     _swr = _symbol_recent_wr.get(symbol, {})
                     _swr_total = _swr.get("total", 0)
@@ -1910,7 +1935,8 @@ def run_cycle() -> None:
                             f"Size: ${size_usd:,.2f} [{_vol_tier}]{_psm_tag}{_swr_tag} | "
                             f"ATR stop: ${_atr_stop:,.4f} | SL={_swing_sl_pct*100:.2f}%"
                         )
-                        if open_position(symbol, _swing_side, size_usd, current_price):
+                        if open_position(symbol, _swing_side, size_usd, current_price,
+                                         regime_at_entry=_regime_label, entry_zscore=sym_z_score):
                             _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
@@ -2079,7 +2105,8 @@ def run_cycle() -> None:
                             f"'{_regime_label}' | scout ${_scout_size:,.2f} (3% equity)"
                         )
                     _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
-                    if open_position(symbol, "long", _scout_size, current_price):
+                    if open_position(symbol, "long", _scout_size, current_price,
+                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
@@ -2136,6 +2163,8 @@ def run_cycle() -> None:
                 _psm = _pair_sizing_mult.get(symbol, 1.0)
                 if _psm != 1.0:
                     size_usd *= _psm
+                if _regime_size_mult != 1.0:
+                    size_usd *= _regime_size_mult
                 if _deep_oversold and _ms.vpin > _effective_vpin_cap and not IS_MRC_BOT:
                     size_usd = min(size_usd, total_equity * MICRO_LOT_EQUITY_PCT)
                     _vol_tier = "micro_lot_vpin_bypass"
@@ -2212,7 +2241,8 @@ def run_cycle() -> None:
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
-                    if open_position(symbol, "long", _t1_size, current_price):
+                    if open_position(symbol, "long", _t1_size, current_price,
+                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
@@ -2267,6 +2297,8 @@ def run_cycle() -> None:
                 _psm = _pair_sizing_mult.get(symbol, 1.0)
                 if _psm != 1.0:
                     size_usd *= _psm
+                if _regime_size_mult != 1.0:
+                    size_usd *= _regime_size_mult
                 if size_usd >= MIN_POSITION_USD:
                     _short_tp_pct = (SWING_TP_ATR_MULT * sym_atr / current_price
                                      if IS_MRC_BOT and current_price > 0
@@ -2332,7 +2364,8 @@ def run_cycle() -> None:
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
-                    if open_position(symbol, "short", _t1_size, current_price):
+                    if open_position(symbol, "short", _t1_size, current_price,
+                                     regime_at_entry=_regime_label, entry_zscore=sym_z_score):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:

@@ -236,6 +236,8 @@ def paper_open_position(
     size_usd: float,
     current_price: float,
     atr: float = 0.0,
+    regime_at_entry: str = "Unknown",
+    entry_zscore: float | None = None,
 ) -> bool:
     """
     Simulate opening a position at the current market price with dynamic slippage.
@@ -264,15 +266,17 @@ def paper_open_position(
     p["cash_usd"] -= total_cost
 
     p["positions"][symbol] = {
-        "side":        side,
-        "entry_price": fill_price,
-        "size_usd":    size_usd,
-        "size_units":  size_units,
-        "entry_time":  datetime.now(tz=timezone.utc).isoformat(),
-        "best_price":  fill_price,
-        "entry_fee":   round(fee_usd, 4),
-        "slippage_pct": round(slip_pct * 100, 4),
-        "order_id":    f"PAPER-{symbol.replace('/', '')}-{int(datetime.now().timestamp())}",
+        "side":            side,
+        "entry_price":     fill_price,
+        "size_usd":        size_usd,
+        "size_units":      size_units,
+        "entry_time":      datetime.now(tz=timezone.utc).isoformat(),
+        "best_price":      fill_price,
+        "entry_fee":       round(fee_usd, 4),
+        "slippage_pct":    round(slip_pct * 100, 4),
+        "order_id":        f"PAPER-{symbol.replace('/', '')}-{int(datetime.now().timestamp())}",
+        "regime_at_entry": regime_at_entry,
+        "entry_zscore":    entry_zscore,
     }
 
     _save_portfolio()
@@ -413,18 +417,20 @@ def paper_close_position(symbol: str, current_price: float, reason: str, atr: fl
     p["cash_usd"] += net_value
 
     trade_record = {
-        "symbol":      symbol,
-        "side":        pos["side"],
-        "entry_price": pos["entry_price"],
-        "exit_price":  fill_price,
-        "pnl_pct":     round(pnl_pct, 2),
-        "pnl_usd":     round(net_pnl_usd, 2),
-        "fees_usd":    round(total_fees, 4),
-        "slippage_pct": round(slip_pct * 100, 4),
-        "reason":      reason,
-        "closed_at":   datetime.now(tz=timezone.utc).isoformat(),
-        "paper":       True,
-        "order_id":    pos.get("order_id"),
+        "symbol":          symbol,
+        "side":            pos["side"],
+        "entry_price":     pos["entry_price"],
+        "exit_price":      fill_price,
+        "pnl_pct":         round(pnl_pct, 2),
+        "pnl_usd":         round(net_pnl_usd, 2),
+        "fees_usd":        round(total_fees, 4),
+        "slippage_pct":    round(slip_pct * 100, 4),
+        "reason":          reason,
+        "closed_at":       datetime.now(tz=timezone.utc).isoformat(),
+        "paper":           True,
+        "order_id":        pos.get("order_id"),
+        "regime_at_entry": pos.get("regime_at_entry", "Unknown"),
+        "entry_zscore":    pos.get("entry_zscore"),
     }
 
     # Persist to DB immediately (primary store)

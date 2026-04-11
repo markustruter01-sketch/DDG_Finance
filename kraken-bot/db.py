@@ -128,6 +128,14 @@ BEGIN
         ALTER TABLE kraken_adaptive_params ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
     END IF;
 
+    -- Stage 1: Add regime_at_entry and entry_zscore to kraken_trades
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='regime_at_entry') THEN
+        ALTER TABLE kraken_trades ADD COLUMN regime_at_entry TEXT DEFAULT 'Unknown';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='entry_zscore') THEN
+        ALTER TABLE kraken_trades ADD COLUMN entry_zscore DOUBLE PRECISION;
+    END IF;
+
     -- Add pending_tranches JSONB column to kraken_portfolio
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_portfolio' AND column_name='pending_tranches') THEN
         ALTER TABLE kraken_portfolio ADD COLUMN pending_tranches JSONB;
@@ -539,8 +547,9 @@ def insert_trade(trade: dict) -> bool:
                     """
                     INSERT INTO kraken_trades
                         (bot_id, symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                         fees_usd, reason, closed_at, paper, order_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s)
+                         fees_usd, reason, closed_at, paper, order_id,
+                         regime_at_entry, entry_zscore)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s)
                     """,
                     (
                         bot_id,
@@ -554,6 +563,8 @@ def insert_trade(trade: dict) -> bool:
                         trade.get("reason"),
                         closed_at,
                         trade.get("order_id"),
+                        trade.get("regime_at_entry", "Unknown"),
+                        trade.get("entry_zscore"),
                     ),
                 )
         return True

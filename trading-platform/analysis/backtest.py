@@ -69,14 +69,21 @@ WARMUP_BARS    = 50        # candles needed before signals are valid
 FEE_PER_SIDE   = 0.0026   # 0.26% Kraken Pro taker rate
 ROUND_TRIP_FEE = FEE_PER_SIDE * 2
 
-# Strategy parameters (mirror config.py per-bot profiles)
+# Hours per bar for each timeframe used in the backtest.
+# Live bots run on 1h candles; timeout_hours is the canonical position limit.
+# When backtesting on 1d data, timeout_bars = max(1, timeout_hours // 24).
+HOURS_PER_BAR: dict[str, int] = {"1d": 24, "1h": 1}
+
+# Strategy parameters (mirror config.py per-bot profiles).
+# timeout_hours is the canonical live-bot position duration in hours.
+# timeout_bars is derived per-timeframe inside run_backtest(); do not use directly.
 BOT_CONFIGS = {
     "davy-jones": {
         "strategy":       "mean_reversion",
         "zscore_entry":   1.0,
         "zscore_exit":    0.3,
         "atr_sl_mult":    2.5,
-        "timeout_bars":   24,
+        "timeout_hours":  24,    # live bot: 24-bar × 1h candles = 24 hours
         "rsi_period":     14,
         "zscore_window":  20,
         "atr_period":     14,
@@ -89,7 +96,7 @@ BOT_CONFIGS = {
         "zscore_entry":   2.0,
         "zscore_exit":    0.3,
         "atr_sl_mult":    2.0,
-        "timeout_bars":   24,
+        "timeout_hours":  24,    # live bot: 24-bar × 1h candles = 24 hours
         "rsi_period":     14,
         "zscore_window":  20,
         "atr_period":     14,
@@ -102,7 +109,7 @@ BOT_CONFIGS = {
         "zscore_entry":   0.8,
         "zscore_exit":    0.0,
         "atr_sl_mult":    2.0,
-        "timeout_bars":   14,
+        "timeout_hours":  336,   # live bot: 14-bar × 1h candles = 14 days (swing strategy)
         "rsi_period":     14,
         "zscore_window":  20,
         "atr_period":     14,
@@ -111,6 +118,22 @@ BOT_CONFIGS = {
         "atr_tp_mult":    3.0,
     },
 }
+
+
+def _timeout_bars_for_timeframe(timeout_hours: int, timeframe: str) -> int:
+    """
+    Convert a time-based position timeout to the equivalent number of candle bars.
+
+    Live bots use hourly candles; timeout_hours is the canonical live timeout.
+    When backtesting on 1d data: timeout_bars = max(1, timeout_hours // 24).
+    On 1h data: timeout_bars = timeout_hours.
+
+    Examples:
+      davy-jones timeout_hours=24  → 1d: 1 bar | 1h: 24 bars
+      blackbeard timeout_hours=336 → 1d: 14 bars | 1h: 336 bars
+    """
+    hours_per_bar = HOURS_PER_BAR.get(timeframe, 1)
+    return max(1, timeout_hours // hours_per_bar)
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -605,16 +628,24 @@ def _sim_flow_sentiment(
 
 # ── per-pair backtest ─────────────────────────────────────────────────────────
 
-def _run_simulator(candles: list[dict], cfg: dict) -> list[dict]:
-    """Dispatch to the correct simulator based on bot strategy config."""
-    strategy = cfg["strategy"]
+def _run_simulator(candles: list[dict], cfg: dict, timeframe: str = TIMEFRAME) -> list[dict]:
+    """
+    Dispatch to the correct simulator based on bot strategy config.
+
+    timeout_hours from cfg is converted to candle bars based on the timeframe:
+      1d data: timeout_bars = max(1, timeout_hours // 24)
+      1h data: timeout_bars = timeout_hours
+    This preserves the semantics of the live bot's time-based position limit.
+    """
+    timeout_bars = _timeout_bars_for_timeframe(cfg["timeout_hours"], timeframe)
+    strategy     = cfg["strategy"]
     if strategy in ("mean_reversion", "mean_reversion_conservative"):
         return _sim_mean_reversion(
             candles,
             zscore_entry  = cfg["zscore_entry"],
             zscore_exit   = cfg["zscore_exit"],
             atr_sl_mult   = cfg["atr_sl_mult"],
-            timeout_bars  = cfg["timeout_bars"],
+            timeout_bars  = timeout_bars,
             rsi_period    = cfg["rsi_period"],
             zscore_window = cfg["zscore_window"],
             atr_period    = cfg["atr_period"],
@@ -625,7 +656,7 @@ def _run_simulator(candles: list[dict], cfg: dict) -> list[dict]:
             zscore_filter = cfg["zscore_entry"],
             atr_sl_mult   = cfg["atr_sl_mult"],
             atr_tp_mult   = cfg["atr_tp_mult"],
-            timeout_bars  = cfg["timeout_bars"],
+            timeout_bars  = timeout_bars,
             rsi_period    = cfg["rsi_period"],
             zscore_window = cfg["zscore_window"],
             atr_period    = cfg["atr_period"],
@@ -635,7 +666,7 @@ def _run_simulator(candles: list[dict], cfg: dict) -> list[dict]:
     return []
 
 
-def _backtest_pair(pair: str, cfg: dict) -> tuple[dict, list[dict]]:
+def _backtest_pair(pair: str, cfg: dict, timeframe: str = TIMEFRAME) -> tuple[dict, list[dict]]:
     """
     Run the backtester for one pair.
 
@@ -643,11 +674,11 @@ def _backtest_pair(pair: str, cfg: dict) -> tuple[dict, list[dict]]:
     aggregated metrics and the individual trade list without re-running
     the simulator a second time.
     """
-    candles = _load_candles(pair, TIMEFRAME)
+    candles = _load_candles(pair, timeframe)
     if len(candles) < WARMUP_BARS + 10:
         return {"pair": pair, "error": f"insufficient candles ({len(candles)})"}, []
 
-    trades   = _run_simulator(candles, cfg)
+    trades   = _run_simulator(candles, cfg, timeframe)
     pnl_pcts = [t["pnl_pct"] for t in trades]
     metrics  = _compute_metrics(pnl_pcts)
     metrics["pair"]    = pair
@@ -745,10 +776,12 @@ def run_backtest(bot_id: str) -> dict:
     wfo_sl, wfo_tp = _fetch_wfo_recommendation(bot_id)
 
     # Build summary
+    timeout_bars_used = _timeout_bars_for_timeframe(cfg["timeout_hours"], TIMEFRAME)
     summary = (
         f"{bot_id} TRUE PRICE BACKTEST | strategy={cfg['strategy']} | "
         f"timeframe={TIMEFRAME} | pairs={len(BACKTEST_PAIRS)} | "
         f"period={data_from or '?'} → {data_to or '?'} | "
+        f"timeout={cfg['timeout_hours']}h → {timeout_bars_used} bars on {TIMEFRAME} data | "
         f"simulated trades={len(all_trades)} | "
         f"WR={agg['wr']*100:.1f}% PF={agg['pf']:.2f} "
         f"net={agg['net_pct']:+.2f}% maxDD={agg['max_dd']:.2f}% "

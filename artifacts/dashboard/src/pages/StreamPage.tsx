@@ -4,12 +4,13 @@ import StreamingScreenV2 from "@/pages/StreamingScreenV2";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import StreamingScreenV3 from "@/pages/StreamingScreenV3";
+import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 
-type SubPage = "a" | "b" | "c" | "d" | "e";
+type SubPage = "a" | "b" | "c" | "d" | "e" | "f";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -41,7 +42,7 @@ function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number 
     }
 
     let subPage: SubPage | null = null;
-    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e") subPage = subParam;
+    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e" || subParam === "f") subPage = subParam;
     else if (subParam === "a") subPage = "a";
 
     return { autoCycle, intervalSeconds, subPage };
@@ -210,6 +211,15 @@ export default function StreamPage() {
       progressGrad: "linear-gradient(90deg, #34d399, #22d3ee)",
       progressGlow: "rgba(52,211,153,0.6)",
     },
+    {
+      id: "f",
+      label: "Orb",
+      activeGrad: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(167,139,250,0.2))",
+      activeColor: "#c4b5fd",
+      activeBorder: "rgba(139,92,246,0.45)",
+      progressGrad: "linear-gradient(90deg, #7c3aed, #c084fc)",
+      progressGlow: "rgba(139,92,246,0.7)",
+    },
   ];
 
   const activeTab = tabs.find((t) => t.id === active)!;
@@ -324,6 +334,11 @@ export default function StreamPage() {
         <div style={{ display: active === "e" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingScreenV3 />
         </div>
+        {active === "f" && (
+          <div style={{ position: "absolute", inset: 0 }}>
+            <StreamingOrbScreen />
+          </div>
+        )}
       </div>
 
       <ClippyAssistant active={active} />

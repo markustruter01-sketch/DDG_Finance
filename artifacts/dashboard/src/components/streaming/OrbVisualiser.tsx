@@ -15,6 +15,8 @@ import {
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 
+const STARTING_CAPITAL = 600_000;
+
 function checkWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
@@ -44,6 +46,7 @@ const BOT_COLORS_HEX: Record<string, THREE.ColorRepresentation> = {
 };
 
 const BOT_KEYS = Object.keys(BOT_COLORS_CSS);
+const BOT_COLORS_ARR = Object.values(BOT_COLORS_HEX);
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 
@@ -54,7 +57,10 @@ interface OrbData {
   lastAiTs: number;
   tradePulse: { active: boolean; isWin: boolean; botName: string } | null;
   aiRipple: boolean;
+  tendrilTrigger: number;
 }
+
+// ─── Molten Core ────────────────────────────────────────────────────────────
 
 function MoltenCore({ orbData }: { orbData: OrbData }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -64,9 +70,9 @@ function MoltenCore({ orbData }: { orbData: OrbData }) {
   const rippleRef = useRef(0);
 
   const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uPulse: { value: 0 },
-    uRipple: { value: 0 },
+    uTime:      { value: 0 },
+    uPulse:     { value: 0 },
+    uRipple:    { value: 0 },
     uPositions: { value: 0 },
     uEquityDir: { value: 0 },
   }), []);
@@ -213,6 +219,8 @@ function MoltenCore({ orbData }: { orbData: OrbData }) {
   );
 }
 
+// ─── Particle Field ─────────────────────────────────────────────────────────
+
 function ParticleField({ orbData }: { orbData: OrbData }) {
   const COUNT = 600;
   const meshRef = useRef<THREE.Points>(null);
@@ -220,22 +228,22 @@ function ParticleField({ orbData }: { orbData: OrbData }) {
 
   const { positions, speeds, phases, radii } = useMemo(() => {
     const positions = new Float32Array(COUNT * 3);
-    const speeds = new Float32Array(COUNT);
-    const phases = new Float32Array(COUNT);
-    const radii = new Float32Array(COUNT);
+    const speeds    = new Float32Array(COUNT);
+    const phases    = new Float32Array(COUNT);
+    const radii     = new Float32Array(COUNT);
 
     for (let i = 0; i < COUNT; i++) {
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 1.3 + Math.random() * 1.8;
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const r     = 1.3 + Math.random() * 1.8;
 
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = r * Math.cos(phi);
 
       speeds[i] = 0.3 + Math.random() * 0.7;
       phases[i] = Math.random() * Math.PI * 2;
-      radii[i] = r;
+      radii[i]  = r;
     }
     return { positions, speeds, phases, radii };
   }, []);
@@ -248,40 +256,32 @@ function ParticleField({ orbData }: { orbData: OrbData }) {
     return geo;
   }, [positions]);
 
-  const material = useMemo(() => {
-    return new THREE.PointsMaterial({
-      color: 0xf97316,
-      size: 0.04,
-      transparent: true,
-      opacity: 0.7,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-  }, []);
+  const material = useMemo(() => new THREE.PointsMaterial({
+    color: 0xf97316,
+    size: 0.04,
+    transparent: true,
+    opacity: 0.7,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
 
   useFrame((_, delta) => {
     timeRef.current += delta;
     const t = timeRef.current;
     const equityMult = orbData.fleetEquityChange > 0 ? 1.4 : orbData.fleetEquityChange < 0 ? 0.6 : 1.0;
     const posAttr = geometry.getAttribute("position") as THREE.BufferAttribute;
-    const posArr = posAttr.array as Float32Array;
+    const posArr  = posAttr.array as Float32Array;
 
     for (let i = 0; i < COUNT; i++) {
       const ox = originalPositions[i * 3];
       const oy = originalPositions[i * 3 + 1];
       const oz = originalPositions[i * 3 + 2];
-      const baseR = radii[i];
-      const phase = phases[i];
-      const speed = speeds[i];
-
-      const breath = Math.sin(t * speed + phase) * 0.18 * equityMult;
-      const scale = (baseR + breath) / baseR;
-
-      posArr[i * 3] = ox * scale;
+      const breath = Math.sin(t * speeds[i] + phases[i]) * 0.18 * equityMult;
+      const scale  = (radii[i] + breath) / radii[i];
+      posArr[i * 3]     = ox * scale;
       posArr[i * 3 + 1] = oy * scale;
       posArr[i * 3 + 2] = oz * scale;
     }
-
     posAttr.needsUpdate = true;
 
     if (meshRef.current) {
@@ -291,11 +291,13 @@ function ParticleField({ orbData }: { orbData: OrbData }) {
 
     const pulseOpacity = orbData.tradePulse?.active ? 0.95 : 0.55 + 0.2 * Math.sin(t * 0.8);
     material.opacity = Math.max(0.3, Math.min(1.0, pulseOpacity));
-    material.size = 0.035 + (equityMult - 1) * 0.02;
+    material.size    = 0.035 + (equityMult - 1) * 0.02;
   });
 
   return <points ref={meshRef} geometry={geometry} material={material} />;
 }
+
+// ─── Bot Arcs ───────────────────────────────────────────────────────────────
 
 function BotArcs({ orbData }: { orbData: OrbData }) {
   const { activeBots } = orbData;
@@ -303,11 +305,11 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
 
   const arcs = useMemo(() => {
     return BOT_KEYS.slice(0, Math.max(1, Math.min(6, activeBots))).map((key, i) => {
-      const color = BOT_COLORS_HEX[key] ?? 0xffffff;
+      const color       = BOT_COLORS_HEX[key] ?? 0xffffff;
       const inclination = (i / 6) * Math.PI;
-      const ascension = (i / 6) * Math.PI * 2;
-      const radius = 1.55 + i * 0.08;
-      const COUNT = 60;
+      const ascension   = (i / 6) * Math.PI * 2;
+      const radius      = 1.55 + i * 0.08;
+      const COUNT       = 60;
 
       const pts: THREE.Vector3[] = [];
       for (let j = 0; j < COUNT; j++) {
@@ -320,16 +322,14 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
       pts.push(pts[0].clone());
 
       const curve = new THREE.CatmullRomCurve3(pts, true);
-      const geo = new THREE.TubeGeometry(curve, 80, 0.008, 3, true);
-      const mat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
+      const geo   = new THREE.TubeGeometry(curve, 80, 0.008, 3, true);
+      const mat   = new THREE.MeshBasicMaterial({
+        color, transparent: true,
         opacity: 0.5 + i * 0.05,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
-
-      return { geo, mat, speed: 0.15 + i * 0.07, key, color };
+      return { geo, mat, speed: 0.15 + i * 0.07, key };
     });
   }, [activeBots]);
 
@@ -359,24 +359,21 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
   );
 }
 
+// ─── Glow Atmosphere ────────────────────────────────────────────────────────
+
 function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
-  const matRef = useRef<THREE.ShaderMaterial>(null);
-  const timeRef = useRef(0);
-  const pulseRef = useRef(0);
+  const matRef    = useRef<THREE.ShaderMaterial>(null);
+  const timeRef   = useRef(0);
+  const pulseRef  = useRef(0);
 
   const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uPulse: { value: 0 },
+    uTime:      { value: 0 },
+    uPulse:     { value: 0 },
     uIntensity: { value: 0.6 },
   }), []);
 
-  useEffect(() => {
-    if (orbData.tradePulse?.active) pulseRef.current = 1.0;
-  }, [orbData.tradePulse]);
-
-  useEffect(() => {
-    if (orbData.aiRipple) pulseRef.current = Math.max(pulseRef.current, 0.7);
-  }, [orbData.aiRipple]);
+  useEffect(() => { if (orbData.tradePulse?.active) pulseRef.current = 1.0; }, [orbData.tradePulse]);
+  useEffect(() => { if (orbData.aiRipple) pulseRef.current = Math.max(pulseRef.current, 0.7); }, [orbData.aiRipple]);
 
   const heatIntensity = clamp01(orbData.openPositions / 8);
 
@@ -384,8 +381,8 @@ function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
     timeRef.current += delta;
     pulseRef.current = Math.max(0, pulseRef.current - delta * 0.8);
     if (matRef.current) {
-      matRef.current.uniforms.uTime.value = timeRef.current;
-      matRef.current.uniforms.uPulse.value = pulseRef.current;
+      matRef.current.uniforms.uTime.value      = timeRef.current;
+      matRef.current.uniforms.uPulse.value     = pulseRef.current;
       matRef.current.uniforms.uIntensity.value = 0.5 + heatIntensity * 0.5;
     }
   });
@@ -408,18 +405,13 @@ function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
           uniform float uTime;
           uniform float uPulse;
           uniform float uIntensity;
-
           void main() {
             float rim = 1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
             rim = pow(rim, 2.5);
             float pulse = 1.0 + uPulse * 0.8;
             float glow = rim * uIntensity * pulse;
             float flicker = 1.0 + 0.1 * sin(uTime * 3.0);
-            vec3 color = mix(
-              vec3(0.8, 0.35, 0.05),
-              vec3(1.0, 0.7, 0.2),
-              uPulse
-            );
+            vec3 color = mix(vec3(0.8, 0.35, 0.05), vec3(1.0, 0.7, 0.2), uPulse);
             gl_FragColor = vec4(color * glow * flicker, glow * 0.55);
           }
         `}
@@ -432,17 +424,19 @@ function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
   );
 }
 
+// ─── Trade Pulse Flare ───────────────────────────────────────────────────────
+
 function TradePulseFlare({ orbData }: { orbData: OrbData }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const meshRef  = useRef<THREE.Mesh>(null);
+  const matRef   = useRef<THREE.MeshBasicMaterial>(null);
   const scaleRef = useRef(0.01);
-  const opacRef = useRef(0);
-  const activeRef = useRef(false);
+  const opacRef  = useRef(0);
+  const activeRef= useRef(false);
 
   useEffect(() => {
     if (orbData.tradePulse?.active) {
-      scaleRef.current = 0.1;
-      opacRef.current = 1.0;
+      scaleRef.current  = 0.1;
+      opacRef.current   = 1.0;
       activeRef.current = true;
     }
   }, [orbData.tradePulse]);
@@ -452,18 +446,10 @@ function TradePulseFlare({ orbData }: { orbData: OrbData }) {
   useFrame((_, delta) => {
     if (!activeRef.current) return;
     scaleRef.current = Math.min(scaleRef.current + delta * 3.0, 4.0);
-    opacRef.current = Math.max(0, opacRef.current - delta * 1.5);
-
-    if (meshRef.current) {
-      meshRef.current.scale.setScalar(scaleRef.current);
-    }
-    if (matRef.current) {
-      matRef.current.opacity = opacRef.current;
-    }
-    if (opacRef.current <= 0) {
-      activeRef.current = false;
-      scaleRef.current = 0.01;
-    }
+    opacRef.current  = Math.max(0, opacRef.current - delta * 1.5);
+    if (meshRef.current) meshRef.current.scale.setScalar(scaleRef.current);
+    if (matRef.current)  matRef.current.opacity = opacRef.current;
+    if (opacRef.current <= 0) { activeRef.current = false; scaleRef.current = 0.01; }
   });
 
   return (
@@ -472,8 +458,7 @@ function TradePulseFlare({ orbData }: { orbData: OrbData }) {
       <meshBasicMaterial
         ref={matRef}
         color={isWin ? 0x22c55e : 0xef4444}
-        transparent
-        opacity={0}
+        transparent opacity={0}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
         side={THREE.DoubleSide}
@@ -482,45 +467,182 @@ function TradePulseFlare({ orbData }: { orbData: OrbData }) {
   );
 }
 
-function OrbScene({ orbData }: { orbData: OrbData }) {
-  const { camera } = useThree();
+// ─── Tendril System (WebGL) ──────────────────────────────────────────────────
+
+type TendrilData = {
+  active:   boolean;
+  startPt:  THREE.Vector3;
+  dir:      THREE.Vector3;
+  perpDir:  THREE.Vector3;
+  maxLen:   number;
+  age:      number;
+  lifetime: number;
+  posAttr:  THREE.BufferAttribute;
+  mat:      THREE.LineBasicMaterial;
+  line:     THREE.Line;
+};
+
+const TENDRIL_SEGS = 12;
+
+function TendrilSystem({ trigger }: { trigger: number }) {
+  const groupRef     = useRef<THREE.Group>(null);
+  const tendrilsRef  = useRef<TendrilData[]>([]);
 
   useEffect(() => {
-    camera.position.set(0, 0, 5);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
+    const group = groupRef.current;
+    if (!group || trigger === 0) return;
+
+    const count = 3 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < count; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi   = Math.acos(2 * Math.random() - 1);
+      const dir   = new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta),
+        Math.sin(phi) * Math.sin(theta),
+        Math.cos(phi),
+      ).normalize();
+
+      const perpDir = new THREE.Vector3(dir.y, -dir.x, 0).normalize();
+      if (perpDir.lengthSq() < 0.01) perpDir.set(0, dir.z, -dir.y).normalize();
+
+      const startPt = dir.clone().multiplyScalar(1.25);
+      const maxLen  = 0.9 + Math.random() * 1.4;
+      const colorIdx= Math.floor(Math.random() * BOT_COLORS_ARR.length);
+      const color   = BOT_COLORS_ARR[colorIdx] as number;
+
+      const positions = new Float32Array((TENDRIL_SEGS + 1) * 3);
+      for (let j = 0; j <= TENDRIL_SEGS; j++) {
+        positions[j * 3]     = startPt.x;
+        positions[j * 3 + 1] = startPt.y;
+        positions[j * 3 + 2] = startPt.z;
+      }
+
+      const posAttr = new THREE.BufferAttribute(positions, 3);
+      const geo     = new THREE.BufferGeometry();
+      geo.setAttribute("position", posAttr);
+
+      const mat = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        linewidth: 1,
+      });
+
+      const line = new THREE.Line(geo, mat);
+      group.add(line);
+
+      tendrilsRef.current.push({ active: true, startPt, dir, perpDir, maxLen, age: 0, lifetime: 0.9 + Math.random() * 0.6, posAttr, mat, line });
+    }
+  }, [trigger]);
+
+  useFrame((_, delta) => {
+    const dead: TendrilData[] = [];
+
+    for (const t of tendrilsRef.current) {
+      if (!t.active) continue;
+      t.age += delta;
+      const progress = t.age / t.lifetime;
+
+      if (progress >= 1) {
+        t.active = false;
+        t.mat.opacity = 0;
+        dead.push(t);
+        continue;
+      }
+
+      const opacity = progress < 0.25 ? progress / 0.25 : 1 - (progress - 0.25) / 0.75;
+      t.mat.opacity = Math.max(0, opacity * 0.95);
+
+      const currentLen = t.maxLen * Math.min(1, progress * 3.5);
+      const arr = t.posAttr.array as Float32Array;
+
+      for (let j = 0; j <= TENDRIL_SEGS; j++) {
+        const frac   = j / TENDRIL_SEGS;
+        const wriggle= Math.sin(frac * Math.PI * 4 + t.age * 6) * 0.09 * frac;
+        const pt = t.startPt.clone()
+          .addScaledVector(t.dir, frac * currentLen)
+          .addScaledVector(t.perpDir, wriggle);
+        arr[j * 3]     = pt.x;
+        arr[j * 3 + 1] = pt.y;
+        arr[j * 3 + 2] = pt.z;
+      }
+      t.posAttr.needsUpdate = true;
+    }
+
+    if (dead.length > 0 && groupRef.current) {
+      for (const t of dead) {
+        groupRef.current.remove(t.line);
+        t.line.geometry.dispose();
+        t.mat.dispose();
+      }
+      tendrilsRef.current = tendrilsRef.current.filter(t => t.active);
+    }
+  });
+
+  return <group ref={groupRef} />;
+}
+
+// ─── Orb Scene (Three.js) ────────────────────────────────────────────────────
+
+function OrbScene({ orbData }: { orbData: OrbData }) {
+  const { camera } = useThree();
+  useEffect(() => { camera.position.set(0, 0, 5); camera.lookAt(0, 0, 0); }, [camera]);
 
   return (
     <>
       <ambientLight intensity={0.1} />
-      <pointLight position={[3, 3, 3]} intensity={1.5} color={0xff8800} />
+      <pointLight position={[3, 3, 3]}   intensity={1.5} color={0xff8800} />
       <pointLight position={[-3, -2, 2]} intensity={0.8} color={0x6644ff} />
-
       <Stars radius={50} depth={20} count={2000} factor={3} fade speed={0.5} />
-
       <GlowAtmosphere orbData={orbData} />
-      <MoltenCore orbData={orbData} />
-      <ParticleField orbData={orbData} />
-      <BotArcs orbData={orbData} />
+      <MoltenCore     orbData={orbData} />
+      <ParticleField  orbData={orbData} />
+      <BotArcs        orbData={orbData} />
       <TradePulseFlare orbData={orbData} />
+      <TendrilSystem  trigger={orbData.tendrilTrigger} />
     </>
   );
 }
 
+// ─── CSS Canvas Orb (WebGL fallback) ─────────────────────────────────────────
+
+type CssTendril = {
+  angle:    number;
+  color:    string;
+  age:      number;
+  lifetime: number;
+  maxLen:   number;
+  perpOff:  number;
+};
+
 function CSSOrb({ orbData }: { orbData: OrbData }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const timeRef = useRef(0);
-  const pulseRef = useRef(0);
-  const rippleRef = useRef(0);
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const animRef     = useRef<number>(0);
+  const timeRef     = useRef(0);
+  const pulseRef    = useRef(0);
+  const rippleRef   = useRef(0);
+  const tendrilsRef = useRef<CssTendril[]>([]);
+
+  useEffect(() => { if (orbData.tradePulse?.active) pulseRef.current = 1.0; }, [orbData.tradePulse]);
+  useEffect(() => { if (orbData.aiRipple) rippleRef.current = 1.0; },         [orbData.aiRipple]);
 
   useEffect(() => {
-    if (orbData.tradePulse?.active) pulseRef.current = 1.0;
-  }, [orbData.tradePulse]);
-
-  useEffect(() => {
-    if (orbData.aiRipple) rippleRef.current = 1.0;
-  }, [orbData.aiRipple]);
+    if (!orbData.tendrilTrigger) return;
+    const count  = 3 + Math.floor(Math.random() * 4);
+    const colors = Object.values(BOT_COLORS_CSS);
+    for (let i = 0; i < count; i++) {
+      tendrilsRef.current.push({
+        angle:    Math.random() * Math.PI * 2,
+        color:    colors[Math.floor(Math.random() * colors.length)],
+        age:      0,
+        lifetime: 0.8 + Math.random() * 0.7,
+        maxLen:   55 + Math.random() * 90,
+        perpOff:  (Math.random() - 0.5) * 40,
+      });
+    }
+  }, [orbData.tendrilTrigger]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -533,13 +655,8 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
     const particles: { x: number; y: number; r: number; speed: number; phase: number; angle: number; dist: number }[] = [];
     for (let i = 0; i < 280; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 90 + Math.random() * 130;
-      particles.push({
-        x: 0, y: 0, r: 0.8 + Math.random() * 1.4,
-        speed: 0.3 + Math.random() * 0.7,
-        phase: Math.random() * Math.PI * 2,
-        angle, dist,
-      });
+      const dist  = 90 + Math.random() * 130;
+      particles.push({ x: 0, y: 0, r: 0.8 + Math.random() * 1.4, speed: 0.3 + Math.random() * 0.7, phase: Math.random() * Math.PI * 2, angle, dist });
     }
 
     function draw(ts: number) {
@@ -548,20 +665,20 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
       timeRef.current += delta;
       const t = timeRef.current;
 
-      pulseRef.current = Math.max(0, pulseRef.current - delta * 1.2);
+      pulseRef.current  = Math.max(0, pulseRef.current  - delta * 1.2);
       rippleRef.current = Math.max(0, rippleRef.current - delta * 0.6);
 
-      const w = canvas!.width;
-      const h = canvas!.height;
+      const w  = canvas!.width;
+      const h  = canvas!.height;
       const cx = w / 2;
       const cy = h / 2;
 
       ctx!.clearRect(0, 0, w, h);
 
       const equityMult = orbData.fleetEquityChange > 0 ? 1.35 : orbData.fleetEquityChange < 0 ? 0.7 : 1.0;
-      const heatFrac = clamp01(orbData.openPositions / 10);
+      const heatFrac   = clamp01(orbData.openPositions / 10);
       const baseRadius = 70 + heatFrac * 20;
-      const pulse = pulseRef.current;
+      const pulse      = pulseRef.current;
 
       const outerGlow = ctx!.createRadialGradient(cx, cy, baseRadius * 0.5, cx, cy, baseRadius * 3.5 * equityMult);
       outerGlow.addColorStop(0, `rgba(249,115,22,${0.12 + pulse * 0.15})`);
@@ -571,13 +688,13 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
       ctx!.fillRect(0, 0, w, h);
 
       for (const p of particles) {
-        const breath = Math.sin(t * p.speed + p.phase) * 30 * equityMult;
-        const rippleJitter = rippleRef.current * Math.sin(t * 6 + p.phase * 3) * 15;
-        const r = p.dist + breath + rippleJitter;
-        const rotOffset = t * 0.05;
-        const px = cx + r * Math.cos(p.angle + rotOffset);
-        const py = cy + r * Math.sin(p.angle + rotOffset) * 0.6;
-        const alpha = (0.3 + 0.4 * Math.sin(t * p.speed * 0.7 + p.phase)) * (0.6 + pulse * 0.4);
+        const breath      = Math.sin(t * p.speed + p.phase) * 30 * equityMult;
+        const rippleJitter= rippleRef.current * Math.sin(t * 6 + p.phase * 3) * 15;
+        const r           = p.dist + breath + rippleJitter;
+        const rotOffset   = t * 0.05;
+        const px   = cx + r * Math.cos(p.angle + rotOffset);
+        const py   = cy + r * Math.sin(p.angle + rotOffset) * 0.6;
+        const alpha= (0.3 + 0.4 * Math.sin(t * p.speed * 0.7 + p.phase)) * (0.6 + pulse * 0.4);
         const redness = heatFrac * 0.5;
         ctx!.beginPath();
         ctx!.arc(px, py, p.r, 0, Math.PI * 2);
@@ -587,30 +704,63 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
 
       const activeBotCount = Math.max(1, Math.min(6, orbData.activeBots));
       BOT_KEYS.slice(0, activeBotCount).forEach((key, i) => {
-        const color = BOT_COLORS_CSS[key];
-        const arcRadius = 110 + i * 14;
-        const tilt = (i / 6) * 0.7;
+        const color    = BOT_COLORS_CSS[key];
+        const arcRadius= 110 + i * 14;
+        const tilt     = (i / 6) * 0.7;
         const rotSpeed = (0.12 + i * 0.05) * (i % 2 === 0 ? 1 : -1);
         const startAngle = t * rotSpeed;
-
         ctx!.save();
         ctx!.translate(cx, cy);
         ctx!.scale(1, 0.5 + tilt * 0.3);
         ctx!.beginPath();
         ctx!.arc(0, 0, arcRadius, startAngle, startAngle + Math.PI * 1.6);
         ctx!.strokeStyle = color + "88";
-        ctx!.lineWidth = 1.5;
+        ctx!.lineWidth   = 1.5;
         ctx!.stroke();
         ctx!.restore();
       });
 
+      // ── Tendrils ──────────────────────────────────────────────────────
+      const liveTendrils: CssTendril[] = [];
+      for (const tendril of tendrilsRef.current) {
+        tendril.age += delta;
+        const progress = tendril.age / tendril.lifetime;
+        if (progress >= 1) continue;
+
+        const opacity    = progress < 0.25 ? progress / 0.25 : 1 - (progress - 0.25) / 0.75;
+        const currentLen = tendril.maxLen * Math.min(1, progress * 3.5);
+        const wriggle    = Math.sin(tendril.age * 7 + tendril.perpOff) * tendril.perpOff * progress;
+
+        const startX  = cx + baseRadius * Math.cos(tendril.angle);
+        const startY  = cy + baseRadius * Math.sin(tendril.angle);
+        const endX    = cx + (baseRadius + currentLen) * Math.cos(tendril.angle);
+        const endY    = cy + (baseRadius + currentLen) * Math.sin(tendril.angle);
+        const perpAngle = tendril.angle + Math.PI / 2;
+        const cpX     = (startX + endX) / 2 + Math.cos(perpAngle) * wriggle;
+        const cpY     = (startY + endY) / 2 + Math.sin(perpAngle) * wriggle;
+
+        const hexAlpha = Math.round(opacity * 220).toString(16).padStart(2, "0");
+        ctx!.beginPath();
+        ctx!.moveTo(startX, startY);
+        ctx!.quadraticCurveTo(cpX, cpY, endX, endY);
+        ctx!.strokeStyle = tendril.color + hexAlpha;
+        ctx!.lineWidth   = Math.max(0.5, 2.0 * (1 - progress * 0.8));
+        ctx!.shadowColor = tendril.color;
+        ctx!.shadowBlur  = 6;
+        ctx!.stroke();
+        ctx!.shadowBlur  = 0;
+
+        liveTendrils.push(tendril);
+      }
+      tendrilsRef.current = liveTendrils;
+
       const coreRadius = baseRadius + pulse * 12;
       const core = ctx!.createRadialGradient(cx, cy, 0, cx, cy, coreRadius);
       const r1 = 255, g1 = Math.round(180 - heatFrac * 120), b1 = Math.round(30 - heatFrac * 30);
-      const r2 = 220, g2 = Math.round(80 - heatFrac * 60), b2 = 10;
+      const r2 = 220, g2 = Math.round(80 - heatFrac * 60);
       core.addColorStop(0, `rgba(${r1},${g1},${b1},${0.95 + pulse * 0.05})`);
-      core.addColorStop(0.5, `rgba(${r2},${g2},${b2},0.85)`);
-      core.addColorStop(1, `rgba(180,40,10,0)`);
+      core.addColorStop(0.5, `rgba(${r2},${g2},10,0.85)`);
+      core.addColorStop(1, "rgba(180,40,10,0)");
       ctx!.beginPath();
       ctx!.arc(cx, cy, coreRadius, 0, Math.PI * 2);
       ctx!.fillStyle = core;
@@ -619,12 +769,10 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
       const pct = orbData.tradePulse?.active ? 1 - pulseRef.current : 0;
       if (pct > 0) {
         const flareR = (1 - pct) * coreRadius * 4;
-        const flareOpacity = pct * 0.7;
         ctx!.beginPath();
         ctx!.arc(cx, cy, flareR, 0, Math.PI * 2);
-        const flareColor = orbData.tradePulse?.isWin ? `rgba(34,197,94,${flareOpacity})` : `rgba(239,68,68,${flareOpacity})`;
-        ctx!.strokeStyle = flareColor;
-        ctx!.lineWidth = 2;
+        ctx!.strokeStyle = orbData.tradePulse?.isWin ? `rgba(34,197,94,${pct * 0.7})` : `rgba(239,68,68,${pct * 0.7})`;
+        ctx!.lineWidth   = 2;
         ctx!.stroke();
       }
 
@@ -635,13 +783,13 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
           ctx!.beginPath();
           ctx!.arc(cx, cy, rippleR, 0, Math.PI * 2);
           ctx!.strokeStyle = `rgba(139,92,246,${rs * 0.3})`;
-          ctx!.lineWidth = 1;
+          ctx!.lineWidth   = 1;
           ctx!.stroke();
         }
       }
 
       const scanY = ((t * 0.15) % 1) * h;
-      ctx!.fillStyle = `rgba(34,211,238,0.015)`;
+      ctx!.fillStyle = "rgba(34,211,238,0.015)";
       ctx!.fillRect(0, scanY, w, 1.5);
 
       animRef.current = requestAnimationFrame(draw);
@@ -661,32 +809,36 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
   );
 }
 
+// ─── Main OrbVisualiser ───────────────────────────────────────────────────────
+
 interface TradePulseState {
-  active: boolean;
-  isWin: boolean;
+  active:  boolean;
+  isWin:   boolean;
   botName: string;
-  ts: number;
+  ts:      number;
 }
 
 export function OrbVisualiser() {
-  const { data: summary } = useStatusSummary();
-  const { data: fleet } = useKrakenFleetSummary();
-  const { data: livePos } = useLivePositions();
-  const { data: journal } = useLearningJournal(undefined, undefined, 5);
+  const { data: summary  } = useStatusSummary();
+  const { data: fleet    } = useKrakenFleetSummary();
+  const { data: livePos  } = useLivePositions();
+  const { data: journal  } = useLearningJournal(undefined, undefined, 5);
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caStatus } = useKrakenStatus("calypso");
   const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
-  const { data: curve } = useEquityCurve(300);
-  const { data: auditor } = useAuditorReport();
+  const { data: fxState  } = useForexState();
+  const { data: curve    } = useEquityCurve(300);
+  const { data: auditor  } = useAuditorReport();
 
-  const [tradePulse, setTradePulse] = useState<TradePulseState | null>(null);
-  const [aiRipple, setAiRipple] = useState(false);
-  const [webglAvailable] = useState<boolean>(() => checkWebGL());
-  const lastJournalCount = useRef<number | null>(null);
-  const lastAuditorRunAt = useRef<string | null>(null);
+  const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
+  const [aiRipple,       setAiRipple      ] = useState(false);
+  const [tendrilTrigger, setTendrilTrigger] = useState(0);
+  const [webglAvailable                  ] = useState<boolean>(() => checkWebGL());
+  const lastJournalCount  = useRef<number | null>(null);
+  const lastAuditorRunAt  = useRef<string | null>(null);
 
+  // Trade pulse events
   useEffect(() => {
     const unsub = onTradePulse((ev) => {
       setTradePulse({ active: true, isWin: ev.type === "win", botName: ev.botName, ts: Date.now() });
@@ -695,23 +847,38 @@ export function OrbVisualiser() {
     return unsub;
   }, []);
 
+  // AI ripple on learning-journal count change
   useEffect(() => {
     const count = journal?.count ?? null;
     if (lastJournalCount.current !== null && count !== null && count !== lastJournalCount.current) {
-      setAiRipple(true);
-      setTimeout(() => setAiRipple(false), 3000);
+      setAiRipple(true); setTimeout(() => setAiRipple(false), 3000);
     }
     if (count !== null) lastJournalCount.current = count;
   }, [journal?.count]);
 
+  // AI ripple on auditor run
   useEffect(() => {
     const runAt = auditor?.report?.run_at ?? null;
     if (lastAuditorRunAt.current !== null && runAt !== null && runAt !== lastAuditorRunAt.current) {
-      setAiRipple(true);
-      setTimeout(() => setAiRipple(false), 3000);
+      setAiRipple(true); setTimeout(() => setAiRipple(false), 3000);
     }
     if (runAt !== null) lastAuditorRunAt.current = runAt;
   }, [auditor?.report?.run_at]);
+
+  // Random tendril timer — fires every 2–3.5 seconds regardless of trade events
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        setTendrilTrigger(n => n + 1);
+        schedule();
+      }, 2000 + Math.random() * 1500);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, []);
+
+  // ── Derived data ─────────────────────────────────────────────────────────
 
   const openPositions = useMemo(() => {
     let n = livePos?.count ?? 0;
@@ -723,15 +890,17 @@ export function OrbVisualiser() {
     return n;
   }, [livePos, djStatus, bbStatus, caStatus, optState, fxState]);
 
+  // Count a bot active if it has ANY non-error status string
   const activeBots = useMemo(() => {
+    const INACTIVE = new Set(["error", "offline", "stopped", "critical", "crashed", "unknown"]);
+    const check = (s: string | undefined) => !!s && !INACTIVE.has(s.toLowerCase());
     let n = 0;
-    const isActive = (s: string | undefined) => s === "running" || s === "online" || s === "ok";
-    if (isActive(summary?.system_health?.system_status)) n++;
-    if (isActive(djStatus?.status)) n++;
-    if (isActive(bbStatus?.status)) n++;
-    if (isActive(caStatus?.status)) n++;
-    if (isActive(optState?.status)) n++;
-    if (isActive(fxState?.status)) n++;
+    if (check(summary?.system_health?.system_status)) n++;
+    if (check(djStatus?.status)) n++;
+    if (check(bbStatus?.status)) n++;
+    if (check(caStatus?.status)) n++;
+    if (check(optState?.status)) n++;
+    if (check(fxState?.status))  n++;
     return n;
   }, [summary, djStatus, bbStatus, caStatus, optState, fxState]);
 
@@ -739,32 +908,26 @@ export function OrbVisualiser() {
     const snaps = curve?.snapshots;
     if (!snaps || snaps.length < 2) return 0;
     const latest = snaps[snaps.length - 1].total_equity;
-    const prev = snaps[0].total_equity;
+    const prev   = snaps[0].total_equity;
     return prev > 0 ? (latest - prev) / prev : 0;
   }, [curve]);
 
   const lastAiTs = useMemo(() => {
-    const journalTs = journal?.entries?.[0]?.last_seen
-      ? new Date(journal.entries[0].last_seen).getTime()
-      : 0;
-    const auditorTs = auditor?.report?.run_at
-      ? new Date(auditor.report.run_at).getTime()
-      : 0;
+    const journalTs  = journal?.entries?.[0]?.last_seen ? new Date(journal.entries[0].last_seen).getTime() : 0;
+    const auditorTs  = auditor?.report?.run_at          ? new Date(auditor.report.run_at).getTime()        : 0;
     return Math.max(journalTs, auditorTs);
   }, [journal, auditor]);
 
+  // P&L = total current equity minus $600k starting capital
   const combinedPnl = useMemo(() => {
     const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
     const krakenEq = fleet?.total_equity_usd ?? 0;
-    const optEq = optState?.paper_equity ?? 0;
-    const fxEq = fxState?.paper_equity ?? 0;
+    const optEq    = optState?.paper_equity ?? 0;
+    const fxEq     = fxState?.paper_equity ?? 0;
     const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
-
-    const snaps = curve?.snapshots;
-    if (!snaps || snaps.length < 2 || totalEquity === 0) return 0;
-    const baseline = snaps[0].total_equity;
-    return baseline > 0 ? totalEquity - baseline : 0;
-  }, [summary, fleet, optState, fxState, curve]);
+    if (totalEquity === 0) return 0;
+    return totalEquity - STARTING_CAPITAL;
+  }, [summary, fleet, optState, fxState]);
 
   const orbData: OrbData = {
     openPositions,
@@ -773,23 +936,27 @@ export function OrbVisualiser() {
     lastAiTs,
     tradePulse: tradePulse ? { active: tradePulse.active, isWin: tradePulse.isWin, botName: tradePulse.botName } : null,
     aiRipple,
+    tendrilTrigger,
   };
 
   function fmtPnl(v: number) {
     const abs = Math.abs(v);
-    const s = v >= 0 ? "+" : "-";
-    if (abs >= 1000) return `${s}$${(abs / 1000).toFixed(1)}k`;
+    const s   = v >= 0 ? "+" : "-";
+    if (abs >= 1_000_000) return `${s}$${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 1_000)     return `${s}$${(abs / 1_000).toFixed(1)}k`;
     return `${s}$${abs.toFixed(0)}`;
   }
 
   const lastAiLabel = useMemo(() => {
     if (!lastAiTs) return "never";
     const diff = Date.now() - lastAiTs;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
+    const mins = Math.floor(diff / 60_000);
+    if (mins < 1)  return "just now";
     if (mins < 60) return `${mins}m ago`;
     return `${Math.floor(mins / 60)}h ago`;
   }, [lastAiTs]);
+
+  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative", background: "#020617", overflow: "hidden" }}>
@@ -808,115 +975,117 @@ export function OrbVisualiser() {
         <CSSOrb orbData={orbData} />
       )}
 
+      {/* ── LIVE ORB HUD — 30% larger ── */}
       <div
         style={{
           position: "absolute",
           bottom: 24,
           right: 24,
-          background: "rgba(2,6,23,0.78)",
-          border: "1px solid rgba(251,146,60,0.25)",
-          borderRadius: 12,
-          padding: "14px 18px",
-          backdropFilter: "blur(12px)",
-          minWidth: 180,
+          background: "rgba(2,6,23,0.82)",
+          border: "1px solid rgba(251,146,60,0.3)",
+          borderRadius: 14,
+          padding: "18px 24px",
+          backdropFilter: "blur(14px)",
+          minWidth: 234,
         }}
       >
-        <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 9, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>
+        <div style={{ color: "rgba(148,163,184,0.55)", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
           Live Orb HUD
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
           <div>
-            <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 8, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>P&amp;L</div>
-            <div style={{
-              color: combinedPnl >= 0 ? "#4ade80" : "#f87171",
-              fontSize: 14,
-              fontFamily: "monospace",
-              fontWeight: 700,
-            }}>
+            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>P&amp;L</div>
+            <div style={{ color: combinedPnl >= 0 ? "#4ade80" : "#f87171", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {fmtPnl(combinedPnl)}
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 8, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>Positions</div>
-            <div style={{ color: "#fbbf24", fontSize: 14, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Positions</div>
+            <div style={{ color: "#fbbf24", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {openPositions}
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 8, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>Active Bots</div>
-            <div style={{ color: "#22d3ee", fontSize: 14, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
+            <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {activeBots} / 6
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 8, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase" }}>Last AI Event</div>
-            <div style={{ color: "#a78bfa", fontSize: 12, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Last AI Event</div>
+            <div style={{ color: "#a78bfa", fontSize: 15, fontFamily: "monospace", fontWeight: 700 }}>
               {lastAiLabel}
             </div>
           </div>
         </div>
 
         {tradePulse?.active && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "4px 8px",
-              borderRadius: 6,
-              background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-              border: `1px solid ${tradePulse.isWin ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
-              color: tradePulse.isWin ? "#4ade80" : "#f87171",
-              fontSize: 10,
-              fontFamily: "monospace",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
+          <div style={{
+            marginTop: 12,
+            padding: "5px 10px",
+            borderRadius: 7,
+            background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
+            border: `1px solid ${tradePulse.isWin ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
+            color: tradePulse.isWin ? "#4ade80" : "#f87171",
+            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+          }}>
             {tradePulse.isWin ? "✓ WIN" : "✗ LOSS"} — {tradePulse.botName}
           </div>
         )}
 
         {aiRipple && (
-          <div
-            style={{
-              marginTop: 6,
-              padding: "4px 8px",
-              borderRadius: 6,
-              background: "rgba(139,92,246,0.15)",
-              border: "1px solid rgba(139,92,246,0.4)",
-              color: "#a78bfa",
-              fontSize: 10,
-              fontFamily: "monospace",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-            }}
-          >
+          <div style={{
+            marginTop: 8,
+            padding: "5px 10px",
+            borderRadius: 7,
+            background: "rgba(139,92,246,0.15)",
+            border: "1px solid rgba(139,92,246,0.4)",
+            color: "#a78bfa",
+            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
+          }}>
             ◉ AI Learning Event
           </div>
         )}
       </div>
 
+      {/* ── PROMINENT TITLE ── */}
       <div
         style={{
           position: "absolute",
-          top: 24,
+          top: 20,
           left: "50%",
           transform: "translateX(-50%)",
-          color: "rgba(251,146,60,0.35)",
-          fontSize: 10,
-          fontFamily: "monospace",
-          letterSpacing: "0.3em",
-          textTransform: "uppercase",
           textAlign: "center",
           pointerEvents: "none",
+          userSelect: "none",
         }}
       >
-        ◈ ALGOEDGE ORB — LIVE MARKET CONSCIOUSNESS ◈
+        <div style={{
+          color: "rgba(251,146,60,0.95)",
+          fontSize: 18,
+          fontFamily: "monospace",
+          fontWeight: 700,
+          letterSpacing: "0.35em",
+          textTransform: "uppercase",
+          textShadow: "0 0 20px rgba(251,146,60,0.8), 0 0 40px rgba(251,146,60,0.4), 0 0 60px rgba(234,88,12,0.3)",
+        }}>
+          ◈ ALGOEDGE ORB ◈
+        </div>
+        <div style={{
+          color: "rgba(251,146,60,0.5)",
+          fontSize: 10,
+          fontFamily: "monospace",
+          letterSpacing: "0.25em",
+          textTransform: "uppercase",
+          marginTop: 4,
+          textShadow: "0 0 12px rgba(251,146,60,0.4)",
+        }}>
+          LIVE MARKET CONSCIOUSNESS
+        </div>
       </div>
     </div>
   );

@@ -250,6 +250,22 @@ async def run_post_mortem() -> dict[str, Any]:
                 f"entry={entry_price:.4f} exit={exit_price:.4f} "
                 f"pnl={pnl_pct:+.2f}%{slip_str} {label}"
             )
+            # ── Oracle Profit Reserve — 15% of gross profit swept to ledger ──
+            _asset_class = journal_entry.get("asset_class", "")
+            if _asset_class == "momentum_equity":
+                try:
+                    _qty = float(journal_entry.get("qty") or journal_entry.get("shares") or 0)
+                    if _qty > 0:
+                        _profit_usd = pnl_pct / 100.0 * entry_price * _qty
+                        _contribution = round(_profit_usd * 0.15, 4)
+                        from db.postgres import add_oracle_profit_contribution
+                        add_oracle_profit_contribution(_contribution)
+                        logger.info(
+                            f"Post-mortem | Oracle Profit Reserve +${_contribution:.2f} "
+                            f"(15% of ${_profit_usd:.2f} from {ticker})"
+                        )
+                except Exception as _opr_exc:
+                    logger.warning(f"Post-mortem | Oracle Profit Reserve contribution failed for {ticker}: {_opr_exc}")
         else:
             losses += 1
             logger.warning(

@@ -174,39 +174,46 @@ def section_fleet_risk_dashboard(
 
 def section_trade_mechanics_oracle() -> list[str]:
     lines: list[str] = []
-    _h2(lines, "TRADE MECHANICS \u2014 EXACT FORMULAS (ORACLE #1)")
+    _h2(lines, "TRADE MECHANICS \u2014 EXACT FORMULAS (ORACLE #1 — PURE MOMENTUM v3.0)")
     lines += [
-        "  MOMENTUM SCORE FORMULA:",
-        "    composite_score = (20d_return * 0.50) + (60d_return * 0.30)",
-        "    Trend bonus: +5.0 if Price > SMA-63 AND Price > SMA-126",
+        "  MOMENTUM SCORE FORMULA (deterministic — no LLM):",
+        "    composite_score = (5d_return * 0.20) + (20d_return * 0.50) + (60d_return * 0.30)",
         "",
-        "  ENTRY FILTERS (ALL must be True):",
-        "    1. Composite momentum score ranks in top N for regime (Bull=9, Sideways=6, Bear=4)",
-        "    2. RSI(14) between 30 and regime_upper (Bull=75, Bear=70)",
-        "    3. 3-month momentum must be 'positive'",
-        "    4. Sector diversification: max 3 per sector (Bull), max 2 per sector (Bear/Sideways)",
-        "    5. Bear regime: only DEFENSIVE sectors (healthcare, utilities, staples, energy, safe-haven ETFs, commodity ETFs)",
-        "    6. Not in existing open positions",
+        "  LONG ENTRY FILTERS (ALL must be True):",
+        "    1. composite_score > 0  (net positive momentum)",
+        "    2. RSI(14) between 30 and 70  (not oversold or overbought)",
+        "    3. Price > EMA-20  (confirmed uptrend)",
+        "    4. Not already in an open position",
+        "    5. Ranks in top 6 of scored universe",
         "",
-        "  STOP LOSS FORMULA:",
+        "  SHORT ENTRY FILTERS (ALL must be True):",
+        "    1. composite_score < 0  (net negative momentum)",
+        "    2. RSI(14) between 30 and 70",
+        "    3. Price < EMA-20  (confirmed downtrend)",
+        "    4. Not already in an open position (long or short)",
+        "    5. Ticker is shortable AND easy-to-borrow (Alpaca check)",
+        "    6. Ranks in bottom 3 of scored universe",
+        "",
+        "  STOP LOSS FORMULA (volatility-scaled):",
         "    vol_factor = annualized_volatility_20d / 100",
-        "    stop_loss_pct = -min(max(vol_factor * stop_mult, 0.03), 0.08)",
-        "    Bull: stop_mult=1.5  |  Sideways: stop_mult=1.2  |  Bear: stop_mult=1.0",
+        "    stop_loss_pct  = -clamp(vol_factor * 1.5, 0.04, 0.10)",
         "",
         "  TAKE PROFIT FORMULA:",
-        "    take_profit_pct = min(max(vol_factor * take_mult, 0.05), 0.20)",
-        "    Bull: take_mult=2.0  |  Sideways: take_mult=1.6  |  Bear: take_mult=1.3",
+        "    take_profit_pct = +clamp(vol_factor * 2.5, 0.06, 0.20)",
         "",
-        "  KELLY CRITERION FORMULA:",
-        "    kelly = (win_rate * (avg_win / avg_loss + 1) - 1) / (avg_win / avg_loss)",
-        "    Final sizing = min(kelly * conviction_score, kelly_cap)",
-        "    Bull: kelly_cap=12%  |  Sideways: kelly_cap=8%  |  Bear: kelly_cap=6%",
-        "    Fallback: 2% fixed fractional if insufficient trade history",
+        "  POSITION SIZING:",
+        "    Fixed 10% of equity per position until 30+ closed trades.",
+        "    After 30 closed trades: half-Kelly formula, capped at 15%.",
+        "    Max 6 longs + 3 shorts = 9 positions simultaneously.",
         "",
-        "  REGIME-SPECIFIC PARAMETERS:",
-        "    Bull:     max_active=9  kelly_cap=12%  stop_mult=1.5x  take_mult=2.0x  full_universe",
-        "    Sideways: max_active=6  kelly_cap=8%   stop_mult=1.2x  take_mult=1.6x  full_universe",
-        "    Bear:     max_active=4  kelly_cap=6%   stop_mult=1.0x  take_mult=1.3x  defensive_only",
+        "  ORACLE PROFIT RESERVE:",
+        "    15% of each winning trade's gross profit is swept to the Oracle Profit",
+        "    Reserve (DB ledger — NOT invested).  This is tracked separately in the",
+        "    diagnostic report under 'Oracle Profit Reserve'.",
+        "",
+        "  CYCLE FREQUENCY:",
+        "    Runs every 15 minutes during NYSE market hours (09:01–15:46 ET Mon-Fri).",
+        "    No afterhours trading.  No weekends.  No LLM calls.",
     ]
     return lines
 
@@ -342,35 +349,57 @@ def section_trade_mechanics_navigator() -> list[str]:
 
 def section_oracle_regime_transparency() -> list[str]:
     lines: list[str] = []
-    _h2(lines, "ORACLE REGIME LOGIC TRANSPARENCY")
+    _h2(lines, "ORACLE #1 — STRATEGY STATUS & MOMENTUM SCAN")
 
     lines += [
-        "  REGIME DEFINITIONS:",
-        "    Bull:     LLM (Groq) classifies based on: SPY trend, VIX level, breadth indicators,",
-        "              economic data (FRED), news sentiment. Characterized by broad risk-on conditions.",
-        "    Sideways: Mixed signals, no clear directional bias. Moderate risk parameters.",
-        "    Bear:     Risk-off conditions: elevated VIX, declining breadth, negative macro data.",
-        "              Triggers defensive-only universe (healthcare, utilities, staples, energy,",
-        "              safe-haven ETFs, commodity ETFs).",
+        "  STRATEGY: Pure Momentum v3.0 (deterministic — no LLM, no SGOV, no JEPQ)",
+        "  Universe: ~250 NYSE/NASDAQ stocks  |  Scan frequency: every 15 min (market hours only)",
         "",
-        "    The LLM provides the regime label. The algo scanner adjusts RISK PARAMETERS not strategy.",
+        "  SCORE = 5d_return*0.20 + 20d_return*0.50 + 60d_return*0.30",
+        "  LONG  filters: score>0, RSI 30-70, price>EMA20  (top 6 max)",
+        "  SHORT filters: score<0, RSI 30-70, price<EMA20  (bottom 3 max, ETB check)",
         "",
-        "  SGOV DEFAULT LOGIC:",
-        "    SGOV (T-Bill ETF) is the cash-equivalent parking position.",
-        "    Used when: all active slots are filled OR no momentum signals pass filters.",
-        "    One slot always reserved for SGOV to prevent full capital deployment.",
-        "    SGOV is exempt from position size cap and treated as a cash proxy.",
     ]
 
-    regime_json_path = Path(__file__).parent.parent / "data" / "market_regime.json"
     try:
-        if regime_json_path.exists():
-            rd = json.loads(regime_json_path.read_text())
-            _row(lines, "Current regime:", str(rd.get("regime", "Unknown")))
-            _row(lines, "Regime set at:", str(rd.get("written_at", "Unknown"))[:19])
-            _row(lines, "Rationale:", str(rd.get("rationale", "N/A"))[:120])
+        from db.postgres import get_oracle_profit_reserve
+        pr = get_oracle_profit_reserve()
+        _row(lines, "Oracle Profit Reserve:", f"${pr['total_usd']:,.2f}  ({pr['contributions']} contributions)")
+        if pr["last_ts"]:
+            _row(lines, "Last contribution:", f"${pr['last_contribution']:,.2f}  at {str(pr['last_ts'])[:19]}")
     except Exception:
-        pass
+        lines.append("  Oracle Profit Reserve: unavailable")
+
+    lines.append("")
+    lines.append("  LAST MOMENTUM SCAN RESULTS (from pipeline state):")
+    try:
+        from core.pipeline import _state as _pipeline_state
+        _scanner = _pipeline_state.get("last_algo_scanner") or {}
+        _top5_long  = _scanner.get("top5_long",  [])
+        _top5_short = _scanner.get("top5_short", [])
+        _scan_type  = _scanner.get("scan_type", "N/A")
+        _universe   = _scanner.get("universe_scanned", 0)
+        _n_signals  = _scanner.get("active_signals", 0)
+
+        _row(lines, "Scan type:", _scan_type)
+        _row(lines, "Universe scanned:", str(_universe))
+        _row(lines, "Long signals:", str(_n_signals))
+
+        if _top5_long:
+            lines.append("  Top 5 long candidates:")
+            for c in _top5_long:
+                score = c.get("score") or c.get("composite_score") or 0
+                rsi   = c.get("rsi") or 0
+                lines.append(f"    {c['ticker']:10s}  score={score:+.2f}  RSI={rsi:.0f}")
+
+        if _top5_short:
+            lines.append("  Bottom 5 short candidates:")
+            for c in _top5_short:
+                score = c.get("score") or c.get("composite_score") or 0
+                rsi   = c.get("rsi") or 0
+                lines.append(f"    {c['ticker']:10s}  score={score:+.2f}  RSI={rsi:.0f}")
+    except Exception:
+        lines.append("  Pipeline state unavailable — scan data will populate after first cycle.")
 
     _h2(lines, "REGIME CHANGE LOG (Reconstructed from equity_snapshots)")
     regime_rows = _pg_query("""

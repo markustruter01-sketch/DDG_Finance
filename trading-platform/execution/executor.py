@@ -134,9 +134,9 @@ def execute_allocations(
     # ── RiskProfile enforcement ───────────────────────────────────────────────
     # Build a RiskProfile using live account data and the Alpaca platform
     # constants (60/40 ring-fence, 15% per-position cap, 18% reserve).
-    # SGOV (cash proxy for 0-Kelly slots) and VAULT_TICKER (JEPQ profit-sweep
-    # target) are excluded from deployed_usd — only risk-on positions count.
-    _SAFE_TICKERS: frozenset[str] = frozenset({CASH_TICKER, VAULT_TICKER})
+    # Oracle v3.0: SGOV and JEPQ are no longer protected — existing positions
+    # in those tickers will be treated as stale and closed on the next cycle.
+    _SAFE_TICKERS: frozenset[str] = frozenset()  # no protected cash/vault tickers
     _deployed_usd = sum(
         p.get("market_value", 0.0)
         for p in current_positions.values()
@@ -169,7 +169,7 @@ def execute_allocations(
 
     is_crypto_only = isinstance(output, CryptoAnalysisOutput)
 
-    protected_symbols = {_normalize_symbol(VAULT_TICKER)}
+    protected_symbols: set[str] = set()  # Oracle v3.0: no protected vault symbols
 
     active_tickers_raw = {
         a.ticker for a in output.allocations
@@ -288,7 +288,9 @@ def execute_allocations(
             regime_at_entry=str(_regime_for_slot) if _regime_for_slot else None,
         )
 
-    results = _run_vault_sweep(equity, results, dry_run)
+    # Oracle v3.0: vault sweep disabled — JEPQ physical buy removed.
+    # Profit reserve is tracked as a DB ledger via add_oracle_profit_contribution()
+    # called from the post-mortem after each winning trade closes.
 
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE COMPLETE")

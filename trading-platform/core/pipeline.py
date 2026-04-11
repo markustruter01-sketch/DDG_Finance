@@ -638,21 +638,11 @@ async def _run_pipeline_inner(
         return result
 
     if not crypto_only and not force and not is_market_open():
-        # ── Afterhours Crypto Mode ─────────────────────────────────────────
-        # Instead of exiting early, deploy idle cash into a defined crypto
-        # watchlist using a lightweight Z-Score + RSI mean-reversion signal.
-        # All existing circuit breakers (kill switch, VaR, per-position cap)
-        # remain active.  No LLM call is made — quant signal only.
-        try:
-            _ah_result = await run_afterhours_crypto_cycle(dry_run=dry_run)
-            result.update(_ah_result)
-            _update_state(result, started, trading_mode="afterhours_crypto")
-        except Exception as _ah_exc:
-            logger.error(f"Pipeline | Afterhours crypto cycle failed: {_ah_exc}")
-            result["status"] = "afterhours_error"
-            result["errors"].append(f"Afterhours cycle failed: {_ah_exc}")
-            _persist_emergency_regime(spy_override, spy_change, cycle_num)
-            _update_state(result, started, trading_mode="afterhours_crypto")
+        # Oracle only trades NYSE market hours — no afterhours activity.
+        logger.info("Pipeline | Oracle | Market closed — skipping cycle (no afterhours trading)")
+        result["status"] = "market_closed"
+        result["market_regime"] = "Market closed — Oracle only trades NYSE hours"
+        _update_state(result, started, trading_mode="market_closed")
         return result
 
     # ── Pre-dispatch Signal Guardrails (authoritative temporal gate) ──────────
@@ -739,198 +729,71 @@ async def _run_pipeline_inner(
     except Exception as exc:
         logger.warning(f"Pipeline | Blackout check failed: {exc} — continuing")
 
+    # ── Oracle Pure Momentum Scan (replaces LLM analysis cycle) ─────────────
+    # Deterministic momentum ranking — no Groq/Gemini LLM calls.
+    # Regime = "Sideways" is used as the schema label (passes validator for
+    # non-LETF / non-bear-hedge tickers; momentum_equity asset_class bypasses
+    # the ticker-universe check entirely).
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
     using_fallback = False
-
-    _regime_bias_used = False
-    if not crypto_only and not dry_run:
-        try:
-            from analysis.regime_bias_manager import get_cached_bias
-            _bias = get_cached_bias()
-            if _bias is not None:
-                logger.info(
-                    f"Pipeline | Async regime bias available: regime={_bias['regime']} "
-                    f"(age={_bias.get('age_hours', '?')}h) — skipping synchronous LLM call"
-                )
-                _regime_bias_used = True
-                result["regime_bias_age_hours"] = _bias.get("age_hours")
-        except ImportError:
-            pass
+    _oracle_short_signals: list = []
 
     try:
-        logger.info("Pipeline | Step 1: Running analysis cycle...")
-        allocation = await run_analysis_cycle(dry_run=dry_run, crypto_only=crypto_only)
-    except Exception as exc:
-        logger.error(f"Pipeline | Analysis cycle FAILED: {exc}")
-        # ── Groq-specific fallback: only activate when the LLM retries themselves
-        # exhausted (Groq rate-limited / 503 / token-limit).  Other failures such
-        # as account-state unavailability, bad market data, or prompt-assembly
-        # errors abort immediately as before — we must NOT trade on stale
-        # allocations when the root cause is something other than Groq.
-        #
-        # Detection: _call_regime_with_retry raises:
-        #   RuntimeError("Regime LLM failed after N attempts. Last error: ...")
-        # Account-fetch raises:
-        #   RuntimeError("Account state unavailable, analysis aborted: ...")
-        # All other non-LLM failures use different messages / types.
-        exc_msg = str(exc)
+        logger.info("Pipeline | Oracle Step 1: Pure momentum scan (no LLM)...")
+        from execution.broker import get_positions as _scan_gpos
+        from analysis.schemas import RegimeAnalysisOutput as _ScanRAO, RegimeAllocationSlot as _ScanRAS
+        from execution.algo_scanner import run_algo_scan as _run_scan
 
-        # ── Data Circuit Breaker abort ────────────────────────────────────────
-        # The market snapshot validator (shared/market_snapshot_validator.py)
-        # raises DataCircuitBreakerError when fetched data has structural gaps
-        # or stale timestamps.  This is a deliberate, pre-LLM abort — handle it
-        # as a first-class analysis failure with a descriptive error message.
-        try:
-            _shared_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
-            if _shared_root not in sys.path:
-                sys.path.insert(0, _shared_root)
-            from shared.market_snapshot_validator import DataCircuitBreakerError as _DCBError
-            _is_dcb = isinstance(exc, _DCBError)
-        except ImportError:
-            _is_dcb = "DataCircuitBreaker" in exc_msg
+        _open_pos  = _scan_gpos()
+        _open_syms = {p["symbol"] for p in _open_pos}
 
-        if _is_dcb:
-            result["status"] = "analysis_failed"
-            result["errors"].append(f"Data integrity gate tripped: {exc}")
-            logger.warning(
-                f"Pipeline | DataCircuitBreaker tripped — cycle aborted "
-                f"without LLM call. Reason: {exc}"
+        _algo_result = _run_scan(open_symbols=_open_syms)
+        _long_slots  = _algo_result.get("signals", [])
+        _oracle_short_signals = _algo_result.get("short_signals", [])
+
+        result["algo_scanner"] = {
+            "scan_type":        "pure_momentum",
+            "active_signals":   len(_long_slots),
+            "activated":        bool(_long_slots or _oracle_short_signals),
+            "universe_scanned": _algo_result.get("universe_scanned", 0),
+            "top5_long":        _algo_result.get("top5_long", []),
+            "top5_short":       _algo_result.get("top5_short", []),
+        }
+
+        if not _long_slots:
+            logger.info(
+                "Pipeline | Oracle momentum scan: no long candidates pass all filters "
+                "— holding cash this cycle"
             )
-            _persist_emergency_regime(spy_override, spy_change, cycle_num)
-            _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
+            result["status"]       = "ok"
+            result["market_regime"] = "Momentum: no qualifying long candidates — holding cash"
+            _update_state(result, started, trading_mode="momentum_no_signals")
             return result
 
-        is_llm_failure = (
-            "Regime LLM failed after" in exc_msg
-            or "Crypto LLM failed after" in exc_msg
+        _alloc_slots = [_ScanRAS.model_validate({**s, "slot": i + 1}) for i, s in enumerate(_long_slots)]
+
+        allocation = _ScanRAO(
+            regime="Sideways",
+            regime_rationale=(
+                f"Oracle pure momentum: {len(_alloc_slots)} long signal(s), "
+                f"{len(_oracle_short_signals)} short signal(s) — "
+                f"deterministic ranking, no LLM"
+            ),
+            allocations=_alloc_slots,
         )
-        if is_llm_failure and not crypto_only:
-            # Attempt Groq regime fallback
-            fallback = get_regime_fallback()
-            if fallback is not None:
-                using_fallback = True
-                logger.warning(
-                    f"Pipeline | Groq LLM exhausted — using CACHED regime '{fallback.regime}' as fallback. "
-                    f"Execution will proceed with stale allocation. LLM error: {exc}"
-                )
-                allocation = fallback
-                result["errors"].append(
-                    f"Groq rate-limited ({exc.__class__.__name__}) — using cached regime '{fallback.regime}'"
-                )
-            else:
-                result["status"] = "analysis_failed"
-                result["errors"].append(f"Groq LLM failed, no fallback cache available: {exc}")
-                _persist_emergency_regime(spy_override, spy_change, cycle_num)
-                _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
-                return result
-        else:
-            result["status"] = "analysis_failed"
-            result["errors"].append(f"Analysis failed: {exc}")
-            _persist_emergency_regime(spy_override, spy_change, cycle_num)
-            _update_state(result, started, trading_mode=mode_label.lower().replace(" ", "_"))
-            return result
 
-    # ── SPY emergency regime override (apply to the resolved allocation) ─────
-    if spy_override and allocation is not None and isinstance(allocation, RegimeAnalysisOutput):
-        if allocation.regime != "Bear":
-            logger.warning(
-                f"Pipeline | EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% — "
-                f"forcing regime from '{allocation.regime}' to 'Bear'"
-            )
-            allocation.regime = "Bear"
-            allocation.regime_rationale = (
-                f"EMERGENCY OVERRIDE: SPY {spy_change * 100:+.1f}% intraday drop. "
-                f"Original regime overridden to Bear."
-            )
-            result["errors"].append(
-                f"SPY emergency override active (SPY {spy_change * 100:+.1f}%) — forced Bear regime"
-            )
+        logger.info(
+            f"Pipeline | Oracle scan: {len(_alloc_slots)} longs + "
+            f"{len(_oracle_short_signals)} shorts ready for execution"
+        )
 
-    # ── ALGORITHMIC SIGNAL GENERATION (equity cycles only) ────────────────────
-    # The LLM provides regime classification and oversight/veto.
-    # The algo scanner generates the actual trade entries/allocations.
-    # Crypto-only cycles still use the LLM's allocations directly (CryptoAnalysisOutput).
-    if isinstance(allocation, RegimeAnalysisOutput):
-        try:
-            from execution.algo_scanner import run_algo_scan
-            from core.veto_enforcer import load_active_vetoes
-
-            _llm_regime = allocation.regime
-            _llm_rationale = allocation.regime_rationale
-
-            _veto_tickers = set(load_active_vetoes())
-
-            _vix_val = None
-            try:
-                import json as _vj
-                from pathlib import Path as _vp
-                _regime_file = _vp(__file__).parent.parent / "data" / "market_regime.json"
-                if _regime_file.exists():
-                    _rd = _vj.loads(_regime_file.read_text())
-                    _vix_val = _rd.get("vix")
-            except Exception:
-                pass
-
-            _algo_result = run_algo_scan(
-                regime=_llm_regime,
-                vix=_vix_val,
-                veto_tickers=_veto_tickers if _veto_tickers else None,
-            )
-            result["algo_scanner"] = {
-                "scan_type": _algo_result["scan_type"],
-                "active_signals": _algo_result.get("active_signals", 0),
-                "activated": _algo_result["activated"],
-                "universe_scanned": _algo_result.get("universe_scanned", 0),
-            }
-
-            _algo_signals = _algo_result["signals"]
-            if _algo_signals:
-                from analysis.schemas import RegimeAllocationSlot
-                _new_allocs = []
-                for s in _algo_signals:
-                    _new_allocs.append(RegimeAllocationSlot.model_validate(s))
-                allocation.allocations = _new_allocs
-                logger.info(
-                    f"Pipeline | Algo scanner replaced LLM allocations: "
-                    f"{len(_new_allocs)} slots (regime={_llm_regime}, "
-                    f"scan={_algo_result['scan_type']})"
-                )
-
-                if _llm_regime == "Bear":
-                    try:
-                        from portfolio.allocator import (
-                            _enforce_leveraged_fence,
-                            normalise_kelly_fractions,
-                        )
-                        _raw = [a.model_dump() for a in allocation.allocations]
-                        _raw = _enforce_leveraged_fence(_raw)
-                        _raw = normalise_kelly_fractions(_raw)
-                        allocation.allocations = [RegimeAllocationSlot.model_validate(s) for s in _raw]
-                        logger.info("Pipeline | Bear allocator fences applied to scanner output")
-                    except Exception as _fence_exc:
-                        logger.warning(f"Pipeline | Bear fence post-processing failed: {_fence_exc}")
-        except Exception as _algo_exc:
-            logger.warning(
-                f"Pipeline | Algo scanner failed (non-fatal), "
-                f"falling back to LLM allocations: {_algo_exc}"
-            )
-            result.setdefault("errors", []).append(f"Algo scanner error: {_algo_exc}")
-            if allocation.regime == "Bear":
-                try:
-                    from portfolio.allocator import (
-                        _apply_bear_half_kelly,
-                        _apply_bear_sgov_default,
-                        normalise_kelly_fractions,
-                    )
-                    from analysis.schemas import RegimeAllocationSlot as _FallbackSlot
-                    _raw = [a.dict() if hasattr(a, "dict") else a.model_dump() for a in allocation.allocations]
-                    _raw = _apply_bear_half_kelly(_raw)
-                    _raw = _apply_bear_sgov_default(_raw)
-                    _raw = normalise_kelly_fractions(_raw)
-                    allocation.allocations = [_FallbackSlot.model_validate(s) for s in _raw]
-                    logger.info("Pipeline | Bear defensive controls applied to LLM fallback allocations")
-                except Exception as _def_exc:
-                    logger.warning(f"Pipeline | Bear defensive fallback also failed: {_def_exc}")
+    except Exception as exc:
+        logger.error(f"Pipeline | Oracle momentum scan FAILED: {exc}")
+        result["status"] = "analysis_failed"
+        result["errors"].append(f"Momentum scan failed: {exc}")
+        _persist_emergency_regime(spy_override, spy_change, cycle_num)
+        _update_state(result, started, trading_mode="momentum_error")
+        return result
 
     # ── Build allocation summary (same path for fresh and fallback allocations) ──
     if isinstance(allocation, RegimeAnalysisOutput):
@@ -990,6 +853,23 @@ async def _run_pipeline_inner(
 
     result["status"] = "ok" if not result["errors"] else "ok_with_errors"
     _update_state(result, started, allocation, trading_mode=mode_label.lower().replace(" ", "_"))
+
+    # ── Oracle Short Execution ────────────────────────────────────────────────
+    # Short signals from the momentum scan are executed separately (short selling
+    # uses a different Alpaca order path than long buys).  Non-fatal.
+    if _oracle_short_signals and not dry_run:
+        try:
+            from execution.oracle_short_executor import execute_oracle_shorts
+            _short_result = execute_oracle_shorts(_oracle_short_signals)
+            result["oracle_shorts"] = _short_result
+            logger.info(
+                f"Pipeline | Oracle shorts: placed={_short_result.get('placed', 0)} "
+                f"skipped={_short_result.get('skipped', 0)} "
+                f"errors={len(_short_result.get('errors', []))}"
+            )
+        except Exception as _se:
+            logger.warning(f"Pipeline | Oracle short execution failed (non-fatal): {_se}")
+            result.setdefault("errors", []).append(f"Oracle short execution error: {_se}")
 
     # ── 3× Inverse ETF 5-Day Time Exit ───────────────────────────────────────
     # Force-exit SPXS/SQQQ/SRTY positions held >= 5 trading days before
@@ -1176,6 +1056,8 @@ def _update_state(
         _state["trading_mode"] = trading_mode
     if result["status"] not in ("ok", "ok_with_errors"):
         _state["error_count"] += 1
+    if result.get("algo_scanner"):
+        _state["last_algo_scanner"] = result["algo_scanner"]
     if allocation:
         _state["last_allocation"] = result.get("allocation_summary")
         if isinstance(allocation, RegimeAnalysisOutput):

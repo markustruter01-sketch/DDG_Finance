@@ -357,6 +357,17 @@ CREATE TABLE IF NOT EXISTS vpin_rejections (
 );
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
+
+-- Oracle Profit Reserve ledger (non-invested cash buffer — 15% of winning trade profits)
+CREATE TABLE IF NOT EXISTS oracle_profit_reserve (
+    id                   BIGSERIAL PRIMARY KEY,
+    ts                   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    contribution_usd     DOUBLE PRECISION NOT NULL,
+    trade_profit_usd     DOUBLE PRECISION NOT NULL,
+    ticker               TEXT,
+    cumulative_total_usd DOUBLE PRECISION NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_oracle_profit_reserve_ts ON oracle_profit_reserve (ts DESC);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -729,3 +740,96 @@ def delete_position_entry(symbol: str) -> None:
                 cur.execute("DELETE FROM position_entry_times WHERE symbol = %s", (symbol,))
     except Exception as exc:
         logger.warning(f"DB | delete_position_entry failed for {symbol}: {exc}")
+
+
+def add_oracle_profit_contribution(
+    trade_profit_usd: float,
+    ticker: str | None = None,
+) -> float:
+    """
+    Add 15% of a winning Oracle trade's profit to the Oracle Profit Reserve.
+
+    Parameters
+    ----------
+    trade_profit_usd : gross profit from the closed trade (must be > 0)
+    ticker           : optional symbol of the closed trade (for audit trail)
+
+    Returns
+    -------
+    float : the new cumulative total of the reserve (0.0 on error)
+    """
+    if trade_profit_usd <= 0:
+        return 0.0
+    contribution = round(trade_profit_usd * 0.15, 2)
+    if not is_pg_available():
+        logger.info(f"OraclePR | DB unavailable — skipping reserve contribution ${contribution:.2f}")
+        return 0.0
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(MAX(cumulative_total_usd), 0) FROM oracle_profit_reserve"
+                )
+                current_total = float(cur.fetchone()[0] or 0.0)
+                new_total = round(current_total + contribution, 2)
+                cur.execute(
+                    """
+                    INSERT INTO oracle_profit_reserve
+                        (contribution_usd, trade_profit_usd, ticker, cumulative_total_usd)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (contribution, trade_profit_usd, ticker, new_total),
+                )
+        logger.info(
+            f"OraclePR | +${contribution:.2f} (15% of ${trade_profit_usd:.2f} profit"
+            f"{' on ' + ticker if ticker else ''}) → cumulative ${new_total:,.2f}"
+        )
+        return new_total
+    except Exception as exc:
+        logger.error(f"OraclePR | add_oracle_profit_contribution failed: {exc}")
+        return 0.0
+
+
+def get_oracle_profit_reserve() -> dict:
+    """
+    Return the current Oracle Profit Reserve balance.
+
+    Returns
+    -------
+    dict with:
+        "total_usd"         : float  — cumulative reserve
+        "contributions"     : int    — number of contributions
+        "last_contribution" : float  — most recent contribution amount
+        "last_ts"           : str    — ISO timestamp of most recent entry
+    """
+    if not is_pg_available():
+        return {"total_usd": 0.0, "contributions": 0, "last_contribution": 0.0, "last_ts": None}
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COALESCE(MAX(cumulative_total_usd), 0)   AS total_usd,
+                        COUNT(*)                                  AS contributions,
+                        COALESCE(
+                            (SELECT contribution_usd FROM oracle_profit_reserve
+                             ORDER BY ts DESC LIMIT 1), 0
+                        )                                         AS last_contribution,
+                        (SELECT ts AT TIME ZONE 'UTC' FROM oracle_profit_reserve
+                         ORDER BY ts DESC LIMIT 1)               AS last_ts
+                    FROM oracle_profit_reserve
+                    """
+                )
+                row = cur.fetchone()
+                if not row:
+                    return {"total_usd": 0.0, "contributions": 0, "last_contribution": 0.0, "last_ts": None}
+                return {
+                    "total_usd":         round(float(row[0] or 0.0), 2),
+                    "contributions":     int(row[1] or 0),
+                    "last_contribution": round(float(row[2] or 0.0), 2),
+                    "last_ts":           row[3].isoformat() if row[3] else None,
+                }
+    except Exception as exc:
+        logger.error(f"OraclePR | get_oracle_profit_reserve failed: {exc}")
+        return {"total_usd": 0.0, "contributions": 0, "last_contribution": 0.0, "last_ts": None}

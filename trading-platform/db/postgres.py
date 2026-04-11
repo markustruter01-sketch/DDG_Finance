@@ -368,6 +368,18 @@ CREATE TABLE IF NOT EXISTS oracle_profit_reserve (
     cumulative_total_usd DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_oracle_profit_reserve_ts ON oracle_profit_reserve (ts DESC);
+
+-- Stage 4: Strategy Health Monitor snapshots (one row per bot per daily run)
+CREATE TABLE IF NOT EXISTS kraken_health_snapshots (
+    id              BIGSERIAL PRIMARY KEY,
+    bot_id          TEXT NOT NULL,
+    checked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    overall_score   INTEGER NOT NULL,
+    overall_status  TEXT NOT NULL,
+    metrics         JSONB NOT NULL DEFAULT '{}',
+    recommendations JSONB NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_kraken_health_bot ON kraken_health_snapshots (bot_id, checked_at DESC);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

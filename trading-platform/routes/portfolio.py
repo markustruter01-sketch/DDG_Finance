@@ -1551,6 +1551,8 @@ async def export_diagnostic_report():
         lines += _rs.section_correlation_aware_sizing(_cas_prof["display_name"], _cas_bid)
     for _ppa_bid, _ppa_prof in KRAKEN_BOT_PROFILES.items():
         lines += _rs.section_per_pair_auto_params(_ppa_prof["display_name"], _ppa_bid)
+    for _hm_bid in KRAKEN_BOT_PROFILES:
+        lines += _rs.section_strategy_health_monitor(_hm_bid)
     for _streak_bid, _streak_prof in KRAKEN_BOT_PROFILES.items():
         _streak_name = _streak_prof["display_name"]
         lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)

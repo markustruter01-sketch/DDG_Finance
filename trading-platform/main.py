@@ -271,6 +271,28 @@ async def lifespan(app: FastAPI):
         )
     logger.info(f"Fleet Commander registered — {len(_fc_schedule)} daily audit runs scheduled")
 
+    # ── Stage 4: Strategy Health Monitor — 4:00 AM UTC daily ──────────────────
+    def _health_monitor_run():
+        try:
+            from analysis.health_monitor import run_all_bots
+            results = run_all_bots()
+            for bid, res in results.items():
+                status = res.get("overall_status", "ERROR")
+                score  = res.get("overall_score", 0)
+                logger.info(f"HealthMonitor | {bid}: status={status} score={score}/100")
+        except Exception as _hme:
+            logger.warning(f"HealthMonitor | Scheduled run failed (non-fatal): {_hme}")
+
+    scheduler.add_job(
+        func=_health_monitor_run,
+        trigger=_CronTrigger(hour=4, minute=0, timezone="UTC"),
+        id="kraken_health_monitor",
+        name="Strategy Health Monitor (4:00 AM UTC)",
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+    logger.info("HealthMonitor | Registered: kraken_health_monitor (4:00 AM UTC daily)")
+
     yield
 
     logger.info("Shutting down scheduler...")

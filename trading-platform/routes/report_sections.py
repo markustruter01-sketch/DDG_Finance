@@ -1464,3 +1464,178 @@ def section_per_pair_auto_params(bot_label: str, bot_id: str) -> list[str]:
     lines.append("    Refresh interval: every 6 hours from bot startup.")
 
     return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 4 — Strategy Health Monitor
+# ──────────────────────────────────────────────────────────────────────────────
+
+_STATUS_ICON = {"HEALTHY": "✅", "WARNING": "⚠️", "CRITICAL": "🔴"}
+_METRIC_LABEL = {
+    "recent_win_rate":      "Win Rate (last 20)",
+    "recent_profit_factor": "Profit Factor (last 20)",
+    "equity_drawdown":      "Equity Drawdown",
+    "loss_streak":          "Loss Streak",
+    "fee_efficiency":       "Fee Efficiency",
+    "symbol_concentration": "Symbol Concentration",
+}
+_METRIC_WEIGHT_PCT = {
+    "recent_win_rate":      "25%",
+    "recent_profit_factor": "25%",
+    "equity_drawdown":      "20%",
+    "loss_streak":          "15%",
+    "fee_efficiency":       "10%",
+    "symbol_concentration":  "5%",
+}
+
+
+def _fetch_health_snapshot(bot_id: str) -> dict | None:
+    """Return latest health snapshot row for bot_id from DB."""
+    import psycopg2, psycopg2.extras
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return None
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT bot_id, checked_at, overall_score, overall_status, metrics, recommendations
+                FROM   kraken_health_snapshots
+                WHERE  bot_id = %s
+                ORDER  BY checked_at DESC
+                LIMIT  1
+                """,
+                (bot_id,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.warning(f"section_strategy_health: DB query failed: {exc}")
+        return None
+
+
+def _fetch_health_trend(bot_id: str, limit: int = 7) -> list[dict]:
+    """Return last `limit` daily health scores for trend sparkline."""
+    import psycopg2, psycopg2.extras
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return []
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT checked_at, overall_score, overall_status
+                FROM   kraken_health_snapshots
+                WHERE  bot_id = %s
+                ORDER  BY checked_at DESC
+                LIMIT  %s
+                """,
+                (bot_id, limit),
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return list(reversed(rows))
+    except Exception:
+        return []
+
+
+def section_strategy_health_monitor(bot_id: str) -> list[str]:
+    """
+    Stage 4 — Strategy Health Monitor report section.
+    Shows the latest daily health snapshot for one Kraken bot.
+    """
+    lines: list[str] = []
+    _h1(lines, f"STAGE 4 — STRATEGY HEALTH MONITOR  [{bot_id.upper()}]")
+
+    snap = _fetch_health_snapshot(bot_id)
+    if snap is None:
+        lines.append(f"  No health snapshot found for {bot_id}.")
+        lines.append("  Health Monitor runs at 4:00 AM UTC daily.")
+        lines.append("  First snapshot will be available after the next scheduled run.")
+        return lines
+
+    # Header — overall score
+    checked_at = snap.get("checked_at")
+    if hasattr(checked_at, "strftime"):
+        ts_str = checked_at.strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        ts_str = str(checked_at)[:16]
+
+    o_score  = snap.get("overall_score", 0)
+    o_status = snap.get("overall_status", "UNKNOWN")
+    icon     = _STATUS_ICON.get(o_status, "❓")
+
+    lines.append(f"  Last checked : {ts_str}")
+    lines.append(f"  Overall score: {o_score}/100  {icon} {o_status}")
+    lines.append("")
+
+    # Metric table
+    metrics_raw = snap.get("metrics") or {}
+    if isinstance(metrics_raw, str):
+        try:
+            import json as _json
+            metrics_raw = _json.loads(metrics_raw)
+        except Exception:
+            metrics_raw = {}
+
+    lines.append(f"  {'Metric':<28} {'Weight':>6}  {'Score':>5}  {'Status':>8}  Details")
+    lines.append("  " + "-" * 80)
+
+    for key in _METRIC_LABEL:
+        m      = metrics_raw.get(key, {})
+        label  = _METRIC_LABEL[key]
+        weight = _METRIC_WEIGHT_PCT[key]
+        score  = m.get("score", "—")
+        status = m.get("status", "—")
+        detail = m.get("details", "")
+        s_icon = _STATUS_ICON.get(status, "")
+        lines.append(
+            f"  {label:<28} {weight:>6}  {str(score):>5}  {s_icon} {status:<8}  {detail}"
+        )
+
+    lines.append("  " + "-" * 80)
+    lines.append(f"  Weighted overall score: {o_score}/100")
+    lines.append("")
+
+    # Score trend (last 7 days)
+    trend = _fetch_health_trend(bot_id, limit=7)
+    if len(trend) >= 2:
+        lines.append("  7-Day Score Trend:")
+        sparkline = ""
+        for t in trend:
+            s = t.get("overall_score", 0)
+            st = t.get("overall_status", "")
+            block = "█" if s >= 80 else ("▆" if s >= 60 else "▂")
+            d_str = ""
+            d = t.get("checked_at")
+            if hasattr(d, "strftime"):
+                d_str = d.strftime("%m-%d")
+            elif d:
+                d_str = str(d)[5:10]
+            sparkline += f"  {d_str}: {block} {s:>3} ({st})\n"
+        lines.extend(["  " + l for l in sparkline.strip().splitlines()])
+        lines.append("")
+
+    # Recommendations
+    recs_raw = snap.get("recommendations") or []
+    if isinstance(recs_raw, str):
+        try:
+            import json as _json
+            recs_raw = _json.loads(recs_raw)
+        except Exception:
+            recs_raw = []
+
+    lines.append("  Recommendations:")
+    for i, rec in enumerate(recs_raw, 1):
+        lines.append(f"    {i}. {rec}")
+    if not recs_raw:
+        lines.append("    No recommendations (all metrics healthy).")
+
+    lines.append("")
+    lines.append("  Schedule : 4:00 AM UTC daily  |  Fully deterministic (no LLM)")
+    lines.append("  Metrics  : win rate, profit factor, drawdown, loss streak, fee drag, symbol concentration")
+
+    return lines

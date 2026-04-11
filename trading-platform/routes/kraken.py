@@ -688,3 +688,173 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         "cycle_count":     cycle_count,
         "bot_status":      bot_status,
     }
+
+
+# ── Stage 6: OHLCV Data Ingestion Endpoints ────────────────────────────────────
+
+@kraken_router.get("/kraken/ohlcv/status", tags=["Kraken Analytics"])
+async def kraken_ohlcv_status() -> dict:
+    """
+    Return current OHLCV data coverage per pair and timeframe.
+    Shows how many candles are stored and the date range covered.
+    """
+    try:
+        from analysis.ingest_kraken_ohlcv import get_coverage_status
+        coverage = get_coverage_status()
+        total_candles = sum(r["total_candles"] for r in coverage)
+        return {
+            "status": "ok",
+            "total_candles": total_candles,
+            "coverage": coverage,
+            "note": (
+                "1d timeframe: ~720 daily candles ≈ 2 years (April 2024 → present). "
+                "1h timeframe: ~720 hourly candles ≈ 30 days. "
+                "Primary backtest uses 1d data for pre-live-period validation."
+            ),
+        }
+    except Exception as exc:
+        logger.error(f"OHLCV Status | Error: {exc}")
+        return {"status": "error", "error": str(exc)}
+
+
+@kraken_router.post("/kraken/ohlcv/ingest", tags=["Kraken Analytics"])
+async def kraken_ohlcv_ingest(
+    pairs: list[str] | None = None,
+    timeframes: list[str] | None = None,
+) -> dict:
+    """
+    Trigger a manual OHLCV data refresh from the Kraken public REST API.
+    Fetches daily (1d) and hourly (1h) candles for all 5 configured pairs.
+
+    Optional query params:
+      pairs      — subset of pairs to ingest (default: all 5)
+      timeframes — subset of timeframes ('1d', '1h') (default: both)
+    """
+    import asyncio
+    try:
+        from analysis.ingest_kraken_ohlcv import (
+            run_ingest, PAIRS as ALL_PAIRS, TIMEFRAMES as ALL_TFS,
+        )
+
+        pairs_cfg = ALL_PAIRS
+        tfs_cfg   = ALL_TFS
+
+        if pairs:
+            pairs_cfg = [p for p in ALL_PAIRS if p["display"] in pairs]
+        if timeframes:
+            tfs_cfg = [t for t in ALL_TFS if t["label"] in timeframes]
+
+        logger.info(f"OHLCV | Manual ingest triggered via API — pairs={[p['display'] for p in pairs_cfg]}")
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(None, lambda: run_ingest(pairs_cfg, tfs_cfg))
+
+        summary = []
+        for key, r in results.items():
+            if "error" in r:
+                summary.append({"key": key, "status": "error", "error": r["error"]})
+            else:
+                rng = r.get("range")
+                summary.append({
+                    "key":       key,
+                    "status":    "ok",
+                    "pair":      r.get("pair"),
+                    "timeframe": r.get("timeframe"),
+                    "fetched":   r.get("fetched", 0),
+                    "inserted":  r.get("inserted", 0),
+                    "total":     r.get("total", 0),
+                    "from":      rng[0] if rng else None,
+                    "to":        rng[1] if rng else None,
+                })
+
+        total_inserted = sum(r.get("inserted", 0) for r in results.values() if "error" not in r)
+        return {
+            "status":         "ok",
+            "total_inserted": total_inserted,
+            "results":        summary,
+        }
+    except Exception as exc:
+        logger.error(f"OHLCV Ingest | Error: {exc}")
+        return {"status": "error", "error": str(exc)}
+
+
+# ── Stage 6: True Price Backtest Endpoints ────────────────────────────────────
+
+@kraken_router.post("/kraken/backtest/run", tags=["Kraken Analytics"])
+async def kraken_backtest_run(bot_id: str | None = None) -> dict:
+    """
+    Trigger the true price-based backtester immediately.
+
+    Replays historical OHLCV candles through the strategy logic for each bot.
+    If historical_prices is empty, data is ingested automatically first.
+
+    Optional:
+      bot_id — run for one specific bot (default: all three bots)
+    """
+    import asyncio
+    try:
+        from analysis.backtest import run_backtest, run_all_bots, KRAKEN_BOT_IDS
+        loop = asyncio.get_event_loop()
+
+        if bot_id:
+            if bot_id not in KRAKEN_BOT_IDS:
+                return {"status": "error", "error": f"Unknown bot_id: {bot_id}. Valid: {KRAKEN_BOT_IDS}"}
+            logger.info(f"Backtest | Manual run triggered via API for {bot_id}")
+            result = await loop.run_in_executor(None, lambda: run_backtest(bot_id))
+            results = {bot_id: result}
+        else:
+            logger.info("Backtest | Manual run triggered via API for all bots")
+            results = await loop.run_in_executor(None, run_all_bots)
+
+        summary = {}
+        for bid, r in results.items():
+            if "error" in r:
+                summary[bid] = {"status": "error", "error": r["error"]}
+            else:
+                summary[bid] = {
+                    "status":        "ok",
+                    "strategy":      r.get("summary", "")[:120],
+                    "sim_trades":    r.get("sim_trades", r.get("n_trades", 0)),
+                    "wr_pct":        round(r.get("baseline_wr", 0) * 100, 1),
+                    "pf":            r.get("baseline_pf"),
+                    "net_pct":       r.get("baseline_net_pct"),
+                    "max_dd":        r.get("baseline_max_dd"),
+                    "sharpe":        r.get("sharpe_ratio"),
+                    "data_from":     r.get("data_from"),
+                    "data_to":       r.get("data_to"),
+                    "timeframe":     r.get("timeframe_used"),
+                    "candles_used":  r.get("candles_used"),
+                    "per_pair":      r.get("per_pair_results", {}),
+                }
+
+        return {"status": "ok", "results": summary}
+
+    except Exception as exc:
+        logger.error(f"Backtest Run | Error: {exc}")
+        return {"status": "error", "error": str(exc)}
+
+
+@kraken_router.get("/kraken/backtest/results", tags=["Kraken Analytics"])
+async def kraken_backtest_results(bot_id: str | None = None) -> dict:
+    """
+    Return the most recent backtest results for all bots (or one specific bot).
+    """
+    try:
+        from analysis.backtest import get_latest_result, KRAKEN_BOT_IDS
+
+        bots = [bot_id] if bot_id else KRAKEN_BOT_IDS
+        results = {}
+        for bid in bots:
+            r = get_latest_result(bid)
+            if r:
+                r_out = dict(r)
+                for f in ("run_at", "data_from", "data_to"):
+                    if r_out.get(f) and hasattr(r_out[f], "isoformat"):
+                        r_out[f] = r_out[f].isoformat()
+                results[bid] = r_out
+            else:
+                results[bid] = None
+
+        return {"status": "ok", "results": results}
+    except Exception as exc:
+        logger.error(f"Backtest Results | Error: {exc}")
+        return {"status": "error", "error": str(exc)}

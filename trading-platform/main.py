@@ -321,23 +321,57 @@ async def lifespan(app: FastAPI):
     )
     logger.info("WFO | Registered: kraken_walk_forward_optimizer (Sunday 2:00 AM UTC)")
 
-    # ── Stage 6: Historical Backtesting Infrastructure ────────────────────────
-    # Runs every Sunday at 2:30 AM UTC — 30 min after the WFO completes so it
-    # can consume fresh WFO-recommended parameters for its comparison scenario.
+    # ── Stage 6: OHLCV Data Ingest — run on startup if historical_prices is empty ──
+    try:
+        from analysis.ingest_kraken_ohlcv import needs_ingest, run_ingest
+        if needs_ingest():
+            logger.info("OHLCV | historical_prices table is empty — running startup ingest …")
+
+            def _startup_ingest():
+                try:
+                    summary = run_ingest()
+                    for key, r in summary.items():
+                        if "error" not in r:
+                            rng = r.get("range")
+                            rng_str = f"{rng[0]} → {rng[1]}" if rng else "N/A"
+                            logger.info(
+                                f"OHLCV | {key}: {r.get('total', 0)} candles stored | "
+                                f"range: {rng_str}"
+                            )
+                        else:
+                            logger.warning(f"OHLCV | {key}: {r.get('error')}")
+                except Exception as _ie:
+                    logger.warning(f"OHLCV | Startup ingest failed (non-fatal): {_ie}")
+
+            import threading as _threading_ohlcv
+            _t = _threading_ohlcv.Thread(target=_startup_ingest, daemon=True, name="ohlcv-startup-ingest")
+            _t.start()
+            logger.info("OHLCV | Startup ingest launched in background thread")
+        else:
+            logger.info("OHLCV | historical_prices already populated — skipping startup ingest")
+    except Exception as _ohlcv_err:
+        logger.warning(f"OHLCV | Startup ingest check failed (non-fatal): {_ohlcv_err}")
+
+    # ── Stage 6: True Price-Based Historical Backtest — Sunday 2:30 AM UTC ────
+    # Runs 30 minutes after the Walk-Forward Optimiser to use fresh WFO data.
+    # Now uses OHLCV-based simulation instead of P&L replay.
     from analysis.backtest import run_all_bots as _bt_run_all
 
     async def _backtest_run():
         import asyncio
         try:
-            logger.info("Backtest | Scheduled run starting …")
+            logger.info("Backtest | Scheduled TRUE price-based backtest starting …")
             results = await asyncio.get_event_loop().run_in_executor(None, _bt_run_all)
             for bid, r in results.items():
                 if "error" in r:
                     logger.warning(f"Backtest | {bid}: {r['error']}")
                 else:
                     logger.info(
-                        f"Backtest | {bid}: PF baseline={r['baseline_pf']:.2f} → "
-                        f"best={r['best_pf']:.2f} | WFO scenario: {r['wfo_verdict']}"
+                        f"Backtest | {bid}: {r.get('sim_trades', r.get('n_trades', 0))} simulated trades | "
+                        f"WR={r.get('baseline_wr', 0)*100:.1f}% "
+                        f"PF={r.get('baseline_pf', 0):.2f} "
+                        f"net={r.get('baseline_net_pct', 0):+.2f}% "
+                        f"Sharpe={r.get('sharpe_ratio', 0):.2f}"
                     )
         except Exception as _bte:
             logger.warning(f"Backtest | Scheduled run failed (non-fatal): {_bte}")
@@ -346,11 +380,11 @@ async def lifespan(app: FastAPI):
         func=_backtest_run,
         trigger=_CronTrigger(day_of_week="sun", hour=2, minute=30, timezone="UTC"),
         id="kraken_historical_backtest",
-        name="Historical Backtesting Infrastructure (Sun 2:30 AM UTC)",
+        name="True Price-Based Backtester (Sun 2:30 AM UTC)",
         replace_existing=True,
         misfire_grace_time=3600,
     )
-    logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC)")
+    logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC) — TRUE price-based")
 
     yield
 

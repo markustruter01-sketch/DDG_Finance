@@ -404,6 +404,25 @@ CREATE TABLE IF NOT EXISTS kraken_health_snapshots (
     recommendations JSONB NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_health_bot ON kraken_health_snapshots (bot_id, checked_at DESC);
+
+-- Stage 6 (True Backtester): Historical OHLCV price data
+-- Pairs: BTC/USD, ETH/USD, SOL/USD, ADA/USD, AVAX/USD
+-- Timeframes: 1d (daily, ~2 years from Kraken public API), 1h (hourly, ~30 days)
+CREATE TABLE IF NOT EXISTS historical_prices (
+    id        BIGSERIAL PRIMARY KEY,
+    pair      TEXT             NOT NULL,
+    timeframe TEXT             NOT NULL DEFAULT '1d',
+    ts        TIMESTAMPTZ      NOT NULL,
+    open      DOUBLE PRECISION NOT NULL,
+    high      DOUBLE PRECISION NOT NULL,
+    low       DOUBLE PRECISION NOT NULL,
+    close     DOUBLE PRECISION NOT NULL,
+    volume    DOUBLE PRECISION NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_prices_uq
+    ON historical_prices (pair, timeframe, ts);
+CREATE INDEX IF NOT EXISTS idx_historical_prices_pair_ts
+    ON historical_prices (pair, timeframe, ts DESC);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

@@ -346,8 +346,13 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
 
     _track_tokens(token_usage)
 
-    from analysis.fleet_enforcer import enforce_fleet_recommendations
-    enforcement = enforce_fleet_recommendations(result)
+    # DISABLED — GEMINI PARAMETER ENFORCEMENT REMOVED
+    # The Fleet Commander may observe, summarise, and flag anomalies but must
+    # never write to kraken_adaptive_params or any parameter store.
+    # Parameters are only changed by direct manual instruction from the operator.
+    # from analysis.fleet_enforcer import enforce_fleet_recommendations
+    # enforcement = enforce_fleet_recommendations(result)
+    enforcement = {"status": "disabled", "reason": "parameter_enforcement_permanently_disabled"}
 
     elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
 

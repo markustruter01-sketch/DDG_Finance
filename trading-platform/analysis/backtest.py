@@ -235,10 +235,10 @@ def _load_candles(pair: str, timeframe: str = "1d") -> list[dict]:
     """Load OHLCV candles for a pair from historical_prices, oldest first."""
     rows = _query(
         """
-        SELECT ts, open, high, low, close, volume
+        SELECT "timestamp" AS ts, open, high, low, close, volume
         FROM   historical_prices
         WHERE  pair = %s AND timeframe = %s
-        ORDER  BY ts ASC
+        ORDER  BY "timestamp" ASC
         """,
         (pair, timeframe),
     )
@@ -385,6 +385,7 @@ def _sim_mean_reversion(
         win_lows   = lows[: i + 1]
 
         z   = _calc_zscore(win_closes, zscore_window)
+        rsi = _calc_rsi(win_closes, rsi_period)
         atr = _calc_atr(win_highs, win_lows, win_closes, atr_period)
 
         if pos is not None:
@@ -432,8 +433,10 @@ def _sim_mean_reversion(
                 pos = None
 
         # Entry logic (only when flat)
+        # RSI confirms the mean-reversion bias: oversold below 45 for longs,
+        # overbought above 55 for shorts — prevents fading extreme momentum.
         if pos is None and atr > 0:
-            if z < -zscore_entry:
+            if z < -zscore_entry and rsi < 45:
                 stop = close - atr * atr_sl_mult
                 pos  = {
                     "pair":        "combined",
@@ -443,7 +446,7 @@ def _sim_mean_reversion(
                     "bars_held":   0,
                     "entry_ts":    candles[i]["ts"].isoformat() if hasattr(candles[i]["ts"], "isoformat") else str(candles[i]["ts"]),
                 }
-            elif z > zscore_entry:
+            elif z > zscore_entry and rsi > 55:
                 stop = close + atr * atr_sl_mult
                 pos  = {
                     "pair":        "combined",
@@ -482,8 +485,13 @@ def _sim_flow_sentiment(
     lows   = [c["low"]   for c in candles]
     closes = [c["close"] for c in candles]
 
-    trades = []
-    pos = None
+    trades   = []
+    pos      = None
+    prev_ema_f: float | None = None
+    prev_ema_s: float | None = None
+    # Trend direction is SET by an EMA crossover event and HELD until the next crossover.
+    # This allows entries on Z-score pullbacks in subsequent bars, not just the crossover bar.
+    trend_dir: str | None = None  # "up", "down", or None (no established trend yet)
 
     for i in range(WARMUP_BARS, len(candles)):
         close = closes[i]
@@ -497,7 +505,16 @@ def _sim_flow_sentiment(
         ema_f = _calc_ema(win_closes, ema_fast)
         ema_s = _calc_ema(win_closes, ema_slow)
         z     = _calc_zscore(win_closes, zscore_window)
+        rsi   = _calc_rsi(win_closes, rsi_period)
         atr   = _calc_atr(win_highs, win_lows, win_closes, atr_period)
+
+        # Detect true EMA crossover events vs. previous candle's EMA values.
+        # Each crossover updates the established trend direction.
+        if prev_ema_f is not None:
+            if prev_ema_f <= prev_ema_s and ema_f > ema_s:
+                trend_dir = "up"    # bullish crossover: fast crossed above slow
+            elif prev_ema_f >= prev_ema_s and ema_f < ema_s:
+                trend_dir = "down"  # bearish crossover: fast crossed below slow
 
         if pos is not None:
             pos["bars_held"] += 1
@@ -545,11 +562,16 @@ def _sim_flow_sentiment(
                 })
                 pos = None
 
-        if pos is None and atr > 0:
-            bullish_trend = ema_f > ema_s
-            bearish_trend = ema_f < ema_s
-
-            if bullish_trend and z < -zscore_filter:
+        # Entry logic: EMA crossover sets trend direction; Z-score pullback finds the entry.
+        #
+        # After a bullish EMA crossover (fast crossed above slow) the strategy waits for
+        # price to pull back toward its mean (z < -zscore_filter) before entering long.
+        # RSI confirms the trade is not entering into an already-overbought/oversold market.
+        #
+        # This mirrors the live swing strategy: trend established by EMA relationship,
+        # entry timed by price retreating toward the EMA / rolling mean.
+        if pos is None and atr > 0 and trend_dir is not None:
+            if trend_dir == "up" and z < -zscore_filter and 35 <= rsi <= 65:
                 tp_price = close + atr * atr_tp_mult
                 sl_price = close - atr * atr_sl_mult
                 pos = {
@@ -561,7 +583,7 @@ def _sim_flow_sentiment(
                     "bars_held":   0,
                     "entry_ts":    candles[i]["ts"].isoformat() if hasattr(candles[i]["ts"], "isoformat") else str(candles[i]["ts"]),
                 }
-            elif bearish_trend and z > zscore_filter:
+            elif trend_dir == "down" and z > zscore_filter and 35 <= rsi <= 65:
                 tp_price = close - atr * atr_tp_mult
                 sl_price = close + atr * atr_sl_mult
                 pos = {
@@ -574,21 +596,20 @@ def _sim_flow_sentiment(
                     "entry_ts":    candles[i]["ts"].isoformat() if hasattr(candles[i]["ts"], "isoformat") else str(candles[i]["ts"]),
                 }
 
+        # Store EMA state for crossover detection on next candle
+        prev_ema_f = ema_f
+        prev_ema_s = ema_s
+
     return trades
 
 
 # ── per-pair backtest ─────────────────────────────────────────────────────────
 
-def _backtest_pair(pair: str, cfg: dict) -> dict:
-    """Run the backtester for one pair and return metrics."""
-    candles = _load_candles(pair, TIMEFRAME)
-    if len(candles) < WARMUP_BARS + 10:
-        return {"pair": pair, "error": f"insufficient candles ({len(candles)})"}
-
+def _run_simulator(candles: list[dict], cfg: dict) -> list[dict]:
+    """Dispatch to the correct simulator based on bot strategy config."""
     strategy = cfg["strategy"]
-
     if strategy in ("mean_reversion", "mean_reversion_conservative"):
-        trades = _sim_mean_reversion(
+        return _sim_mean_reversion(
             candles,
             zscore_entry  = cfg["zscore_entry"],
             zscore_exit   = cfg["zscore_exit"],
@@ -599,7 +620,7 @@ def _backtest_pair(pair: str, cfg: dict) -> dict:
             atr_period    = cfg["atr_period"],
         )
     elif strategy == "flow_sentiment":
-        trades = _sim_flow_sentiment(
+        return _sim_flow_sentiment(
             candles,
             zscore_filter = cfg["zscore_entry"],
             atr_sl_mult   = cfg["atr_sl_mult"],
@@ -611,12 +632,25 @@ def _backtest_pair(pair: str, cfg: dict) -> dict:
             ema_fast      = cfg["ema_fast"],
             ema_slow      = cfg["ema_slow"],
         )
-    else:
-        trades = []
+    return []
 
+
+def _backtest_pair(pair: str, cfg: dict) -> tuple[dict, list[dict]]:
+    """
+    Run the backtester for one pair.
+
+    Returns (metrics_dict, raw_trades) so the caller has both
+    aggregated metrics and the individual trade list without re-running
+    the simulator a second time.
+    """
+    candles = _load_candles(pair, TIMEFRAME)
+    if len(candles) < WARMUP_BARS + 10:
+        return {"pair": pair, "error": f"insufficient candles ({len(candles)})"}, []
+
+    trades   = _run_simulator(candles, cfg)
     pnl_pcts = [t["pnl_pct"] for t in trades]
     metrics  = _compute_metrics(pnl_pcts)
-    metrics["pair"] = pair
+    metrics["pair"]    = pair
     metrics["candles"] = len(candles)
 
     # Date range from loaded candles
@@ -626,7 +660,7 @@ def _backtest_pair(pair: str, cfg: dict) -> dict:
         metrics["data_from"] = first_ts.isoformat() if hasattr(first_ts, "isoformat") else str(first_ts)
         metrics["data_to"]   = last_ts.isoformat() if hasattr(last_ts, "isoformat") else str(last_ts)
 
-    return metrics
+    return metrics, trades
 
 
 # ── WFO integration ───────────────────────────────────────────────────────────
@@ -675,55 +709,26 @@ def run_backtest(bot_id: str) -> dict:
 
     for pair in BACKTEST_PAIRS:
         try:
-            result = _backtest_pair(pair, cfg)
-            per_pair[pair] = result
+            metrics, raw_trades = _backtest_pair(pair, cfg)
+            per_pair[pair] = metrics
 
-            if "error" not in result:
-                # Reconstruct per-trade pnl_pcts from the pair metrics (aggregated)
-                # We need the raw trades — re-run to get them
-                candles = _load_candles(pair, TIMEFRAME)
-                strategy = cfg["strategy"]
-                if strategy in ("mean_reversion", "mean_reversion_conservative"):
-                    raw_trades = _sim_mean_reversion(
-                        candles,
-                        zscore_entry  = cfg["zscore_entry"],
-                        zscore_exit   = cfg["zscore_exit"],
-                        atr_sl_mult   = cfg["atr_sl_mult"],
-                        timeout_bars  = cfg["timeout_bars"],
-                        rsi_period    = cfg["rsi_period"],
-                        zscore_window = cfg["zscore_window"],
-                        atr_period    = cfg["atr_period"],
-                    )
-                else:
-                    raw_trades = _sim_flow_sentiment(
-                        candles,
-                        zscore_filter = cfg["zscore_entry"],
-                        atr_sl_mult   = cfg["atr_sl_mult"],
-                        atr_tp_mult   = cfg["atr_tp_mult"],
-                        timeout_bars  = cfg["timeout_bars"],
-                        rsi_period    = cfg["rsi_period"],
-                        zscore_window = cfg["zscore_window"],
-                        atr_period    = cfg["atr_period"],
-                        ema_fast      = cfg["ema_fast"],
-                        ema_slow      = cfg["ema_slow"],
-                    )
-
+            if "error" not in metrics:
                 pair_pnls = [t["pnl_pct"] for t in raw_trades]
                 all_trades.extend(pair_pnls)
 
-                total_candles += result.get("candles", 0)
-                if data_from is None or result.get("data_from", "") < data_from:
-                    data_from = result.get("data_from")
-                if data_to is None or result.get("data_to", "") > data_to:
-                    data_to = result.get("data_to")
+                total_candles += metrics.get("candles", 0)
+                if data_from is None or metrics.get("data_from", "") < data_from:
+                    data_from = metrics.get("data_from")
+                if data_to is None or metrics.get("data_to", "") > data_to:
+                    data_to = metrics.get("data_to")
 
                 logger.info(
-                    f"Backtest | {bot_id} — {pair}: {result['n']} simulated trades | "
-                    f"WR={result['wr']*100:.1f}% PF={result['pf']:.2f} "
-                    f"net={result['net_pct']:+.2f}% DD={result['max_dd']:.2f}%"
+                    f"Backtest | {bot_id} — {pair}: {metrics['n']} simulated trades | "
+                    f"WR={metrics['wr']*100:.1f}% PF={metrics['pf']:.2f} "
+                    f"net={metrics['net_pct']:+.2f}% DD={metrics['max_dd']:.2f}%"
                 )
             else:
-                logger.warning(f"Backtest | {bot_id} — {pair}: {result['error']}")
+                logger.warning(f"Backtest | {bot_id} — {pair}: {metrics['error']}")
 
         except Exception as exc:
             logger.error(f"Backtest | {bot_id} — {pair}: exception: {exc}")
@@ -784,6 +789,7 @@ def run_backtest(bot_id: str) -> dict:
         "sharpe_ratio":   agg["sharpe"],
         "per_pair_results": per_pair,
     }
+    _persist(bot_id, result)
     return result
 
 
@@ -794,8 +800,6 @@ def run_all_bots() -> dict[str, dict]:
         try:
             r = run_backtest(bot_id)
             results[bot_id] = r
-            if "error" not in r:
-                _persist(bot_id, r)
         except Exception as exc:
             logger.error(f"Backtest | {bot_id} failed: {exc}")
             results[bot_id] = {"error": str(exc)}

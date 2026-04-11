@@ -86,24 +86,37 @@ def _pg_conn():
 def _ensure_table() -> None:
     ddl = """
     CREATE TABLE IF NOT EXISTS historical_prices (
-        id        BIGSERIAL PRIMARY KEY,
-        pair      TEXT             NOT NULL,
-        timeframe TEXT             NOT NULL DEFAULT '1d',
-        ts        TIMESTAMPTZ      NOT NULL,
-        open      DOUBLE PRECISION NOT NULL,
-        high      DOUBLE PRECISION NOT NULL,
-        low       DOUBLE PRECISION NOT NULL,
-        close     DOUBLE PRECISION NOT NULL,
-        volume    DOUBLE PRECISION NOT NULL
+        id          BIGSERIAL PRIMARY KEY,
+        pair        TEXT             NOT NULL,
+        timeframe   TEXT             NOT NULL DEFAULT '1d',
+        "timestamp" TIMESTAMPTZ      NOT NULL,
+        open        DOUBLE PRECISION NOT NULL,
+        high        DOUBLE PRECISION NOT NULL,
+        low         DOUBLE PRECISION NOT NULL,
+        close       DOUBLE PRECISION NOT NULL,
+        volume      DOUBLE PRECISION NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_prices_uq
-        ON historical_prices (pair, timeframe, ts);
+        ON historical_prices (pair, timeframe, "timestamp");
     CREATE INDEX IF NOT EXISTS idx_historical_prices_pair_ts
-        ON historical_prices (pair, timeframe, ts DESC);
+        ON historical_prices (pair, timeframe, "timestamp" DESC);
+    """
+    # Rename legacy 'ts' column to 'timestamp' if the old schema exists
+    rename_col = """
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'historical_prices' AND column_name = 'ts'
+        ) THEN
+            ALTER TABLE historical_prices RENAME COLUMN ts TO "timestamp";
+        END IF;
+    END $$;
     """
     try:
         with _pg_conn() as conn:
             with conn.cursor() as cur:
+                cur.execute(rename_col)
                 cur.execute(ddl)
         logger.debug("OHLCV | historical_prices table ensured")
     except Exception as exc:
@@ -130,9 +143,9 @@ def _upsert_candles(pair: str, timeframe: str, candles: list[dict]) -> int:
     if not candles:
         return 0
     sql = """
-        INSERT INTO historical_prices (pair, timeframe, ts, open, high, low, close, volume)
+        INSERT INTO historical_prices (pair, timeframe, "timestamp", open, high, low, close, volume)
         VALUES (%(pair)s, %(tf)s, to_timestamp(%(ts)s), %(open)s, %(high)s, %(low)s, %(close)s, %(volume)s)
-        ON CONFLICT (pair, timeframe, ts) DO NOTHING
+        ON CONFLICT (pair, timeframe, "timestamp") DO NOTHING
     """
     inserted = 0
     try:
@@ -162,7 +175,7 @@ def _get_date_range(pair: str, timeframe: str) -> tuple[str, str] | None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT MIN(ts), MAX(ts)
+                    SELECT MIN("timestamp"), MAX("timestamp")
                     FROM historical_prices
                     WHERE pair=%s AND timeframe=%s
                     """,
@@ -181,10 +194,22 @@ def _get_date_range(pair: str, timeframe: str) -> tuple[str, str] | None:
 
 # ── Kraken API fetch ──────────────────────────────────────────────────────────
 
-def _fetch_ohlcv(kraken_pair: str, interval: int, since: int | None = None) -> list[dict]:
+def _fetch_ohlcv(
+    kraken_pair: str,
+    interval: int,
+    since: int | None = None,
+) -> tuple[list[dict], int | None]:
     """
     Fetch OHLCV candles from Kraken's public REST API.
-    Returns a list of dicts with keys: ts, open, high, low, close, volume.
+
+    Returns (candles, last) where:
+      candles — list of dicts with keys: ts, open, high, low, close, volume
+      last    — Kraken's `last` cursor value (pass as `since` for next page)
+
+    Kraken returns at most ~720 candles per call. The `last` field is the
+    UNIX timestamp of the most recent candle returned and can be used as the
+    `since` parameter for subsequent calls to request older data. In practice,
+    the free public API caps history at ~720 candles per interval regardless.
     """
     url = f"{KRAKEN_OHLC_URL}?pair={kraken_pair}&interval={interval}"
     if since is not None:
@@ -198,15 +223,17 @@ def _fetch_ohlcv(kraken_pair: str, interval: int, since: int | None = None) -> l
 
             if data.get("error"):
                 logger.warning(f"OHLCV | Kraken API error for {kraken_pair}: {data['error']}")
-                return []
+                return [], None
 
-            result = data.get("result", {})
+            result   = data.get("result", {})
+            last_cur = int(result.get("last", 0)) or None
+
             # The pair key in the response may differ (e.g. XBTUSD → XXBTZUSD)
             candle_key = next((k for k in result if k != "last"), None)
             if not candle_key:
-                return []
+                return [], None
 
-            raw = result[candle_key]
+            raw     = result[candle_key]
             candles = []
             for row in raw:
                 # Kraken OHLC row: [time, open, high, low, close, vwap, volume, count]
@@ -218,7 +245,7 @@ def _fetch_ohlcv(kraken_pair: str, interval: int, since: int | None = None) -> l
                     "close":  float(row[4]),
                     "volume": float(row[6]),
                 })
-            return candles
+            return candles, last_cur
 
         except Exception as exc:
             if attempt < MAX_RETRIES:
@@ -227,14 +254,24 @@ def _fetch_ohlcv(kraken_pair: str, interval: int, since: int | None = None) -> l
                 time.sleep(wait)
             else:
                 logger.error(f"OHLCV | Failed after {MAX_RETRIES} attempts for {kraken_pair}: {exc}")
-                return []
-    return []
+                return [], None
+    return [], None
 
 
 # ── Main ingest logic ─────────────────────────────────────────────────────────
 
 def ingest_pair(pair_cfg: dict, tf_cfg: dict) -> dict:
-    """Ingest one pair × one timeframe. Returns summary dict."""
+    """
+    Ingest one pair × one timeframe using `since`-based pagination.
+
+    Kraken's public OHLC endpoint returns at most ~720 candles per request.
+    We iterate using the `last` cursor from each response until no new candles
+    are returned (i.e. we've reached the API's historical limit). For daily data
+    this yields ~720 candles ≈ 2 years of history; for hourly it yields ~720
+    candles ≈ 30 days. The loop terminates correctly in both cases.
+
+    Returns a summary dict.
+    """
     display   = pair_cfg["display"]
     kpair     = pair_cfg["kraken_pair"]
     interval  = tf_cfg["interval"]
@@ -242,35 +279,66 @@ def ingest_pair(pair_cfg: dict, tf_cfg: dict) -> dict:
 
     logger.info(f"OHLCV | Fetching {display} [{tf_label}] from Kraken …")
 
-    # Kraken only returns most-recent ~720 candles regardless of since,
-    # so one call is sufficient.
-    candles = _fetch_ohlcv(kpair, interval)
+    all_candles: list[dict] = []
+    seen_ts: set[int]       = set()
+    since: int | None       = None
+    page                    = 0
 
-    if not candles:
+    while True:
+        page += 1
+        batch, last_cur = _fetch_ohlcv(kpair, interval, since=since)
+
+        if not batch:
+            logger.debug(f"OHLCV | {display} [{tf_label}]: empty batch on page {page} — stopping")
+            break
+
+        # Deduplicate by unix timestamp within this ingest session
+        new_in_batch = [c for c in batch if c["ts"] not in seen_ts]
+        if not new_in_batch:
+            logger.debug(f"OHLCV | {display} [{tf_label}]: no new candles on page {page} — stopping")
+            break
+
+        for c in new_in_batch:
+            seen_ts.add(c["ts"])
+        all_candles.extend(new_in_batch)
+
+        logger.debug(
+            f"OHLCV | {display} [{tf_label}]: page {page} — {len(new_in_batch)} new candles "
+            f"(total so far: {len(all_candles)}) last_cursor={last_cur}"
+        )
+
+        # Advance cursor for next page.  Kraken returns the same ~720 most-recent
+        # candles regardless of `since`, so subsequent pages will contain no new
+        # candles and the loop terminates via the dedup check above.
+        if last_cur is None or last_cur == since:
+            break
+        since = last_cur
+
+        # Polite pause between pages
+        time.sleep(0.5)
+
+    if not all_candles:
         logger.warning(f"OHLCV | No candles returned for {display} [{tf_label}]")
-        return {"pair": display, "timeframe": tf_label, "inserted": 0, "total": 0, "range": None}
+        return {"pair": display, "timeframe": tf_label, "fetched": 0, "inserted": 0, "total": 0, "range": None}
 
-    # Remove the last (incomplete/current) candle to avoid partial data
-    if len(candles) > 1:
-        candles = candles[:-1]
+    # Remove the last (potentially incomplete/current) candle to avoid partial data
+    if len(all_candles) > 1:
+        all_candles = all_candles[:-1]
 
-    inserted = _upsert_candles(display, tf_label, candles)
+    inserted = _upsert_candles(display, tf_label, all_candles)
     total    = _count_rows(display, tf_label)
     date_rng = _get_date_range(display, tf_label)
 
     logger.info(
-        f"OHLCV | {display} [{tf_label}]: {len(candles)} fetched, "
+        f"OHLCV | {display} [{tf_label}]: {len(all_candles)} fetched, "
         f"{inserted} new rows → {total} total | "
         f"range: {date_rng[0] if date_rng else '?'} → {date_rng[1] if date_rng else '?'}"
     )
 
-    # Brief pause to be polite to Kraken's servers
-    time.sleep(0.5)
-
     return {
         "pair":      display,
         "timeframe": tf_label,
-        "fetched":   len(candles),
+        "fetched":   len(all_candles),
         "inserted":  inserted,
         "total":     total,
         "range":     date_rng,

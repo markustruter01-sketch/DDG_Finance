@@ -293,6 +293,34 @@ async def lifespan(app: FastAPI):
     )
     logger.info("HealthMonitor | Registered: kraken_health_monitor (4:00 AM UTC daily)")
 
+    # ── Stage 5: Walk-Forward Optimiser — Sunday 2:00 AM UTC weekly ────────────
+    def _walk_forward_run():
+        try:
+            from analysis.walk_forward import run_all_bots as _wfo_run_all
+            results = _wfo_run_all()
+            for bid, res in results.items():
+                if "error" in res:
+                    logger.error(f"WFO | {bid}: {res['error']}")
+                else:
+                    logger.info(
+                        f"WFO | {bid}: {res.get('total_trades',0)} trades | "
+                        f"{res.get('windows_analysed',0)} windows | "
+                        f"confidence={res.get('overall_confidence','?')} | "
+                        f"stability={res.get('stability_score',0)}/100"
+                    )
+        except Exception as _wfe:
+            logger.warning(f"WFO | Scheduled run failed (non-fatal): {_wfe}")
+
+    scheduler.add_job(
+        func=_walk_forward_run,
+        trigger=_CronTrigger(day_of_week="sun", hour=2, minute=0, timezone="UTC"),
+        id="kraken_walk_forward_optimizer",
+        name="Walk-Forward Parameter Optimiser (Sun 2:00 AM UTC)",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("WFO | Registered: kraken_walk_forward_optimizer (Sunday 2:00 AM UTC)")
+
     yield
 
     logger.info("Shutting down scheduler...")

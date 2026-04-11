@@ -369,6 +369,30 @@ CREATE TABLE IF NOT EXISTS oracle_profit_reserve (
 );
 CREATE INDEX IF NOT EXISTS idx_oracle_profit_reserve_ts ON oracle_profit_reserve (ts DESC);
 
+-- Stage 5: Walk-Forward Optimiser results (one row per bot per weekly run)
+CREATE TABLE IF NOT EXISTS kraken_wfo_results (
+    id                  BIGSERIAL PRIMARY KEY,
+    bot_id              TEXT NOT NULL,
+    run_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    data_from           TIMESTAMPTZ,
+    data_to             TIMESTAMPTZ,
+    total_trades        INTEGER NOT NULL DEFAULT 0,
+    windows_analysed    INTEGER NOT NULL DEFAULT 0,
+    overall_confidence  TEXT NOT NULL DEFAULT 'LOW',
+    stability_score     INTEGER NOT NULL DEFAULT 0,
+    rec_sl_pct          DOUBLE PRECISION,
+    rec_tp_pct          DOUBLE PRECISION,
+    rec_best_regime     TEXT,
+    rec_worst_regime    TEXT,
+    rec_focus_symbols   JSONB NOT NULL DEFAULT '[]',
+    rec_avoid_symbols   JSONB NOT NULL DEFAULT '[]',
+    window_results      JSONB NOT NULL DEFAULT '[]',
+    regime_breakdown    JSONB NOT NULL DEFAULT '{}',
+    oos_validation      JSONB NOT NULL DEFAULT '{}',
+    summary             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_kraken_wfo_bot ON kraken_wfo_results (bot_id, run_at DESC);
+
 -- Stage 4: Strategy Health Monitor snapshots (one row per bot per daily run)
 CREATE TABLE IF NOT EXISTS kraken_health_snapshots (
     id              BIGSERIAL PRIMARY KEY,

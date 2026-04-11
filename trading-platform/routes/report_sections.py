@@ -1639,3 +1639,183 @@ def section_strategy_health_monitor(bot_id: str) -> list[str]:
     lines.append("  Metrics  : win rate, profit factor, drawdown, loss streak, fee drag, symbol concentration")
 
     return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 5 — Walk-Forward Parameter Optimiser
+# ──────────────────────────────────────────────────────────────────────────────
+
+_CONF_ICON = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}
+
+
+def _fetch_wfo_result(bot_id: str) -> dict | None:
+    import psycopg2, psycopg2.extras
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return None
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT bot_id, run_at, total_trades, windows_analysed,
+                       overall_confidence, stability_score,
+                       rec_sl_pct, rec_tp_pct, rec_best_regime, rec_worst_regime,
+                       rec_focus_symbols, rec_avoid_symbols,
+                       window_results, regime_breakdown, oos_validation, summary
+                FROM   kraken_wfo_results
+                WHERE  bot_id = %s
+                ORDER  BY run_at DESC
+                LIMIT  1
+                """,
+                (bot_id,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.warning(f"section_wfo: DB query failed: {exc}")
+        return None
+
+
+def _jload(val, default):
+    if val is None:
+        return default
+    if isinstance(val, str):
+        try:
+            import json as _j
+            return _j.loads(val)
+        except Exception:
+            return default
+    return val
+
+
+def section_walk_forward_optimizer(bot_id: str) -> list[str]:
+    """
+    Stage 5 — Walk-Forward Parameter Optimiser report section.
+    Shows the latest weekly WFO result for one Kraken bot.
+    """
+    lines: list[str] = []
+    _h1(lines, f"STAGE 5 — WALK-FORWARD PARAMETER OPTIMISER  [{bot_id.upper()}]")
+
+    res = _fetch_wfo_result(bot_id)
+    if res is None:
+        lines.append(f"  No WFO result found for {bot_id}.")
+        lines.append("  Walk-Forward Optimiser runs every Sunday at 2:00 AM UTC.")
+        lines.append("  First result available after the next Sunday run.")
+        return lines
+
+    run_at = res.get("run_at")
+    if hasattr(run_at, "strftime"):
+        ts_str = run_at.strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        ts_str = str(run_at)[:16]
+
+    n_trades  = res.get("total_trades", 0)
+    n_windows = res.get("windows_analysed", 0)
+    conf      = res.get("overall_confidence", "LOW")
+    stability = res.get("stability_score", 0)
+    c_icon    = _CONF_ICON.get(conf, "❓")
+
+    lines.append(f"  Last run     : {ts_str}")
+    lines.append(f"  Trades used  : {n_trades}")
+    lines.append(f"  Windows      : {n_windows}")
+    lines.append(f"  Stability    : {stability}/100  (WR + PF consistency across windows)")
+    lines.append(f"  Confidence   : {c_icon} {conf}")
+    lines.append("")
+
+    # ── Parameter Recommendations ──────────────────────────────────────────
+    _h2(lines, "Parameter Recommendations  (advisory only — does not auto-apply)")
+    rec_sl   = res.get("rec_sl_pct")
+    rec_tp   = res.get("rec_tp_pct")
+    rec_best = res.get("rec_best_regime")
+    rec_worst= res.get("rec_worst_regime")
+    focus    = _jload(res.get("rec_focus_symbols"), [])
+    avoid    = _jload(res.get("rec_avoid_symbols"), [])
+
+    if rec_sl is not None:
+        lines.append(f"  Stop-loss    : {rec_sl:.2f}%  (median observed stop exit across all windows)")
+    else:
+        lines.append("  Stop-loss    : insufficient stop-exit data")
+
+    if rec_tp is not None:
+        lines.append(f"  Take-profit  : {rec_tp:.2f}%  (median observed TP/trail exit across all windows)")
+    else:
+        lines.append("  Take-profit  : insufficient TP-exit data")
+
+    if rec_best:
+        lines.append(f"  Best regime  : {rec_best}  (highest median PF)")
+    if rec_worst:
+        lines.append(f"  Worst regime : {rec_worst}  (lowest median PF — consider reducing size)")
+    if focus:
+        lines.append(f"  Focus symbols: {', '.join(focus)}  (consistent top performers)")
+    else:
+        lines.append("  Focus symbols: no consistent top performers yet")
+    if avoid:
+        lines.append(f"  Avoid symbols: {', '.join(avoid)}  (consistent underperformers)")
+    lines.append("")
+
+    # ── Per-Window Summary ─────────────────────────────────────────────────
+    window_results = _jload(res.get("window_results"), [])
+    if window_results:
+        _h2(lines, "Sliding Window Analysis")
+        lines.append(
+            f"  {'Window':<20} {'N':>5} {'WR':>6} {'PF':>6} "
+            f"{'AvgWin%':>8} {'AvgLoss%':>9} {'Top Symbol':<14} {'Exit'}"
+        )
+        lines.append("  " + "-" * 82)
+        for w in window_results:
+            if w.get("skipped"):
+                lines.append(f"  {w.get('label','?'):<20} {'—':>5}  skipped ({w.get('reason','')})")
+                continue
+            label    = w.get("label", "?")
+            n        = w.get("n", 0)
+            wr       = w.get("wr", 0)
+            pf       = w.get("pf", 0)
+            aw       = w.get("avg_win_pct")
+            al       = w.get("avg_loss_pct")
+            top_sym  = (w.get("top_symbols") or ["—"])[0]
+            dom_exit = w.get("dominant_exit", "?")
+            aw_str   = f"{aw:+.2f}%" if aw is not None else "   —"
+            al_str   = f"{al:+.2f}%" if al is not None else "   —"
+            lines.append(
+                f"  {label:<20} {n:>5} {wr:>5.1%} {pf:>6.2f} "
+                f"{aw_str:>8} {al_str:>9} {top_sym:<14} {dom_exit}"
+            )
+        lines.append("  " + "-" * 82)
+        lines.append("")
+
+    # ── Regime Breakdown ───────────────────────────────────────────────────
+    regime_bd = _jload(res.get("regime_breakdown"), {})
+    if regime_bd:
+        _h2(lines, "Full-History Regime Breakdown")
+        lines.append(f"  {'Regime':<22} {'N':>5} {'WR':>6} {'PF':>6} {'Net P&L':>10}")
+        lines.append("  " + "-" * 52)
+        for reg, m in sorted(regime_bd.items(), key=lambda x: x[1].get("pf", 0), reverse=True):
+            n_r   = m.get("n", 0)
+            wr_r  = m.get("wr", 0)
+            pf_r  = m.get("pf", 0)
+            net_r = m.get("net", 0)
+            flag  = " ← best" if reg == rec_best else (" ← avoid" if reg == rec_worst else "")
+            lines.append(
+                f"  {reg:<22} {n_r:>5} {wr_r:>5.1%} {pf_r:>6.2f} "
+                f"{net_r:>+10.2f}{flag}"
+            )
+        lines.append("")
+
+    # ── OOS Validation ────────────────────────────────────────────────────
+    oos = _jload(res.get("oos_validation"), {})
+    hit_rate = oos.get("hit_rate")
+    if hit_rate is not None:
+        _h2(lines, "Out-of-Sample Symbol Carry-Over Validation")
+        lines.append(f"  Symbol carry-over rate: {hit_rate:.0%}  "
+                     f"(did top symbols from window[n] stay top in window[n+1]?)")
+        for d in (oos.get("detail") or []):
+            lines.append(f"    {d.strip()}")
+        lines.append("")
+
+    lines.append("  Schedule    : Every Sunday 2:00 AM UTC  |  Fully deterministic (no LLM)")
+    lines.append("  Note        : Recommendations are advisory — they do NOT auto-apply parameters.")
+    lines.append("  Data source : kraken_trades (pnl_pct, reason, regime_at_entry, symbol)")
+
+    return lines

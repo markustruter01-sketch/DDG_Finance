@@ -354,6 +354,10 @@ loss_streak_paused_until: datetime | None = None   # kept for backward-compat st
 
 # Set to True when LOSS_STREAK_LIMIT is hit; consumed at the START of the next cycle.
 _pending_emergency_rebalance: bool = False
+
+# Stage 3: Per-Pair Auto Params — refresh every 6h
+_auto_params_last_refresh: float = 0.0
+_auto_pair_stats: dict = {}   # symbol → PairStats
 # Guard to prevent re-entrant calls while closing positions during the rebalance.
 _emergency_rebalance_in_progress: bool = False
 
@@ -1460,6 +1464,50 @@ def run_cycle() -> None:
         _corr_sizing_active = False
         logger.debug(f"CorrSizing | correlation_tracker unavailable: {_ct_exc}")
 
+    # ── Stage 3: Per-Pair Automatic Parameter Adjustment ─────────────────────
+    # Refresh per-pair stats every AUTO_PARAMS_REFRESH_HOURS (default 6h).
+    # Builds two dicts used inside the symbol loop:
+    #   _pair_zscore_factor  — per-symbol multiplier on _zscore_entry
+    #   Merges auto_size_mult into _pair_sizing_mult for non-manually-configured pairs
+    global _auto_params_last_refresh, _auto_pair_stats
+    _pair_zscore_factor: dict[str, float] = {}
+    _auto_refresh_interval = 6 * 3600.0
+    try:
+        from per_pair_params import refresh_and_get as _ppp_refresh, load_pair_params as _ppp_load
+        _now_ts = time.time()
+        if _now_ts - _auto_params_last_refresh >= _auto_refresh_interval:
+            _auto_pair_stats = _ppp_refresh(BOT_ID)
+            _auto_params_last_refresh = _now_ts
+            # If refresh returned nothing (first run, no trades yet), try loading from DB
+            if not _auto_pair_stats:
+                _auto_pair_stats = _ppp_load(BOT_ID)
+        # Build zscore factor dict and merge auto-sizing into _pair_sizing_mult
+        _manual_pairs = set(PAIR_SIZING_PENALIZED) | set(PAIR_SIZING_BOOSTED)
+        for _ap_sym, _ap_stats in _auto_pair_stats.items():
+            if _ap_stats.has_data():
+                _pair_zscore_factor[_ap_sym] = _ap_stats.auto_zscore_factor
+                if _ap_sym not in _manual_pairs and _ap_stats.auto_size_mult != 1.0:
+                    _pair_sizing_mult[_ap_sym] = _ap_stats.auto_size_mult
+        # Log auto adjustments (only non-neutral ones)
+        _auto_size_adj = [
+            f"{s}={_pair_sizing_mult[s]:.2f}×"
+            for s in _auto_pair_stats
+            if s not in _manual_pairs and _pair_sizing_mult.get(s, 1.0) != 1.0
+        ]
+        _auto_z_adj = [
+            f"{s}={v:.2f}×"
+            for s, v in _pair_zscore_factor.items()
+            if v != 1.0
+        ]
+        if _auto_size_adj:
+            logger.info(f"AutoParams | Auto-size adj: {', '.join(_auto_size_adj)}")
+        if _auto_z_adj:
+            logger.info(f"AutoParams | Auto-zscore adj: {', '.join(_auto_z_adj)}")
+        elif _auto_pair_stats:
+            logger.debug(f"AutoParams | {len(_auto_pair_stats)} pairs loaded — all neutral (1.0×)")
+    except Exception as _ppp_exc:
+        logger.debug(f"AutoParams | per_pair_params unavailable: {_ppp_exc}")
+
     _blacklisted_open = [s for s in list(open_positions.keys()) if s in BLACKLIST]
     for _bl_sym in _blacklisted_open:
         logger.warning(
@@ -1520,6 +1568,10 @@ def run_cycle() -> None:
             # Pre-compute indicators once — used in both position mgmt and entry signals
             sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
             sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
+
+            # Stage 3: per-symbol z-score entry threshold
+            # auto_zscore_factor tightens/loosens the threshold based on pair's win rate.
+            _sym_zscore_entry = _zscore_entry * _pair_zscore_factor.get(symbol, 1.0)
 
             # ── Microstructure signals (OFI / VAMP / VPIN) ────────────────────
             # Primary: order-book snapshot + recent trades (ccxt live data).
@@ -2164,7 +2216,7 @@ def run_cycle() -> None:
                         })
                     continue
 
-                if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+                if sym_z_score < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
                     logger.info(
                         f"CryptoRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
                         f"[src={_regime_src}] RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
@@ -2179,7 +2231,7 @@ def run_cycle() -> None:
                     continue
 
             # LONG signal: price is unusually low + RSI is oversold
-            if sym_z_score < -_zscore_entry and sym_rsi < RSI_OVERSOLD:
+            if sym_z_score < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
                 _long_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
                 _long_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(
@@ -2322,7 +2374,7 @@ def run_cycle() -> None:
                     })
 
             # SHORT signal: price is unusually high + RSI is overbought
-            elif sym_z_score > _zscore_entry and sym_rsi > RSI_OVERBOUGHT:
+            elif sym_z_score > _sym_zscore_entry and sym_rsi > RSI_OVERBOUGHT:
                 _short_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
                 _short_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(

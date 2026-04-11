@@ -157,6 +157,21 @@ CREATE TABLE IF NOT EXISTS vpin_rejections (
 );
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
+
+CREATE TABLE IF NOT EXISTS kraken_pair_params (
+    bot_id             TEXT NOT NULL,
+    symbol             TEXT NOT NULL,
+    computed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    trade_count        INTEGER NOT NULL DEFAULT 0,
+    win_rate           DOUBLE PRECISION NOT NULL DEFAULT 0,
+    profit_factor      DOUBLE PRECISION NOT NULL DEFAULT 0,
+    avg_win_pct        DOUBLE PRECISION NOT NULL DEFAULT 0,
+    avg_loss_pct       DOUBLE PRECISION NOT NULL DEFAULT 0,
+    auto_size_mult     DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    auto_zscore_factor DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (bot_id, symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_kraken_pair_params_bot ON kraken_pair_params (bot_id);
 """
 
 

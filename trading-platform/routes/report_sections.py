@@ -1350,3 +1350,117 @@ def section_correlation_aware_sizing(bot_label: str, bot_id: str) -> list[str]:
     lines.append(f"  Window : last {CORR_WINDOW} OHLCV closes (1h candles = ~{CORR_WINDOW}h lookback)")
 
     return lines
+
+
+def section_per_pair_auto_params(bot_label: str, bot_id: str) -> list[str]:
+    """
+    Stage 3 — Per-Pair Automatic Parameter Adjustment.
+    Reads computed pair stats from kraken_pair_params and displays them in a
+    formatted table showing win rate, profit factor, and the auto-derived
+    sizing multiplier and z-score threshold factor for each symbol.
+    """
+    lines: list[str] = []
+    _h2(lines, f"PER-PAIR AUTO PARAMS — {bot_label}")
+
+    rows = _pg_query(
+        """
+        SELECT symbol, trade_count, win_rate, profit_factor,
+               avg_win_pct, avg_loss_pct, auto_size_mult, auto_zscore_factor,
+               computed_at
+        FROM   kraken_pair_params
+        WHERE  bot_id = %s
+        ORDER  BY profit_factor DESC
+        """,
+        (bot_id,),
+    )
+
+    if not rows:
+        lines.append("  No per-pair params computed yet — first refresh runs at bot startup.")
+        lines.append("  Data appears after ≥8 closed trades per symbol in the last 30 days.")
+        lines.append("")
+        lines.append("  Auto-sizing rules (by Profit Factor):")
+        lines.append("    PF ≥ 1.50 and WR ≥ 50%  →  1.20×  (auto-boost)")
+        lines.append("    PF 1.00–1.50              →  1.00×  (neutral)")
+        lines.append("    PF 0.60–1.00              →  0.75×  (caution)")
+        lines.append("    PF 0.30–0.60              →  0.50×  (suppress)")
+        lines.append("    PF < 0.30                 →  0.30×  (heavy suppress)")
+        lines.append("")
+        lines.append("  Z-score factor rules (by Win Rate):")
+        lines.append("    WR ≥ 55%  →  0.90×  (lower bar — proven pair)")
+        lines.append("    WR 40–55% →  1.00×  (neutral)")
+        lines.append("    WR 25–40% →  1.15×  (raise bar)")
+        lines.append("    WR < 25%  →  1.30×  (significantly raise bar)")
+        return lines
+
+    # Determine freshness from latest computed_at
+    import datetime as _dt
+    from datetime import timezone as _tz
+    _freshness = ""
+    try:
+        _latest_ts = max(r["computed_at"] for r in rows if r.get("computed_at"))
+        _age_h = (_dt.datetime.now(_tz.utc) - _latest_ts).total_seconds() / 3600
+        _freshness = f"(computed {_age_h:.1f}h ago, refreshes every 6h)"
+    except Exception:
+        pass
+
+    lines.append(f"  {len(rows)} symbols with data {_freshness}")
+    lines.append("")
+
+    MIN_TRADES = 8
+    has_data_count = sum(1 for r in rows if r["trade_count"] >= MIN_TRADES)
+    neutral_count  = sum(1 for r in rows if r["trade_count"] >= MIN_TRADES
+                         and r["auto_size_mult"] == 1.0 and r["auto_zscore_factor"] == 1.0)
+    adjusted_count = has_data_count - neutral_count
+
+    lines.append(
+        f"  {'Symbol':<14} {'Trades':>6} {'WR':>6} {'PF':>6} "
+        f"{'AvgWin':>8} {'AvgLoss':>8} {'SizeMult':>9} {'ZFactor':>8} {'Status':>12}"
+    )
+    lines.append("  " + "-" * 82)
+
+    for r in rows:
+        sym    = r["symbol"]
+        n      = r["trade_count"]
+        wr     = r["win_rate"]
+        pf     = r["profit_factor"]
+        aw     = r["avg_win_pct"]
+        al     = r["avg_loss_pct"]
+        sm     = r["auto_size_mult"]
+        zf     = r["auto_zscore_factor"]
+
+        if n < MIN_TRADES:
+            status = "insufficient"
+            sm_str = "–"
+            zf_str = "–"
+        else:
+            sm_str = f"{sm:.2f}×"
+            zf_str = f"{zf:.2f}×"
+            if sm > 1.0:
+                status = "AUTO-BOOST"
+            elif sm < 0.65:
+                status = "SUPPRESSED"
+            elif sm < 1.0:
+                status = "CAUTION"
+            elif zf != 1.0:
+                status = "Z-ADJ"
+            else:
+                status = "neutral"
+
+        lines.append(
+            f"  {sym:<14} {n:>6} {wr:>6.1%} {pf:>6.2f} "
+            f"{aw:>8.2%} {al:>8.2%} {sm_str:>9} {zf_str:>8} {status:>12}"
+        )
+
+    lines.append("  " + "-" * 82)
+    lines.append(
+        f"  Totals: {len(rows)} symbols | {has_data_count} with data | "
+        f"{adjusted_count} adjusted | {neutral_count} neutral"
+    )
+    lines.append("")
+    lines.append("  Notes:")
+    lines.append(f"    Lookback : 30 days of closed trades  |  Min trades: {MIN_TRADES}")
+    lines.append("    Manual PAIR_SIZING_PENALIZED/BOOSTED always override auto_size_mult.")
+    lines.append("    auto_zscore_factor applies to ALL pairs (no manual override).")
+    lines.append("    Refresh interval: every 6 hours from bot startup.")
+
+    return lines

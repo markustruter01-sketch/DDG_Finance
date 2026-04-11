@@ -1555,6 +1555,8 @@ async def export_diagnostic_report():
         lines += _rs.section_strategy_health_monitor(_hm_bid)
     for _wfo_bid in KRAKEN_BOT_PROFILES:
         lines += _rs.section_walk_forward_optimizer(_wfo_bid)
+    for _bt_bid in KRAKEN_BOT_PROFILES:
+        lines += _rs.section_historical_backtest(_bt_bid)
     for _streak_bid, _streak_prof in KRAKEN_BOT_PROFILES.items():
         _streak_name = _streak_prof["display_name"]
         lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)

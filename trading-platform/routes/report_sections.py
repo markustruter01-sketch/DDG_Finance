@@ -1819,3 +1819,175 @@ def section_walk_forward_optimizer(bot_id: str) -> list[str]:
     lines.append("  Data source : kraken_trades (pnl_pct, reason, regime_at_entry, symbol)")
 
     return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stage 6 — Historical Backtesting Infrastructure
+# ──────────────────────────────────────────────────────────────────────────────
+
+_VERDICT_ICON = {"BETTER": "✅", "WORSE": "❌", "NEUTRAL": "➖"}
+
+
+def _fetch_backtest_result(bot_id: str) -> dict | None:
+    import psycopg2, psycopg2.extras
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        return None
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT *
+                FROM   kraken_backtest_results
+                WHERE  bot_id = %s
+                ORDER  BY run_at DESC
+                LIMIT  1
+                """,
+                (bot_id,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.warning(f"section_backtest: DB query failed: {exc}")
+        return None
+
+
+def section_historical_backtest(bot_id: str) -> list[str]:
+    """
+    Stage 6 — Historical Backtesting Infrastructure report section.
+    Shows parameter sensitivity analysis for one Kraken bot.
+    """
+    lines: list[str] = []
+    _h1(lines, f"STAGE 6 — HISTORICAL BACKTEST INFRASTRUCTURE  [{bot_id.upper()}]")
+
+    res = _fetch_backtest_result(bot_id)
+    if res is None:
+        lines.append(f"  No backtest result found for {bot_id}.")
+        lines.append("  Historical Backtest runs every Sunday at 2:30 AM UTC (30 min after WFO).")
+        lines.append("  First result available after the next Sunday run.")
+        return lines
+
+    run_at = res.get("run_at")
+    ts_str = run_at.strftime("%Y-%m-%d %H:%M UTC") if hasattr(run_at, "strftime") else str(run_at)[:16]
+
+    n_trades = res.get("n_trades", 0)
+    lines.append(f"  Last run    : {ts_str}")
+    lines.append(f"  Trades      : {n_trades}")
+    lines.append(f"  Grid size   : {8 * 8} combinations (SL ∈ [0.5–5.0%] × TP ∈ [none,0.5–4.0%])")
+    lines.append(f"  Method      : Realized P&L replay  (see Methodology note below)")
+    lines.append("")
+
+    # ── Scenario Comparison Table ──────────────────────────────────────────
+    _h2(lines, "Scenario Comparison")
+    hdr = f"  {'Scenario':<28} {'WR':>6} {'PF':>6} {'Net P&L%':>9} {'MaxDD%':>8}  {'Verdict'}"
+    lines.append(hdr)
+    lines.append("  " + "-" * 73)
+
+    # Baseline
+    b_wr  = res.get("baseline_wr")  or 0.0
+    b_pf  = res.get("baseline_pf")  or 0.0
+    b_net = res.get("baseline_net_pct") or 0.0
+    b_dd  = res.get("baseline_max_dd")  or 0.0
+    lines.append(
+        f"  {'Actual (baseline)':<28} {b_wr:>5.1%} {b_pf:>6.2f} {b_net:>+9.2f}% {b_dd:>7.2f}%  —"
+    )
+
+    # WFO-recommended
+    wfo_sl   = res.get("wfo_sl_pct")
+    wfo_tp   = res.get("wfo_tp_pct")
+    wfo_wr   = res.get("wfo_wr")   or 0.0
+    wfo_pf   = res.get("wfo_pf")   or 0.0
+    wfo_net  = res.get("wfo_net_pct") or 0.0
+    wfo_dd   = res.get("wfo_max_dd")  or 0.0
+    wfo_verd = res.get("wfo_verdict", "?")
+    wfo_v_ic = _VERDICT_ICON.get(wfo_verd, "❓")
+    wfo_tp_s = f"TP={wfo_tp:.1f}%" if wfo_tp else "TP=none"
+    wfo_label = f"WFO rec  SL={wfo_sl:.1f}% {wfo_tp_s}" if wfo_sl else "WFO rec (no data)"
+    lines.append(
+        f"  {wfo_label:<28} {wfo_wr:>5.1%} {wfo_pf:>6.2f} {wfo_net:>+9.2f}% {wfo_dd:>7.2f}%  "
+        f"{wfo_v_ic} {wfo_verd}"
+    )
+
+    # Best found
+    best_sl  = res.get("best_sl_pct")
+    best_tp  = res.get("best_tp_pct")
+    best_wr  = res.get("best_wr")  or 0.0
+    best_pf  = res.get("best_pf")  or 0.0
+    best_net = res.get("best_net_pct") or 0.0
+    best_dd  = res.get("best_max_dd")  or 0.0
+    best_imp = res.get("best_improvement") or 0.0
+    best_tp_s= f"TP={best_tp:.1f}%" if best_tp else "TP=none"
+    best_label = f"Best grid SL={best_sl:.1f}% {best_tp_s}" if best_sl else "Best found"
+    best_v = "BETTER" if best_imp > 0.05 else ("WORSE" if best_imp < -0.05 else "NEUTRAL")
+    best_v_ic = _VERDICT_ICON.get(best_v, "❓")
+    lines.append(
+        f"  {best_label:<28} {best_wr:>5.1%} {best_pf:>6.2f} {best_net:>+9.2f}% {best_dd:>7.2f}%  "
+        f"{best_v_ic} {best_v}"
+    )
+    lines.append("  " + "-" * 73)
+    lines.append(f"  Best grid improvement vs baseline: {best_imp:+.2f}% net P&L")
+    lines.append("")
+
+    # ── Grid Search Top-10 ─────────────────────────────────────────────────
+    grid = _jload(res.get("grid_results"), [])
+    if grid:
+        _h2(lines, f"Grid Search — Top {min(len(grid), 10)} Combinations (by Profit Factor)")
+        lines.append(
+            f"  {'Rank':>5} {'SL%':>5} {'TP%':>6} {'WR':>6} {'PF':>6} {'Net%':>7} {'MaxDD%':>8}"
+        )
+        lines.append("  " + "-" * 47)
+        for i, g in enumerate(grid[:10], 1):
+            g_sl = g.get("sl_pct", 0)
+            g_tp = g.get("tp_pct")
+            g_wr = g.get("wr", 0)
+            g_pf = g.get("pf", 0)
+            g_np = g.get("net_pct", 0)
+            g_dd = g.get("max_dd", 0)
+            tp_str = f"{g_tp:.1f}" if g_tp else "none"
+            marker = " ◄ best" if i == 1 else ""
+            lines.append(
+                f"  {i:>5} {g_sl:>4.1f}% {tp_str:>6} {g_wr:>5.1%} {g_pf:>6.2f} "
+                f"{g_np:>+6.2f}% {g_dd:>7.2f}%{marker}"
+            )
+        lines.append("")
+
+    # ── Regime Breakdown ───────────────────────────────────────────────────
+    reg_bd = _jload(res.get("regime_breakdown"), {})
+    if reg_bd:
+        _h2(lines, f"Regime Breakdown — Best Parameters  (SL={best_sl:.1f}% {best_tp_s})")
+        lines.append(
+            f"  {'Regime':<22} {'N':>5} {'Base PF':>8} {'Sim PF':>7} {'ΔPF':>7} {'Net Δ%':>8}"
+        )
+        lines.append("  " + "-" * 60)
+        for reg, m in sorted(
+            reg_bd.items(),
+            key=lambda x: x[1].get("simulated", {}).get("pf", 0),
+            reverse=True,
+        ):
+            n_r  = m.get("n", 0)
+            b_m  = m.get("baseline",  {})
+            s_m  = m.get("simulated", {})
+            b_pf_r = b_m.get("pf", 0)
+            s_pf_r = s_m.get("pf", 0)
+            d_pf   = s_pf_r - b_pf_r
+            d_net  = s_m.get("net_pct", 0) - b_m.get("net_pct", 0)
+            lines.append(
+                f"  {reg:<22} {n_r:>5} {b_pf_r:>8.2f} {s_pf_r:>7.2f} "
+                f"{d_pf:>+7.2f} {d_net:>+7.2f}%"
+            )
+        lines.append("")
+
+    # ── Methodology Note ───────────────────────────────────────────────────
+    _h2(lines, "Methodology & Limitations")
+    lines.append("  Method      : Realized P&L replay — applies new SL/TP to each trade's")
+    lines.append("                recorded pnl_pct without replaying intra-trade price paths.")
+    lines.append("  SL caveat   : Benefit may be overstated (no gap fills or slippage modelled).")
+    lines.append("  TP caveat   : Trades that reversed after TP level are treated as clean fills.")
+    lines.append("  Use as      : Directional parameter sensitivity — not exact performance prediction.")
+    lines.append("")
+    lines.append(f"  Schedule    : Every Sunday 2:30 AM UTC (30 min after WFO)")
+    lines.append("  Deterministic — no LLM calls.  Results are advisory only.")
+
+    return lines

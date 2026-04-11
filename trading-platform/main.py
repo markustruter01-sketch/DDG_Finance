@@ -321,6 +321,37 @@ async def lifespan(app: FastAPI):
     )
     logger.info("WFO | Registered: kraken_walk_forward_optimizer (Sunday 2:00 AM UTC)")
 
+    # ── Stage 6: Historical Backtesting Infrastructure ────────────────────────
+    # Runs every Sunday at 2:30 AM UTC — 30 min after the WFO completes so it
+    # can consume fresh WFO-recommended parameters for its comparison scenario.
+    from analysis.backtest import run_all_bots as _bt_run_all
+
+    async def _backtest_run():
+        import asyncio
+        try:
+            logger.info("Backtest | Scheduled run starting …")
+            results = await asyncio.get_event_loop().run_in_executor(None, _bt_run_all)
+            for bid, r in results.items():
+                if "error" in r:
+                    logger.warning(f"Backtest | {bid}: {r['error']}")
+                else:
+                    logger.info(
+                        f"Backtest | {bid}: PF baseline={r['baseline_pf']:.2f} → "
+                        f"best={r['best_pf']:.2f} | WFO scenario: {r['wfo_verdict']}"
+                    )
+        except Exception as _bte:
+            logger.warning(f"Backtest | Scheduled run failed (non-fatal): {_bte}")
+
+    scheduler.add_job(
+        func=_backtest_run,
+        trigger=_CronTrigger(day_of_week="sun", hour=2, minute=30, timezone="UTC"),
+        id="kraken_historical_backtest",
+        name="Historical Backtesting Infrastructure (Sun 2:30 AM UTC)",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC)")
+
     yield
 
     logger.info("Shutting down scheduler...")

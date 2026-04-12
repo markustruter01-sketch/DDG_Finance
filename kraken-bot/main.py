@@ -1899,6 +1899,32 @@ def run_cycle() -> None:
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
 
+            # ── Pair Pause Check ──────────────────────────────────────────────
+            # Check whether this pair has been administratively paused.  The
+            # pause is stored in kraken_pair_performance (status='paused',
+            # pause_until TIMESTAMPTZ).  We skip the pair entirely — no Hurst
+            # check, no signal evaluation — until the pause expires.
+            _pause_info = _db.get_pair_pause_status(BOT_ID, symbol)
+            if _pause_info["is_paused"]:
+                _pause_until_str = (
+                    str(_pause_info["pause_until"])[:19]
+                    if _pause_info["pause_until"] else "indefinitely"
+                )
+                logger.info(
+                    f"PAIR PAUSED | {symbol} skipped until {_pause_until_str} "
+                    f"— reason: {_pause_info['pause_reason']}"
+                )
+                cycle_signals.append({
+                    "symbol": symbol,
+                    "price": round(current_price, 4),
+                    "signal_type": "pair_paused",
+                    "has_position": False,
+                    "pause_until": _pause_until_str,
+                    "reason": _pause_info["pause_reason"],
+                })
+                continue
+            # ─────────────────────────────────────────────────────────────────
+
             # ── Addition 1: Hurst Exponent + ADF Pre-Entry Filter ────────────
             # Fetch the last 100 hourly closes from the shared historical_prices
             # table.  Results are cached per pair with a 4-hour TTL so the

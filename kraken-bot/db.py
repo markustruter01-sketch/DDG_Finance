@@ -172,6 +172,17 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='vpin_rejections' AND column_name='effective_threshold') THEN
         ALTER TABLE vpin_rejections ADD COLUMN effective_threshold DOUBLE PRECISION;
     END IF;
+
+    -- Pair pause columns on kraken_pair_performance
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_pair_performance' AND column_name='status') THEN
+        ALTER TABLE kraken_pair_performance ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_pair_performance' AND column_name='pause_until') THEN
+        ALTER TABLE kraken_pair_performance ADD COLUMN pause_until TIMESTAMPTZ;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_pair_performance' AND column_name='pause_reason') THEN
+        ALTER TABLE kraken_pair_performance ADD COLUMN pause_reason TEXT;
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
@@ -920,4 +931,94 @@ def upsert_pair_hurst_adf(
         return True
     except Exception as exc:
         logger.warning(f"DB | upsert_pair_hurst_adf({bot_id}, {symbol}) failed: {exc}")
+        return False
+
+
+def get_pair_pause_status(bot_id: str, symbol: str) -> dict:
+    """
+    Return the current pause status for a (bot_id, symbol) pair.
+
+    Returns a dict:
+      {
+        "is_paused":   bool,
+        "pause_until": datetime | None,
+        "pause_reason": str | None,
+      }
+
+    A pair is considered paused when:
+      - status column == 'paused'  AND
+      - pause_until IS NULL or pause_until > NOW()
+
+    If there is no row for this pair, returns is_paused=False.
+    """
+    default = {"is_paused": False, "pause_until": None, "pause_reason": None}
+    if not _is_available():
+        return default
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT status, pause_until, pause_reason
+                    FROM kraken_pair_performance
+                    WHERE bot_id = %s AND symbol = %s
+                    """,
+                    (bot_id, symbol),
+                )
+                row = cur.fetchone()
+        if row is None:
+            return default
+        status, pause_until, pause_reason = row
+        is_paused = (
+            status == "paused"
+            and (pause_until is None or pause_until > __import__("datetime").datetime.now(__import__("datetime").timezone.utc))
+        )
+        return {
+            "is_paused": is_paused,
+            "pause_until": pause_until,
+            "pause_reason": pause_reason,
+        }
+    except Exception as exc:
+        logger.warning(f"DB | get_pair_pause_status({bot_id}, {symbol}) failed: {exc}")
+        return default
+
+
+def upsert_pair_pause(
+    bot_id: str,
+    symbol: str,
+    status: str,
+    pause_until=None,
+    pause_reason: str | None = None,
+) -> bool:
+    """
+    Set or clear the pause status for a (bot_id, symbol) pair.
+
+    status        : 'paused' or 'active'
+    pause_until   : datetime (aware) until which to hold the pause; None = indefinite
+    pause_reason  : human-readable explanation recorded for auditing
+
+    Always upserts the row (creates it if absent).
+    """
+    if not _is_available():
+        return False
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO kraken_pair_performance
+                        (bot_id, symbol, status, pause_until, pause_reason, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (bot_id, symbol) DO UPDATE
+                        SET status       = EXCLUDED.status,
+                            pause_until  = EXCLUDED.pause_until,
+                            pause_reason = EXCLUDED.pause_reason,
+                            updated_at   = NOW()
+                    """,
+                    (bot_id, symbol, status, pause_until, pause_reason),
+                )
+        logger.info(f"DB | upsert_pair_pause({bot_id}, {symbol}) → status={status} until={pause_until}")
+        return True
+    except Exception as exc:
+        logger.warning(f"DB | upsert_pair_pause({bot_id}, {symbol}) failed: {exc}")
         return False

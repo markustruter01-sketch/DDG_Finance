@@ -1848,112 +1848,57 @@ async def export_diagnostic_report():
 
     lines.append("@@SEC_AI@@")
     h1("SECTION 8: AI IMPACT TIMELINE \u2014 INTERVENTIONS & PERFORMANCE EFFECT")
+    lines += [
+        "  STATUS: AI parameter enforcement is permanently disabled.",
+        "  The fleet_commander diagnostic jobs run on schedule but NEVER write",
+        "  parameter changes to the database. All bot parameters are managed",
+        "  manually by the operator.",
+        "",
+        "  Oracle #1 runs Pure Momentum v3.0 — fully deterministic, no LLM calls.",
+        "  Kraken bots (#2-4) use fixed strategy parameters (no Gemini/Groq tuning).",
+        "  Apex Predator (#5) and Navigator (#6) use quantitative rules only.",
+        "",
+        "  As a result, the ai_interventions log is no longer active.",
+        "  Historical entries (if any) are preserved in the database for auditing.",
+    ]
     try:
         from routes.ai_impact import _get_conn as _ai_conn
         _aic = _ai_conn()
         try:
             with _aic.cursor() as _aicur:
                 _aicur.execute("""
-                    SELECT id, ts, source, overall_verdict, critique_summary,
-                           vetoed_tickers, param_changes, equity_at_time
-                    FROM ai_interventions
-                    ORDER BY ts DESC
-                    LIMIT 50
+                    SELECT COUNT(*) AS n FROM ai_interventions
                 """)
-                _ai_cols = [d[0] for d in _aicur.description]
-                _ai_rows = [dict(zip(_ai_cols, r)) for r in _aicur.fetchall()]
+                _ai_count = _aicur.fetchone()
+                _ai_n = _ai_count[0] if _ai_count else 0
         finally:
             _aic.close()
-
-        if not _ai_rows:
-            lines.append("  No AI interventions recorded yet.")
-        else:
-            lines.append(f"  Total interventions in DB: {len(_ai_rows)} (showing most recent 50)")
-            lines.append("")
-
-            helped = 0
-            hurt = 0
-            neutral = 0
-
-            for iv in _ai_rows:
-                iv_ts = iv["ts"].strftime("%Y-%m-%d %H:%M UTC") if iv["ts"] else "Unknown"
-                source = iv.get("source") or "unknown"
-                verdict = iv.get("overall_verdict") or "N/A"
-                summary = iv.get("critique_summary") or "N/A"
-                eq = iv.get("equity_at_time")
-                vetoed = iv.get("vetoed_tickers")
-                params = iv.get("param_changes")
-
-                if isinstance(vetoed, str):
-                    try:
-                        import json as _jj
-                        vetoed = _jj.loads(vetoed)
-                    except Exception:
-                        pass
-                if isinstance(params, str):
-                    try:
-                        import json as _jj
-                        params = _jj.loads(params)
-                    except Exception:
-                        pass
-
-                lines.append(f"  [{iv_ts}] Source: {source} | Verdict: {verdict}")
-                if eq is not None:
-                    lines.append(f"    Equity at time: ${float(eq):,.2f}")
-                if summary and summary != "N/A":
-                    summary_short = summary[:300] + ("..." if len(summary) > 300 else "")
-                    lines.append(f"    Summary: {summary_short}")
-                if vetoed and isinstance(vetoed, list) and len(vetoed) > 0:
-                    lines.append(f"    Vetoed tickers: {', '.join(str(v) for v in vetoed)}")
-                if params and isinstance(params, dict) and len(params) > 0:
-                    param_str = ", ".join(f"{k}={v}" for k, v in list(params.items())[:10])
-                    lines.append(f"    Param changes: {param_str}")
-                lines.append("")
-
-            for iv in _ai_rows:
-                v = iv.get("overall_verdict", "")
-                if v and "helped" in str(v).lower():
-                    helped += 1
-                elif v and ("hurt" in str(v).lower() or "negative" in str(v).lower()):
-                    hurt += 1
-                else:
-                    neutral += 1
-
-            h2("AI IMPACT SUMMARY")
-            row("Total interventions:", str(len(_ai_rows)))
-            row("Helped:", str(helped))
-            row("Hurt:", str(hurt))
-            row("Neutral/Unknown:", str(neutral))
+        lines.append(f"  Historical ai_interventions rows in DB: {_ai_n}")
     except Exception as _ai_exc:
-        lines.append(f"  [AI Impact Timeline unavailable: {_ai_exc}]")
+        lines.append(f"  (Historical count unavailable: {_ai_exc})")
 
     lines.append("@@SEC9@@")
     h1("SECTION 9: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
 
     h2("BOT #1: ORACLE (ALPACA) \u2014 HOW IT WORKS")
     lines += [
-        "  AI Engine:         Groq Llama 3.3 70B (100,000 tokens/day budget)",
+        "  Version:           Pure Momentum v3.0 (fully deterministic \u2014 no LLM, no SGOV, no JEPQ)",
         "  Execution:         Alpaca paper trading (simulated US equities)",
         "  Cycle frequency:   Every 15 minutes during market hours",
-        "                     24/7 crypto-only cycle for crypto ETFs",
-        "  Market regimes:    Bear | Bull | Neutral | Risk-Off",
-        "                     Regime changes the entire allocation strategy",
-        "  Position sizing:   Kelly Criterion \u00d7 conviction score (0.0\u20131.0)",
-        "                     Max 15% per position (except SGOV)",
+        "  Universe:          ~250 NYSE/NASDAQ stocks (screened for liquidity)",
+        "  Signal:            SCORE = 5d_return\u00d70.20 + 20d_return\u00d70.50 + 60d_return\u00d70.30",
+        "  LONG  filters:     score > 0, RSI 30\u201370, price > EMA20  (top 6 max)",
+        "  SHORT filters:     score < 0, RSI 30\u201370, price < EMA20  (bottom 3 max, ETB check)",
+        "  Position sizing:   Fixed Kelly fraction (no conviction multiplier)",
+        "                     Max 15% of equity per position",
         "  Risk controls:",
         "    - Kill switch:   Trips at 5% daily drawdown \u2014 liquidates all",
-        "    - Stop losses:   Per-trade, set by AI in allocation decision",
-        "    - Take profits:  Per-trade, set by AI in allocation decision",
+        "    - Stop losses:   Hard-coded per strategy rules (not AI-set)",
+        "    - Take profits:  Hard-coded per strategy rules (not AI-set)",
         "    - Ratchet stops: Trailing stop that locks in gains",
-        "  Special positions:",
-        "    - SGOV:          AI cash-equivalent \u2014 absorbs overflow when all",
-        "                     normal slots are capped. Exempt from 15% cap.",
-        "    - JEPQ:          Profit vault. 20% of every profit event swept here",
-        "                     as a DRIP position. Protected from all liquidations.",
-        "  Auditing:          Gemini self-critic runs daily pre-market,",
-        "                     HITL auditor agent runs post-close.",
-        "  Learning:          AI insights persist in a learning journal and are",
-        "                     injected as context into future allocation calls.",
+        "  Cash handling:     No SGOV / JEPQ slots \u2014 undeployed capital sits in cash",
+        "  AI role:           None \u2014 pure quant momentum; Groq/Gemini not called",
+        "  Profit reserve:    Oracle Profit Reserve accumulates 20% of each winning trade",
     ]
 
     h2("BOTS #2-4: KRAKEN FLEET \u2014 HOW THEY WORK")

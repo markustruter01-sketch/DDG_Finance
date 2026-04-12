@@ -8,7 +8,7 @@ const MESSAGES: Record<SubPage, string> = {
   c: "Here are each robot's current open trades and strategy settings — like peeking at their game plan! 📋",
   d: "Mission control! Every green node means that system is running perfectly. Red means trouble! 🟢",
   e: "The ultimate command center! Every bot's P&L, all open trades, live news, and our AI brain — all in one place! 🚀",
-  f: "The Orb is alive! Every glow, pulse and tendril represents live trading activity across all 6 bots. Watch the flares when trades close! ✨",
+  f: "The Orb is alive! Every glow, pulse and tendril represents live trading activity. Each coloured ring orbiting the core is one of your 6 bots — their colour, speed and brightness reflect live market activity. Watch the flares when trades close! ✨",
 };
 
 interface ClippyAssistantProps {

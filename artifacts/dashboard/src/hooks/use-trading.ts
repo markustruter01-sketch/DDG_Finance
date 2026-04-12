@@ -463,6 +463,16 @@ export function useAuditorReport() {
   });
 }
 
+export function useAdminLearningSnapshot() {
+  return useQuery<{ exported_at: string | null; llm_learnings_count: number }>({
+    queryKey: ["/admin/learning-snapshot"],
+    queryFn: async () => (await api.get("/admin/learning-snapshot")).data,
+    refetchInterval: useVisibleInterval(300_000),
+    retry: false,
+    staleTime: 120_000,
+  });
+}
+
 export function useTriggerAudit() {
   const qc = useQueryClient();
   return useMutation({

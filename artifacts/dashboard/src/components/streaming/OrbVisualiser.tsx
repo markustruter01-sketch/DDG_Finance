@@ -12,6 +12,7 @@ import {
   useForexState,
   useEquityCurve,
   useAuditorReport,
+  useAdminLearningSnapshot,
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 
@@ -809,6 +810,114 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
   );
 }
 
+// ─── Algorithmic Thought Bubbles ─────────────────────────────────────────────
+
+const ALGO_THOUGHTS = [
+  "MACD: signal > baseline → BUY",
+  "RSI(14) = 68.4 → overbought",
+  "Kelly f* = 0.23",
+  "Sharpe = 1.87",
+  "EMA(9) > EMA(21) ✓",
+  "σ(vol) = 0.024",
+  "regime: BULL ↑",
+  "BTC/USD: 4h engulfing",
+  "vol crush → IV = 22%",
+  "momentum: +2.4σ",
+  "max drawdown: 4.2%",
+  "win_rate = 54.3%",
+  "profit_factor = 1.87",
+  "Δ = 0.67, Γ = 0.12",
+  "ADX = 28.3 → trending",
+  "Bollinger squeeze → breakout",
+  "θ = -0.043 / day",
+  "liquidity = OK",
+  "regime: Crypto-Risk-Off × 0.5",
+  "pair corr(BTC,ETH) = 0.91",
+  "news sentiment: neutral",
+  "stoch K < 20 → oversold",
+  "ATR(14) = 142.6",
+  "VWAP deviation: +0.8%",
+  "WFO optimised ✓",
+  "position sizing: 2.0%",
+  "signal confidence: 74%",
+];
+
+type AlgoThought = {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+  opacity: number;
+  fadeIn: boolean;
+  color: string;
+};
+
+function AlgoThoughts() {
+  const [thoughts, setThoughts] = useState<AlgoThought[]>([]);
+  const nextId = useRef(0);
+  const colors = ["#22d3ee", "#a78bfa", "#4ade80", "#fb923c", "#f472b6", "#facc15"];
+
+  useEffect(() => {
+    const spawn = () => {
+      const id = nextId.current++;
+      const text = ALGO_THOUGHTS[Math.floor(Math.random() * ALGO_THOUGHTS.length)];
+      const side  = Math.random();
+      let x: number, y: number;
+      if (side < 0.25)       { x = 4 + Math.random() * 18; y = 8 + Math.random() * 80; }
+      else if (side < 0.5)   { x = 78 + Math.random() * 18; y = 8 + Math.random() * 80; }
+      else if (side < 0.75)  { x = 20 + Math.random() * 60; y = 4 + Math.random() * 12; }
+      else                   { x = 20 + Math.random() * 60; y = 82 + Math.random() * 12; }
+
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const thought: AlgoThought = { id, text, x, y, opacity: 0, fadeIn: true, color };
+      setThoughts(prev => [...prev.slice(-8), thought]);
+
+      setTimeout(() => setThoughts(prev => prev.map(t => t.id === id ? { ...t, opacity: 1, fadeIn: false } : t)), 50);
+      setTimeout(() => setThoughts(prev => prev.map(t => t.id === id ? { ...t, opacity: 0 } : t)), 3200);
+      setTimeout(() => setThoughts(prev => prev.filter(t => t.id !== id)), 4000);
+
+      const delay = 3500 + Math.random() * 3000;
+      setTimeout(spawn, delay);
+    };
+
+    const initial = setTimeout(spawn, 1200 + Math.random() * 1000);
+    return () => clearTimeout(initial);
+  }, []);
+
+  return (
+    <>
+      {thoughts.map(t => (
+        <div
+          key={t.id}
+          style={{
+            position: "absolute",
+            left: `${t.x}%`,
+            top:  `${t.y}%`,
+            transform: "translate(-50%, -50%)",
+            opacity: t.opacity,
+            transition: "opacity 0.7s ease",
+            pointerEvents: "none",
+            userSelect: "none",
+            fontFamily: "monospace",
+            fontSize: 11,
+            fontWeight: 700,
+            color: t.color,
+            textShadow: `0 0 10px ${t.color}88, 0 0 20px ${t.color}44`,
+            background: "rgba(2,6,23,0.7)",
+            border: `1px solid ${t.color}44`,
+            borderRadius: 6,
+            padding: "3px 8px",
+            letterSpacing: "0.05em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t.text}
+        </div>
+      ))}
+    </>
+  );
+}
+
 // ─── Main OrbVisualiser ───────────────────────────────────────────────────────
 
 interface TradePulseState {
@@ -830,6 +939,7 @@ export function OrbVisualiser() {
   const { data: fxState  } = useForexState();
   const { data: curve    } = useEquityCurve(300);
   const { data: auditor  } = useAuditorReport();
+  const { data: snapshot } = useAdminLearningSnapshot();
 
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
   const [aiRipple,       setAiRipple      ] = useState(false);
@@ -915,15 +1025,18 @@ export function OrbVisualiser() {
   const lastAiTs = useMemo(() => {
     const journalTs  = journal?.entries?.[0]?.last_seen ? new Date(journal.entries[0].last_seen).getTime() : 0;
     const auditorTs  = auditor?.report?.run_at          ? new Date(auditor.report.run_at).getTime()        : 0;
-    return Math.max(journalTs, auditorTs);
-  }, [journal, auditor]);
+    const snapshotTs = snapshot?.exported_at            ? new Date(snapshot.exported_at).getTime()         : 0;
+    return Math.max(journalTs, auditorTs, snapshotTs);
+  }, [journal, auditor, snapshot]);
 
-  // P&L = total current equity minus $600k starting capital
+  // P&L = total current equity minus $600k starting capital.
+  // Apex Predator (options) and Navigator (forex) start at $100k each — use their
+  // starting capital as a floor so equity reads as correct when their API is unavailable.
   const combinedPnl = useMemo(() => {
     const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
     const krakenEq = fleet?.total_equity_usd ?? 0;
-    const optEq    = optState?.paper_equity ?? 0;
-    const fxEq     = fxState?.paper_equity ?? 0;
+    const optEq    = optState?.paper_equity ?? 100_000;
+    const fxEq     = fxState?.paper_equity  ?? 100_000;
     const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
     if (totalEquity === 0) return 0;
     return totalEquity - STARTING_CAPITAL;
@@ -1051,6 +1164,9 @@ export function OrbVisualiser() {
           </div>
         )}
       </div>
+
+      {/* ── ALGO THOUGHT BUBBLES ── */}
+      <AlgoThoughts />
 
       {/* ── PROMINENT TITLE ── */}
       <div

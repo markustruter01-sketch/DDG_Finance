@@ -89,6 +89,25 @@ CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
 """
 
 _MIGRATION_SQL = """
+-- Create vpin_rejections first so the DO block below can safely ALTER it
+-- (includes new Addition 3 columns; fresh installs get them from CREATE,
+--  existing tables get them from the ALTER TABLE guards in the DO block).
+CREATE TABLE IF NOT EXISTS vpin_rejections (
+    id                  BIGSERIAL PRIMARY KEY,
+    ts                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bot_id              TEXT NOT NULL,
+    pair                TEXT NOT NULL,
+    vpin_value          DOUBLE PRECISION NOT NULL,
+    threshold           DOUBLE PRECISION NOT NULL,
+    direction           TEXT NOT NULL,
+    price               DOUBLE PRECISION NOT NULL,
+    reason              TEXT,
+    session_name        TEXT,
+    effective_threshold DOUBLE PRECISION
+);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts  ON vpin_rejections (ts DESC);
+CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
+
 DO $$
 BEGIN
     -- Drop CHECK constraints if they exist
@@ -156,20 +175,6 @@ BEGIN
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
-
-CREATE TABLE IF NOT EXISTS vpin_rejections (
-    id          BIGSERIAL PRIMARY KEY,
-    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    bot_id      TEXT NOT NULL,
-    pair        TEXT NOT NULL,
-    vpin_value  DOUBLE PRECISION NOT NULL,
-    threshold   DOUBLE PRECISION NOT NULL,
-    direction   TEXT NOT NULL,
-    price       DOUBLE PRECISION NOT NULL,
-    reason      TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
-CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
 
 CREATE TABLE IF NOT EXISTS kraken_pair_params (
     bot_id             TEXT NOT NULL,

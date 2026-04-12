@@ -208,6 +208,90 @@ def calculate_zscore(closes: list[float], window: int = 20) -> float:
     return round(z, 4)
 
 
+def calculate_btc_neutral_zscore(
+    pair_prices: list[float],
+    btc_prices: list[float],
+    zscore_window: int = 20,
+) -> "float | None":
+    """
+    Addition 2: BTC-neutral Z-score via rolling OLS regression.
+
+    Strips out the market-wide BTC move so entries only fire on
+    idiosyncratic (pair-specific) price dislocations.
+
+    Returns None when data is insufficient — callers must fall back
+    to the raw Z-score in that case.
+    """
+    try:
+        import numpy as np
+
+        if len(pair_prices) < 2 or len(btc_prices) < 2:
+            return None
+
+        pair_returns = np.diff(np.log(np.asarray(pair_prices, dtype=np.float64)))
+        btc_returns  = np.diff(np.log(np.asarray(btc_prices,  dtype=np.float64)))
+
+        min_len = min(len(pair_returns), len(btc_returns))
+        pair_returns = pair_returns[-min_len:]
+        btc_returns  = btc_returns[-min_len:]
+
+        if len(pair_returns) < zscore_window:
+            return None
+
+        recent_pair = pair_returns[-zscore_window:]
+        recent_btc  = btc_returns[-zscore_window:]
+
+        btc_var = float(np.var(recent_btc))
+        if btc_var == 0.0:
+            return None
+
+        beta = float(np.cov(recent_pair, recent_btc)[0, 1]) / btc_var
+
+        all_residuals    = pair_returns - beta * btc_returns
+        rolling_residuals = all_residuals[-zscore_window:]
+
+        mean_res = float(np.mean(rolling_residuals))
+        std_res  = float(np.std(rolling_residuals))
+        if std_res == 0.0:
+            return None
+
+        residual = float(pair_returns[-1] - beta * btc_returns[-1])
+        return float((residual - mean_res) / std_res)
+    except Exception:
+        return None
+
+
+def get_session_name() -> str:
+    """
+    Addition 3: Return the human-readable trading session name for the
+    current UTC time (Asian / European / US / Weekend).
+    """
+    from datetime import datetime, timezone as tz
+    now  = datetime.now(tz.utc)
+    hour = now.hour
+    if now.weekday() >= 5:
+        return "Weekend"
+    if 0 <= hour < 8:
+        return "Asian"
+    if 8 <= hour < 16:
+        return "European"
+    return "US"
+
+
+def get_session_vpin_multiplier() -> float:
+    """
+    Addition 3: Return the VPIN threshold multiplier for the current
+    trading session.
+
+      Weekend  → 1.08  (8% more lenient — thinner, noisier volume)
+      Asian    → 1.05  (5% more lenient — lower volume)
+      European → 1.00  (baseline)
+      US       → 0.97  (3% stricter — highest informed trading activity)
+    """
+    session = get_session_name()
+    return {"Weekend": 1.08, "Asian": 1.05, "European": 1.00, "US": 0.97}.get(session, 1.00)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 3. ATR — Average True Range  (NEW)
 # ══════════════════════════════════════════════════════════════════════════════

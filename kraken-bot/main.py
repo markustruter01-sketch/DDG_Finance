@@ -169,6 +169,7 @@ import db as _db
 from logic import (
     calculate_rsi,
     calculate_zscore,
+    calculate_btc_neutral_zscore,
     calculate_atr,
     get_atr_stop_price,
     build_tranche_orders,
@@ -179,6 +180,8 @@ from logic import (
     compute_volatility_state,
     get_adaptive_atr_multiplier,
     get_vol_state_size_scale,
+    get_session_name,
+    get_session_vpin_multiplier,
 )
 
 from swing_strategies import evaluate_momentum_breakout, evaluate_trend_following
@@ -767,6 +770,7 @@ def open_position(
     current_price: float,
     regime_at_entry: str = "Unknown",
     entry_zscore: float | None = None,
+    zscore_source: str = "raw",
 ) -> bool:
     """
     Open a position — simulated (paper mode) or real (live mode).
@@ -782,6 +786,7 @@ def open_position(
             symbol, side, size_usd, current_price,
             regime_at_entry=regime_at_entry,
             entry_zscore=entry_zscore,
+            zscore_source=zscore_source,
         )
         if success:
             # Sync in-memory state from the paper engine's persisted state
@@ -1574,6 +1579,26 @@ def run_cycle() -> None:
             sym_rsi     = calculate_rsi(closes, period=RSI_PERIOD)
             sym_z_score = calculate_zscore(closes, window=ZSCORE_WINDOW)
 
+            # Addition 2: BTC-neutral Z-score — strip out market-wide BTC move so
+            # entries fire only on idiosyncratic price dislocations.
+            # BTC/USD itself always uses raw. Falls back to raw when insufficient data.
+            if symbol == "BTC/USD":
+                effective_zscore = sym_z_score
+                zscore_source    = "raw_btc"
+            else:
+                _btc_closes = _closes_cache.get("BTC/USD", [])
+                _btc_neutral = calculate_btc_neutral_zscore(closes, _btc_closes, zscore_window=ZSCORE_WINDOW)
+                if _btc_neutral is not None:
+                    effective_zscore = _btc_neutral
+                    zscore_source    = "btc_neutral"
+                else:
+                    effective_zscore = sym_z_score
+                    zscore_source    = "raw_fallback"
+            logger.debug(
+                f"ZScore | {symbol}: raw={sym_z_score:.3f} "
+                f"effective={effective_zscore:.3f} src={zscore_source}"
+            )
+
             # Stage 3: per-symbol z-score entry threshold
             # auto_zscore_factor tightens/loosens the threshold based on pair's win rate.
             _sym_zscore_entry = _zscore_entry * _pair_zscore_factor.get(symbol, 1.0)
@@ -2056,7 +2081,8 @@ def run_cycle() -> None:
                             f"ATR stop: ${_atr_stop:,.4f} | SL={_swing_sl_pct*100:.2f}%"
                         )
                         if open_position(symbol, _swing_side, size_usd, current_price,
-                                         regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
+                                         regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
+                                         zscore_source=zscore_source):
                             _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
@@ -2154,6 +2180,14 @@ def run_cycle() -> None:
                             and _vol_24h_sum >= _trailing_mean_24h * VOLUME_SURGE_RATIO)
             _effective_vpin_cap = VPIN_ELEVATED_CAP if _volume_surge else VPIN_ENTRY_BLOCK
 
+            # Addition 3: Session-specific VPIN multiplier — adjust the effective cap
+            # based on the UTC trading session. Asian/Weekend are noisier (more lenient);
+            # US session has highest informed flow (stricter). The underlying dynamic-cap
+            # and decay logic remain unchanged — only the final gate threshold is adjusted.
+            _session_name     = get_session_name()
+            _session_mult     = get_session_vpin_multiplier()
+            _session_vpin_cap = _effective_vpin_cap * _session_mult
+
             _effective_vpin = _vpin_decay.update(
                 symbol=symbol,
                 vpin=_ms.vpin,
@@ -2165,7 +2199,7 @@ def run_cycle() -> None:
 
             _deep_oversold = sym_rsi < DEEP_OVERSOLD_RSI
 
-            if _effective_vpin > _effective_vpin_cap and not _deep_oversold:
+            if _effective_vpin > _session_vpin_cap and not _deep_oversold:
                 _decay_note = ""
                 if _decay_count > VPIN_DECAY_AFTER_CYCLES:
                     _decay_note = (
@@ -2174,7 +2208,8 @@ def run_cycle() -> None:
                     )
                 logger.info(
                     f"Signal | {symbol}: skipping entry — VPIN={_effective_vpin:.3f} > "
-                    f"{_effective_vpin_cap:.2f} "
+                    f"{_session_vpin_cap:.3f} "
+                    f"[session={_session_name} base={_effective_vpin_cap:.3f}×{_session_mult:.2f}] "
                     f"(defensive state — toxic/institutional flow detected)"
                     f"{_decay_note}"
                 )
@@ -2182,25 +2217,27 @@ def run_cycle() -> None:
                     "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
                     "price": round(current_price, 4), "signal_type": "skip_vpin_defensive",
                     "has_position": False,
-                    "vpin_cap": round(_effective_vpin_cap, 2),
+                    "vpin_cap": round(_session_vpin_cap, 3),
                     "vpin_effective": round(_effective_vpin, 3),
                     "vpin_decay_cycles": _decay_count,
+                    "session": _session_name,
                 })
                 continue
 
-            if _deep_oversold and _ms.vpin > _effective_vpin_cap:
+            if _deep_oversold and _ms.vpin > _session_vpin_cap:
                 _vpin_decay.reset(symbol)
                 logger.info(
                     f"Signal | {symbol}: VPIN bypass — RSI={sym_rsi:.1f} < {DEEP_OVERSOLD_RSI} "
-                    f"(Deep Oversold) | VPIN={_ms.vpin:.3f} ignored for micro-lot entry"
+                    f"(Deep Oversold) | VPIN={_ms.vpin:.3f} ignored for micro-lot entry "
+                    f"[session={_session_name}]"
                 )
 
-            if _effective_vpin <= _effective_vpin_cap and _ms.vpin > VPIN_ENTRY_BLOCK:
+            if _effective_vpin <= _session_vpin_cap and _ms.vpin > VPIN_ENTRY_BLOCK:
                 _reason = "volume_surge" if _volume_surge else "decay"
                 logger.info(
                     f"Signal | {symbol}: VPIN gate relaxed ({_reason}) — "
                     f"raw VPIN={_ms.vpin:.3f}, effective={_effective_vpin:.3f}, "
-                    f"cap={_effective_vpin_cap:.2f}"
+                    f"cap={_session_vpin_cap:.3f} [session={_session_name}×{_session_mult:.2f}]"
                 )
 
             # ── Crypto Regime LONG Filter + Contrarian Scout ──────────────────
@@ -2226,7 +2263,8 @@ def run_cycle() -> None:
                         )
                     _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
                     if open_position(symbol, "long", _scout_size, current_price,
-                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
+                                     zscore_source=zscore_source):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
@@ -2250,10 +2288,10 @@ def run_cycle() -> None:
                         })
                     continue
 
-                if sym_z_score < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
+                if effective_zscore < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
                     logger.info(
                         f"CryptoRegimeFilter | LONG {symbol} BLOCKED — regime='{_regime_label}' "
-                        f"[src={_regime_src}] RSI={sym_rsi:.1f} Z={sym_z_score:.2f} | "
+                        f"[src={_regime_src}] RSI={sym_rsi:.1f} Z={effective_zscore:.2f} [{zscore_source}] | "
                         f"Capital preserved (SHORT-only mode active)"
                     )
                     cycle_signals.append({
@@ -2265,7 +2303,7 @@ def run_cycle() -> None:
                     continue
 
             # LONG signal: price is unusually low + RSI is oversold
-            if sym_z_score < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
+            if effective_zscore < -_sym_zscore_entry and sym_rsi < RSI_OVERSOLD:
                 _long_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
                 _long_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(
@@ -2319,9 +2357,9 @@ def run_cycle() -> None:
                     # MRC bot: VPIN always enforced — no bypass even in deep-oversold.
                     # (Spec: all 3 conditions — Z-score, VPIN, RSI — must be met simultaneously.)
                     if IS_MRC_BOT:
-                        _ms_vpin_override = _effective_vpin_cap
+                        _ms_vpin_override = _session_vpin_cap
                     else:
-                        _ms_vpin_override = 9.99 if _deep_oversold else _effective_vpin_cap
+                        _ms_vpin_override = 9.99 if _deep_oversold else _session_vpin_cap
                     _ms_allowed, _ms_reason = _ms.entry_filter(
                         side="long", vpin_block=_ms_vpin_override,
                     )
@@ -2337,6 +2375,8 @@ def run_cycle() -> None:
                                     vpin_value=_ms.vpin, threshold=_ms_vpin_override,
                                     direction="LONG", price=current_price,
                                     reason=_ms_reason,
+                                    session_name=_session_name,
+                                    effective_threshold=_session_vpin_cap,
                                 )
                             except Exception as _vpin_exc:
                                 logger.warning(f"VPIN | Failed to log rejection: {_vpin_exc}")
@@ -2365,13 +2405,14 @@ def run_cycle() -> None:
                     _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | LONG  {symbol} | RSI={sym_rsi:.1f} (oversold<{RSI_OVERSOLD}) | "
-                        f"Z={sym_z_score:.2f} (dip>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
+                        f"Z={effective_zscore:.2f} [{zscore_source}] (dip>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
                         f"[{_vol_tier}] | ATR stop: ${_atr_stop:,.4f} | "
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "long", _t1_size, current_price,
-                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
+                                     zscore_source=zscore_source):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
@@ -2408,7 +2449,7 @@ def run_cycle() -> None:
                     })
 
             # SHORT signal: price is unusually high + RSI is overbought
-            elif sym_z_score > _sym_zscore_entry and sym_rsi > RSI_OVERBOUGHT:
+            elif effective_zscore > _sym_zscore_entry and sym_rsi > RSI_OVERBOUGHT:
                 _short_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
                 _short_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
                 size_usd, _vol_tier, _eff_stop = get_position_size(
@@ -2469,6 +2510,8 @@ def run_cycle() -> None:
                                     vpin_value=_ms.vpin, threshold=VPIN_ENTRY_BLOCK,
                                     direction="SHORT", price=current_price,
                                     reason=_ms_reason,
+                                    session_name=_session_name,
+                                    effective_threshold=_session_vpin_cap,
                                 )
                             except Exception as _vpin_exc:
                                 logger.warning(f"VPIN | Failed to log rejection: {_vpin_exc}")
@@ -2497,13 +2540,14 @@ def run_cycle() -> None:
                     _sl, _tp, _trail = _bracket.compute()
                     logger.info(
                         f"Signal | SHORT {symbol} | RSI={sym_rsi:.1f} (overbought>{RSI_OVERBOUGHT}) | "
-                        f"Z={sym_z_score:.2f} (peak>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
+                        f"Z={effective_zscore:.2f} [{zscore_source}] (peak>{_zscore_entry}) | T1: ${_t1_size:,.2f} "
                         f"[{_vol_tier}] | ATR stop: ${_atr_stop:,.4f} | "
                         f"OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} | "
                         f"Exit bracket → SL=${_sl:.4f} Trail@${_trail:.4f}"
                     )
                     if open_position(symbol, "short", _t1_size, current_price,
-                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score):
+                                     regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
+                                     zscore_source=zscore_source):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:

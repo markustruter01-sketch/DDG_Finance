@@ -140,6 +140,19 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_portfolio' AND column_name='pending_tranches') THEN
         ALTER TABLE kraken_portfolio ADD COLUMN pending_tranches JSONB;
     END IF;
+
+    -- Addition 2: zscore_source column on kraken_trades
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='zscore_source') THEN
+        ALTER TABLE kraken_trades ADD COLUMN zscore_source TEXT;
+    END IF;
+
+    -- Addition 3: session_name and effective_threshold on vpin_rejections
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='vpin_rejections' AND column_name='session_name') THEN
+        ALTER TABLE vpin_rejections ADD COLUMN session_name TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='vpin_rejections' AND column_name='effective_threshold') THEN
+        ALTER TABLE vpin_rejections ADD COLUMN effective_threshold DOUBLE PRECISION;
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
@@ -574,8 +587,8 @@ def insert_trade(trade: dict) -> bool:
                     INSERT INTO kraken_trades
                         (bot_id, symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                          fees_usd, reason, closed_at, paper, order_id,
-                         regime_at_entry, entry_zscore)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s)
+                         regime_at_entry, entry_zscore, zscore_source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s)
                     """,
                     (
                         bot_id,
@@ -591,6 +604,7 @@ def insert_trade(trade: dict) -> bool:
                         trade.get("order_id"),
                         trade.get("regime_at_entry", "Unknown"),
                         trade.get("entry_zscore"),
+                        trade.get("zscore_source"),
                     ),
                 )
         return True
@@ -709,6 +723,8 @@ def log_vpin_rejection(
     direction: str,
     price: float,
     reason: str = "",
+    session_name: str = "",
+    effective_threshold: "float | None" = None,
 ) -> None:
     if not _is_available():
         return
@@ -716,9 +732,12 @@ def log_vpin_rejection(
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO vpin_rejections (bot_id, pair, vpin_value, threshold, direction, price, reason)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (bot_id, pair, vpin_value, threshold, direction, price, reason))
+                    INSERT INTO vpin_rejections
+                        (bot_id, pair, vpin_value, threshold, direction, price, reason,
+                         session_name, effective_threshold)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (bot_id, pair, vpin_value, threshold, direction, price, reason,
+                      session_name or None, effective_threshold))
             conn.commit()
         logger.debug(f"DB | VPIN rejection logged: {bot_id} {pair} VPIN={vpin_value:.3f} >= {threshold:.3f} ({direction})")
     except Exception as exc:

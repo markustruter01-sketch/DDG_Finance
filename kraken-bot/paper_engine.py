@@ -238,6 +238,7 @@ def paper_open_position(
     atr: float = 0.0,
     regime_at_entry: str = "Unknown",
     entry_zscore: float | None = None,
+    zscore_source: str = "raw",
 ) -> bool:
     """
     Simulate opening a position at the current market price with dynamic slippage.
@@ -277,6 +278,7 @@ def paper_open_position(
         "order_id":        f"PAPER-{symbol.replace('/', '')}-{int(datetime.now().timestamp())}",
         "regime_at_entry": regime_at_entry,
         "entry_zscore":    entry_zscore,
+        "zscore_source":   zscore_source,
     }
 
     _save_portfolio()
@@ -431,6 +433,7 @@ def paper_close_position(symbol: str, current_price: float, reason: str, atr: fl
         "order_id":        pos.get("order_id"),
         "regime_at_entry": pos.get("regime_at_entry", "Unknown"),
         "entry_zscore":    pos.get("entry_zscore"),
+        "zscore_source":   pos.get("zscore_source"),
     }
 
     # Persist to DB immediately (primary store)

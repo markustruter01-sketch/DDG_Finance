@@ -272,7 +272,8 @@ CREATE INDEX IF NOT EXISTS idx_hardcoded_rules_active ON hardcoded_rules (active
 -- Single-row heartbeat (id=1) upserted by the bot every cycle.
 -- The auto-heal monitor reads last_updated here; no JSON file parsing needed.
 CREATE TABLE IF NOT EXISTS kraken_heartbeat (
-    id              INTEGER PRIMARY KEY CHECK (id = 1),
+    id              INTEGER PRIMARY KEY,
+    bot_id          TEXT             DEFAULT 'davy-jones',
     status          TEXT    NOT NULL DEFAULT 'not_started',
     cycle_count     INTEGER NOT NULL DEFAULT 0,
     equity_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -284,9 +285,9 @@ CREATE TABLE IF NOT EXISTS kraken_heartbeat (
     last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Single-row portfolio state (id=1): paper cash + open positions (JSONB).
+-- Per-bot portfolio state (id=1 davy-jones, id=2 blackbeard, id=3 calypso).
 CREATE TABLE IF NOT EXISTS kraken_portfolio (
-    id                   INTEGER PRIMARY KEY CHECK (id = 1),
+    id                   INTEGER PRIMARY KEY,
     starting_balance_usd DOUBLE PRECISION NOT NULL DEFAULT 100000,
     cash_usd             DOUBLE PRECISION NOT NULL DEFAULT 100000,
     positions            JSONB NOT NULL DEFAULT '{}'
@@ -475,6 +476,9 @@ def ensure_schema() -> None:
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id)")
                 cur.execute("ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check")
                 cur.execute("ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS bot_id TEXT")
+                cur.execute("ALTER TABLE kraken_heartbeat ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
+                cur.execute("ALTER TABLE kraken_heartbeat DROP CONSTRAINT IF EXISTS kraken_heartbeat_id_check")
+                cur.execute("ALTER TABLE kraken_portfolio DROP CONSTRAINT IF EXISTS kraken_portfolio_id_check")
         logger.info("DB | Kraken multi-bot migrations applied")
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")

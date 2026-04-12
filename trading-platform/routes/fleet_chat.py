@@ -294,7 +294,7 @@ async def _get_fleet_context() -> str:
                 cur.execute(
                     """SELECT total_equity, alpaca_equity, kraken_equity,
                               COALESCE(options_equity, 0) AS options_equity,
-                              COALESCE(forex_equity, 0) AS forex_equity, ts
+                              COALESCE(forex_equity, 0) AS forex_equity, ts, source
                        FROM equity_curve ORDER BY ts DESC LIMIT 1"""
                 )
                 row = cur.fetchone()
@@ -306,9 +306,55 @@ async def _get_fleet_context() -> str:
                         "options": float(row[3]) if row[3] else None,
                         "forex": float(row[4]) if row[4] else None,
                         "ts": row[5].isoformat() if row[5] else None,
+                        "source": row[6] if row[6] else "pipeline",
                     }
     except Exception as exc:
         logger.debug(f"FleetChat | context: equity_curve query failed: {exc}")
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT ts, pool, bot_id, amount_usd, reason
+                       FROM capital_injections
+                       ORDER BY ts DESC LIMIT 20"""
+                )
+                cols = [d[0] for d in cur.description]
+                cap_rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+                if cap_rows:
+                    for r in cap_rows:
+                        if r.get("ts"):
+                            r["ts"] = r["ts"].isoformat()
+                    reset_events = [r for r in cap_rows if "EQUITY_RESET" in (r.get("reason") or "")]
+                    other_events  = [r for r in cap_rows if "EQUITY_RESET" not in (r.get("reason") or "")]
+                    raw_data["capital_events_WARNING"] = (
+                        "IMPORTANT: The following capital events are OPERATOR ACTIONS, "
+                        "not trading gains/losses. Exclude them from P&L analysis."
+                    )
+                    if reset_events:
+                        raw_data["equity_baseline_resets"] = [
+                            {
+                                "date": r["ts"][:10],
+                                "bot": r["bot_id"],
+                                "pool": r["pool"],
+                                "adjustment_usd": float(r["amount_usd"] or 0),
+                                "explanation": r["reason"],
+                            }
+                            for r in reset_events
+                        ]
+                    if other_events:
+                        raw_data["other_capital_events"] = [
+                            {
+                                "date": r["ts"][:10],
+                                "bot": r["bot_id"],
+                                "pool": r["pool"],
+                                "amount_usd": float(r["amount_usd"] or 0),
+                                "reason": r["reason"],
+                            }
+                            for r in other_events
+                        ]
+    except Exception as exc:
+        logger.debug(f"FleetChat | context: capital_injections query failed: {exc}")
 
     context_blocks = ["kraken_trades", "kraken_heartbeat", "equity_trades", "forex", "equity_snapshot"]
     missing = [b for b in context_blocks if not any(b.replace("_", "") in k.replace("_", "") for k in raw_data)]

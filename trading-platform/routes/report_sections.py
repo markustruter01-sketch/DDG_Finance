@@ -573,7 +573,8 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
         SELECT DATE(ts) as day,
                MIN({col}) as open_eq,
                MAX({col}) as close_eq_proxy,
-               MIN(regime) as regime
+               MIN(regime) as regime,
+               STRING_AGG(DISTINCT COALESCE(source, ''), ',' ORDER BY COALESCE(source, '')) as sources
         FROM equity_snapshots
         WHERE {col} IS NOT NULL AND {col} > 0
         GROUP BY DATE(ts)
@@ -618,10 +619,20 @@ def section_daily_equity_history(bot_label: str, source: str = "all") -> list[st
             close_eq = float(r.get("close_eq_proxy") or 0)
             regime = str(r.get("regime") or "?")[:10]
             injection = injection_by_day.get(day[:10], 0.0)
+            sources_raw = str(r.get("sources") or "")
+            is_reset_day = "reset" in sources_raw.lower()
+            trades = trade_counts.get(day[:10], 0)
+            if is_reset_day:
+                lines.append(
+                    f"  {day:<12} {_c(open_eq):>14} {_c(close_eq):>14} "
+                    f"{'N/A (RESET)':>12} {'---':>9} {regime:<12} {trades:>7}"
+                    f"  *** EQUITY BASELINE RESET — see Fleet Operations Log. Not a trading day. Do not calculate P&L. ***"
+                )
+                prev_close = close_eq
+                continue
             base = prev_close if prev_close else open_eq
             daily_pnl = close_eq - base - injection
             daily_pct = (daily_pnl / base * 100) if base > 0 else 0
-            trades = trade_counts.get(day[:10], 0)
             inj_marker = f" [+{_c(injection)} injected]" if injection > 0 else ""
             lines.append(f"  {day:<12} {_c(open_eq):>14} {_c(close_eq):>14} {_c(daily_pnl):>12} {_pct(daily_pct):>9} {regime:<12} {trades:>7}{inj_marker}")
             prev_close = close_eq
@@ -1989,5 +2000,114 @@ def section_historical_backtest(bot_id: str) -> list[str]:
     lines.append("")
     lines.append(f"  Schedule    : Every Sunday 2:30 AM UTC (30 min after WFO)")
     lines.append("  Deterministic — no LLM calls.  Results are advisory only.")
+
+    return lines
+
+
+def section_fleet_operations_log() -> list[str]:
+    """
+    Surfaces all planned capital events (equity resets, injections) so that LLMs
+    analysing the report never mistake operational adjustments for trading gains/losses.
+    Always call this near the top of the export report.
+    """
+    lines: list[str] = []
+    _h1(lines, "FLEET OPERATIONS LOG — CAPITAL EVENTS & EQUITY BASELINE RESETS")
+
+    lines.append("")
+    lines.append("  ╔══════════════════════════════════════════════════════════════════════════════╗")
+    lines.append("  ║  CRITICAL NOTE FOR AI ANALYSIS — READ BEFORE INTERPRETING EQUITY CURVES     ║")
+    lines.append("  ║                                                                              ║")
+    lines.append("  ║  This section documents planned operational events that affect raw equity    ║")
+    lines.append("  ║  numbers but are NOT the result of trading activity. Any equity change       ║")
+    lines.append("  ║  labelled EQUITY_RESET must be excluded from P&L performance calculations.  ║")
+    lines.append("  ║  Do NOT count these as trading gains or losses.                              ║")
+    lines.append("  ╚══════════════════════════════════════════════════════════════════════════════╝")
+    lines.append("")
+
+    events = _pg_query(
+        "SELECT id, ts, pool, bot_id, amount_usd, reason FROM capital_injections ORDER BY ts ASC"
+    )
+
+    if not events:
+        lines.append("  No capital events recorded. This table populates when equity resets or")
+        lines.append("  manual capital adjustments are applied by the operator.")
+        return lines
+
+    reset_events = [e for e in events if "EQUITY_RESET" in (e.get("reason") or "")]
+    other_events  = [e for e in events if "EQUITY_RESET" not in (e.get("reason") or "")]
+
+    if reset_events:
+        _h2(lines, "EQUITY BASELINE RESETS")
+        lines.append("  These rows represent planned resets to a bot's starting capital.")
+        lines.append("  They do NOT represent trading profits or losses.")
+        lines.append("  All trade history before the reset date is preserved in kraken_trades.")
+        lines.append("")
+
+        reset_dates: dict[str, list[dict]] = {}
+        for e in reset_events:
+            ts_raw = e.get("ts")
+            day = str(ts_raw)[:10] if ts_raw else "unknown"
+            reset_dates.setdefault(day, []).append(e)
+
+        for day, day_events in sorted(reset_dates.items()):
+            fleet_note = next((e for e in day_events if e.get("pool") == "fleet"), None)
+            bot_events = [e for e in day_events if e.get("pool") != "fleet"]
+
+            lines.append(f"  ── Reset event on {day} ──────────────────────────────────────────")
+            if fleet_note:
+                lines.append(f"  Scope   : {fleet_note.get('reason', '').split(':',1)[1].strip() if ':' in (fleet_note.get('reason') or '') else fleet_note.get('reason','')}")
+            lines.append("")
+            lines.append(f"  {'Bot':<20} {'Pool':<10} {'Adj. Amount':>14}  Explanation")
+            lines.append("  " + "-" * 70)
+            for e in bot_events:
+                bot_id     = str(e.get("bot_id") or "?")
+                pool       = str(e.get("pool") or "?")
+                amount     = float(e.get("amount_usd") or 0)
+                reason_txt = str(e.get("reason") or "")
+                short_reason = reason_txt.split("Previous equity:")[1].strip() if "Previous equity:" in reason_txt else ""
+                direction  = f"+{_c(amount)}" if amount >= 0 else _c(amount)
+                lines.append(f"  {bot_id:<20} {pool:<10} {direction:>14}  {short_reason}")
+            lines.append("")
+            lines.append(
+                f"  RESULT: After this reset, P&L for affected bots should be measured "
+                f"from $100,000 starting capital as of {day}."
+            )
+            lines.append(
+                f"  Any equity snapshot on or after {day} that shows kraken bots at ~$100,000 "
+                f"is the intended new baseline — not a trading gain."
+            )
+            lines.append("")
+
+    if other_events:
+        _h2(lines, "OTHER CAPITAL EVENTS")
+        lines.append(f"  {'Date':<12} {'Pool':<10} {'Bot':<20} {'Amount':>12}  Reason")
+        lines.append("  " + "-" * 80)
+        for e in other_events:
+            ts_raw  = e.get("ts")
+            day     = str(ts_raw)[:10] if ts_raw else "?"
+            pool    = str(e.get("pool") or "?")
+            bot_id  = str(e.get("bot_id") or "?")
+            amount  = float(e.get("amount_usd") or 0)
+            reason  = str(e.get("reason") or "")[:60]
+            lines.append(f"  {day:<12} {pool:<10} {bot_id:<20} {_c(amount):>12}  {reason}")
+        lines.append("")
+
+    snap_resets = _pg_query(
+        "SELECT ts, source, kraken_equity, alpaca_equity, options_equity, forex_equity, total_equity "
+        "FROM equity_snapshots WHERE source NOT IN ('pipeline', 'hourly_heartbeat') "
+        "ORDER BY ts ASC"
+    )
+    if snap_resets:
+        _h2(lines, "ANNOTATED EQUITY SNAPSHOTS (non-pipeline sources)")
+        lines.append("  These snapshots were inserted by operator actions, not the normal hourly pipeline.")
+        lines.append(f"  {'Timestamp':<28} {'Source':<32} {'Kraken Eq':>12} {'Total Eq':>12}")
+        lines.append("  " + "-" * 90)
+        for s in snap_resets:
+            ts_str    = str(s.get("ts") or "?")[:26]
+            src       = str(s.get("source") or "?")[:30]
+            k_eq      = _c(s.get("kraken_equity"))
+            t_eq      = _c(s.get("total_equity"))
+            lines.append(f"  {ts_str:<28} {src:<32} {k_eq:>12} {t_eq:>12}")
+        lines.append("")
 
     return lines

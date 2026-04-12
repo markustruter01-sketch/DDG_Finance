@@ -1008,6 +1008,8 @@ async def export_diagnostic_report():
     except Exception:
         ks_state = {}; mkt_open = False; sched_jobs = []; last_run = {}; groq_tok = None; groq_used = None; groq_max = 100_000
 
+    lines += _rs.section_fleet_operations_log()
+
     lines.append("@@PART1@@")
     h1("SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT")
     row("Report timestamp:", ts)

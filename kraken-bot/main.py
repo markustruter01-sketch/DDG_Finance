@@ -184,6 +184,7 @@ from logic import (
 from swing_strategies import evaluate_momentum_breakout, evaluate_trend_following
 from swing_exits import check_swing_exits
 from flow_sentiment import evaluate_flow_sentiment
+from hurst_filter import HurstADFCache
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
 # but always imported so the module is ready to switch modes).
@@ -327,6 +328,10 @@ price_history: dict[str, deque] = {
 # Populated each cycle as candles are fetched; persists across cycles so
 # open-position symbols always have data even if not scanned in this cycle.
 _closes_cache: dict[str, list[float]] = {}
+
+# Addition 1: Hurst Exponent + ADF pre-entry filter cache (4-hour TTL per pair).
+# One shared instance per bot process — all symbols share the same cache.
+_hurst_cache: HurstADFCache = HurstADFCache(ttl_seconds=4 * 3600)
 
 # Stateful circuit-breaker instance from shared/ — tracks pause window and
 # observation count in memory across cycles.  One per-symbol breaker so each
@@ -1868,6 +1873,35 @@ def run_cycle() -> None:
                 continue  # Don't try to open a new position in the same symbol
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
+
+            # ── Addition 1: Hurst Exponent + ADF Pre-Entry Filter ────────────
+            # Fetch the last 100 hourly closes from the shared historical_prices
+            # table.  Results are cached per pair with a 4-hour TTL so the
+            # computation AND the DB SELECT are skipped when the cache is hot.
+            _hurst_was_cached = _hurst_cache.get_cached(symbol)[0] is not None
+            _hist_closes_hurst = (
+                []  # cache hit — closes not needed
+                if _hurst_was_cached
+                else _db.get_historical_closes_for_hurst(symbol)
+            )
+            _hurst_allowed, _hurst_reason, _hurst_val, _adf_val = _hurst_cache.check(
+                symbol, _hist_closes_hurst
+            )
+            if not _hurst_was_cached and _hurst_val is not None and _adf_val is not None:
+                _db.upsert_pair_hurst_adf(BOT_ID, symbol, _hurst_val, _adf_val)
+            if not _hurst_allowed:
+                logger.info(f"HURST/ADF | {_hurst_reason}")
+                cycle_signals.append({
+                    "symbol": symbol,
+                    "rsi": round(sym_rsi, 1) if sym_rsi is not None else None,
+                    "z_score": round(sym_z_score, 3) if sym_z_score is not None else None,
+                    "price": round(current_price, 4),
+                    "signal_type": "hurst_adf_block",
+                    "has_position": False,
+                    "reason": _hurst_reason,
+                })
+                continue
+            # ─────────────────────────────────────────────────────────────────
 
             # ── SWING ENTRY PATH (Blackbeard / Calypso — momentum & trend) ──
             # Swing bots skip VPIN gate, contrarian scout, and tranches.

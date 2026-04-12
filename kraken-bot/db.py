@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS kraken_pair_params (
     PRIMARY KEY (bot_id, symbol)
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_pair_params_bot ON kraken_pair_params (bot_id);
+
+CREATE TABLE IF NOT EXISTS kraken_pair_performance (
+    id                 BIGSERIAL PRIMARY KEY,
+    bot_id             TEXT NOT NULL,
+    symbol             TEXT NOT NULL,
+    hurst_current      DOUBLE PRECISION,
+    adf_pvalue_current DOUBLE PRECISION,
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (bot_id, symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_kraken_pair_perf_bot ON kraken_pair_performance (bot_id);
 """
 
 
@@ -816,3 +827,73 @@ def get_pair_win_rates_recent(last_n: int = 15) -> dict[str, dict]:
     except Exception as exc:
         logger.warning(f"DB | get_pair_win_rates_recent failed: {exc}")
         return {}
+
+
+def get_historical_closes_for_hurst(
+    symbol: str,
+    timeframe: str = "1h",
+    limit: int = 100,
+) -> list[float]:
+    """
+    Return up to `limit` hourly closing prices for `symbol` from the
+    shared historical_prices table (newest-first, then reversed so they
+    are chronological).
+
+    Returns an empty list when the DB is unavailable or the table has no
+    data for this symbol.
+    """
+    if not _is_available():
+        return []
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT close
+                    FROM   historical_prices
+                    WHERE  pair      = %s
+                      AND  timeframe = %s
+                    ORDER  BY "timestamp" DESC
+                    LIMIT  %s
+                    """,
+                    (symbol, timeframe, limit),
+                )
+                rows = cur.fetchall()
+                closes = [float(r[0]) for r in reversed(rows)]
+                return closes
+    except Exception as exc:
+        logger.warning(f"DB | get_historical_closes_for_hurst({symbol}) failed: {exc}")
+        return []
+
+
+def upsert_pair_hurst_adf(
+    bot_id: str,
+    symbol: str,
+    hurst: float,
+    adf_pvalue: float,
+) -> bool:
+    """
+    Persist the most-recent Hurst / ADF values for a pair into
+    kraken_pair_performance so they are visible in the analytics dashboard.
+    """
+    if not _is_available():
+        return False
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO kraken_pair_performance
+                        (bot_id, symbol, hurst_current, adf_pvalue_current, updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON CONFLICT (bot_id, symbol) DO UPDATE
+                        SET hurst_current      = EXCLUDED.hurst_current,
+                            adf_pvalue_current = EXCLUDED.adf_pvalue_current,
+                            updated_at         = NOW()
+                    """,
+                    (bot_id, symbol, hurst, adf_pvalue),
+                )
+        return True
+    except Exception as exc:
+        logger.warning(f"DB | upsert_pair_hurst_adf({bot_id}, {symbol}) failed: {exc}")
+        return False

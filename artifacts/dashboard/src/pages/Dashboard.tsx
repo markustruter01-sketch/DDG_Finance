@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useMemo, useRef, useEffect, useState, type ReactNode } from "react";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
@@ -27,6 +27,7 @@ import {
   FileText, Mail,
   DollarSign, Percent, Bot, BarChart2,
   Code, ShieldCheck, Copy, Check, X,
+  ChevronDown, TrendingDown, Hash,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -1368,6 +1369,274 @@ function AuditExportButton() {
   );
 }
 
+// ── Reusable collapsable section wrapper ─────────────────────────────────────
+function CollapsableSection({
+  title,
+  icon,
+  badge,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  icon: ReactNode;
+  badge?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] transition-colors group"
+      >
+        <div className="flex items-center gap-2.5">
+          {icon}
+          <span className="text-sm font-semibold text-white/80 group-hover:text-white transition-colors tracking-tight">
+            {title}
+          </span>
+          {badge}
+        </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 text-muted-foreground/60 transition-transform duration-200",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </div>
+  );
+}
+
+// ── Unified closed trade row type ─────────────────────────────────────────────
+interface UnifiedTrade {
+  id: string;
+  bot: string;
+  botColor: string;
+  symbol: string;
+  side: string;
+  pnl_pct: number;
+  pnl_usd: number | null;
+  reason: string | null;
+  closed_at: string;
+  is_win: boolean;
+}
+
+function AllClosedTradesSection() {
+  const { data: journal } = useJournal();
+  const { data: davyStatus } = useKrakenStatus("davy-jones");
+  const { data: bbStatus }   = useKrakenStatus("blackbeard");
+  const { data: caStatus }   = useKrakenStatus("calypso");
+  const [page, setPage] = useState(1);
+  const PER_PAGE  = 25;
+  const MAX_TRADES = 100;
+
+  const allTrades = useMemo<UnifiedTrade[]>(() => {
+    const trades: UnifiedTrade[] = [];
+
+    // Alpaca / Oracle journal trades
+    if (journal?.trades) {
+      for (const t of journal.trades) {
+        if (t.status === "Active") continue;
+        trades.push({
+          id: t.trade_id,
+          bot: "Oracle #1",
+          botColor: "text-blue-400",
+          symbol: t.ticker,
+          side: "long",
+          pnl_pct: t.pnl_percentage,
+          pnl_usd: null,
+          reason: null,
+          closed_at: t.date,
+          is_win: t.status === "Closed_Win",
+        });
+      }
+    }
+
+    // Kraken bots — each returns up to 50 recent trades
+    const krakenBots: { status: typeof davyStatus; name: string; color: string }[] = [
+      { status: davyStatus, name: "Davy Jones #2", color: "text-emerald-400" },
+      { status: bbStatus,   name: "Blackbeard #3", color: "text-amber-400"   },
+      { status: caStatus,   name: "Calypso #4",    color: "text-violet-400"  },
+    ];
+    for (const { status, name, color } of krakenBots) {
+      if (!status?.recent_trades) continue;
+      for (const t of status.recent_trades) {
+        trades.push({
+          id: `${name}-${t.closed_at}-${t.symbol}`,
+          bot: name,
+          botColor: color,
+          symbol: t.symbol,
+          side: t.side ?? "—",
+          pnl_pct: t.pnl_pct ?? 0,
+          pnl_usd: t.pnl_usd ?? null,
+          reason: t.reason ?? null,
+          closed_at: t.closed_at,
+          is_win: (t.pnl_usd ?? 0) > 0 || (t.pnl_usd == null && (t.pnl_pct ?? 0) > 0),
+        });
+      }
+    }
+
+    // Sort newest-first, cap at MAX_TRADES
+    trades.sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime());
+    return trades.slice(0, MAX_TRADES);
+  }, [journal, davyStatus, bbStatus, caStatus]);
+
+  const totalPages = Math.max(1, Math.ceil(allTrades.length / PER_PAGE));
+  const safePage   = Math.min(page, totalPages);
+  const paginated  = allTrades.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
+  useEffect(() => { setPage(1); }, [allTrades.length]);
+
+  const wins  = allTrades.filter((t) => t.is_win).length;
+  const total = allTrades.length;
+
+  function fmtDate(iso: string) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })
+        + " " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    } catch { return iso.slice(0, 16); }
+  }
+
+  if (total === 0) {
+    return (
+      <div className="rounded-xl border border-white/8 bg-white/[0.02] px-6 py-10 text-center text-sm text-muted-foreground">
+        No closed trades yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-white/8 bg-slate-950/60 overflow-hidden">
+      {/* Summary strip */}
+      <div className="flex items-center gap-4 px-4 py-2.5 border-b border-white/6 text-[10px] font-mono text-muted-foreground/60">
+        <span className="flex items-center gap-1.5">
+          <Hash className="h-3 w-3" />
+          {total} trades
+        </span>
+        <span className="text-emerald-400/70">{wins}W</span>
+        <span className="text-red-400/70">{total - wins}L</span>
+        <span className={cn(
+          "font-semibold",
+          total > 0 && wins / total >= 0.5 ? "text-emerald-400" : "text-red-400"
+        )}>
+          {total > 0 ? ((wins / total) * 100).toFixed(1) : "0.0"}% WR
+        </span>
+        <span className="ml-auto text-muted-foreground/40">latest {MAX_TRADES} · page {safePage}/{totalPages}</span>
+      </div>
+
+      {/* Trade table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/6 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+              <th className="text-left px-4 py-2 font-semibold">Time</th>
+              <th className="text-left px-3 py-2 font-semibold">Bot</th>
+              <th className="text-left px-3 py-2 font-semibold">Symbol</th>
+              <th className="text-left px-3 py-2 font-semibold">Side</th>
+              <th className="text-right px-3 py-2 font-semibold">P&L %</th>
+              <th className="text-right px-3 py-2 font-semibold">P&L $</th>
+              <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Reason</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.04]">
+            {paginated.map((t) => (
+              <tr
+                key={t.id}
+                className={cn(
+                  "transition-colors",
+                  t.is_win ? "hover:bg-emerald-500/[0.03]" : "hover:bg-red-500/[0.03]"
+                )}
+              >
+                <td className="px-4 py-2.5 font-mono text-[11px] text-muted-foreground/60 whitespace-nowrap">
+                  {fmtDate(t.closed_at)}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className={cn("font-mono text-[10px] font-semibold", t.botColor)}>
+                    {t.bot}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 font-mono font-semibold text-white/90 whitespace-nowrap">
+                  {t.symbol}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className={cn(
+                    "text-[10px] font-mono uppercase px-1.5 py-0.5 rounded font-semibold",
+                    t.side === "short"
+                      ? "bg-red-500/10 text-red-400"
+                      : "bg-blue-500/10 text-blue-400"
+                  )}>
+                    {t.side}
+                  </span>
+                </td>
+                <td className={cn(
+                  "px-3 py-2.5 text-right font-mono font-semibold tabular-nums whitespace-nowrap",
+                  t.is_win ? "text-emerald-400" : "text-red-400"
+                )}>
+                  {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
+                </td>
+                <td className={cn(
+                  "px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap",
+                  t.pnl_usd == null
+                    ? "text-muted-foreground/40"
+                    : t.is_win ? "text-emerald-400/80" : "text-red-400/80"
+                )}>
+                  {t.pnl_usd != null
+                    ? `${t.pnl_usd >= 0 ? "+" : ""}${formatCurrency(t.pnl_usd)}`
+                    : "—"}
+                </td>
+                <td className="px-3 py-2.5 text-muted-foreground/50 hidden sm:table-cell max-w-[180px]">
+                  <span className="truncate block text-[10px]">
+                    {t.reason ?? "—"}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-2.5 border-t border-white/6">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="text-[11px] font-mono px-3 py-1.5 rounded-lg border border-white/10 text-muted-foreground hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            ← Prev
+          </button>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPage(p)}
+                className={cn(
+                  "w-7 h-7 rounded-md text-[11px] font-mono transition-all",
+                  p === safePage
+                    ? "bg-primary/20 border border-primary/40 text-primary"
+                    : "text-muted-foreground/50 hover:text-white hover:bg-white/[0.04]"
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="text-[11px] font-mono px-3 py-1.5 rounded-lg border border-white/10 text-muted-foreground hover:text-white hover:border-white/20 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -1416,15 +1685,42 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
+        {/* All Closed Trades — collapsable */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.10 }}>
-          <SafeSection label="AI Impact Timeline">
-            <AIImpactTimeline />
+          <SafeSection label="All Closed Trades">
+            <CollapsableSection
+              title="All Closed Trades"
+              defaultOpen={false}
+              icon={<TrendingDown className="h-4 w-4 text-emerald-400/70" />}
+            >
+              <AllClosedTradesSection />
+            </CollapsableSection>
           </SafeSection>
         </motion.div>
 
+        {/* AI Interventions — collapsable */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+          <SafeSection label="AI Impact Timeline">
+            <CollapsableSection
+              title="AI Intervention Timeline"
+              defaultOpen={false}
+              icon={<Brain className="h-4 w-4 text-violet-400/70" />}
+            >
+              <AIImpactTimeline />
+            </CollapsableSection>
+          </SafeSection>
+        </motion.div>
+
+        {/* System Health / Bug Report — collapsable */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.14 }}>
           <SafeSection label="System Health Log">
-            <SystemDegradationLog />
+            <CollapsableSection
+              title="System Health Log & Bug Report"
+              defaultOpen={false}
+              icon={<ShieldAlert className="h-4 w-4 text-amber-400/70" />}
+            >
+              <SystemDegradationLog />
+            </CollapsableSection>
           </SafeSection>
         </motion.div>
       </main>

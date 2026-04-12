@@ -294,8 +294,9 @@ async def _get_fleet_context() -> str:
                 cur.execute(
                     """SELECT total_equity, alpaca_equity, kraken_equity,
                               COALESCE(options_equity, 0) AS options_equity,
-                              COALESCE(forex_equity, 0) AS forex_equity, ts, source
-                       FROM equity_curve ORDER BY ts DESC LIMIT 1"""
+                              COALESCE(forex_equity, 0) AS forex_equity, ts,
+                              COALESCE(source, 'pipeline') AS source
+                       FROM equity_snapshots ORDER BY ts DESC LIMIT 1"""
                 )
                 row = cur.fetchone()
                 if row:
@@ -309,7 +310,7 @@ async def _get_fleet_context() -> str:
                         "source": row[6] if row[6] else "pipeline",
                     }
     except Exception as exc:
-        logger.debug(f"FleetChat | context: equity_curve query failed: {exc}")
+        logger.debug(f"FleetChat | context: equity_snapshots query failed: {exc}")
 
     try:
         with get_conn() as conn:

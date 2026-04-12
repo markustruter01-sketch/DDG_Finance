@@ -1941,17 +1941,202 @@ def run_cycle() -> None:
             if not _hurst_was_cached and _hurst_val is not None and _adf_val is not None:
                 _db.upsert_pair_hurst_adf(BOT_ID, symbol, _hurst_val, _adf_val)
             if not _hurst_allowed:
-                logger.info(f"HURST/ADF | {_hurst_reason}")
-                cycle_signals.append({
-                    "symbol": symbol,
-                    "rsi": round(sym_rsi, 1) if sym_rsi is not None else None,
-                    "z_score": round(sym_z_score, 3) if sym_z_score is not None else None,
-                    "price": round(current_price, 4),
-                    "signal_type": "hurst_adf_block",
-                    "has_position": False,
-                    "reason": _hurst_reason,
-                })
-                continue
+                # ── Bear Momentum Short Bypass ────────────────────────────────
+                # H > 0.5 means the market is trending (random walk or momentum).
+                # In a Crypto-Bear / Risk-Off regime that IS the signal — price
+                # is breaking down with persistent momentum.  If three additional
+                # conditions confirm the downtrend (price below SMA-20, RSI < 45,
+                # and ≥ 2% 24-hour decline) we bypass the Hurst block and fall
+                # through to a dedicated momentum_bear short entry below.
+                # All other cases are blocked exactly as before.
+                _bear_short_bypass  = False
+                _bear_bypass_sma20  = None
+                _bear_bypass_ret24h = None
+                if _is_bear and _hurst_val is not None and _hurst_val > 0.5 and len(closes) >= 25:
+                    _bear_bypass_sma20  = sum(closes[-20:]) / 20.0
+                    _bear_bypass_ret24h = (
+                        (closes[-1] - closes[-24]) / closes[-24]
+                        if closes[-24] > 0 else 0.0
+                    )
+                    _bear_short_bypass = (
+                        current_price < _bear_bypass_sma20
+                        and sym_rsi is not None and sym_rsi < 45.0
+                        and _bear_bypass_ret24h < -0.02
+                    )
+
+                if not _bear_short_bypass:
+                    logger.info(f"HURST/ADF | {_hurst_reason}")
+                    cycle_signals.append({
+                        "symbol": symbol,
+                        "rsi": round(sym_rsi, 1) if sym_rsi is not None else None,
+                        "z_score": round(sym_z_score, 3) if sym_z_score is not None else None,
+                        "price": round(current_price, 4),
+                        "signal_type": "hurst_adf_block",
+                        "has_position": False,
+                        "reason": _hurst_reason,
+                    })
+                    continue
+                # Bypass confirmed — fall through to momentum_bear short block ↓
+                logger.info(
+                    f"HurstBypass | {symbol}: Bear momentum short conditions met — "
+                    f"H={_hurst_val:.3f} (trending) price={current_price:.4f} < "
+                    f"SMA20={_bear_bypass_sma20:.4f} RSI={sym_rsi:.1f}<45 "
+                    f"24h_ret={_bear_bypass_ret24h * 100:.1f}%<-2% "
+                    f"regime='{_regime_label}'"
+                )
+            else:
+                _bear_short_bypass  = False
+                _bear_bypass_sma20  = None
+                _bear_bypass_ret24h = None
+            # ─────────────────────────────────────────────────────────────────
+
+            # ── Bear Momentum Short Entry (Hurst Bypass Path) ─────────────────
+            # Reached only when all bypass conditions are satisfied above.
+            # Uses the same position-sizing, VPIN, and fee-gate machinery as a
+            # normal short, but skips the mean-reversion signal entirely.
+            if _bear_short_bypass:
+                # Standard pre-entry guards (shared with all other entry paths)
+                if len(open_positions) >= _effective_max_positions:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "slots_full", "has_position": False,
+                    })
+                elif _profile_breached:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "skip_ceiling_breach", "has_position": False,
+                    })
+                elif _penalty_tracker.is_throttled():
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "skip_penalty_throttle", "has_position": False,
+                    })
+                elif _cycle_new_entries >= MAX_NEW_ENTRIES_PER_CYCLE:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "max_entries_this_cycle", "has_position": False,
+                    })
+                else:
+                    _bs_max_frac = _mrc_tier_max_frac(symbol) if IS_MRC_BOT else _effective_max_position_frac
+                    _bs_sl_mult  = SWING_SL_ATR_MULT if IS_MRC_BOT else _sym_atr_mult
+                    size_usd, _vol_tier, _eff_stop = get_position_size(
+                        total_equity=total_equity, entry_price=current_price, deployed_usd=deployed_usd,
+                        risk_fraction=RISK_FRACTION, stop_loss_pct=_stop_loss_pct,
+                        max_position_fraction=_bs_max_frac, cash_reserve=CASH_RESERVE,
+                        atr=sym_atr, atr_multiplier=_bs_sl_mult,
+                    )
+                    size_usd *= _vol_size_scale
+                    _psm = _pair_sizing_mult.get(symbol, 1.0)
+                    if _psm != 1.0:
+                        size_usd *= _psm
+                    if _regime_size_mult != 1.0:
+                        size_usd *= _regime_size_mult
+                    if _corr_sizing_active and _get_corr_penalty and open_positions:
+                        _corr_scale, _corr_reason = _get_corr_penalty(
+                            symbol, list(open_positions.keys()), _closes_cache
+                        )
+                        if _corr_scale != 1.0:
+                            size_usd *= _corr_scale
+                            logger.info(f"CorrSizing | BearShort {symbol}: {_corr_reason}")
+                        else:
+                            logger.debug(f"CorrSizing | BearShort {symbol}: {_corr_reason}")
+                    if size_usd >= MIN_POSITION_USD:
+                        _bs_tp_pct = (SWING_TP_ATR_MULT * sym_atr / current_price
+                                      if IS_MRC_BOT and current_price > 0 else TRAIL_PCT)
+                        _fee_ok, _exp_profit, _rt_fees = check_fee_profitability(size_usd, _bs_tp_pct)
+                        if not _fee_ok or (IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD):
+                            _fee_reason = (
+                                f"expected profit ${_exp_profit:.2f} < $92 hard floor"
+                                if IS_MRC_BOT and _exp_profit < _MRC_MIN_PROFIT_USD
+                                else f"expected profit ${_exp_profit:.2f} < 2.5× fees ${_rt_fees:.2f}"
+                            )
+                            logger.info(f"FeeGate | {symbol}: SKIP bear_short — {_fee_reason}")
+                            cycle_signals.append({
+                                "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                "price": round(current_price, 4), "signal_type": "short_blocked_fee_gate",
+                                "has_position": False,
+                            })
+                        else:
+                            # Compute session VPIN cap locally — volume-surge data not yet
+                            # available at this point in the per-symbol loop, so use base cap.
+                            _session_name     = get_session_name()
+                            _session_mult     = get_session_vpin_multiplier()
+                            _session_vpin_cap = VPIN_ENTRY_BLOCK * _session_mult
+                            _ms_allowed, _ms_reason = _ms.entry_filter(
+                                side="short", vpin_block=_session_vpin_cap
+                            )
+                            if not _ms_allowed:
+                                logger.info(
+                                    f"Signal | BEAR_SHORT {symbol} blocked by microstructure: "
+                                    f"{_ms_reason} | VPIN={_ms.vpin:.3f} "
+                                    f"[session={_session_name}→cap={_session_vpin_cap:.3f}]"
+                                )
+                                if "VPIN" in _ms_reason.upper():
+                                    try:
+                                        _db.log_vpin_rejection(
+                                            bot_id=BOT_ID, pair=symbol,
+                                            vpin_value=_ms.vpin, threshold=_session_vpin_cap,
+                                            direction="BEAR_SHORT", price=current_price,
+                                            reason=_ms_reason, session_name=_session_name,
+                                            effective_threshold=_session_vpin_cap,
+                                        )
+                                    except Exception as _vpin_exc:
+                                        logger.warning(f"VPIN | bear_short log failed: {_vpin_exc}")
+                                cycle_signals.append({
+                                    "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                                    "price": round(current_price, 4), "signal_type": "short_blocked_microstructure",
+                                    "has_position": False,
+                                })
+                            else:
+                                _atr_stop = get_atr_stop_price(
+                                    "short", current_price, sym_atr, multiplier=_bs_sl_mult
+                                )
+                                logger.info(
+                                    f"Signal | BEAR_SHORT {symbol} | RSI={sym_rsi:.1f}<45 "
+                                    f"price<SMA20={_bear_bypass_sma20:.4f} "
+                                    f"24h={_bear_bypass_ret24h * 100:.1f}% | H={_hurst_val:.3f} "
+                                    f"(trending bear) | size=${size_usd:,.2f} [{_vol_tier}] | "
+                                    f"entry_type=momentum_bear | ATR stop=${_atr_stop:,.4f}"
+                                )
+                                if open_position(
+                                    symbol, "short", size_usd, current_price,
+                                    regime_at_entry=_regime_label_canonical,
+                                    entry_zscore=sym_z_score, zscore_source=zscore_source,
+                                ):
+                                    deployed_usd += size_usd
+                                    if symbol in open_positions:
+                                        open_positions[symbol]["atr_stop_price"]  = _atr_stop
+                                        open_positions[symbol]["vol_tier"]        = "momentum_bear"
+                                        open_positions[symbol]["tranches_filled"] = 1
+                                    _cycle_new_entries += 1
+                                    cycle_signals.append({
+                                        "symbol": symbol, "rsi": round(sym_rsi, 1),
+                                        "z_score": round(sym_z_score, 3),
+                                        "price": round(current_price, 4),
+                                        "signal_type": "momentum_bear_short_entered",
+                                        "has_position": True, "size_usd": round(size_usd, 2),
+                                        "vol_tier": "momentum_bear", "entry_type": "momentum_bear",
+                                        "sma20": round(_bear_bypass_sma20, 4),
+                                        "return_24h": round(_bear_bypass_ret24h, 4),
+                                    })
+                                else:
+                                    cycle_signals.append({
+                                        "symbol": symbol, "rsi": round(sym_rsi, 1),
+                                        "z_score": round(sym_z_score, 3),
+                                        "price": round(current_price, 4),
+                                        "signal_type": "momentum_bear_short_signal",
+                                        "has_position": False, "entry_type": "momentum_bear",
+                                    })
+                    else:
+                        logger.debug(
+                            f"Signal | {symbol}: momentum_bear SHORT size ${size_usd:.2f} too small"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "momentum_bear_short_small",
+                            "has_position": False,
+                        })
+                continue  # skip mean-reversion signal evaluation
             # ─────────────────────────────────────────────────────────────────
 
             # ── SWING ENTRY PATH (Blackbeard / Calypso — momentum & trend) ──

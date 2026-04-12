@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect, useState, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
+import { Stars, Billboard, Text } from "@react-three/drei";
 import * as THREE from "three";
 import {
   useStatusSummary,
@@ -48,6 +48,15 @@ const BOT_COLORS_HEX: Record<string, THREE.ColorRepresentation> = {
 
 const BOT_KEYS = Object.keys(BOT_COLORS_CSS);
 const BOT_COLORS_ARR = Object.values(BOT_COLORS_HEX);
+
+const BOT_DISPLAY_NAMES: Record<string, string> = {
+  oracle:       "ORACLE",
+  "davy-jones": "DAVY JONES",
+  blackbeard:   "BLACKBEARD",
+  calypso:      "CALYPSO",
+  apex:         "APEX",
+  navigator:    "NAVIGATOR",
+};
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
 
@@ -301,12 +310,10 @@ function ParticleField({ orbData }: { orbData: OrbData }) {
 // ─── Bot Arcs ───────────────────────────────────────────────────────────────
 
 function BotArcs({ orbData }: { orbData: OrbData }) {
-  const { activeBots } = orbData;
-  const groupRef = useRef<THREE.Group>(null);
-
   const arcs = useMemo(() => {
-    return BOT_KEYS.slice(0, Math.max(1, Math.min(6, activeBots))).map((key, i) => {
+    return BOT_KEYS.map((key, i) => {
       const color       = BOT_COLORS_HEX[key] ?? 0xffffff;
+      const colorCss    = BOT_COLORS_CSS[key] ?? "#ffffff";
       const inclination = (i / 6) * Math.PI;
       const ascension   = (i / 6) * Math.PI * 2;
       const radius      = 1.55 + i * 0.08;
@@ -322,6 +329,8 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
       }
       pts.push(pts[0].clone());
 
+      const labelPos = pts[0].clone();
+
       const curve = new THREE.CatmullRomCurve3(pts, true);
       const geo   = new THREE.TubeGeometry(curve, 80, 0.008, 3, true);
       const mat   = new THREE.MeshBasicMaterial({
@@ -330,31 +339,118 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
-      return { geo, mat, speed: 0.15 + i * 0.07, key };
+      return { geo, mat, speed: 0.15 + i * 0.07, key, color, colorCss, labelPos, displayName: BOT_DISPLAY_NAMES[key] ?? key.toUpperCase() };
     });
-  }, [activeBots]);
+  }, []);
 
-  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const groupRefs = useRef<(THREE.Group | null)[]>([]);
+  const pulseRefs = useRef<number[]>(arcs.map(() => 0));
+  const lastEventRef = useRef<number>(0);
+  const idleTimerRef = useRef<number>(4 + Math.random() * 3);
+
+  const textRefs = useRef<(THREE.Object3D | null)[]>([]);
+  const backingRefs = useRef<(THREE.Mesh | null)[]>([]);
+
+  useEffect(() => {
+    pulseRefs.current = arcs.map(() => 0);
+  }, [arcs.length]);
+
+  useEffect(() => {
+    const pulse = orbData.tradePulse;
+    if (!pulse?.active) return;
+    const idx = arcs.findIndex(a => a.key === pulse.botName);
+    if (idx >= 0) {
+      pulseRefs.current[idx] = 1.0;
+      lastEventRef.current = 0;
+      idleTimerRef.current = 4 + Math.random() * 3;
+    }
+  }, [orbData.tradePulse, arcs]);
 
   useFrame((_, delta) => {
+    lastEventRef.current += delta;
+    idleTimerRef.current -= delta;
+
+    if (idleTimerRef.current <= 0 && arcs.length > 0 && lastEventRef.current > 5) {
+      const idx = Math.floor(Math.random() * arcs.length);
+      if (pulseRefs.current[idx] < 0.1) {
+        pulseRefs.current[idx] = 0.6;
+      }
+      idleTimerRef.current = 4 + Math.random() * 3;
+    }
+
     for (let i = 0; i < arcs.length; i++) {
-      const mesh = meshRefs.current[i];
-      if (mesh) {
-        mesh.rotation.y += delta * arcs[i].speed;
-        mesh.rotation.x += delta * arcs[i].speed * 0.4;
+      const grp = groupRefs.current[i];
+      if (grp) {
+        grp.rotation.y += delta * arcs[i].speed;
+        grp.rotation.x += delta * arcs[i].speed * 0.4;
+      }
+
+      pulseRefs.current[i] = Math.max(0, pulseRefs.current[i] - delta * 0.7);
+      const pulse = pulseRefs.current[i];
+
+      const textObj = textRefs.current[i];
+      const backObj = backingRefs.current[i];
+
+      if (textObj) {
+        const scale = 1.0 + pulse * 0.35;
+        textObj.scale.setScalar(scale);
+        const mat = (textObj as THREE.Mesh).material;
+        if (mat && !Array.isArray(mat)) {
+          (mat as THREE.MeshBasicMaterial).opacity = 0.75 + pulse * 0.25;
+        }
+      }
+      if (backObj) {
+        const scale = 1.0 + pulse * 0.35;
+        backObj.scale.setScalar(scale);
+        const mat = backObj.material;
+        if (mat && !Array.isArray(mat)) {
+          (mat as THREE.MeshBasicMaterial).opacity = 0.18 + pulse * 0.32;
+        }
       }
     }
   });
 
   return (
-    <group ref={groupRef}>
+    <group>
       {arcs.map((arc, i) => (
-        <mesh
+        <group
           key={arc.key}
-          ref={el => { meshRefs.current[i] = el; }}
-          geometry={arc.geo}
-          material={arc.mat}
-        />
+          ref={el => { groupRefs.current[i] = el; }}
+        >
+          <mesh geometry={arc.geo} material={arc.mat} />
+          <Billboard
+            position={arc.labelPos}
+            follow={true}
+          >
+            <mesh
+              ref={el => { backingRefs.current[i] = el; }}
+            >
+              <planeGeometry args={[0.32, 0.075]} />
+              <meshBasicMaterial
+                color={arc.color}
+                transparent
+                opacity={0.18}
+                depthWrite={false}
+              />
+            </mesh>
+            <Text
+              ref={el => { textRefs.current[i] = el; }}
+              fontSize={0.055}
+              color={arc.colorCss}
+              anchorX="center"
+              anchorY="middle"
+              renderOrder={10}
+              material-transparent={true}
+              material-opacity={0.75}
+              material-depthWrite={false}
+              outlineColor={arc.colorCss}
+              outlineOpacity={0.3}
+              outlineWidth={0.003}
+            >
+              {arc.displayName}
+            </Text>
+          </Billboard>
+        </group>
       ))}
     </group>
   );

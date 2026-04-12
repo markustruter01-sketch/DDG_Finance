@@ -2366,7 +2366,8 @@ def run_cycle() -> None:
                     if not _ms_allowed:
                         logger.info(
                             f"Signal | LONG {symbol} blocked by microstructure: {_ms_reason} "
-                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
+                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} "
+                            f"[session={_session_name} base={_effective_vpin_cap:.3f}×{_session_mult:.2f}→cap={_session_vpin_cap:.3f}]"
                         )
                         if "VPIN" in _ms_reason.upper():
                             try:
@@ -2497,17 +2498,21 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                         continue
-                    _ms_allowed, _ms_reason = _ms.entry_filter(side="short")
+                    # Mirror long-side: pass the session-adjusted cap so the microstructure
+                    # filter uses the same threshold as the main VPIN gate.
+                    _ms_short_vpin_override = _session_vpin_cap
+                    _ms_allowed, _ms_reason = _ms.entry_filter(side="short", vpin_block=_ms_short_vpin_override)
                     if not _ms_allowed:
                         logger.info(
                             f"Signal | SHORT {symbol} blocked by microstructure: {_ms_reason} "
-                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f}"
+                            f"| OFI={_ms.ofi:+.3f} VPIN={_ms.vpin:.3f} "
+                            f"[session={_session_name} base={_effective_vpin_cap:.3f}×{_session_mult:.2f}→cap={_session_vpin_cap:.3f}]"
                         )
                         if "VPIN" in _ms_reason.upper():
                             try:
                                 _db.log_vpin_rejection(
                                     bot_id=BOT_ID, pair=symbol,
-                                    vpin_value=_ms.vpin, threshold=VPIN_ENTRY_BLOCK,
+                                    vpin_value=_ms.vpin, threshold=_ms_short_vpin_override,
                                     direction="SHORT", price=current_price,
                                     reason=_ms_reason,
                                     session_name=_session_name,

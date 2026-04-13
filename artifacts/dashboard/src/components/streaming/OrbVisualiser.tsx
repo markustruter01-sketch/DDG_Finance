@@ -1,6 +1,6 @@
 import { useRef, useMemo, useEffect, useState, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Stars, Billboard, Text } from "@react-three/drei";
+import { Stars, Html } from "@react-three/drei";
 import * as THREE from "three";
 import {
   useStatusSummary,
@@ -348,8 +348,7 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
   const lastEventRef = useRef<number>(0);
   const idleTimerRef = useRef<number>(4 + Math.random() * 3);
 
-  const textRefs = useRef<(THREE.Object3D | null)[]>([]);
-  const backingRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const badgeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     pulseRefs.current = arcs.map(() => 0);
@@ -388,24 +387,12 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
       pulseRefs.current[i] = Math.max(0, pulseRefs.current[i] - delta * 0.7);
       const pulse = pulseRefs.current[i];
 
-      const textObj = textRefs.current[i];
-      const backObj = backingRefs.current[i];
-
-      if (textObj) {
+      const badge = badgeRefs.current[i];
+      if (badge) {
         const scale = 1.0 + pulse * 0.35;
-        textObj.scale.setScalar(scale);
-        const mat = (textObj as THREE.Mesh).material;
-        if (mat && !Array.isArray(mat)) {
-          (mat as THREE.MeshBasicMaterial).opacity = 0.75 + pulse * 0.25;
-        }
-      }
-      if (backObj) {
-        const scale = 1.0 + pulse * 0.35;
-        backObj.scale.setScalar(scale);
-        const mat = backObj.material;
-        if (mat && !Array.isArray(mat)) {
-          (mat as THREE.MeshBasicMaterial).opacity = 0.18 + pulse * 0.32;
-        }
+        const opacity = 0.75 + pulse * 0.25;
+        badge.style.transform = `scale(${scale.toFixed(3)})`;
+        badge.style.opacity = opacity.toFixed(3);
       }
     }
   });
@@ -418,38 +405,34 @@ function BotArcs({ orbData }: { orbData: OrbData }) {
           ref={el => { groupRefs.current[i] = el; }}
         >
           <mesh geometry={arc.geo} material={arc.mat} />
-          <Billboard
+          <Html
             position={arc.labelPos}
-            follow={true}
+            center
+            zIndexRange={[100, 200]}
+            style={{ pointerEvents: "none" }}
           >
-            <mesh
-              ref={el => { backingRefs.current[i] = el; }}
-            >
-              <planeGeometry args={[0.32, 0.075]} />
-              <meshBasicMaterial
-                color={arc.color}
-                transparent
-                opacity={0.18}
-                depthWrite={false}
-              />
-            </mesh>
-            <Text
-              ref={el => { textRefs.current[i] = el; }}
-              fontSize={0.055}
-              color={arc.colorCss}
-              anchorX="center"
-              anchorY="middle"
-              renderOrder={10}
-              material-transparent={true}
-              material-opacity={0.75}
-              material-depthWrite={false}
-              outlineColor={arc.colorCss}
-              outlineOpacity={0.3}
-              outlineWidth={0.003}
+            <div
+              ref={el => { badgeRefs.current[i] = el; }}
+              style={{
+                padding: "2px 7px",
+                border: `1px solid ${arc.colorCss}`,
+                borderRadius: 3,
+                color: arc.colorCss,
+                fontSize: 9,
+                fontFamily: "monospace",
+                fontWeight: 700,
+                letterSpacing: "0.12em",
+                whiteSpace: "nowrap",
+                background: `${arc.colorCss}22`,
+                opacity: 0.75,
+                textShadow: `0 0 6px ${arc.colorCss}`,
+                boxShadow: `0 0 8px ${arc.colorCss}44`,
+                userSelect: "none",
+              }}
             >
               {arc.displayName}
-            </Text>
-          </Billboard>
+            </div>
+          </Html>
         </group>
       ))}
     </group>

@@ -858,3 +858,147 @@ async def kraken_backtest_results(bot_id: str | None = None) -> dict:
     except Exception as exc:
         logger.error(f"Backtest Results | Error: {exc}")
         return {"status": "error", "error": str(exc)}
+
+
+# ─── Admin: One-Time Equity Reset to $100k ──────────────────────────────────
+
+@kraken_router.post("/admin/kraken-equity-reset", tags=["Admin"])
+async def admin_kraken_equity_reset() -> dict:
+    """
+    One-time admin endpoint: reset Davy Jones, Blackbeard, Calypso equity pools
+    to exactly $100,000 each by injecting/removing cash.
+    Logs capital_injections + inserts equity_snapshots baseline row.
+    ONLY affects the 3 Kraken bots — Oracle/Apex/Navigator untouched.
+    """
+    import psycopg2 as _pg2
+    import psycopg2.extras as _pg2x
+    from datetime import datetime, timezone
+
+    TARGET = 100_000.0
+    BOTS = ["davy-jones", "blackbeard", "calypso"]
+    RESET_LABEL = "EQUITY_RESET_2026-04-13"
+    SCOPE = (
+        "Fleet equity baseline restart for 3 Kraken bots (blackbeard, calypso, davy-jones). "
+        "Forex (navigator), Options (apex-predator), and Alpaca (oracle) excluded from reset. "
+        "All bots reset to $100,000 starting capital. P&L tracking restarted from $0."
+    )
+    now = datetime.now(timezone.utc)
+    results = {}
+
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            conn.autocommit = False
+            with conn.cursor(cursor_factory=_pg2x.RealDictCursor) as cur:
+
+                # 1. Per-bot: read heartbeat equity, adjust cash, reset starting_balance
+                total_kraken_after = 0.0
+                for bot_id in BOTS:
+                    cur.execute(
+                        "SELECT equity_usd FROM kraken_heartbeat WHERE bot_id = %s",
+                        (bot_id,)
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        results[bot_id] = {"error": "no heartbeat row"}
+                        continue
+
+                    current_equity = float(row["equity_usd"])
+                    adjustment = TARGET - current_equity
+
+                    # Adjust cash_usd so total stays at $100k
+                    cur.execute(
+                        "UPDATE kraken_portfolio SET cash_usd = cash_usd + %s, starting_balance_usd = %s WHERE bot_id = %s",
+                        (adjustment, TARGET, bot_id)
+                    )
+
+                    # Reset heartbeat to $100k
+                    cur.execute(
+                        "UPDATE kraken_heartbeat SET equity_usd = %s WHERE bot_id = %s",
+                        (TARGET, bot_id)
+                    )
+
+                    # Log capital injection
+                    reason_text = (
+                        f"{RESET_LABEL} | prev=${current_equity:,.2f} adj={'+' if adjustment >= 0 else ''}"
+                        f"${adjustment:,.2f} | NOT a trading gain — P&L reset to $0."
+                    )
+                    cur.execute(
+                        """INSERT INTO capital_injections
+                           (ts, bot_id, pool, amount_usd, reason)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (now, bot_id, "kraken", adjustment, reason_text)
+                    )
+
+                    total_kraken_after += TARGET
+                    results[bot_id] = {
+                        "previous_equity": current_equity,
+                        "adjustment": round(adjustment, 2),
+                        "new_equity": TARGET,
+                    }
+                    logger.info(
+                        f"ADMIN EQUITY RESET | {bot_id} | {current_equity:.2f} → {TARGET:.0f} "
+                        f"(adj {adjustment:+.2f})"
+                    )
+
+                # 2. Fleet-level capital_injections + equity_snapshots baseline
+                cur.execute(
+                    """INSERT INTO capital_injections
+                       (ts, bot_id, pool, amount_usd, reason)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (now, "fleet", "all", total_kraken_after, SCOPE)
+                )
+
+                # Pull current non-Kraken equity for total snapshot
+                cur.execute(
+                    """SELECT
+                         COALESCE(SUM(CASE WHEN bot_id NOT IN ('davy-jones','blackbeard','calypso')
+                                          THEN equity_usd ELSE 0 END), 0) as other_equity
+                       FROM kraken_heartbeat"""
+                )
+                other_row = cur.fetchone()
+                other_equity = float(other_row["other_equity"]) if other_row else 0.0
+
+                cur.execute(
+                    """INSERT INTO equity_snapshots
+                       (ts, total_equity, alpaca_equity, kraken_equity,
+                        options_equity, forex_equity, source)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (now,
+                     total_kraken_after + other_equity,
+                     0,
+                     total_kraken_after,
+                     0,
+                     0,
+                     f"equity_reset_{now.strftime('%Y-%m-%d')}")
+                )
+
+                conn.commit()
+                logger.info(f"ADMIN EQUITY RESET | Complete. Bots reset: {BOTS}")
+
+            # 3. Verify
+            with conn.cursor(cursor_factory=_pg2x.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT bot_id, cash_usd, starting_balance_usd FROM kraken_portfolio WHERE bot_id = ANY(%s)",
+                    (BOTS,)
+                )
+                portfolio_rows = cur.fetchall()
+                cur.execute(
+                    "SELECT bot_id, equity_usd FROM kraken_heartbeat WHERE bot_id = ANY(%s)",
+                    (BOTS,)
+                )
+                heartbeat_rows = cur.fetchall()
+
+        return {
+            "status": "ok",
+            "message": f"Equity reset complete for {BOTS}",
+            "per_bot": results,
+            "verification": {
+                "portfolio": [dict(r) for r in portfolio_rows],
+                "heartbeat": [dict(r) for r in heartbeat_rows],
+            },
+        }
+
+    except Exception as exc:
+        logger.error(f"ADMIN EQUITY RESET | Error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))

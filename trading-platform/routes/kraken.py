@@ -119,7 +119,10 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                     """
                     SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                            fees_usd, reason, closed_at, paper
-                    FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
+                    FROM   kraken_trades
+                    WHERE  bot_id = %s
+                      AND  closed_at >= '2026-04-13 00:00:00+00'
+                    ORDER  BY closed_at ASC
                     """,
                     (bid,)
                 )
@@ -231,7 +234,8 @@ async def kraken_fleet_summary() -> dict:
                         "SELECT COUNT(*), "
                         "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END), "
                         "COALESCE(SUM(pnl_usd), 0) "
-                        "FROM kraken_trades WHERE bot_id = %s",
+                        "FROM kraken_trades WHERE bot_id = %s "
+                        "AND closed_at >= '2026-04-13 00:00:00+00'",
                         (_bid,)
                     )
                     _tr = _fsc.fetchone()
@@ -600,7 +604,9 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
                         """
                         SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
                                fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades WHERE bot_id = %s
+                        FROM   kraken_trades
+                        WHERE  bot_id = %s
+                          AND  closed_at >= '2026-04-13 00:00:00+00'
                         ORDER  BY closed_at ASC
                         """,
                         (bid,)

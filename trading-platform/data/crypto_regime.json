@@ -6,9 +6,9 @@
   "equity_regime": "Sideways",
   "correlation_with_equity": 0.0,
   "crypto_fear_greed": 23,
-  "btc_24h_change_pct": 0.44,
-  "btc_dominance": 57.1,
+  "btc_24h_change_pct": 0.19,
+  "btc_dominance": 57.2,
   "previous_regime": "Crypto-Risk-Off",
   "regime_changed": false,
-  "written_at": "2026-04-15T18:47:29.799796+00:00"
+  "written_at": "2026-04-15T19:01:49.693759+00:00"
 }

@@ -1,24 +1,7 @@
 {
-  "cash": 40045.59452158531,
-  "reserved_margin": 59954.40547841469,
+  "cash": 59572.76301437318,
+  "reserved_margin": 39954.40547841469,
   "positions": {
-    "25": {
-      "pair_set_id": 25,
-      "asset_a": "TIA/USD",
-      "asset_b": "GRT/USD",
-      "direction": "short_a_long_b",
-      "leg_a_side": "short",
-      "leg_b_side": "long",
-      "leg_a_units": 64703.979294726625,
-      "leg_b_units": 1259174.831680003,
-      "leg_a_entry": 0.3091,
-      "leg_b_entry": 0.02383,
-      "position_value": 20000.0,
-      "entry_zscore": 2.1817442789984316,
-      "entry_hedge_ratio": 1.5003068119467236,
-      "opened_at": "2026-04-15T08:07:02.237968+00:00",
-      "fees_paid": 130.01595422122963
-    },
     "35": {
       "pair_set_id": 35,
       "asset_a": "GRT/USD",
@@ -54,7 +37,7 @@
       "fees_paid": 112.43832611290858
     }
   },
-  "total_trades": 0,
-  "consecutive_losses": 0,
-  "updated_at": "2026-04-15T10:23:49.491519+00:00"
+  "total_trades": 1,
+  "consecutive_losses": 1,
+  "updated_at": "2026-04-15T19:01:12.027217+00:00"
 }

@@ -1,5 +1,5 @@
 {
-  "cash": 6778.889460186223,
+  "cash": 6660.141072181084,
   "positions": {
     "BTC/USD": {
       "symbol": "BTC/USD",
@@ -11,7 +11,7 @@
       "ema_fast": 73297.25945965812,
       "ema_slow": 70980.00634107793,
       "adx": 29.911046157107187,
-      "best_price": 74079.9,
+      "best_price": 74378.9,
       "stop_level": 71778.017520032,
       "trail_immediate": false,
       "trailing_active": false,
@@ -28,7 +28,7 @@
       "ema_fast": 2290.478125842219,
       "ema_slow": 2191.1670350510744,
       "adx": 28.315898537849204,
-      "best_price": 2346.21,
+      "best_price": 2357.67,
       "stop_level": 2227.4302932806227,
       "trail_immediate": false,
       "trailing_active": false,
@@ -45,7 +45,7 @@
       "ema_fast": 42.94174484272551,
       "ema_slow": 40.00433026106225,
       "adx": 36.87394262374927,
-      "best_price": 44.28,
+      "best_price": 44.8,
       "stop_level": 41.293352121798414,
       "trail_immediate": false,
       "trailing_active": false,
@@ -72,23 +72,23 @@
     "ZEC/USD": {
       "symbol": "ZEC/USD",
       "direction": "long",
-      "units": 37.517232598347505,
-      "entry_price": 354.35,
+      "units": 37.65638403843225,
+      "entry_price": 355.66,
       "stop_distance": 26.40692321279114,
-      "position_value": 13294.23137122444,
-      "ema_fast": 357.60821800711676,
-      "ema_slow": 313.05571533932425,
+      "position_value": 13392.869547108816,
+      "ema_fast": 357.7329799118787,
+      "ema_slow": 313.0816559333836,
       "adx": 27.532193904685425,
-      "best_price": 354.35,
-      "stop_level": 327.9430767872089,
+      "best_price": 355.66,
+      "stop_level": 329.2530767872089,
       "trail_immediate": false,
       "trailing_active": false,
-      "opened_at": "2026-04-15T17:55:30.017929+00:00",
-      "fees_paid": 34.56500156518354
+      "opened_at": "2026-04-15T18:58:33.023236+00:00",
+      "fees_paid": 34.82146082248292
     }
   },
-  "total_trades": 1,
+  "total_trades": 2,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-15T17:55:30.018007+00:00"
+  "updated_at": "2026-04-15T18:58:33.023297+00:00"
 }

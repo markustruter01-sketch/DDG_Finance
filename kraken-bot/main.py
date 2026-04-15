@@ -1207,6 +1207,11 @@ def run_cycle() -> None:
     _cycle_new_entries: int = 0
     cycle_microstructure: dict[str, dict] = {}
 
+    # ── Self-healing kick: API can set force_refresh=TRUE to prompt re-init ───
+    if _db.check_and_clear_force_refresh():
+        logger.info("Cycle | force_refresh flag detected — re-initialising adaptive params")
+        _adaptive.initialise()
+
     cycle_count += 1
 
     # ── Heartbeat — write DB heartbeat + live_state at start of every cycle ──

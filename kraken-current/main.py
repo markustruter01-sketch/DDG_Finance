@@ -51,6 +51,7 @@ from paper_portfolio import TrendPosition, PaperPortfolio
 from db_utils import (
     ensure_kraken_current_tables, write_heartbeat, write_portfolio,
     record_trade, record_signal_scan, get_kraken_current_equity,
+    check_and_clear_force_refresh,
 )
 
 # ── Exchange setup ────────────────────────────────────────────────────────────
@@ -359,6 +360,11 @@ def main():
         _cycle += 1
         cycle_start = datetime.now(timezone.utc)
         logger.info(f"KrakenCurrent | === Cycle #{_cycle} at {cycle_start.isoformat()[:19]} UTC ===")
+
+        # Self-healing kick: API can set force_refresh=TRUE to prompt universe refresh
+        if check_and_clear_force_refresh():
+            logger.info("KrakenCurrent | force_refresh flag detected — refreshing universe")
+            refresh_universe(force=True)
 
         try:
             # Refresh universe every 24h (no-op if fresh)

@@ -440,11 +440,17 @@ def run_health_check(bot_id: str) -> dict[str, Any]:
     # Persist to DB
     _persist(bot_id, overall_score, overall_status, metrics, recommendations)
 
+    # Adaptive params bridge: auto-tighten params on CRITICAL
+    bridge_actions = _apply_adaptive_bridge(bot_id, metrics, overall_status)
+    if bridge_actions:
+        result["adaptive_bridge_actions"] = bridge_actions
+
     n_critical = sum(1 for m in metrics.values() if m["status"] == "CRITICAL")
     n_warning  = sum(1 for m in metrics.values() if m["status"] == "WARNING")
     logger.info(
         f"HealthMonitor | {bot_id}: score={overall_score}/100 status={overall_status} "
         f"[{n_critical} CRITICAL, {n_warning} WARNING]"
+        + (f" | bridge: {len(bridge_actions)} param(s) tightened" if bridge_actions else "")
     )
     return result
 
@@ -466,6 +472,98 @@ def _persist(bot_id: str, overall_score: int, overall_status: str,
             conn.commit()
     except Exception as exc:
         logger.warning(f"HealthMonitor | Failed to persist snapshot for {bot_id}: {exc}")
+
+
+def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status: str) -> list[str]:
+    """
+    Health monitor → adaptive params bridge.
+    When a bot's health check returns CRITICAL on key metrics, automatically
+    tighten the corresponding adaptive params in kraken_adaptive_params.
+    Only applied to the 3 kraken bots that use the adaptive params table.
+    Returns a list of actions taken.
+    """
+    ADAPTIVE_BOTS = {"davy-jones", "blackbeard", "calypso"}
+    if bot_id not in ADAPTIVE_BOTS or overall_status != "CRITICAL":
+        return []
+
+    # Load current params
+    try:
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT params FROM kraken_adaptive_params WHERE bot_id = %s",
+                    (bot_id,)
+                )
+                row = cur.fetchone()
+        if not row or not row[0]:
+            return []
+        import json as _json_br
+        params = dict(row[0]) if isinstance(row[0], dict) else _json_br.loads(row[0])
+    except Exception as exc:
+        logger.warning(f"HealthMonitor | AdaptiveBridge | Could not load params for {bot_id}: {exc}")
+        return []
+
+    actions: list[str] = []
+    changed = False
+
+    wr_status    = metrics.get("recent_win_rate", {}).get("status", "HEALTHY")
+    pf_status    = metrics.get("recent_profit_factor", {}).get("status", "HEALTHY")
+    sl_status    = metrics.get("loss_streak", {}).get("status", "HEALTHY")
+    fee_status   = metrics.get("fee_efficiency", {}).get("status", "HEALTHY")
+
+    # Win rate CRITICAL → raise entry threshold (be more selective)
+    if wr_status == "CRITICAL" and "ZSCORE_ENTRY" in params:
+        old = params["ZSCORE_ENTRY"]
+        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.05), 4)
+        if params["ZSCORE_ENTRY"] != old:
+            actions.append(f"ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (win_rate CRITICAL)")
+            changed = True
+
+    # Loss streak CRITICAL → raise entry threshold more aggressively
+    if sl_status == "CRITICAL" and "ZSCORE_ENTRY" in params:
+        old = params["ZSCORE_ENTRY"]
+        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.10), 4)
+        if params["ZSCORE_ENTRY"] != old:
+            actions.append(f"ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (loss_streak CRITICAL)")
+            changed = True
+
+    # Profit factor or fee drag CRITICAL → raise min profit floor
+    if (pf_status == "CRITICAL" or fee_status == "CRITICAL") and "MIN_NET_PROFIT_PCT" in params:
+        old = params["MIN_NET_PROFIT_PCT"]
+        params["MIN_NET_PROFIT_PCT"] = round(min(0.03, old + 0.001), 6)
+        if params["MIN_NET_PROFIT_PCT"] != old:
+            actions.append(
+                f"MIN_NET_PROFIT_PCT {old*100:.2f}%→{params['MIN_NET_PROFIT_PCT']*100:.2f}% "
+                f"({'pf' if pf_status=='CRITICAL' else 'fee'} CRITICAL)"
+            )
+            changed = True
+
+    if not changed:
+        return []
+
+    # Write back
+    try:
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                import json as _json_br2
+                cur.execute(
+                    """
+                    UPDATE kraken_adaptive_params
+                    SET params = %s, adapted_at = NOW()
+                    WHERE bot_id = %s
+                    """,
+                    (_json_br2.dumps(params), bot_id)
+                )
+            conn.commit()
+        logger.info(
+            f"HealthMonitor | AdaptiveBridge | {bot_id}: applied {len(actions)} tightening(s): "
+            + " | ".join(actions)
+        )
+    except Exception as exc:
+        logger.warning(f"HealthMonitor | AdaptiveBridge | Failed to write params for {bot_id}: {exc}")
+        return []
+
+    return actions
 
 
 def run_all_bots() -> dict[str, dict]:

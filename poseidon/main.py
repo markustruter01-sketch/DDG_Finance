@@ -51,6 +51,7 @@ from paper_portfolio import PairPosition, PaperPortfolio
 from db_utils import (
     ensure_poseidon_tables, write_heartbeat, write_portfolio,
     upsert_pair_params, record_trade, get_pair_params, get_all_pair_params,
+    check_and_clear_force_refresh,
 )
 import market_universe as _mu
 from pair_discovery import discover_pairs
@@ -523,6 +524,11 @@ def main():
         _cycle += 1
         cycle_start = datetime.now(timezone.utc)
         logger.info(f"Poseidon | === Cycle #{_cycle} starting at {cycle_start.isoformat()[:19]} UTC ===")
+
+        # Self-healing kick: API can set force_refresh=TRUE to prompt re-discovery
+        if check_and_clear_force_refresh():
+            logger.info("Poseidon | force_refresh flag detected — re-running pair discovery")
+            maybe_run_discovery(force=True)
 
         try:
             # Check if discovery needs to run (every 24h)

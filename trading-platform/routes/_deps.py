@@ -62,6 +62,7 @@ def _add_heal_entry(component: str, action: str, result: str, success: bool, tri
         "result": result,
         "success": success,
         "triggered_by": triggered_by,
+        "heal_type": "HEALED" if success else "LOGGED",
     }
     with _heal_lock:
         _heal_log.insert(0, entry)

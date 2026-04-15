@@ -213,61 +213,89 @@ async def system_health_architecture() -> dict:
 
     try:
         from datetime import datetime as _dt, timezone as _tz
-        kst: dict | None = None
+        import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
+        _kdburl = _kos.environ.get("DATABASE_URL")
+        _ARCH_BOTS = [
+            (1, "davy-jones",     "Davy Jones"),
+            (2, "blackbeard",     "Blackbeard"),
+            (3, "calypso",        "Calypso"),
+            (7, "poseidon",       "Poseidon"),
+            (8, "kraken-current", "Kraken Current"),
+        ]
+        _bot_levels: list[str] = []
+        _bot_detail_parts: list[str] = []
+        _mkt_open_kr = False
         try:
-            import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
-            _kdburl = _kos.environ.get("DATABASE_URL")
-            if _kdburl:
-                _kpgconn = _pg2.connect(_kdburl)
-                try:
-                    with _kpgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _kc:
-                        _kc.execute(
-                            "SELECT status, cycle_count, last_updated, error "
-                            "FROM kraken_heartbeat WHERE id = 1"
-                        )
-                        _kr = _kc.fetchone()
-                    if _kr:
-                        kst = {
-                            "last_updated": _kr["last_updated"].isoformat() if _kr["last_updated"] else None,
-                            "status":       _kr["status"],
-                            "cycle_count":  _kr["cycle_count"],
-                        }
-                finally:
-                    _kpgconn.close()
+            _mkt_open_kr = is_market_open()
         except Exception:
             pass
 
-        if kst is not None:
-            last_upd = kst.get("last_updated")
-            kage = now - _dt.fromisoformat(last_upd).timestamp() if last_upd else None
-            kstatus = kst.get("status", "unknown")
-            _mkt_open_kr = False
+        if _kdburl:
+            _kpgconn = _pg2.connect(_kdburl)
             try:
-                _mkt_open_kr = is_market_open()
-            except Exception:
-                pass
-            if kstatus in ("error",):
-                level = "red"
-            elif kage and kage > 1800:
-                level = "red" if _mkt_open_kr else "yellow"
-            elif kstatus == "paused_circuit_breaker" or kstatus == "paused_dashboard" or (kage and kage > 600):
-                level = "yellow"
-            else:
-                level = "green"
-            nodes["kraken_api"] = {
-                "label": "Kraken API (Crypto Bot)",
-                "level": level,
-                "latency_ms": None,
-                "data_age_s": round(kage, 1) if kage else None,
-                "detail": f"Status: {kstatus} · Cycle #{kst.get('cycle_count', 0)}",
-            }
-        else:
-            nodes["kraken_api"] = {
-                "label": "Kraken API (Crypto Bot)", "level": "yellow",
-                "latency_ms": None, "data_age_s": None, "detail": "Bot not started",
-            }
+                for _arch_db_id, _arch_bot_id, _arch_label in _ARCH_BOTS:
+                    try:
+                        with _kpgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _kc:
+                            _kc.execute(
+                                "SELECT status, cycle_count, last_updated, error "
+                                "FROM kraken_heartbeat WHERE id = %s",
+                                (_arch_db_id,)
+                            )
+                            _kr = _kc.fetchone()
+                        if _kr:
+                            _klast = _kr["last_updated"]
+                            _kage = (now - _klast.timestamp()) if _klast else None
+                            _kstatus = _kr["status"] or "unknown"
+                            if _kstatus == "error":
+                                _blevel = "red"
+                            elif _kage and _kage > 1800:
+                                _blevel = "red" if _mkt_open_kr else "yellow"
+                            elif _kstatus in ("paused_circuit_breaker", "paused_dashboard") or (_kage and _kage > 600):
+                                _blevel = "yellow"
+                            else:
+                                _blevel = "green"
+                            _bot_levels.append(_blevel)
+                            _age_str = f"{int(_kage)}s" if _kage else "?"
+                            _bot_detail_parts.append(
+                                f"{_arch_label}: {_kstatus} ({_age_str})"
+                            )
+                            nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
+                                "label": f"Kraken Bot: {_arch_label}",
+                                "level": _blevel,
+                                "latency_ms": None,
+                                "data_age_s": round(_kage, 1) if _kage else None,
+                                "detail": f"Status: {_kstatus} · Cycle #{_kr['cycle_count']}",
+                            }
+                        else:
+                            _bot_levels.append("yellow")
+                            _bot_detail_parts.append(f"{_arch_label}: not started")
+                            nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
+                                "label": f"Kraken Bot: {_arch_label}",
+                                "level": "yellow", "latency_ms": None,
+                                "data_age_s": None, "detail": "Bot not started",
+                            }
+                    except Exception as _bexc:
+                        _bot_levels.append("red")
+                        _bot_detail_parts.append(f"{_arch_label}: error")
+                        nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
+                            "label": f"Kraken Bot: {_arch_label}",
+                            "level": "red", "latency_ms": None,
+                            "data_age_s": None, "detail": str(_bexc)[:60],
+                        }
+            finally:
+                _kpgconn.close()
+
+        _summary_level = "red" if "red" in _bot_levels else ("yellow" if "yellow" in _bot_levels else "green")
+        _n_ok = sum(1 for l in _bot_levels if l == "green")
+        nodes["kraken_api"] = {
+            "label": "Kraken Crypto Fleet (5 bots)",
+            "level": _summary_level,
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"{_n_ok}/{len(_ARCH_BOTS)} bots healthy · " + " | ".join(_bot_detail_parts),
+        }
     except Exception as exc:
-        nodes["kraken_api"] = {"label": "Kraken API (Crypto Bot)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["kraken_api"] = {"label": "Kraken Crypto Fleet (5 bots)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         caches = get_cache_stats()
@@ -473,18 +501,43 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
             try:
                 import psycopg2 as _pg2r, os as _osr
                 _dburlr = _osr.environ.get("DATABASE_URL")
+                _BOT_KICK_ROWS = [
+                    (1, "davy-jones"),
+                    (2, "blackbeard"),
+                    (3, "calypso"),
+                    (7, "poseidon"),
+                    (8, "kraken-current"),
+                ]
                 if _dburlr:
                     _rconn = _pg2r.connect(_dburlr)
                     try:
-                        with _rconn.cursor() as _rc:
-                            _rc.execute("SELECT status, cycle_count FROM kraken_heartbeat WHERE id = 1")
-                            _rrow = _rc.fetchone()
-                        if _rrow:
-                            steps.append(
-                                f"DB heartbeat reachable — status={_rrow[0]}, cycle #{_rrow[1]}"
-                            )
-                        else:
-                            steps.append("DB reachable but bot has not run yet (no heartbeat row)")
+                        _kicked = []
+                        for _bid, _bname in _BOT_KICK_ROWS:
+                            with _rconn.cursor() as _rc:
+                                _rc.execute(
+                                    "SELECT status, cycle_count, last_updated FROM kraken_heartbeat WHERE id = %s",
+                                    (_bid,)
+                                )
+                                _rrow = _rc.fetchone()
+                            if _rrow:
+                                _bstatus, _bcycle, _blast = _rrow
+                                _bage = (time.time() - _blast.timestamp()) if _blast else None
+                                steps.append(
+                                    f"{_bname}: status={_bstatus}, cycle #{_bcycle}"
+                                    + (f", age={_bage:.0f}s" if _bage else "")
+                                )
+                                if _bstatus == "error" or (_bage and _bage > 600):
+                                    with _rconn.cursor() as _kc:
+                                        _kc.execute(
+                                            "UPDATE kraken_heartbeat SET force_refresh = TRUE WHERE id = %s",
+                                            (_bid,)
+                                        )
+                                    _kicked.append(_bname)
+                            else:
+                                steps.append(f"{_bname}: no heartbeat row yet")
+                        _rconn.commit()
+                        if _kicked:
+                            steps.append(f"force_refresh=TRUE set for: {', '.join(_kicked)}")
                     finally:
                         _rconn.close()
                 else:
@@ -617,26 +670,44 @@ async def _auto_heal_check() -> None:
         from datetime import datetime as _dt, timezone as _tz
         import psycopg2 as _pg2k, os as _osk
         _kdburl = _osk.environ.get("DATABASE_URL")
+        _BOT_ROWS = [
+            (1, "davy-jones"),
+            (2, "blackbeard"),
+            (3, "calypso"),
+            (7, "poseidon"),
+            (8, "kraken-current"),
+        ]
         if _kdburl:
             _kconn = _pg2k.connect(_kdburl)
             try:
-                with _kconn.cursor() as _kc:
-                    _kc.execute("SELECT status, last_updated FROM kraken_heartbeat WHERE id = 1")
-                    _kr = _kc.fetchone()
-                if _kr:
-                    _kstatus = _kr[0]
-                    _klast = _kr[1]
-                    _kage = (now - _klast.timestamp()) if _klast else None
-                    if _kstatus == "error" or (_kage and _kage > 1800):
-                        record_degradation(
-                            component="kraken_api",
-                            severity="error",
-                            error_type="bot_stale" if _kage and _kage > 1800 else "bot_error",
-                            message=f"Kraken bot: status={_kstatus}, age={_kage:.0f}s" if _kage else f"Kraken bot error: {_kstatus}",
+                _any_degraded = False
+                for _bot_db_id, _bot_name in _BOT_ROWS:
+                    with _kconn.cursor() as _kc:
+                        _kc.execute(
+                            "SELECT status, last_updated FROM kraken_heartbeat WHERE id = %s",
+                            (_bot_db_id,)
                         )
-                        await _remediate_component("kraken_api", triggered_by="auto_heal")
-                    else:
-                        mark_resolved("kraken_api", "bot_stale")
+                        _kr = _kc.fetchone()
+                    if _kr:
+                        _kstatus = _kr[0]
+                        _klast = _kr[1]
+                        _kage = (now - _klast.timestamp()) if _klast else None
+                        if _kstatus == "error" or (_kage and _kage > 1800):
+                            _any_degraded = True
+                            record_degradation(
+                                component="kraken_api",
+                                severity="error",
+                                error_type="bot_stale" if (_kage and _kage > 1800) else "bot_error",
+                                message=(
+                                    f"Kraken bot {_bot_name}: status={_kstatus}, age={_kage:.0f}s"
+                                    if _kage else f"Kraken bot {_bot_name} error: {_kstatus}"
+                                ),
+                                detail=f"bot_id={_bot_name} db_id={_bot_db_id}",
+                            )
+                if _any_degraded:
+                    await _remediate_component("kraken_api", triggered_by="auto_heal")
+                else:
+                    mark_resolved("kraken_api", "bot_stale")
             finally:
                 _kconn.close()
     except Exception as exc:

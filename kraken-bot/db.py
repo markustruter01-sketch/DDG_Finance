@@ -183,6 +183,11 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_pair_performance' AND column_name='pause_reason') THEN
         ALTER TABLE kraken_pair_performance ADD COLUMN pause_reason TEXT;
     END IF;
+
+    -- Self-healing: force_refresh flag lets the API kick the bot to re-init
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_heartbeat' AND column_name='force_refresh') THEN
+        ALTER TABLE kraken_heartbeat ADD COLUMN force_refresh BOOLEAN NOT NULL DEFAULT FALSE;
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
@@ -491,6 +496,32 @@ def upsert_heartbeat(
         return True
     except Exception as exc:
         logger.warning(f"DB | upsert_heartbeat failed: {exc}")
+        return False
+
+
+def check_and_clear_force_refresh() -> bool:
+    """Check if force_refresh flag is set for this bot. If yes, clear it and return True."""
+    if not _is_available():
+        return False
+    bot_id, db_id = _get_bot_config()
+    try:
+        with _conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT force_refresh FROM kraken_heartbeat WHERE id = %s",
+                    (db_id,)
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    cur.execute(
+                        "UPDATE kraken_heartbeat SET force_refresh = FALSE WHERE id = %s",
+                        (db_id,)
+                    )
+                    logger.info(f"DB | force_refresh flag cleared for {bot_id} — re-initialising params")
+                    return True
+        return False
+    except Exception as exc:
+        logger.warning(f"DB | check_and_clear_force_refresh failed: {exc}")
         return False
 
 

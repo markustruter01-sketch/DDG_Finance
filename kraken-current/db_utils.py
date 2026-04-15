@@ -114,6 +114,29 @@ def write_heartbeat(equity: float, positions: int, cycle: int, status: str = "ru
         logger.warning(f"KrakenCurrent DB | heartbeat failed: {e}")
 
 
+def check_and_clear_force_refresh() -> bool:
+    """Check if force_refresh flag is set for this bot. If yes, clear it and return True."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT force_refresh FROM kraken_heartbeat WHERE id = %s",
+                    (DB_ID,)
+                )
+                row = cur.fetchone()
+                if row and row[0]:
+                    cur.execute(
+                        "UPDATE kraken_heartbeat SET force_refresh = FALSE WHERE id = %s",
+                        (DB_ID,)
+                    )
+                    logger.info(f"KrakenCurrent | force_refresh flag cleared — re-initialising params")
+                    return True
+        return False
+    except Exception as e:
+        logger.warning(f"KrakenCurrent DB | check_and_clear_force_refresh failed: {e}")
+        return False
+
+
 def write_portfolio(equity: float, cash: float, positions: int):
     try:
         with _get_conn() as conn:

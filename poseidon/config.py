@@ -15,14 +15,21 @@ PAPER_STARTING_BALANCE = 100_000.0
 PAPER_FEE_PCT = 0.0026
 LOOP_SLEEP_SECONDS = 900  # 15 minutes
 
-# ── Pair definitions ──────────────────────────────────────────────────────────
-# Each pair: (pair_set_id, asset_a, asset_b, description)
-PAIR_SETS = [
-    {"pair_set_id": 1, "asset_a": "ETH/USD", "asset_b": "BTC/USD", "description": "ETH vs BTC (foundational crypto pair)"},
-    {"pair_set_id": 2, "asset_a": "ADA/USD", "asset_b": "SOL/USD", "description": "ADA vs SOL (competing L1s)"},
-    {"pair_set_id": 3, "asset_a": "AVAX/USD", "asset_b": "SOL/USD", "description": "AVAX vs SOL (competing L1s)"},
-    {"pair_set_id": 4, "asset_a": "DOT/USD", "asset_b": "ATOM/USD", "description": "DOT vs ATOM (interoperability)"},
-    {"pair_set_id": 5, "asset_a": "LINK/USD", "asset_b": "UNI/USD", "description": "LINK vs UNI (oracle/DeFi)"},
+# ── Dynamic pair discovery ────────────────────────────────────────────────────
+UNIVERSE_SIZE = 250        # top N coins by market cap to fetch from CoinGecko
+MIN_PAIR_CORR = 0.85       # minimum |log-price correlation| to run ADF
+ADF_PVALUE_MAX_DISCOVERY = 0.15  # ADF p-value gate during discovery
+MAX_UNIVERSE_PAIRS = 50    # max pairs held in the tradeable universe
+DISCOVERY_HOURS = 24       # full rediscovery interval
+DISCOVERY_DAILY_DAYS = 30  # days of daily closes used during discovery
+
+# Fallback pairs used if CoinGecko is unavailable at startup
+FALLBACK_PAIR_SETS = [
+    {"pair_set_id": 1, "asset_a": "ETH/USD", "asset_b": "BTC/USD", "description": "ETH vs BTC (fallback)"},
+    {"pair_set_id": 2, "asset_a": "ADA/USD", "asset_b": "SOL/USD", "description": "ADA vs SOL (fallback)"},
+    {"pair_set_id": 3, "asset_a": "AVAX/USD", "asset_b": "SOL/USD", "description": "AVAX vs SOL (fallback)"},
+    {"pair_set_id": 4, "asset_a": "DOT/USD", "asset_b": "ATOM/USD", "description": "DOT vs ATOM (fallback)"},
+    {"pair_set_id": 5, "asset_a": "LINK/USD", "asset_b": "UNI/USD", "description": "LINK vs UNI (fallback)"},
 ]
 
 # ── Entry conditions ──────────────────────────────────────────────────────────

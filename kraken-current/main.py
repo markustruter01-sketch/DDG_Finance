@@ -26,6 +26,8 @@ _TRADING_PLATFORM = os.path.join(_REPO_ROOT, "trading-platform")
 if _TRADING_PLATFORM not in sys.path:
     sys.path.append(_TRADING_PLATFORM)
 
+import market_universe as _mu
+
 from config import (
     BOT_ID, DISPLAY_NAME, DB_ID,
     PAPER_STARTING_BALANCE, PAPER_FEE_PCT, LOOP_SLEEP_SECONDS,
@@ -68,6 +70,45 @@ PORTFOLIO_FILE = os.path.join(_DIR, "kc_paper_portfolio.json")
 portfolio = PaperPortfolio(PORTFOLIO_FILE, PAPER_STARTING_BALANCE)
 
 _cycle = 0
+
+# ── Dynamic market universe ────────────────────────────────────────────────────
+_UNIVERSE_SIZE = 250
+_UNIVERSE_REFRESH_HOURS = 24
+_active_symbols: list[str] = list(SYMBOLS)   # start with config fallback
+_last_universe_refresh: datetime | None = None
+
+
+def refresh_universe(force: bool = False):
+    """
+    Refresh the active trading universe from top-250 CoinGecko coins
+    that are available on Kraken. Falls back to config SYMBOLS if fetch fails.
+    Cached for 24 hours.
+    """
+    global _active_symbols, _last_universe_refresh
+    now = datetime.now(timezone.utc)
+    if (
+        not force
+        and _last_universe_refresh is not None
+        and (now - _last_universe_refresh).total_seconds() < _UNIVERSE_REFRESH_HOURS * 3600
+    ):
+        return
+
+    logger.info(f"KrakenCurrent | Refreshing market universe (top {_UNIVERSE_SIZE} by market cap)...")
+    universe = _mu.get_kraken_universe(exchange, n=_UNIVERSE_SIZE) if exchange else []
+
+    if universe:
+        _active_symbols = universe
+        _last_universe_refresh = now
+        logger.info(
+            f"KrakenCurrent | Universe updated: {len(_active_symbols)} symbols "
+            f"(from top-{_UNIVERSE_SIZE} CoinGecko × Kraken USD pairs)"
+        )
+    else:
+        logger.warning(
+            f"KrakenCurrent | Universe fetch failed — keeping {len(_active_symbols)} symbols"
+        )
+        if not _last_universe_refresh:
+            _last_universe_refresh = now  # don't retry every cycle
 
 
 # ── Regime loading ────────────────────────────────────────────────────────────
@@ -190,7 +231,7 @@ def scan_for_entries(current_prices: dict[str, float], ohlcv_data: dict[str, tup
         logger.info("KrakenCurrent | Circuit breaker active — skipping entry scan")
         return []
 
-    for sym in SYMBOLS:
+    for sym in _active_symbols:
         closes, highs, lows, _ = ohlcv_data.get(sym, ([], [], [], []))
         price = current_prices.get(sym, 0)
 
@@ -304,11 +345,15 @@ def main():
   PAPER TRADING MODE  —  {DISPLAY_NAME}
   Bot ID: {BOT_ID} (DB id={DB_ID}) | Strategy: Trend Following
   Simulated ${PAPER_STARTING_BALANCE:,.0f} account | 4-hour cycle
-  Universe: {', '.join(SYMBOLS)}
+  Universe: top-250 by market cap (dynamic)
 =================================================================
 """)
 
     ensure_kraken_current_tables()
+
+    # Build market universe on startup
+    logger.info(f"KrakenCurrent | Building initial market universe (top {_UNIVERSE_SIZE})...")
+    refresh_universe(force=True)
 
     while True:
         _cycle += 1
@@ -316,19 +361,22 @@ def main():
         logger.info(f"KrakenCurrent | === Cycle #{_cycle} at {cycle_start.isoformat()[:19]} UTC ===")
 
         try:
-            regime = load_regime()
-            logger.info(f"KrakenCurrent | Regime: {regime}")
+            # Refresh universe every 24h (no-op if fresh)
+            refresh_universe()
 
-            # Fetch all OHLCV data
+            regime = load_regime()
+            logger.info(f"KrakenCurrent | Regime: {regime} | Universe: {len(_active_symbols)} symbols")
+
+            # Fetch all OHLCV data for the active universe
             ohlcv_data: dict[str, tuple] = {}
             current_prices: dict[str, float] = {}
-            for sym in SYMBOLS:
+            for sym in _active_symbols:
                 closes, highs, lows, opens = fetch_ohlcv(sym)
                 if closes:
                     ohlcv_data[sym] = (closes, highs, lows, opens)
                     current_prices[sym] = closes[-1]
 
-            logger.info(f"KrakenCurrent | OHLCV loaded for {len(ohlcv_data)}/{len(SYMBOLS)} symbols")
+            logger.info(f"KrakenCurrent | OHLCV loaded for {len(ohlcv_data)}/{len(_active_symbols)} symbols")
 
             equity = portfolio.equity(current_prices)
 

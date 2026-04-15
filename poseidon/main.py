@@ -30,7 +30,10 @@ if _TRADING_PLATFORM not in sys.path:
 from config import (
     BOT_ID, DISPLAY_NAME, DB_ID,
     PAPER_STARTING_BALANCE, PAPER_FEE_PCT, LOOP_SLEEP_SECONDS,
-    PAIR_SETS, ZSCORE_ENTRY, ZSCORE_EXIT, ZSCORE_STOP,
+    FALLBACK_PAIR_SETS,
+    UNIVERSE_SIZE, MIN_PAIR_CORR, ADF_PVALUE_MAX_DISCOVERY,
+    MAX_UNIVERSE_PAIRS, DISCOVERY_HOURS, DISCOVERY_DAILY_DAYS,
+    ZSCORE_ENTRY, ZSCORE_EXIT, ZSCORE_STOP,
     HURST_MAX, ADF_PVALUE_MAX, HEDGE_RATIO_STABILITY,
     POSITION_VALUE_PCT, MAX_POSITIONS, MAX_HOLD_HOURS,
     HEDGE_RATIO_RECALC_HOURS, OLS_LOOKBACK_DAYS,
@@ -49,6 +52,8 @@ from db_utils import (
     ensure_poseidon_tables, write_heartbeat, write_portfolio,
     upsert_pair_params, record_trade, get_pair_params, get_all_pair_params,
 )
+import market_universe as _mu
+from pair_discovery import discover_pairs
 
 # ── Exchange setup ────────────────────────────────────────────────────────────
 try:
@@ -71,6 +76,104 @@ _circuit_breaker_until: datetime | None = None
 _last_hedge_recalc: dict[int, datetime] = {}
 _hedge_ratio_history: dict[int, list[float]] = {}
 _pair_params_cache: dict[int, dict] = {}
+
+# ── Dynamic pair universe ──────────────────────────────────────────────────────
+_active_pairs: list[dict] = []          # populated by run_pair_discovery()
+_last_discovery: datetime | None = None  # timestamp of last successful discovery
+
+
+def _fetch_daily_closes_for_discovery(symbols: list[str]) -> dict[str, list[float]]:
+    """
+    Fetch DISCOVERY_DAILY_DAYS of daily closes for all symbols in the universe.
+    Used only during pair discovery (not the hot 15-min cycle path).
+    """
+    if exchange is None:
+        return {}
+    closes: dict[str, list[float]] = {}
+    limit = DISCOVERY_DAILY_DAYS + 5
+    for sym in symbols:
+        try:
+            bars = exchange.fetch_ohlcv(sym, "1d", limit=limit)
+            if bars and len(bars) >= 10:
+                closes[sym] = [float(b[4]) for b in bars if b[4] and b[4] > 0]
+        except Exception as e:
+            logger.debug(f"Poseidon discovery | daily OHLCV failed for {sym}: {e}")
+    return closes
+
+
+def run_pair_discovery() -> bool:
+    """
+    Full pair discovery: CoinGecko top-250 → Kraken intersection →
+    correlation screen → ADF gate → update _active_pairs.
+    Returns True on success, False on failure (falls back to FALLBACK_PAIR_SETS).
+    """
+    global _active_pairs, _last_discovery
+
+    logger.info(
+        f"Poseidon | Starting pair discovery "
+        f"(top {UNIVERSE_SIZE} coins, corr≥{MIN_PAIR_CORR}, ADF<{ADF_PVALUE_MAX_DISCOVERY})"
+    )
+
+    # Step 1: Get market universe
+    universe = _mu.get_kraken_universe(exchange, n=UNIVERSE_SIZE) if exchange else []
+    if not universe:
+        logger.warning("Poseidon | Universe fetch failed — keeping current pairs")
+        if not _active_pairs:
+            _active_pairs = list(FALLBACK_PAIR_SETS)
+        return False
+
+    logger.info(f"Poseidon | Universe: {len(universe)} symbols from top-{UNIVERSE_SIZE}")
+
+    # Step 2: Fetch daily closes for all universe symbols
+    logger.info("Poseidon | Fetching daily closes for pair discovery...")
+    daily_closes = _fetch_daily_closes_for_discovery(universe)
+    logger.info(f"Poseidon | Daily close data available for {len(daily_closes)}/{len(universe)} symbols")
+
+    # Step 3: Discover cointegrated pairs
+    discovered = discover_pairs(
+        symbols=universe,
+        daily_closes=daily_closes,
+        min_corr=MIN_PAIR_CORR,
+        adf_pvalue_max=ADF_PVALUE_MAX_DISCOVERY,
+        max_pairs=MAX_UNIVERSE_PAIRS,
+    )
+
+    if discovered:
+        _active_pairs = discovered
+        _last_discovery = datetime.now(timezone.utc)
+        # Clear stale hedge ratio caches so they recalculate for new pairs
+        _last_hedge_recalc.clear()
+        _pair_params_cache.clear()
+        logger.info(
+            f"Poseidon | Discovery complete — {len(_active_pairs)} tradeable pairs "
+            f"from {len(universe)}-symbol universe"
+        )
+        for p in _active_pairs[:10]:  # log top 10
+            logger.info(
+                f"  Pair {p['pair_set_id']}: {p['asset_a']}/{p['asset_b']} "
+                f"corr={p.get('corr', '?')} ADF={p.get('adf_p', '?')}"
+            )
+        return True
+    else:
+        logger.warning(
+            "Poseidon | Discovery found 0 cointegrated pairs — "
+            "using fallback pair set"
+        )
+        if not _active_pairs:
+            _active_pairs = list(FALLBACK_PAIR_SETS)
+        return False
+
+
+def maybe_run_discovery(force: bool = False):
+    """Run discovery if not done yet or if DISCOVERY_HOURS have elapsed."""
+    global _last_discovery
+    now = datetime.now(timezone.utc)
+    if (
+        force
+        or _last_discovery is None
+        or (now - _last_discovery).total_seconds() >= DISCOVERY_HOURS * 3600
+    ):
+        run_pair_discovery()
 
 
 # ── Market data ───────────────────────────────────────────────────────────────
@@ -195,7 +298,7 @@ def recalculate_hedge_ratio(pair: dict) -> dict | None:
 def maybe_recalculate_hedge_ratios(force: bool = False):
     """Recalculate hedge ratios every HEDGE_RATIO_RECALC_HOURS hours."""
     now = datetime.now(timezone.utc)
-    for pair in PAIR_SETS:
+    for pair in _active_pairs:
         ps_id = pair["pair_set_id"]
         last_recalc = _last_hedge_recalc.get(ps_id)
         if force or last_recalc is None or (now - last_recalc).total_seconds() >= HEDGE_RATIO_RECALC_HOURS * 3600:
@@ -285,7 +388,7 @@ def scan_for_entries(current_prices: dict[str, float]):
         logger.info(f"Poseidon | Max positions ({MAX_POSITIONS}) reached — skipping entry scan")
         return
 
-    for pair in PAIR_SETS:
+    for pair in _active_pairs:
         ps_id = pair["pair_set_id"]
         asset_a = pair["asset_a"]
         asset_b = pair["asset_b"]
@@ -408,8 +511,12 @@ def main():
     # Ensure DB tables exist
     ensure_poseidon_tables()
 
-    # Initial hedge ratio calculation (blocking, takes a few minutes)
-    logger.info("Poseidon | Calculating initial hedge ratios for all pairs...")
+    # Run pair discovery (blocking at startup — builds universe from top-250)
+    logger.info(f"Poseidon | Running startup pair discovery (top {UNIVERSE_SIZE} coins)...")
+    maybe_run_discovery(force=True)
+
+    # Initial hedge ratio calculation for discovered pairs
+    logger.info(f"Poseidon | Calculating hedge ratios for {len(_active_pairs)} discovered pairs...")
     maybe_recalculate_hedge_ratios(force=True)
 
     while True:
@@ -418,9 +525,12 @@ def main():
         logger.info(f"Poseidon | === Cycle #{_cycle} starting at {cycle_start.isoformat()[:19]} UTC ===")
 
         try:
-            # Fetch current prices for all assets we care about
+            # Check if discovery needs to run (every 24h)
+            maybe_run_discovery()
+
+            # Fetch current prices for all assets in the active pair universe
             all_symbols = set()
-            for pair in PAIR_SETS:
+            for pair in _active_pairs:
                 all_symbols.add(pair["asset_a"])
                 all_symbols.add(pair["asset_b"])
 
@@ -430,7 +540,10 @@ def main():
                 if price and price > 0:
                     current_prices[sym] = price
 
-            logger.info(f"Poseidon | Prices fetched for {len(current_prices)}/{len(all_symbols)} symbols")
+            logger.info(
+                f"Poseidon | Prices fetched for {len(current_prices)}/{len(all_symbols)} symbols "
+                f"| Active pairs: {len(_active_pairs)}"
+            )
 
             # Compute equity
             equity = portfolio.equity(current_prices)

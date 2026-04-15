@@ -180,10 +180,14 @@ def execute_allocations(
     # ── MARGIN BLOCK: compute available cash including exit proceeds ─────────
     # Positions being exited this cycle free up cash. Add their market value to
     # the settled cash balance so that the margin block is evaluated AFTER exits.
+    # Oracle v3.1: SGOV no longer has a blanket exclusion from stale liquidation.
+    # If SGOV is legitimately in the plan (non-zero kelly momentum slot), it will
+    # be in active_symbols and excluded by the first condition.  Legacy SGOV held
+    # from a previous strategy (zero signals / vault cash overflow) must be sold
+    # so that Oracle has free capital to deploy into momentum signals.
     stale_symbols = {
         sym for sym in current_positions
         if sym not in active_symbols
-        and sym != CASH_TICKER
         and sym not in protected_symbols
         and (not is_crypto_only or sym in KNOWN_CRYPTO_SYMBOLS)
     }

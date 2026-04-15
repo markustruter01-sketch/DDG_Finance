@@ -1,5 +1,5 @@
 """
-Oracle Pure Momentum Scanner v3.0 — Deterministic, No LLM
+Oracle Pure Momentum Scanner v3.1 — Deterministic, No LLM
 ----------------------------------------------------------
 Replaces the regime-switching LLM-dependent scanner with a pure
 deterministic momentum ranking system.  No Groq/Gemini calls.
@@ -38,10 +38,19 @@ Oracle Profit Reserve
 Kill Switch
 -----------
   5% daily drawdown trips the kill switch — handled upstream.
+
+v3.1 changes
+------------
+  • Per-filter-stage verbose logging: universe_loaded → with_data →
+    passed_score → passed_rsi → passed_ema → final signals.
+  • Each scan run persists a diagnostic row to oracle_scan_log in
+    PostgreSQL so operators can audit zero-signal cycles without
+    trawling server logs.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from loguru import logger
@@ -126,6 +135,49 @@ def _get_position_fraction() -> float:
     return half_kelly
 
 
+def _persist_scan_log(
+    universe_loaded: int,
+    with_data: int,
+    passed_score: int,
+    passed_rsi: int,
+    passed_ema: int,
+    long_signals: int,
+    short_signals: int,
+    top5_long: list,
+    top5_short: list,
+    scan_note: str | None = None,
+) -> None:
+    """Write one diagnostic row to oracle_scan_log (non-fatal if DB unavailable)."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO oracle_scan_log
+                        (universe_loaded, with_data, passed_score, passed_rsi,
+                         passed_ema, long_signals, short_signals,
+                         top5_long, top5_short, scan_note)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (
+                        universe_loaded, with_data, passed_score, passed_rsi,
+                        passed_ema, long_signals, short_signals,
+                        json.dumps(top5_long), json.dumps(top5_short),
+                        scan_note,
+                    ),
+                )
+        logger.debug(
+            f"Oracle | scan_log persisted: loaded={universe_loaded} "
+            f"with_data={with_data} score={passed_score} rsi={passed_rsi} "
+            f"ema={passed_ema} longs={long_signals} shorts={short_signals}"
+        )
+    except Exception as exc:
+        logger.warning(f"Oracle | Failed to persist scan_log (non-fatal): {exc}")
+
+
 def scan_momentum(
     momentum_data: dict,
     open_symbols: set[str] | None = None,
@@ -136,18 +188,24 @@ def scan_momentum(
     Returns
     -------
     dict with:
-        "long_signals"  : list[dict]  — up to 6 long candidates
-        "short_signals" : list[dict]  — up to 3 short candidates
-        "top5_long"     : list[dict]  — top 5 ranked (pre-filter, for reporting)
-        "top5_short"    : list[dict]  — bottom 5 ranked (pre-filter, for reporting)
-        "universe_size" : int
+        "long_signals"   : list[dict]  — up to 6 long candidates
+        "short_signals"  : list[dict]  — up to 3 short candidates
+        "top5_long"      : list[dict]  — top 5 ranked (pre-filter, for reporting)
+        "top5_short"     : list[dict]  — bottom 5 ranked (pre-filter, for reporting)
+        "universe_size"  : int
+        "filter_stages"  : dict        — per-stage counts for diagnostics
     """
     open_symbols = open_symbols or set()
     by_ticker    = momentum_data.get("by_ticker", {})
 
+    universe_loaded = len(by_ticker)
+
+    # ── Stage 1: parse + score all tickers ───────────────────────────────────
     scored: list[dict] = []
+    skipped_no_data = 0
     for ticker, d in by_ticker.items():
         if "error" in d:
+            skipped_no_data += 1
             continue
         score = _composite_score(d)
         rsi   = d.get("rsi_14d")
@@ -166,26 +224,58 @@ def scan_momentum(
             "return_60d": d.get("return_60d_pct") or 0.0,
         })
 
+    with_data = len(scored)
+    logger.info(
+        f"Oracle | Filter stage 1/5 — universe_loaded={universe_loaded} "
+        f"with_valid_data={with_data} skipped_errors={skipped_no_data}"
+    )
+
     scored.sort(key=lambda x: x["score"], reverse=True)
+
+    # ── Stage 2: score > 0 (longs) / score < 0 (shorts) ─────────────────────
+    long_candidates  = [c for c in scored if c["score"] > 0]
+    short_candidates = [c for c in scored if c["score"] < 0]
+    passed_score = len(long_candidates) + len(short_candidates)
+    logger.info(
+        f"Oracle | Filter stage 2/5 — passed_nonzero_score: "
+        f"long_candidates={len(long_candidates)} short_candidates={len(short_candidates)}"
+    )
+
+    # ── Stage 3: RSI 30–70 ────────────────────────────────────────────────────
+    long_rsi  = [c for c in long_candidates  if c["rsi"] is not None and RSI_LOWER <= c["rsi"] <= RSI_UPPER]
+    short_rsi = [c for c in short_candidates if c["rsi"] is not None and RSI_LOWER <= c["rsi"] <= RSI_UPPER]
+    passed_rsi = len(long_rsi) + len(short_rsi)
+    logger.info(
+        f"Oracle | Filter stage 3/5 — passed_RSI({RSI_LOWER:.0f}–{RSI_UPPER:.0f}): "
+        f"long={len(long_rsi)} short={len(short_rsi)} "
+        f"(dropped longs={len(long_candidates)-len(long_rsi)} shorts={len(short_candidates)-len(short_rsi)})"
+    )
+
+    # ── Stage 4: price vs EMA-20 ──────────────────────────────────────────────
+    long_ema  = [c for c in long_rsi  if c["price"] is not None and c["ema_20d"] is not None and c["price"] > c["ema_20d"]]
+    short_ema = [c for c in short_rsi if c["price"] is not None and c["ema_20d"] is not None and c["price"] < c["ema_20d"]]
+    passed_ema = len(long_ema) + len(short_ema)
+    logger.info(
+        f"Oracle | Filter stage 4/5 — passed_EMA20: "
+        f"long(price>EMA20)={len(long_ema)} short(price<EMA20)={len(short_ema)} "
+        f"(dropped longs={len(long_rsi)-len(long_ema)} shorts={len(short_rsi)-len(short_ema)})"
+    )
+
+    # ── Stage 5: exclude open positions ──────────────────────────────────────
+    long_fresh  = [c for c in long_ema  if c["ticker"] not in open_symbols]
+    short_fresh = [c for c in short_ema if c["ticker"] not in open_symbols]
+    logger.info(
+        f"Oracle | Filter stage 5/5 — exclude_open_positions({len(open_symbols)} held): "
+        f"long_eligible={len(long_fresh)} short_eligible={len(short_fresh)}"
+    )
 
     fraction   = _get_position_fraction()
     top5_long  = [{"ticker": c["ticker"], "score": round(c["score"], 3), "rsi": c["rsi"]} for c in scored[:5]]
     top5_short = [{"ticker": c["ticker"], "score": round(c["score"], 3), "rsi": c["rsi"]} for c in scored[-5:]]
 
+    # ── Build final signal lists ──────────────────────────────────────────────
     long_signals: list[dict] = []
-    for c in scored:
-        if len(long_signals) >= MAX_LONG_SLOTS:
-            break
-        if c["ticker"] in open_symbols:
-            continue
-        if c["score"] <= 0:
-            break
-        rsi = c["rsi"]
-        if rsi is None or not (RSI_LOWER <= rsi <= RSI_UPPER):
-            continue
-        price, ema20 = c["price"], c["ema_20d"]
-        if price is None or ema20 is None or price <= ema20:
-            continue
+    for c in long_fresh[:MAX_LONG_SLOTS]:
         stop, take = _stop_take(c["vol"])
         slot_num   = len(long_signals) + 1
         long_signals.append({
@@ -198,27 +288,15 @@ def scan_momentum(
             "thesis": (
                 f"Momentum long #{slot_num}: score={c['score']:.2f} "
                 f"5d={c['return_5d']:+.1f}% 20d={c['return_20d']:+.1f}% "
-                f"60d={c['return_60d']:+.1f}% RSI={rsi:.0f} "
-                f"price={price:.2f} EMA20={ema20:.2f}"
+                f"60d={c['return_60d']:+.1f}% RSI={c['rsi']:.0f} "
+                f"price={c['price']:.2f} EMA20={c['ema_20d']:.2f}"
             ),
             "stop_loss_pct":   stop,
             "take_profit_pct": take,
         })
 
     short_signals: list[dict] = []
-    for c in reversed(scored):
-        if len(short_signals) >= MAX_SHORT_SLOTS:
-            break
-        if c["ticker"] in open_symbols:
-            continue
-        if c["score"] >= 0:
-            break
-        rsi = c["rsi"]
-        if rsi is None or not (RSI_LOWER <= rsi <= RSI_UPPER):
-            continue
-        price, ema20 = c["price"], c["ema_20d"]
-        if price is None or ema20 is None or price >= ema20:
-            continue
+    for c in short_fresh[:MAX_SHORT_SLOTS]:
         stop, take = _stop_take(c["vol"])
         slot_num   = len(short_signals) + 1
         short_signals.append({
@@ -231,19 +309,48 @@ def scan_momentum(
             "thesis": (
                 f"Momentum short #{slot_num}: score={c['score']:.2f} "
                 f"5d={c['return_5d']:+.1f}% 20d={c['return_20d']:+.1f}% "
-                f"60d={c['return_60d']:+.1f}% RSI={rsi:.0f} "
-                f"price={price:.2f} EMA20={ema20:.2f}"
+                f"60d={c['return_60d']:+.1f}% RSI={c['rsi']:.0f} "
+                f"price={c['price']:.2f} EMA20={c['ema_20d']:.2f}"
             ),
             "stop_loss_pct":   stop,
             "take_profit_pct": take,
         })
+
+    logger.info(
+        f"Oracle | Scan complete — "
+        f"universe={universe_loaded} → with_data={with_data} → "
+        f"score_filter={passed_score} → rsi_filter={passed_rsi} → "
+        f"ema_filter={passed_ema} → final: longs={len(long_signals)} shorts={len(short_signals)}"
+    )
+    if long_signals:
+        for s in long_signals:
+            logger.info(
+                f"  LONG  → {s['ticker']:10s} | "
+                f"stop={s['stop_loss_pct']:.1%} tp={s['take_profit_pct']:.1%} "
+                f"kelly={s['kelly_fraction']:.1%}"
+            )
+    else:
+        logger.warning("Oracle | No long signals generated — Oracle will hold cash this cycle")
+    for s in short_signals:
+        logger.info(
+            f"  SHORT → {s['ticker']:10s} | "
+            f"stop={s['stop_loss_pct']:.1%} tp={s['take_profit_pct']:.1%} "
+            f"kelly={s['kelly_fraction']:.1%}"
+        )
 
     return {
         "long_signals":  long_signals,
         "short_signals": short_signals,
         "top5_long":     top5_long,
         "top5_short":    top5_short,
-        "universe_size": len(by_ticker),
+        "universe_size": universe_loaded,
+        "filter_stages": {
+            "universe_loaded": universe_loaded,
+            "with_data":       with_data,
+            "passed_score":    passed_score,
+            "passed_rsi":      passed_rsi,
+            "passed_ema":      passed_ema,
+        },
     }
 
 
@@ -276,11 +383,21 @@ def run_algo_scan(
         "scan_type"       : "pure_momentum"
         "active_signals"  : int
         "universe_scanned": int
+        "filter_stages"   : dict       (per-stage counts for diagnostics)
     """
     momentum_data = get_cached_momentum_data()
 
     if momentum_data is None or not momentum_data.get("by_ticker"):
-        logger.warning("AlgoScanner | No momentum data available — returning empty signals")
+        logger.warning(
+            "AlgoScanner | No momentum data in cache — "
+            "fetch_momentum_universe() must be called before run_algo_scan()."
+        )
+        _persist_scan_log(
+            universe_loaded=0, with_data=0, passed_score=0,
+            passed_rsi=0, passed_ema=0, long_signals=0, short_signals=0,
+            top5_long=[], top5_short=[],
+            scan_note="no_cache: fetch_momentum_universe() was not called",
+        )
         return {
             "regime":           "momentum",
             "signals":          [],
@@ -291,32 +408,37 @@ def run_algo_scan(
             "scan_type":        "no_data",
             "active_signals":   0,
             "universe_scanned": 0,
+            "filter_stages":    {},
         }
 
-    result       = scan_momentum(momentum_data, open_symbols=open_symbols or set())
+    result        = scan_momentum(momentum_data, open_symbols=open_symbols or set())
     long_signals  = result["long_signals"]
     short_signals = result["short_signals"]
+    stages        = result["filter_stages"]
 
-    fetched   = momentum_data.get("fetched",        len(momentum_data.get("by_ticker", {})))
-    universe  = momentum_data.get("universe_size",  fetched)
+    fetched  = momentum_data.get("fetched",       stages.get("universe_loaded", 0))
+    universe = momentum_data.get("universe_size", fetched)
 
     logger.info(
-        f"Oracle | Pure momentum scan complete: universe={universe} fetched={fetched} "
+        f"Oracle | run_algo_scan summary: universe={universe} fetched={fetched} "
         f"longs={len(long_signals)} shorts={len(short_signals)} "
-        f"vix={vix:.1f if vix else 'N/A'} regime_param={regime!r} (ignored)"
+        f"vix={vix:.1f if isinstance(vix, float) else 'N/A'} "
+        f"regime_param={regime!r} (ignored)"
     )
-    for s in long_signals:
-        logger.info(
-            f"  LONG  → {s['ticker']:10s} | "
-            f"stop={s['stop_loss_pct']:.1%} tp={s['take_profit_pct']:.1%} "
-            f"kelly={s['kelly_fraction']:.1%}"
-        )
-    for s in short_signals:
-        logger.info(
-            f"  SHORT → {s['ticker']:10s} | "
-            f"stop={s['stop_loss_pct']:.1%} tp={s['take_profit_pct']:.1%} "
-            f"kelly={s['kelly_fraction']:.1%}"
-        )
+
+    scan_note = None if (long_signals or short_signals) else "no_signals_after_all_filters"
+    _persist_scan_log(
+        universe_loaded=stages.get("universe_loaded", 0),
+        with_data=stages.get("with_data", 0),
+        passed_score=stages.get("passed_score", 0),
+        passed_rsi=stages.get("passed_rsi", 0),
+        passed_ema=stages.get("passed_ema", 0),
+        long_signals=len(long_signals),
+        short_signals=len(short_signals),
+        top5_long=result["top5_long"],
+        top5_short=result["top5_short"],
+        scan_note=scan_note,
+    )
 
     return {
         "regime":           "momentum",
@@ -328,4 +450,5 @@ def run_algo_scan(
         "scan_type":        "pure_momentum",
         "active_signals":   len(long_signals),
         "universe_scanned": fetched,
+        "filter_stages":    stages,
     }

@@ -323,6 +323,26 @@ CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
     lookback_n  INTEGER NOT NULL DEFAULT 0
 );
 
+-- ── Oracle Scan Log ─────────────────────────────────────────────────────────
+-- Persists a diagnostic row every time the Oracle momentum scan runs.
+-- Each row captures how many tickers passed each filter stage so operators
+-- can diagnose zero-signal cycles without trawling server logs.
+CREATE TABLE IF NOT EXISTS oracle_scan_log (
+    id              BIGSERIAL PRIMARY KEY,
+    ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    universe_loaded INTEGER NOT NULL DEFAULT 0,
+    with_data       INTEGER NOT NULL DEFAULT 0,
+    passed_score    INTEGER NOT NULL DEFAULT 0,
+    passed_rsi      INTEGER NOT NULL DEFAULT 0,
+    passed_ema      INTEGER NOT NULL DEFAULT 0,
+    long_signals    INTEGER NOT NULL DEFAULT 0,
+    short_signals   INTEGER NOT NULL DEFAULT 0,
+    top5_long       JSONB,
+    top5_short      JSONB,
+    scan_note       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_oracle_scan_log_ts ON oracle_scan_log (ts DESC);
+
 -- Fleet Commander chat history (Gemini-powered fleet management).
 CREATE TABLE IF NOT EXISTS fleet_commander_chat (
     id          TEXT PRIMARY KEY,

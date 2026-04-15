@@ -747,6 +747,15 @@ async def _run_pipeline_inner(
         _open_pos  = _scan_gpos()
         _open_syms = {p["symbol"] for p in _open_pos}
 
+        # ── Fetch momentum universe data before running the scan ─────────────
+        # get_cached_momentum_data() starts as None on every cold boot.
+        # fetch_momentum_universe() pulls 1-year daily bars for all ~250
+        # tickers from Alpaca and populates the in-process cache.
+        # Without this call the scan always returns universe_scanned=0.
+        from data.yfinance_client import fetch_momentum_universe as _fetch_mom
+        logger.info("Pipeline | Oracle Step 1a: fetching momentum universe (~250 tickers)...")
+        await _fetch_mom()
+
         _algo_result = _run_scan(open_symbols=_open_syms)
         _long_slots  = _algo_result.get("signals", [])
         _oracle_short_signals = _algo_result.get("short_signals", [])

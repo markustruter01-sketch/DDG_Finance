@@ -1202,14 +1202,16 @@ def run_cycle() -> None:
     """
     global total_equity, circuit_breaker_until, cycle_count, open_positions, latest_prices
     global latest_signals, thinking_text, latest_microstructure
+    global last_equity_refresh
 
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
     _cycle_new_entries: int = 0
     cycle_microstructure: dict[str, dict] = {}
 
-    # ── Self-healing kick: API can set force_refresh=TRUE to prompt re-init ───
-    if _db.check_and_clear_force_refresh():
-        logger.info("Cycle | force_refresh flag detected — re-initialising adaptive params")
+    # ── Self-healing kick: API can set force_refresh=TRUE to prompt full re-init ─
+    _force_refresh_this_cycle = _db.check_and_clear_force_refresh()
+    if _force_refresh_this_cycle:
+        logger.info("Cycle | force_refresh flag detected — flushing runtime caches and re-initialising")
         _adaptive.initialise()
 
     cycle_count += 1
@@ -1485,6 +1487,11 @@ def run_cycle() -> None:
     #   _pair_zscore_factor  — per-symbol multiplier on _zscore_entry
     #   Merges auto_size_mult into _pair_sizing_mult for non-manually-configured pairs
     global _auto_params_last_refresh, _auto_pair_stats
+    # If force_refresh was triggered this cycle, flush equity + pair-stats caches
+    if _force_refresh_this_cycle:
+        last_equity_refresh = 0.0
+        _auto_params_last_refresh = 0.0
+        logger.info("Cycle | force_refresh — equity + pair-stats caches flushed")
     _pair_zscore_factor: dict[str, float] = {}
     _auto_refresh_interval = 6 * 3600.0
     try:

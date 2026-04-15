@@ -29,8 +29,8 @@ PAIR_SETS = [
 ZSCORE_ENTRY = 2.0        # enter when |Z| > this
 ZSCORE_EXIT = 0.3         # exit when |Z| < this (mean reversion complete)
 ZSCORE_STOP = 3.5         # stop loss when |Z| > this (divergence accelerating)
-HURST_MAX = 0.5           # Hurst must be below 0.5 (mean-reverting)
-ADF_PVALUE_MAX = 0.10     # ADF p-value must be below 0.10
+HURST_MAX = 1.0           # Hurst not used as a hard gate for crypto pairs (crypto trends; cointegration via ADF is the quality gate)
+ADF_PVALUE_MAX = 0.15     # ADF p-value must be below 0.15 (cointegration significance)
 HEDGE_RATIO_STABILITY = 0.15  # hedge ratio must be within 15% of 30d avg
 HEDGE_RATIO_BREAKDOWN = 0.25  # exit if hedge ratio drifts 25% from entry
 

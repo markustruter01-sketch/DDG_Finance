@@ -316,12 +316,15 @@ def scan_for_entries(current_prices: dict[str, float]):
             hedge_stability=HEDGE_RATIO_STABILITY,
         )
 
+        _z = signal.get("zscore")
+        _h = signal.get("hurst")
+        _adf = signal.get("adf_pvalue")
+        _z_str = f"{_z:.2f}" if _z is not None else "N/A"
+        _h_str = f"{_h:.3f}" if _h is not None else "N/A"
+        _adf_str = f"{_adf:.3f}" if _adf is not None else "N/A"
         logger.info(
             f"Poseidon | Pair {ps_id} ({asset_a}/{asset_b}): "
-            f"Z={signal.get('zscore', 'N/A'):.2f if signal.get('zscore') is not None else 'N/A'} "
-            f"H={signal.get('hurst', 'N/A'):.3f if signal.get('hurst') is not None else 'N/A'} "
-            f"ADF={signal.get('adf_pvalue', 'N/A'):.3f if signal.get('adf_pvalue') is not None else 'N/A'} "
-            f"signal={signal.get('signal')}"
+            f"Z={_z_str} H={_h_str} ADF={_adf_str} signal={signal.get('signal')}"
         )
 
         if not signal.get("signal"):

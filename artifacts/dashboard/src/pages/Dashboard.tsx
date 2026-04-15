@@ -16,6 +16,7 @@ import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   EXPECTED_JOBS, tradingModeLabel, tradingModeColor,
+  computeFleetEquity, FLEET_STARTING_CAPITAL,
 } from "@/lib/dashboard-shared";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -375,18 +376,17 @@ function FleetKPISummary() {
   // Show "—" only on the very first render before ANY real data has arrived.
   // Once any single source responds, show the live (progressively-updating) total.
   const anyLoading = alpacaEquity === 0 && !krakenReady && optionsState == null && forexState == null;
-  // Fleet equity formula: alpaca (Oracle) + krakenFleet (DJ+BB+Cal+Poseidon+KC via fleet-summary) + options (Apex) + forex (Navigator)
-  // Do NOT add poseidon or kraken-current separately — they are already inside krakenFleetEquity.
-  const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
-    + krakenFleetEquity
-    + optionsEquity
-    + forexEquity;
+  const grandTotal = computeFleetEquity(
+    alpacaEquity > 0 ? alpacaEquity : 0,
+    krakenFleetEquity,
+    optionsEquity,
+    forexEquity,
+  );
 
-  // True P&L = current equity across all 8 bots minus the $800k starting capital.
+  // True P&L = grand total minus the $800k starting capital (8 bots × $100k each).
   // Guard: do not show until all key equity pools have loaded.
-  // Do NOT use realized trade P&L — those are closed-trade sums only.
   const equitiesReady = alpacaEquity > 0 && krakenReady && optionsState != null && forexState != null;
-  const totalPnl: number | null = equitiesReady ? grandTotal - 800_000 : null;
+  const totalPnl: number | null = equitiesReady ? grandTotal - FLEET_STARTING_CAPITAL : null;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;

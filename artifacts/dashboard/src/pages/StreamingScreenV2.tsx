@@ -16,7 +16,7 @@ import {
 } from "@/hooks/use-trading";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { AnimatedValue } from "@/components/streaming/AnimatedValue";
-import { MiniSparkline } from "@/lib/dashboard-shared";
+import { MiniSparkline, computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 import { formatCurrency } from "@/lib/utils";
 
 
@@ -80,7 +80,7 @@ function HeroStrip() {
   const krakenEq = fleet?.total_equity_usd ?? 0;
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
-  const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
+  const totalEquity = computeFleetEquity(alpacaEq, krakenEq, optEq, fxEq);
 
   const pnl24h = useMemo(() => {
     if (!curve?.snapshots?.length) return { value: 0, pct: 0, label: "24H P&L" };

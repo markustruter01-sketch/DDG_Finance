@@ -3,7 +3,7 @@ import {
   usePortfolio, useLivePositions, useVault, useKrakenStatus, useKrakenFleetSummary,
   useExportReport, useOptionsState, useForexState,
 } from "@/hooks/use-trading";
-import { AnimatedCurrency, RollingCurrency } from "@/lib/dashboard-shared";
+import { AnimatedCurrency, RollingCurrency, computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui";
 import {
@@ -94,12 +94,12 @@ export function CombinedPortfolioSummary() {
   const forexPnlPct   = (forexPnl / forexStart) * 100;
   const forexPosCount = fxState?.position_count ?? 0;
 
-  // Fleet equity formula: alpaca (Oracle) + krakenFleet (DJ+BB+Cal+Poseidon+KC via fleet-summary) + options (Apex) + forex (Navigator)
-  // Do NOT add poseidon or kraken-current separately — they are already inside krakenFleetEquity.
-  const grandTotal = alpacaEquity
-    + (krakenReady || fleetSummary ? krakenFleetEquity : 0)
-    + optionsEquity
-    + forexEquity;
+  const grandTotal = computeFleetEquity(
+    alpacaEquity,
+    krakenReady || fleetSummary ? krakenFleetEquity : 0,
+    optionsEquity,
+    forexEquity,
+  );
 
   const grandPnl = alpacaPnl + krakenPnl + optionsPnl + forexPnl;
   const grandProfit = grandPnl >= 0;

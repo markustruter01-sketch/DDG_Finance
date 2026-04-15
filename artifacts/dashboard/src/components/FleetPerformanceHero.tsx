@@ -5,7 +5,7 @@ import {
   useKrakenPerformance, useKrakenStatus, useOptionsState, useForexState,
   usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
-import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
+import { BOT_THEMES, MiniSparkline, computeFleetEquity, type KrakenTradeEntry } from "@/lib/dashboard-shared";
 
 export function FleetPerformanceHero() {
   const { data: summary } = useStatusSummary();
@@ -27,10 +27,7 @@ export function FleetPerformanceHero() {
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optState?.total_equity ?? 100_000;
   const forexEquity = fxState?.total_equity ?? 100_000;
-  const poseidonEquity = poseidonState?.total_equity ?? 100_000;
-  const kcEquity = kcState?.total_equity ?? 100_000;
-  // krakenFleetEquity now includes Poseidon (#7) and Kraken Current (#8) — don't add them again
-  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
+  const grandTotal = computeFleetEquity(alpacaEquity, krakenFleetEquity, optionsEquity, forexEquity);
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;

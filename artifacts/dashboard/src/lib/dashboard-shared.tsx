@@ -479,3 +479,30 @@ export function tradingModeColor(mode: string | undefined): string {
 }
 
 export const EXPECTED_JOBS = 4;
+
+/**
+ * Canonical 8-bot fleet equity formula.
+ *
+ * Bot layout:
+ *   alpacaEquity      — Oracle (Bot #1, Alpaca paper account)
+ *   krakenFleetEquity — 5-bot Kraken fleet total (from /kraken/fleet-summary):
+ *                       Davy Jones (#2) + Blackbeard (#3) + Calypso (#4) +
+ *                       Poseidon (#7) + Kraken Current (#8)
+ *   optionsEquity     — Apex Predator (Bot #5, options paper account)
+ *   forexEquity       — Navigator (Bot #6, forex paper account)
+ *
+ * CRITICAL: Do NOT add Poseidon or Kraken Current equity separately.
+ * They are already included inside krakenFleetEquity via fleet-summary.
+ * Adding them again inflates the total by ~$200k.
+ */
+export function computeFleetEquity(
+  alpacaEquity: number,
+  krakenFleetEquity: number,
+  optionsEquity: number,
+  forexEquity: number,
+): number {
+  return alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
+}
+
+/** Starting capital across all 8 bots ($100k each). */
+export const FLEET_STARTING_CAPITAL = 800_000;

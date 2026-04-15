@@ -17,8 +17,7 @@ import {
   useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
-
-const STARTING_CAPITAL = 800_000;
+import { computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 
 function checkWebGL(): boolean {
   try {
@@ -1129,9 +1128,9 @@ export function OrbVisualiser() {
     const krakenEq    = fleet?.total_equity_usd ?? 0;
     const optEq       = optState?.paper_equity ?? 100_000;
     const fxEq        = fxState?.paper_equity  ?? 100_000;
-    const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
+    const totalEquity = computeFleetEquity(alpacaEq, krakenEq, optEq, fxEq);
     if (totalEquity === 0) return 0;
-    return totalEquity - STARTING_CAPITAL;
+    return totalEquity - FLEET_STARTING_CAPITAL;
   }, [summary, fleet, optState, fxState]);
 
   const orbData: OrbData = {

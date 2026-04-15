@@ -1,24 +1,7 @@
 {
-  "cash": 59847.07279110995,
-  "reserved_margin": 39860.94693758484,
+  "cash": 79849.96193671107,
+  "reserved_margin": 19886.95012842909,
   "positions": {
-    "35": {
-      "pair_set_id": 35,
-      "asset_a": "GRT/USD",
-      "asset_b": "SAND/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 838187.0251429187,
-      "leg_b_units": 233310.03684509348,
-      "leg_a_entry": 0.02383,
-      "leg_b_entry": 0.0769,
-      "position_value": 19973.996809155753,
-      "entry_zscore": -2.0530714171500137,
-      "entry_hedge_ratio": 0.8982449534168133,
-      "opened_at": "2026-04-15T08:07:02.245930+00:00",
-      "fees_paid": 98.58040047061294
-    },
     "3": {
       "pair_set_id": 3,
       "asset_a": "BNB/USD",
@@ -37,7 +20,7 @@
       "fees_paid": 80.75425586176797
     }
   },
-  "total_trades": 2,
+  "total_trades": 3,
   "consecutive_losses": 0,
-  "updated_at": "2026-04-15T20:01:13.599312+00:00"
+  "updated_at": "2026-04-15T20:46:11.202976+00:00"
 }

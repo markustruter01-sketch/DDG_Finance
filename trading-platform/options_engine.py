@@ -5,14 +5,14 @@ A 100% LLM-free options trading bot that exploits Implied Volatility
 compression and technical breakouts using hard-coded math.
 
 Strategy: Volatility Squeeze → Long Straddle
-  1. Scan highly liquid options chains (SPY, QQQ, NVDA, TSLA)
-  2. Calculate Implied Volatility Rank (IVR) — must be < 20
-  3. Detect Bollinger Band Squeeze — 20-day bandwidth at 6-month low
-  4. When BOTH conditions met → construct Long Straddle (ATM Call + ATM Put, 30-45 DTE)
-  5. Size via Half-Kelly Criterion
+  1. Scan highly liquid options chains (~150 symbols)
+  2. Calculate Implied Volatility Rank (IVR) — must be < 35
+  3. Detect Bollinger Band Squeeze — 20-day bandwidth within 20% of 6-month min
+  4. When BOTH conditions met → construct Long Straddle (ATM Call + ATM Put, 21-60 DTE)
+  5. Size via Quarter-Kelly Criterion
 
-Capital Fence: 5% of total global account equity.
-Execution Window: 3:30 PM EST daily.
+Capital Fence: 20% of total global account equity.
+Execution Windows: 9:45 AM, 10:00 AM, 12:00 PM, 2:00 PM, 3:30 PM ET.
 Paper Trading: Simulated execution with real market data.
 """
 
@@ -72,13 +72,13 @@ WATCHLIST = [
     "TSM", "ASML", "NVO", "MELI",
     "GLD", "SLV", "USO", "TLT",
 ]
-CAPITAL_FENCE_PCT = 0.05
-IVR_THRESHOLD = 25
+CAPITAL_FENCE_PCT = 0.20    # Change 3: raised from 5% → 20% of equity
+IVR_THRESHOLD = 35          # Change 1: raised from 25 → 35
 BB_PERIOD = 20
 BB_STD = 2.0
 BB_LOOKBACK_DAYS = 126
-TARGET_DTE_MIN = 30
-TARGET_DTE_MAX = 45
+TARGET_DTE_MIN = 21         # Change 4: widened from 30 → 21
+TARGET_DTE_MAX = 60         # Change 4: widened from 45 → 60
 MIN_TRADES_FOR_KELLY = 10
 DEFAULT_RISK_PCT = 0.01
 EXECUTION_HOUR_ET = 15
@@ -328,7 +328,8 @@ def _is_bollinger_squeeze(closes: list[float]) -> tuple[bool, float, float]:
     current_bw = bandwidths[-1]
     min_bw_6m = min(bandwidths) if bandwidths else current_bw
 
-    is_squeeze = current_bw <= min_bw_6m * 1.05
+    # Change 2: relaxed from 1.05× → 1.20× (triggers within 20% of 6-month min, not 5%)
+    is_squeeze = current_bw <= min_bw_6m * 1.20
     return is_squeeze, current_bw, min_bw_6m
 
 
@@ -837,7 +838,7 @@ def approve_trade(trade_id: str) -> dict:
         available = fenced_capital - deployed
         trade_cost = trade.get("total_cost", 0)
         if trade_cost > available:
-            return {"error": f"Capital fence breach: trade costs ${trade_cost:,.2f} but only ${available:,.2f} available within 5% fence (${fenced_capital:,.2f})"}
+            return {"error": f"Capital fence breach: trade costs ${trade_cost:,.2f} but only ${available:,.2f} available within {CAPITAL_FENCE_PCT*100:.0f}% fence (${fenced_capital:,.2f})"}
 
         _save_pending(remaining)
 

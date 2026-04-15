@@ -197,7 +197,16 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("Apex Predator options scanner registered (10am/12pm/2pm/3:30pm ET)")
+    # Change 5: added 9:45 AM post-open scan
+    scheduler.add_job(
+        func=_options_scan,
+        trigger=_CronTrigger(hour=9, minute=45, timezone="US/Eastern"),
+        id="options_apex_open",
+        name="Apex Predator Post-Open Scan (9:45 AM ET)",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Apex Predator options scanner registered (9:45am/10am/12pm/2pm/3:30pm ET)")
 
     def _forex_navigator_cycle():
         try:

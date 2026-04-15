@@ -269,7 +269,7 @@ def section_trade_mechanics_apex() -> list[str]:
         "    iv_min = 5th percentile of chain IVs",
         "    iv_max = 95th percentile of chain IVs",
         "    ivr = ((current_iv - iv_min) / (iv_max - iv_min)) * 100",
-        "    THRESHOLD: IVR < 25 (implied volatility is compressed)",
+        "    THRESHOLD: IVR < 35 (implied volatility is compressed)",
         "",
         "  BOLLINGER BAND SQUEEZE FORMULA:",
         "    SMA = 20-day Simple Moving Average",
@@ -277,17 +277,17 @@ def section_trade_mechanics_apex() -> list[str]:
         "    Lower Band = SMA - (2.0 * 20d_stddev)",
         "    Bandwidth = ((Upper - Lower) / SMA) * 100",
         "    Lookback: 126 trading days (6 months)",
-        "    SQUEEZE = True when current_bandwidth <= 1.05 * min_bandwidth_126d",
+        "    SQUEEZE = True when current_bandwidth <= 1.20 * min_bandwidth_126d",
         "",
         "  ENTRY CONDITIONS (ALL must be True):",
-        "    1. IVR < 25",
+        "    1. IVR < 35",
         "    2. Bollinger Band squeeze detected",
-        "    3. Option chain has valid ATM strikes with 30-45 DTE",
-        "    4. Deployed capital < capital fence (5% of equity)",
+        "    3. Option chain has valid ATM strikes with 21-60 DTE",
+        "    4. Deployed capital < capital fence (20% of equity)",
         "",
         "  TRADE CONSTRUCTION:",
         "    Strategy: Long Straddle (ATM Call + ATM Put, same strike, same expiration)",
-        "    DTE target: 30-45 days to expiration",
+        "    DTE target: 21-60 days to expiration",
         "    Strike: At-The-Money (closest to current stock price)",
         "",
         "  QUARTER-KELLY POSITION SIZING:",
@@ -859,7 +859,7 @@ def section_apex_scan_log() -> list[str]:
                 setups = scan_results_raw.get("setups_found", 0)
                 entries = scan_results_raw.get("entries_taken", 0)
                 lines.append(f"  Tickers evaluated: {evaluated}")
-                lines.append(f"  Setups found (IVR<25 + squeeze): {setups}")
+                lines.append(f"  Setups found (IVR<35 + squeeze): {setups}")
                 lines.append(f"  Entries taken: {entries}")
                 scanner_detail = scan_results_raw.get("scanner_detail", [])
 

@@ -90,6 +90,8 @@ def compute_correlation_matrix() -> dict:
         "kraken": "kraken_equity",
         "options": "COALESCE(options_equity, 0)",
         "forex": "COALESCE(forex_equity, 0)",
+        "poseidon": "COALESCE(poseidon_equity, 0)",
+        "kraken_current": "COALESCE(kraken_current_equity, 0)",
     }
 
     columns = ", ".join(

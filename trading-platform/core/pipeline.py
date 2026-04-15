@@ -1021,6 +1021,28 @@ async def _run_pipeline_inner(
                 forex_eq = float(_fx_snap.get_state().get("paper_equity", 0))
         except Exception:
             pass
+        poseidon_eq = 0.0
+        try:
+            from db.postgres import get_conn as _gc_ps
+            with _gc_ps() as _conn_ps:
+                with _conn_ps.cursor() as _cur_ps:
+                    _cur_ps.execute("SELECT equity_usd FROM poseidon_portfolio WHERE id = 7")
+                    _row_ps = _cur_ps.fetchone()
+                    if _row_ps:
+                        poseidon_eq = float(_row_ps[0])
+        except Exception:
+            poseidon_eq = 100_000.0
+        kc_eq = 0.0
+        try:
+            from db.postgres import get_conn as _gc_kc
+            with _gc_kc() as _conn_kc:
+                with _conn_kc.cursor() as _cur_kc:
+                    _cur_kc.execute("SELECT equity_usd FROM kraken_current_portfolio WHERE id = 8")
+                    _row_kc = _cur_kc.fetchone()
+                    if _row_kc:
+                        kc_eq = float(_row_kc[0])
+        except Exception:
+            kc_eq = 100_000.0
         insert_equity_snapshot(
             alpaca_equity=alpaca_equity,
             kraken_equity=kraken_equity,
@@ -1028,6 +1050,8 @@ async def _run_pipeline_inner(
             source="pipeline",
             options_equity=options_eq,
             forex_equity=forex_eq,
+            poseidon_equity=poseidon_eq,
+            kraken_current_equity=kc_eq,
         )
     except Exception as _snap_exc:
         logger.warning(f"Pipeline | Equity snapshot write failed (non-fatal): {_snap_exc}")

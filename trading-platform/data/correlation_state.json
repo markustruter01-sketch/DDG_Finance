@@ -3,9 +3,18 @@
     "alpaca_vs_kraken": null,
     "alpaca_vs_options": null,
     "alpaca_vs_forex": null,
+    "alpaca_vs_poseidon": null,
+    "alpaca_vs_kraken_current": null,
     "kraken_vs_options": null,
     "kraken_vs_forex": null,
-    "options_vs_forex": null
+    "kraken_vs_poseidon": null,
+    "kraken_vs_kraken_current": null,
+    "options_vs_forex": null,
+    "options_vs_poseidon": null,
+    "options_vs_kraken_current": null,
+    "forex_vs_poseidon": null,
+    "forex_vs_kraken_current": null,
+    "poseidon_vs_kraken_current": null
   },
   "max_correlation": null,
   "max_pair": "",
@@ -14,10 +23,12 @@
   "shock_threshold": 0.85,
   "data_points": {
     "alpaca": 1,
-    "kraken": 0,
+    "kraken": 1,
     "options": 1,
-    "forex": 1
+    "forex": 1,
+    "poseidon": 0,
+    "kraken_current": 0
   },
   "rolling_window_days": 60,
-  "computed_at": "2026-04-13T02:00:03.584876+00:00"
+  "computed_at": "2026-04-15T07:19:51.239208+00:00"
 }

@@ -470,11 +470,14 @@ def _persist(bot_id: str, overall_score: int, overall_status: str,
 
 def run_all_bots() -> dict[str, dict]:
     """
-    Run health checks for all three Kraken bots.
+    Run health checks for all Kraken-based bots.
     Called by the 4:00 AM UTC scheduler job.
     """
-    from config.settings import settings
-    bot_ids = ["davy-jones", "blackbeard", "calypso"]
+    try:
+        from config.settings import settings
+    except Exception:
+        pass
+    bot_ids = ["davy-jones", "blackbeard", "calypso", "poseidon", "kraken-current"]
     results = {}
     for bid in bot_ids:
         try:

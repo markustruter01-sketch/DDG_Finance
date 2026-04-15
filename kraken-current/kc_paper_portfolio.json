@@ -1,0 +1,43 @@
+{
+  "cash": 60010.399999999994,
+  "positions": {
+    "BTC/USD": {
+      "symbol": "BTC/USD",
+      "direction": "long",
+      "units": 0.2713976708651886,
+      "entry_price": 73692.6,
+      "stop_distance": 1914.5824799680086,
+      "position_value": 20000.0,
+      "ema_fast": 73297.25945965812,
+      "ema_slow": 70980.00634107793,
+      "adx": 29.911046157107187,
+      "best_price": 73692.6,
+      "stop_level": 71778.017520032,
+      "trail_immediate": false,
+      "trailing_active": false,
+      "opened_at": "2026-04-15T07:18:48.632007+00:00",
+      "fees_paid": 52.0
+    },
+    "ETH/USD": {
+      "symbol": "ETH/USD",
+      "direction": "long",
+      "units": 8.647329829342677,
+      "entry_price": 2311.65,
+      "stop_distance": 84.21970671937724,
+      "position_value": 19989.600000000002,
+      "ema_fast": 2290.478125842219,
+      "ema_slow": 2191.1670350510744,
+      "adx": 28.315898537849204,
+      "best_price": 2311.65,
+      "stop_level": 2227.4302932806227,
+      "trail_immediate": false,
+      "trailing_active": false,
+      "opened_at": "2026-04-15T07:18:48.632769+00:00",
+      "fees_paid": 51.97296
+    }
+  },
+  "total_trades": 0,
+  "equity_7d_low": 100000.0,
+  "circuit_breaker_until": null,
+  "updated_at": "2026-04-15T07:18:48.632812+00:00"
+}

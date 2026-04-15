@@ -98,7 +98,7 @@ function HeroBanner() {
   const optEq = optState?.total_equity ?? 100_000;
   const fxEq = fxState?.total_equity ?? 100_000;
   const grandTotal = alpacaEq + krakenEq + optEq + fxEq;
-  const startTotal = 600_000;
+  const startTotal = 800_000;
   const pnlUsd = grandTotal - startTotal;
   const pnlPct = startTotal > 0 ? ((grandTotal - startTotal) / startTotal) * 100 : 0;
 

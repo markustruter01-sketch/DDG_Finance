@@ -1732,3 +1732,70 @@ export function useAIImpactTimeline() {
     staleTime: 60_000,
   });
 }
+
+export interface PoseidonState {
+  total_equity: number;
+  paper_equity: number;
+  cash_usd: number;
+  open_positions: number;
+  total_pnl: number;
+  total_trades: number;
+  total_wins: number;
+  win_rate: number | null;
+  paused: boolean;
+  status: string;
+  strategy: string;
+  cycle_minutes: number;
+  max_pairs: number;
+  zscore_entry: number;
+  zscore_exit: number;
+  zscore_stop: number;
+  hurst_threshold: number;
+  adf_pvalue_threshold: number;
+  pair_params?: object[];
+  open_trades?: object[];
+}
+
+export function usePoseidonState() {
+  return useQuery<PoseidonState>({
+    queryKey: ["/poseidon/state"],
+    queryFn: async () => (await api.get("/poseidon/state")).data,
+    refetchInterval: useVisibleInterval(30_000),
+    retry: false,
+    staleTime: 15_000,
+  });
+}
+
+export interface KrakenCurrentState {
+  total_equity: number;
+  paper_equity: number;
+  cash_usd: number;
+  open_positions: number;
+  total_pnl: number;
+  total_trades: number;
+  total_wins: number;
+  win_rate: number | null;
+  paused: boolean;
+  status: string;
+  strategy: string;
+  cycle_hours: number;
+  universe_size: number;
+  ema_fast: number;
+  ema_slow: number;
+  adx_threshold: number;
+  hurst_threshold: number;
+  max_positions: number;
+  max_hold_days: number;
+  atr_stop_mult: number;
+  signal_scan?: object[];
+}
+
+export function useKrakenCurrentState() {
+  return useQuery<KrakenCurrentState>({
+    queryKey: ["/kraken-current/state"],
+    queryFn: async () => (await api.get("/kraken-current/state")).data,
+    refetchInterval: useVisibleInterval(30_000),
+    retry: false,
+    staleTime: 15_000,
+  });
+}

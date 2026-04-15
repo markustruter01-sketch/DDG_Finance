@@ -1,4 +1,4 @@
-const TICKER_TEXT = "System Note: Our 6-bot fleet (Stocks, Crypto, Forex, Futures) is currently in its Self-Learning Phase. Powered by institutional algorithms and Gemini AI, the system auto-optimizes parameters every 3 hours, logging every trend and trade into a persistent neural journal to sharpen performance. Want to build this automated trading platform for yourself in 2 days? DM this channel to register interest, this will help us understand demand and create a instruction manual. No experience needed!";
+const TICKER_TEXT = "System Note: Our 8-bot fleet (Stocks, Crypto, Forex, Futures) is currently in its Self-Learning Phase. Powered by institutional algorithms and Gemini AI, the system auto-optimizes parameters every 3 hours, logging every trend and trade into a persistent neural journal to sharpen performance. Want to build this automated trading platform for yourself in 2 days? DM this channel to register interest, this will help us understand demand and create a instruction manual. No experience needed!";
 
 function TickerBlock() {
   return (

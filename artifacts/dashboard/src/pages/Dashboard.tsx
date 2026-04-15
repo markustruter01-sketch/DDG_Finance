@@ -5,6 +5,7 @@ import {
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useOptionsState, useForexState,
   usePortfolio, useJournal, useEquityCurve,
+  usePoseidonState, useKrakenCurrentState,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
@@ -358,6 +359,8 @@ function FleetKPISummary() {
   const { data: fleetSummary, isLoading: krakenLoading } = useKrakenFleetSummary();
   const { data: optionsState, isLoading: optionsLoading } = useOptionsState();
   const { data: forexState, isLoading: forexLoading } = useForexState();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
@@ -369,6 +372,8 @@ function FleetKPISummary() {
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? 100_000;
   const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
+  const poseidonEquity = poseidonState?.total_equity ?? 100_000;
+  const kcEquity = kcState?.total_equity ?? 100_000;
 
   // Only include equity pools that have actually loaded. krakenFleetEquity = 0 while
   // the Kraken summary API is still fetching — never add that to the grand total yet.
@@ -377,13 +382,15 @@ function FleetKPISummary() {
   const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
     + (krakenReady ? krakenFleetEquity : 0)
     + optionsEquity
-    + forexEquity;
+    + forexEquity
+    + poseidonEquity
+    + kcEquity;
 
-  // True P&L = current equity across all 6 bots minus the $600k starting capital.
-  // Guard: do not show until all four equity pools have loaded.
+  // True P&L = current equity across all 8 bots minus the $800k starting capital.
+  // Guard: do not show until all key equity pools have loaded.
   // Do NOT use realized trade P&L — those are closed-trade sums only.
   const equitiesReady = alpacaEquity > 0 && krakenReady && optionsState != null && forexState != null;
-  const totalPnl: number | null = equitiesReady ? grandTotal - 600_000 : null;
+  const totalPnl: number | null = equitiesReady ? grandTotal - 800_000 : null;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -402,7 +409,7 @@ function FleetKPISummary() {
   const activeBotCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
   ).length;
-  const totalBotCount = (fleetSummary?.bot_count ?? 3) + 3;
+  const totalBotCount = (fleetSummary?.bot_count ?? 3) + 5;
 
   const regime = summary?.groq?.regime ?? null;
   const tradingMode = summary?.trading_mode;
@@ -411,7 +418,7 @@ function FleetKPISummary() {
     {
       label: "Fleet Equity",
       value: anyLoading ? "—" : formatCurrency(grandTotal),
-      sub: `${totalBotCount} bots · 4 capital pools`,
+      sub: `${totalBotCount} bots · 6 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
       valueColor: anyLoading ? "text-slate-500" : "text-white",
@@ -421,7 +428,7 @@ function FleetKPISummary() {
       value: totalPnl != null
         ? `${totalPnl >= 0 ? "+" : ""}${formatCurrency(totalPnl)}`
         : "—",
-      sub: "all 6 bots · vs $600k capital",
+      sub: "all 8 bots · vs $800k capital",
       icon: <BarChart2 className="h-4 w-4 text-emerald-400" />,
       accent: totalPnl == null
         ? "border-slate-500/20 bg-slate-500/5"
@@ -507,7 +514,7 @@ interface ChartTooltipProps {
   label?: string;
 }
 
-const FLEET_BASELINE = 600_000;
+const FLEET_BASELINE = 800_000;
 type EquityRange = "24h" | "7d" | "30d" | "all";
 
 function LiveEquityCurveSection() {
@@ -583,7 +590,7 @@ function LiveEquityCurveSection() {
         <CardTitle className="flex items-center gap-2 fluid-heading">
           <TrendingUp className="h-4 w-4 text-primary" />
           <span>Fleet Equity Curve</span>
-          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">6 Bots · 4 Pools</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">8 Bots · 6 Pools</span>
         </CardTitle>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-800/60 rounded-md p-0.5 gap-0.5">
@@ -645,7 +652,7 @@ function LiveEquityCurveSection() {
                 width={48}
               />
               <Tooltip content={<EquityTooltip />} />
-              <ReferenceLine y={FLEET_BASELINE} stroke="#64748b" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: "$600k baseline", position: "insideBottomRight", fill: "#64748b", fontSize: 9 }} />
+              <ReferenceLine y={FLEET_BASELINE} stroke="#64748b" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: "$800k baseline", position: "insideBottomRight", fill: "#64748b", fontSize: 9 }} />
               {peak > 0 && (
                 <ReferenceLine y={peak} stroke="#3b82f6" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: `HWM $${(peak / 1000).toFixed(0)}k`, position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
               )}

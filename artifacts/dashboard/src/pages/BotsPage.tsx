@@ -7,6 +7,8 @@ import {
   useOptionsPositions,
   useForexState,
   useForexPositions,
+  usePoseidonState,
+  useKrakenCurrentState,
   type AIIntervention,
   type ForexPosition,
 } from "@/hooks/use-trading";
@@ -269,6 +271,8 @@ export default function BotsPage() {
   const { data: optionsPositions, isLoading: optionsPosLoading } = useOptionsPositions();
   const { data: forexState, isLoading: forexLoading } = useForexState();
   const { data: forexPositionsRaw, isLoading: forexPosLoading } = useForexPositions();
+  const { data: poseidonState, isLoading: poseidonLoading } = usePoseidonState();
+  const { data: kcState, isLoading: kcLoading } = useKrakenCurrentState();
 
   const previousParams = useMemo(
     () => derivePreviousParams(aiTimeline?.interventions),
@@ -362,6 +366,30 @@ export default function BotsPage() {
     },
   ];
 
+  const poseidonEquity = poseidonState?.total_equity ?? null;
+  const poseidonWins = poseidonState?.total_wins ?? 0;
+  const poseidonTotalTrades = poseidonState?.total_trades ?? 0;
+  const poseidonLosses = poseidonTotalTrades - poseidonWins;
+  const poseidonWinRate = poseidonTotalTrades > 0 ? (poseidonWins / poseidonTotalTrades) * 100 : null;
+  const poseidonStrategyConfig: StrategyConfigRow[] = [
+    { label: "Entry Z-Score", value: `|Z| > ${poseidonState?.zscore_entry ?? 2.0}`, color: "#8b5cf6" },
+    { label: "Exit Z-Score", value: `|Z| < ${poseidonState?.zscore_exit ?? 0.3}`, color: "#a78bfa" },
+    { label: "Hurst Req.", value: `H < ${poseidonState?.hurst_threshold ?? 0.5} (mean-rev)`, color: "#94a3b8" },
+    { label: "Max Pairs", value: `${poseidonState?.max_pairs ?? 3} open`, color: "#cbd5e1" },
+  ];
+
+  const kcEquity = kcState?.total_equity ?? null;
+  const kcWins = kcState?.total_wins ?? 0;
+  const kcTotalTrades = kcState?.total_trades ?? 0;
+  const kcLosses = kcTotalTrades - kcWins;
+  const kcWinRate = kcTotalTrades > 0 ? (kcWins / kcTotalTrades) * 100 : null;
+  const kcStrategyConfig: StrategyConfigRow[] = [
+    { label: "EMA Crossover", value: `${kcState?.ema_fast ?? 20}/${kcState?.ema_slow ?? 100}`, color: "#06b6d4" },
+    { label: "ADX Filter", value: `ADX > ${kcState?.adx_threshold ?? 25}`, color: "#22d3ee" },
+    { label: "Trailing Stop", value: `${kcState?.atr_stop_mult ?? 2.0}× ATR`, color: "#f87171" },
+    { label: "Max Positions", value: `${kcState?.max_positions ?? 5}`, color: "#cbd5e1" },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-950 pb-24">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/95 backdrop-blur-xl px-4 py-3">
@@ -371,9 +399,9 @@ export default function BotsPage() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-white leading-none">Bots</h1>
-            <p className="text-[10px] text-slate-500">6-bot automated fleet</p>
+            <p className="text-[10px] text-slate-500">8-bot automated fleet</p>
           </div>
-          <span className="ml-auto text-[11px] text-slate-500">6 bots</span>
+          <span className="ml-auto text-[11px] text-slate-500">8 bots</span>
         </div>
       </header>
 
@@ -442,6 +470,38 @@ export default function BotsPage() {
             winRate={navWinRate}
             totalTrades={navTotalTrades}
             strategyConfig={navStrategyConfig}
+          />
+
+          <GenericBotCard
+            name="Poseidon"
+            icon="🔱"
+            color="#8b5cf6"
+            strategy="Crypto pairs trading — statistical arbitrage (Z-score)"
+            equity={poseidonEquity}
+            positions={[]}
+            isLoading={poseidonLoading}
+            paused={poseidonState?.paused ?? false}
+            winCount={poseidonWins}
+            lossCount={poseidonLosses}
+            winRate={poseidonWinRate}
+            totalTrades={poseidonTotalTrades}
+            strategyConfig={poseidonStrategyConfig}
+          />
+
+          <GenericBotCard
+            name="Kraken Current"
+            icon="🌊"
+            color="#06b6d4"
+            strategy="Crypto trend following — EMA crossover + ADX momentum"
+            equity={kcEquity}
+            positions={[]}
+            isLoading={kcLoading}
+            paused={kcState?.paused ?? false}
+            winCount={kcWins}
+            lossCount={kcLosses}
+            winRate={kcWinRate}
+            totalTrades={kcTotalTrades}
+            strategyConfig={kcStrategyConfig}
           />
 
         </div>

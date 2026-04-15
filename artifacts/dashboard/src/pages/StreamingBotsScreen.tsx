@@ -478,7 +478,7 @@ export default function StreamingBotsScreen() {
 
   const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity].filter((e): e is number => e != null);
   const fleetTotal = allEquities.length === 6 ? allEquities.reduce((s, e) => s + e, 0) : null;
-  const fleetPnl = fleetTotal != null ? fleetTotal - 600_000 : null;
+  const fleetPnl = fleetTotal != null ? fleetTotal - 800_000 : null;
 
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
 
@@ -657,7 +657,7 @@ export default function StreamingBotsScreen() {
           <div className="flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5" style={{ color: "#22d3ee" }} />
             <span className="text-xs font-black uppercase tracking-widest text-white">Bot Fleet</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>6 BOTS</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>8 BOTS</span>
           </div>
         </div>
 
@@ -676,7 +676,7 @@ export default function StreamingBotsScreen() {
           </div>
           <div className="text-center">
             <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>STARTING CAPITAL</div>
-            <div className="text-xs font-black font-mono" style={{ color: "rgba(203,213,225,0.6)" }}>$600,000</div>
+            <div className="text-xs font-black font-mono" style={{ color: "rgba(203,213,225,0.6)" }}>$800,000</div>
           </div>
         </div>
 

@@ -3,6 +3,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useOptionsState, useForexState,
+  usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
 
@@ -13,6 +14,8 @@ export function FleetPerformanceHero() {
   const { data: perfHistory } = usePerformanceHistory();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const caPerf = useKrakenPerformance("calypso");
@@ -24,7 +27,9 @@ export function FleetPerformanceHero() {
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optState?.total_equity ?? 100_000;
   const forexEquity = fxState?.total_equity ?? 100_000;
-  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
+  const poseidonEquity = poseidonState?.total_equity ?? 100_000;
+  const kcEquity = kcState?.total_equity ?? 100_000;
+  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity + poseidonEquity + kcEquity;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -82,6 +87,12 @@ export function FleetPerformanceHero() {
     const forexPnlToday = fxState?.total_pnl ?? 0;
     results.push({ name: "Navigator", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
+    const poseidonPnl = poseidonState?.total_pnl ?? 0;
+    results.push({ name: "Poseidon", icon: "🔱", dailyPnl: poseidonPnl });
+
+    const kcPnl = kcState?.total_pnl ?? 0;
+    results.push({ name: "Kraken Current", icon: "🌊", dailyPnl: kcPnl });
+
     const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
     const best = sorted[0] ?? null;
     const worst = sorted[sorted.length - 1] ?? null;
@@ -112,12 +123,22 @@ export function FleetPerformanceHero() {
     const fxPct = fxEquity > 0 ? (fxPnl / fxEquity) * 100 : 0;
     krakenLines.push({ id: "forex", name: "Navigator", icon: "🧭", accent: "#14b8a6", curve: fxPct !== 0 ? [0, fxPct * 0.25, fxPct * 0.5, fxPct * 0.75, fxPct] : [0] });
 
-    return krakenLines;
-  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory, optState, fxState]);
+    const psPnl = poseidonState?.total_pnl ?? 0;
+    const psEq = poseidonState?.total_equity ?? 100_000;
+    const psPct = psEq > 0 ? (psPnl / psEq) * 100 : 0;
+    krakenLines.push({ id: "poseidon", name: "Poseidon", icon: "🔱", accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
 
-  const botCount = (fleetSummary?.bot_count ?? 3) + 3;
+    const kcPnlVal = kcState?.total_pnl ?? 0;
+    const kcEqVal = kcState?.total_equity ?? 100_000;
+    const kcPct = kcEqVal > 0 ? (kcPnlVal / kcEqVal) * 100 : 0;
+    krakenLines.push({ id: "kraken-current", name: "KC", icon: "🌊", accent: "#06b6d4", curve: kcPct !== 0 ? [0, kcPct * 0.25, kcPct * 0.5, kcPct * 0.75, kcPct] : [0] });
+
+    return krakenLines;
+  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory, optState, fxState, poseidonState, kcState]);
+
+  const botCount = (fleetSummary?.bot_count ?? 3) + 5;
   const stats = [
-    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 4 capital pools` },
+    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 6 capital pools` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
     { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
     { label: "Best Today", value: todayPerformers.best ? `${todayPerformers.best.icon} ${todayPerformers.best.name}` : "—", color: "text-green-400", sub: todayPerformers.best ? `${todayPerformers.best.dailyPnl >= 0 ? "+" : ""}${todayPerformers.best.dailyPnl.toFixed(2)}% daily P&L` : "no trades today" },

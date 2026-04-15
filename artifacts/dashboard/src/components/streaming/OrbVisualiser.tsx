@@ -16,7 +16,7 @@ import {
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 
-const STARTING_CAPITAL = 600_000;
+const STARTING_CAPITAL = 800_000;
 
 function checkWebGL(): boolean {
   try {

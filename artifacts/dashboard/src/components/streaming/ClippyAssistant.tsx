@@ -54,11 +54,11 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
         style={{
           position: "fixed",
           bottom: 56,
-          left: 16,
+          right: 16,
           zIndex: 9999,
           display: "flex",
           flexDirection: "column",
-          alignItems: "flex-start",
+          alignItems: "flex-end",
           gap: 14,
           pointerEvents: "none",
           userSelect: "none",
@@ -95,11 +95,11 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
             style={{
               position: "absolute",
               bottom: -14,
-              left: 35,
+              right: 35,
               width: 0,
               height: 0,
-              borderLeft: "14px solid transparent",
-              borderRight: "7px solid transparent",
+              borderLeft: "7px solid transparent",
+              borderRight: "14px solid transparent",
               borderTop: "14px solid rgba(99,102,241,0.35)",
             }}
           />
@@ -107,11 +107,11 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
             style={{
               position: "absolute",
               bottom: -11,
-              left: 38,
+              right: 38,
               width: 0,
               height: 0,
-              borderLeft: "11px solid transparent",
-              borderRight: "5px solid transparent",
+              borderLeft: "5px solid transparent",
+              borderRight: "11px solid transparent",
               borderTop: "11px solid rgba(15,23,42,0.97)",
             }}
           />
@@ -120,7 +120,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
         {/* Clippy mascot SVG — 35% larger */}
         <div
           style={{
-            marginLeft: 14,
+            marginRight: 14,
             animation: "clippyFloat 3.5s ease-in-out infinite",
           }}
         >

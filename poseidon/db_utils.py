@@ -40,10 +40,15 @@ def _query(sql: str, params: tuple = (), fetch: bool = True):
 
 
 def ensure_poseidon_tables():
-    """Create Poseidon-specific tables if they don't exist."""
+    """Create Poseidon-specific tables and run idempotent migrations."""
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
+                # Idempotent migration: force_refresh column on shared kraken_heartbeat table
+                cur.execute("""
+                    ALTER TABLE kraken_heartbeat
+                    ADD COLUMN IF NOT EXISTS force_refresh BOOLEAN NOT NULL DEFAULT FALSE;
+                """)
                 cur.execute("""
                 CREATE TABLE IF NOT EXISTS poseidon_pair_params (
                     id              BIGSERIAL PRIMARY KEY,

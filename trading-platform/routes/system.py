@@ -535,7 +535,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                                     f"{_bname}: status={_bstatus}, cycle #{_bcycle}"
                                     + (f", age={_bage:.0f}s" if _bage else "")
                                 )
-                                if _bstatus == "error" or (_bage and _bage > 600):
+                                if _bstatus == "error" or (_bage and _bage > 1800):
                                     with _rconn.cursor() as _kc:
                                         _kc.execute(
                                             "UPDATE kraken_heartbeat SET force_refresh = TRUE WHERE id = %s",
@@ -704,8 +704,9 @@ async def _auto_heal_check() -> None:
                         _kage = (now - _klast.timestamp()) if _klast else None
                         if _kstatus == "error" or (_kage and _kage > 1800):
                             _any_degraded = True
+                            _per_bot_comp = f"kraken_{_bot_name.replace('-', '_')}"
                             record_degradation(
-                                component="kraken_api",
+                                component=_per_bot_comp,
                                 severity="error",
                                 error_type="bot_stale" if (_kage and _kage > 1800) else "bot_error",
                                 message=(
@@ -717,7 +718,10 @@ async def _auto_heal_check() -> None:
                 if _any_degraded:
                     await _remediate_component("kraken_api", triggered_by="auto_heal")
                 else:
-                    mark_resolved("kraken_api", "bot_stale")
+                    # Mark all per-bot components resolved
+                    for _rb_id, _rb_name in _BOT_ROWS:
+                        mark_resolved(f"kraken_{_rb_name.replace('-', '_')}", "bot_stale")
+                        mark_resolved(f"kraken_{_rb_name.replace('-', '_')}", "bot_error")
             finally:
                 _kconn.close()
     except Exception as exc:

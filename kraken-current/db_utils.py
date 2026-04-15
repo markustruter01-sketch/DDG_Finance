@@ -41,6 +41,11 @@ def ensure_kraken_current_tables():
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
+                # Idempotent migration: force_refresh column on shared kraken_heartbeat table
+                cur.execute("""
+                    ALTER TABLE kraken_heartbeat
+                    ADD COLUMN IF NOT EXISTS force_refresh BOOLEAN NOT NULL DEFAULT FALSE;
+                """)
                 cur.execute("""
                 CREATE TABLE IF NOT EXISTS kraken_current_trades (
                     id              BIGSERIAL PRIMARY KEY,

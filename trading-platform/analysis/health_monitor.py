@@ -506,35 +506,27 @@ def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status
     actions: list[str] = []
     changed = False
 
-    wr_status    = metrics.get("recent_win_rate", {}).get("status", "HEALTHY")
-    pf_status    = metrics.get("recent_profit_factor", {}).get("status", "HEALTHY")
-    sl_status    = metrics.get("loss_streak", {}).get("status", "HEALTHY")
-    fee_status   = metrics.get("fee_efficiency", {}).get("status", "HEALTHY")
+    wr_status = metrics.get("recent_win_rate", {}).get("status", "HEALTHY")
+    pf_status = metrics.get("recent_profit_factor", {}).get("status", "HEALTHY")
 
-    # Win rate CRITICAL → raise entry threshold (be more selective)
+    # Win rate CRITICAL → tighten entry threshold (+0.15 to ZSCORE_ENTRY, cap at 2.5)
     if wr_status == "CRITICAL" and "ZSCORE_ENTRY" in params:
         old = params["ZSCORE_ENTRY"]
-        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.05), 4)
+        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.15), 4)
         if params["ZSCORE_ENTRY"] != old:
-            actions.append(f"ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (win_rate CRITICAL)")
+            actions.append(
+                f"HealthMonitor auto-tighten: ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (win_rate CRITICAL)"
+            )
             changed = True
 
-    # Loss streak CRITICAL → raise entry threshold more aggressively
-    if sl_status == "CRITICAL" and "ZSCORE_ENTRY" in params:
-        old = params["ZSCORE_ENTRY"]
-        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.10), 4)
-        if params["ZSCORE_ENTRY"] != old:
-            actions.append(f"ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (loss_streak CRITICAL)")
-            changed = True
-
-    # Profit factor or fee drag CRITICAL → raise min profit floor
-    if (pf_status == "CRITICAL" or fee_status == "CRITICAL") and "MIN_NET_PROFIT_PCT" in params:
+    # Profit factor CRITICAL → raise minimum net profit floor (+0.002, cap at 0.03)
+    if pf_status == "CRITICAL" and "MIN_NET_PROFIT_PCT" in params:
         old = params["MIN_NET_PROFIT_PCT"]
-        params["MIN_NET_PROFIT_PCT"] = round(min(0.03, old + 0.001), 6)
+        params["MIN_NET_PROFIT_PCT"] = round(min(0.03, old + 0.002), 6)
         if params["MIN_NET_PROFIT_PCT"] != old:
             actions.append(
-                f"MIN_NET_PROFIT_PCT {old*100:.2f}%→{params['MIN_NET_PROFIT_PCT']*100:.2f}% "
-                f"({'pf' if pf_status=='CRITICAL' else 'fee'} CRITICAL)"
+                f"HealthMonitor auto-tighten: MIN_NET_PROFIT_PCT "
+                f"{old*100:.3f}%→{params['MIN_NET_PROFIT_PCT']*100:.3f}% (profit_factor CRITICAL)"
             )
             changed = True
 
@@ -542,7 +534,8 @@ def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status
         return []
 
     # Build reason strings for the reasons JSONB column
-    reason_entries = [f"HealthMonitor auto-tighten: {a}" for a in actions]
+    # actions already contain full reason text ("HealthMonitor auto-tighten: ...")
+    reason_entries = list(actions)
 
     # Write back params AND reasons
     try:

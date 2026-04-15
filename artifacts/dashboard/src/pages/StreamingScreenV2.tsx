@@ -117,6 +117,7 @@ function HeroStrip() {
       const timer = setTimeout(() => setPrevPnl(pnl24h.value), 2000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [pnl24h.value, prevPnl]);
 
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : "0.0";
@@ -686,8 +687,23 @@ function NeuralFeed() {
           <motion.div
             key={line.id}
             initial={i < 3 ? { opacity: 0, x: -10 } : false}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
+            animate={
+              line.highConviction && i < 3
+                ? {
+                    opacity: 1,
+                    x: 0,
+                    backgroundColor: [
+                      line.type === "trade" ? "rgba(250,204,21,0.12)" : "rgba(248,113,113,0.1)",
+                      line.type === "trade" ? "rgba(250,204,21,0.04)" : "rgba(248,113,113,0.03)",
+                    ],
+                  }
+                : { opacity: 1, x: 0 }
+            }
+            transition={
+              line.highConviction && i < 3
+                ? { duration: 1.5, ease: "easeOut" }
+                : { duration: 0.3 }
+            }
             className="flex items-start gap-2 px-3 py-1.5 border-b"
             style={{
               borderColor: line.highConviction ? "rgba(250,204,21,0.15)" : "rgba(255,255,255,0.03)",
@@ -696,15 +712,6 @@ function NeuralFeed() {
                 : line.type === "trade" ? "rgba(250,204,21,0.04)" : line.type === "signal" ? "rgba(248,113,113,0.02)" : "transparent",
               boxShadow: line.highConviction && i < 3 ? "inset 0 0 20px rgba(250,204,21,0.06)" : "none",
             }}
-            {...(line.highConviction && i < 3 ? {
-              animate: {
-                backgroundColor: [
-                  line.type === "trade" ? "rgba(250,204,21,0.12)" : "rgba(248,113,113,0.1)",
-                  line.type === "trade" ? "rgba(250,204,21,0.04)" : "rgba(248,113,113,0.03)",
-                ],
-              },
-              transition: { duration: 1.5, ease: "easeOut" },
-            } : {})}
           >
             <span style={{ fontSize: 12 }}>{line.icon}</span>
             <span className="shrink-0 font-bold" style={{ color: line.color, fontSize: 10, minWidth: 70 }}>

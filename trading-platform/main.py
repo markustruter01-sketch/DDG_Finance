@@ -384,7 +384,7 @@ async def lifespan(app: FastAPI):
     # ── Stage 6: True Price-Based Historical Backtest — Sunday 2:30 AM UTC ────
     # Runs 30 minutes after the Walk-Forward Optimiser to use fresh WFO data.
     # Now uses OHLCV-based simulation instead of P&L replay.
-    from analysis.backtest import run_all_bots as _bt_run_all
+    from analysis.backtester_kraken import run_all_bots as _bt_run_all
 
     async def _backtest_run():
         import asyncio

@@ -1,19 +1,21 @@
 """
-Strategy Backtester
---------------------
-Replays the current momentum-based regime-switching strategy against
-historical price data to produce a simulated equity curve.
+backtester_momentum.py — Alpaca / Oracle Momentum Backtest
+===========================================================
+Replays the Oracle bot's momentum-based regime-switching strategy against
+historical Alpaca price data to produce a simulated equity curve.
 
-Uses cached market data (Alpaca OHLCV) to simulate what trades would
-have been placed over the last N days using the same rules the live
-system applies.
+WHEN IT RUNS:
+  Called on-demand via the /portfolio/backtest endpoint (BacktesterPanel in
+  the dashboard). Not part of the nightly scheduler.
 
-This is a simplified momentum-backtest (no LLM calls) that tests the
-quantitative signal layer:
-  - Momentum 3mo/6mo filters
-  - 10% position cap
-  - ATR trailing stops
-  - Overheating override (Z>2 or RSI>75 → 50% cut)
+WHAT IT TESTS:
+  - Momentum 3-month / 6-month filters (yfinance universe)
+  - 10% per-position cap
+  - ATR trailing stops (period=14, multiplier from config)
+  - Overheating override: Z-score > 2.0 or RSI > 75 → 50% position cut
+
+No LLM calls — purely quantitative signal layer.
+See backtester_kraken.py for the Kraken-bot OHLCV backtester.
 """
 
 from __future__ import annotations

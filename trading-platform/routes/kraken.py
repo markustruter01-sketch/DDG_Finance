@@ -882,7 +882,7 @@ async def kraken_backtest_run(bot_id: str | None = None) -> dict:
     """
     import asyncio
     try:
-        from analysis.backtest import run_backtest, run_all_bots, KRAKEN_BOT_IDS
+        from analysis.backtester_kraken import run_backtest, run_all_bots, KRAKEN_BOT_IDS
         loop = asyncio.get_event_loop()
 
         if bot_id:
@@ -929,7 +929,7 @@ async def kraken_backtest_results(bot_id: str | None = None) -> dict:
     Return the most recent backtest results for all bots (or one specific bot).
     """
     try:
-        from analysis.backtest import get_latest_result, KRAKEN_BOT_IDS
+        from analysis.backtester_kraken import get_latest_result, KRAKEN_BOT_IDS
 
         bots = [bot_id] if bot_id else KRAKEN_BOT_IDS
         results = {}

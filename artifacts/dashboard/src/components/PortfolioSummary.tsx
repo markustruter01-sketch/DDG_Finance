@@ -94,6 +94,8 @@ export function CombinedPortfolioSummary() {
   const forexPnlPct   = (forexPnl / forexStart) * 100;
   const forexPosCount = fxState?.position_count ?? 0;
 
+  // Fleet equity formula: alpaca (Oracle) + krakenFleet (DJ+BB+Cal+Poseidon+KC via fleet-summary) + options (Apex) + forex (Navigator)
+  // Do NOT add poseidon or kraken-current separately — they are already inside krakenFleetEquity.
   const grandTotal = alpacaEquity
     + (krakenReady || fleetSummary ? krakenFleetEquity : 0)
     + optionsEquity

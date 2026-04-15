@@ -154,6 +154,12 @@ export interface TradeJournal {
     original_thesis: string;
     status: string;
     source?: string;
+    // Optional fields present on closed/oracle trades
+    pnl_usd?: number | null;
+    realized_pnl?: number | null;
+    side?: string;
+    direction?: string;
+    exit_reason?: string | null;
   }>;
 }
 
@@ -1127,6 +1133,7 @@ export interface KrakenPerformance {
   current_equity: number;
   cycle_count: number;
   bot_status: string;
+  trades_today?: number;
 }
 
 export function useKrakenPerformance(botId?: string) {

@@ -27,7 +27,7 @@ from data.sentiment import get_sentiment
 from data.onchain import get_onchain_data
 from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
-from analysis.backtester import run_backtest
+from analysis.backtester_momentum import run_backtest
 from data.cache import get_cache_stats
 from execution.kill_switch import get_state as ks_get_state
 from core.scheduler import get_job_status, is_auto_trading_enabled

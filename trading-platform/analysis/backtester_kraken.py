@@ -1,8 +1,13 @@
 """
-backtest.py — Stage 6: True Price-Based Historical Backtesting
-==============================================================
+backtester_kraken.py — Stage 6: True Price-Based Historical Backtesting
+========================================================================
 Runs every Sunday at 2:30 AM UTC (30 min after the Walk-Forward Optimiser).
 Fully deterministic — no LLM calls.
+
+Covers davy-jones (mean_reversion), calypso (mean_reversion_conservative),
+and blackbeard (flow_sentiment) bots. Poseidon and Kraken Current run their
+own strategy-specific simulators.
+See backtester_momentum.py for the simpler Alpaca/Oracle momentum backtest.
 
 This replaces the previous P&L replay simulator with a genuine price-based
 backtester that replays OHLCV candles through the actual strategy logic.

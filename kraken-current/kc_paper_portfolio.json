@@ -1,5 +1,5 @@
 {
-  "cash": 6821.30324319019,
+  "cash": 6927.11808246759,
   "positions": {
     "BTC/USD": {
       "symbol": "BTC/USD",
@@ -72,23 +72,23 @@
     "ZEC/USD": {
       "symbol": "ZEC/USD",
       "direction": "long",
-      "units": 36.99494983100833,
-      "entry_price": 347.78,
-      "stop_distance": 26.74102087316133,
-      "position_value": 12866.103652228076,
-      "ema_fast": 357.03754868899796,
-      "ema_slow": 313.8523902848603,
-      "adx": 26.46259677079871,
-      "best_price": 347.78,
-      "stop_level": 321.0389791268386,
+      "units": 36.49708228084088,
+      "entry_price": 346.71,
+      "stop_distance": 27.083878016018478,
+      "position_value": 12653.90339759034,
+      "ema_fast": 356.93564392709317,
+      "ema_slow": 313.8312021660484,
+      "adx": 26.34273634395189,
+      "best_price": 346.71,
+      "stop_level": 319.6261219839815,
       "trail_immediate": false,
       "trailing_active": false,
-      "opened_at": "2026-04-15T20:53:51.775788+00:00",
-      "fees_paid": 33.451869495793
+      "opened_at": "2026-04-15T21:24:52.780404+00:00",
+      "fees_paid": 32.90014883373488
     }
   },
-  "total_trades": 3,
+  "total_trades": 4,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-15T20:53:51.775849+00:00"
+  "updated_at": "2026-04-15T21:24:52.780481+00:00"
 }

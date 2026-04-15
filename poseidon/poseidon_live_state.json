@@ -1,7 +1,7 @@
 {
   "bot_id": "poseidon",
   "display_name": "Poseidon",
-  "equity": 99902.04334629468,
+  "equity": 99679.436157008,
   "cash": 40045.59452158531,
   "open_positions": 3,
   "positions": {
@@ -21,12 +21,12 @@
       "entry_hedge_ratio": 1.5003068119467236,
       "opened_at": "2026-04-15T08:07:02.237968+00:00",
       "fees_paid": 130.01595422122963,
-      "current_price_a": 0.3123,
+      "current_price_a": 0.3128,
       "current_price_b": 0.02408,
-      "leg_a_pnl": -207.05273374312753,
+      "leg_a_pnl": -239.4047233904909,
       "leg_b_pnl": 314.79370792000105,
-      "total_pnl": -22.274980044356113,
-      "leg_a_current": 0.3123,
+      "total_pnl": -54.62696969171947,
+      "leg_a_current": 0.3128,
       "leg_b_current": 0.02408
     },
     "35": {
@@ -69,12 +69,12 @@
       "entry_hedge_ratio": 1.1643956717443023,
       "opened_at": "2026-04-15T10:23:49.491422+00:00",
       "fees_paid": 112.43832611290858,
-      "current_price_a": 0.05392,
+      "current_price_a": 0.05371,
       "current_price_b": 0.003,
-      "leg_a_pnl": 0.0,
+      "leg_a_pnl": -77.81687352641717,
       "leg_b_pnl": 0.0,
-      "total_pnl": -112.43832611290858,
-      "leg_a_current": 0.05392,
+      "total_pnl": -190.25519963932575,
+      "leg_a_current": 0.05371,
       "leg_b_current": 0.003
     }
   },
@@ -781,6 +781,6 @@
     }
   ],
   "circuit_breaker": null,
-  "cycle": 1,
-  "updated_at": "2026-04-15T10:23:49.510126+00:00"
+  "cycle": 2,
+  "updated_at": "2026-04-15T10:38:51.114953+00:00"
 }

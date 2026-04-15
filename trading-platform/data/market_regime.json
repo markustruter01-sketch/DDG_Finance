@@ -1,9 +1,9 @@
 {
-  "regime": "Bear",
-  "written_at": "2026-04-05T08:43:15.942306+00:00",
+  "regime": "Sideways",
+  "written_at": "2026-04-15T18:47:27.132607+00:00",
   "cycle_number": 1,
   "using_fallback": false,
   "regime_override": false,
-  "rationale": "Bear regime: elevated VIX (24.54), negative momentum on QQQ and XLK, recession signals.",
-  "vix": 24.54
+  "rationale": "Oracle pure momentum: 6 long signal(s), 3 short signal(s) \u2014 deterministic ranking, no LLM",
+  "vix": 18.36
 }

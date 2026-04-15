@@ -356,9 +356,9 @@ function PositionChangeNotifier() {
 function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
   const { data: portfolio } = usePortfolio();
-  const { data: fleetSummary, isLoading: krakenLoading } = useKrakenFleetSummary();
-  const { data: optionsState, isLoading: optionsLoading } = useOptionsState();
-  const { data: forexState, isLoading: forexLoading } = useForexState();
+  const { data: fleetSummary } = useKrakenFleetSummary();
+  const { data: optionsState } = useOptionsState();
+  const { data: forexState } = useForexState();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
@@ -375,12 +375,14 @@ function FleetKPISummary() {
   const poseidonEquity = poseidonState?.total_equity ?? 100_000;
   const kcEquity = kcState?.total_equity ?? 100_000;
 
-  // Only include equity pools that have actually loaded. krakenFleetEquity = 0 while
-  // the Kraken summary API is still fetching — never add that to the grand total yet.
-  const krakenReady = !krakenLoading && krakenFleetEquity > 0;
-  const anyLoading = krakenLoading || optionsLoading || forexLoading;
+  // krakenReady = true as soon as fleetSummary data has arrived (not gated on isLoading
+  // which can stay truthy across re-renders while a background refetch is in flight).
+  const krakenReady = fleetSummary != null;
+  // Show "—" only on the very first render before ANY real data has arrived.
+  // Once any single source responds, show the live (progressively-updating) total.
+  const anyLoading = alpacaEquity === 0 && !krakenReady && optionsState == null && forexState == null;
   const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
-    + (krakenReady ? krakenFleetEquity : 0)
+    + krakenFleetEquity
     + optionsEquity
     + forexEquity
     + poseidonEquity

@@ -2,6 +2,10 @@
 """
 Historical Data Ingestion Pipeline  —  Stream-to-Database Architecture
 =======================================================================
+STANDALONE MAINTENANCE SCRIPT — not imported by the trading platform at runtime.
+Run manually from the shell to backfill historical price/news/dividend data into
+PostgreSQL before first launch or after adding new symbols.
+
 Lead-engineer-grade backfill script for the Quant Terminal AI system.
 
 CRITICAL DESIGN PRINCIPLE — Zero Local Storage

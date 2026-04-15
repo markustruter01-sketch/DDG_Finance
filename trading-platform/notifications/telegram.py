@@ -46,27 +46,6 @@ def _send_async(text: str) -> None:
     t.start()
 
 
-def send_profitable_trade_alert(
-    bot_name: str,
-    symbol: str,
-    pnl_pct: float,
-    pnl_usd: float,
-    side: str = "SELL",
-    reason: str = "",
-) -> None:
-    emoji = "\U0001f4b0" if pnl_pct >= 1.0 else "\u2705"
-    text = (
-        f"{emoji} <b>Profitable Trade — {bot_name}</b>\n"
-        f"\n"
-        f"\U0001f4ca <b>{symbol}</b> closed at <b>+{pnl_pct:.2f}%</b>\n"
-        f"\U0001f4b5 P&L: <b>${pnl_usd:,.2f}</b>\n"
-    )
-    if reason:
-        text += f"\U0001f4dd Reason: {reason}\n"
-    text += f"\n\u23f0 {datetime.now(timezone.utc).strftime('%H:%M UTC · %b %d, %Y')}"
-    _send_async(text)
-
-
 def send_batch_summary(alerts: list[dict[str, Any]]) -> None:
     if not alerts:
         return

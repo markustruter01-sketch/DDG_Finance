@@ -1,24 +1,7 @@
 {
-  "cash": 39869.00248990213,
-  "reserved_margin": 59614.51817645665,
+  "cash": 39777.81597655789,
+  "reserved_margin": 59554.153798394145,
   "positions": {
-    "6": {
-      "pair_set_id": 6,
-      "asset_a": "AVAX/USD",
-      "asset_b": "SUI/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 2096.1934270028178,
-      "leg_b_units": 16352.648038224364,
-      "leg_a_entry": 9.49,
-      "leg_b_entry": 0.9657,
-      "position_value": 19892.87562225674,
-      "entry_zscore": -2.194978921627979,
-      "entry_hedge_ratio": 0.7938395891263196,
-      "opened_at": "2026-04-15T20:56:35.089806+00:00",
-      "fees_paid": 92.78003236520203
-    },
     "8": {
       "pair_set_id": 8,
       "asset_a": "VIRTUAL/USD",
@@ -52,9 +35,26 @@
       "entry_hedge_ratio": 0.5595290759422922,
       "opened_at": "2026-04-15T21:27:43.371840+00:00",
       "fees_paid": 80.47644072539887
+    },
+    "12": {
+      "pair_set_id": 12,
+      "asset_a": "GALA/USD",
+      "asset_b": "EGLD/USD",
+      "direction": "long_a_short_b",
+      "leg_a_side": "long",
+      "leg_b_side": "short",
+      "leg_a_units": 6377013.261798789,
+      "leg_b_units": 6911.40949222995,
+      "leg_a_entry": 0.00311,
+      "leg_b_entry": 4.05,
+      "position_value": 19832.511244194233,
+      "entry_zscore": -3.0917247480897974,
+      "entry_hedge_ratio": 1.4113799356460943,
+      "opened_at": "2026-04-15T23:03:02.050215+00:00",
+      "fees_paid": 124.34167118808637
     }
   },
-  "total_trades": 5,
-  "consecutive_losses": 2,
-  "updated_at": "2026-04-15T21:27:43.371925+00:00"
+  "total_trades": 6,
+  "consecutive_losses": 3,
+  "updated_at": "2026-04-15T23:03:02.050326+00:00"
 }

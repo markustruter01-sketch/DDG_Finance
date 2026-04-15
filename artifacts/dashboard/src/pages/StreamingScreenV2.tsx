@@ -76,12 +76,11 @@ function HeroStrip() {
   const { wins, losses, totalTrades } = useRealFeed(50);
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
+  // krakenEq (fleet-summary) already includes all 5 kraken bots: DJ, BB, Cal, Poseidon, KC
   const krakenEq = fleet?.total_equity_usd ?? 0;
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
-  const poseidonEq = poseidonState?.total_equity ?? 0;
-  const kcEq = kcState?.total_equity ?? 0;
-  const totalEquity = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
+  const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
 
   const pnl24h = useMemo(() => {
     if (!curve?.snapshots?.length) return { value: 0, pct: 0, label: "24H P&L" };

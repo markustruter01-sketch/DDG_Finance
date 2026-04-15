@@ -1,34 +1,10 @@
 {
   "bot_id": "poseidon",
   "display_name": "Poseidon",
-  "equity": 99324.23019367308,
-  "cash": 39868.91212359899,
+  "equity": 99133.55386357862,
+  "cash": 39869.00248990213,
   "open_positions": 3,
   "positions": {
-    "4": {
-      "pair_set_id": 4,
-      "asset_a": "BNB/USD",
-      "asset_b": "STX/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 31.93210181627295,
-      "leg_b_units": 47050.66695965032,
-      "leg_a_entry": 623.48,
-      "leg_b_entry": 0.237,
-      "position_value": 19909.02684040986,
-      "entry_zscore": -3.1799445422355324,
-      "entry_hedge_ratio": 0.5600980981553372,
-      "opened_at": "2026-04-15T20:56:35.088049+00:00",
-      "fees_paid": 80.75609076560215,
-      "current_price_a": 624.06,
-      "current_price_b": 0.2356,
-      "leg_a_pnl": 18.52061905343599,
-      "leg_b_pnl": 65.87093374350972,
-      "total_pnl": 3.6354620313435646,
-      "leg_a_current": 624.06,
-      "leg_b_current": 0.2356
-    },
     "6": {
       "pair_set_id": 6,
       "asset_a": "AVAX/USD",
@@ -76,6 +52,30 @@
       "total_pnl": -90.2848015874786,
       "leg_a_current": 0.6926,
       "leg_b_current": 0.3338
+    },
+    "3": {
+      "pair_set_id": 3,
+      "asset_a": "BNB/USD",
+      "asset_b": "STX/USD",
+      "direction": "long_a_short_b",
+      "leg_a_side": "long",
+      "leg_b_side": "short",
+      "leg_a_units": 31.84692629838451,
+      "leg_b_units": 47316.37947874002,
+      "leg_a_entry": 623.21,
+      "leg_b_entry": 0.2347,
+      "position_value": 19847.32293841621,
+      "entry_zscore": -2.314432365287443,
+      "entry_hedge_ratio": 0.5595290759422922,
+      "opened_at": "2026-04-15T21:27:43.371840+00:00",
+      "fees_paid": 80.47644072539887,
+      "current_price_a": 623.73,
+      "current_price_b": 0.236,
+      "leg_a_pnl": 16.560401675159365,
+      "leg_b_pnl": -61.511293322361816,
+      "total_pnl": -125.42733237260133,
+      "leg_a_current": 623.73,
+      "leg_b_current": 0.236
     }
   },
   "pair_params": [
@@ -781,6 +781,6 @@
     }
   ],
   "circuit_breaker": null,
-  "cycle": 5,
-  "updated_at": "2026-04-15T21:56:39.215571+00:00"
+  "cycle": 3,
+  "updated_at": "2026-04-15T21:57:42.549899+00:00"
 }

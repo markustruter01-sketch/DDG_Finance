@@ -291,14 +291,21 @@ async def system_health_architecture() -> dict:
             finally:
                 _kpgconn.close()
 
-        _summary_level = "red" if "red" in _bot_levels else ("yellow" if "yellow" in _bot_levels else "green")
+        if not _bot_levels:
+            # DATABASE_URL unavailable — cannot assess fleet status
+            _summary_level = "yellow"
+        else:
+            _summary_level = "red" if "red" in _bot_levels else ("yellow" if "yellow" in _bot_levels else "green")
         _n_ok = sum(1 for l in _bot_levels if l == "green")
         nodes["kraken_api"] = {
             "label": "Kraken Crypto Fleet (5 bots)",
             "level": _summary_level,
             "latency_ms": None,
             "data_age_s": None,
-            "detail": f"{_n_ok}/{len(_ARCH_BOTS)} bots healthy · " + " | ".join(_bot_detail_parts),
+            "detail": (
+                f"{_n_ok}/{len(_ARCH_BOTS)} bots healthy · " + " | ".join(_bot_detail_parts)
+                if _bot_levels else "DB unavailable — fleet status unknown"
+            ),
         }
     except Exception as exc:
         nodes["kraken_api"] = {"label": "Kraken Crypto Fleet (5 bots)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
@@ -692,6 +699,7 @@ async def _auto_heal_check() -> None:
             try:
                 _any_degraded = False
                 for _bot_db_id, _bot_name in _BOT_ROWS:
+                    _per_bot_comp = f"kraken_{_bot_name.replace('-', '_')}"
                     with _kconn.cursor() as _kc:
                         _kc.execute(
                             "SELECT status, last_updated FROM kraken_heartbeat WHERE id = %s",
@@ -704,7 +712,6 @@ async def _auto_heal_check() -> None:
                         _kage = (now - _klast.timestamp()) if _klast else None
                         if _kstatus == "error" or (_kage and _kage > 1800):
                             _any_degraded = True
-                            _per_bot_comp = f"kraken_{_bot_name.replace('-', '_')}"
                             record_degradation(
                                 component=_per_bot_comp,
                                 severity="error",
@@ -715,13 +722,12 @@ async def _auto_heal_check() -> None:
                                 ),
                                 detail=f"bot_id={_bot_name} db_id={_bot_db_id}",
                             )
+                        else:
+                            # Bot is healthy — resolve per-bot degradation immediately
+                            mark_resolved(_per_bot_comp, "bot_stale")
+                            mark_resolved(_per_bot_comp, "bot_error")
                 if _any_degraded:
                     await _remediate_component("kraken_api", triggered_by="auto_heal")
-                else:
-                    # Mark all per-bot components resolved
-                    for _rb_id, _rb_name in _BOT_ROWS:
-                        mark_resolved(f"kraken_{_rb_name.replace('-', '_')}", "bot_stale")
-                        mark_resolved(f"kraken_{_rb_name.replace('-', '_')}", "bot_error")
             finally:
                 _kconn.close()
     except Exception as exc:

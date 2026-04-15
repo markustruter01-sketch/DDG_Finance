@@ -1874,10 +1874,29 @@ export interface PoseidonPairParam {
   is_tradeable: boolean;
 }
 
+export interface AdaptiveParam {
+  bot_id: string;
+  params: Record<string, number>;
+  metrics: Record<string, number>;
+  reasons: Record<string, string>;
+  adapted_at: string | null;
+  lookback_n: number;
+}
+
+export interface RecentTrade {
+  bot_id: string;
+  symbol: string;
+  side: string;
+  pnl_usd: number;
+  closed_at: string | null;
+}
+
 export interface PairLearningData {
   symbols: PairLearningSymbol[];
   fleet_symbols: FleetSymbol[];
   poseidon_pairs: PoseidonPairParam[];
+  adaptive_params: AdaptiveParam[];
+  recent_trades: RecentTrade[];
   total_symbols: number;
   paused_count: number;
   active_count: number;

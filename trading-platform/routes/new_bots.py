@@ -202,6 +202,40 @@ async def pair_learning():
 
     fleet_symbols = sorted(unique_symbols.values(), key=lambda x: (not x["any_paused"], -(x.get("avg_hurst") or 0)))
 
+    # Adaptive parameters per bot (self-tuning)
+    adaptive_rows = _pg_query("""
+        SELECT bot_id, params, metrics, reasons, adapted_at, lookback_n
+        FROM kraken_adaptive_params ORDER BY bot_id
+    """)
+    adaptive_params = []
+    for a in adaptive_rows:
+        adaptive_params.append({
+            "bot_id": a["bot_id"],
+            "params": a["params"] or {},
+            "metrics": a["metrics"] or {},
+            "reasons": a["reasons"] or {},
+            "adapted_at": str(a["adapted_at"]) if a["adapted_at"] else None,
+            "lookback_n": int(a["lookback_n"] or 0),
+        })
+
+    # Recent trades feed (last 20 across all 3 bots)
+    recent_trades = _pg_query("""
+        SELECT bot_id, symbol, side, pnl_usd, closed_at
+        FROM kraken_trades
+        WHERE closed_at IS NOT NULL
+        ORDER BY closed_at DESC
+        LIMIT 20
+    """)
+    recent_trades_list = []
+    for t in recent_trades:
+        recent_trades_list.append({
+            "bot_id": t["bot_id"],
+            "symbol": t["symbol"],
+            "side": t["side"],
+            "pnl_usd": float(t["pnl_usd"] or 0),
+            "closed_at": str(t["closed_at"]) if t["closed_at"] else None,
+        })
+
     # Poseidon pair stats
     poseidon_pairs = _pg_query("""
         SELECT pair_set_id, asset_a, asset_b, hedge_ratio, hurst, adf_pvalue, is_tradeable
@@ -217,6 +251,8 @@ async def pair_learning():
         "symbols": symbols,
         "fleet_symbols": fleet_symbols,
         "poseidon_pairs": poseidon_pairs,
+        "adaptive_params": adaptive_params,
+        "recent_trades": recent_trades_list,
         "total_symbols": len(total_syms),
         "paused_count": len(paused_syms),
         "active_count": len(active_syms),

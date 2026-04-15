@@ -1,7 +1,7 @@
 {
   "regime": "Sideways",
-  "written_at": "2026-04-15T19:01:47.458883+00:00",
-  "cycle_number": 1,
+  "written_at": "2026-04-15T19:46:30.394965+00:00",
+  "cycle_number": 2,
   "using_fallback": false,
   "regime_override": false,
   "rationale": "Oracle pure momentum: 6 long signal(s), 3 short signal(s) \u2014 deterministic ranking, no LLM",

@@ -1,6 +1,6 @@
 {
-  "cash": 39685.81288594409,
-  "reserved_margin": 59841.355606843776,
+  "cash": 59847.07279110995,
+  "reserved_margin": 39860.94693758484,
   "positions": {
     "35": {
       "pair_set_id": 35,
@@ -18,23 +18,6 @@
       "entry_hedge_ratio": 0.8982449534168133,
       "opened_at": "2026-04-15T08:07:02.245930+00:00",
       "fees_paid": 98.58040047061294
-    },
-    "12": {
-      "pair_set_id": 12,
-      "asset_a": "SEI/USD",
-      "asset_b": "GALA/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 370556.54060198326,
-      "leg_b_units": 7755033.791389147,
-      "leg_a_entry": 0.05392,
-      "leg_b_entry": 0.003,
-      "position_value": 19980.408669258937,
-      "entry_zscore": -2.3712015191137588,
-      "entry_hedge_ratio": 1.1643956717443023,
-      "opened_at": "2026-04-15T10:23:49.491422+00:00",
-      "fees_paid": 112.43832611290858
     },
     "3": {
       "pair_set_id": 3,
@@ -54,7 +37,7 @@
       "fees_paid": 80.75425586176797
     }
   },
-  "total_trades": 1,
-  "consecutive_losses": 1,
-  "updated_at": "2026-04-15T19:16:13.622260+00:00"
+  "total_trades": 2,
+  "consecutive_losses": 0,
+  "updated_at": "2026-04-15T20:01:13.599312+00:00"
 }

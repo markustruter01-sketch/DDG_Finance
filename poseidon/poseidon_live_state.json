@@ -1,7 +1,7 @@
 {
   "bot_id": "poseidon",
   "display_name": "Poseidon",
-  "equity": 99434.75064214545,
+  "equity": 99617.31818243362,
   "cash": 39685.81288594409,
   "open_positions": 3,
   "positions": {
@@ -21,13 +21,13 @@
       "entry_hedge_ratio": 0.8982449534168133,
       "opened_at": "2026-04-15T08:07:02.245930+00:00",
       "fees_paid": 98.58040047061294,
-      "current_price_a": 0.0246,
-      "current_price_b": 0.0792,
-      "leg_a_pnl": 645.4040093600472,
-      "leg_b_pnl": -536.6130847437174,
-      "total_pnl": 10.210524145716846,
-      "leg_a_current": 0.0246,
-      "leg_b_current": 0.0792
+      "current_price_a": 0.02477,
+      "current_price_b": 0.0798,
+      "leg_a_pnl": 787.8958036343435,
+      "leg_b_pnl": -676.599106850771,
+      "total_pnl": 12.716296312959486,
+      "leg_a_current": 0.02477,
+      "leg_b_current": 0.0798
     },
     "12": {
       "pair_set_id": 12,
@@ -45,13 +45,13 @@
       "entry_hedge_ratio": 1.1643956717443023,
       "opened_at": "2026-04-15T10:23:49.491422+00:00",
       "fees_paid": 112.43832611290858,
-      "current_price_a": 0.05583,
-      "current_price_b": 0.00309,
-      "leg_a_pnl": 707.7629925497862,
-      "leg_b_pnl": -697.9530412250217,
-      "total_pnl": -102.6283747881441,
-      "leg_a_current": 0.05583,
-      "leg_b_current": 0.00309
+      "current_price_a": 0.0562,
+      "current_price_b": 0.00308,
+      "leg_a_pnl": 844.8689125725208,
+      "leg_b_pnl": -620.40270331113,
+      "total_pnl": 112.02788314848218,
+      "leg_a_current": 0.0562,
+      "leg_b_current": 0.00308
     },
     "3": {
       "pair_set_id": 3,
@@ -69,13 +69,13 @@
       "entry_hedge_ratio": 0.561794492218426,
       "opened_at": "2026-04-15T19:16:13.622173+00:00",
       "fees_paid": 80.75425586176797,
-      "current_price_a": 622.94,
-      "current_price_b": 0.236,
-      "leg_a_pnl": 0.0,
-      "leg_b_pnl": 0.0,
-      "total_pnl": -80.75425586176797,
-      "leg_a_current": 622.94,
-      "leg_b_current": 0.236
+      "current_price_a": 627.5,
+      "current_price_b": 0.2381,
+      "leg_a_pnl": 145.57500334805206,
+      "leg_b_pnl": -99.41523730197275,
+      "total_pnl": -34.59448981568866,
+      "leg_a_current": 627.5,
+      "leg_b_current": 0.2381
     }
   },
   "pair_params": [
@@ -781,6 +781,6 @@
     }
   ],
   "circuit_breaker": null,
-  "cycle": 2,
-  "updated_at": "2026-04-15T19:16:13.630235+00:00"
+  "cycle": 4,
+  "updated_at": "2026-04-15T19:46:16.047876+00:00"
 }

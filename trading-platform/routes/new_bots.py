@@ -110,6 +110,122 @@ async def poseidon_state():
     }
 
 
+@new_bots_router.get("/pair-learning")
+async def pair_learning():
+    """Python rule-based learning journal — per-symbol Hurst, ADF, win rates, pauses."""
+
+    # Per-symbol stats from pair performance table
+    perf_rows = _pg_query("""
+        SELECT bot_id, symbol, hurst_current, adf_pvalue_current,
+               status, pause_until, pause_reason, updated_at
+        FROM kraken_pair_performance
+        ORDER BY bot_id, symbol
+    """)
+
+    # Aggregate win rates from kraken_trades per bot+symbol
+    trade_rows = _pg_query("""
+        SELECT bot_id, symbol,
+               COUNT(*) FILTER (WHERE pnl_usd > 0) AS wins,
+               COUNT(*) AS total,
+               SUM(pnl_usd) AS total_pnl,
+               MAX(closed_at) AS last_trade_at
+        FROM kraken_trades
+        WHERE closed_at IS NOT NULL
+        GROUP BY bot_id, symbol
+        ORDER BY bot_id, symbol
+    """)
+
+    # Build win-rate lookup: (bot_id, symbol) -> stats
+    wr_lookup: dict = {}
+    for t in trade_rows:
+        key = (t["bot_id"], t["symbol"])
+        wr_lookup[key] = {
+            "wins": int(t["wins"] or 0),
+            "total": int(t["total"] or 0),
+            "total_pnl": float(t["total_pnl"] or 0),
+            "last_trade_at": str(t["last_trade_at"]) if t["last_trade_at"] else None,
+        }
+
+    # Merge into symbol records
+    symbols = []
+    for row in perf_rows:
+        bot_id = row["bot_id"]
+        symbol = row["symbol"]
+        wr = wr_lookup.get((bot_id, symbol), {})
+        wins = wr.get("wins", 0)
+        total = wr.get("total", 0)
+        symbols.append({
+            "bot_id": bot_id,
+            "symbol": symbol,
+            "hurst": float(row["hurst_current"]) if row["hurst_current"] is not None else None,
+            "adf_pvalue": float(row["adf_pvalue_current"]) if row["adf_pvalue_current"] is not None else None,
+            "status": row["status"],
+            "pause_until": str(row["pause_until"]) if row["pause_until"] else None,
+            "pause_reason": row["pause_reason"],
+            "updated_at": str(row["updated_at"]) if row["updated_at"] else None,
+            "wins": wins,
+            "losses": total - wins,
+            "total_trades": total,
+            "win_rate": (wins / total * 100) if total > 0 else None,
+            "total_pnl": wr.get("total_pnl", 0),
+            "last_trade_at": wr.get("last_trade_at"),
+        })
+
+    # Fleet-wide symbol summary (deduplicated across bots)
+    unique_symbols: dict[str, dict] = {}
+    for s in symbols:
+        sym = s["symbol"]
+        if sym not in unique_symbols:
+            unique_symbols[sym] = {
+                "symbol": sym,
+                "avg_hurst": None,
+                "avg_adf_pvalue": None,
+                "total_wins": 0,
+                "total_losses": 0,
+                "total_pnl": 0,
+                "any_paused": False,
+                "pause_reason": None,
+                "bot_count": 0,
+            }
+        u = unique_symbols[sym]
+        u["total_wins"] += s["wins"]
+        u["total_losses"] += s["losses"]
+        u["total_pnl"] += s["total_pnl"]
+        u["bot_count"] += 1
+        if s["hurst"] is not None:
+            u["avg_hurst"] = ((u["avg_hurst"] or 0) + s["hurst"]) / 1 if u["avg_hurst"] is None else (u["avg_hurst"] * (u["bot_count"] - 1) + s["hurst"]) / u["bot_count"]
+        if s["adf_pvalue"] is not None:
+            u["avg_adf_pvalue"] = s["adf_pvalue"] if u["avg_adf_pvalue"] is None else (u["avg_adf_pvalue"] + s["adf_pvalue"]) / 2
+        if s["status"] == "paused":
+            u["any_paused"] = True
+            u["pause_reason"] = s["pause_reason"]
+
+    fleet_symbols = sorted(unique_symbols.values(), key=lambda x: (not x["any_paused"], -(x.get("avg_hurst") or 0)))
+
+    # Poseidon pair stats
+    poseidon_pairs = _pg_query("""
+        SELECT pair_set_id, asset_a, asset_b, hedge_ratio, hurst, adf_pvalue, is_tradeable
+        FROM poseidon_pair_params ORDER BY pair_set_id LIMIT 20
+    """)
+
+    # Fleet-level counts (unique symbols)
+    paused_syms = set(s["symbol"] for s in symbols if s["status"] == "paused")
+    active_syms = set(s["symbol"] for s in symbols if s["status"] == "active") - paused_syms
+    total_syms = active_syms | paused_syms
+
+    return {
+        "symbols": symbols,
+        "fleet_symbols": fleet_symbols,
+        "poseidon_pairs": poseidon_pairs,
+        "total_symbols": len(total_syms),
+        "paused_count": len(paused_syms),
+        "active_count": len(active_syms),
+        "bot_slot_total": len(symbols),
+        "bot_slot_paused": sum(1 for s in symbols if s["status"] == "paused"),
+        "bot_slot_active": sum(1 for s in symbols if s["status"] == "active"),
+    }
+
+
 @new_bots_router.get("/kraken-current/state")
 async def kraken_current_state():
     """Return current state of Bot #8 Kraken Current (trend following)."""

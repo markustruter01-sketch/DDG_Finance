@@ -373,7 +373,7 @@ def check_exits(current_prices: dict[str, float]):
             trade = portfolio.close_position(ps_id, price_a, price_b, reason)
             if trade:
                 record_trade(trade)
-                logger.info(f"Poseidon | Exited pair {ps_id}: {reason} Z={current_z:.2f if current_z else 'N/A'}")
+                logger.info(f"Poseidon | Exited pair {ps_id}: {reason} Z={f'{current_z:.2f}' if current_z is not None else 'N/A'}")
 
 
 # ── Entry scan ────────────────────────────────────────────────────────────────

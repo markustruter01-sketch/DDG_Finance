@@ -1312,26 +1312,24 @@ def section_correlation_aware_sizing(bot_label: str, bot_id: str) -> list[str]:
         lines.append(f"  correlation_tracker unavailable: {exc}")
         return lines
 
-    # Load open positions for this bot via DB
-    open_rows = _pg_query(
-        """
-        SELECT symbol, entry_price, size_usd
-        FROM kraken_positions
-        WHERE bot_id = %s AND status = 'open'
-        ORDER BY symbol
-        """,
+    # Load open positions for this bot via kraken_portfolio (positions stored as JSONB)
+    port_rows = _pg_query(
+        "SELECT positions FROM kraken_portfolio WHERE bot_id = %s LIMIT 1",
         (bot_id,),
     )
+    open_symbols: list[str] = []
+    if port_rows and port_rows[0].get("positions"):
+        pos_data = port_rows[0]["positions"]
+        if isinstance(pos_data, dict):
+            open_symbols = list(pos_data.keys())
 
-    if not open_rows:
+    if not open_symbols:
         lines.append("  No open positions — correlation-aware sizing active but idle.")
         lines.append("")
         lines.append(f"  Thresholds: HIGH > {HIGH_CORR_THRESHOLD:.0%}  →  0.50×")
         lines.append(f"              MODERATE > {MODERATE_CORR_THRESHOLD:.0%}  →  0.75×")
         lines.append(f"              LOW ≤ {MODERATE_CORR_THRESHOLD:.0%}  →  1.00×  (no adjustment)")
         return lines
-
-    open_symbols = [r["symbol"] for r in open_rows]
 
     # Attempt to load closes_cache from correlation_tracker module — only
     # available in-process (the trading bot's memory), so it may be empty here.
@@ -2180,7 +2178,7 @@ def section_poseidon_status() -> list[str]:
     # Open positions
     _h2(lines, "OPEN PAIR POSITIONS")
     pos_rows = _pg_query("""
-        SELECT pair_set_id, asset_a, asset_b, direction, entry_zscore, opened_at
+        SELECT pair_set_id, asset_a, asset_b, direction, entry_zscore
         FROM poseidon_trades
         WHERE closed_at IS NULL OR closed_at > NOW() - INTERVAL '1 hour'
         LIMIT 3

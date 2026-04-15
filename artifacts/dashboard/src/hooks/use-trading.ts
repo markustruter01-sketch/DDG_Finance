@@ -1834,3 +1834,64 @@ export function useKrakenCurrentState() {
     staleTime: 15_000,
   });
 }
+
+export interface PairLearningSymbol {
+  bot_id: string;
+  symbol: string;
+  hurst: number | null;
+  adf_pvalue: number | null;
+  status: "active" | "paused";
+  pause_until: string | null;
+  pause_reason: string | null;
+  updated_at: string | null;
+  wins: number;
+  losses: number;
+  total_trades: number;
+  win_rate: number | null;
+  total_pnl: number;
+  last_trade_at: string | null;
+}
+
+export interface FleetSymbol {
+  symbol: string;
+  avg_hurst: number | null;
+  avg_adf_pvalue: number | null;
+  total_wins: number;
+  total_losses: number;
+  total_pnl: number;
+  any_paused: boolean;
+  pause_reason: string | null;
+  bot_count: number;
+}
+
+export interface PoseidonPairParam {
+  pair_set_id: number;
+  asset_a: string;
+  asset_b: string;
+  hedge_ratio: number;
+  hurst: number;
+  adf_pvalue: number;
+  is_tradeable: boolean;
+}
+
+export interface PairLearningData {
+  symbols: PairLearningSymbol[];
+  fleet_symbols: FleetSymbol[];
+  poseidon_pairs: PoseidonPairParam[];
+  total_symbols: number;
+  paused_count: number;
+  active_count: number;
+  bot_slot_total: number;
+  bot_slot_paused: number;
+  bot_slot_active: number;
+}
+
+export function usePairLearning() {
+  return useQuery<PairLearningData>({
+    queryKey: ["/pair-learning"],
+    queryFn: async () => (await api.get("/pair-learning")).data,
+    refetchInterval: useVisibleInterval(60_000),
+    retry: false,
+    staleTime: 30_000,
+  });
+}

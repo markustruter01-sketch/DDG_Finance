@@ -1,21 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
-  useStatusSummary,
-  useKrakenFleetSummary,
-  useKrakenPerformance,
-  useOptionsState,
-  useForexState,
-  useVault,
-  useForexVault,
-  useJournal,
-  usePoseidonState,
-  useKrakenCurrentState,
+  usePairLearning,
+  type PairLearningSymbol,
+  type FleetSymbol,
+  type PoseidonPairParam,
 } from "@/hooks/use-trading";
-import { useRealFeed } from "@/components/streaming/useRealFeed";
-import { NewsIntelligence } from "@/components/streaming/NewsIntelligence";
-import { GeminiThinking } from "@/components/streaming/GeminiThinking";
-import { SalesTicker } from "@/components/streaming/SalesTicker";
-import { AnimatedValue } from "@/components/streaming/AnimatedValue";
 
 const C = {
   green: "#4ade80",
@@ -25,491 +14,774 @@ const C = {
   violet: "#a78bfa",
   amber: "#fbbf24",
   slate: "rgba(148,163,184,0.5)",
-  slateDim: "rgba(148,163,184,0.35)",
-  white: "#ffffff",
+  dim: "rgba(148,163,184,0.3)",
+  bg: "#020617",
+  card: "rgba(15,23,42,0.95)",
+  border: "rgba(255,255,255,0.06)",
 };
-
-const BOT_META = [
-  { key: "oracle",          name: "Oracle",         icon: "🔮", color: "#8b5cf6", market: "Stocks" },
-  { key: "davy-jones",      name: "Davy Jones",     icon: "⚓",  color: "#22d3ee", market: "Crypto" },
-  { key: "blackbeard",      name: "Blackbeard",     icon: "🏴‍☠️", color: "#ef4444", market: "Crypto" },
-  { key: "calypso",         name: "Calypso",        icon: "🌊",  color: "#3b82f6", market: "Crypto" },
-  { key: "apex",            name: "Apex Predator",  icon: "🎯",  color: "#f59e0b", market: "Options" },
-  { key: "navigator",       name: "Navigator",      icon: "🧭",  color: "#a78bfa", market: "Forex" },
-  { key: "poseidon",        name: "Poseidon",       icon: "🔱",  color: "#8b5cf6", market: "Pairs" },
-  { key: "kraken-current",  name: "Kraken Current", icon: "🌊",  color: "#06b6d4", market: "Trend" },
-];
 
 const BOT_COLORS: Record<string, string> = {
-  "Oracle": "#8b5cf6",
-  "Davy Jones": "#22d3ee",
-  "Blackbeard": "#ef4444",
-  "Calypso": "#3b82f6",
-  "Apex Predator": "#f59e0b",
-  "Navigator": "#a78bfa",
-  "Poseidon": "#8b5cf6",
-  "Kraken Current": "#06b6d4",
+  "davy-jones": "#22d3ee",
+  blackbeard: "#f97316",
+  calypso: "#a855f7",
 };
 
-function fmtUsd(v: number, compact = false): string {
+function fmtPnl(v: number) {
   const abs = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-  if (compact && abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (compact && abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-  return `${sign}$${abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const str = abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k` : `$${abs.toFixed(0)}`;
+  return v >= 0 ? `+${str}` : `-${str}`;
 }
 
-function fmtPnl(v: number, compact = false): string {
-  const abs = Math.abs(v);
-  const sign = v >= 0 ? "+" : "-";
-  if (compact && abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (compact && abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-  return `${sign}$${abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
-function pnlColor(v: number) {
-  return v >= 0 ? C.green : C.red;
-}
-
-function Card({ children, className = "", style = {} }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+function HurstBar({ value, label }: { value: number | null; label?: string }) {
+  if (value == null) return <span style={{ color: C.dim }}>—</span>;
+  const pct = Math.min(1, value) * 100;
+  const color =
+    value < 0.45
+      ? C.green
+      : value < 0.55
+      ? C.amber
+      : value < 0.75
+      ? C.orange
+      : C.red;
+  const meaning =
+    value < 0.45
+      ? "Mean-reverts"
+      : value < 0.55
+      ? "Random walk"
+      : value < 0.75
+      ? "Trending"
+      : "Strong trend";
   return (
-    <div
-      className={`rounded-xl border bg-slate-900/70 ${className}`}
-      style={{ borderColor: "rgba(255,255,255,0.07)", ...style }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-[9px] uppercase tracking-widest font-bold mb-1.5" style={{ color: C.slate }}>
-      {children}
-    </div>
-  );
-}
-
-function HeroBanner() {
-  const { data: summary } = useStatusSummary();
-  const { data: fleet } = useKrakenFleetSummary();
-  const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
-  const { data: vault } = useVault();
-  const { data: fxVault } = useForexVault();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
-  const { wins, losses, openPositions } = useRealFeed(50);
-
-  const alpacaEq = summary?.portfolio_totals?.equity ?? 100_000;
-  const krakenEq = fleet?.total_equity_usd ?? 300_000;
-  const optEq = optState?.total_equity ?? 100_000;
-  const fxEq = fxState?.total_equity ?? 100_000;
-  const poseidonEq = poseidonState?.total_equity ?? 100_000;
-  const kcEq = kcState?.total_equity ?? 100_000;
-  const grandTotal = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
-  const startTotal = 800_000;
-  const pnlUsd = grandTotal - startTotal;
-  const pnlPct = startTotal > 0 ? ((grandTotal - startTotal) / startTotal) * 100 : 0;
-
-  const totalTrades = wins + losses;
-  const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-
-  const openCount = openPositions.length;
-  const unrealisedPnl = openPositions.reduce((sum, p) => sum + p.pnlUsd, 0);
-
-  const totalVaulted = (vault?.total_vaulted_usd ?? 0) + (fxVault?.vault_total_usd ?? 0);
-
-  return (
-    <div className="grid gap-2.5 shrink-0" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
-      <Card className="px-4 py-3 flex flex-col justify-center" style={{ borderColor: pnlPct >= 0 ? "rgba(74,222,128,0.2)" : "rgba(248,113,113,0.2)" }}>
-        <div className="text-[9px] uppercase tracking-widest font-bold mb-1" style={{ color: C.slateDim }}>Combined P&L</div>
-        <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-3xl font-mono font-black" style={{ color: pnlColor(pnlUsd), lineHeight: 1 }}>
-            <AnimatedValue value={fmtPnl(pnlUsd)} />
-          </span>
-          <span className="text-lg font-mono font-semibold" style={{ color: pnlColor(pnlPct) }}>
-            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
-          </span>
+    <div title={meaning}>
+      {label && (
+        <div
+          className="text-[8px] font-bold uppercase tracking-widest mb-0.5"
+          style={{ color: C.dim }}
+        >
+          {label}
         </div>
-        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>all-time vs $800k start</div>
-      </Card>
-
-      <Card className="px-4 py-3 flex flex-col justify-center" style={{ borderColor: "rgba(34,211,238,0.15)" }}>
-        <div className="text-[9px] uppercase tracking-widest font-bold mb-1" style={{ color: C.slateDim }}>Total Capital</div>
-        <div className="text-3xl font-mono font-black" style={{ color: C.cyan, lineHeight: 1 }}>
-          <AnimatedValue value={fmtUsd(grandTotal)} />
+      )}
+      <div className="flex items-center gap-1.5">
+        <div
+          className="flex-1 h-1.5 rounded-full overflow-hidden"
+          style={{ background: "rgba(255,255,255,0.06)" }}
+        >
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${pct}%`, background: color }}
+          />
         </div>
-        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>fleet-wide balance</div>
-      </Card>
-
-      <Card className="px-4 py-3 flex flex-col justify-center" style={{ borderColor: "rgba(167,139,250,0.15)" }}>
-        <div className="text-[9px] uppercase tracking-widest font-bold mb-1" style={{ color: C.slateDim }}>Open Positions</div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-mono font-black" style={{ color: C.violet, lineHeight: 1 }}>{openCount}</span>
-          {openCount > 0 && (
-            <span className="text-lg font-mono font-semibold" style={{ color: pnlColor(unrealisedPnl) }}>
-              {fmtPnl(unrealisedPnl, true)}
-            </span>
-          )}
-        </div>
-        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>unrealised P&L</div>
-      </Card>
-
-      <Card className="px-4 py-3 flex flex-col justify-center" style={{ borderColor: "rgba(52,211,153,0.15)" }}>
-        <div className="text-[9px] uppercase tracking-widest font-bold mb-1" style={{ color: C.slateDim }}>Growth Vault</div>
-        <div className="text-3xl font-mono font-black" style={{ color: "#34d399", lineHeight: 1 }}>
-          <AnimatedValue value={fmtUsd(totalVaulted)} />
-        </div>
-        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>
-          {wins}W / {losses}L · {winRate.toFixed(1)}% win rate
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function WelcomeCard() {
-  return (
-    <Card className="px-4 py-2.5 flex items-center gap-3 shrink-0" style={{ borderColor: "rgba(167,139,250,0.12)" }}>
-      <span style={{ fontSize: 20 }}>👋</span>
-      <div>
-        <span className="text-[12px] font-black uppercase tracking-wide mr-2" style={{ color: "#ddd6fe" }}>Welcome to AlgoEdge Live —</span>
-        <span className="text-[12px] font-mono" style={{ color: "rgba(203,213,225,0.65)" }}>
-          Eight automated AI bots trading{" "}
-          <span style={{ color: C.amber }}>Stocks</span>,{" "}
-          <span style={{ color: C.cyan }}>Crypto</span>,{" "}
-          <span style={{ color: C.violet }}>FOREX</span> &{" "}
-          <span style={{ color: C.orange }}>Futures</span> 24/7.{" "}
-          <span style={{ color: "#ddd6fe", fontWeight: 700 }}>Want your own? Message us — no experience needed.</span>
+        <span
+          className="text-[10px] font-mono font-bold shrink-0"
+          style={{ color, minWidth: 30 }}
+        >
+          {value.toFixed(3)}
         </span>
       </div>
-    </Card>
+    </div>
   );
 }
 
-function BotPnlCard({ meta, pnlToday, pnlAllTime, wins, losses, todayWins, todayLosses }: {
-  meta: typeof BOT_META[number];
-  pnlToday: number;
-  pnlAllTime: number;
+function AdfBadge({ value }: { value: number | null }) {
+  if (value == null) return <span style={{ color: C.dim }}>—</span>;
+  const good = value < 0.05;
+  const ok = value < 0.1;
+  const color = good ? C.green : ok ? C.amber : C.red;
+  const label = good ? "cointegrated" : ok ? "marginal" : "non-stationary";
+  return (
+    <span
+      className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded"
+      style={{
+        background: `${color}15`,
+        color,
+        border: `1px solid ${color}30`,
+      }}
+      title={`ADF p-value: ${value.toFixed(4)} — ${label}`}
+    >
+      p={value.toFixed(3)}
+    </span>
+  );
+}
+
+function WinRateChip({
+  wins,
+  losses,
+  winRate,
+}: {
   wins: number;
   losses: number;
-  todayWins: number;
-  todayLosses: number;
+  winRate: number | null;
 }) {
-  const hasTodayData = todayWins + todayLosses > 0;
+  if (wins + losses === 0)
+    return (
+      <span className="text-[9px]" style={{ color: C.dim }}>
+        no trades
+      </span>
+    );
+  const color =
+    winRate == null
+      ? C.slate
+      : winRate >= 55
+      ? C.green
+      : winRate >= 40
+      ? C.amber
+      : C.red;
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[9px] font-mono font-bold" style={{ color }}>
+        {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
+      </span>
+      <span className="text-[8px]" style={{ color: C.dim }}>
+        {wins}W/{losses}L
+      </span>
+    </div>
+  );
+}
+
+function PausedBanner({ symbol }: { symbol: FleetSymbol }) {
   return (
     <div
-      className="rounded-lg px-3 py-2.5 flex flex-col gap-1 shrink-0"
-      style={{ border: `1px solid ${meta.color}22`, backgroundColor: "rgba(15,23,42,0.6)" }}
+      className="rounded-lg p-3 border"
+      style={{
+        background: "rgba(239,68,68,0.06)",
+        borderColor: "rgba(239,68,68,0.3)",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] font-black text-red-400">⛔ PAUSED</span>
+        <span className="text-sm font-black font-mono text-white">
+          {symbol.symbol.replace("/USD", "")}
+        </span>
+        <span className="text-[9px]" style={{ color: C.dim }}>
+          {symbol.bot_count} bot{symbol.bot_count !== 1 ? "s" : ""}
+        </span>
+        <span
+          className="ml-auto text-[9px] font-mono font-bold px-1.5 py-0.5 rounded"
+          style={{
+            color: symbol.total_pnl >= 0 ? C.green : C.red,
+            background: "rgba(255,255,255,0.05)",
+          }}
+        >
+          {fmtPnl(symbol.total_pnl)}
+        </span>
+      </div>
+      {symbol.pause_reason && (
+        <p
+          className="text-[9px] leading-relaxed"
+          style={{ color: "rgba(252,165,165,0.7)" }}
+        >
+          {symbol.pause_reason.length > 180
+            ? symbol.pause_reason.slice(0, 180) + "…"
+            : symbol.pause_reason}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SymbolCard({ sym }: { sym: FleetSymbol }) {
+  const isPaused = sym.any_paused;
+  const hasGoodHurst = sym.avg_hurst != null && sym.avg_hurst < 0.55;
+  const hasGoodAdf = sym.avg_adf_pvalue != null && sym.avg_adf_pvalue < 0.1;
+  const totalTrades = sym.total_wins + sym.total_losses;
+  const winRate = totalTrades > 0 ? (sym.total_wins / totalTrades) * 100 : null;
+
+  const borderColor = isPaused
+    ? "rgba(239,68,68,0.4)"
+    : hasGoodHurst && hasGoodAdf
+    ? "rgba(74,222,128,0.2)"
+    : C.border;
+
+  return (
+    <div
+      className="rounded-lg p-2.5 flex flex-col gap-1.5"
+      style={{ background: C.card, border: `1px solid ${borderColor}` }}
     >
       <div className="flex items-center gap-1.5">
-        <span style={{ fontSize: 14 }}>{meta.icon}</span>
-        <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: meta.color }}>{meta.name}</span>
-        <span className="ml-auto text-[8px] font-mono uppercase" style={{ color: C.slateDim }}>{meta.market}</span>
+        {isPaused && <span className="text-[9px]">⛔</span>}
+        <span className="text-[11px] font-black font-mono text-white">
+          {sym.symbol.replace("/USD", "")}
+        </span>
+        <span
+          className="text-[8px] font-bold ml-auto px-1 py-0.5 rounded"
+          style={{
+            color: isPaused ? C.red : C.green,
+            background: isPaused ? "rgba(239,68,68,0.1)" : "rgba(74,222,128,0.1)",
+          }}
+        >
+          {isPaused ? "PAUSED" : "ACTIVE"}
+        </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <div>
-          <div className="text-[7px] uppercase tracking-widest font-bold mb-0.5" style={{ color: C.slateDim }}>Today</div>
-          <div className="text-[14px] font-mono font-black" style={{ color: pnlColor(pnlToday) }}>
-            {fmtPnl(pnlToday, true)}
-          </div>
-          <div className="text-[8px] font-mono" style={{ color: C.slateDim }}>
-            {hasTodayData ? `${todayWins}W / ${todayLosses}L` : "—"}
-          </div>
-        </div>
-        <div>
-          <div className="text-[7px] uppercase tracking-widest font-bold mb-0.5" style={{ color: C.slateDim }}>All-Time</div>
-          <div className="text-[14px] font-mono font-black" style={{ color: pnlColor(pnlAllTime) }}>
-            {fmtPnl(pnlAllTime, true)}
-          </div>
-          <div className="text-[8px] font-mono" style={{ color: C.slateDim }}>
-            {wins}W / {losses}L
-          </div>
-        </div>
+      <HurstBar value={sym.avg_hurst} label="Hurst H" />
+
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[8px] font-bold uppercase tracking-widest"
+          style={{ color: C.dim }}
+        >
+          ADF
+        </span>
+        <AdfBadge value={sym.avg_adf_pvalue} />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[8px] font-bold uppercase tracking-widest"
+          style={{ color: C.dim }}
+        >
+          Win Rate
+        </span>
+        <WinRateChip
+          wins={sym.total_wins}
+          losses={sym.total_losses}
+          winRate={winRate}
+        />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[8px] font-bold uppercase tracking-widest"
+          style={{ color: C.dim }}
+        >
+          Fleet P&amp;L
+        </span>
+        <span
+          className="text-[9px] font-mono font-bold"
+          style={{ color: sym.total_pnl >= 0 ? C.green : C.red }}
+        >
+          {fmtPnl(sym.total_pnl)}
+        </span>
       </div>
     </div>
   );
 }
 
-function LeftColumn() {
-  const { data: summary } = useStatusSummary();
-  const { data: journal } = useJournal();
-  const { data: djPerf } = useKrakenPerformance("davy-jones");
-  const { data: bbPerf } = useKrakenPerformance("blackbeard");
-  const { data: caPerf } = useKrakenPerformance("calypso");
-  const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
-  const { trades: allTrades } = useRealFeed(200);
+function PoseidonPairRow({ pair }: { pair: PoseidonPairParam }) {
+  const tradeable = pair.is_tradeable;
+  const hurstOk = pair.hurst < 0.6;
+  const adfOk = pair.adf_pvalue < 0.05;
+  const health =
+    tradeable && hurstOk && adfOk ? "good" : tradeable ? "ok" : "blocked";
+  const color =
+    health === "good" ? C.green : health === "ok" ? C.amber : C.red;
 
-  const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
-  const alpacaEq = summary?.portfolio_totals?.equity ?? alpacaStart;
-  const oraclePnlAll = alpacaEq - alpacaStart;
-  const oracleWins = journal?.summary?.wins ?? 0;
-  const oracleLosses = journal?.summary?.losses ?? 0;
+  return (
+    <div
+      className="flex items-center gap-3 px-3 py-2 rounded-lg"
+      style={{ background: `${color}05`, border: `1px solid ${color}15` }}
+    >
+      <span
+        className="text-[8px] font-bold font-mono"
+        style={{ color: C.dim, minWidth: 14 }}
+      >
+        #{pair.pair_set_id}
+      </span>
+      <div className="flex-1 flex items-center gap-1.5">
+        <span className="text-[11px] font-black font-mono text-white">
+          {pair.asset_a.replace("/USD", "")}
+        </span>
+        <span style={{ color: C.dim }}>↔</span>
+        <span className="text-[11px] font-black font-mono text-white">
+          {pair.asset_b.replace("/USD", "")}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="text-center">
+          <div
+            className="text-[7px] uppercase tracking-widest"
+            style={{ color: C.dim }}
+          >
+            H
+          </div>
+          <div
+            className="text-[10px] font-mono font-bold"
+            style={{
+              color:
+                pair.hurst < 0.6
+                  ? C.green
+                  : pair.hurst < 0.75
+                  ? C.amber
+                  : C.red,
+            }}
+          >
+            {pair.hurst.toFixed(3)}
+          </div>
+        </div>
+        <div className="text-center">
+          <div
+            className="text-[7px] uppercase tracking-widest"
+            style={{ color: C.dim }}
+          >
+            ADF
+          </div>
+          <div
+            className="text-[10px] font-mono font-bold"
+            style={{
+              color:
+                pair.adf_pvalue < 0.05
+                  ? C.green
+                  : pair.adf_pvalue < 0.1
+                  ? C.amber
+                  : C.red,
+            }}
+          >
+            {pair.adf_pvalue.toFixed(3)}
+          </div>
+        </div>
+        <div className="text-center">
+          <div
+            className="text-[7px] uppercase tracking-widest"
+            style={{ color: C.dim }}
+          >
+            HR
+          </div>
+          <div className="text-[10px] font-mono font-bold text-white">
+            {pair.hedge_ratio.toFixed(3)}
+          </div>
+        </div>
+        <span
+          className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+          style={{
+            color,
+            background: `${color}15`,
+            border: `1px solid ${color}30`,
+            minWidth: 52,
+            textAlign: "center",
+          }}
+        >
+          {tradeable ? "TRADEABLE" : "BLOCKED"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
-  const apexStart = optState?.starting_capital ?? 100_000;
-  const apexEq = optState?.total_equity ?? optState?.paper_equity ?? apexStart;
-  const apexPnlAll = apexEq - apexStart;
+function BotLearningRow({
+  botId,
+  symbols,
+}: {
+  botId: string;
+  symbols: PairLearningSymbol[];
+}) {
+  const color = BOT_COLORS[botId] ?? "#64748b";
+  const botIcon =
+    botId === "davy-jones" ? "⚓" : botId === "blackbeard" ? "🏴‍☠️" : "🌊";
+  const paused = symbols.filter((s) => s.status === "paused");
+  const active = symbols.filter((s) => s.status === "active");
 
-  const fxStart = fxState?.starting_capital ?? 100_000;
-  const fxEq = fxState?.total_equity ?? fxState?.paper_equity ?? fxStart;
-  const navPnlAll = fxEq - fxStart;
+  return (
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={{ borderColor: `${color}20` }}
+    >
+      <div
+        className="px-3 py-2 flex items-center gap-2"
+        style={{
+          background: `${color}10`,
+          borderBottom: `1px solid ${color}20`,
+        }}
+      >
+        <span style={{ fontSize: 14 }}>{botIcon}</span>
+        <span
+          className="text-[11px] font-black uppercase tracking-wider"
+          style={{ color }}
+        >
+          {botId === "davy-jones"
+            ? "Davy Jones"
+            : botId === "blackbeard"
+            ? "Blackbeard"
+            : "Calypso"}
+        </span>
+        <span className="text-[9px] ml-2" style={{ color: C.dim }}>
+          {active.length} active · {paused.length} paused · {symbols.length}{" "}
+          symbols
+        </span>
+      </div>
+      <div className="p-2 grid grid-cols-3 gap-1.5">
+        {symbols.map((s) => {
+          const isPaused = s.status === "paused";
+          const borderCol = isPaused ? "rgba(239,68,68,0.35)" : `${color}20`;
+          return (
+            <div
+              key={s.symbol}
+              className="rounded p-1.5"
+              style={{
+                background: isPaused ? "rgba(239,68,68,0.05)" : `${color}06`,
+                border: `1px solid ${borderCol}`,
+              }}
+            >
+              <div className="flex items-center gap-1 mb-1">
+                <span
+                  className="text-[9px] font-black font-mono"
+                  style={{ color: isPaused ? C.red : "white" }}
+                >
+                  {s.symbol.replace("/USD", "")}
+                </span>
+                {isPaused && <span className="text-[8px]">⛔</span>}
+                {!isPaused && s.win_rate != null && (
+                  <span
+                    className="ml-auto text-[8px] font-mono font-bold"
+                    style={{ color: s.win_rate >= 50 ? C.green : C.red }}
+                  >
+                    {s.win_rate.toFixed(0)}%
+                  </span>
+                )}
+              </div>
+              {s.hurst != null && (
+                <div className="flex items-center gap-1">
+                  <div
+                    className="flex-1 h-1 rounded-full overflow-hidden"
+                    style={{ background: "rgba(255,255,255,0.06)" }}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${Math.min(1, s.hurst) * 100}%`,
+                        background:
+                          s.hurst < 0.55
+                            ? C.green
+                            : s.hurst < 0.75
+                            ? C.amber
+                            : C.red,
+                      }}
+                    />
+                  </div>
+                  <span
+                    className="text-[8px] font-mono shrink-0"
+                    style={{
+                      color:
+                        s.hurst < 0.55
+                          ? C.green
+                          : s.hurst < 0.75
+                          ? C.amber
+                          : C.red,
+                      minWidth: 30,
+                    }}
+                  >
+                    H={s.hurst.toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {s.total_trades > 0 && (
+                <div
+                  className="text-[8px] font-mono mt-0.5"
+                  style={{ color: s.total_pnl >= 0 ? C.green : C.red }}
+                >
+                  {fmtPnl(s.total_pnl)} · {s.wins}W/{s.losses}L
+                </div>
+              )}
+              {isPaused && s.adf_pvalue == null && (
+                <div
+                  className="text-[8px] mt-0.5"
+                  style={{ color: "rgba(252,165,165,0.6)" }}
+                >
+                  stats frozen
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-  const poseidonStart = poseidonState?.starting_capital ?? 100_000;
-  const poseidonEq = poseidonState?.total_equity ?? poseidonStart;
-  const poseidonPnlAll = poseidonEq - poseidonStart;
+type View = "fleet" | "bots" | "poseidon";
 
-  const kcStart = kcState?.starting_capital ?? 100_000;
-  const kcEq = kcState?.total_equity ?? kcStart;
-  const kcPnlAll = kcEq - kcStart;
+export default function StreamingScreenV3() {
+  const { data, isLoading } = usePairLearning();
+  const [view, setView] = useState<View>("fleet");
 
-  const todayByBot = useMemo(() => {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    const map: Record<string, { pnl: number; wins: number; losses: number }> = {};
-    for (const t of allTrades) {
-      if (!t.date || new Date(t.date).getTime() < cutoff) continue;
-      if (!map[t.bot]) map[t.bot] = { pnl: 0, wins: 0, losses: 0 };
-      map[t.bot].pnl += t.pnlUsd;
-      if (t.isWin) map[t.bot].wins++; else map[t.bot].losses++;
+  const pausedSymbols = useMemo(
+    () => (data?.fleet_symbols ?? []).filter((s) => s.any_paused),
+    [data]
+  );
+
+  const activeSymbols = useMemo(
+    () => (data?.fleet_symbols ?? []).filter((s) => !s.any_paused),
+    [data]
+  );
+
+  const byBot = useMemo(() => {
+    const map: Record<string, PairLearningSymbol[]> = {};
+    for (const s of data?.symbols ?? []) {
+      (map[s.bot_id] ??= []).push(s);
     }
     return map;
-  }, [allTrades]);
+  }, [data]);
 
-  function todayStats(botName: string) {
-    return todayByBot[botName] ?? { pnl: 0, wins: 0, losses: 0 };
-  }
-
-  const oToday = todayStats("Oracle");
-  const djToday = todayStats("Davy Jones");
-  const bbToday = todayStats("Blackbeard");
-  const caToday = todayStats("Calypso");
-  const apToday = todayStats("Apex Predator");
-  const navToday = todayStats("Navigator");
-  const posToday = todayStats("Poseidon");
-  const kcToday = todayStats("Kraken Current");
-
-  const bots = [
-    { meta: BOT_META[0], pnlToday: oToday.pnl, pnlAllTime: oraclePnlAll, wins: oracleWins, losses: oracleLosses, todayWins: oToday.wins, todayLosses: oToday.losses },
-    { meta: BOT_META[1], pnlToday: djToday.pnl, pnlAllTime: djPerf?.total_pnl_usd ?? 0, wins: djPerf?.win_count ?? 0, losses: djPerf?.loss_count ?? 0, todayWins: djToday.wins, todayLosses: djToday.losses },
-    { meta: BOT_META[2], pnlToday: bbToday.pnl, pnlAllTime: bbPerf?.total_pnl_usd ?? 0, wins: bbPerf?.win_count ?? 0, losses: bbPerf?.loss_count ?? 0, todayWins: bbToday.wins, todayLosses: bbToday.losses },
-    { meta: BOT_META[3], pnlToday: caToday.pnl, pnlAllTime: caPerf?.total_pnl_usd ?? 0, wins: caPerf?.win_count ?? 0, losses: caPerf?.loss_count ?? 0, todayWins: caToday.wins, todayLosses: caToday.losses },
-    { meta: BOT_META[4], pnlToday: apToday.pnl, pnlAllTime: apexPnlAll, wins: optState?.total_wins ?? 0, losses: (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0), todayWins: apToday.wins, todayLosses: apToday.losses },
-    { meta: BOT_META[5], pnlToday: navToday.pnl, pnlAllTime: navPnlAll, wins: fxState?.total_wins ?? 0, losses: (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0), todayWins: navToday.wins, todayLosses: navToday.losses },
-    { meta: BOT_META[6], pnlToday: posToday.pnl, pnlAllTime: poseidonPnlAll, wins: poseidonState?.total_wins ?? 0, losses: (poseidonState?.total_trades ?? 0) - (poseidonState?.total_wins ?? 0), todayWins: posToday.wins, todayLosses: posToday.losses },
-    { meta: BOT_META[7], pnlToday: kcToday.pnl, pnlAllTime: kcPnlAll, wins: kcState?.total_wins ?? 0, losses: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0), todayWins: kcToday.wins, todayLosses: kcToday.losses },
+  const tabs: { id: View; label: string; icon: string }[] = [
+    { id: "fleet", label: "Fleet View", icon: "⚡" },
+    { id: "bots", label: "Per-Bot", icon: "🤖" },
+    { id: "poseidon", label: "Poseidon Pairs", icon: "🔱" },
   ];
 
   return (
-    <div className="flex flex-col gap-2 h-full overflow-hidden">
-      <SectionLabel>Per-Bot Performance</SectionLabel>
-      <div className="flex flex-col gap-1.5 flex-1 overflow-hidden">
-        {bots.map((b) => (
-          <BotPnlCard key={b.meta.key} {...b} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function CenterColumn() {
-  const { wins, losses, trades, openPositions } = useRealFeed(50);
-  const totalTrades = wins + losses;
-  const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-
-  const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
-  const trades24h = trades.filter(t => new Date(t.date).getTime() > cutoff24h);
-  const wins24h = trades24h.filter(t => t.isWin).length;
-  const losses24h = trades24h.filter(t => !t.isWin).length;
-  const wr24h = (wins24h + losses24h) > 0 ? (wins24h / (wins24h + losses24h)) * 100 : 0;
-
-  const unrealisedPnl = openPositions.reduce((sum, p) => sum + p.pnlUsd, 0);
-
-  return (
-    <div className="flex flex-col gap-2 h-full overflow-hidden">
-      <SectionLabel>Win / Loss Record</SectionLabel>
-
-      <div className="grid grid-cols-2 gap-1.5 shrink-0">
-        <Card className="px-3 py-2 text-center" style={{ borderColor: "rgba(74,222,128,0.2)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(74,222,128,0.5)" }}>All-Time Wins</div>
-          <div className="text-2xl font-mono font-black" style={{ color: C.green }}>{wins}</div>
-        </Card>
-        <Card className="px-3 py-2 text-center" style={{ borderColor: "rgba(248,113,113,0.2)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(248,113,113,0.5)" }}>All-Time Losses</div>
-          <div className="text-2xl font-mono font-black" style={{ color: C.red }}>{losses}</div>
-        </Card>
-        <Card className="px-3 py-2 text-center" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(74,222,128,0.35)" }}>Today Wins</div>
-          <div className="text-xl font-mono font-black" style={{ color: C.green }}>{wins24h}</div>
-        </Card>
-        <Card className="px-3 py-2 text-center" style={{ borderColor: "rgba(248,113,113,0.12)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(248,113,113,0.35)" }}>Today Losses</div>
-          <div className="text-xl font-mono font-black" style={{ color: C.red }}>{losses24h}</div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-2 gap-1.5 shrink-0">
-        <Card className="px-3 py-1.5 text-center" style={{ borderColor: "rgba(251,191,36,0.15)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(251,191,36,0.5)" }}>All-Time Win Rate</div>
-          <div className="text-lg font-mono font-black" style={{ color: C.amber }}>{winRate.toFixed(1)}%</div>
-        </Card>
-        <Card className="px-3 py-1.5 text-center" style={{ borderColor: "rgba(251,191,36,0.1)" }}>
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(251,191,36,0.4)" }}>Today Win Rate</div>
-          <div className="text-lg font-mono font-black" style={{ color: C.amber }}>{wr24h.toFixed(1)}%</div>
-        </Card>
-      </div>
-
-      {openPositions.length > 0 && (
-        <div className="shrink-0">
-          <div className="text-[8px] uppercase tracking-widest font-bold mb-1" style={{ color: C.slateDim }}>
-            Open Positions ({openPositions.length}) · Unrealised {fmtPnl(unrealisedPnl, true)}
-          </div>
-          <div className="flex flex-col gap-0.5">
-            {openPositions.slice(0, 4).map((p) => (
-                <div
-                  key={p.id}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                  style={{ backgroundColor: p.pnlUsd >= 0 ? "rgba(74,222,128,0.04)" : "rgba(248,113,113,0.04)", border: `1px solid ${p.pnlUsd >= 0 ? "rgba(74,222,128,0.08)" : "rgba(248,113,113,0.08)"}` }}
-                >
-                  <span style={{ fontSize: 12 }}>{p.icon}</span>
-                  <span className="font-mono font-bold text-[10px] truncate flex-1" style={{ color: "rgba(203,213,225,0.8)" }}>{p.symbol}</span>
-                  {p.side && (
-                    <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{
-                      color: p.side === "short" ? C.red : C.green,
-                      backgroundColor: p.side === "short" ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.1)",
-                    }}>
-                      {p.side.toUpperCase()}
-                    </span>
-                  )}
-                  <span className="text-[11px] font-mono font-bold shrink-0" style={{ color: pnlColor(p.pnlUsd) }}>
-                    {fmtPnl(p.pnlUsd, true)}
-                  </span>
-                  <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: C.cyan, boxShadow: `0 0 4px ${C.cyan}` }} />
-                </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-1 flex-1 min-h-0">
-        <div className="text-[8px] uppercase tracking-widest font-bold" style={{ color: C.slateDim }}>Recent Closed Trades</div>
-        <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
-          {trades.length === 0 ? (
-            <div className="text-[11px] font-mono text-center py-4" style={{ color: C.slateDim }}>No trades yet</div>
-          ) : (
-            trades.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg shrink-0"
-                style={{ backgroundColor: t.isWin ? "rgba(74,222,128,0.04)" : "rgba(248,113,113,0.04)", border: `1px solid ${t.isWin ? "rgba(74,222,128,0.07)" : "rgba(248,113,113,0.07)"}` }}
-              >
-                <span style={{ fontSize: 12 }}>{t.icon}</span>
-                <span className="font-mono font-bold text-[10px] truncate flex-1" style={{ color: "rgba(203,213,225,0.8)" }}>{t.symbol}</span>
-                {t.side && (
-                  <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded" style={{
-                    color: t.side === "short" ? C.red : C.green,
-                    backgroundColor: t.side === "short" ? "rgba(248,113,113,0.1)" : "rgba(74,222,128,0.1)",
-                  }}>
-                    {t.side.toUpperCase()}
-                  </span>
-                )}
-                <span className="text-[11px] font-mono font-bold shrink-0" style={{ color: t.isWin ? C.green : C.red }}>
-                  {t.pnlUsd !== 0 ? fmtPnl(t.pnlUsd, true) : `${t.pnlPct >= 0 ? "+" : ""}${t.pnlPct.toFixed(2)}%`}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RightColumn() {
-  const { data: vault } = useVault();
-  const { data: fxVault } = useForexVault();
-  const totalVaulted = (vault?.total_vaulted_usd ?? 0) + (fxVault?.vault_total_usd ?? 0);
-  const totalSweeps = (vault?.total_sweeps ?? 0) + (fxVault?.sweeps?.length ?? 0);
-  const vaulted24h = vault?.vaulted_24h ?? 0;
-
-  return (
-    <div className="flex flex-col gap-2 h-full overflow-hidden">
-      <div className="shrink-0">
-        <SectionLabel>News Intelligence</SectionLabel>
-        <NewsIntelligence />
-      </div>
-
-      <div className="flex-1 flex flex-col min-h-0">
-        <SectionLabel>AI Fleet Commander</SectionLabel>
-        <div className="flex-1 min-h-0">
-          <GeminiThinking />
-        </div>
-      </div>
-
-      <Card className="px-4 py-3 shrink-0" style={{ borderColor: "rgba(52,211,153,0.2)" }}>
-        <div className="flex items-center gap-2 mb-2">
-          <span style={{ fontSize: 14 }}>🏦</span>
-          <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: "#34d399" }}>Growth Vault</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className="text-[7px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(52,211,153,0.5)" }}>Total Vaulted</div>
-            <div className="text-[16px] font-mono font-black" style={{ color: "#34d399" }}>{fmtUsd(totalVaulted)}</div>
-          </div>
-          <div>
-            <div className="text-[7px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(52,211,153,0.5)" }}>Sweeps</div>
-            <div className="text-[16px] font-mono font-black" style={{ color: "#34d399" }}>{totalSweeps}</div>
-          </div>
-          {vaulted24h > 0 && (
-            <div className="col-span-2">
-              <div className="text-[7px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(52,211,153,0.5)" }}>Today</div>
-              <div className="text-[14px] font-mono font-bold" style={{ color: "#4ade80" }}>+{fmtUsd(vaulted24h)}</div>
-            </div>
-          )}
-        </div>
-        <div className="text-[9px] font-mono mt-1.5 leading-snug" style={{ color: "rgba(52,211,153,0.4)" }}>
-          20% of every winning trade auto-vaulted across all bots.
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-export default function StreamingScreenV3() {
-  return (
     <div
+      className="h-full flex flex-col overflow-hidden"
       style={{
-        height: "100%",
-        width: "100%",
-        backgroundColor: "#020617",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
+        background: C.bg,
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}
     >
-      <div className="flex-1 flex flex-col p-3 gap-2.5 min-h-0 overflow-hidden">
-        <HeroBanner />
-        <WelcomeCard />
-
-        <div className="flex-1 grid gap-2.5 min-h-0 overflow-hidden" style={{ gridTemplateColumns: "270px 1fr 300px" }}>
-          <div className="min-h-0 overflow-hidden">
-            <LeftColumn />
+      {/* Header */}
+      <div
+        className="flex items-center gap-4 px-4 py-3 shrink-0"
+        style={{
+          borderBottom: `1px solid ${C.border}`,
+          background: "rgba(15,23,42,0.95)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 18 }}>🧠</span>
+          <div>
+            <div className="text-xs font-black uppercase tracking-widest text-white">
+              Python Learning Journal
+            </div>
+            <div className="text-[9px]" style={{ color: C.dim }}>
+              Rule-based pair evaluation · Hurst · ADF · Win rates · Auto-pause
+            </div>
           </div>
+        </div>
 
-          <div className="min-h-0 overflow-hidden">
-            <CenterColumn />
+        {data && (
+          <div className="flex items-center gap-4 ml-4">
+            <div className="text-center">
+              <div
+                className="text-[8px] uppercase tracking-widest font-bold"
+                style={{ color: C.dim }}
+              >
+                Monitoring
+              </div>
+              <div className="text-base font-black text-white">
+                {data.total_symbols}
+              </div>
+            </div>
+            <div className="w-px h-6" style={{ background: C.border }} />
+            <div className="text-center">
+              <div
+                className="text-[8px] uppercase tracking-widest font-bold"
+                style={{ color: C.dim }}
+              >
+                Active
+              </div>
+              <div
+                className="text-base font-black"
+                style={{ color: C.green }}
+              >
+                {data.active_count}
+              </div>
+            </div>
+            <div className="w-px h-6" style={{ background: C.border }} />
+            <div className="text-center">
+              <div
+                className="text-[8px] uppercase tracking-widest font-bold"
+                style={{ color: C.dim }}
+              >
+                Paused
+              </div>
+              <div
+                className="text-base font-black"
+                style={{
+                  color: data.paused_count > 0 ? C.red : C.slate,
+                }}
+              >
+                {data.paused_count}
+              </div>
+            </div>
           </div>
+        )}
 
-          <div className="min-h-0 overflow-hidden">
-            <RightColumn />
-          </div>
+        <div className="ml-auto flex items-center gap-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setView(tab.id)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all"
+              style={{
+                background:
+                  view === tab.id
+                    ? "rgba(139,92,246,0.2)"
+                    : "rgba(255,255,255,0.04)",
+                color: view === tab.id ? "#a78bfa" : C.slate,
+                border: `1px solid ${
+                  view === tab.id
+                    ? "rgba(139,92,246,0.4)"
+                    : "rgba(255,255,255,0.06)"
+                }`,
+              }}
+            >
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      <SalesTicker />
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="text-xs font-mono" style={{ color: C.dim }}>
+              Loading pair learning data...
+            </div>
+          </div>
+        ) : !data ? (
+          <div className="flex items-center justify-center h-40">
+            <div className="text-xs font-mono" style={{ color: C.dim }}>
+              No data available
+            </div>
+          </div>
+        ) : view === "fleet" ? (
+          <div className="flex flex-col gap-4">
+            {/* Legend */}
+            <div
+              className="flex flex-wrap items-center gap-4 px-3 py-2 rounded-lg text-[9px] font-bold"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <span
+                className="uppercase tracking-widest font-bold"
+                style={{ color: C.dim }}
+              >
+                Hurst H:
+              </span>
+              <span style={{ color: C.green }}>{"< 0.45 Mean-reverts ✓"}</span>
+              <span style={{ color: C.amber }}>0.45–0.55 Random walk ~</span>
+              <span style={{ color: C.orange }}>0.55–0.75 Trending !</span>
+              <span style={{ color: C.red }}>{"> 0.75 Strong trend ✗"}</span>
+              <span
+                className="ml-auto uppercase tracking-widest"
+                style={{ color: C.dim }}
+              >
+                ADF p {"< 0.05"} = cointegrated
+              </span>
+            </div>
+
+            {/* Paused symbols */}
+            {pausedSymbols.length > 0 && (
+              <div>
+                <div
+                  className="text-[9px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"
+                  style={{ color: C.red }}
+                >
+                  <span>⛔</span>
+                  <span>
+                    Auto-Paused Symbols ({pausedSymbols.length})
+                  </span>
+                  <span
+                    className="text-[8px] font-normal"
+                    style={{ color: C.dim }}
+                  >
+                    — bot learned these pairs are unprofitable
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {pausedSymbols.map((s) => (
+                    <PausedBanner key={s.symbol} symbol={s} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Active symbols grid */}
+            <div>
+              <div
+                className="text-[9px] font-black uppercase tracking-widest mb-2 flex items-center gap-2"
+                style={{ color: C.green }}
+              >
+                <span>✓</span>
+                <span>Active Symbols ({activeSymbols.length})</span>
+                <span
+                  className="text-[8px] font-normal"
+                  style={{ color: C.dim }}
+                >
+                  — evaluated every cycle, sorted by Hurst (lower = better)
+                </span>
+              </div>
+              <div
+                className="grid gap-2"
+                style={{
+                  gridTemplateColumns:
+                    "repeat(auto-fill, minmax(160px, 1fr))",
+                }}
+              >
+                {activeSymbols.map((s) => (
+                  <SymbolCard key={s.symbol} sym={s} />
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : view === "bots" ? (
+          <div className="flex flex-col gap-3">
+            <div className="text-[9px] mb-1" style={{ color: C.dim }}>
+              Each bot independently evaluates its symbols using Hurst exponent
+              and ADF p-value tests. Symbols that fail these tests or have poor
+              win rates are automatically paused per-bot.
+            </div>
+            {Object.entries(byBot).map(([botId, symbols]) => (
+              <BotLearningRow
+                key={botId}
+                botId={botId}
+                symbols={symbols}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <div
+              className="text-[9px] mb-1"
+              style={{ color: C.dim }}
+            >
+              Poseidon (#7) evaluates pairs for statistical cointegration. Pairs
+              must pass Hurst {"< 0.6"} and ADF p-value {"< 0.10"} to be
+              tradeable. Hedge ratios are recalculated every 24 hours.
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-4 px-3 py-1.5 rounded text-[9px] font-bold mb-1"
+              style={{
+                background: "rgba(255,255,255,0.03)",
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              <span style={{ color: C.dim }}>
+                H {"< 0.6"} = mean-reverting
+              </span>
+              <span
+                className="w-px h-3"
+                style={{ background: C.border }}
+              />
+              <span style={{ color: C.dim }}>
+                ADF p {"< 0.05"} = cointegrated
+              </span>
+              <span
+                className="w-px h-3"
+                style={{ background: C.border }}
+              />
+              <span style={{ color: C.dim }}>
+                HR = hedge ratio (units B per unit A)
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {(data.poseidon_pairs ?? []).map((pair) => (
+                <PoseidonPairRow key={pair.pair_set_id} pair={pair} />
+              ))}
+              {data.poseidon_pairs.length === 0 && (
+                <div
+                  className="text-center py-8 text-xs font-mono"
+                  style={{ color: C.dim }}
+                >
+                  Poseidon pair discovery running — first cycle takes ~3
+                  minutes
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -43,6 +43,8 @@ interface HealEntry {
   result: string;
   success: boolean;
   triggered_by: string;
+  heal_type?: string;
+  state_changed?: boolean;
 }
 
 interface Overrides {
@@ -118,6 +120,11 @@ const COMPONENT_LABELS: Record<string, string> = {
   options_bot: "Apex Predator",
   forex_bot: "The Navigator",
   alert_system: "Alert System",
+  kraken_davy_jones: "Davy Jones",
+  kraken_blackbeard: "Blackbeard",
+  kraken_calypso: "Calypso",
+  kraken_poseidon: "Poseidon",
+  kraken_kraken_current: "Kraken Current",
 };
 
 function buildExplanation(key: string, node: NodeHealth): string {
@@ -510,6 +517,12 @@ function AlertsDigest({
 }
 
 /* ── Remediation Log Panel ───────────────────────────────────────────────── */
+const HEAL_TYPE_STYLES: Record<string, string> = {
+  HEALED: "text-green-400 border-green-500/30 bg-green-500/10",
+  LOGGED: "text-blue-400 border-blue-500/30 bg-blue-500/10",
+  FAILED: "text-red-400 border-red-500/30 bg-red-500/10",
+};
+
 function RemediationLog({ log }: { log: HealEntry[] }) {
   if (log.length === 0) return null;
 
@@ -525,13 +538,15 @@ function RemediationLog({ log }: { log: HealEntry[] }) {
           const label = COMPONENT_LABELS[entry.component] ?? entry.component;
           const byLabel = entry.triggered_by === "auto_heal" ? "auto" : entry.triggered_by === "heal_all" ? "heal-all" : "manual";
           const timeStr = new Date(entry.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          const healType = entry.heal_type ?? (entry.success ? "HEALED" : "FAILED");
+          const healTypeStyle = HEAL_TYPE_STYLES[healType] ?? "text-slate-400 border-white/10 bg-white/5";
           return (
-            <div key={i} className="flex items-start gap-3 px-5 py-1.5">
-              <span className={cn("text-[8px] font-mono mt-px shrink-0", entry.success ? "text-green-400" : "text-red-400")}>
-                {entry.success ? "✓" : "✗"}
-              </span>
+            <div key={i} className="flex items-center gap-2 px-5 py-1.5 flex-wrap">
               <span className="text-[8px] font-mono text-muted-foreground/50 shrink-0 w-16">{timeStr}</span>
-              <span className={cn("text-[8px] font-mono shrink-0 px-1 py-px rounded text-[7px] border",
+              <span className={cn("text-[7px] font-mono font-bold shrink-0 px-1.5 py-px rounded border uppercase tracking-wider", healTypeStyle)}>
+                {healType}
+              </span>
+              <span className={cn("text-[7px] font-mono shrink-0 px-1 py-px rounded border",
                 entry.triggered_by === "auto_heal"
                   ? "text-violet-400 border-violet-500/20 bg-violet-500/5"
                   : "text-cyan-400/60 border-cyan-500/15 bg-cyan-500/5"
@@ -951,6 +966,57 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                     onClick={() => setSelectedNode(selectedNode === key ? null : key)} />
                 ))}
               </svg>
+
+              {/* Per-bot Kraken Fleet Panel */}
+              {(() => {
+                const perBotNodes = Object.entries(mergedNodes).filter(
+                  ([k]) => k.startsWith("kraken_") && k !== "kraken_api"
+                );
+                if (perBotNodes.length === 0) return null;
+                const BOT_DISPLAY: Record<string, string> = {
+                  kraken_davy_jones: "Davy Jones",
+                  kraken_blackbeard: "Blackbeard",
+                  kraken_calypso: "Calypso",
+                  kraken_poseidon: "Poseidon",
+                  kraken_kraken_current: "Kraken Current",
+                };
+                return (
+                  <div className="absolute top-3 right-5 z-10 flex flex-col gap-1.5"
+                    style={{ minWidth: 140 }}>
+                    <div className="text-[8px] font-mono uppercase tracking-widest text-muted-foreground/40 mb-0.5">
+                      Bot Fleet
+                    </div>
+                    {perBotNodes.map(([key, node]) => {
+                      const colors = LEVEL_COLORS[node.level];
+                      const botLabel = BOT_DISPLAY[key] ?? key.replace("kraken_", "").replace(/_/g, " ");
+                      const kickPending = (node as NodeHealth & { kick_pending?: boolean }).kick_pending;
+                      return (
+                        <div key={key} className="flex items-center gap-2 px-2 py-1 rounded-lg backdrop-blur-sm"
+                          style={{
+                            background: colors.fill,
+                            border: `1px solid ${colors.stroke}`,
+                          }}>
+                          <span className="h-1.5 w-1.5 rounded-full shrink-0"
+                            style={{ background: colors.wire, boxShadow: `0 0 5px ${colors.wire}` }} />
+                          <span className="text-[8px] font-mono font-semibold flex-1 capitalize"
+                            style={{ color: colors.wire }}>
+                            {botLabel}
+                          </span>
+                          {kickPending && (
+                            <span className="text-[7px] font-mono px-1 py-px rounded border text-orange-400 border-orange-500/30 bg-orange-500/10">
+                              KICK
+                            </span>
+                          )}
+                          <span className="text-[7px] font-mono uppercase"
+                            style={{ color: colors.wire, opacity: 0.7 }}>
+                            {node.level === "green" ? "OK" : node.level === "yellow" ? "WARN" : "ERR"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Selected Node Detail Panel */}
               {selectedHealth && (

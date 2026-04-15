@@ -515,7 +515,8 @@ def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status
         params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.15), 4)
         if params["ZSCORE_ENTRY"] != old:
             actions.append(
-                f"HealthMonitor auto-tighten: ZSCORE_ENTRY {old:.2f}→{params['ZSCORE_ENTRY']:.2f} (win_rate CRITICAL)"
+                f"HealthMonitor: win_rate CRITICAL — auto-tightened ZSCORE_ENTRY "
+                f"{old:.2f}→{params['ZSCORE_ENTRY']:.2f}"
             )
             changed = True
 
@@ -525,8 +526,8 @@ def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status
         params["MIN_NET_PROFIT_PCT"] = round(min(0.03, old + 0.002), 6)
         if params["MIN_NET_PROFIT_PCT"] != old:
             actions.append(
-                f"HealthMonitor auto-tighten: MIN_NET_PROFIT_PCT "
-                f"{old*100:.3f}%→{params['MIN_NET_PROFIT_PCT']*100:.3f}% (profit_factor CRITICAL)"
+                f"HealthMonitor: profit_factor CRITICAL — auto-tightened MIN_NET_PROFIT_PCT "
+                f"{old*100:.3f}%→{params['MIN_NET_PROFIT_PCT']*100:.3f}%"
             )
             changed = True
 

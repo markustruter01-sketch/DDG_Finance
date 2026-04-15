@@ -69,8 +69,6 @@ function HeroStrip() {
   const { data: fleet } = useKrakenFleetSummary();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
   const { data: sentiment } = useSentiment();
   const { data: curve } = useEquityCurve(1500);
   const { wins, losses, totalTrades } = useRealFeed(50);

@@ -422,7 +422,7 @@ def run_algo_scan(
     logger.info(
         f"Oracle | run_algo_scan summary: universe={universe} fetched={fetched} "
         f"longs={len(long_signals)} shorts={len(short_signals)} "
-        f"vix={vix:.1f if isinstance(vix, float) else 'N/A'} "
+        f"vix={'N/A' if not isinstance(vix, float) else f'{vix:.1f}'} "
         f"regime_param={regime!r} (ignored)"
     )
 

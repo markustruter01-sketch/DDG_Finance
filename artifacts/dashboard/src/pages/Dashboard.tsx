@@ -5,7 +5,6 @@ import {
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useOptionsState, useForexState,
   usePortfolio, useJournal, useEquityCurve,
-  usePoseidonState, useKrakenCurrentState,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
@@ -359,8 +358,6 @@ function FleetKPISummary() {
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
@@ -372,21 +369,18 @@ function FleetKPISummary() {
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
   const optionsEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? 100_000;
   const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
-  const poseidonEquity = poseidonState?.total_equity ?? 100_000;
-  const kcEquity = kcState?.total_equity ?? 100_000;
-
   // krakenReady = true as soon as fleetSummary data has arrived (not gated on isLoading
   // which can stay truthy across re-renders while a background refetch is in flight).
   const krakenReady = fleetSummary != null;
   // Show "—" only on the very first render before ANY real data has arrived.
   // Once any single source responds, show the live (progressively-updating) total.
   const anyLoading = alpacaEquity === 0 && !krakenReady && optionsState == null && forexState == null;
+  // Fleet equity formula: alpaca (Oracle) + krakenFleet (DJ+BB+Cal+Poseidon+KC via fleet-summary) + options (Apex) + forex (Navigator)
+  // Do NOT add poseidon or kraken-current separately — they are already inside krakenFleetEquity.
   const grandTotal = (alpacaEquity > 0 ? alpacaEquity : 0)
     + krakenFleetEquity
     + optionsEquity
-    + forexEquity
-    + poseidonEquity
-    + kcEquity;
+    + forexEquity;
 
   // True P&L = current equity across all 8 bots minus the $800k starting capital.
   // Guard: do not show until all key equity pools have loaded.

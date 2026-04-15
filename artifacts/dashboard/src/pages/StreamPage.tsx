@@ -17,7 +17,7 @@ function nextPage(current: SubPage): SubPage {
   return SUB_PAGES[(idx + 1) % SUB_PAGES.length];
 }
 
-const STORAGE_KEY = "stream-prefs";
+const STORAGE_KEY = "stream-prefs-v2";
 
 interface StreamPrefs {
   autoCycle: boolean;
@@ -63,11 +63,11 @@ function loadPrefs(): StreamPrefs {
           parsed.intervalSeconds >= 5 &&
           parsed.intervalSeconds <= 120
             ? parsed.intervalSeconds
-            : 10,
+            : 20,
       };
     }
   } catch {}
-  return { autoCycle: true, intervalSeconds: 10 };
+  return { autoCycle: true, intervalSeconds: 20 };
 }
 
 function savePrefs(prefs: StreamPrefs) {

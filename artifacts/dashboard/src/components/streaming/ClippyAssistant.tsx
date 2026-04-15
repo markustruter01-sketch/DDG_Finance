@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type SubPage = "a" | "b" | "c" | "d" | "e" | "f";
 
@@ -11,6 +11,8 @@ const MESSAGES: Record<SubPage, string> = {
   f: "The Orb is alive! Every glow, pulse and tendril represents live trading activity. Each coloured ring orbiting the core is one of your 8 bots — their colour, speed and brightness reflect live market activity. Watch the flares when trades close! ✨",
 };
 
+const AUTO_HIDE_MS = 10_000;
+
 interface ClippyAssistantProps {
   active: SubPage;
 }
@@ -18,14 +20,25 @@ interface ClippyAssistantProps {
 export function ClippyAssistant({ active }: ClippyAssistantProps) {
   const [displayed, setDisplayed] = useState<SubPage>(active);
   const [visible, setVisible] = useState(true);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+
     setVisible(false);
-    const t = setTimeout(() => {
+    const showTimer = setTimeout(() => {
       setDisplayed(active);
       setVisible(true);
+
+      hideTimer.current = setTimeout(() => {
+        setVisible(false);
+      }, AUTO_HIDE_MS);
     }, 250);
-    return () => clearTimeout(t);
+
+    return () => {
+      clearTimeout(showTimer);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
   }, [active]);
 
   const msg = MESSAGES[displayed];
@@ -64,11 +77,11 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           userSelect: "none",
         }}
       >
-        {/* Speech bubble — 35% larger */}
+        {/* Speech bubble */}
         <div
           style={{
             opacity: visible ? 1 : 0,
-            transition: "opacity 0.25s ease",
+            transition: "opacity 0.4s ease",
             maxWidth: 356,
             background: "linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.95))",
             border: "1px solid rgba(99,102,241,0.35)",
@@ -90,7 +103,6 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           >
             {msg}
           </p>
-          {/* Bubble tail */}
           <div
             style={{
               position: "absolute",
@@ -117,10 +129,12 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           />
         </div>
 
-        {/* Clippy mascot SVG — 35% larger */}
+        {/* Clippy mascot SVG */}
         <div
           style={{
             marginRight: 14,
+            opacity: visible ? 1 : 0,
+            transition: "opacity 0.4s ease",
             animation: "clippyFloat 3.5s ease-in-out infinite",
           }}
         >

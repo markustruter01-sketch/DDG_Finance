@@ -1,9 +1,9 @@
 {
   "bot_id": "poseidon",
   "display_name": "Poseidon",
-  "equity": 99617.31818243362,
-  "cash": 39685.81288594409,
-  "open_positions": 3,
+  "equity": 99634.09706842949,
+  "cash": 59847.07279110995,
+  "open_positions": 2,
   "positions": {
     "35": {
       "pair_set_id": 35,
@@ -21,37 +21,13 @@
       "entry_hedge_ratio": 0.8982449534168133,
       "opened_at": "2026-04-15T08:07:02.245930+00:00",
       "fees_paid": 98.58040047061294,
-      "current_price_a": 0.02477,
-      "current_price_b": 0.0798,
-      "leg_a_pnl": 787.8958036343435,
-      "leg_b_pnl": -676.599106850771,
-      "total_pnl": 12.716296312959486,
-      "leg_a_current": 0.02477,
-      "leg_b_current": 0.0798
-    },
-    "12": {
-      "pair_set_id": 12,
-      "asset_a": "SEI/USD",
-      "asset_b": "GALA/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 370556.54060198326,
-      "leg_b_units": 7755033.791389147,
-      "leg_a_entry": 0.05392,
-      "leg_b_entry": 0.003,
-      "position_value": 19980.408669258937,
-      "entry_zscore": -2.3712015191137588,
-      "entry_hedge_ratio": 1.1643956717443023,
-      "opened_at": "2026-04-15T10:23:49.491422+00:00",
-      "fees_paid": 112.43832611290858,
-      "current_price_a": 0.0562,
-      "current_price_b": 0.00308,
-      "leg_a_pnl": 844.8689125725208,
-      "leg_b_pnl": -620.40270331113,
-      "total_pnl": 112.02788314848218,
-      "leg_a_current": 0.0562,
-      "leg_b_current": 0.00308
+      "current_price_a": 0.02467,
+      "current_price_b": 0.0793,
+      "leg_a_pnl": 704.0771011200521,
+      "leg_b_pnl": -559.9440884282242,
+      "total_pnl": 45.552612221215014,
+      "leg_a_current": 0.02467,
+      "leg_b_current": 0.0793
     },
     "3": {
       "pair_set_id": 3,
@@ -69,13 +45,13 @@
       "entry_hedge_ratio": 0.561794492218426,
       "opened_at": "2026-04-15T19:16:13.622173+00:00",
       "fees_paid": 80.75425586176797,
-      "current_price_a": 627.5,
-      "current_price_b": 0.2381,
-      "leg_a_pnl": 145.57500334805206,
-      "leg_b_pnl": -99.41523730197275,
-      "total_pnl": -34.59448981568866,
-      "leg_a_current": 627.5,
-      "leg_b_current": 0.2381
+      "current_price_a": 623.21,
+      "current_price_b": 0.237,
+      "leg_a_pnl": 8.6195725666605,
+      "leg_b_pnl": -47.34058919141522,
+      "total_pnl": -119.4752724865227,
+      "leg_a_current": 623.21,
+      "leg_b_current": 0.237
     }
   },
   "pair_params": [
@@ -781,6 +757,6 @@
     }
   ],
   "circuit_breaker": null,
-  "cycle": 4,
-  "updated_at": "2026-04-15T19:46:16.047876+00:00"
+  "cycle": 7,
+  "updated_at": "2026-04-15T20:31:13.630415+00:00"
 }

@@ -19,12 +19,14 @@ import { formatCurrency } from "@/lib/utils";
 
 
 const BOT_META: Record<string, { icon: string; color: string; label: string }> = {
-  oracle:     { icon: "🔮", color: "#8b5cf6", label: "Oracle #1" },
-  "davy-jones": { icon: "⚓", color: "#22d3ee", label: "Davy Jones #2" },
-  blackbeard: { icon: "🏴‍☠️", color: "#f97316", label: "Blackbeard #3" },
-  calypso:    { icon: "🌊", color: "#a855f7", label: "Calypso #4" },
-  apex:       { icon: "🎯", color: "#f59e0b", label: "Apex Predator #5" },
-  navigator:  { icon: "🧭", color: "#10b981", label: "Navigator #6" },
+  oracle:           { icon: "🔮", color: "#8b5cf6", label: "Oracle #1" },
+  "davy-jones":     { icon: "⚓", color: "#22d3ee", label: "Davy Jones #2" },
+  blackbeard:       { icon: "🏴‍☠️", color: "#f97316", label: "Blackbeard #3" },
+  calypso:          { icon: "🌊", color: "#a855f7", label: "Calypso #4" },
+  apex:             { icon: "🎯", color: "#f59e0b", label: "Apex Predator #5" },
+  navigator:        { icon: "🧭", color: "#10b981", label: "Navigator #6" },
+  poseidon:         { icon: "🔱", color: "#8b5cf6", label: "Poseidon #7" },
+  "kraken-current": { icon: "🌊", color: "#06b6d4", label: "Kraken Current #8" },
 };
 
 function fmtUsd(v: number): string {

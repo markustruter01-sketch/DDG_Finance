@@ -28,12 +28,14 @@ const C = {
 };
 
 const BOT_META = [
-  { key: "oracle",      name: "Oracle",       icon: "🔮", color: "#8b5cf6", market: "Stocks" },
-  { key: "davy-jones",  name: "Davy Jones",   icon: "⚓",  color: "#22d3ee", market: "Crypto" },
-  { key: "blackbeard",  name: "Blackbeard",   icon: "🏴‍☠️", color: "#ef4444", market: "Crypto" },
-  { key: "calypso",     name: "Calypso",      icon: "🌊",  color: "#3b82f6", market: "Crypto" },
-  { key: "apex",        name: "Apex Predator",icon: "🎯",  color: "#f59e0b", market: "Options" },
-  { key: "navigator",   name: "Navigator",    icon: "🧭",  color: "#a78bfa", market: "Forex" },
+  { key: "oracle",          name: "Oracle",         icon: "🔮", color: "#8b5cf6", market: "Stocks" },
+  { key: "davy-jones",      name: "Davy Jones",     icon: "⚓",  color: "#22d3ee", market: "Crypto" },
+  { key: "blackbeard",      name: "Blackbeard",     icon: "🏴‍☠️", color: "#ef4444", market: "Crypto" },
+  { key: "calypso",         name: "Calypso",        icon: "🌊",  color: "#3b82f6", market: "Crypto" },
+  { key: "apex",            name: "Apex Predator",  icon: "🎯",  color: "#f59e0b", market: "Options" },
+  { key: "navigator",       name: "Navigator",      icon: "🧭",  color: "#a78bfa", market: "Forex" },
+  { key: "poseidon",        name: "Poseidon",       icon: "🔱",  color: "#8b5cf6", market: "Pairs" },
+  { key: "kraken-current",  name: "Kraken Current", icon: "🌊",  color: "#06b6d4", market: "Trend" },
 ];
 
 const BOT_COLORS: Record<string, string> = {
@@ -43,6 +45,8 @@ const BOT_COLORS: Record<string, string> = {
   "Calypso": "#3b82f6",
   "Apex Predator": "#f59e0b",
   "Navigator": "#a78bfa",
+  "Poseidon": "#8b5cf6",
+  "Kraken Current": "#06b6d4",
 };
 
 function fmtUsd(v: number, compact = false): string {

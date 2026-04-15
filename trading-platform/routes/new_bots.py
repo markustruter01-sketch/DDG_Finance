@@ -1,10 +1,15 @@
 """API routes for Bot #7 Poseidon and Bot #8 Kraken Current."""
 from __future__ import annotations
 
+import json
 import os
 from fastapi import APIRouter
 
 new_bots_router = APIRouter()
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_POSEIDON_LIVE_STATE = os.path.join(_REPO_ROOT, "poseidon", "poseidon_live_state.json")
+_KC_LIVE_STATE = os.path.join(_REPO_ROOT, "kraken-current", "kc_live_state.json")
 
 
 def _pg_query(sql: str, params: tuple = ()):
@@ -24,6 +29,14 @@ def _pg_query(sql: str, params: tuple = ()):
         return []
 
 
+def _read_live_state(path: str) -> dict:
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 @new_bots_router.get("/poseidon/state")
 async def poseidon_state():
     """Return current state of Bot #7 Poseidon (pairs trading)."""
@@ -33,10 +46,6 @@ async def poseidon_state():
     pair_params = _pg_query("""
         SELECT pair_set_id, asset_a, asset_b, hedge_ratio, hurst, adf_pvalue, is_tradeable
         FROM poseidon_pair_params ORDER BY pair_set_id
-    """)
-    open_trades = _pg_query("""
-        SELECT pair_set_id, asset_a, asset_b, direction, entry_zscore, opened_at
-        FROM poseidon_trades WHERE closed_at IS NULL
     """)
 
     eq = float(port[0]["equity_usd"]) if port else 100_000.0
@@ -50,6 +59,31 @@ async def poseidon_state():
 
     paused = bool(hb[0].get("bot_paused")) if hb else False
     status = str(hb[0].get("status") or "INITIALISING") if hb else "INITIALISING"
+
+    # Read live positions from the bot's JSON state file
+    live_state = _read_live_state(_POSEIDON_LIVE_STATE)
+    live_positions_raw = live_state.get("positions", {})
+
+    # Normalise into a list for the frontend
+    open_trades = []
+    for ps_id, pos in live_positions_raw.items():
+        open_trades.append({
+            "pair_set_id": pos.get("pair_set_id"),
+            "asset_a": pos.get("asset_a"),
+            "asset_b": pos.get("asset_b"),
+            "direction": pos.get("direction"),
+            "leg_a_side": pos.get("leg_a_side"),
+            "leg_b_side": pos.get("leg_b_side"),
+            "entry_zscore": pos.get("entry_zscore"),
+            "position_value": pos.get("position_value"),
+            "total_pnl": pos.get("total_pnl"),
+            "leg_a_entry": pos.get("leg_a_entry"),
+            "leg_b_entry": pos.get("leg_b_entry"),
+            "current_price_a": pos.get("current_price_a"),
+            "current_price_b": pos.get("current_price_b"),
+            "opened_at": pos.get("opened_at"),
+            "fees_paid": pos.get("fees_paid"),
+        })
 
     return {
         "total_equity": eq,
@@ -99,11 +133,32 @@ async def kraken_current_state():
     paused = bool(hb[0].get("bot_paused")) if hb else False
     status = str(hb[0].get("status") or "INITIALISING") if hb else "INITIALISING"
 
+    # Read live positions from the bot's JSON state file
+    live_state = _read_live_state(_KC_LIVE_STATE)
+    live_positions_raw = live_state.get("positions", {})
+
+    open_positions_list = []
+    for sym, pos in live_positions_raw.items():
+        open_positions_list.append({
+            "symbol": pos.get("symbol", sym),
+            "direction": pos.get("direction", "long"),
+            "entry_price": pos.get("entry_price"),
+            "current_price": pos.get("current_price"),
+            "units": pos.get("units"),
+            "position_value": pos.get("position_value"),
+            "unrealised_pnl": pos.get("unrealised_pnl"),
+            "stop_level": pos.get("stop_level"),
+            "trailing_active": pos.get("trailing_active"),
+            "opened_at": pos.get("opened_at"),
+            "fees_paid": pos.get("fees_paid"),
+        })
+
     return {
         "total_equity": eq,
         "paper_equity": eq,
         "cash_usd": cash,
         "open_positions": open_count,
+        "open_positions_list": open_positions_list,
         "total_pnl": total_pnl,
         "total_trades": total_trades,
         "total_wins": wins,
@@ -114,7 +169,7 @@ async def kraken_current_state():
         "starting_capital": 100_000.0,
         "strategy": "Trend Following / EMA Crossover + ADX",
         "cycle_hours": 4,
-        "universe_size": 10,
+        "universe_size": 156,
         "ema_fast": 20,
         "ema_slow": 100,
         "adx_threshold": 25,

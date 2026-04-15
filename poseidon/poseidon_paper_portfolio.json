@@ -1,8 +1,43 @@
 {
-  "cash": 100000.0,
-  "reserved_margin": 0.0,
-  "positions": {},
+  "cash": 60026.00319084425,
+  "reserved_margin": 39973.99680915575,
+  "positions": {
+    "25": {
+      "pair_set_id": 25,
+      "asset_a": "TIA/USD",
+      "asset_b": "GRT/USD",
+      "direction": "short_a_long_b",
+      "leg_a_side": "short",
+      "leg_b_side": "long",
+      "leg_a_units": 64703.979294726625,
+      "leg_b_units": 1259174.831680003,
+      "leg_a_entry": 0.3091,
+      "leg_b_entry": 0.02383,
+      "position_value": 20000.0,
+      "entry_zscore": 2.1817442789984316,
+      "entry_hedge_ratio": 1.5003068119467236,
+      "opened_at": "2026-04-15T08:07:02.237968+00:00",
+      "fees_paid": 130.01595422122963
+    },
+    "35": {
+      "pair_set_id": 35,
+      "asset_a": "GRT/USD",
+      "asset_b": "SAND/USD",
+      "direction": "long_a_short_b",
+      "leg_a_side": "long",
+      "leg_b_side": "short",
+      "leg_a_units": 838187.0251429187,
+      "leg_b_units": 233310.03684509348,
+      "leg_a_entry": 0.02383,
+      "leg_b_entry": 0.0769,
+      "position_value": 19973.996809155753,
+      "entry_zscore": -2.0530714171500137,
+      "entry_hedge_ratio": 0.8982449534168133,
+      "opened_at": "2026-04-15T08:07:02.245930+00:00",
+      "fees_paid": 98.58040047061294
+    }
+  },
   "total_trades": 0,
   "consecutive_losses": 0,
-  "updated_at": "2026-04-15T07:18:31.543569+00:00"
+  "updated_at": "2026-04-15T08:07:02.246005+00:00"
 }

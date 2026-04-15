@@ -1,4 +1,4 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 
@@ -431,6 +431,8 @@ export default function StreamingBotsScreen() {
   const { data: optionsPosRaw } = useOptionsPositions();
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
 
   const oracleEquity = portfolio?.account?.equity ?? null;
   const oraclePositions = (portfolio?.positions ?? []).filter((p) => (p.market_value ?? 0) > 10);
@@ -476,8 +478,28 @@ export default function StreamingBotsScreen() {
     size_usd: p.size_usd ?? 0,
   }));
 
-  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity].filter((e): e is number => e != null);
-  const fleetTotal = allEquities.length === 6 ? allEquities.reduce((s, e) => s + e, 0) : null;
+  const poseidonEquity = poseidonState?.total_equity ?? null;
+  const poseidonOpenList: OpenPosSummary[] = (poseidonState?.open_trades ?? []).map((t) => ({
+    symbol: `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`,
+    side: (t.leg_a_side === "long" ? "long" : "short") as "long" | "short",
+    entry_price: t.leg_a_entry ?? 0,
+    unrealized_pnl_usd: t.total_pnl ?? 0,
+    size_usd: t.position_value ?? 0,
+  }));
+  const poseidonTopPair = poseidonOpenList[0]?.symbol;
+
+  const kcEquity = kcState?.total_equity ?? null;
+  const kcOpenList: OpenPosSummary[] = (kcState?.open_positions_list ?? []).map((p) => ({
+    symbol: p.symbol,
+    side: (p.direction === "long" ? "long" : "short") as "long" | "short",
+    entry_price: p.entry_price ?? 0,
+    unrealized_pnl_usd: p.unrealised_pnl ?? 0,
+    size_usd: p.position_value ?? 0,
+  }));
+  const kcTopPair = kcOpenList[0]?.symbol;
+
+  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
+  const fleetTotal = allEquities.length === 8 ? allEquities.reduce((s, e) => s + e, 0) : null;
   const fleetPnl = fleetTotal != null ? fleetTotal - 800_000 : null;
 
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
@@ -626,6 +648,48 @@ export default function StreamingBotsScreen() {
         },
       ],
     },
+    {
+      id: "poseidon",
+      name: "Poseidon",
+      icon: "🔱",
+      exchange: "Kraken · Pairs",
+      color: "#8b5cf6",
+      glow: "#8b5cf6",
+      equity: poseidonEquity,
+      paused: poseidonState?.paused ?? false,
+      winCount: poseidonState?.total_wins ?? 0,
+      lossCount: (poseidonState?.total_trades ?? 0) - (poseidonState?.total_wins ?? 0),
+      openPositions: poseidonOpenList.length,
+      topPair: poseidonTopPair,
+      openPositionsList: poseidonOpenList,
+      strategyConfig: [
+        { label: "Entry Z", value: `|Z| > ${poseidonState?.zscore_entry ?? 2.0}`, color: "#8b5cf6" },
+        { label: "Exit Z", value: `|Z| < ${poseidonState?.zscore_exit ?? 0.3}`, color: "#a78bfa" },
+        { label: "Max Pairs", value: `${poseidonState?.max_pairs ?? 3} open`, color: "#cbd5e1" },
+        { label: "Cycle", value: `${poseidonState?.cycle_minutes ?? 15} min`, color: "#94a3b8" },
+      ],
+    },
+    {
+      id: "kraken-current",
+      name: "Kraken Current",
+      icon: "🌊",
+      exchange: "Kraken · Trend",
+      color: "#06b6d4",
+      glow: "#06b6d4",
+      equity: kcEquity,
+      paused: kcState?.paused ?? false,
+      winCount: kcState?.total_wins ?? 0,
+      lossCount: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0),
+      openPositions: kcOpenList.length,
+      topPair: kcTopPair,
+      openPositionsList: kcOpenList,
+      strategyConfig: [
+        { label: "EMA", value: `${kcState?.ema_fast ?? 20}/${kcState?.ema_slow ?? 100}`, color: "#06b6d4" },
+        { label: "ADX Filter", value: `> ${kcState?.adx_threshold ?? 25}`, color: "#22d3ee" },
+        { label: "Max Pos", value: `${kcState?.max_positions ?? 5}`, color: "#cbd5e1" },
+        { label: "Universe", value: `${kcState?.universe_size ?? 156} coins`, color: "#94a3b8" },
+      ],
+    },
   ];
 
   const bestBotId = bots.reduce<string | null>((best, bot) => {
@@ -686,8 +750,8 @@ export default function StreamingBotsScreen() {
         </div>
       </div>
 
-      {/* Bot cards row */}
-      <div className="flex-1 min-h-0 flex gap-2.5 p-3">
+      {/* Bot cards grid — 4 cols × 2 rows */}
+      <div className="flex-1 min-h-0 grid grid-cols-4 gap-2 p-3" style={{ gridTemplateRows: "1fr 1fr" }}>
         {bots.map((bot) => (
           <StreamBotCard key={bot.id} bot={{ ...bot, isBest: bot.id === bestBotId }} />
         ))}

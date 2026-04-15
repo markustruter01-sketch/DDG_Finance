@@ -371,6 +371,12 @@ export default function BotsPage() {
   const poseidonTotalTrades = poseidonState?.total_trades ?? 0;
   const poseidonLosses = poseidonTotalTrades - poseidonWins;
   const poseidonWinRate = poseidonTotalTrades > 0 ? (poseidonWins / poseidonTotalTrades) * 100 : null;
+  const poseidonPositions: GenericPosition[] = (poseidonState?.open_trades ?? []).map((t) => ({
+    symbol: `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`,
+    size_usd: t.position_value ?? 0,
+    unrealized_pnl: t.total_pnl ?? 0,
+    entry_price: undefined,
+  }));
   const poseidonStrategyConfig: StrategyConfigRow[] = [
     { label: "Entry Z-Score", value: `|Z| > ${poseidonState?.zscore_entry ?? 2.0}`, color: "#8b5cf6" },
     { label: "Exit Z-Score", value: `|Z| < ${poseidonState?.zscore_exit ?? 0.3}`, color: "#a78bfa" },
@@ -383,6 +389,12 @@ export default function BotsPage() {
   const kcTotalTrades = kcState?.total_trades ?? 0;
   const kcLosses = kcTotalTrades - kcWins;
   const kcWinRate = kcTotalTrades > 0 ? (kcWins / kcTotalTrades) * 100 : null;
+  const kcPositions: GenericPosition[] = (kcState?.open_positions_list ?? []).map((p) => ({
+    symbol: p.symbol,
+    size_usd: p.position_value ?? 0,
+    unrealized_pnl: p.unrealised_pnl ?? 0,
+    entry_price: p.entry_price,
+  }));
   const kcStrategyConfig: StrategyConfigRow[] = [
     { label: "EMA Crossover", value: `${kcState?.ema_fast ?? 20}/${kcState?.ema_slow ?? 100}`, color: "#06b6d4" },
     { label: "ADX Filter", value: `ADX > ${kcState?.adx_threshold ?? 25}`, color: "#22d3ee" },
@@ -478,7 +490,7 @@ export default function BotsPage() {
             color="#8b5cf6"
             strategy="Crypto pairs trading — statistical arbitrage (Z-score)"
             equity={poseidonEquity}
-            positions={[]}
+            positions={poseidonPositions}
             isLoading={poseidonLoading}
             paused={poseidonState?.paused ?? false}
             winCount={poseidonWins}
@@ -494,7 +506,7 @@ export default function BotsPage() {
             color="#06b6d4"
             strategy="Crypto trend following — EMA crossover + ADX momentum"
             equity={kcEquity}
-            positions={[]}
+            positions={kcPositions}
             isLoading={kcLoading}
             paused={kcState?.paused ?? false}
             winCount={kcWins}

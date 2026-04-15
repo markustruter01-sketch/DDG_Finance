@@ -1733,6 +1733,24 @@ export function useAIImpactTimeline() {
   });
 }
 
+export interface PoseidonOpenTrade {
+  pair_set_id: number;
+  asset_a: string;
+  asset_b: string;
+  direction: string;
+  leg_a_side: string;
+  leg_b_side: string;
+  entry_zscore: number;
+  position_value: number;
+  total_pnl: number;
+  leg_a_entry: number;
+  leg_b_entry: number;
+  current_price_a: number;
+  current_price_b: number;
+  opened_at: string;
+  fees_paid: number;
+}
+
 export interface PoseidonState {
   total_equity: number;
   paper_equity: number;
@@ -1753,7 +1771,7 @@ export interface PoseidonState {
   hurst_threshold: number;
   adf_pvalue_threshold: number;
   pair_params?: object[];
-  open_trades?: object[];
+  open_trades?: PoseidonOpenTrade[];
 }
 
 export function usePoseidonState() {
@@ -1766,11 +1784,26 @@ export function usePoseidonState() {
   });
 }
 
+export interface KrakenCurrentOpenPosition {
+  symbol: string;
+  direction: string;
+  entry_price: number;
+  current_price: number;
+  units: number;
+  position_value: number;
+  unrealised_pnl: number;
+  stop_level: number;
+  trailing_active: boolean;
+  opened_at: string;
+  fees_paid: number;
+}
+
 export interface KrakenCurrentState {
   total_equity: number;
   paper_equity: number;
   cash_usd: number;
   open_positions: number;
+  open_positions_list?: KrakenCurrentOpenPosition[];
   total_pnl: number;
   total_trades: number;
   total_wins: number;

@@ -54,7 +54,31 @@ _KRAKEN_IMPORTED_SIDECAR = os.path.join(os.path.dirname(os.path.abspath(__file__
 _kraken_imported_lock = threading.Lock()
 
 
-def _add_heal_entry(component: str, action: str, result: str, success: bool, triggered_by: str = "manual") -> dict:
+def _add_heal_entry(
+    component: str,
+    action: str,
+    result: str,
+    success: bool,
+    triggered_by: str = "manual",
+    state_changed: bool = False,
+) -> dict:
+    """
+    Add an entry to the in-memory heal log.
+
+    heal_type semantics:
+      HEALED  — remediation succeeded AND the bot/system state actually changed
+                (e.g. force_refresh set, params tightened, cache cleared)
+      LOGGED  — success but no concrete state change occurred (verified OK,
+                nothing to fix, or observation-only)
+      FAILED  — the remediation attempt itself failed or errored
+    """
+    if not success:
+        heal_type = "FAILED"
+    elif state_changed:
+        heal_type = "HEALED"
+    else:
+        heal_type = "LOGGED"
+
     entry = {
         "ts": time.time(),
         "component": component,
@@ -62,7 +86,8 @@ def _add_heal_entry(component: str, action: str, result: str, success: bool, tri
         "result": result,
         "success": success,
         "triggered_by": triggered_by,
-        "heal_type": "HEALED" if success else "LOGGED",
+        "heal_type": heal_type,
+        "state_changed": state_changed,
     }
     with _heal_lock:
         _heal_log.insert(0, entry)

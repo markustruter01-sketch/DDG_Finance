@@ -237,7 +237,7 @@ async def system_health_architecture() -> dict:
                     try:
                         with _kpgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _kc:
                             _kc.execute(
-                                "SELECT status, cycle_count, last_updated, error "
+                                "SELECT status, cycle_count, last_updated, error, force_refresh "
                                 "FROM kraken_heartbeat WHERE id = %s",
                                 (_arch_db_id,)
                             )
@@ -246,6 +246,7 @@ async def system_health_architecture() -> dict:
                             _klast = _kr["last_updated"]
                             _kage = (now - _klast.timestamp()) if _klast else None
                             _kstatus = _kr["status"] or "unknown"
+                            _kick_pending = bool(_kr.get("force_refresh", False))
                             if _kstatus == "error":
                                 _blevel = "red"
                             elif _kage and _kage > 1800:
@@ -258,13 +259,16 @@ async def system_health_architecture() -> dict:
                             _age_str = f"{int(_kage)}s" if _kage else "?"
                             _bot_detail_parts.append(
                                 f"{_arch_label}: {_kstatus} ({_age_str})"
+                                + (" [kick pending]" if _kick_pending else "")
                             )
                             nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
                                 "label": f"Kraken Bot: {_arch_label}",
                                 "level": _blevel,
                                 "latency_ms": None,
                                 "data_age_s": round(_kage, 1) if _kage else None,
-                                "detail": f"Status: {_kstatus} · Cycle #{_kr['cycle_count']}",
+                                "detail": f"Status: {_kstatus} · Cycle #{_kr['cycle_count']}"
+                                          + (" · kick pending" if _kick_pending else ""),
+                                "kick_pending": _kick_pending,
                             }
                         else:
                             _bot_levels.append("yellow")
@@ -273,6 +277,7 @@ async def system_health_architecture() -> dict:
                                 "label": f"Kraken Bot: {_arch_label}",
                                 "level": "yellow", "latency_ms": None,
                                 "data_age_s": None, "detail": "Bot not started",
+                                "kick_pending": False,
                             }
                     except Exception as _bexc:
                         _bot_levels.append("red")
@@ -281,6 +286,7 @@ async def system_health_architecture() -> dict:
                             "label": f"Kraken Bot: {_arch_label}",
                             "level": "red", "latency_ms": None,
                             "data_age_s": None, "detail": str(_bexc)[:60],
+                            "kick_pending": False,
                         }
             finally:
                 _kpgconn.close()
@@ -469,11 +475,13 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
 
     steps: list[str] = []
     success = True
+    _state_changed = False   # True only when bot/system state was concretely modified
 
     try:
         if component == "platform_core":
             new_state = reset_error_state()
             steps.append(f"Error state reset → {new_state.get('last_run_status', '?')}")
+            _state_changed = True
             try:
                 import data.yfinance_client as _yf
                 _yf._cached_market_data = None
@@ -489,6 +497,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
             from data.cache import invalidate_all
             invalidate_all()
             steps.append("FRED macro + NewsAPI caches invalidated")
+            _state_changed = True
             try:
                 import data.yfinance_client as _yf
                 _yf._cached_market_data = None
@@ -538,6 +547,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                         _rconn.commit()
                         if _kicked:
                             steps.append(f"force_refresh=TRUE set for: {', '.join(_kicked)}")
+                            _state_changed = True
                     finally:
                         _rconn.close()
                 else:
@@ -584,9 +594,9 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
         success = False
 
     result_str = " · ".join(steps) if steps else "No action taken"
-    logger.info(f"[HEAL] component={component} by={triggered_by} ok={success} | {result_str}")
-    entry = _add_heal_entry(component, f"remediate_{component}", result_str, success, triggered_by)
-    return {"component": component, "success": success, "result": result_str, "ts": entry["ts"]}
+    logger.info(f"[HEAL] component={component} by={triggered_by} ok={success} changed={_state_changed} | {result_str}")
+    entry = _add_heal_entry(component, f"remediate_{component}", result_str, success, triggered_by, state_changed=_state_changed)
+    return {"component": component, "success": success, "result": result_str, "ts": entry["ts"], "state_changed": _state_changed}
 
 
 async def _auto_heal_check() -> None:

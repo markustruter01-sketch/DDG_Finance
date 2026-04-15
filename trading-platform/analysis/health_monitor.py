@@ -541,18 +541,34 @@ def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status
     if not changed:
         return []
 
-    # Write back
+    # Build reason strings for the reasons JSONB column
+    reason_entries = [f"HealthMonitor auto-tighten: {a}" for a in actions]
+
+    # Write back params AND reasons
     try:
         with _pg_conn() as conn:
             with conn.cursor() as cur:
                 import json as _json_br2
+                # Load current reasons (may be null or a list)
+                cur.execute(
+                    "SELECT reasons FROM kraken_adaptive_params WHERE bot_id = %s",
+                    (bot_id,)
+                )
+                _reasons_row = cur.fetchone()
+                existing_reasons = []
+                if _reasons_row and _reasons_row[0]:
+                    _r = _reasons_row[0]
+                    existing_reasons = list(_r) if isinstance(_r, (list, tuple)) else []
+                # Prepend new reasons, keep most recent 20
+                updated_reasons = (reason_entries + existing_reasons)[:20]
+
                 cur.execute(
                     """
                     UPDATE kraken_adaptive_params
-                    SET params = %s, adapted_at = NOW()
+                    SET params = %s, reasons = %s, adapted_at = NOW()
                     WHERE bot_id = %s
                     """,
-                    (_json_br2.dumps(params), bot_id)
+                    (_json_br2.dumps(params), _json_br2.dumps(updated_reasons), bot_id)
                 )
             conn.commit()
         logger.info(

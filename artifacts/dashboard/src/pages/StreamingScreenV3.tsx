@@ -8,6 +8,8 @@ import {
   useVault,
   useForexVault,
   useJournal,
+  usePoseidonState,
+  useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { NewsIntelligence } from "@/components/streaming/NewsIntelligence";
@@ -95,13 +97,17 @@ function HeroBanner() {
   const { data: fxState } = useForexState();
   const { data: vault } = useVault();
   const { data: fxVault } = useForexVault();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
   const { wins, losses, openPositions } = useRealFeed(50);
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 100_000;
   const krakenEq = fleet?.total_equity_usd ?? 300_000;
   const optEq = optState?.total_equity ?? 100_000;
   const fxEq = fxState?.total_equity ?? 100_000;
-  const grandTotal = alpacaEq + krakenEq + optEq + fxEq;
+  const poseidonEq = poseidonState?.total_equity ?? 100_000;
+  const kcEq = kcState?.total_equity ?? 100_000;
+  const grandTotal = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
   const startTotal = 800_000;
   const pnlUsd = grandTotal - startTotal;
   const pnlPct = startTotal > 0 ? ((grandTotal - startTotal) / startTotal) * 100 : 0;
@@ -126,7 +132,7 @@ function HeroBanner() {
             {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
           </span>
         </div>
-        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>all-time vs $600k start</div>
+        <div className="text-[9px] font-mono mt-1" style={{ color: C.slateDim }}>all-time vs $800k start</div>
       </Card>
 
       <Card className="px-4 py-3 flex flex-col justify-center" style={{ borderColor: "rgba(34,211,238,0.15)" }}>
@@ -170,7 +176,7 @@ function WelcomeCard() {
       <div>
         <span className="text-[12px] font-black uppercase tracking-wide mr-2" style={{ color: "#ddd6fe" }}>Welcome to AlgoEdge Live —</span>
         <span className="text-[12px] font-mono" style={{ color: "rgba(203,213,225,0.65)" }}>
-          Six automated AI bots trading{" "}
+          Eight automated AI bots trading{" "}
           <span style={{ color: C.amber }}>Stocks</span>,{" "}
           <span style={{ color: C.cyan }}>Crypto</span>,{" "}
           <span style={{ color: C.violet }}>FOREX</span> &{" "}
@@ -235,6 +241,8 @@ function LeftColumn() {
   const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
   const { trades: allTrades } = useRealFeed(200);
 
   const alpacaStart = summary?.portfolio_totals?.initial_capital ?? 100_000;
@@ -250,6 +258,14 @@ function LeftColumn() {
   const fxStart = fxState?.starting_capital ?? 100_000;
   const fxEq = fxState?.total_equity ?? fxState?.paper_equity ?? fxStart;
   const navPnlAll = fxEq - fxStart;
+
+  const poseidonStart = poseidonState?.starting_capital ?? 100_000;
+  const poseidonEq = poseidonState?.total_equity ?? poseidonStart;
+  const poseidonPnlAll = poseidonEq - poseidonStart;
+
+  const kcStart = kcState?.starting_capital ?? 100_000;
+  const kcEq = kcState?.total_equity ?? kcStart;
+  const kcPnlAll = kcEq - kcStart;
 
   const todayByBot = useMemo(() => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -273,6 +289,8 @@ function LeftColumn() {
   const caToday = todayStats("Calypso");
   const apToday = todayStats("Apex Predator");
   const navToday = todayStats("Navigator");
+  const posToday = todayStats("Poseidon");
+  const kcToday = todayStats("Kraken Current");
 
   const bots = [
     { meta: BOT_META[0], pnlToday: oToday.pnl, pnlAllTime: oraclePnlAll, wins: oracleWins, losses: oracleLosses, todayWins: oToday.wins, todayLosses: oToday.losses },
@@ -281,6 +299,8 @@ function LeftColumn() {
     { meta: BOT_META[3], pnlToday: caToday.pnl, pnlAllTime: caPerf?.total_pnl_usd ?? 0, wins: caPerf?.win_count ?? 0, losses: caPerf?.loss_count ?? 0, todayWins: caToday.wins, todayLosses: caToday.losses },
     { meta: BOT_META[4], pnlToday: apToday.pnl, pnlAllTime: apexPnlAll, wins: optState?.total_wins ?? 0, losses: (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0), todayWins: apToday.wins, todayLosses: apToday.losses },
     { meta: BOT_META[5], pnlToday: navToday.pnl, pnlAllTime: navPnlAll, wins: fxState?.total_wins ?? 0, losses: (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0), todayWins: navToday.wins, todayLosses: navToday.losses },
+    { meta: BOT_META[6], pnlToday: posToday.pnl, pnlAllTime: poseidonPnlAll, wins: poseidonState?.total_wins ?? 0, losses: (poseidonState?.total_trades ?? 0) - (poseidonState?.total_wins ?? 0), todayWins: posToday.wins, todayLosses: posToday.losses },
+    { meta: BOT_META[7], pnlToday: kcToday.pnl, pnlAllTime: kcPnlAll, wins: kcState?.total_wins ?? 0, losses: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0), todayWins: kcToday.wins, todayLosses: kcToday.losses },
   ];
 
   return (

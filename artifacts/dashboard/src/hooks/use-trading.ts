@@ -1763,6 +1763,7 @@ export interface PoseidonState {
   paused: boolean;
   status: string;
   strategy: string;
+  starting_capital: number;
   cycle_minutes: number;
   max_pairs: number;
   zscore_entry: number;
@@ -1811,6 +1812,7 @@ export interface KrakenCurrentState {
   paused: boolean;
   status: string;
   strategy: string;
+  starting_capital: number;
   cycle_hours: number;
   universe_size: number;
   ema_fast: number;

@@ -11,6 +11,8 @@ import {
   useForexPositions,
   useEquityCurve,
   useSentiment,
+  usePoseidonState,
+  useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { AnimatedValue } from "@/components/streaming/AnimatedValue";
@@ -67,6 +69,8 @@ function HeroStrip() {
   const { data: fleet } = useKrakenFleetSummary();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
   const { data: sentiment } = useSentiment();
   const { data: curve } = useEquityCurve(1500);
   const { wins, losses, totalTrades } = useRealFeed(50);
@@ -75,7 +79,9 @@ function HeroStrip() {
   const krakenEq = fleet?.total_equity_usd ?? 0;
   const optEq = optState?.paper_equity ?? 0;
   const fxEq = fxState?.paper_equity ?? 0;
-  const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
+  const poseidonEq = poseidonState?.total_equity ?? 0;
+  const kcEq = kcState?.total_equity ?? 0;
+  const totalEquity = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
 
   const pnl24h = useMemo(() => {
     if (!curve?.snapshots?.length) return { value: 0, pct: 0, label: "24H P&L" };
@@ -270,6 +276,8 @@ function BotTilesRow() {
   const { data: fxState } = useForexState();
   const { data: livePos } = useLivePositions();
   const { data: fxPos } = useForexPositions();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
   const oracleStatus = summary?.system_health?.system_status ?? "offline";
@@ -386,6 +394,36 @@ function BotTilesRow() {
       lastSignal: fxTopScan?.signal ?? undefined,
       signalStrength: fxTopScan?.rsi != null ? `RSI ${fxTopScan.rsi.toFixed(0)}` : undefined,
     },
+    {
+      key: "poseidon", equity: poseidonState?.total_equity ?? 0,
+      pnl: (poseidonState?.total_equity ?? 100_000) - (poseidonState?.starting_capital ?? 100_000),
+      status: poseidonState?.status ?? "offline",
+      thinkingText: poseidonState ? `${poseidonState.open_positions} pairs · Z>${poseidonState.zscore_entry}` : "",
+      posCount: poseidonState?.open_positions ?? 0,
+      cycleCount: 0,
+      winCount: poseidonState?.total_wins ?? 0,
+      lossCount: (poseidonState?.total_trades ?? 0) - (poseidonState?.total_wins ?? 0),
+      color: BOT_META.poseidon.color,
+      currentTicker: poseidonState?.open_trades?.[0]
+        ? `${poseidonState.open_trades[0].asset_a.replace("/USD","").replace("USD","")}/${poseidonState.open_trades[0].asset_b.replace("/USD","").replace("USD","")}`
+        : undefined,
+      lastSignal: undefined as string | undefined,
+      signalStrength: undefined as string | undefined,
+    },
+    {
+      key: "kraken-current", equity: kcState?.total_equity ?? 0,
+      pnl: (kcState?.total_equity ?? 100_000) - (kcState?.starting_capital ?? 100_000),
+      status: kcState?.status ?? "offline",
+      thinkingText: kcState ? `${kcState.open_positions}/${kcState.max_positions} pos · EMA${kcState.ema_fast}/${kcState.ema_slow}` : "",
+      posCount: kcState?.open_positions ?? 0,
+      cycleCount: 0,
+      winCount: kcState?.total_wins ?? 0,
+      lossCount: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0),
+      color: BOT_META["kraken-current"].color,
+      currentTicker: kcState?.open_positions_list?.[0]?.symbol,
+      lastSignal: undefined as string | undefined,
+      signalStrength: undefined as string | undefined,
+    },
   ];
 
   return (
@@ -431,6 +469,8 @@ function NeuralFeed() {
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: summary } = useStatusSummary();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
 
   const [lines, setLines] = useState<NeuralLine[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -571,6 +611,45 @@ function NeuralFeed() {
       }
     }
 
+    if (poseidonState) {
+      const posParts = [
+        `${poseidonState.open_positions} pair${poseidonState.open_positions !== 1 ? "s" : ""} open`,
+        `Z>${poseidonState.zscore_entry} entry · Z<${poseidonState.zscore_exit} exit`,
+        `Cap $${Math.round(poseidonState.total_equity).toLocaleString()}`,
+      ];
+      if (poseidonState.open_trades && poseidonState.open_trades.length > 0) {
+        const t = poseidonState.open_trades[0];
+        const aName = t.asset_a.replace("/USD", "");
+        const bName = t.asset_b.replace("/USD", "");
+        posParts.push(`LIVE: ${aName}/${bName} ${t.leg_a_side?.toUpperCase()} | P&L ${t.total_pnl >= 0 ? "+" : ""}$${t.total_pnl.toFixed(0)}`);
+      }
+      newLines.push({
+        id: `poseidon-state-${poseidonState.open_positions}-${Math.round(poseidonState.total_equity)}`,
+        ts: now, bot: "Poseidon", icon: "🔱", color: "#8b5cf6",
+        text: posParts.join(" | "),
+        type: "thinking",
+      });
+    }
+
+    if (kcState) {
+      const kcParts = [
+        `${kcState.open_positions}/${kcState.max_positions} positions`,
+        `EMA${kcState.ema_fast}/${kcState.ema_slow} · ADX>${kcState.adx_threshold}`,
+        `${kcState.universe_size} symbols scanned`,
+      ];
+      if (kcState.open_positions_list && kcState.open_positions_list.length > 0) {
+        const p = kcState.open_positions_list[0];
+        const sym = p.symbol.replace("/USD", "");
+        kcParts.push(`LIVE: ${sym} ${p.direction?.toUpperCase()} | P&L ${p.unrealised_pnl >= 0 ? "+" : ""}$${p.unrealised_pnl.toFixed(0)}`);
+      }
+      newLines.push({
+        id: `kc-state-${kcState.open_positions}-${Math.round(kcState.total_equity)}`,
+        ts: now, bot: "Kraken Current", icon: "🌊", color: "#06b6d4",
+        text: kcParts.join(" | "),
+        type: "thinking",
+      });
+    }
+
     if (newLines.length > 0) {
       setLines((prev) => {
         const existing = new Set(prev.map(l => l.id));
@@ -579,7 +658,7 @@ function NeuralFeed() {
         return [...filtered, ...prev].slice(0, 50);
       });
     }
-  }, [djStatus, bbStatus, caStatus, optState, fxState, summary]);
+  }, [djStatus, bbStatus, caStatus, optState, fxState, summary, poseidonState, kcState]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -677,6 +756,8 @@ function EquitySidebar() {
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caStatus } = useKrakenStatus("calypso");
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
 
   const equityData = useMemo(() => {
     if (!curve?.snapshots?.length) return [];
@@ -779,23 +860,35 @@ function EquitySidebar() {
         vaultUsd: fxState.vault_total_usd,
       });
     }
+    if (poseidonState) {
+      const peq = poseidonState.total_equity ?? 0;
+      rows.push({ name: "Poseidon", icon: "🔱", equity: peq, pnl: peq - (poseidonState.starting_capital ?? 100_000), color: "#6366f1" });
+    }
+    if (kcState) {
+      const keq = kcState.total_equity ?? 0;
+      rows.push({ name: "Kraken Current", icon: "🌊", equity: keq, pnl: keq - (kcState.starting_capital ?? 100_000), color: "#06b6d4" });
+    }
     return rows;
-  }, [summary, djStatus, bbStatus, caStatus, optState, fxState]);
+  }, [summary, djStatus, bbStatus, caStatus, optState, fxState, poseidonState, kcState]);
 
   const segments = useMemo(() => {
-    const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
-    const krakenEq = fleet?.total_equity_usd ?? 0;
-    const optEq = optState?.paper_equity ?? 0;
-    const fxEq = fxState?.paper_equity ?? 0;
-    const total = alpacaEq + krakenEq + optEq + fxEq;
+    const alpacaEq  = summary?.portfolio_totals?.equity ?? 0;
+    const krakenEq  = fleet?.total_equity_usd ?? 0;
+    const optEq     = optState?.paper_equity ?? 0;
+    const fxEq      = fxState?.paper_equity ?? 0;
+    const pairsEq   = poseidonState?.total_equity ?? 0;
+    const trendEq   = kcState?.total_equity ?? 0;
+    const total = alpacaEq + krakenEq + optEq + fxEq + pairsEq + trendEq;
     if (total <= 0) return [];
     return [
       { label: "Stocks", pct: (alpacaEq / total) * 100, color: "#8b5cf6" },
       { label: "Crypto", pct: (krakenEq / total) * 100, color: "#22d3ee" },
       { label: "Options", pct: (optEq / total) * 100, color: "#f59e0b" },
       { label: "Forex", pct: (fxEq / total) * 100, color: "#10b981" },
+      { label: "Pairs", pct: (pairsEq / total) * 100, color: "#6366f1" },
+      { label: "Trend", pct: (trendEq / total) * 100, color: "#06b6d4" },
     ].filter(s => s.pct > 0.5);
-  }, [summary, fleet, optState, fxState]);
+  }, [summary, fleet, optState, fxState, poseidonState, kcState]);
 
   return (
     <div className="w-72 shrink-0 flex flex-col gap-2 min-h-0 overflow-auto px-2">

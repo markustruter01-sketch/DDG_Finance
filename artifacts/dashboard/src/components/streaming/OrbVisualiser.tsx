@@ -13,6 +13,8 @@ import {
   useEquityCurve,
   useAuditorReport,
   useAdminLearningSnapshot,
+  usePoseidonState,
+  useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 
@@ -29,33 +31,39 @@ function checkWebGL(): boolean {
 }
 
 const BOT_COLORS_CSS: Record<string, string> = {
-  oracle:       "#8b5cf6",
-  "davy-jones": "#22d3ee",
-  blackbeard:   "#f97316",
-  calypso:      "#a855f7",
-  apex:         "#f59e0b",
-  navigator:    "#10b981",
+  oracle:            "#8b5cf6",
+  "davy-jones":      "#22d3ee",
+  blackbeard:        "#f97316",
+  calypso:           "#a855f7",
+  apex:              "#f59e0b",
+  navigator:         "#10b981",
+  poseidon:          "#6366f1",
+  "kraken-current":  "#06b6d4",
 };
 
 const BOT_COLORS_HEX: Record<string, THREE.ColorRepresentation> = {
-  oracle:       0x8b5cf6,
-  "davy-jones": 0x22d3ee,
-  blackbeard:   0xf97316,
-  calypso:      0xa855f7,
-  apex:         0xf59e0b,
-  navigator:    0x10b981,
+  oracle:            0x8b5cf6,
+  "davy-jones":      0x22d3ee,
+  blackbeard:        0xf97316,
+  calypso:           0xa855f7,
+  apex:              0xf59e0b,
+  navigator:         0x10b981,
+  poseidon:          0x6366f1,
+  "kraken-current":  0x06b6d4,
 };
 
 const BOT_KEYS = Object.keys(BOT_COLORS_CSS);
 const BOT_COLORS_ARR = Object.values(BOT_COLORS_HEX);
 
 const BOT_DISPLAY_NAMES: Record<string, string> = {
-  oracle:       "ORACLE",
-  "davy-jones": "DAVY JONES",
-  blackbeard:   "BLACKBEARD",
-  calypso:      "CALYPSO",
-  apex:         "APEX",
-  navigator:    "NAVIGATOR",
+  oracle:            "ORACLE",
+  "davy-jones":      "DAVY JONES",
+  blackbeard:        "BLACKBEARD",
+  calypso:           "CALYPSO",
+  apex:              "APEX",
+  navigator:         "NAVIGATOR",
+  poseidon:          "POSEIDON",
+  "kraken-current":  "KRAKEN CURRENT",
 };
 
 function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
@@ -782,11 +790,11 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
         ctx!.fill();
       }
 
-      const activeBotCount = Math.max(1, Math.min(6, orbData.activeBots));
+      const activeBotCount = Math.max(1, Math.min(8, orbData.activeBots));
       BOT_KEYS.slice(0, activeBotCount).forEach((key, i) => {
         const color    = BOT_COLORS_CSS[key];
-        const arcRadius= 110 + i * 14;
-        const tilt     = (i / 6) * 0.7;
+        const arcRadius= 110 + i * 11;
+        const tilt     = (i / 8) * 0.7;
         const rotSpeed = (0.12 + i * 0.05) * (i % 2 === 0 ? 1 : -1);
         const startAngle = t * rotSpeed;
         ctx!.save();
@@ -934,7 +942,7 @@ type AlgoThought = {
 function AlgoThoughts() {
   const [thoughts, setThoughts] = useState<AlgoThought[]>([]);
   const nextId = useRef(0);
-  const colors = ["#22d3ee", "#a78bfa", "#4ade80", "#fb923c", "#f472b6", "#facc15"];
+  const colors = ["#22d3ee", "#a78bfa", "#4ade80", "#fb923c", "#f472b6", "#facc15", "#6366f1", "#06b6d4"];
 
   useEffect(() => {
     const spawn = () => {
@@ -1007,18 +1015,20 @@ interface TradePulseState {
 }
 
 export function OrbVisualiser() {
-  const { data: summary  } = useStatusSummary();
-  const { data: fleet    } = useKrakenFleetSummary();
-  const { data: livePos  } = useLivePositions();
-  const { data: journal  } = useLearningJournal(undefined, undefined, 5);
-  const { data: djStatus } = useKrakenStatus("davy-jones");
-  const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: optState } = useOptionsState();
-  const { data: fxState  } = useForexState();
-  const { data: curve    } = useEquityCurve(300);
-  const { data: auditor  } = useAuditorReport();
-  const { data: snapshot } = useAdminLearningSnapshot();
+  const { data: summary       } = useStatusSummary();
+  const { data: fleet         } = useKrakenFleetSummary();
+  const { data: livePos       } = useLivePositions();
+  const { data: journal       } = useLearningJournal(undefined, undefined, 5);
+  const { data: djStatus      } = useKrakenStatus("davy-jones");
+  const { data: bbStatus      } = useKrakenStatus("blackbeard");
+  const { data: caStatus      } = useKrakenStatus("calypso");
+  const { data: optState      } = useOptionsState();
+  const { data: fxState       } = useForexState();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState       } = useKrakenCurrentState();
+  const { data: curve         } = useEquityCurve(300);
+  const { data: auditor       } = useAuditorReport();
+  const { data: snapshot      } = useAdminLearningSnapshot();
 
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
   const [aiRipple,       setAiRipple      ] = useState(false);
@@ -1076,8 +1086,10 @@ export function OrbVisualiser() {
     n += caStatus?.position_count ?? 0;
     n += optState?.positions_count ?? 0;
     n += fxState?.position_count ?? 0;
+    n += poseidonState?.open_positions ?? 0;
+    n += kcState?.open_positions ?? 0;
     return n;
-  }, [livePos, djStatus, bbStatus, caStatus, optState, fxState]);
+  }, [livePos, djStatus, bbStatus, caStatus, optState, fxState, poseidonState, kcState]);
 
   // Count a bot active if it has ANY non-error status string
   const activeBots = useMemo(() => {
@@ -1090,8 +1102,10 @@ export function OrbVisualiser() {
     if (check(caStatus?.status)) n++;
     if (check(optState?.status)) n++;
     if (check(fxState?.status))  n++;
+    if (check(poseidonState?.status)) n++;
+    if (check(kcState?.status)) n++;
     return n;
-  }, [summary, djStatus, bbStatus, caStatus, optState, fxState]);
+  }, [summary, djStatus, bbStatus, caStatus, optState, fxState, poseidonState, kcState]);
 
   const fleetEquityChange = useMemo(() => {
     const snaps = curve?.snapshots;
@@ -1108,18 +1122,18 @@ export function OrbVisualiser() {
     return Math.max(journalTs, auditorTs, snapshotTs);
   }, [journal, auditor, snapshot]);
 
-  // P&L = total current equity minus $600k starting capital.
-  // Apex Predator (options) and Navigator (forex) start at $100k each — use their
-  // starting capital as a floor so equity reads as correct when their API is unavailable.
+  // P&L = total current equity minus $800k starting capital (8 bots × $100k each).
   const combinedPnl = useMemo(() => {
-    const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
-    const krakenEq = fleet?.total_equity_usd ?? 0;
-    const optEq    = optState?.paper_equity ?? 100_000;
-    const fxEq     = fxState?.paper_equity  ?? 100_000;
-    const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
+    const alpacaEq    = summary?.portfolio_totals?.equity ?? 0;
+    const krakenEq    = fleet?.total_equity_usd ?? 0;
+    const optEq       = optState?.paper_equity ?? 100_000;
+    const fxEq        = fxState?.paper_equity  ?? 100_000;
+    const poseidonEq  = poseidonState?.total_equity ?? 100_000;
+    const kcEq        = kcState?.total_equity ?? 100_000;
+    const totalEquity = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
     if (totalEquity === 0) return 0;
     return totalEquity - STARTING_CAPITAL;
-  }, [summary, fleet, optState, fxState]);
+  }, [summary, fleet, optState, fxState, poseidonState, kcState]);
 
   const orbData: OrbData = {
     openPositions,
@@ -1203,7 +1217,7 @@ export function OrbVisualiser() {
           <div>
             <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
             <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {activeBots} / 6
+              {activeBots} / 8
             </div>
           </div>
 

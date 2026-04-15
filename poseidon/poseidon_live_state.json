@@ -1,7 +1,7 @@
 {
   "bot_id": "poseidon",
   "display_name": "Poseidon",
-  "equity": 99685.52820469072,
+  "equity": 99742.03429151661,
   "cash": 79849.96193671107,
   "open_positions": 1,
   "positions": {
@@ -21,12 +21,12 @@
       "entry_hedge_ratio": 0.561794492218426,
       "opened_at": "2026-04-15T19:16:13.622173+00:00",
       "fees_paid": 80.75425586176797,
-      "current_price_a": 623.86,
+      "current_price_a": 625.63,
       "current_price_b": 0.236,
-      "leg_a_pnl": 29.370395412325337,
+      "leg_a_pnl": 85.87648223821407,
       "leg_b_pnl": 0.0,
-      "total_pnl": -51.383860449442636,
-      "leg_a_current": 623.86,
+      "total_pnl": 5.122226376446093,
+      "leg_a_current": 625.63,
       "leg_b_current": 0.236
     }
   },
@@ -733,6 +733,6 @@
     }
   ],
   "circuit_breaker": null,
-  "cycle": 13,
-  "updated_at": "2026-04-15T22:01:11.254024+00:00"
+  "cycle": 14,
+  "updated_at": "2026-04-15T22:16:11.248685+00:00"
 }

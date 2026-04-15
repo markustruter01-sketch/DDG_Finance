@@ -29,7 +29,8 @@ export function FleetPerformanceHero() {
   const forexEquity = fxState?.total_equity ?? 100_000;
   const poseidonEquity = poseidonState?.total_equity ?? 100_000;
   const kcEquity = kcState?.total_equity ?? 100_000;
-  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity + poseidonEquity + kcEquity;
+  // krakenFleetEquity now includes Poseidon (#7) and Kraken Current (#8) — don't add them again
+  const grandTotal = alpacaEquity + krakenFleetEquity + optionsEquity + forexEquity;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -136,7 +137,8 @@ export function FleetPerformanceHero() {
     return krakenLines;
   }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory, optState, fxState, poseidonState, kcState]);
 
-  const botCount = (fleetSummary?.bot_count ?? 3) + 5;
+  // fleet-summary has 5 bots (DJ+BB+Cal+Poseidon+KC) + 3 external (Oracle, Apex, Navigator)
+  const botCount = (fleetSummary?.bot_count ?? 5) + 3;
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 6 capital pools` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },

@@ -1123,17 +1123,16 @@ export function OrbVisualiser() {
   }, [journal, auditor, snapshot]);
 
   // P&L = total current equity minus $800k starting capital (8 bots × $100k each).
+  // krakenEq from fleet-summary now includes Poseidon (#7) and Kraken Current (#8).
   const combinedPnl = useMemo(() => {
     const alpacaEq    = summary?.portfolio_totals?.equity ?? 0;
     const krakenEq    = fleet?.total_equity_usd ?? 0;
     const optEq       = optState?.paper_equity ?? 100_000;
     const fxEq        = fxState?.paper_equity  ?? 100_000;
-    const poseidonEq  = poseidonState?.total_equity ?? 100_000;
-    const kcEq        = kcState?.total_equity ?? 100_000;
-    const totalEquity = alpacaEq + krakenEq + optEq + fxEq + poseidonEq + kcEq;
+    const totalEquity = alpacaEq + krakenEq + optEq + fxEq;
     if (totalEquity === 0) return 0;
     return totalEquity - STARTING_CAPITAL;
-  }, [summary, fleet, optState, fxState, poseidonState, kcState]);
+  }, [summary, fleet, optState, fxState]);
 
   const orbData: OrbData = {
     openPositions,

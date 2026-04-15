@@ -262,6 +262,90 @@ async def kraken_fleet_summary() -> dict:
                     "pnl_usd": round(pnl, 2),
                 })
 
+            # ── Bot #7 Poseidon ────────────────────────────────────────────────
+            try:
+                ps_eq = 100_000.0
+                ps_cash = 0.0
+                with _fsconn.cursor() as _psc:
+                    _psc.execute("SELECT equity_usd, cash_usd FROM poseidon_portfolio WHERE id = 7")
+                    _psr = _psc.fetchone()
+                    if _psr:
+                        ps_eq = float(_psr[0] or 100_000)
+                        ps_cash = float(_psr[1] or 0)
+                    _psc.execute(
+                        "SELECT COUNT(*), "
+                        "SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END), "
+                        "COALESCE(SUM(net_pnl), 0) FROM poseidon_trades"
+                    )
+                    _ptr = _psc.fetchone()
+                    ps_trades = int(_ptr[0] or 0) if _ptr else 0
+                    ps_wins   = int(_ptr[1] or 0) if _ptr else 0
+                    ps_pnl    = float(_ptr[2] or 0) if _ptr else 0.0
+                total_equity += ps_eq
+                total_cash   += ps_cash
+                total_starting += 100_000.0
+                total_trades += ps_trades
+                total_wins   += ps_wins
+                total_pnl_usd += ps_pnl
+                bots_out.append({
+                    "bot_id": "poseidon",
+                    "display_name": "Poseidon",
+                    "equity_usd": round(ps_eq, 2),
+                    "cash_usd": round(ps_cash, 2),
+                    "starting_balance_usd": 100_000.0,
+                    "trades": ps_trades,
+                    "wins": ps_wins,
+                    "pnl_usd": round(ps_pnl, 2),
+                })
+            except Exception as _ps_exc:
+                logger.warning(f"[fleet-summary] Poseidon read failed: {_ps_exc}")
+                total_starting += 100_000.0
+                bots_out.append({"bot_id": "poseidon", "display_name": "Poseidon",
+                                  "equity_usd": 100_000.0, "cash_usd": 0.0,
+                                  "starting_balance_usd": 100_000.0, "trades": 0, "wins": 0, "pnl_usd": 0.0})
+
+            # ── Bot #8 Kraken Current ──────────────────────────────────────────
+            try:
+                kc_eq = 100_000.0
+                kc_cash = 0.0
+                with _fsconn.cursor() as _kcc:
+                    _kcc.execute("SELECT equity_usd, cash_usd FROM kraken_current_portfolio WHERE id = 8")
+                    _kcr = _kcc.fetchone()
+                    if _kcr:
+                        kc_eq = float(_kcr[0] or 100_000)
+                        kc_cash = float(_kcr[1] or 0)
+                    _kcc.execute(
+                        "SELECT COUNT(*), "
+                        "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), "
+                        "COALESCE(SUM(pnl), 0) FROM kraken_current_trades"
+                    )
+                    _ktr = _kcc.fetchone()
+                    kc_trades = int(_ktr[0] or 0) if _ktr else 0
+                    kc_wins   = int(_ktr[1] or 0) if _ktr else 0
+                    kc_pnl    = float(_ktr[2] or 0) if _ktr else 0.0
+                total_equity += kc_eq
+                total_cash   += kc_cash
+                total_starting += 100_000.0
+                total_trades += kc_trades
+                total_wins   += kc_wins
+                total_pnl_usd += kc_pnl
+                bots_out.append({
+                    "bot_id": "kraken-current",
+                    "display_name": "Kraken Current",
+                    "equity_usd": round(kc_eq, 2),
+                    "cash_usd": round(kc_cash, 2),
+                    "starting_balance_usd": 100_000.0,
+                    "trades": kc_trades,
+                    "wins": kc_wins,
+                    "pnl_usd": round(kc_pnl, 2),
+                })
+            except Exception as _kc_exc:
+                logger.warning(f"[fleet-summary] KrakenCurrent read failed: {_kc_exc}")
+                total_starting += 100_000.0
+                bots_out.append({"bot_id": "kraken-current", "display_name": "Kraken Current",
+                                  "equity_usd": 100_000.0, "cash_usd": 0.0,
+                                  "starting_balance_usd": 100_000.0, "trades": 0, "wins": 0, "pnl_usd": 0.0})
+
             return {
                 "total_equity_usd": round(total_equity, 2),
                 "total_cash_usd": round(total_cash, 2),
@@ -269,7 +353,7 @@ async def kraken_fleet_summary() -> dict:
                 "total_trades": total_trades,
                 "total_wins": total_wins,
                 "total_pnl_usd": round(total_pnl_usd, 2),
-                "bot_count": len(KRAKEN_BOT_PROFILES),
+                "bot_count": len(bots_out),
                 "bots": bots_out,
             }
         finally:

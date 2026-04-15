@@ -1442,21 +1442,27 @@ function AllClosedTradesSection() {
   const allTrades = useMemo<UnifiedTrade[]>(() => {
     const trades: UnifiedTrade[] = [];
 
-    // Alpaca / Oracle journal trades
+    // Alpaca / Oracle journal trades — skip Kraken-sourced entries (those are
+    // already shown under each Kraken bot via status.recent_trades below)
     if (journal?.trades) {
       for (const t of journal.trades) {
         if (t.status === "Active") continue;
+        if (t.source === "kraken") continue;
+        const pnlUsd = t.realized_pnl ?? null;
+        const isWin = t.status === "Closed_Win" ||
+          (t.status === "Closed" && (t.pnl_percentage ?? 0) > 0) ||
+          (pnlUsd != null ? pnlUsd > 0 : (t.pnl_percentage ?? 0) > 0);
         trades.push({
           id: t.trade_id,
           bot: "Oracle #1",
           botColor: "text-blue-400",
           symbol: t.ticker,
-          side: "long",
-          pnl_pct: t.pnl_percentage,
-          pnl_usd: null,
-          reason: null,
+          side: (t.asset_class ?? "").toLowerCase().includes("short") ? "short" : "long",
+          pnl_pct: t.pnl_percentage ?? 0,
+          pnl_usd: pnlUsd,
+          reason: t.exit_reason ?? null,
           closed_at: t.date,
-          is_win: t.status === "Closed_Win",
+          is_win: isWin,
         });
       }
     }

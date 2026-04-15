@@ -524,7 +524,8 @@ def get_contextual_wins(
 def get_recent_trades_combined(limit: int = 20) -> list[dict]:
     """Last N closed trades (wins + losses combined) ordered by date DESC.
     Used by the /journal/recent endpoint for streak computation and Kill Board."""
-    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status")
+    cols = ("trade_id", "date", "ticker", "pnl_percentage", "status",
+            "realized_pnl", "exit_reason")
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -562,8 +563,8 @@ def get_recent_trades_combined(limit: int = 20) -> list[dict]:
             "trade_id":    r["trade_id"],
             "symbol":      r["ticker"],
             "pnl_pct":     pnl,
-            "pnl_usd":     None,
-            "exit_reason": None,
+            "pnl_usd":     r.get("realized_pnl"),
+            "exit_reason": r.get("exit_reason"),
             "closed_at":   str(r["date"]),
             "status":      status,
         })
@@ -622,7 +623,8 @@ def get_all_active_trades() -> list[dict]:
 def get_all_trades(limit: int = 200) -> list[dict]:
     cols = ("trade_id", "date", "ticker", "asset_class", "conviction_score",
             "original_thesis", "pnl_percentage", "status",
-            "intended_price", "actual_fill_price")
+            "intended_price", "actual_fill_price",
+            "realized_pnl", "exit_reason")
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:

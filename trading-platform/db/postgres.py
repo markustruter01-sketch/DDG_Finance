@@ -460,6 +460,14 @@ ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS poseidon_equity       DOUB
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS kraken_current_equity DOUBLE PRECISION NOT NULL DEFAULT 0;
 """
 
+# Data-only backfill: safe to run repeatedly (idempotent WHERE clause)
+_BACKFILL_SQL = """
+UPDATE trades
+SET exit_reason = 'algo_cover'
+WHERE exit_reason IS NULL
+  AND status IN ('Closed_Win', 'Closed_Loss', 'Closed');
+"""
+
 
 def ensure_schema() -> None:
     """
@@ -490,6 +498,17 @@ def ensure_schema() -> None:
         logger.info("DB | Trade journal column migrations applied")
     except Exception as exc:
         logger.error(f"DB | Migration failed (non-fatal): {exc}")
+
+    # Backfill exit_reason for historical Oracle closed trades (idempotent)
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_BACKFILL_SQL.strip())
+                updated = cur.rowcount
+        if updated:
+            logger.info(f"DB | Backfilled exit_reason for {updated} historical Oracle trade(s)")
+    except Exception as exc:
+        logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
 
     try:
         with get_conn() as conn:

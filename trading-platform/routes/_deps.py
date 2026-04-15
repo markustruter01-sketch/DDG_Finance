@@ -218,7 +218,8 @@ def _load_kraken_journal_trades() -> list[dict]:
             with _jconn.cursor(cursor_factory=_pg2xj.RealDictCursor) as _jc:
                 _jc.execute(
                     """
-                    SELECT symbol, side, pnl_pct, pnl_usd, reason, closed_at
+                    SELECT symbol, side, pnl_pct, pnl_usd, reason, closed_at,
+                           COALESCE(bot_id, 'davy-jones') AS bot_id
                     FROM   kraken_trades ORDER BY closed_at ASC
                     """
                 )
@@ -230,19 +231,24 @@ def _load_kraken_journal_trades() -> list[dict]:
             if t.get("pnl_pct") is None:
                 continue
             _pnl = float(t["pnl_pct"])
+            _pusd = t.get("pnl_usd")
+            _reason = t.get("reason")
             trades.append({
                 "trade_id": f"kraken-{idx}",
                 "date": (t["closed_at"].isoformat() if t.get("closed_at") else "")[:10],
                 "ticker": t.get("symbol", "?"),
                 "asset_class": "crypto",
                 "conviction_score": None,
-                "original_thesis": f"Kraken {t.get('side','?')} {t.get('symbol','?')} — exit: {t.get('reason','?')}",
+                "original_thesis": f"Kraken {t.get('side','?')} {t.get('symbol','?')} — exit: {_reason or '?'}",
                 "pnl_percentage": _pnl,
+                "realized_pnl": float(_pusd) if _pusd is not None else None,
+                "exit_reason": _reason,
                 "status": "Closed_Win" if _pnl > 0 else "Closed_Loss",
                 "intended_price": None,
                 "actual_fill_price": None,
                 "slippage_pct": None,
                 "source": "kraken",
+                "bot_id": t.get("bot_id", "davy-jones"),
             })
         return trades
     except Exception as _e:

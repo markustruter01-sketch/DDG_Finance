@@ -63,7 +63,7 @@ from analysis.schemas import (
     is_crypto_pair,
     LEVERAGED_RISK_TICKERS,
 )
-from analysis.trade_journal import log_trade, update_trade_fill_price
+from analysis.trade_journal import log_trade, update_trade_fill_price, close_trade
 from execution.broker import (
     close_position,
     get_account,
@@ -353,6 +353,56 @@ def _close_stale_positions(
                 delete_stop(symbol)
             except Exception:
                 pass
+            # Record realized P&L in the trade journal
+            try:
+                realized_usd = float(pos.get("unrealized_pl", 0) or 0)
+                cost_basis   = float(pos.get("cost_basis", 0) or 0)
+                pnl_pct      = (realized_usd / abs(cost_basis) * 100) if cost_basis else 0.0
+                # Look up the active trade_id for this ticker
+                _trade_id: str | None = None
+                _entry_time = None
+                try:
+                    from db.postgres import is_pg_available, get_conn as _gc
+                    if is_pg_available():
+                        with _gc() as _c:
+                            with _c.cursor() as _cur:
+                                _cur.execute(
+                                    "SELECT trade_id, date FROM trades "
+                                    "WHERE ticker = %s AND status = 'Active' "
+                                    "ORDER BY date DESC LIMIT 1",
+                                    (symbol,)
+                                )
+                                _row = _cur.fetchone()
+                                if _row:
+                                    _trade_id = _row[0]
+                                    _entry_time = _row[1]
+                except Exception as _le:
+                    logger.debug(f"Executor | trade_id lookup failed for {symbol}: {_le}")
+                if _trade_id:
+                    from datetime import datetime, timezone as _tz
+                    _hours = None
+                    if _entry_time:
+                        try:
+                            _now = datetime.now(_tz.utc)
+                            if hasattr(_entry_time, "tzinfo") and _entry_time.tzinfo:
+                                _hours = (_now - _entry_time).total_seconds() / 3600
+                            else:
+                                _hours = (_now - _entry_time.replace(tzinfo=_tz.utc)).total_seconds() / 3600
+                        except Exception:
+                            pass
+                    close_trade(
+                        trade_id=_trade_id,
+                        pnl_percentage=round(pnl_pct, 4),
+                        realized_pnl=round(realized_usd, 2),
+                        exit_reason="algo_cover",
+                        time_in_trade_hours=round(_hours, 2) if _hours else None,
+                    )
+                    logger.info(
+                        f"Trade journal | Recorded close for {symbol}: "
+                        f"pnl={pnl_pct:+.2f}% / ${realized_usd:+.2f}"
+                    )
+            except Exception as _je:
+                logger.warning(f"Executor | close_trade journal write failed for {symbol}: {_je}")
         except Exception as exc:
             logger.error(f"Failed to close {symbol}: {exc}")
             results["errors"].append({"symbol": symbol, "error": str(exc)})

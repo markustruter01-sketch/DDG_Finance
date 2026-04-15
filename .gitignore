@@ -78,5 +78,13 @@ kraken-bot/davy-jones_live_state.json
 kraken-bot/*_live_state.json
 kraken-bot/_market_cache.json
 
+# All bot live-state files (runtime-generated, not tracked)
+poseidon/*_live_state.json
+kraken-current/*_live_state.json
+forex-engine/*_live_state.json
+*_live_state.json
+trading-platform/data/correlation_state.json
+trading-platform/logs/cycle_state.json
+
 # Pasted screenshots and user-uploaded reference files (not referenced by code)
 attached_assets/

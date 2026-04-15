@@ -6,6 +6,7 @@ Three recurring jobs:
   Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Pure momentum scan + execution
   Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
   Job 3 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
+  Job 4 | 05:00 AEST daily (Brisbane, 7 days)   — Discord fleet P&L digest
 
 Oracle only trades during NYSE market hours (no afterhours crypto).
 The Gemini Self-Critic pre-market veto and crypto-only cycles have been retired.
@@ -78,6 +79,20 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         misfire_grace_time=300,
     )
     logger.info("Scheduler | Registered: evening_postmortem (Mon–Fri 16:10 ET)")
+
+    scheduler.add_job(
+        func=_daily_discord_pnl_report,
+        trigger=CronTrigger(
+            hour=5,
+            minute=0,
+            timezone="Australia/Brisbane",
+        ),
+        id="daily_discord_pnl_report",
+        name="Discord Daily Fleet P&L Digest (05:00 AEST)",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: daily_discord_pnl_report (daily 05:00 AEST Brisbane)")
 
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
@@ -201,7 +216,7 @@ def is_auto_trading_enabled() -> bool:
     return _auto_trading_enabled
 
 
-_ALWAYS_ACTIVE_JOBS = {"auto_heal"}  # jobs that must never be paused by auto-trading toggle
+_ALWAYS_ACTIVE_JOBS = {"auto_heal", "daily_discord_pnl_report"}  # always run regardless of trading toggle
 
 
 def set_auto_trading(enabled: bool) -> dict:
@@ -225,3 +240,18 @@ def set_auto_trading(enabled: bool) -> dict:
         "auto_trading_enabled": _auto_trading_enabled,
         "jobs": get_job_status(),
     }
+
+
+async def _daily_discord_pnl_report() -> None:
+    """
+    Fires every day at 05:00 AEST (Brisbane) — sends the 24-hour fleet P&L
+    digest to Discord. Runs regardless of whether auto-trading is enabled.
+    """
+    logger.info("Scheduler | JOB STARTING: daily_discord_pnl_report")
+    try:
+        import asyncio
+        from notifications.discord import notify_daily_pnl_report
+        await asyncio.to_thread(notify_daily_pnl_report)
+        logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")

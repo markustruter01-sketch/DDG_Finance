@@ -91,11 +91,6 @@ def check(current_equity: float | None = None) -> bool:
             _state["tripped"] = True
             n = close_all_positions()
             logger.critical(f"Kill switch | {n} positions liquidated. Trading halted for the day.")
-            try:
-                from notifications.discord import notify_kill_switch
-                notify_kill_switch(drawdown, current_equity)
-            except Exception:
-                pass
             return True
 
         return False
@@ -115,11 +110,6 @@ def manual_trip(reason: str = "manual_emergency") -> None:
         f"Kill switch MANUALLY TRIPPED | reason={reason} | Trading halted immediately."
     )
     _state["tripped"] = True
-    try:
-        from notifications.discord import notify_kill_switch
-        notify_kill_switch(0.0, None, reason=reason)
-    except Exception:
-        pass
 
 
 def set_pending_liquidation(value: bool = True) -> None:

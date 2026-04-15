@@ -720,11 +720,6 @@ async def _run_pipeline_inner(
             result["blackout"] = blackout
             _persist_emergency_regime(spy_override, spy_change, cycle_num)
             _update_state(result, started)
-            try:
-                from notifications.discord import notify_blackout_active
-                notify_blackout_active(blackout.get("event", ""), blackout.get("window_minutes", 30))
-            except Exception:
-                pass
             return result
     except Exception as exc:
         logger.warning(f"Pipeline | Blackout check failed: {exc} — continuing")

@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "enabled": True,
     "interval_minutes": 60,
     "telegram_enabled": True,
-    "discord_enabled": True,
+    "discord_enabled": False,
     "min_pnl_pct": 0.0,
     "min_pnl_usd": 0.0,
 }
@@ -120,7 +120,6 @@ def flush_alerts() -> int:
     cfg = get_config()
     count = len(queue)
     tg_ok = False
-    dc_ok = False
 
     if cfg.get("telegram_enabled", True):
         try:
@@ -132,30 +131,11 @@ def flush_alerts() -> int:
         except Exception as exc:
             logger.warning(f"Telegram flush failed: {exc}")
 
-    if cfg.get("discord_enabled", True):
-        try:
-            from notifications.discord import is_configured as dc_configured, _send_async, _embed, COLOR_GREEN, COLOR_PURPLE
-            if dc_configured():
-                total_pnl = sum(a.get("pnl_usd", 0) for a in queue)
-                fields = [
-                    {"name": "Trades", "value": str(count), "inline": True},
-                    {"name": "Total P&L", "value": f"${total_pnl:,.2f}", "inline": True},
-                ]
-                lines = []
-                for a in queue[:8]:
-                    lines.append(f"**{a['symbol']}** ({a['bot_name']}): +{a['pnl_pct']:.2f}%")
-                desc = "\n".join(lines) or "Profitable trades summary"
-                _send_async({"embeds": [_embed("\U0001f4b0 Profitable Trades Summary", desc, COLOR_GREEN, fields)]})
-                dc_ok = True
-                logger.info(f"Discord alert sent: {count} trades")
-        except Exception as exc:
-            logger.warning(f"Discord flush failed: {exc}")
-
-    if tg_ok or dc_ok:
+    if tg_ok:
         with _lock:
             _save_queue([])
     else:
-        logger.warning(f"Alert flush: no channels succeeded — {count} alerts retained in queue")
+        logger.warning(f"Alert flush: Telegram not configured — {count} alerts retained in queue")
 
     return count
 
@@ -194,11 +174,9 @@ def get_queue_status() -> dict[str, Any]:
         queue = _load_queue()
     cfg = get_config()
     from notifications.telegram import is_configured as tg_ok
-    from notifications.discord import is_configured as dc_ok
     return {
         "queue_size": len(queue),
         "config": cfg,
         "telegram_configured": tg_ok(),
-        "discord_configured": dc_ok(),
         "pending_alerts": queue[-5:] if queue else [],
     }

@@ -699,13 +699,6 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
             f"total vaulted: ${new_total_vaulted:,.2f} across {new_total_sweeps} sweeps"
         )
 
-        if not dry_run:
-            try:
-                from notifications.discord import notify_profit_sweep
-                notify_profit_sweep(sweep_amount, VAULT_SYMBOL, new_hwm)
-            except Exception:
-                pass
-
         return {
             "swept":             not dry_run,
             "dry_run":           dry_run,

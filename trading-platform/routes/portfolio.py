@@ -693,7 +693,7 @@ async def performance_attribution() -> dict:
 @portfolio_router.get("/performance/risk-metrics", tags=["Performance"])
 async def risk_metrics() -> dict:
     snapshots = get_performance_snapshots(limit=90)
-    if not snapshots:
+    if len(snapshots) < 2:
         try:
             import numpy as np
             from db.postgres import get_conn as _gc

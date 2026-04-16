@@ -825,7 +825,8 @@ export function useRiskMetrics() {
   return useQuery<RiskMetrics>({
     queryKey: ["/performance/risk-metrics"],
     queryFn: async () => (await api.get("/performance/risk-metrics")).data,
-    refetchInterval: useVisibleInterval(120000),
+    refetchInterval: useVisibleInterval(30_000),
+    staleTime: 25_000,
   });
 }
 

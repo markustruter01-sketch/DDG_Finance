@@ -1378,12 +1378,12 @@ export function OrbVisualiser() {
                 padding: "5px 8px",
                 marginBottom: 3,
                 borderRadius: 7,
-                background: (p.pnlUsd ?? 0) >= 0 ? "rgba(251,146,60,0.07)" : "rgba(239,68,68,0.07)",
-                border: `1px solid ${(p.pnlUsd ?? 0) >= 0 ? "rgba(251,146,60,0.18)" : "rgba(239,68,68,0.18)"}`,
+                background: (p.pnlUsd ?? 0) >= 0 ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)",
+                border: `1px solid ${(p.pnlUsd ?? 0) >= 0 ? "rgba(52,211,153,0.18)" : "rgba(239,68,68,0.18)"}`,
                 backdropFilter: "blur(10px)",
               }}
             >
-              <span style={{ fontSize: 8, color: "#fbbf24", flexShrink: 0 }}>⬤</span>
+              <span style={{ fontSize: 8, color: (p.pnlUsd ?? 0) >= 0 ? "#34d399" : "#f87171", flexShrink: 0 }}>⬤</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {p.symbol}
@@ -1392,7 +1392,7 @@ export function OrbVisualiser() {
                   {p.bot}
                 </div>
               </div>
-              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: (p.pnlUsd ?? 0) >= 0 ? "#fb923c" : "#f87171", flexShrink: 0 }}>
+              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: (p.pnlUsd ?? 0) >= 0 ? "#34d399" : "#f87171", flexShrink: 0 }}>
                 {(p.pnlUsd ?? 0) >= 0 ? "+" : ""}${Math.abs(p.pnlUsd ?? 0) >= 1000 ? `${(Math.abs(p.pnlUsd ?? 0) / 1000).toFixed(1)}k` : Math.abs(p.pnlUsd ?? 0).toFixed(0)}
               </span>
             </div>

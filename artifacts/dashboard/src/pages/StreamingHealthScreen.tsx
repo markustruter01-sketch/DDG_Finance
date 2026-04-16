@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Activity, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Clock, Brain, Globe, Target, Bell, Wifi, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { DDGBadge } from "@/components/DDGBadge";
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/trading-api";
 const api = {
@@ -442,9 +443,10 @@ export default function StreamingHealthScreen() {
 
   return (
     <div
-      className="h-full w-full flex flex-col"
+      className="h-full w-full flex flex-col relative"
       style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(8,18,38,1) 0%, rgba(2,6,18,1) 100%)" }}
     >
+      <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
       {/* Header */}
       <div
         className="shrink-0 flex items-center justify-between px-5 py-2.5"

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DDGBadge } from "@/components/DDGBadge";
 import {
   usePairLearning,
   type PairLearningSymbol,
@@ -625,7 +626,7 @@ export default function StreamingScreenV3() {
 
   return (
     <div
-      className="h-full flex flex-col overflow-hidden"
+      className="h-full flex flex-col overflow-hidden relative"
       style={{ background: C.bg, fontFamily: "'JetBrains Mono','Fira Code',monospace" }}
     >
       {/* ── Title bar ── */}
@@ -968,6 +969,7 @@ export default function StreamingScreenV3() {
           </div>
         )}
       </div>
+      <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
     </div>
   );
 }

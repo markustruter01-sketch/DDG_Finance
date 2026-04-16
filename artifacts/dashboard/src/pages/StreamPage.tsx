@@ -63,11 +63,11 @@ function loadPrefs(): StreamPrefs {
           parsed.intervalSeconds >= 5 &&
           parsed.intervalSeconds <= 120
             ? parsed.intervalSeconds
-            : 20,
+            : 15,
       };
     }
   } catch {}
-  return { autoCycle: true, intervalSeconds: 20 };
+  return { autoCycle: true, intervalSeconds: 15 };
 }
 
 function savePrefs(prefs: StreamPrefs) {

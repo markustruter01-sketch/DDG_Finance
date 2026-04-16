@@ -1,6 +1,7 @@
 import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
+import { DDGBadge } from "@/components/DDGBadge";
 
 const STARTING_BALANCE = 100_000;
 
@@ -418,7 +419,6 @@ const PARAM_LABELS: Record<string, { label: string; format: (v: number) => strin
   MIN_NET_PROFIT_PCT: { label: "Min Profit", format: (v) => `${(v * 100).toFixed(2)}%` },
 };
 
-
 export default function StreamingBotsScreen() {
   const { data: portfolio } = usePortfolio();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
@@ -705,7 +705,7 @@ export default function StreamingBotsScreen() {
 
   return (
     <div
-      className="h-full w-full flex flex-col"
+      className="h-full w-full flex flex-col relative"
       style={{ background: "linear-gradient(180deg, #020617 0%, #030712 100%)" }}
     >
       {/* Header strip */}
@@ -784,6 +784,7 @@ export default function StreamingBotsScreen() {
           );
         })}
       </div>
+      <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
     </div>
   );
 }

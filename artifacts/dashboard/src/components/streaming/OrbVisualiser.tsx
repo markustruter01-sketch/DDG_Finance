@@ -2,6 +2,8 @@ import { useRef, useMemo, useEffect, useState, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Stars, Html } from "@react-three/drei";
 import * as THREE from "three";
+import { DDGBadge } from "@/components/DDGBadge";
+import { useRealFeed } from "@/components/streaming/useRealFeed";
 import {
   useStatusSummary,
   useKrakenFleetSummary,
@@ -1028,6 +1030,7 @@ export function OrbVisualiser() {
   const { data: curve         } = useEquityCurve(300);
   const { data: auditor       } = useAuditorReport();
   const { data: snapshot      } = useAdminLearningSnapshot();
+  const { trades: closedTradesFeed, openPositions: openTradesFeed } = useRealFeed(12);
 
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
   const [aiRipple,       setAiRipple      ] = useState(false);
@@ -1166,7 +1169,7 @@ export function OrbVisualiser() {
     <div style={{ width: "100%", height: "100%", position: "relative", background: "#020617", overflow: "hidden" }}>
       {webglAvailable ? (
         <Canvas
-          camera={{ position: [0, 0, 5], fov: 50 }}
+          camera={{ position: [0, 0, 5.88], fov: 50 }}
           dpr={Math.min(window.devicePixelRatio, 2)}
           gl={{ antialias: true, alpha: false }}
           style={{ position: "absolute", inset: 0 }}
@@ -1294,6 +1297,111 @@ export function OrbVisualiser() {
           LIVE MARKET CONSCIOUSNESS
         </div>
       </div>
+
+      {/* ── LEFT PANEL: RECENTLY CLOSED TRADES ── */}
+      {closedTradesFeed.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 16,
+            top: 80,
+            bottom: 52,
+            width: 216,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+            zIndex: 20,
+          }}
+        >
+          <div style={{ color: "rgba(148,163,184,0.4)", fontSize: 9, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2 }}>
+            ◂ Closed Trades
+          </div>
+          {closedTradesFeed.slice(0, 10).map((t, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 8px",
+                marginBottom: 3,
+                borderRadius: 7,
+                background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+                border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <span style={{ fontSize: 10, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace" }}>
+                {t.isWin ? "✓" : "✗"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.symbol}
+                </div>
+                <div style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.5)", letterSpacing: "0.05em" }}>
+                  {t.bot}
+                </div>
+              </div>
+              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0 }}>
+                {t.pnlUsd >= 0 ? "+" : ""}${Math.abs(t.pnlUsd) >= 1000 ? `${(Math.abs(t.pnlUsd) / 1000).toFixed(1)}k` : Math.abs(t.pnlUsd).toFixed(0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── RIGHT PANEL: OPEN POSITIONS ── */}
+      {openTradesFeed.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 80,
+            bottom: 240,
+            width: 216,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+            zIndex: 20,
+          }}
+        >
+          <div style={{ color: "rgba(148,163,184,0.4)", fontSize: 9, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, textAlign: "right", paddingRight: 2 }}>
+            Open Positions ▸
+          </div>
+          {openTradesFeed.slice(0, 10).map((p, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 8px",
+                marginBottom: 3,
+                borderRadius: 7,
+                background: (p.pnlUsd ?? 0) >= 0 ? "rgba(251,146,60,0.07)" : "rgba(239,68,68,0.07)",
+                border: `1px solid ${(p.pnlUsd ?? 0) >= 0 ? "rgba(251,146,60,0.18)" : "rgba(239,68,68,0.18)"}`,
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <span style={{ fontSize: 8, color: "#fbbf24", flexShrink: 0 }}>⬤</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.symbol}
+                </div>
+                <div style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.5)", letterSpacing: "0.05em" }}>
+                  {p.bot}
+                </div>
+              </div>
+              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: (p.pnlUsd ?? 0) >= 0 ? "#fb923c" : "#f87171", flexShrink: 0 }}>
+                {(p.pnlUsd ?? 0) >= 0 ? "+" : ""}${Math.abs(p.pnlUsd ?? 0) >= 1000 ? `${(Math.abs(p.pnlUsd ?? 0) / 1000).toFixed(1)}k` : Math.abs(p.pnlUsd ?? 0).toFixed(0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── DDG BADGE ── */}
+      <DDGBadge style={{ position: "absolute", bottom: 16, left: 16, zIndex: 30 }} />
     </div>
   );
 }

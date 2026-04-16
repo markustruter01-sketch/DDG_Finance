@@ -1,24 +1,7 @@
 {
-  "cash": 39777.81597655789,
-  "reserved_margin": 59554.153798394145,
+  "cash": 39527.68837998541,
+  "reserved_margin": 59455.62882495836,
   "positions": {
-    "8": {
-      "pair_set_id": 8,
-      "asset_a": "VIRTUAL/USD",
-      "asset_b": "TIA/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 28979.760302980027,
-      "leg_b_units": 47541.553662477425,
-      "leg_a_entry": 0.6858,
-      "leg_b_entry": 0.3297,
-      "position_value": 19874.3196157837,
-      "entry_zscore": -2.1724127432921962,
-      "entry_hedge_ratio": 0.7886785834957862,
-      "opened_at": "2026-04-15T20:56:35.091377+00:00",
-      "fees_paid": 92.42680163158653
-    },
     "3": {
       "pair_set_id": 3,
       "asset_a": "BNB/USD",
@@ -52,9 +35,26 @@
       "entry_hedge_ratio": 1.4113799356460943,
       "opened_at": "2026-04-15T23:03:02.050215+00:00",
       "fees_paid": 124.34167118808637
+    },
+    "4": {
+      "pair_set_id": 4,
+      "asset_a": "PENGU/USD",
+      "asset_b": "TIA/USD",
+      "direction": "long_a_short_b",
+      "leg_a_side": "long",
+      "leg_b_side": "short",
+      "leg_a_units": 2653400.596048292,
+      "leg_b_units": 49523.29241976431,
+      "leg_a_entry": 0.007453,
+      "leg_b_entry": 0.3543,
+      "position_value": 19775.79464234792,
+      "entry_zscore": -2.542495300467122,
+      "entry_hedge_ratio": 0.8872514516685586,
+      "opened_at": "2026-04-16T07:51:53.402706+00:00",
+      "fees_paid": 97.03693258134308
     }
   },
-  "total_trades": 6,
-  "consecutive_losses": 3,
-  "updated_at": "2026-04-15T23:03:02.050326+00:00"
+  "total_trades": 7,
+  "consecutive_losses": 4,
+  "updated_at": "2026-04-16T07:51:53.402800+00:00"
 }

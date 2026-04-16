@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from "react";
+import { DDGBadge } from "@/components/DDGBadge";
 import { motion } from "framer-motion";
 import {
   useStatusSummary,
@@ -1176,7 +1177,7 @@ function DecisionPipelineBar() {
 
 export default function StreamingScreenV2() {
   return (
-    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
       <style>{`
         @keyframes ping {
           75%, 100% { transform: scale(2); opacity: 0; }
@@ -1197,6 +1198,7 @@ export default function StreamingScreenV2() {
       </div>
 
       <TradeTickerFooter />
+      <DDGBadge style={{ position: "absolute", bottom: 40, left: 10, zIndex: 50 }} />
     </div>
   );
 }

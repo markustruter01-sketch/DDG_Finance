@@ -701,12 +701,22 @@ def get_hardcoded_rules(regime: str | None = None) -> list[dict]:
 
 
 def get_kraken_equity() -> float:
+    """
+    Return combined equity for the 3 original Kraken swing bots only
+    (Davy Jones id=1, Blackbeard id=2, Calypso id=3).
+    Poseidon (id=7) and Kraken Current (id=8) have their own dedicated
+    equity columns in equity_snapshots — do NOT include them here or
+    the total_equity will double-count them.
+    """
     if not is_pg_available():
         return 0.0
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
+                cur.execute(
+                    "SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat "
+                    "WHERE id IN (1, 2, 3)"
+                )
                 row = cur.fetchone()
                 return float(row[0]) if row else 0.0
     except Exception as exc:

@@ -119,7 +119,10 @@ async def lifespan(app: FastAPI):
                 _eqconn = _pg2eq.connect(_dburlq)
                 try:
                     with _eqconn.cursor() as _eqcur:
-                        _eqcur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
+                        _eqcur.execute(
+                            "SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat "
+                            "WHERE id IN (1, 2, 3)"
+                        )
                         _eqrow = _eqcur.fetchone()
                         if _eqrow:
                             kraken_eq = float(_eqrow[0] or 0)

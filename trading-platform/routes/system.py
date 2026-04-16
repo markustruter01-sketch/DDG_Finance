@@ -222,6 +222,10 @@ async def system_health_architecture() -> dict:
             (7, "poseidon",       "Poseidon"),
             (8, "kraken-current", "Kraken Current"),
         ]
+        _ARCH_STALE_THRESHOLDS = {
+            "kraken-current": 16200,  # 4-hour cycle + 30min buffer
+            "poseidon":        1800,  # 15-min cycle — standard threshold
+        }
         _bot_levels: list[str] = []
         _bot_detail_parts: list[str] = []
         _mkt_open_kr = False
@@ -247,11 +251,13 @@ async def system_health_architecture() -> dict:
                             _kage = (now - _klast.timestamp()) if _klast else None
                             _kstatus = _kr["status"] or "unknown"
                             _kick_pending = bool(_kr.get("force_refresh", False))
+                            _stale_threshold = _ARCH_STALE_THRESHOLDS.get(_arch_bot_id, 1800)
+                            _warn_threshold  = _stale_threshold // 3
                             if _kstatus == "error":
                                 _blevel = "red"
-                            elif _kage and _kage > 1800:
+                            elif _kage and _kage > _stale_threshold:
                                 _blevel = "red" if _mkt_open_kr else "yellow"
-                            elif _kstatus in ("paused_circuit_breaker", "paused_dashboard") or (_kage and _kage > 600):
+                            elif _kstatus in ("paused_circuit_breaker", "paused_dashboard") or (_kage and _kage > _warn_threshold):
                                 _blevel = "yellow"
                             else:
                                 _blevel = "green"
@@ -524,6 +530,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                     (7, "poseidon"),
                     (8, "kraken-current"),
                 ]
+                _BOT_KICK_STALE = {"kraken-current": 16200}
                 if _dburlr:
                     _rconn = _pg2r.connect(_dburlr)
                     try:
@@ -542,7 +549,8 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                                     f"{_bname}: status={_bstatus}, cycle #{_bcycle}"
                                     + (f", age={_bage:.0f}s" if _bage else "")
                                 )
-                                if _bstatus == "error" or (_bage and _bage > 1800):
+                                _bstale_thresh = _BOT_KICK_STALE.get(_bname, 1800)
+                                if _bstatus == "error" or (_bage and _bage > _bstale_thresh):
                                     with _rconn.cursor() as _kc:
                                         _kc.execute(
                                             "UPDATE kraken_heartbeat SET force_refresh = TRUE WHERE id = %s",
@@ -694,6 +702,7 @@ async def _auto_heal_check() -> None:
             (7, "poseidon"),
             (8, "kraken-current"),
         ]
+        _BOT_HEAL_STALE = {"kraken-current": 16200}
         if _kdburl:
             _kconn = _pg2k.connect(_kdburl)
             try:
@@ -710,12 +719,13 @@ async def _auto_heal_check() -> None:
                         _kstatus = _kr[0]
                         _klast = _kr[1]
                         _kage = (now - _klast.timestamp()) if _klast else None
-                        if _kstatus == "error" or (_kage and _kage > 1800):
+                        _kheal_thresh = _BOT_HEAL_STALE.get(_bot_name, 1800)
+                        if _kstatus == "error" or (_kage and _kage > _kheal_thresh):
                             _any_degraded = True
                             record_degradation(
                                 component=_per_bot_comp,
                                 severity="error",
-                                error_type="bot_stale" if (_kage and _kage > 1800) else "bot_error",
+                                error_type="bot_stale" if (_kage and _kage > _kheal_thresh) else "bot_error",
                                 message=(
                                     f"Kraken bot {_bot_name}: status={_kstatus}, age={_kage:.0f}s"
                                     if _kage else f"Kraken bot {_bot_name} error: {_kstatus}"

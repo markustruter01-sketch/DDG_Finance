@@ -82,10 +82,10 @@ def apply_hardcoded_exits(allocations: list[dict]) -> list[dict]:
 
         if old_sl != sl or old_tp != tp:
             overridden += 1
-            logger.debug(
-                f"HardcodedExits | {slot.get('ticker', '?')} ({asset_class}): "
-                f"SL {old_sl} → {sl}  TP {old_tp} → {tp}"
-            )
+        logger.info(
+            f"ORACLE SL/TP CHECK | {slot.get('ticker', '?')} ({asset_class}): "
+            f"SL={sl:.4f} ({sl:.1%})  TP={tp:.4f} ({tp:.1%})"
+        )
 
     if overridden:
         logger.info(

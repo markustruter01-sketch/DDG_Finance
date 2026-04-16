@@ -369,6 +369,10 @@ _auto_pair_stats: dict = {}   # symbol → PairStats
 # Guard to prevent re-entrant calls while closing positions during the rebalance.
 _emergency_rebalance_in_progress: bool = False
 
+# Entry cooldown cycles remaining after a loss-streak rebalance.
+# When > 0, no new entries are opened this cycle; decremented each cycle.
+_entry_cooldown_cycles: int = 0
+
 SCALP_ENTRY_COOLDOWN_BARS = 10
 _scalp_last_entry: dict[str, datetime] = {}
 _scalp_stagnant_exit: dict[str, datetime] = {}
@@ -868,27 +872,32 @@ def _do_emergency_rebalance() -> None:
     """
     Called at the START of the next cycle after LOSS_STREAK_LIMIT is reached.
 
-    Steps:
-      1. Identify all open positions that are currently underwater.
-      2. Force-close each losing position (reason='loss_streak_rebalance').
-      3. Call _adaptive.gemini_emergency_rebalance() with the losing-position
-         metadata so Gemini has full context.
-      4. Reset the consecutive-loss counter — the bot resumes normally.
+    FIX (Issue #4): No longer force-closes losing positions.  Force-closing
+    converts temporary unrealized losses into permanent realized losses, and
+    incurs double fees for no strategic benefit.
+
+    New behaviour:
+      1. Identify underwater positions (for Gemini context only — NOT closed).
+      2. Pause new entries for 3 cycles via _entry_cooldown_cycles.
+      3. Call _adaptive.gemini_emergency_rebalance() with context so Gemini
+         can propose updated parameters with 5× the normal adjustment room.
+      4. Reset the consecutive-loss counter — bot resumes with reduced sizing.
+
+    Existing positions continue to resolve via their defined SL/TP/trailing stops.
     """
-    global consecutive_losses, _emergency_rebalance_in_progress
+    global consecutive_losses, _emergency_rebalance_in_progress, _entry_cooldown_cycles
 
     logger.warning(
         f"LossStreak | EMERGENCY REBALANCE STARTING "
         f"({consecutive_losses} consecutive losses) — "
-        "closing losing positions and calling Gemini..."
+        "pausing new entries; existing positions keep their SL/TP targets."
     )
 
     _emergency_rebalance_in_progress = True
     streak = consecutive_losses   # capture before reset
 
-    # ── Step 1: identify losing positions ─────────────────────────────────────
+    # ── Step 1: identify underwater positions (context for Gemini — NOT closed) ─
     losing_meta: list[dict] = []
-    symbols_to_close: list[str] = []
 
     current_positions = get_paper_positions() if PAPER_TRADING else dict(open_positions)
     for sym, pos in current_positions.items():
@@ -902,7 +911,6 @@ def _do_emergency_rebalance() -> None:
         else:
             pnl_pct = (entry - price) / entry * 100
         if pnl_pct < 0:
-            symbols_to_close.append(sym)
             losing_meta.append({
                 "symbol":            sym,
                 "side":              side,
@@ -911,17 +919,13 @@ def _do_emergency_rebalance() -> None:
             })
 
     logger.warning(
-        f"LossStreak | Closing {len(symbols_to_close)} losing position(s): "
-        f"{', '.join(symbols_to_close) or 'none'}"
+        f"LossStreak | {len(losing_meta)} underwater position(s) identified — "
+        "keeping all positions open to hit their defined SL/TP targets. "
+        "No forced closures. New entries paused for 3 cycles."
     )
 
-    # ── Step 2: close them ────────────────────────────────────────────────────
-    for sym in symbols_to_close:
-        try:
-            close_position(sym, reason="loss_streak_rebalance")
-        except Exception as exc:
-            logger.error(f"LossStreak | Failed to close {sym}: {exc}")
-
+    # ── Step 2: pause new entries for 3 cycles (no forced position closes) ────
+    _entry_cooldown_cycles = 3
     _emergency_rebalance_in_progress = False
 
     # ── Step 3: Gemini rebalance ──────────────────────────────────────────────
@@ -933,9 +937,12 @@ def _do_emergency_rebalance() -> None:
     except Exception as exc:
         logger.error(f"LossStreak | Gemini rebalance call failed: {exc} — params unchanged")
 
-    # ── Step 4: reset streak so the bot resumes trading normally ─────────────
+    # ── Step 4: reset streak so the bot resumes trading after cooldown ────────
     consecutive_losses = 0
-    logger.warning("LossStreak | Emergency rebalance complete — bot resuming normal operation.")
+    logger.warning(
+        f"LossStreak | Emergency rebalance complete — new entries paused for "
+        f"{_entry_cooldown_cycles} cycle(s). Existing positions unaffected."
+    )
 
 
 def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
@@ -1538,6 +1545,15 @@ def run_cycle() -> None:
         close_position(_bl_sym, reason="blacklisted_asset")
         deployed_usd = sum(p["size_usd"] for p in open_positions.values())
 
+    # ── Loss-streak entry cooldown countdown ──────────────────────────────────
+    global _entry_cooldown_cycles
+    if _entry_cooldown_cycles > 0:
+        _entry_cooldown_cycles -= 1
+        logger.warning(
+            f"EntryCooldown | Loss-streak cooldown active — new entries BLOCKED this cycle. "
+            f"{_entry_cooldown_cycles} cycle(s) remaining after this cycle."
+        )
+
     for symbol in SYMBOLS:
         if symbol in BLACKLIST:
             logger.debug(f"Blacklist | {symbol}: SKIPPED — blacklisted asset")
@@ -1910,6 +1926,18 @@ def run_cycle() -> None:
                 continue  # Don't try to open a new position in the same symbol
 
             # ── 3e. Evaluate entry signals (no position in this symbol) ────────
+
+            # ── Loss-streak cooldown gate ──────────────────────────────────────
+            if _entry_cooldown_cycles > 0:
+                cycle_signals.append({
+                    "symbol": symbol, "rsi": round(sym_rsi, 1),
+                    "z_score": round(sym_z_score, 3),
+                    "price": round(current_price, 4),
+                    "signal_type": "entry_cooldown",
+                    "has_position": False,
+                    "cooldown_remaining": _entry_cooldown_cycles,
+                })
+                continue
 
             # ── Pair Pause Check ──────────────────────────────────────────────
             # Check whether this pair has been administratively paused.  The

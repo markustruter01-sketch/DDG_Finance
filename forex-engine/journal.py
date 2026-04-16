@@ -89,16 +89,43 @@ def log_trade_open(
 def log_trade_close(
     pair: str, exit_price: float, pnl_pips: float, pnl_usd: float,
     final_trailing_sl: float | None = None,
+    ticket_id: int | None = None,
+    reason: str | None = None,
 ) -> bool:
+    """
+    Close the most-recently-opened open journal row for this pair.
+
+    FIX (Issue #6): Previously used `WHERE pair = ? AND status = 'open'` which
+    could match multiple rows when duplicate open entries existed, writing the
+    same exit data to all of them.  Now uses `ORDER BY ticket_id ASC LIMIT 1`
+    to close exactly one row per call, preventing phantom multi-close writes.
+    When ticket_id is explicitly provided it closes that specific row directly.
+    """
     try:
         conn = _get_conn()
-        conn.execute(
-            """UPDATE trades SET exit_price = ?, pnl_pips = ?, pnl_usd = ?,
-               final_trailing_sl = ?,
-               status = 'closed', exit_time = ? WHERE pair = ? AND status = 'open'""",
-            (exit_price, pnl_pips, pnl_usd, final_trailing_sl,
-             datetime.now(tz=timezone.utc).isoformat(), pair),
-        )
+        now_iso = datetime.now(tz=timezone.utc).isoformat()
+        if ticket_id is not None:
+            conn.execute(
+                """UPDATE trades SET exit_price = ?, pnl_pips = ?, pnl_usd = ?,
+                   final_trailing_sl = ?, status = 'closed', exit_time = ?
+                   WHERE ticket_id = ? AND status = 'open'""",
+                (exit_price, pnl_pips, pnl_usd, final_trailing_sl, now_iso, ticket_id),
+            )
+        else:
+            row = conn.execute(
+                "SELECT ticket_id FROM trades WHERE pair = ? AND status = 'open' "
+                "ORDER BY ticket_id ASC LIMIT 1",
+                (pair,),
+            ).fetchone()
+            if row is None:
+                conn.close()
+                return False
+            conn.execute(
+                """UPDATE trades SET exit_price = ?, pnl_pips = ?, pnl_usd = ?,
+                   final_trailing_sl = ?, status = 'closed', exit_time = ?
+                   WHERE ticket_id = ?""",
+                (exit_price, pnl_pips, pnl_usd, final_trailing_sl, now_iso, row["ticket_id"]),
+            )
         conn.commit()
         conn.close()
         return True
@@ -156,10 +183,24 @@ def get_recent_losers(limit: int = 5) -> list[dict]:
 
 
 def get_journal_entries(limit: int = 50) -> list[dict]:
+    """
+    Return recent journal entries, deduplicating exact-duplicate rows.
+
+    FIX (Issue #6): Duplicate open rows (same pair + direction + entry_time)
+    caused by double-write bugs are collapsed — only the row with the lowest
+    ticket_id is returned, so the dashboard never shows phantom repeated entries.
+    """
     try:
         conn = _get_conn()
         rows = conn.execute(
-            "SELECT * FROM trades ORDER BY entry_time DESC LIMIT ?", (limit,)
+            """SELECT * FROM trades
+               WHERE ticket_id IN (
+                   SELECT MIN(ticket_id)
+                   FROM trades
+                   GROUP BY pair, direction, entry_time
+               )
+               ORDER BY entry_time DESC LIMIT ?""",
+            (limit,),
         ).fetchall()
         conn.close()
         return [dict(r) for r in rows]

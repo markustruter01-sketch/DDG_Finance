@@ -546,6 +546,24 @@ def _execute_slot(
         })
         return results, remaining_cash
 
+    # ── STEP 3a: 5% Cash Floor Gate ─────────────────────────────────────────
+    # FIX (Issue #7): Never deploy when available cash < 5% of equity.
+    # This prevents Oracle from going margin-negative (cash < $0) by stopping
+    # new entries once the cash cushion is nearly exhausted.
+    _cash_floor = equity * 0.05
+    if remaining_cash < _cash_floor:
+        logger.warning(
+            f"🛑 Cash Gate | Slot {slot.slot}: {ticker} | "
+            f"Remaining cash ${remaining_cash:,.2f} < 5% floor ${_cash_floor:,.2f} "
+            f"(equity=${equity:,.2f}). Blocking new entry to preserve cash cushion."
+        )
+        results["margin_blocks"] += 1
+        results["skipped"].append({
+            "slot": slot.slot, "ticker": ticker,
+            "reason": f"cash_gate_5pct (remaining=${remaining_cash:,.2f}, floor=${_cash_floor:,.2f})",
+        })
+        return results, remaining_cash
+
     if notional_usd > remaining_cash:
         logger.warning(
             f"💰 Cash Cap | Slot {slot.slot}: {ticker} | "

@@ -220,8 +220,13 @@ def _apply_volatility_adjusted_weight(allocations: list[dict]) -> list[dict]:
     total_inv_vol = sum(inv_vols.values())
     # Realistic maximum: can't exceed n × per-asset cap
     realistic_target = min(TARGET_UTILIZATION, n * MAX_POSITION_KELLY)
+    conviction_by_ticker: dict[str, float] = {
+        slot["ticker"]: min(max(float(slot.get("conviction_score", 1.0)), 0.0), 1.0)
+        for slot in active
+    }
     raw_weights: dict[str, float] = {
-        t: (v / total_inv_vol) * realistic_target for t, v in inv_vols.items()
+        t: (v / total_inv_vol) * realistic_target * conviction_by_ticker.get(t, 1.0)
+        for t, v in inv_vols.items()
     }
 
     # ── Iterative cap-and-redistribute ───────────────────────────────────────

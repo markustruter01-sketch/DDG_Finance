@@ -213,52 +213,35 @@ function BotTile({ botKey, equity, pnl, status, thinkingText, posCount, cycleCou
 
   return (
     <motion.div
-      className="rounded-lg border p-2 flex flex-col gap-1 min-w-0"
-      animate={hasRecentTrade ? { boxShadow: [`0 0 0px ${color}00`, `0 0 16px ${color}60`, `0 0 0px ${color}00`] } : {}}
+      className="rounded-lg border px-2 py-1.5 flex flex-col gap-0.5 min-w-0"
+      animate={hasRecentTrade ? { boxShadow: [`0 0 0px ${color}00`, `0 0 12px ${color}60`, `0 0 0px ${color}00`] } : {}}
       transition={hasRecentTrade ? { duration: 1.5, repeat: 2 } : {}}
       style={{
         borderColor: hasRecentTrade ? `${color}60` : `${color}25`,
         background: `linear-gradient(135deg, rgba(15,23,42,0.95), ${color}08)`,
       }}>
-      <div className="flex items-center gap-2">
-        <span style={{ fontSize: 16 }}>{meta.icon}</span>
-        <span className="text-[11px] font-black uppercase tracking-wider truncate" style={{ color }}>{meta.label}</span>
-        <span className="ml-auto">
+      <div className="flex items-center gap-1">
+        <span style={{ fontSize: 11 }}>{meta.icon}</span>
+        <span className="text-[9px] font-black uppercase tracking-wider truncate" style={{ color }}>{meta.label}</span>
+        <span className="ml-auto flex items-center gap-1">
+          {hasRecentTrade && <span className="text-[8px] font-bold" style={{ color: "#fbbf24" }}>TRADE</span>}
           <PulsingDot color={isOnline ? "#22c55e" : "#ef4444"} />
         </span>
       </div>
 
-      <div className="flex items-baseline gap-2">
-        <span className="text-sm font-mono font-bold text-white">{fmtUsd(equity)}</span>
-        <span className={`text-[10px] font-mono font-semibold ${pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-[11px] font-mono font-bold text-white">{fmtUsd(equity)}</span>
+        <span className={`text-[9px] font-mono font-semibold ${pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
           {fmtPnl(pnl)}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 text-[9px] font-mono" style={{ color: "rgba(148,163,184,0.5)" }}>
+      <div className="flex items-center gap-1 text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.4)" }}>
         <span>{winCount}W/{lossCount}L</span>
         <span>·</span>
-        <span>{posCount} pos</span>
-        <span>·</span>
-        <span>C#{cycleCount}</span>
+        <span>{posCount}p</span>
+        {currentTicker && <><span>·</span><span style={{ color: `${color}cc` }}>{currentTicker}</span></>}
       </div>
-
-      {(currentTicker || lastSignal) && (
-        <div className="flex items-center gap-1.5 text-[9px] font-mono truncate" style={{ color: `${color}bb` }}>
-          {currentTicker && <span className="font-bold text-white">{currentTicker}</span>}
-          {lastSignal && <span>{lastSignal.toUpperCase()}</span>}
-          {signalStrength && <span style={{ color: "#f59e0b" }}>{signalStrength}</span>}
-        </div>
-      )}
-
-      {truncatedThinking && (
-        <div className="text-[9px] font-mono leading-relaxed mt-0.5 overflow-hidden" style={{
-          color: `${color}99`,
-          maxHeight: 28,
-        }}>
-          {truncatedThinking}
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -426,7 +409,7 @@ function BotTilesRow() {
   ];
 
   return (
-    <div className="flex flex-col gap-1.5 w-52 shrink-0 overflow-auto min-h-0 px-1">
+    <div className="flex flex-col gap-1 w-48 shrink-0 overflow-hidden min-h-0 px-1">
       {bots.map((b) => (
         <BotTile
           key={b.key}
@@ -803,6 +786,8 @@ function EquitySidebar() {
       const snaps = curve.snapshots;
       result.push({ name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) });
       result.push({ name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) });
+      result.push({ name: "Poseidon", icon: "🔱", color: "#6366f1", data: snaps.map(s => (s as Record<string, number>).poseidon_equity ?? 0) });
+      result.push({ name: "KC", icon: "🌊", color: "#06b6d4", data: snaps.map(s => (s as Record<string, number>).kraken_current_equity ?? 0) });
     }
     return result;
   }, [curve, krakenBotCurves]);
@@ -905,14 +890,14 @@ function EquitySidebar() {
       {perBotSparklines.length > 0 && (
         <div className="rounded-lg border p-3" style={{ borderColor: "rgba(255,255,255,0.06)", backgroundColor: "rgba(15,23,42,0.8)" }}>
           <div className="text-[9px] uppercase tracking-widest font-bold mb-2" style={{ color: "rgba(148,163,184,0.5)" }}>Per-Bot Equity</div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-4 gap-1">
             {perBotSparklines.map(bot => (
               <div key={bot.name}>
-                <div className="flex items-center gap-1 mb-0.5">
-                  <span style={{ fontSize: 8 }}>{bot.icon}</span>
-                  <span className="text-[7px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
+                <div className="flex items-center gap-0.5 mb-0.5">
+                  <span style={{ fontSize: 7 }}>{bot.icon}</span>
+                  <span className="text-[6px] font-mono font-bold truncate" style={{ color: bot.color }}>{bot.name}</span>
                 </div>
-                <MiniSparkline data={bot.data} color={bot.color} w={72} h={20} />
+                <MiniSparkline data={bot.data} color={bot.color} w={50} h={18} />
               </div>
             ))}
           </div>

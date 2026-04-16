@@ -1,6 +1,6 @@
 {
-  "cash": 59071.690052732054,
-  "reserved_margin": 39623.11758076413,
+  "cash": 77393.11149852401,
+  "reserved_margin": 19847.322938416208,
   "positions": {
     "3": {
       "pair_set_id": 3,
@@ -18,26 +18,9 @@
       "entry_hedge_ratio": 0.5595290759422922,
       "opened_at": "2026-04-15T21:27:43.371840+00:00",
       "fees_paid": 80.47644072539887
-    },
-    "4": {
-      "pair_set_id": 4,
-      "asset_a": "PENGU/USD",
-      "asset_b": "TIA/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 2653400.596048292,
-      "leg_b_units": 49523.29241976431,
-      "leg_a_entry": 0.007453,
-      "leg_b_entry": 0.3543,
-      "position_value": 19775.79464234792,
-      "entry_zscore": -2.542495300467122,
-      "entry_hedge_ratio": 0.8872514516685586,
-      "opened_at": "2026-04-16T07:51:53.402706+00:00",
-      "fees_paid": 97.03693258134308
     }
   },
-  "total_trades": 8,
-  "consecutive_losses": 5,
-  "updated_at": "2026-04-16T08:06:51.369609+00:00"
+  "total_trades": 9,
+  "consecutive_losses": 6,
+  "updated_at": "2026-04-16T13:46:42.944502+00:00"
 }

@@ -402,10 +402,14 @@ function FleetKPISummary() {
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const botStatuses = summary?.bot_statuses ?? {};
-  const activeBotCount = Object.values(botStatuses).filter(
+  // Kraken heartbeat bots (Davy Jones, Blackbeard, Calypso, Poseidon, Kraken Current)
+  const krakenActiveCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
   ).length;
-  const totalBotCount = (fleetSummary?.bot_count ?? 3) + 5;
+  // Oracle, Apex Predator, Navigator don't have heartbeat rows — always considered active
+  const activeBotCount = krakenActiveCount + 3;
+  // Fixed fleet size: 8 bots total
+  const totalBotCount = 8;
 
   const regime = summary?.groq?.regime ?? null;
   const tradingMode = summary?.trading_mode;
@@ -414,7 +418,7 @@ function FleetKPISummary() {
     {
       label: "Fleet Equity",
       value: anyLoading ? "—" : formatCurrency(grandTotal),
-      sub: `${totalBotCount} bots · 6 capital pools`,
+      sub: `8 bots · 6 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
       valueColor: anyLoading ? "text-slate-500" : "text-white",

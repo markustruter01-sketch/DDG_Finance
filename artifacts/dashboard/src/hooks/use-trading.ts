@@ -270,6 +270,7 @@ export function useSystemHealth() {
     queryKey: ["/health"],
     queryFn: async () => (await api.get("/health")).data,
     refetchInterval: useVisibleInterval(30000),
+    staleTime: 25_000,
     retry: 1,
   });
 }
@@ -279,6 +280,7 @@ export function usePlatformStatus() {
     queryKey: ["/status"],
     queryFn: async () => (await api.get("/status")).data,
     refetchInterval: useVisibleInterval(30000),
+    staleTime: 25_000,
   });
 }
 
@@ -287,6 +289,7 @@ export function usePortfolio() {
     queryKey: ["/portfolio"],
     queryFn: async () => (await api.get("/portfolio")).data,
     refetchInterval: useVisibleInterval(30000),
+    staleTime: 25_000,
   });
 }
 
@@ -294,7 +297,8 @@ export function useLivePositions() {
   return useQuery<LivePositionsData>({
     queryKey: ["/positions/live"],
     queryFn: async () => (await api.get("/positions/live")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    refetchInterval: useVisibleInterval(15_000),
+    staleTime: 12_000,
   });
 }
 
@@ -302,6 +306,7 @@ export function useLatestAllocation() {
   return useQuery<AllocationPlan>({
     queryKey: ["/allocation/latest"],
     queryFn: async () => (await api.get("/allocation/latest")).data,
+    staleTime: 60_000,
   });
 }
 
@@ -309,7 +314,8 @@ export function useJournal() {
   return useQuery<TradeJournal>({
     queryKey: ["/journal"],
     queryFn: async () => (await api.get("/journal")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    refetchInterval: useVisibleInterval(30_000),
+    staleTime: 25_000,
   });
 }
 
@@ -420,7 +426,8 @@ export function useVault() {
   return useQuery<VaultState>({
     queryKey: ["/vault"],
     queryFn: async () => (await api.get("/vault")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    refetchInterval: useVisibleInterval(15_000),
+    staleTime: 12_000,
   });
 }
 
@@ -465,6 +472,7 @@ export function useAuditorReport() {
     queryKey: ["/auditor/report"],
     queryFn: async () => (await api.get("/auditor/report")).data,
     refetchInterval: useVisibleInterval(60000),
+    staleTime: 55_000,
     retry: 1,
   });
 }
@@ -549,6 +557,7 @@ export function useFleetCommanderStatus() {
     queryKey: ["/admin/fleet-commander/status"],
     queryFn: async () => (await api.get("/admin/fleet-commander/status")).data,
     refetchInterval: useVisibleInterval(60000),
+    staleTime: 55_000,
     retry: 1,
   });
 }
@@ -558,6 +567,7 @@ export function useFleetCommanderHistory() {
     queryKey: ["/admin/fleet-commander/history"],
     queryFn: async () => (await api.get("/admin/fleet-commander/history")).data,
     refetchInterval: useVisibleInterval(120000),
+    staleTime: 110_000,
     retry: 1,
   });
 }
@@ -1911,6 +1921,9 @@ export interface PairLearningData {
   bot_slot_total: number;
   bot_slot_paused: number;
   bot_slot_active: number;
+  total_trade_count: number;
+  kraken_trade_count: number;
+  alpaca_trade_count: number;
 }
 
 export function usePairLearning() {

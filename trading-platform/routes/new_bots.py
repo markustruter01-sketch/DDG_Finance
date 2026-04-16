@@ -247,6 +247,15 @@ async def pair_learning():
     active_syms = set(s["symbol"] for s in symbols if s["status"] == "active") - paused_syms
     total_syms = active_syms | paused_syms
 
+    # Total trade count across ALL bots: Kraken trades + Alpaca journal (Oracle)
+    kraken_count_rows = _pg_query("SELECT COUNT(*) AS cnt FROM kraken_trades WHERE closed_at IS NOT NULL")
+    alpaca_count_rows = _pg_query(
+        "SELECT COUNT(*) AS cnt FROM trade_journal WHERE status IN ('Closed_Win','Closed_Loss','Closed')"
+    )
+    kraken_total = int(kraken_count_rows[0]["cnt"] or 0) if kraken_count_rows else 0
+    alpaca_total = int(alpaca_count_rows[0]["cnt"] or 0) if alpaca_count_rows else 0
+    total_trade_count = kraken_total + alpaca_total
+
     return {
         "symbols": symbols,
         "fleet_symbols": fleet_symbols,
@@ -259,6 +268,9 @@ async def pair_learning():
         "bot_slot_total": len(symbols),
         "bot_slot_paused": sum(1 for s in symbols if s["status"] == "paused"),
         "bot_slot_active": sum(1 for s in symbols if s["status"] == "active"),
+        "total_trade_count": total_trade_count,
+        "kraken_trade_count": kraken_total,
+        "alpaca_trade_count": alpaca_total,
     }
 
 

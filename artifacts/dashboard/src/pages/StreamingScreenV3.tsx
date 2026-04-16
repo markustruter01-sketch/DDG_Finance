@@ -678,8 +678,8 @@ export default function StreamingScreenV3() {
               </div>
               <div className="w-px h-8" style={{ background: C.border }} />
               <div className="text-center">
-                <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: C.dim }}>Trades</div>
-                <div className="text-2xl font-black text-white leading-none mt-0.5">{data.recent_trades.length}</div>
+                <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: C.dim }}>All Trades</div>
+                <div className="text-2xl font-black text-white leading-none mt-0.5">{data.total_trade_count ?? data.recent_trades.length}</div>
               </div>
             </div>
           )}

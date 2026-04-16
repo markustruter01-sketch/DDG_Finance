@@ -5,12 +5,13 @@ import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import StreamingScreenV3 from "@/pages/StreamingScreenV3";
 import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
+import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
 import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 
-type SubPage = "a" | "b" | "c" | "d" | "e" | "f";
+type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f", "g"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -42,7 +43,7 @@ function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number 
     }
 
     let subPage: SubPage | null = null;
-    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e" || subParam === "f") subPage = subParam;
+    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e" || subParam === "f" || subParam === "g") subPage = subParam;
     else if (subParam === "a") subPage = "a";
 
     return { autoCycle, intervalSeconds, subPage };
@@ -204,7 +205,7 @@ export default function StreamPage() {
     },
     {
       id: "e",
-      label: "V2",
+      label: "Learning",
       activeGrad: "linear-gradient(135deg, rgba(52,211,153,0.25), rgba(34,211,238,0.15))",
       activeColor: "#6ee7b7",
       activeBorder: "rgba(52,211,153,0.4)",
@@ -219,6 +220,15 @@ export default function StreamPage() {
       activeBorder: "rgba(139,92,246,0.45)",
       progressGrad: "linear-gradient(90deg, #7c3aed, #c084fc)",
       progressGlow: "rgba(139,92,246,0.7)",
+    },
+    {
+      id: "g",
+      label: "Performance",
+      activeGrad: "linear-gradient(135deg, rgba(251,146,60,0.28), rgba(250,204,21,0.15))",
+      activeColor: "#fdba74",
+      activeBorder: "rgba(251,146,60,0.45)",
+      progressGrad: "linear-gradient(90deg, #f97316, #facc15)",
+      progressGlow: "rgba(251,146,60,0.65)",
     },
   ];
 
@@ -339,6 +349,9 @@ export default function StreamPage() {
             <StreamingOrbScreen />
           </div>
         )}
+        <div style={{ display: active === "g" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingPerformanceScreen />
+        </div>
       </div>
 
       <ClippyAssistant active={active} />

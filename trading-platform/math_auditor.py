@@ -564,9 +564,10 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
             if not symbol or entry is None or sl_px is None:
                 continue
 
-            # entry_atr is stored by the bot at trade open (kraken-bot/main.py).
-            # When present it is the authoritative ATR for this position's stop.
-            entry_atr: Optional[float] = pos.get("entry_atr")
+            # entry_atr / entry_atr_mult are stored at trade open (kraken-bot/main.py).
+            # Together they define the exact intended stop distance = entry_atr × entry_atr_mult.
+            entry_atr: Optional[float]      = pos.get("entry_atr")
+            entry_atr_mult: Optional[float] = pos.get("entry_atr_mult")
 
             candles = _fetch_kraken_ohlcv(symbol, "1h", limit=40)
             if not candles or len(candles) < 16:
@@ -622,18 +623,24 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
             implied_mult = bot_stop_dist / ref_atr if ref_atr > 0 else 0
 
             if min_expected <= bot_stop_dist <= max_expected:
-                # ── PASS (or WARN for legacy) ────────────────────────────────
-                drift_suffix = ""
-                drift_notes  = []
+                # ── PASS (or WARN for legacy / ATR-drift) ───────────────────
+                drift_suffix     = ""
+                drift_notes      = []
+                pass_override    = "WARN" if is_legacy else None  # default: legacy → WARN
 
                 # Secondary ATR-drift check (only meaningful when entry_atr known)
                 if entry_atr and entry_atr > 0 and current_atr:
                     drift_ratio = current_atr / entry_atr
                     if drift_ratio > 2.5:
+                        # Volatility has expanded dramatically since entry.
+                        # The stop, while numerically within the entry-ATR bounds,
+                        # may now be too tight vs. the current market noise floor.
+                        # This is genuinely actionable → escalate to WARN.
+                        pass_override = "WARN"
                         drift_notes.append(
                             f"ATR-DRIFT WARN: current_atr ({current_atr:.5f}) is "
                             f"{drift_ratio:.2f}× entry_atr ({entry_atr:.5f}). "
-                            "Volatility has expanded — stop may now be too tight relative to market noise."
+                            "Volatility has expanded — stop may be too tight relative to current market noise."
                         )
                     elif drift_ratio < 0.4:
                         drift_notes.append(
@@ -659,17 +666,21 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
                     bot_id, "atr_stop_check",
                     {"symbol": symbol, "entry": entry, "sl_price": sl_px,
                      "auditor_atr": ref_atr, "current_atr": current_atr,
-                     "entry_atr": entry_atr, "stop_dist": bot_stop_dist,
-                     "implied_mult": round(implied_mult, 3)},
+                     "entry_atr": entry_atr, "entry_atr_mult": entry_atr_mult,
+                     "stop_dist": bot_stop_dist, "implied_mult": round(implied_mult, 3)},
                     bot_output=bot_stop_dist, auditor_output=bot_stop_dist,
                     notes=notes,
                     audit_mode=audit_mode,
-                    # Legacy positions without entry_atr get WARN, not PASS
-                    override_status="WARN" if is_legacy else None,
+                    override_status=pass_override,
                 )
             else:
                 # ── FAIL (or WARN for legacy fallback) ───────────────────────
-                expected_dist = ref_atr * 2.0  # mid-point of actual bot range
+                # Use the intended stop distance as the auditor reference so that
+                # discrepancy_pct reflects the true deviation from intended placement.
+                if entry_atr and entry_atr > 0 and entry_atr_mult and entry_atr_mult > 0:
+                    expected_dist = entry_atr * entry_atr_mult  # exact intended distance
+                else:
+                    expected_dist = ref_atr * 2.0  # mid-point fallback when mult unknown
 
                 if is_legacy:
                     notes = (
@@ -683,14 +694,16 @@ def audit_atr_open_positions(audit_mode: str = "quick") -> int:
                     )
                     override_status = "WARN"
                 else:
+                    _mult_label = f"{entry_atr_mult:.2f}×" if entry_atr_mult else "unknown"
                     notes = (
                         f"STOP PLACEMENT ANOMALY on {symbol}: entry={entry:.5f} "
                         f"stop={sl_px:.5f} side={side}. "
-                        f"Stop dist={bot_stop_dist:.5f} {atr_label} "
+                        f"Stop dist={bot_stop_dist:.5f} {atr_label} (mult={_mult_label}) "
                         f"implied_mult={implied_mult:.2f}× outside expected "
                         f"[{min_mult}–{max_mult}×]. "
                         f"current_atr={current_atr:.5f} (drift ratio="
                         f"{current_atr/entry_atr:.2f}×). "
+                        f"Expected dist={expected_dist:.5f} (entry_atr × intended_mult). "
                         "Stop was placed at trade entry using entry_atr — this is a "
                         "genuine multiplier error, not an ATR-drift false positive."
                     )

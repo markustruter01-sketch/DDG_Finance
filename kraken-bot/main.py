@@ -732,6 +732,7 @@ def write_live_state() -> None:
             "entry_time":          pos["entry_time"],
             "best_price":          round(best, 4),
             "entry_atr":           pos.get("entry_atr"),
+            "entry_atr_mult":      pos.get("entry_atr_mult"),
         })
 
     live_state = {
@@ -2237,6 +2238,7 @@ def run_cycle() -> None:
                                     if symbol in open_positions:
                                         open_positions[symbol]["atr_stop_price"]  = _atr_stop
                                         open_positions[symbol]["entry_atr"]       = sym_atr
+                                        open_positions[symbol]["entry_atr_mult"]  = _bs_sl_mult
                                         open_positions[symbol]["vol_tier"]        = "momentum_bear"
                                         open_positions[symbol]["tranches_filled"] = 1
                                     _cycle_new_entries += 1
@@ -2371,6 +2373,7 @@ def run_cycle() -> None:
                     if symbol in open_positions:
                         open_positions[symbol]["atr_stop_price"]  = _apex_atr_stop
                         open_positions[symbol]["entry_atr"]       = sym_atr
+                        open_positions[symbol]["entry_atr_mult"]  = ATR_STOP_MULTIPLIER
                         open_positions[symbol]["vol_tier"]        = "momentum_scalper"
                         open_positions[symbol]["tranches_filled"] = 1
                     _cycle_new_entries += 1
@@ -2552,6 +2555,7 @@ def run_cycle() -> None:
                             if symbol in open_positions:
                                 open_positions[symbol]["atr_stop_price"] = _atr_stop
                                 open_positions[symbol]["entry_atr"]      = sym_atr
+                                open_positions[symbol]["entry_atr_mult"] = SWING_SL_ATR_MULT
                                 open_positions[symbol]["vol_tier"] = _vol_tier
                                 open_positions[symbol]["tranches_filled"] = 1
                             cycle_signals.append({
@@ -2734,6 +2738,7 @@ def run_cycle() -> None:
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
                             open_positions[symbol]["entry_atr"]      = sym_atr
+                            open_positions[symbol]["entry_atr_mult"] = _sym_atr_mult
                             open_positions[symbol]["vol_tier"] = "contrarian_scout"
                             open_positions[symbol]["tranches_filled"] = 1
                         cycle_signals.append({
@@ -2885,6 +2890,7 @@ def run_cycle() -> None:
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"]    = _atr_stop
                             open_positions[symbol]["entry_atr"]         = sym_atr
+                            open_positions[symbol]["entry_atr_mult"]    = _long_sl_mult
                             open_positions[symbol]["vol_tier"]          = _vol_tier
                             open_positions[symbol]["tranches_filled"]   = 1
                         # Register pending T2/T3 tranches (skip T1, already filled)
@@ -3025,6 +3031,7 @@ def run_cycle() -> None:
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"]    = _atr_stop
                             open_positions[symbol]["entry_atr"]         = sym_atr
+                            open_positions[symbol]["entry_atr_mult"]    = _short_sl_mult
                             open_positions[symbol]["vol_tier"]          = _vol_tier
                             open_positions[symbol]["tranches_filled"]   = 1
                         # Register pending T2/T3 tranches (skip T1, already filled)

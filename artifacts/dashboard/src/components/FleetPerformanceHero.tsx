@@ -38,8 +38,10 @@ export function FleetPerformanceHero() {
     { id: "calypso", perf: caPerf.data, status: caStatus.data },
   ];
   const allPerfs = botPerfList.map(b => b.perf).filter(Boolean);
-  const krakenWins = allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
-  const krakenTotal = allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
+  // Use fleet-summary totals for the full Kraken family (includes Poseidon #7 and
+  // Kraken Current #8 which are missing from individual perf endpoints).
+  const krakenWins = fleetSummary?.total_wins ?? allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
+  const krakenTotal = fleetSummary?.total_trades ?? allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
 
   const optionsWins = optState?.total_wins ?? 0;
   const optionsTotal = optState?.total_trades ?? 0;

@@ -390,9 +390,10 @@ function FleetKPISummary() {
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
-  const allPerfs = [davyPerf, bbPerf, caPerf].filter(Boolean);
-  const krakenWins = allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
-  const krakenTotal = allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
+  // Use fleet-summary totals for the Kraken family — this includes all 5 bots:
+  // Davy Jones, Blackbeard, Calypso, Poseidon (#7), and Kraken Current (#8).
+  const krakenWins = fleetSummary?.total_wins ?? 0;
+  const krakenTotal = fleetSummary?.total_trades ?? 0;
   const optionsWins = optionsState?.total_wins ?? 0;
   const optionsTotal = optionsState?.total_trades ?? 0;
   const forexWins = forexState?.total_wins ?? 0;
@@ -402,12 +403,12 @@ function FleetKPISummary() {
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const botStatuses = summary?.bot_statuses ?? {};
-  // Kraken heartbeat bots (Davy Jones, Blackbeard, Calypso, Poseidon, Kraken Current)
-  const krakenActiveCount = Object.values(botStatuses).filter(
+  // bot_statuses now contains: davy-jones, blackbeard, calypso, apex-predator,
+  // navigator, poseidon, kraken-current (7 bots). Oracle is the trading-api itself
+  // and has no heartbeat row — add +1 for it.
+  const activeBotCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
-  ).length;
-  // Oracle, Apex Predator, Navigator don't have heartbeat rows — always considered active
-  const activeBotCount = krakenActiveCount + 3;
+  ).length + 1;
   // Fixed fleet size: 8 bots total
   const totalBotCount = 8;
 

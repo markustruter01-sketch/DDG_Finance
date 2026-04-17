@@ -9,7 +9,14 @@ PAPER_STARTING_BALANCE = 100_000.0
 PAPER_SPREAD_COST_PCT = 0.001
 
 PAIRS = [
+    # 5 majors (USD-based)
     "EURUSD=X", "GBPUSD=X", "JPY=X", "AUDUSD=X", "CAD=X",
+    # Expanded to 10 — USD/CHF + 4 liquid crosses
+    "CHF=X",    # USD/CHF
+    "EURGBP=X", # EUR/GBP
+    "AUDJPY=X", # AUD/JPY
+    "GBPJPY=X", # GBP/JPY
+    "EURJPY=X", # EUR/JPY
 ]
 
 PAIR_LABELS = {
@@ -187,8 +194,8 @@ def get_quote_to_usd(pair: str, current_price: float, latest_prices: dict) -> fl
 
 
 RSI_PERIOD = 14
-RSI_OVERSOLD = 30
-RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 35    # relaxed from 30 — sideways markets rarely hit RSI extremes
+RSI_OVERBOUGHT = 65  # relaxed from 70 — gives wider entry window in choppy conditions
 
 ATR_PERIOD = 14
 

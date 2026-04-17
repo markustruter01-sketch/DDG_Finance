@@ -1,6 +1,8 @@
 """
 pairs_engine.py — Poseidon Pairs Trading Core Logic
-Statistical arbitrage: spread calculation, Z-score, OLS hedge ratio, Hurst, ADF
+Statistical arbitrage: spread calculation, Z-score, OLS hedge ratio, ADF
+Hurst exponent is computed for logging only — NOT used as an entry gate.
+ADF is the sole stationarity gate (tests the spread directly).
 """
 from __future__ import annotations
 
@@ -194,16 +196,25 @@ def evaluate_pair_signal(
     prices_b: list[float],
     hedge_ratio: float,
     hr_30d_avg: float,
-    zscore_entry: float = 2.0,
+    zscore_entry: float = 1.5,
     zscore_lookback: int = 60,
-    hurst_max: float = 0.5,
-    adf_max: float = 0.10,
-    hedge_stability: float = 0.15,
+    hurst_max: float = 1.0,   # kept for backward-compat signature but NOT used in filters_ok
+    adf_max: float = 0.20,
+    hedge_stability: float = 0.25,
 ) -> dict:
     """
     Evaluate whether a pair is ready to trade.
     Returns a dict with all computed metrics and a 'signal' key.
     signal: 'long_a_short_b', 'short_a_long_b', or None
+
+    Entry gates (in order):
+      1. |Z-score| >= zscore_entry (spread divergence)
+      2. ADF p-value < adf_max    (spread stationarity — the ONLY stationarity gate)
+      3. Hedge ratio within hedge_stability% of 30d avg
+    Hurst is computed and returned for observability but does NOT block entry.
+    Applying Hurst to the spread is double-filtering: ADF already tests stationarity
+    of the spread directly. Hurst on individual asset prices makes sense for
+    single-asset mean reversion bots (Kraken, Blackbeard) but not pairs trading.
     """
     result = {
         "signal": None,
@@ -244,12 +255,11 @@ def evaluate_pair_signal(
     hr_stable = is_hedge_ratio_stable(hedge_ratio, hr_30d_avg, hedge_stability)
     result["hedge_ratio_stable"] = hr_stable
 
-    # All filters
+    # All filters — Hurst intentionally excluded (ADF is the sole stationarity gate)
     if zscore is None:
         return result
     filters_ok = (
         abs(zscore) >= zscore_entry
-        and h < hurst_max
         and adf_p < adf_max
         and hr_stable
     )

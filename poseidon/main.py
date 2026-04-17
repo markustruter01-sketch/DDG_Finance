@@ -261,11 +261,12 @@ def recalculate_hedge_ratio(pair: dict) -> dict | None:
     hr_30d_avg = sum(hist) / len(hist) if hist else hedge
 
     hr_stable = is_hedge_ratio_stable(hedge, hr_30d_avg, HEDGE_RATIO_STABILITY)
-    is_tradeable = (h < HURST_MAX and adf_p < ADF_PVALUE_MAX and hr_stable)
+    # Hurst removed from is_tradeable gate — ADF is the sole stationarity gate for pairs trading
+    is_tradeable = (adf_p < ADF_PVALUE_MAX and hr_stable)
 
     notes = []
-    if h >= HURST_MAX:
-        notes.append(f"Hurst={h:.3f}≥{HURST_MAX} (trending, not MR)")
+    # Hurst logged for observability only — no longer gates entry
+    notes.append(f"Hurst={h:.3f} (info only)")
     if adf_p >= ADF_PVALUE_MAX:
         notes.append(f"ADF={adf_p:.3f}≥{ADF_PVALUE_MAX} (non-stationary)")
     if not hr_stable:

@@ -1,26 +1,8 @@
 {
-  "cash": 77393.11149852401,
-  "reserved_margin": 19847.322938416208,
-  "positions": {
-    "3": {
-      "pair_set_id": 3,
-      "asset_a": "BNB/USD",
-      "asset_b": "STX/USD",
-      "direction": "long_a_short_b",
-      "leg_a_side": "long",
-      "leg_b_side": "short",
-      "leg_a_units": 31.84692629838451,
-      "leg_b_units": 47316.37947874002,
-      "leg_a_entry": 623.21,
-      "leg_b_entry": 0.2347,
-      "position_value": 19847.32293841621,
-      "entry_zscore": -2.314432365287443,
-      "entry_hedge_ratio": 0.5595290759422922,
-      "opened_at": "2026-04-15T21:27:43.371840+00:00",
-      "fees_paid": 80.47644072539887
-    }
-  },
-  "total_trades": 9,
-  "consecutive_losses": 6,
-  "updated_at": "2026-04-16T13:46:42.944502+00:00"
+  "cash": 97188.98163928528,
+  "reserved_margin": 0,
+  "positions": {},
+  "total_trades": 10,
+  "consecutive_losses": 7,
+  "updated_at": "2026-04-17T20:40:14.758394+00:00"
 }

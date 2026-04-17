@@ -11,9 +11,9 @@ Every 15 minutes during NYSE market hours:
   1. Compute composite_score for all ~250 tickers in the universe:
        score = 5d_return × 0.20 + 20d_return × 0.50 + 60d_return × 0.30
   2. Rank all tickers by composite_score (descending).
-  3. Long candidates : top 6 where score > 0, RSI 30–70, price > EMA-20,
+  3. Long candidates : top 3 where score ≥ 5.0, RSI 30–70, price > EMA-20,
                        not already in an open position.
-  4. Short candidates: bottom 3 where score < 0, RSI 30–70, price < EMA-20,
+  4. Short candidates: bottom 1 where score < 0, RSI 30–70, price < EMA-20,
                        not already in an open position.
 
 Position Sizing
@@ -25,8 +25,8 @@ Position Sizing
 Stop / Take-Profit (volatility-scaled)
 ---------------------------------------
   vol_factor  = annualized_vol_20d / 100
-  stop_loss   = -clamp(vol_factor × 1.5, 0.04, 0.10)
-  take_profit =  clamp(vol_factor × 2.5, 0.06, 0.20)
+  stop_loss   = -clamp(vol_factor × 1.5, 0.06, 0.10)   # floor raised 4% → 6%
+  take_profit =  clamp(vol_factor × 2.5, 0.09, 0.20)   # floor raised 6% → 9%
 
 Oracle Profit Reserve
 ---------------------
@@ -58,11 +58,13 @@ from loguru import logger
 from data.yfinance_client import get_cached_momentum_data
 
 
-MAX_LONG_SLOTS  = 6
-MAX_SHORT_SLOTS = 3
+MAX_LONG_SLOTS  = 3    # reduced from 6 — concentrated portfolio, 3 high-conviction longs
+MAX_SHORT_SLOTS = 1    # reduced from 3 — single highest-conviction short only
 
 RSI_LOWER       = 30.0
 RSI_UPPER       = 70.0
+
+MIN_MOMENTUM_SCORE = 5.0  # minimum composite score for long entry — filters weak/borderline signals
 
 FIXED_FRACTION  = 0.10
 KELLY_CAP       = 0.15
@@ -79,8 +81,11 @@ def _composite_score(d: dict) -> float:
 def _stop_take(volatility: Optional[float]) -> tuple[float, float]:
     vol = volatility or 20.0
     vol_factor = max(vol / 100.0, 0.01)
-    stop = -round(min(max(vol_factor * 1.5, 0.04), 0.10), 4)
-    take =  round(min(max(vol_factor * 2.5, 0.06), 0.20), 4)
+    # Minimum stop raised from 4% to 6% to avoid normal price noise stop-outs on
+    # volatile momentum stocks. Tight 4% stops were being triggered by routine
+    # intraday swings, generating massive churn with near-zero P&L.
+    stop = -round(min(max(vol_factor * 1.5, 0.06), 0.10), 4)
+    take =  round(min(max(vol_factor * 2.5, 0.09), 0.20), 4)
     return stop, take
 
 
@@ -232,13 +237,15 @@ def scan_momentum(
 
     scored.sort(key=lambda x: x["score"], reverse=True)
 
-    # ── Stage 2: score > 0 (longs) / score < 0 (shorts) ─────────────────────
-    long_candidates  = [c for c in scored if c["score"] > 0]
+    # ── Stage 2: score threshold — longs need score ≥ MIN_MOMENTUM_SCORE ────
+    # Shorts only need score < 0 (no floor — inverted logic for weak momentum)
+    long_candidates  = [c for c in scored if c["score"] >= MIN_MOMENTUM_SCORE]
     short_candidates = [c for c in scored if c["score"] < 0]
     passed_score = len(long_candidates) + len(short_candidates)
     logger.info(
-        f"Oracle | Filter stage 2/5 — passed_nonzero_score: "
-        f"long_candidates={len(long_candidates)} short_candidates={len(short_candidates)}"
+        f"Oracle | Filter stage 2/5 — score_threshold(longs≥{MIN_MOMENTUM_SCORE} / shorts<0): "
+        f"long_candidates={len(long_candidates)} short_candidates={len(short_candidates)} "
+        f"(dropped below_min_score={len([c for c in scored if 0 <= c['score'] < MIN_MOMENTUM_SCORE])})"
     )
 
     # ── Stage 3: RSI 30–70 ────────────────────────────────────────────────────

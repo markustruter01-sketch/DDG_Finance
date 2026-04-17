@@ -312,6 +312,28 @@ def execute_allocations(
     return results
 
 
+MIN_HOLD_HOURS = 4.0   # minimum time a position must be held before stale-rotation close
+
+
+def _hours_since_entry(entry_time_raw) -> float | None:
+    """Return hours held for a position, or None if entry_time is unavailable."""
+    if not entry_time_raw:
+        return None
+    try:
+        from datetime import datetime, timezone as _tz
+        if isinstance(entry_time_raw, str):
+            entry_dt = datetime.fromisoformat(entry_time_raw.replace("Z", "+00:00"))
+        elif isinstance(entry_time_raw, datetime):
+            entry_dt = entry_time_raw
+        else:
+            return None
+        if entry_dt.tzinfo is None:
+            entry_dt = entry_dt.replace(tzinfo=_tz.utc)
+        return (datetime.now(_tz.utc) - entry_dt).total_seconds() / 3600.0
+    except Exception:
+        return None
+
+
 def _close_stale_positions(
     current_positions: dict,
     active_symbols: set,
@@ -337,8 +359,22 @@ def _close_stale_positions(
 
     for symbol in stale:
         pos = current_positions[symbol]
+
+        # ── Minimum hold time gate (4 hours) ────────────────────────────────
+        # Prevents stale-rotation closes from churning positions on every 15-min
+        # cycle.  Positions held < MIN_HOLD_HOURS are protected from rotation
+        # exits (stop/take-profit still fire independently through Alpaca orders).
+        _hours_held = _hours_since_entry(pos.get("entry_time"))
+        if _hours_held is not None and _hours_held < MIN_HOLD_HOURS:
+            logger.info(
+                f"Min-hold gate | {symbol} held {_hours_held:.1f}h < {MIN_HOLD_HOURS:.0f}h — "
+                f"skipping stale-rotation close (SL/TP still active via broker orders)"
+            )
+            continue
+
         logger.warning(
             f"Closing stale position: {symbol} | "
+            f"held={f'{_hours_held:.1f}h' if _hours_held else 'unknown'} | "
             f"value=${pos['market_value']:,.2f} | "
             f"P&L={pos['unrealized_pl']:+.2f}"
         )

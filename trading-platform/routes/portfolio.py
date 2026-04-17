@@ -997,6 +997,33 @@ async def export_diagnostic_report():
     lines.append("  CAPITAL: $600,000 total across 4 capital pools")
     lines.append(W)
 
+    # ── Math Audit FAIL banner — shown at very top if any critical errors ───
+    try:
+        import sys as _sys_ma_top
+        import importlib as _imp_ma_top
+        _TPDIR_TOP = _Path(__file__).parent.parent
+        if str(_TPDIR_TOP) not in _sys_ma_top.path:
+            _sys_ma_top.path.insert(0, str(_TPDIR_TOP))
+        _ma_top = _imp_ma_top.import_module("math_auditor")
+        _audit_top = _ma_top.get_audit_summary(hours=24)
+        _fail_count_top = int(_audit_top.get("fail") or 0)
+        if _fail_count_top > 0:
+            _affected_bots = sorted(set(
+                str(d.get("bot_id") or "?")
+                for d in (_audit_top.get("details") or [])
+                if d.get("status") == "FAIL"
+            ))
+            lines.append("")
+            lines.append("  \u26a0\ufe0f\u26a0\ufe0f\u26a0\ufe0f  MATH AUDIT FAILURE DETECTED  \u26a0\ufe0f\u26a0\ufe0f\u26a0\ufe0f")
+            lines.append(f"  {_fail_count_top} critical formula error(s) detected.")
+            lines.append("  Trading may be using incorrect calculations.")
+            lines.append(f"  Affected bots: {', '.join(_affected_bots) if _affected_bots else 'see audit section'}")
+            lines.append("  See MATHEMATICAL AUDIT RESULTS section for full details.")
+            lines.append("")
+            lines.append(W)
+    except Exception:
+        pass  # auditor not yet initialized — no banner
+
     try:
         ks_state   = ks_get_state()
         mkt_open   = is_market_open()
@@ -1019,6 +1046,11 @@ async def export_diagnostic_report():
         lines += _rs.section_fleet_health_scorecard()
     except Exception as _e5:
         lines.append(f"  [ADD 5: Fleet Health Scorecard — error: {_e5}]")
+
+    try:
+        lines += _rs.section_math_audit_results()
+    except Exception as _e_ma:
+        lines.append(f"  [Math Audit Results — error: {_e_ma}]")
 
     lines.append("@@PART1@@")
     h1("SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT")

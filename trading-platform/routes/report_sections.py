@@ -4129,3 +4129,108 @@ def _save_current_report_state_to_file() -> None:
         state["params"][bid] = dict(p)
 
     _save_report_state(state)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MATH AUDIT SECTION — Mathematical Verification Results
+# ══════════════════════════════════════════════════════════════════════════════
+
+def section_math_audit_results() -> list[str]:
+    """Report section: Mathematical Audit Results — inserted after Fleet Health Scorecard."""
+    lines: list[str] = []
+    W80 = "\u2550" * 80
+    lines.append("")
+    lines.append(W80)
+    lines.append("  MATHEMATICAL AUDIT RESULTS")
+    lines.append(W80)
+
+    # Import summary from math_auditor (graceful fallback if not yet run)
+    try:
+        import sys as _sys_ma
+        import importlib as _imp_ma
+        _TPDIR = _PathDiag(__file__).parent.parent
+        if str(_TPDIR) not in _sys_ma.path:
+            _sys_ma.path.insert(0, str(_TPDIR))
+        _ma = _imp_ma.import_module("math_auditor")
+        summary = _ma.get_audit_summary(hours=24)
+    except Exception as _mae:
+        lines.append(f"  Math auditor not yet initialized or error: {_mae}")
+        lines.append("  Run /trading-api/admin/math-audit to trigger manually.")
+        lines.append("")
+        return lines
+
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    last_ts = str(summary.get("last_audit_ts") or "Never")[:19]
+    total_logged = int(summary.get("total_logged") or 0)
+
+    pass_n = int(summary.get("pass") or 0)
+    warn_n = int(summary.get("warn") or 0)
+    fail_n = int(summary.get("fail") or 0)
+    total_recent = pass_n + warn_n + fail_n
+
+    lines.append(f"  Report generated: {now_ts}")
+    lines.append(f"  Last full audit:  {last_ts} UTC")
+    lines.append(f"  Formulas checked (24h): {total_recent}  |  Total logged (all time): {total_logged}")
+    lines.append("")
+
+    if fail_n > 0:
+        lines.append("  ┌─────────────────────────────────────────────────────────────────────────┐")
+        lines.append(f"  │  ⚠️⚠️⚠️  MATH AUDIT FAILURE DETECTED — {fail_n} CRITICAL FORMULA ERROR(s)    │")
+        lines.append("  │  Trading may be using incorrect calculations. See details below.        │")
+        lines.append("  └─────────────────────────────────────────────────────────────────────────┘")
+        lines.append("")
+
+    lines.append("  Summary:")
+    lines.append(f"    ✅ PASS:  {pass_n:>4} checks")
+    lines.append(f"    ⚠️  WARN:  {warn_n:>4} checks")
+    lines.append(f"    ❌ FAIL:  {fail_n:>4} checks" + (" — REQUIRES IMMEDIATE ATTENTION" if fail_n > 0 else ""))
+    lines.append(f"    All checks passed: {'YES ✅' if fail_n == 0 else 'NO ❌'}")
+    lines.append("")
+
+    # Show details
+    details = summary.get("details") or []
+    fails = [d for d in details if d.get("status") == "FAIL"]
+    warns = [d for d in details if d.get("status") == "WARN"]
+
+    if fails:
+        lines.append("  CRITICAL FAILURES REQUIRING ACTION:")
+        lines.append("  " + "-" * 76)
+        for d in fails:
+            ts = str(d.get("audit_timestamp") or "?")[:19]
+            bot = str(d.get("bot_id") or "?")
+            formula = str(d.get("formula_name") or "?")
+            bot_out = d.get("bot_output")
+            audit_out = d.get("auditor_output")
+            diff_pct = d.get("discrepancy_pct")
+            note = str(d.get("notes") or "")[:120]
+            lines.append(f"  [{ts}] {bot} / {formula}")
+            lines.append(f"    Bot output: {bot_out}  |  Auditor output: {audit_out}  |  Diff: {diff_pct:.3f}%")
+            lines.append(f"    {note}")
+            lines.append("")
+    else:
+        lines.append("  Critical failures: NONE")
+        lines.append("")
+
+    if warns:
+        lines.append("  WARNINGS UNDER INVESTIGATION:")
+        lines.append("  " + "-" * 76)
+        for d in warns[:10]:  # cap at 10 warnings
+            ts = str(d.get("audit_timestamp") or "?")[:19]
+            bot = str(d.get("bot_id") or "?")
+            formula = str(d.get("formula_name") or "?")
+            diff_pct = d.get("discrepancy_pct")
+            note = str(d.get("notes") or "")[:100]
+            diff_str = f"{diff_pct:.3f}%" if diff_pct is not None else "N/A"
+            lines.append(f"  [{ts}] {bot} / {formula} (diff={diff_str})")
+            lines.append(f"    {note}")
+    else:
+        lines.append("  Warnings: NONE")
+
+    lines.append("")
+    lines.append("  Audit schedule:  quick (60s) | full (15 min) | deep (4h)")
+    lines.append("  Audit log:       math_audit_log table (last 1,000 entries retained)")
+    lines.append("  Modules checked: Z-score · RSI · ATR/stop · Position sizing · Kelly")
+    lines.append("                   Profit factor · Momentum score · BTC-neutral Z-score")
+    lines.append("                   [Deep] Hurst exponent · Poseidon hedge ratio & dollar-neutral")
+
+    return lines

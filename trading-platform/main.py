@@ -418,6 +418,59 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC) — TRUE price-based")
 
+    # ── Math Auditor — independent formula verification ─────────────────────
+    try:
+        from math_auditor import ensure_table as _ma_ensure, run_quick_audit, run_full_audit, run_deep_audit
+
+        _ma_ensure()  # create math_audit_log table if needed
+        logger.info("MathAuditor | DB table ensured")
+
+        def _math_audit_quick():
+            try:
+                run_quick_audit()
+            except Exception as _mae:
+                logger.warning(f"MathAuditor | quick audit failed: {_mae}")
+
+        def _math_audit_full():
+            try:
+                run_full_audit()
+            except Exception as _mae:
+                logger.warning(f"MathAuditor | full audit failed: {_mae}")
+
+        def _math_audit_deep():
+            try:
+                run_deep_audit()
+            except Exception as _mae:
+                logger.warning(f"MathAuditor | deep audit failed: {_mae}")
+
+        scheduler.add_job(
+            func=_math_audit_quick,
+            trigger=_ITrigger(seconds=60),
+            id="math_audit_quick",
+            name="Math Auditor — Quick (ATR + sizing, 60s)",
+            replace_existing=True,
+            misfire_grace_time=30,
+        )
+        scheduler.add_job(
+            func=_math_audit_full,
+            trigger=_ITrigger(minutes=15),
+            id="math_audit_full",
+            name="Math Auditor — Full (all formulas, 15 min)",
+            replace_existing=True,
+            misfire_grace_time=120,
+        )
+        scheduler.add_job(
+            func=_math_audit_deep,
+            trigger=_ITrigger(hours=4),
+            id="math_audit_deep",
+            name="Math Auditor — Deep (Hurst + hedge ratio, 4h)",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+        logger.info("MathAuditor | 3 jobs registered: quick (60s), full (15 min), deep (4h)")
+    except Exception as _ma_boot_err:
+        logger.warning(f"MathAuditor | Boot failed (non-fatal): {_ma_boot_err}")
+
     yield
 
     logger.info("Shutting down scheduler...")

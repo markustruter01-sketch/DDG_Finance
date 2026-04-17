@@ -188,6 +188,11 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     exit_spread = size_usd * PAPER_SPREAD_COST_PCT
     entry_spread = pos.get("spread_cost", 0)
     total_fees = entry_spread + exit_spread
+
+    # LEDGER value: only subtract exit spread here.
+    # The entry spread was already deducted from cash at open (paper_open_position
+    # line: p["cash_usd"] -= total_cost, where total_cost = size_usd + spread_cost).
+    # Deducting total_fees here would double-count the entry spread.
     net_pnl = pnl_raw - exit_spread
 
     pip_size = PIP_SIZE.get(pair, 0.0001)
@@ -196,8 +201,12 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     else:
         pnl_pips = (entry - current_price) / pip_size
 
+    # Cash ledger update: return the original position capital (size_usd) plus the
+    # net P&L after exit spread. Entry spread is already accounted for at open.
     p["cash_usd"] += size_usd + net_pnl
 
+    # RECORD value: full round-trip cost (entry + exit spread) for trade journal only.
+    # true_net_pnl is NEVER used for the cash ledger — only for the journal record.
     true_net_pnl = pnl_raw - total_fees
 
     open_trades = _db.load_open_trades()

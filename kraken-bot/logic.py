@@ -628,11 +628,20 @@ def get_position_size(
         #   A $60k position risks $60k × 2.5% = $1,500 at the stop.
         effective_stop_pct = (atr_multiplier * atr) / entry_price
 
-        # Apply the volatility-tier size multiplier on top
+        # Vol-tier classification determines the concentration cap.
+        # Design intent (anti-double-penalty):
+        #   - size_by_risk is already reduced when ATR is high (wider stop → smaller
+        #     risk-sized position). That is the PRIMARY vol adjustment.
+        #   - adjusted_max_frac (vol-tier concentration cap) is a SEPARATE, independent
+        #     guardrail that limits single-position size as a fraction of equity.
+        #   - The vol-tier multiplier is applied ONLY to adjusted_max_frac (the cap),
+        #     NOT multiplicatively to size_by_risk. Applying it to both would be
+        #     a double-reduction: the risk-based size is already ATR-calibrated.
         vol_tier, size_multiplier, atr_pct = get_volatility_tier(atr, entry_price)
 
-        # The adjusted max fraction can only be LOWER than what was passed in,
-        # never higher — we only cut, never increase.
+        # Concentration cap scales with volatility tier (0.5x HIGH, 0.33x EXTREME).
+        # This is the only place vol-tier affects position size — size_by_risk is NOT
+        # further multiplied by size_multiplier; the ATR stop handles vol there.
         adjusted_max_frac = max_position_fraction * size_multiplier
 
     else:

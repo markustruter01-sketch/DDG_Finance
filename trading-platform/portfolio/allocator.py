@@ -482,29 +482,66 @@ SAFE_HAVEN_TICKERS    = {"GLD", "TLT", "XLU", "XLP", "XLV"}   # Safe-haven asset
 def _apply_bear_half_kelly(allocations: list[dict]) -> list[dict]:
     """
     Bear regime capital-preservation step.
-    Applies an additional 0.50x multiplier to all non-SGOV kelly_fractions,
-    then injects the freed capacity as a SGOV slot.
-    This is on top of the existing half-Kelly baked into the vol-adjusted sizing,
-    making it an effective quarter-Kelly in a confirmed Bear regime.
+
+    Intended behavior: positions are sized at BEAR_KELLY_MULTIPLIER (0.50) ×
+    the even-weight BASE allocation (TARGET_UTILIZATION / n_active), NOT at
+    0.50 × the vol-adjusted weight from step 3.
+
+    Why REPLACE rather than multiply:
+      - Step 3 (_apply_volatility_adjusted_weight) already adjusts sizing based
+        on each asset's volatility. High-vol assets get smaller weights there.
+      - If we then also multiply by 0.50 on top of the vol-adjusted weight, a
+        high-vol asset is penalised twice: once by inverse-vol sizing, once by
+        the Bear multiplier. A low-vol asset only gets the Bear haircut.
+      - The correct approach: in Bear regime, use a flat equal-weight base
+        (TARGET_UTILIZATION / n) and halve it. This is a capital-preservation
+        stance — every position gets the same conservative allowance.
+
+    Safety invariants enforced:
+      1. bear_target is capped at MAX_POSITION_KELLY (10%) to prevent large
+         allocations when n is small (e.g. n=1 → base_per_slot=82% → cap=10%).
+      2. Each slot's new weight = min(bear_target, original_frac). This means:
+           - When original_frac > bear_target: slot is REDUCED to bear_target.
+             This is the typical capital-preservation case.
+           - When original_frac ≤ bear_target: slot stays at original_frac.
+             The Bear step does NOT raise a low-vol asset back up to bear_target,
+             because raising any slot would violate the "never increase" invariant
+             and could increase total risk. Assets already below bear_target are
+             already conservatively sized; leaving them unchanged is correct.
+      3. Excess = total_original − total_bear_assigned ≥ 0 (always).
     """
     active = [s for s in allocations if s["ticker"] != "SGOV" and s["kelly_fraction"] > 0]
     if not active:
         return allocations
 
-    excess = 0.0
+    n = len(active)
+    # Base equal-weight per position (pre-vol-adjustment), hard-capped at
+    # MAX_POSITION_KELLY so low-n portfolios (1-2 slots) cannot over-allocate.
+    base_per_slot = TARGET_UTILIZATION / n
+    # Bear target: flat half of the base, still capped at per-asset max.
+    bear_target = min(base_per_slot * BEAR_KELLY_MULTIPLIER, MAX_POSITION_KELLY)
+
+    total_original = sum(s["kelly_fraction"] for s in active)
     result = []
+    total_bear_assigned = 0.0
     for slot in allocations:
         if slot["ticker"] != "SGOV" and slot["kelly_fraction"] > 0:
-            original_frac = slot["kelly_fraction"]
-            new_frac = round(original_frac * BEAR_KELLY_MULTIPLIER, 4)
-            excess += original_frac - new_frac
+            # Invariant: never increase any slot vs its pre-Bear weight.
+            # If a high-vol asset's vol-adjusted weight is already below bear_target,
+            # we keep it as-is (not raising it back to bear_target).
+            new_frac = round(min(bear_target, slot["kelly_fraction"]), 4)
+            total_bear_assigned += new_frac
             result.append({**slot, "kelly_fraction": new_frac})
         else:
             result.append(slot)
 
+    # Excess is always >= 0 because new_frac <= original_frac for every slot.
+    excess = round(max(total_original - total_bear_assigned, 0.0), 4)
+
     logger.warning(
-        f"Allocator | BEAR Half-Kelly: all positions scaled by {BEAR_KELLY_MULTIPLIER:.0%} "
-        f"— {excess:.1%} excess capital swept to SGOV"
+        f"Allocator | BEAR Half-Kelly: {n} positions sized at flat "
+        f"{bear_target:.1%} each (base={base_per_slot:.1%} × {BEAR_KELLY_MULTIPLIER:.0%}, "
+        f"capped at {MAX_POSITION_KELLY:.0%}) — {excess:.1%} excess swept to SGOV"
     )
 
     if excess >= 0.001:
@@ -663,9 +700,10 @@ def process_regime_llm_output(raw_json: str) -> RegimeAnalysisOutput:
             f"Allocator | Bear Regime active ('{regime}') — applying defensive controls"
         )
 
-        # Step 6a: Half-Kelly multiplier — halve all position sizes, sweep excess to SGOV.
-        # This is additive on top of the existing vol-adjusted sizing, making the
-        # effective sizing ~quarter-Kelly of full Kelly to preserve capital.
+        # Step 6a: Bear half-Kelly replacement — replace vol-adjusted weights with
+        # flat equal-weight × BEAR_KELLY_MULTIPLIER (0.5), capped at MAX_POSITION_KELLY.
+        # This REPLACES (not stacks on top of) vol-adjusted sizing to prevent
+        # double-penalising high-vol assets. Excess weight is swept to SGOV.
         allocations = _apply_bear_half_kelly(allocations)
 
         # Step 6b: SGOV default sweep — if no safe-haven (GLD/TLT) has positive

@@ -114,12 +114,15 @@ def compute_daily_var(
         logger.warning(f"VarCalculator | yfinance fetch failed (non-fatal): {exc} — VaR=0.0")
         return 0.0
 
-    # ── Extract closing prices per ticker ────────────────────────────────────
+    # ── Extract closing prices and build date-indexed return series ──────────
     # yfinance returns a multi-level column DataFrame when multiple tickers are
     # requested, or a single-level DataFrame for one ticker.
-    closes: dict[str, list[float]] = {}
+    # We keep the date index on each series so that the portfolio P&L can be
+    # computed via an outer join with fillna(0) — each asset contributes its OWN
+    # full history rather than being truncated to the shortest asset's history.
     try:
         import pandas as pd
+
         if isinstance(raw_data.columns, pd.MultiIndex):
             close_df = raw_data["Close"] if "Close" in raw_data else raw_data.iloc[:, 0]
         else:
@@ -128,44 +131,50 @@ def compute_daily_var(
             if len(yf_tickers) == 1:
                 close_df.columns = yf_tickers
 
+        # Build per-asset daily return Series with the yfinance DATE index intact.
+        # pct_change() preserves the date index; dropna() removes the first NaN row.
+        return_series: dict[str, "pd.Series[float]"] = {}
         for ticker in yf_tickers:
             if ticker in close_df.columns:
-                series = close_df[ticker].dropna()
-                if len(series) >= 2:
-                    closes[ticker] = series.tolist()
+                prices = close_df[ticker].dropna()
+                if len(prices) >= 2:
+                    return_series[ticker] = prices.pct_change().dropna()
+
     except Exception as exc:
         logger.warning(f"VarCalculator | Close extraction failed: {exc} — VaR=0.0")
         return 0.0
 
-    if not closes:
+    if not return_series:
         logger.debug("VarCalculator | No usable price series — VaR=0.0")
         return 0.0
 
-    # ── Build portfolio daily P&L series ─────────────────────────────────────
-    portfolio_pnl: list[float] = []
-
-    # Align series lengths: use the minimum available
-    lengths = [len(v) for v in closes.values()]
-    min_len = min(lengths) - 1 if lengths else 0
-    if min_len < 5:
-        logger.debug(
-            f"VarCalculator | Only {min_len} daily returns available "
-            f"(need ≥ 5) — VaR=0.0"
-        )
-        return 0.0
-
-    for i in range(min_len):
-        day_pnl = 0.0
+    # ── Build portfolio daily P&L series (date-aligned outer join) ───────────
+    # Each asset contributes returns over its OWN available history.
+    # pd.concat with join="outer" preserves every date where ANY asset has data.
+    # NaN entries (days an asset was not yet listed or not held) are filled with
+    # 0.0, which is correct: a non-held asset contributes $0 P&L on that day.
+    # This ensures a newly listed stock does not truncate older assets' histories.
+    try:
+        frames: list["pd.Series[float]"] = []
         for p in valid:
-            raw        = str(p["symbol"]).upper()
-            yf_ticker  = symbol_map.get(raw)
-            if yf_ticker not in closes:
+            raw       = str(p["symbol"]).upper()
+            yf_ticker = symbol_map.get(raw)
+            if yf_ticker not in return_series:
                 continue
-            price_series = closes[yf_ticker]
-            ret          = (price_series[i + 1] - price_series[i]) / price_series[i]
-            weight       = float(p["market_value"]) / total_value
-            day_pnl     += ret * weight
-        portfolio_pnl.append(day_pnl)
+            weight = float(p["market_value"]) / total_value
+            frames.append(return_series[yf_ticker] * weight)
+
+        if not frames:
+            return 0.0
+
+        # Outer join: union of all dates. Fill missing returns with 0.0
+        # (asset not held / not yet listed → zero daily contribution).
+        combined = pd.concat(frames, axis=1, join="outer").fillna(0.0)
+        portfolio_pnl = combined.sum(axis=1).tolist()
+
+    except Exception as exc:
+        logger.warning(f"VarCalculator | Date-aligned P&L build failed: {exc} — VaR=0.0")
+        return 0.0
 
     if len(portfolio_pnl) < 5:
         return 0.0

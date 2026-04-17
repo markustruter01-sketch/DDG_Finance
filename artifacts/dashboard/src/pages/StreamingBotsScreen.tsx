@@ -2,6 +2,7 @@ import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, us
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
+import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 
 const STARTING_BALANCE = 100_000;
 
@@ -500,7 +501,7 @@ export default function StreamingBotsScreen() {
 
   const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
   const fleetTotal = allEquities.length === 8 ? allEquities.reduce((s, e) => s + e, 0) : null;
-  const fleetPnl = fleetTotal != null ? fleetTotal - 800_000 : null;
+  const fleetPnl = fleetTotal != null ? fleetTotal - FLEET_STARTING_CAPITAL : null;
 
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
 
@@ -740,7 +741,7 @@ export default function StreamingBotsScreen() {
           </div>
           <div className="text-center">
             <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>STARTING CAPITAL</div>
-            <div className="text-xs font-black font-mono" style={{ color: "rgba(203,213,225,0.6)" }}>$800,000</div>
+            <div className="text-xs font-black font-mono" style={{ color: "rgba(203,213,225,0.6)" }}>${FLEET_STARTING_CAPITAL.toLocaleString()}</div>
           </div>
         </div>
 

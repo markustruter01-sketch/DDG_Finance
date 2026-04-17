@@ -122,8 +122,12 @@ def compute_kelly(
         return 0.0
 
     quarter_kelly = full_kelly * KELLY_MULTIPLIER
-    sized = max(quarter_kelly, DEFAULT_RISK_PCT)
-    return round(min(sized, MAX_KELLY_FRACTION), 4)
+    # Do NOT apply DEFAULT_RISK_PCT floor here. The 1% floor is only for the
+    # "insufficient history" fallback in compute_empirical_kelly(). When the
+    # Kelly formula produces a value below 1% with sufficient trade history,
+    # the formula's output should be respected (it signals low conviction).
+    # Clamped at 0 only — negative Kelly has already been filtered above.
+    return round(min(max(quarter_kelly, 0.0), MAX_KELLY_FRACTION), 4)
 
 
 def compute_empirical_kelly(
@@ -135,7 +139,11 @@ def compute_empirical_kelly(
     Compute Quarter-Kelly using trailing 30-day empirical win/loss data.
 
     If fewer than MIN_TRADES_FOR_KELLY trades exist in the window,
-    returns DEFAULT_RISK_PCT (fixed fractional fallback).
+    returns DEFAULT_RISK_PCT (1%) as the fixed-fractional insufficient-history
+    fallback. For all other paths (negative edge, zero Kelly, or valid quarter-
+    Kelly), the output is clamped to [0.0, MAX_KELLY_FRACTION] — the DEFAULT
+    floor is NOT applied so that genuinely negative-edge systems can be sized
+    at 0 rather than being forced to trade at 1%.
 
     Args:
         db_path: Path to the SQLite trading journal. Auto-detected if None.
@@ -143,25 +151,31 @@ def compute_empirical_kelly(
         stop_loss_pct: Expected loss (used as b-ratio denominator).
 
     Returns:
-        Kelly fraction clamped to [DEFAULT_RISK_PCT, MAX_KELLY_FRACTION].
+        Kelly fraction clamped to [0.0, MAX_KELLY_FRACTION], or DEFAULT_RISK_PCT
+        only when count < MIN_TRADES_FOR_KELLY (insufficient history fallback).
     """
     win_rate, wl_ratio, count = get_trailing_30d_stats(db_path)
 
+    # Insufficient history: use fixed-fractional fallback (only 1% floor path).
     if count < MIN_TRADES_FOR_KELLY:
         return DEFAULT_RISK_PCT
 
+    # Non-positive win/loss ratio → no positive edge; size at 0, not 1%.
     if wl_ratio <= 0:
-        return DEFAULT_RISK_PCT
+        return 0.0
 
     b = wl_ratio
     p = win_rate
     full_kelly = (b * p - (1 - p)) / b
 
+    # Negative full Kelly → system has negative expected value; size at 0, not 1%.
     if full_kelly <= 0:
-        return DEFAULT_RISK_PCT
+        return 0.0
 
     quarter_kelly = full_kelly * KELLY_MULTIPLIER
-    return round(max(DEFAULT_RISK_PCT, min(quarter_kelly, MAX_KELLY_FRACTION)), 4)
+    # Clamp to [0.0, MAX_KELLY_FRACTION] — DEFAULT_RISK_PCT floor not applied here;
+    # it is reserved only for the insufficient-history fallback above.
+    return round(max(0.0, min(quarter_kelly, MAX_KELLY_FRACTION)), 4)
 
 
 def compute_kelly_for_slots(allocations: list[dict]) -> list[dict]:

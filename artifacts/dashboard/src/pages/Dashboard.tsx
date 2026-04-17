@@ -1,10 +1,11 @@
-import { useMemo, useRef, useEffect, useState, type ReactNode } from "react";
+import { useMemo, useRef, useEffect, useState, Fragment, type ReactNode } from "react";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
+  useMathAuditSummary, useMathAuditRecent,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
@@ -511,6 +512,23 @@ interface ChartTooltipProps {
   label?: string;
 }
 
+function EquityTooltip({ active, payload, label }: ChartTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const d = (payload[0] as ChartPayloadEntry & { payload?: Record<string, number | string | null> })?.payload;
+  return (
+    <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
+      <p className="text-muted-foreground mb-1">{label}</p>
+      <p className="font-mono text-white font-semibold">Total: {formatCurrency(Number(d?.total ?? 0))}</p>
+      <p className="font-mono text-emerald-400">Alpaca: {formatCurrency(Number(d?.alpaca ?? 0))}</p>
+      <p className="font-mono text-amber-400">Kraken: {formatCurrency(Number(d?.kraken ?? 0))}</p>
+      <p className="font-mono text-teal-400">Forex: {formatCurrency(Number(d?.forex ?? 0))}</p>
+      {d?.regime && (
+        <p className="text-slate-500 mt-1">Regime: {d.regime}</p>
+      )}
+    </div>
+  );
+}
+
 const FLEET_BASELINE = 800_000;
 type EquityRange = "24h" | "7d" | "30d" | "all";
 
@@ -543,7 +561,6 @@ function LiveEquityCurveSection() {
       total,
       alpaca: s.alpaca_equity,
       kraken: s.kraken_equity,
-      options: s.options_equity ?? 0,
       forex: s.forex_equity ?? 0,
       ddBand: total < peak ? [total, peak] as [number, number] : [total, total] as [number, number],
       regime: s.regime,
@@ -556,23 +573,6 @@ function LiveEquityCurveSection() {
     ? ((last.total_equity - first.total_equity) / first.total_equity) * 100
     : null;
 
-  const EquityTooltip = ({ active, payload, label }: ChartTooltipProps) => {
-    if (!active || !payload?.length) return null;
-    const d = (payload[0] as ChartPayloadEntry & { payload?: Record<string, number | string | null> })?.payload;
-    return (
-      <div className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl">
-        <p className="text-muted-foreground mb-1">{label}</p>
-        <p className="font-mono text-white font-semibold">Total: {formatCurrency(Number(d?.total ?? 0))}</p>
-        <p className="font-mono text-emerald-400">Alpaca: {formatCurrency(Number(d?.alpaca ?? 0))}</p>
-        <p className="font-mono text-amber-400">Kraken: {formatCurrency(Number(d?.kraken ?? 0))}</p>
-        <p className="font-mono text-red-400">Options: {formatCurrency(Number(d?.options ?? 0))}</p>
-        <p className="font-mono text-teal-400">Forex: {formatCurrency(Number(d?.forex ?? 0))}</p>
-        {d?.regime && (
-          <p className="text-slate-500 mt-1">Regime: {d.regime}</p>
-        )}
-      </div>
-    );
-  };
 
   const rangeButtons: { label: string; value: EquityRange }[] = [
     { label: "24h", value: "24h" },
@@ -659,7 +659,6 @@ function LiveEquityCurveSection() {
               <Line type="monotone" dataKey="total" name="Total Fleet" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
               <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
               <Line type="monotone" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
-              <Line type="monotone" dataKey="options" name="Options" stroke="#ef4444" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
               <Line type="monotone" dataKey="forex" name="Forex" stroke="#14b8a6" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
             </ComposedChart>
           </ResponsiveContainer>
@@ -668,7 +667,6 @@ function LiveEquityCurveSection() {
           <div className="flex items-center gap-1.5"><div className="w-4 h-0.5 bg-blue-500 rounded" /><span className="text-[9px] text-muted-foreground">Total Fleet</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-green-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Alpaca</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-amber-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Kraken</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-red-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Options</span></div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 bg-teal-500 rounded opacity-60" /><span className="text-[9px] text-muted-foreground">Forex</span></div>
         </div>
       </CardContent>
@@ -1647,6 +1645,223 @@ function AllClosedTradesSection() {
   );
 }
 
+type AuditStatusFilter = "ALL" | "FAIL" | "WARN" | "PASS";
+
+const BOT_COLORS: Record<string, string> = {
+  "davy-jones":    "text-blue-400",
+  "blackbeard":    "text-amber-400",
+  "calypso":       "text-purple-400",
+  "apex-predator": "text-orange-400",
+  "poseidon":      "text-cyan-400",
+  "kraken-current":"text-teal-400",
+  "navigator":     "text-green-400",
+  "oracle":        "text-rose-400",
+};
+
+function MathAuditorPanel() {
+  const [filter, setFilter] = useState<AuditStatusFilter>("ALL");
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const { data: summary, isLoading: summaryLoading } = useMathAuditSummary(24);
+  const { data: recent, isLoading: recentLoading } = useMathAuditRecent(40, filter);
+
+  const total = (summary?.pass ?? 0) + (summary?.warn ?? 0) + (summary?.fail ?? 0);
+  const passRate = total > 0 ? ((summary?.pass ?? 0) / total) * 100 : null;
+
+  const overallHealth =
+    (summary?.fail ?? 0) > 0 ? "FAIL" :
+    (summary?.warn ?? 0) > 0 ? "WARN" : "PASS";
+
+  const healthColor = overallHealth === "FAIL" ? "text-red-400 border-red-500/30 bg-red-500/5"
+    : overallHealth === "WARN" ? "text-amber-400 border-amber-500/30 bg-amber-500/5"
+    : "text-emerald-400 border-emerald-500/30 bg-emerald-500/5";
+
+  const statusBadge = (s: string) => {
+    if (s === "FAIL") return "bg-red-500/15 text-red-400 border border-red-500/30";
+    if (s === "WARN") return "bg-amber-500/15 text-amber-400 border border-amber-500/30";
+    return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30";
+  };
+
+  const severityDot = (sev: string) => {
+    if (sev === "CRITICAL") return "bg-red-500";
+    if (sev === "WARNING") return "bg-amber-400";
+    return "bg-slate-500";
+  };
+
+  const rows = recent?.rows ?? [];
+  const fmtTs = (ts: string) => {
+    try { return new Date(ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+    catch { return ts.slice(11, 19); }
+  };
+  const fmtFormula = (f: string) => f.replace(/_/g, " ");
+
+  return (
+    <Card className="border-white/5 overflow-hidden">
+      <CardHeader className="bg-slate-900/50 border-b border-white/5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <CardTitle className="flex items-center gap-2 fluid-heading">
+          <ShieldCheck className="h-4 w-4 text-violet-400" />
+          <span>Math Auditor</span>
+          {!summaryLoading && (
+            <span className={cn("text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider", healthColor)}>
+              {overallHealth}
+            </span>
+          )}
+        </CardTitle>
+        <div className="flex items-center gap-2">
+          {(["ALL", "FAIL", "WARN", "PASS"] as AuditStatusFilter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "px-2 py-0.5 text-[10px] rounded font-mono transition-colors border",
+                filter === f
+                  ? f === "FAIL" ? "bg-red-600/80 text-white border-red-500/50"
+                    : f === "WARN" ? "bg-amber-600/80 text-white border-amber-500/50"
+                    : f === "PASS" ? "bg-emerald-700/80 text-white border-emerald-500/50"
+                    : "bg-violet-700/80 text-white border-violet-500/50"
+                  : "text-slate-400 hover:text-white border-transparent"
+              )}
+            >{f}</button>
+          ))}
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-0">
+        {/* Summary stats bar */}
+        {!summaryLoading && summary && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border-b border-white/5 divide-x divide-white/5">
+            <div className="px-4 py-3 flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-semibold">Pass Rate (24h)</span>
+              <span className={cn("text-xl font-mono font-bold tabular-nums", passRate != null && passRate >= 95 ? "text-emerald-400" : passRate != null && passRate >= 80 ? "text-amber-400" : "text-red-400")}>
+                {passRate != null ? `${passRate.toFixed(1)}%` : "—"}
+              </span>
+              <span className="text-[9px] text-muted-foreground/40">{total} checks total</span>
+            </div>
+            <div className="px-4 py-3 flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-semibold">PASS</span>
+              <span className="text-xl font-mono font-bold text-emerald-400">{summary.pass}</span>
+              <span className="text-[9px] text-muted-foreground/40">formulas verified</span>
+            </div>
+            <div className="px-4 py-3 flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-semibold">WARN</span>
+              <span className={cn("text-xl font-mono font-bold", summary.warn > 0 ? "text-amber-400" : "text-slate-500")}>{summary.warn}</span>
+              <span className="text-[9px] text-muted-foreground/40">minor deviations</span>
+            </div>
+            <div className="px-4 py-3 flex flex-col gap-0.5">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/50 font-semibold">FAIL</span>
+              <span className={cn("text-xl font-mono font-bold", summary.fail > 0 ? "text-red-400" : "text-slate-500")}>{summary.fail}</span>
+              <span className="text-[9px] text-muted-foreground/40">anomalies flagged</span>
+            </div>
+          </div>
+        )}
+
+        {/* Progress bars */}
+        {!summaryLoading && total > 0 && (
+          <div className="px-4 py-2 border-b border-white/5">
+            <div className="flex w-full h-1.5 rounded-full overflow-hidden gap-px">
+              <div className="bg-emerald-500 transition-all" style={{ width: `${((summary?.pass ?? 0) / total) * 100}%` }} />
+              <div className="bg-amber-400 transition-all" style={{ width: `${((summary?.warn ?? 0) / total) * 100}%` }} />
+              <div className="bg-red-500 transition-all" style={{ width: `${((summary?.fail ?? 0) / total) * 100}%` }} />
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[8px] text-muted-foreground/40 font-mono">
+                Last run: {summary?.last_audit_ts ?? "—"} UTC
+              </span>
+              <span className="text-[8px] text-muted-foreground/40 font-mono">
+                {summary?.total_logged?.toLocaleString() ?? 0} total entries in log
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Recent audit rows */}
+        <div className="overflow-x-auto">
+          {recentLoading ? (
+            <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">Loading audit log…</div>
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-1">
+              <ShieldCheck className="h-6 w-6 text-emerald-500/40" />
+              <p className="text-xs text-muted-foreground">No audit entries found for current filter</p>
+            </div>
+          ) : (
+            <table className="w-full text-[10px] font-mono">
+              <thead>
+                <tr className="border-b border-white/5 text-muted-foreground/50 text-[9px] uppercase tracking-wider">
+                  <th className="text-left px-3 py-1.5 w-16">Time</th>
+                  <th className="text-left px-3 py-1.5 w-24">Bot</th>
+                  <th className="text-left px-3 py-1.5">Formula</th>
+                  <th className="text-right px-3 py-1.5 w-16">Δ%</th>
+                  <th className="text-center px-3 py-1.5 w-14">Status</th>
+                  <th className="text-left px-3 py-1.5">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <Fragment key={`${row.bot_id}-${row.formula_name}-${i}`}>
+                    <tr
+                      className={cn(
+                        "border-b border-white/[0.03] cursor-pointer transition-colors",
+                        row.status === "FAIL" ? "hover:bg-red-500/5" :
+                        row.status === "WARN" ? "hover:bg-amber-500/5" :
+                        "hover:bg-emerald-500/5",
+                        expanded === i ? (
+                          row.status === "FAIL" ? "bg-red-500/5" :
+                          row.status === "WARN" ? "bg-amber-500/5" :
+                          "bg-emerald-500/5"
+                        ) : ""
+                      )}
+                      onClick={() => setExpanded(expanded === i ? null : i)}
+                    >
+                      <td className="px-3 py-1.5 text-slate-500">{fmtTs(row.audit_timestamp)}</td>
+                      <td className={cn("px-3 py-1.5 font-semibold", BOT_COLORS[row.bot_id] ?? "text-slate-300")}>
+                        <span className="flex items-center gap-1">
+                          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", severityDot(row.severity))} />
+                          {row.bot_id}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-300">{fmtFormula(row.formula_name)}</td>
+                      <td className={cn("px-3 py-1.5 text-right tabular-nums",
+                        Math.abs(row.discrepancy_pct) > 50 ? "text-red-400" :
+                        Math.abs(row.discrepancy_pct) > 10 ? "text-amber-400" :
+                        "text-slate-400"
+                      )}>
+                        {row.discrepancy_pct != null ? `${row.discrepancy_pct > 0 ? "+" : ""}${row.discrepancy_pct.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        <span className={cn("px-1.5 py-0.5 rounded text-[8px] font-bold uppercase", statusBadge(row.status))}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-400 max-w-xs truncate">{row.notes}</td>
+                    </tr>
+                    {expanded === i && (
+                      <tr key={`expand-${i}`} className="border-b border-white/5">
+                        <td colSpan={6} className="px-4 py-2">
+                          <div className="bg-slate-800/40 rounded-lg p-3 space-y-1.5 text-[10px]">
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                              <div><span className="text-muted-foreground/60">Bot output:</span> <span className="font-mono text-white">{row.bot_output?.toFixed(6) ?? "—"}</span></div>
+                              <div><span className="text-muted-foreground/60">Auditor output:</span> <span className="font-mono text-white">{row.auditor_output?.toFixed(6) ?? "—"}</span></div>
+                              <div><span className="text-muted-foreground/60">Audit mode:</span> <span className="font-mono text-slate-300">{row.audit_mode}</span></div>
+                              <div><span className="text-muted-foreground/60">Severity:</span> <span className={cn("font-mono font-bold", row.severity === "CRITICAL" ? "text-red-400" : row.severity === "WARNING" ? "text-amber-400" : "text-slate-400")}>{row.severity}</span></div>
+                            </div>
+                            <div className="pt-1">
+                              <span className="text-muted-foreground/60">Details:</span>
+                              <p className="text-slate-200 mt-0.5 whitespace-pre-wrap break-words leading-relaxed">{row.notes}</p>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -1705,6 +1920,13 @@ export default function Dashboard() {
             >
               <AllClosedTradesSection />
             </CollapsableSection>
+          </SafeSection>
+        </motion.div>
+
+        {/* Math Auditor — always visible, prominent */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}>
+          <SafeSection label="Math Auditor">
+            <MathAuditorPanel />
           </SafeSection>
         </motion.div>
 

@@ -1935,3 +1935,60 @@ export function usePairLearning() {
     staleTime: 30_000,
   });
 }
+
+export interface MathAuditDetail {
+  audit_timestamp: string;
+  bot_id: string;
+  formula_name: string;
+  bot_output: number;
+  auditor_output: number;
+  discrepancy_pct: number;
+  status: "PASS" | "WARN" | "FAIL";
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  notes: string;
+  audit_mode: string;
+}
+
+export interface MathAuditSummary {
+  status: string;
+  pass: number;
+  warn: number;
+  fail: number;
+  last_audit_ts: string;
+  total_logged: number;
+  details: MathAuditDetail[];
+}
+
+export function useMathAuditSummary(hours: number = 24) {
+  return useQuery<MathAuditSummary>({
+    queryKey: ["/admin/math-audit/summary", hours],
+    queryFn: async () => (await api.get(`/admin/math-audit/summary?hours=${hours}`)).data,
+    refetchInterval: useVisibleInterval(60_000),
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+export interface MathAuditRecentRow {
+  audit_timestamp: string;
+  bot_id: string;
+  formula_name: string;
+  bot_output: number;
+  auditor_output: number;
+  discrepancy_pct: number;
+  status: "PASS" | "WARN" | "FAIL";
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  notes: string;
+  audit_mode: string;
+}
+
+export function useMathAuditRecent(limit: number = 30, statusFilter: "ALL" | "FAIL" | "WARN" | "PASS" = "ALL") {
+  return useQuery<{ status: string; rows: MathAuditRecentRow[]; count: number }>({
+    queryKey: ["/admin/math-audit/recent", limit, statusFilter],
+    queryFn: async () =>
+      (await api.get(`/admin/math-audit/recent?limit=${limit}&status_filter=${statusFilter}`)).data,
+    refetchInterval: useVisibleInterval(30_000),
+    retry: false,
+    staleTime: 15_000,
+  });
+}

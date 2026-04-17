@@ -250,3 +250,65 @@ async def trigger_micro_auditor(background_tasks: BackgroundTasks) -> dict:
         "status": "triggered",
         "message": "Micro-Auditor check started — poll GET /admin/micro-auditor/status for results",
     }
+
+
+@admin_router.get("/admin/math-audit/summary", tags=["Admin"])
+async def get_math_audit_summary(hours: int = 24) -> dict:
+    """Return aggregated math auditor results for the dashboard panel."""
+    import asyncio, concurrent.futures
+    try:
+        from math_auditor import get_audit_summary
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            result = await loop.run_in_executor(pool, get_audit_summary, hours)
+        return {"status": "ok", **result}
+    except Exception as exc:
+        logger.error(f"Math audit summary error: {exc}")
+        return {"status": "error", "pass": 0, "warn": 0, "fail": 0,
+                "last_audit_ts": "Never", "total_logged": 0, "details": []}
+
+
+@admin_router.get("/admin/math-audit/recent", tags=["Admin"])
+async def get_math_audit_recent(limit: int = 50, status_filter: str = "ALL") -> dict:
+    """Return the most recent audit log rows, optionally filtered by status."""
+    import asyncio, os, concurrent.futures
+    import psycopg2
+    from datetime import datetime, timezone, timedelta
+
+    def _query():
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        try:
+            with conn.cursor() as cur:
+                params: list = []
+                where = ""
+                if status_filter != "ALL":
+                    where = "WHERE status = %s"
+                    params.append(status_filter)
+                cur.execute(
+                    f"""SELECT audit_timestamp, bot_id, formula_name,
+                               bot_output, auditor_output, discrepancy_pct,
+                               status, severity, notes, audit_mode
+                        FROM math_audit_log
+                        {where}
+                        ORDER BY audit_timestamp DESC
+                        LIMIT %s""",
+                    params + [limit],
+                )
+                cols = [d[0] for d in cur.description]
+                rows = []
+                for row in cur.fetchall():
+                    d = dict(zip(cols, row))
+                    d["audit_timestamp"] = d["audit_timestamp"].isoformat() if d["audit_timestamp"] else None
+                    rows.append(d)
+                return rows
+        finally:
+            conn.close()
+
+    try:
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            rows = await loop.run_in_executor(pool, _query)
+        return {"status": "ok", "rows": rows, "count": len(rows)}
+    except Exception as exc:
+        logger.error(f"Math audit recent query error: {exc}")
+        return {"status": "error", "rows": [], "count": 0}

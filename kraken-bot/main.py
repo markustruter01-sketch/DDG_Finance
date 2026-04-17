@@ -731,6 +731,7 @@ def write_live_state() -> None:
             "take_profit_price":   take_profit_px,
             "entry_time":          pos["entry_time"],
             "best_price":          round(best, 4),
+            "entry_atr":           pos.get("entry_atr"),
         })
 
     live_state = {
@@ -2235,6 +2236,7 @@ def run_cycle() -> None:
                                     deployed_usd += size_usd
                                     if symbol in open_positions:
                                         open_positions[symbol]["atr_stop_price"]  = _atr_stop
+                                        open_positions[symbol]["entry_atr"]       = sym_atr
                                         open_positions[symbol]["vol_tier"]        = "momentum_bear"
                                         open_positions[symbol]["tranches_filled"] = 1
                                     _cycle_new_entries += 1
@@ -2368,6 +2370,7 @@ def run_cycle() -> None:
                     deployed_usd += _apex_size
                     if symbol in open_positions:
                         open_positions[symbol]["atr_stop_price"]  = _apex_atr_stop
+                        open_positions[symbol]["entry_atr"]       = sym_atr
                         open_positions[symbol]["vol_tier"]        = "momentum_scalper"
                         open_positions[symbol]["tranches_filled"] = 1
                     _cycle_new_entries += 1
@@ -2548,6 +2551,7 @@ def run_cycle() -> None:
                             deployed_usd += size_usd
                             if symbol in open_positions:
                                 open_positions[symbol]["atr_stop_price"] = _atr_stop
+                                open_positions[symbol]["entry_atr"]      = sym_atr
                                 open_positions[symbol]["vol_tier"] = _vol_tier
                                 open_positions[symbol]["tranches_filled"] = 1
                             cycle_signals.append({
@@ -2729,6 +2733,7 @@ def run_cycle() -> None:
                         deployed_usd += _scout_size
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
+                            open_positions[symbol]["entry_atr"]      = sym_atr
                             open_positions[symbol]["vol_tier"] = "contrarian_scout"
                             open_positions[symbol]["tranches_filled"] = 1
                         cycle_signals.append({
@@ -2879,6 +2884,7 @@ def run_cycle() -> None:
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"]    = _atr_stop
+                            open_positions[symbol]["entry_atr"]         = sym_atr
                             open_positions[symbol]["vol_tier"]          = _vol_tier
                             open_positions[symbol]["tranches_filled"]   = 1
                         # Register pending T2/T3 tranches (skip T1, already filled)
@@ -3018,6 +3024,7 @@ def run_cycle() -> None:
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"]    = _atr_stop
+                            open_positions[symbol]["entry_atr"]         = sym_atr
                             open_positions[symbol]["vol_tier"]          = _vol_tier
                             open_positions[symbol]["tranches_filled"]   = 1
                         # Register pending T2/T3 tranches (skip T1, already filled)

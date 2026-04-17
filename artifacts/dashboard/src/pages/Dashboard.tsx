@@ -3,7 +3,7 @@ import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
   useLivePositions, useKrakenStatus, useKrakenPerformance,
-  useKrakenFleetSummary, useOptionsState, useForexState,
+  useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
   type LivePosition,
 } from "@/hooks/use-trading";
@@ -357,7 +357,6 @@ function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
   const { data: portfolio } = usePortfolio();
   const { data: fleetSummary } = useKrakenFleetSummary();
-  const { data: optionsState } = useOptionsState();
   const { data: forexState } = useForexState();
   const { data: davyPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
@@ -368,24 +367,23 @@ function FleetKPISummary() {
   // (which does not include portfolio_totals).
   const alpacaEquity = portfolio?.account?.equity ?? 0;
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
-  const optionsEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? 100_000;
   const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
   // krakenReady = true as soon as fleetSummary data has arrived (not gated on isLoading
   // which can stay truthy across re-renders while a background refetch is in flight).
   const krakenReady = fleetSummary != null;
   // Show "—" only on the very first render before ANY real data has arrived.
   // Once any single source responds, show the live (progressively-updating) total.
-  const anyLoading = alpacaEquity === 0 && !krakenReady && optionsState == null && forexState == null;
+  const anyLoading = alpacaEquity === 0 && !krakenReady && forexState == null;
   const grandTotal = computeFleetEquity(
     alpacaEquity > 0 ? alpacaEquity : 0,
     krakenFleetEquity,
-    optionsEquity,
+    0,
     forexEquity,
   );
 
   // True P&L = grand total minus the $800k starting capital (8 bots × $100k each).
   // Guard: do not show until all key equity pools have loaded.
-  const equitiesReady = alpacaEquity > 0 && krakenReady && optionsState != null && forexState != null;
+  const equitiesReady = alpacaEquity > 0 && krakenReady && forexState != null;
   const totalPnl: number | null = equitiesReady ? grandTotal - FLEET_STARTING_CAPITAL : null;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
@@ -394,12 +392,10 @@ function FleetKPISummary() {
   // Davy Jones, Blackbeard, Calypso, Poseidon (#7), and Kraken Current (#8).
   const krakenWins = fleetSummary?.total_wins ?? 0;
   const krakenTotal = fleetSummary?.total_trades ?? 0;
-  const optionsWins = optionsState?.total_wins ?? 0;
-  const optionsTotal = optionsState?.total_trades ?? 0;
   const forexWins = forexState?.total_wins ?? 0;
   const forexTotal = forexState?.total_trades ?? 0;
-  const totalWins = alpacaWins + krakenWins + optionsWins + forexWins;
-  const totalTrades = alpacaTotal + krakenTotal + optionsTotal + forexTotal;
+  const totalWins = alpacaWins + krakenWins + forexWins;
+  const totalTrades = alpacaTotal + krakenTotal + forexTotal;
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const botStatuses = summary?.bot_statuses ?? {};
@@ -419,7 +415,7 @@ function FleetKPISummary() {
     {
       label: "Fleet Equity",
       value: anyLoading ? "—" : formatCurrency(grandTotal),
-      sub: `8 bots · 6 capital pools`,
+      sub: `8 bots · 3 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
       valueColor: anyLoading ? "text-slate-500" : "text-white",
@@ -591,7 +587,7 @@ function LiveEquityCurveSection() {
         <CardTitle className="flex items-center gap-2 fluid-heading">
           <TrendingUp className="h-4 w-4 text-primary" />
           <span>Fleet Equity Curve</span>
-          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">8 Bots · 6 Pools</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">8 Bots · 3 Pools</span>
         </CardTitle>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-800/60 rounded-md p-0.5 gap-0.5">

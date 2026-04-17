@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
-  useKrakenPerformance, useKrakenStatus, useOptionsState, useForexState,
+  useKrakenPerformance, useKrakenStatus, useForexState,
   usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { BOT_THEMES, MiniSparkline, computeFleetEquity, type KrakenTradeEntry } from "@/lib/dashboard-shared";
@@ -12,7 +12,6 @@ export function FleetPerformanceHero() {
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
-  const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
@@ -25,9 +24,8 @@ export function FleetPerformanceHero() {
 
   const alpacaEquity = summary?.portfolio_totals.equity ?? 0;
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
-  const optionsEquity = optState?.total_equity ?? 100_000;
   const forexEquity = fxState?.total_equity ?? 100_000;
-  const grandTotal = computeFleetEquity(alpacaEquity, krakenFleetEquity, optionsEquity, forexEquity);
+  const grandTotal = computeFleetEquity(alpacaEquity, krakenFleetEquity, 0, forexEquity);
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -43,13 +41,11 @@ export function FleetPerformanceHero() {
   const krakenWins = fleetSummary?.total_wins ?? allPerfs.reduce((s, p) => s + (p?.win_count ?? 0), 0);
   const krakenTotal = fleetSummary?.total_trades ?? allPerfs.reduce((s, p) => s + (p?.total_trades ?? 0), 0);
 
-  const optionsWins = optState?.total_wins ?? 0;
-  const optionsTotal = optState?.total_trades ?? 0;
   const forexWins = fxState?.total_wins ?? 0;
   const forexTotal = fxState?.total_trades ?? 0;
 
-  const totalWins = alpacaWins + krakenWins + optionsWins + forexWins;
-  const totalTrades = alpacaTotal + krakenTotal + optionsTotal + forexTotal;
+  const totalWins = alpacaWins + krakenWins + forexWins;
+  const totalTrades = alpacaTotal + krakenTotal + forexTotal;
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const alpacaBestPct = journal?.trades?.length
@@ -81,8 +77,9 @@ export function FleetPerformanceHero() {
     const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + (t.pnl_percentage ?? 0), 0);
     results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
 
-    const optionsPnlToday = optState?.total_pnl ?? 0;
-    results.push({ name: "Apex Predator", icon: "🎯", dailyPnl: optionsPnlToday > 0 ? optionsPnlToday : 0 });
+    const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
+    const apexPnl = apexBot?.pnl_usd ?? 0;
+    results.push({ name: "Apex Predator", icon: "🦅", dailyPnl: apexPnl });
 
     const forexPnlToday = fxState?.total_pnl ?? 0;
     results.push({ name: "Navigator", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
@@ -97,7 +94,7 @@ export function FleetPerformanceHero() {
     const best = sorted[0] ?? null;
     const worst = sorted[sorted.length - 1] ?? null;
     return { best, worst };
-  }, [djPerf.data, bbPerf.data, caPerf.data, journal, todayStr, optState, fxState]);
+  }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, journal, todayStr, fxState]);
 
   const botSparklines = useMemo(() => {
     const krakenLines = botPerfList.map((b) => {
@@ -113,10 +110,11 @@ export function FleetPerformanceHero() {
       ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
       : [0];
     krakenLines.unshift({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
-    const optPnl = optState?.total_pnl ?? 0;
-    const optEquity = optState?.total_equity ?? 100_000;
-    const optPct = optEquity > 0 ? (optPnl / optEquity) * 100 : 0;
-    krakenLines.push({ id: "options", name: "Apex", icon: "🎯", accent: "#ef4444", curve: optPct !== 0 ? [0, optPct * 0.3, optPct * 0.6, optPct * 0.8, optPct] : [0] });
+    const apexBotSpk = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
+    const apexPnlSpk = apexBotSpk?.pnl_usd ?? 0;
+    const apexEqSpk = apexBotSpk?.equity_usd ?? 100_000;
+    const apexPctSpk = apexEqSpk > 0 ? (apexPnlSpk / apexEqSpk) * 100 : 0;
+    krakenLines.push({ id: "apex", name: "Apex", icon: "🦅", accent: "#f97316", curve: apexPctSpk !== 0 ? [0, apexPctSpk * 0.3, apexPctSpk * 0.6, apexPctSpk * 0.8, apexPctSpk] : [0] });
 
     const fxPnl = fxState?.total_pnl ?? 0;
     const fxEquity = fxState?.total_equity ?? 100_000;
@@ -134,12 +132,12 @@ export function FleetPerformanceHero() {
     krakenLines.push({ id: "kraken-current", name: "KC", icon: "🌊", accent: "#06b6d4", curve: kcPct !== 0 ? [0, kcPct * 0.25, kcPct * 0.5, kcPct * 0.75, kcPct] : [0] });
 
     return krakenLines;
-  }, [djPerf.data, bbPerf.data, caPerf.data, perfHistory, optState, fxState, poseidonState, kcState]);
+  }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
 
   // fleet-summary has 5 bots (DJ+BB+Cal+Poseidon+KC) + 3 external (Oracle, Apex, Navigator)
   const botCount = (fleetSummary?.bot_count ?? 5) + 3;
   const stats = [
-    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 6 capital pools` },
+    { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 3 capital pools` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },
     { label: "Fleet Win Rate", value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—", color: combinedWinRate != null && combinedWinRate >= 50 ? "text-green-400" : "text-amber-400", sub: "all bots combined" },
     { label: "Best Today", value: todayPerformers.best ? `${todayPerformers.best.icon} ${todayPerformers.best.name}` : "—", color: "text-green-400", sub: todayPerformers.best ? `${todayPerformers.best.dailyPnl >= 0 ? "+" : ""}${todayPerformers.best.dailyPnl.toFixed(2)}% daily P&L` : "no trades today" },

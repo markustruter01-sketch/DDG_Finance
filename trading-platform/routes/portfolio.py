@@ -991,10 +991,11 @@ async def export_diagnostic_report():
     lines.append(f"  Generated: {ts}")
     lines.append("  PURPOSE: Paste into Claude / Gemini / ChatGPT for strategy analysis.")
     lines.append("           Contains all trade history, AI reasoning, risk parameters,")
-    lines.append("           entry/exit conditions, and performance data for ALL 6 BOTS.")
-    lines.append("  FLEET:   #1 Oracle (Alpaca), #2 Davy Jones, #3 Blackbeard, #4 Calypso (Kraken),")
-    lines.append("           #5 Apex Predator (Options), #6 Navigator (Forex)")
-    lines.append("  CAPITAL: $600,000 total across 4 capital pools")
+    lines.append("           entry/exit conditions, and performance data for ALL 8 BOTS.")
+    lines.append("  FLEET:   #1 Oracle (Alpaca), #2 Davy Jones, #3 Blackbeard, #4 Calypso,")
+    lines.append("           #5 Apex Predator (Crypto Momentum, Kraken), #6 Navigator (Forex),")
+    lines.append("           #7 Poseidon (Pairs Trading), #8 Kraken Current (Trend Following)")
+    lines.append("  CAPITAL: $800,000 total across 3 capital pools")
     lines.append(W)
 
     # ── Math Audit FAIL banner — shown at very top if any critical errors ───
@@ -1889,20 +1890,20 @@ async def export_diagnostic_report():
         pass
 
     grand_start = 800_000.0
-    grand_now   = equity + _all_kraken_equity + _opts_equity + _fx_equity + _poseidon_equity + _kc_equity
+    grand_now   = equity + _all_kraken_equity + _fx_equity + _poseidon_equity + _kc_equity
     grand_pnl   = grand_now - grand_start
     grand_pct   = (grand_pnl / grand_start) * 100 if grand_start else 0
 
-    row("Total starting capital:", f"{_c(grand_start)} across 6 capital pools, 8 bots")
+    row("Total starting capital:", f"{_c(grand_start)} across 3 capital pools, 8 bots")
     lines.append("")
     row("Bot #1 Oracle (Alpaca):", f"{_c(equity)}  ({_pct((equity - 100_000) / 100_000 * 100)} from $100k)")
     _k_fleet_pnl_s = _all_kraken_equity - _all_kraken_starting
-    row("Bots #2-4 Kraken Fleet:", f"{_c(_all_kraken_equity)}  ({_pct((_k_fleet_pnl_s/_all_kraken_starting)*100 if _all_kraken_starting else 0)} from {_c(_all_kraken_starting)})")
+    row("Bots #2-5 Kraken Fleet:", f"{_c(_all_kraken_equity)}  ({_pct((_k_fleet_pnl_s/_all_kraken_starting)*100 if _all_kraken_starting else 0)} from {_c(_all_kraken_starting)})")
     for _kbid2, _kprof2 in KRAKEN_BOT_PROFILES.items():
         _kdbid2 = _kprof2["db_id"]
         _keq2 = _kraken_per_bot_equity.get(_kbid2, 0)
-        row(f"  - {_kprof2['display_name']} (#{_kdbid2+1}):", _c(_keq2))
-    row("Bot #5 Apex Predator:", f"{_c(_opts_equity)}  ({_pct((_opts_pnl/_opts_start)*100)} from $100k)")
+        _kstrategy = _kprof2.get("strategy_label", "")
+        row(f"  - {_kprof2['display_name']} (#{_kdbid2+1}) [{_kstrategy}]:", _c(_keq2))
     row("Bot #6 Navigator:", f"{_c(_fx_equity)}  ({_pct((_fx_pnl_from_start/_fx_start)*100)} from $100k)")
     row("Bot #7 Poseidon:", f"{_c(_poseidon_equity)}  ({_pct((_poseidon_equity - 100_000) / 1000)} from $100k)")
     row("Bot #8 Kraken Current:", f"{_c(_kc_equity)}  ({_pct((_kc_equity - 100_000) / 1000)} from $100k)")
@@ -1913,11 +1914,10 @@ async def export_diagnostic_report():
     lines.append("")
     lines.append("  CAPITAL POOLS:")
     lines.append("    Pool 1: Alpaca US Equities        $100k  (Bot #1 Oracle)")
-    lines.append("    Pool 2: Kraken Crypto Fleet       $300k  (Bots #2 Davy Jones, #3 Blackbeard, #4 Calypso)")
-    lines.append("    Pool 3: Options (Apex Predator)   $100k  (Bot #5)")
-    lines.append("    Pool 4: Forex (Navigator)         $100k  (Bot #6)")
-    lines.append("    Pool 5: Poseidon Pairs Trading    $100k  (Bot #7)")
-    lines.append("    Pool 6: Kraken Current Trend      $100k  (Bot #8)")
+    lines.append("    Pool 2: Kraken Crypto Fleet       $600k  (Bots #2 Davy Jones, #3 Blackbeard,")
+    lines.append("                                              #4 Calypso, #5 Apex Predator (momentum),")
+    lines.append("                                              #7 Poseidon, #8 Kraken Current)")
+    lines.append("    Pool 3: Forex (Navigator)         $100k  (Bot #6)")
     lines.append("  Each pool is independent \u2014 different asset classes, strategies, and risk profiles.")
 
     lines.append("@@SEC1A@@")
@@ -2038,7 +2038,7 @@ async def export_diagnostic_report():
         lines.append(f"  (Historical count unavailable: {_ai_exc})")
 
     lines.append("@@SEC9@@")
-    h1("SECTION 9: STRATEGY PARAMETERS \u2014 ALL 6 BOTS (for LLM context)")
+    h1("SECTION 9: STRATEGY PARAMETERS \u2014 ALL 8 BOTS (for LLM context)")
 
     h2("BOT #1: ORACLE (ALPACA) \u2014 HOW IT WORKS")
     lines += [

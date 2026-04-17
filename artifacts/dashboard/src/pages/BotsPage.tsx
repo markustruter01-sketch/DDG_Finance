@@ -3,8 +3,7 @@ import {
   useKrakenBots,
   useAIImpactTimeline,
   usePortfolio,
-  useOptionsState,
-  useOptionsPositions,
+  useKrakenFleetSummary,
   useForexState,
   useForexPositions,
   usePoseidonState,
@@ -267,8 +266,7 @@ export default function BotsPage() {
   const { data: krakenBots, isLoading: krakenLoading } = useKrakenBots();
   const { data: aiTimeline } = useAIImpactTimeline();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
-  const { data: optionsState, isLoading: optionsLoading } = useOptionsState();
-  const { data: optionsPositions, isLoading: optionsPosLoading } = useOptionsPositions();
+  const { data: fleetSummary, isLoading: fleetLoading } = useKrakenFleetSummary();
   const { data: forexState, isLoading: forexLoading } = useForexState();
   const { data: forexPositionsRaw, isLoading: forexPosLoading } = useForexPositions();
   const { data: poseidonState, isLoading: poseidonLoading } = usePoseidonState();
@@ -289,15 +287,11 @@ export default function BotsPage() {
       entry_price: p.avg_entry_price,
     }));
 
-  const apexEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? null;
-  const apexPosArr = Array.isArray(optionsPositions) ? optionsPositions : [];
-  const apexPositions: GenericPosition[] = apexPosArr.map((p) => ({
-    symbol: p.symbol,
-    size_usd: p.total_cost ?? 0,
-    unrealized_pnl: p.unrealized_pnl ?? 0,
-  }));
-  const apexTotalTrades = optionsState?.total_trades ?? 0;
-  const apexWins = optionsState?.total_wins ?? 0;
+  const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
+  const apexEquity = apexBot?.equity_usd ?? null;
+  const apexPositions: GenericPosition[] = [];
+  const apexTotalTrades = apexBot?.trades ?? 0;
+  const apexWins = apexBot?.wins ?? 0;
   const apexLosses = apexTotalTrades - apexWins;
   const apexWinRate = apexTotalTrades > 0 ? (apexWins / apexTotalTrades) * 100 : null;
 
@@ -324,22 +318,10 @@ export default function BotsPage() {
   ];
 
   const apexStrategyConfig: StrategyConfigRow[] = [
-    {
-      label: "Capital Fence",
-      value: `${((optionsState?.capital_fence_pct ?? 0.05) * 100).toFixed(0)}%  ($${(optionsState?.fenced_capital ?? 5000).toLocaleString()})`,
-      color: "#f97316",
-    },
-    {
-      label: "Circuit Breaker",
-      value: optionsState?.circuit_breaker_active ? "ACTIVE" : "OFF",
-      color: optionsState?.circuit_breaker_active ? "#f87171" : "#10b981",
-    },
-    {
-      label: "Paper Mode",
-      value: optionsState?.paper_mode ? "YES" : "LIVE",
-      color: optionsState?.paper_mode ? "#fbbf24" : "#10b981",
-    },
-    { label: "Strategy", value: "Vol. squeeze + condors", color: "#94a3b8" },
+    { label: "Strategy", value: "Dual-TF Momentum Scalper", color: "#f97316" },
+    { label: "Pairs", value: "15 Kraken pairs", color: "#fb923c" },
+    { label: "Entry", value: "1h RSI × 4h EMA + volume", color: "#94a3b8" },
+    { label: "Stop / TP", value: "1.5× ATR / 3× ATR", color: "#f87171" },
   ];
 
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
@@ -456,11 +438,11 @@ export default function BotsPage() {
             name="Apex Predator"
             icon="🦅"
             color="#f97316"
-            strategy="Options — iron condors, volatility squeeze"
+            strategy="Crypto — dual-TF momentum scalper (15 pairs, 1h/4h)"
             equity={apexEquity}
             positions={apexPositions}
-            isLoading={optionsLoading || optionsPosLoading}
-            paused={optionsState?.paused ?? false}
+            isLoading={fleetLoading}
+            paused={false}
             winCount={apexWins}
             lossCount={apexLosses}
             winRate={apexWinRate}

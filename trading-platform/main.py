@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
                     with _eqconn.cursor() as _eqcur:
                         _eqcur.execute(
                             "SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat "
-                            "WHERE id IN (1, 2, 3)"
+                            "WHERE id IN (1, 2, 3, 4)"
                         )
                         _eqrow = _eqcur.fetchone()
                         if _eqrow:
@@ -130,14 +130,9 @@ async def lifespan(app: FastAPI):
                     _eqconn.close()
         except Exception:
             kraken_eq = 0.0
+        # Apex Predator (Bot #5) is included in kraken_eq (id=4 above).
+        # The options pool no longer exists; report options_equity as 0.
         options_eq = 0.0
-        try:
-            import importlib
-            opts = importlib.import_module("options_engine")
-            opts_state = opts.get_state()
-            options_eq = float(opts_state.get("paper_equity", 0))
-        except Exception:
-            options_eq = 0.0
         forex_eq = 0.0
         try:
             fx = _get_forex_engine()
@@ -203,33 +198,7 @@ async def lifespan(app: FastAPI):
     logger.info("Equity curve heartbeat registered (1-hour interval)")
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
-    from options_engine import run_scheduled_scan as _options_scan
-    scheduler.add_job(
-        func=_options_scan,
-        trigger=_CronTrigger(hour=15, minute=30, timezone="US/Eastern"),
-        id="options_apex_predator",
-        name="Apex Predator Options Scan (3:30 PM ET)",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    scheduler.add_job(
-        func=_options_scan,
-        trigger=_CronTrigger(hour="10,12,14", minute=0, timezone="US/Eastern"),
-        id="options_apex_intraday",
-        name="Apex Predator Intraday Scan (10am/12pm/2pm ET)",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    # Change 5: added 9:45 AM post-open scan
-    scheduler.add_job(
-        func=_options_scan,
-        trigger=_CronTrigger(hour=9, minute=45, timezone="US/Eastern"),
-        id="options_apex_open",
-        name="Apex Predator Post-Open Scan (9:45 AM ET)",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    logger.info("Apex Predator options scanner registered (9:45am/10am/12pm/2pm/3:30pm ET)")
+    logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")
 
     def _forex_navigator_cycle():
         try:

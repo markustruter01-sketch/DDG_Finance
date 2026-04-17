@@ -105,6 +105,7 @@ from config import (
     BOT_STRATEGY_TYPE,
     IS_SCALP_BOT,
     IS_SWING_BOT,
+    IS_MOMENTUM_SCALPER,
     CALYPSO_TIER1_MAX,
     CALYPSO_TIER2_MAX,
     CALYPSO_TIER3_MAX,
@@ -161,6 +162,12 @@ from config import (
     SYMBOL_WINRATE_RECOVERY_THRESHOLD,
     SYMBOL_WINRATE_PENALTY_FACTOR,
     PAPER_FEE_PCT,
+    APEX_TP_ATR_MULT,
+    APEX_EMA_FAST,
+    APEX_EMA_SLOW,
+    APEX_VOLUME_MULT,
+    APEX_VPIN_BLOCK,
+    APEX_TREND_TIMEFRAME,
 )
 
 import adaptive_params as _adaptive
@@ -188,6 +195,7 @@ from swing_strategies import evaluate_momentum_breakout, evaluate_trend_followin
 from swing_exits import check_swing_exits
 from flow_sentiment import evaluate_flow_sentiment
 from hurst_filter import HurstADFCache
+from apex_momentum import calculate_apex_momentum_signal, evaluate_momentum_exit
 
 # Import the paper trading engine (only actively used when PAPER_TRADING=True,
 # but always imported so the module is ready to switch modes).
@@ -254,6 +262,11 @@ elif IS_MRC_BOT:
     _strategy_note = (
         f" (MRC BOT — mean-reversion entry | ATR exits | "
         f"Tier1≤{CALYPSO_TIER1_MAX*100:.0f}% Tier2≤{CALYPSO_TIER2_MAX*100:.0f}% Tier3≤{CALYPSO_TIER3_MAX*100:.0f}%)"
+    )
+elif IS_MOMENTUM_SCALPER:
+    _strategy_note = (
+        f" (MOMENTUM SCALPER — 1h RSI crossover + {APEX_TREND_TIMEFRAME} EMA{APEX_EMA_FAST}/{APEX_EMA_SLOW} trend | "
+        f"SL={ATR_STOP_MULTIPLIER}×ATR TP={APEX_TP_ATR_MULT}×ATR | hourly cycle)"
     )
 logger.info(f"  Strategy type  : {BOT_STRATEGY_TYPE}{_strategy_note}")
 logger.info(f"  Timeframe      : {OHLCV_TIMEFRAME}")
@@ -331,6 +344,13 @@ price_history: dict[str, deque] = {
 # Populated each cycle as candles are fetched; persists across cycles so
 # open-position symbols always have data even if not scanned in this cycle.
 _closes_cache: dict[str, list[float]] = {}
+
+# Apex Predator — previous cycle RSI per symbol, used for crossover detection.
+_apex_prev_rsi: dict[str, float] = {}
+
+# Apex Predator — best favorable price seen since entry, keyed by symbol.
+# Supports trailing stop activation at +1.5 ATR; reset on position close.
+_apex_trail_prices: dict[str, float] = {}
 
 # Addition 1: Hurst Exponent + ADF pre-entry filter cache (4-hour TTL per pair).
 # One shared instance per bot process — all symbols share the same cache.
@@ -921,11 +941,12 @@ def _do_emergency_rebalance() -> None:
     logger.warning(
         f"LossStreak | {len(losing_meta)} underwater position(s) identified — "
         "keeping all positions open to hit their defined SL/TP targets. "
-        "No forced closures. New entries paused for 3 cycles."
+        "No forced closures. New entries paused per cooldown schedule."
     )
 
-    # ── Step 2: pause new entries for 3 cycles (no forced position closes) ────
-    _entry_cooldown_cycles = 3
+    # ── Step 2: pause new entries (duration = LOSS_STREAK_COOLDOWN_HOURS / cycle) ─
+    _cycle_hours = LOOP_SLEEP_SECONDS / 3600.0
+    _entry_cooldown_cycles = max(1, round(LOSS_STREAK_COOLDOWN_HOURS / max(_cycle_hours, 1 / 60)))
     _emergency_rebalance_in_progress = False
 
     # ── Step 3: Gemini rebalance ──────────────────────────────────────────────
@@ -956,6 +977,9 @@ def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
 
     if symbol not in open_positions:
         return
+
+    # Clear Apex Predator trailing-stop best-price state for this symbol.
+    _apex_trail_prices.pop(symbol, None)
 
     pos = open_positions[symbol]
 
@@ -1571,6 +1595,15 @@ def run_cycle() -> None:
             volumes       = [c[5] for c in candles]
             current_price = closes[-1]
 
+            # Apex Predator: fetch 4h candles for trend EMA filter
+            _apex_4h_closes: list[float] = []
+            if IS_MOMENTUM_SCALPER:
+                try:
+                    _raw_4h = exchange.fetch_ohlcv(symbol, timeframe=APEX_TREND_TIMEFRAME, limit=100)
+                    _apex_4h_closes = [c[4] for c in _raw_4h] if _raw_4h else []
+                except Exception as _apex_4h_exc:
+                    logger.debug(f"Apex | {symbol}: 4h fetch failed ({_apex_4h_exc}) — trend filter unavailable")
+
             # Stage 2: keep close-price history for correlation calculations
             _closes_cache[symbol] = closes
 
@@ -1801,6 +1834,59 @@ def run_cycle() -> None:
                         })
                     continue
 
+                # ── APEX PREDATOR EXIT PATH (momentum_scalper) ───────────────
+                # ATR-based TP (3×), SL (1.5×), and trailing stop (activates at
+                # +1.5 ATR profit, trails at 1.5 ATR from best price).
+                if IS_MOMENTUM_SCALPER:
+                    # Update best favorable price for trailing stop
+                    _prior_best = _apex_trail_prices.get(symbol)
+                    if pos["side"] == "long":
+                        _apex_trail_prices[symbol] = max(
+                            current_price,
+                            _prior_best if _prior_best is not None else current_price,
+                        )
+                    else:
+                        _apex_trail_prices[symbol] = min(
+                            current_price,
+                            _prior_best if _prior_best is not None else current_price,
+                        )
+                    _apex_exit = evaluate_momentum_exit(
+                        side=pos["side"],
+                        entry_price=pos["entry_price"],
+                        current_price=current_price,
+                        atr=sym_atr,
+                        sl_atr_mult=ATR_STOP_MULTIPLIER,
+                        tp_atr_mult=APEX_TP_ATR_MULT,
+                        trail_atr_mult=ATR_STOP_MULTIPLIER,
+                        best_price=_apex_trail_prices.get(symbol),
+                    )
+                    if _apex_exit:
+                        close_position(symbol, reason=_apex_exit, atr=sym_atr)
+                        deployed_usd = sum(p["size_usd"] for p in open_positions.values())
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": f"exit_{_apex_exit}",
+                            "has_position": False,
+                        })
+                    else:
+                        _ax_pnl = (
+                            (current_price - pos["entry_price"]) / pos["entry_price"]
+                            if pos["side"] == "long"
+                            else (pos["entry_price"] - current_price) / pos["entry_price"]
+                        )
+                        logger.debug(
+                            f"ApexHold | {pos['side'].upper()} {symbol} @ ${pos['entry_price']:,.4f} | "
+                            f"Now: ${current_price:,.4f} | P&L: {_ax_pnl*100:+.2f}%"
+                        )
+                        cycle_signals.append({
+                            "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                            "price": round(current_price, 4), "signal_type": "hold",
+                            "has_position": True, "pnl_pct": round(_ax_pnl * 100, 2),
+                            "side": pos["side"],
+                        })
+                    continue
+                # ─────────────────────────────────────────────────────────────
+
                 if symbol in _pending_tranches:
                     for _t in _pending_tranches[symbol]:
                         if _t.get("filled"):
@@ -2015,15 +2101,18 @@ def run_cycle() -> None:
                         "has_position": False,
                         "reason": _hurst_reason,
                     })
-                    continue
-                # Bypass confirmed — fall through to momentum_bear short block ↓
-                logger.info(
-                    f"HurstBypass | {symbol}: Bear momentum short conditions met — "
-                    f"H={_hurst_val:.3f} (trending) price={current_price:.4f} < "
-                    f"SMA20={_bear_bypass_sma20:.4f} RSI={sym_rsi:.1f}<45 "
-                    f"24h_ret={_bear_bypass_ret24h * 100:.1f}%<-2% "
-                    f"regime='{_regime_label}'"
-                )
+                    if not IS_MOMENTUM_SCALPER:
+                        continue
+                    # IS_MOMENTUM_SCALPER: Hurst filter is advisory-only — fall through to apex entry
+                if _bear_short_bypass:
+                    # Bypass confirmed — fall through to momentum_bear short block ↓
+                    logger.info(
+                        f"HurstBypass | {symbol}: Bear momentum short conditions met — "
+                        f"H={_hurst_val:.3f} (trending) price={current_price:.4f} < "
+                        f"SMA20={_bear_bypass_sma20:.4f} RSI={sym_rsi:.1f}<45 "
+                        f"24h_ret={_bear_bypass_ret24h * 100:.1f}%<-2% "
+                        f"regime='{_regime_label}'"
+                    )
             else:
                 _bear_short_bypass  = False
                 _bear_bypass_sma20  = None
@@ -2177,6 +2266,127 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                 continue  # skip mean-reversion signal evaluation
+            # ─────────────────────────────────────────────────────────────────
+
+            # ── APEX PREDATOR ENTRY PATH (momentum_scalper) ───────────────────
+            # Dual-timeframe momentum scalper:
+            #   • 1h RSI crossover (oversold→above 45 = long; overbought→below 55 = short)
+            #   • 4h EMA-20/50 trend confirmation (price above both = long; below = short)
+            #   • 1.5× volume surge filter
+            #   • VPIN ≤ 0.80 (no toxic flow)
+            # Uses ATR-based TP/SL and max 5 positions.
+            if IS_MOMENTUM_SCALPER:
+                _apex_prev = _apex_prev_rsi.get(symbol)
+                _apex_vpin = _ms.vpin if _ms else 0.0
+                _apex_sig = calculate_apex_momentum_signal(
+                    symbol=symbol,
+                    closes_1h=closes,
+                    volumes_1h=volumes,
+                    closes_4h=_apex_4h_closes,
+                    rsi_1h=sym_rsi,
+                    prev_rsi_1h=_apex_prev,
+                    atr_1h=sym_atr,
+                    vpin=_apex_vpin,
+                    rsi_oversold=RSI_OVERSOLD,
+                    rsi_overbought=RSI_OVERBOUGHT,
+                    ema_fast_period=APEX_EMA_FAST,
+                    ema_slow_period=APEX_EMA_SLOW,
+                    volume_mult=APEX_VOLUME_MULT,
+                    vpin_block=APEX_VPIN_BLOCK,
+                )
+                # Persist current RSI for next cycle crossover check
+                _apex_prev_rsi[symbol] = sym_rsi
+
+                _apex_dir = _apex_sig["direction"]
+                logger.debug(
+                    f"ApexSignal | {symbol}: direction={_apex_dir} | {_apex_sig['reason']} | "
+                    f"RSI={sym_rsi:.1f} prev={_apex_prev} VPIN={_apex_vpin:.3f}"
+                )
+
+                if _apex_dir == "none":
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "no_signal",
+                        "has_position": False, "reason": _apex_sig["reason"],
+                        "volume_ratio": _apex_sig.get("volume_ratio"),
+                        "ema_fast_4h": _apex_sig.get("ema_fast_4h"),
+                        "ema_slow_4h": _apex_sig.get("ema_slow_4h"),
+                    })
+                    continue
+
+                # Position cap check
+                if len(open_positions) >= _effective_max_positions:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "slots_full",
+                        "has_position": False,
+                    })
+                    continue
+
+                # Loss-streak cooldown gate
+                if _entry_cooldown_cycles > 0:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "entry_cooldown",
+                        "has_position": False, "cooldown_remaining": _entry_cooldown_cycles,
+                    })
+                    continue
+
+                # Position sizing
+                _apex_size, _apex_tier, _apex_eff_stop = get_position_size(
+                    total_equity=total_equity,
+                    entry_price=current_price,
+                    deployed_usd=deployed_usd,
+                    risk_fraction=RISK_FRACTION,
+                    stop_loss_pct=STOP_LOSS_PCT,
+                    max_position_fraction=MAX_POSITION_FRACTION,
+                    cash_reserve=CASH_RESERVE,
+                    atr=sym_atr,
+                    atr_multiplier=ATR_STOP_MULTIPLIER,
+                )
+                if _apex_size < MIN_POSITION_USD:
+                    logger.debug(f"ApexEntry | {symbol}: size ${_apex_size:.2f} < min ${MIN_POSITION_USD:.0f} — skip")
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": "size_too_small",
+                        "has_position": False,
+                    })
+                    continue
+
+                _apex_atr_stop = get_atr_stop_price(_apex_dir, current_price, sym_atr, multiplier=ATR_STOP_MULTIPLIER)
+                logger.info(
+                    f"ApexEntry | {_apex_dir.upper()} {symbol} @ ${current_price:,.4f} | "
+                    f"size=${_apex_size:,.2f} | SL=${_apex_atr_stop:,.4f} "
+                    f"({ATR_STOP_MULTIPLIER}×ATR) | TP={APEX_TP_ATR_MULT}×ATR | "
+                    f"RSI={sym_rsi:.1f} VPIN={_apex_vpin:.3f} vol_ratio={_apex_sig.get('volume_ratio')}"
+                )
+                if open_position(
+                    symbol, _apex_dir, _apex_size, current_price,
+                    regime_at_entry=_regime_label_canonical,
+                    entry_zscore=sym_z_score, zscore_source=zscore_source,
+                ):
+                    deployed_usd += _apex_size
+                    if symbol in open_positions:
+                        open_positions[symbol]["atr_stop_price"]  = _apex_atr_stop
+                        open_positions[symbol]["vol_tier"]        = "momentum_scalper"
+                        open_positions[symbol]["tranches_filled"] = 1
+                    _cycle_new_entries += 1
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": f"apex_{_apex_dir}_entered",
+                        "has_position": True, "size_usd": round(_apex_size, 2),
+                        "entry_type": "momentum_scalper",
+                        "volume_ratio": _apex_sig.get("volume_ratio"),
+                        "ema_fast_4h": _apex_sig.get("ema_fast_4h"),
+                        "ema_slow_4h": _apex_sig.get("ema_slow_4h"),
+                    })
+                else:
+                    cycle_signals.append({
+                        "symbol": symbol, "rsi": round(sym_rsi, 1), "z_score": round(sym_z_score, 3),
+                        "price": round(current_price, 4), "signal_type": f"apex_{_apex_dir}_signal",
+                        "has_position": False, "entry_type": "momentum_scalper",
+                    })
+                continue
             # ─────────────────────────────────────────────────────────────────
 
             # ── SWING ENTRY PATH (Blackbeard / Calypso — momentum & trend) ──

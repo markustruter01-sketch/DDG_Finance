@@ -1,74 +1,53 @@
-"""Options engine routes (Apex Predator, Bot #5)."""
+"""
+Options routes — DECOMMISSIONED.
 
-from __future__ import annotations
+Apex Predator (Bot #5) has been converted from an options volatility engine
+to a 24/7 crypto momentum scalper running on Kraken (BOT_ID=apex-predator).
+These endpoints now return a 410 Gone response so any stale callers fail
+explicitly rather than silently.
+"""
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-
-import options_engine as _opts
+from fastapi import APIRouter, HTTPException
 
 options_router = APIRouter()
+
+_GONE_MSG = (
+    "Apex Predator options engine has been decommissioned. "
+    "Bot #5 now runs as a crypto momentum scalper (BOT_ID=apex-predator) "
+    "via the Kraken pool. Use /kraken/* endpoints instead."
+)
 
 
 @options_router.get("/options/state")
 async def options_state():
-    return _opts.get_full_state()
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.get("/options/positions")
 async def options_positions():
-    positions = _opts._get_positions()
-    for pos in positions:
-        pos["max_loss_pct"] = _opts.MAX_LOSS_PCT
-        pos["profit_target_pct"] = _opts.PROFIT_TARGET_PCT
-        expiry = (pos.get("call") or {}).get("expiry") or (pos.get("put") or {}).get("expiry")
-        pos["dte_remaining"] = _opts._compute_dte(expiry) if expiry else None
-        tc = pos.get("total_cost", 0)
-        cv = pos.get("current_value", tc)
-        pos["unrealized_pnl_pct"] = ((cv - tc) / tc * 100) if tc > 0 else 0.0
-    return {"positions": positions, "count": len(positions)}
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.get("/options/pending")
 async def options_pending():
-    pending = _opts._get_pending()
-    return {"pending": pending, "count": len(pending)}
-
-
-class _OptionsApproveReq(BaseModel):
-    trade_id: str
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.post("/options/approve")
-async def options_approve(req: _OptionsApproveReq):
-    result = _opts.approve_trade(req.trade_id)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
+async def options_approve():
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.post("/options/reject")
-async def options_reject(req: _OptionsApproveReq):
-    result = _opts.reject_trade(req.trade_id)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
+async def options_reject():
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.post("/options/toggle")
 async def options_toggle():
-    return _opts.toggle_pause()
+    raise HTTPException(status_code=410, detail=_GONE_MSG)
 
 
 @options_router.post("/options/scan")
-async def options_manual_scan(background_tasks: BackgroundTasks):
-    background_tasks.add_task(_opts.scan_for_setups)
-    return {"status": "scan_queued"}
-
-
-@options_router.post("/options/close")
-async def options_close_position(req: _OptionsApproveReq):
-    result = _opts.close_position_by_id(req.trade_id)
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
-    return result
+async def options_scan():
+    raise HTTPException(status_code=410, detail=_GONE_MSG)

@@ -25,7 +25,6 @@ from routes._deps import (
     _heal_lock,
     _add_heal_entry,
     _get_forex_engine,
-    _get_options_engine,
 )
 
 system_router = APIRouter(tags=["System"])
@@ -418,21 +417,34 @@ async def system_health_architecture() -> dict:
         }
 
     try:
-        import options_engine as _opts_h
-        _opts_state = _opts_h._get_state()
-        _opts_enabled = not _opts_state.get("paused", False)
-        _opts_equity = _opts_state.get("paper_equity", _opts_h.PAPER_CAPITAL)
-        _opts_positions = _opts_h._load_json(_opts_h.POSITIONS_FILE, [])
-        _opts_open = len([p for p in _opts_positions if p.get("status") == "open"]) if _opts_positions else 0
+        import psycopg2 as _pg2_ap, os as _os_ap
+        _db_ap = _os_ap.environ.get("DATABASE_URL")
+        _ap_detail = "No heartbeat yet"
+        _ap_level = "yellow"
+        if _db_ap:
+            _ap_conn = _pg2_ap.connect(_db_ap)
+            try:
+                with _ap_conn.cursor() as _apc:
+                    _apc.execute(
+                        "SELECT status, cycle_count, equity_usd FROM kraken_heartbeat WHERE id = 4"
+                    )
+                    _ap_row = _apc.fetchone()
+                    if _ap_row:
+                        _ap_status, _ap_cycles, _ap_eq = _ap_row
+                        _ap_eq = float(_ap_eq or 0)
+                        _ap_level = "green" if str(_ap_status or "").lower() == "running" else "yellow"
+                        _ap_detail = f"{_ap_status} · ${_ap_eq:,.0f} · {_ap_cycles or 0} cycles"
+            finally:
+                _ap_conn.close()
         nodes["options_bot"] = {
-            "label": "Apex Predator (Options Bot #5)",
-            "level": "green",
+            "label": "Apex Predator — Crypto Momentum (Bot #5)",
+            "level": _ap_level,
             "latency_ms": None,
             "data_age_s": None,
-            "detail": f"{'Enabled' if _opts_enabled else 'Standby'} · ${_opts_equity:,.0f} · {_opts_open} open",
+            "detail": _ap_detail,
         }
     except Exception as exc:
-        nodes["options_bot"] = {"label": "Apex Predator (Options Bot #5)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["options_bot"] = {"label": "Apex Predator — Crypto Momentum (Bot #5)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         _fx_h = _get_forex_engine()
@@ -940,18 +952,23 @@ async def status_summary() -> dict:
         pass
 
     try:
-        opts = _get_options_engine()
-        if opts is not None:
-            opts_state = opts.get_state()
-            bot_statuses["apex-predator"] = {
-                "display_name": "Apex Predator",
-                "status": "paused" if opts_state.get("paused") else "running",
-            }
-        else:
-            bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}
+        import psycopg2 as _pg2_apex, os as _os_apex
+        _db_apex = _os_apex.environ.get("DATABASE_URL")
+        _apex_status = "unknown"
+        if _db_apex:
+            _apex_conn = _pg2_apex.connect(_db_apex)
+            try:
+                with _apex_conn.cursor() as _apexc:
+                    _apexc.execute("SELECT status FROM kraken_heartbeat WHERE id = 4")
+                    _apexr = _apexc.fetchone()
+                    if _apexr:
+                        _apex_status = str(_apexr[0] or "running").lower()
+            finally:
+                _apex_conn.close()
+        bot_statuses["apex-predator"] = {"display_name": "Apex Predator \u2014 Crypto Momentum", "status": _apex_status}
     except Exception as _apex_exc:
         logger.debug(f"[STATUS] Apex Predator state unavailable: {_apex_exc}")
-        bot_statuses["apex-predator"] = {"display_name": "Apex Predator", "status": "unknown"}
+        bot_statuses["apex-predator"] = {"display_name": "Apex Predator \u2014 Crypto Momentum", "status": "unknown"}
 
     try:
         fx = _get_forex_engine()

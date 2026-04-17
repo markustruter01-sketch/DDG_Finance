@@ -109,6 +109,45 @@ BOT_PROFILES = {
         "CALYPSO_TIER2_MAX": 0.07,
         "CALYPSO_TIER3_MAX": 0.05,
     },
+    "apex-predator": {
+        "display_name": "Apex Predator",
+        "db_id": 4,
+        "strategy_type": "momentum_scalper",
+        "strategy_label": "Dual-TF Momentum Scalper",
+        "BLACKLIST": [],
+        # Top-15 Kraken pairs by liquidity
+        "SYMBOLS": [
+            "BTC/USD", "ETH/USD", "XRP/USD", "SOL/USD", "DOGE/USD",
+            "ADA/USD", "AVAX/USD", "LINK/USD", "DOT/USD", "LTC/USD",
+            "ATOM/USD", "NEAR/USD", "AAVE/USD", "BCH/USD", "UNI/USD",
+        ],
+        # Risk management
+        "RISK_FRACTION": 0.015,          # 1.5% risk per trade
+        "ATR_STOP_MULTIPLIER": 1.5,      # 1.5× ATR stop loss
+        "APEX_TP_ATR_MULT": 3.0,         # 3× ATR take-profit
+        "MAX_POSITIONS": 5,
+        "MAX_POSITION_FRACTION": 0.15,
+        "CASH_RESERVE": 0.20,
+        # Entry signal thresholds
+        "RSI_OVERSOLD": 45,              # 1h RSI crossing up from below 45 = bullish
+        "RSI_OVERBOUGHT": 55,            # 1h RSI crossing down from above 55 = bearish
+        "APEX_EMA_FAST": 20,             # 4h EMA for trend filter
+        "APEX_EMA_SLOW": 50,
+        "APEX_VOLUME_MULT": 1.5,         # volume must be 1.5× 20-bar average
+        "APEX_VPIN_BLOCK": 0.80,         # block if VPIN > 0.80 (toxic flow)
+        # Timeframes
+        "OHLCV_TIMEFRAME": "1h",         # primary candles for RSI
+        "APEX_TREND_TIMEFRAME": "4h",    # secondary candles for EMA trend
+        "OHLCV_LIMIT": 100,
+        # Loop
+        "LOOP_SLEEP_SECONDS": 3600,      # hourly cycle
+        # Loss circuit breaker
+        "LOSS_STREAK_LIMIT": 6,
+        "LOSS_STREAK_COOLDOWN_HOURS": 12,
+        # Stop params (unused by scalper path but must exist for shared reads)
+        "STOP_LOSS_PCT": 0.015,
+        "VPIN_ENTRY_BLOCK": 0.80,
+    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "davy-jones")
@@ -121,8 +160,9 @@ BOT_DISPLAY_NAME = _profile["display_name"]
 BOT_DB_ID = _profile["db_id"]
 BOT_STRATEGY_LABEL = _profile["strategy_label"]
 BOT_STRATEGY_TYPE = _profile.get("strategy_type", "mean_reversion")
-IS_SCALP_BOT = BOT_STRATEGY_TYPE in ("momentum_wave", "liquidity_scout")
-IS_SWING_BOT = BOT_STRATEGY_TYPE in ("momentum_breakout", "trend_following", "flow_sentiment")
+IS_SCALP_BOT          = BOT_STRATEGY_TYPE in ("momentum_wave", "liquidity_scout")
+IS_SWING_BOT          = BOT_STRATEGY_TYPE in ("momentum_breakout", "trend_following", "flow_sentiment")
+IS_MOMENTUM_SCALPER   = BOT_STRATEGY_TYPE == "momentum_scalper"
 
 if PAPER_TRADING:
     print("\n" + "=" * 65)
@@ -180,7 +220,7 @@ PAIR_SIZING_BOOSTED = {
     "DYM/USD":  1.25,
 }
 
-SYMBOLS = [
+SYMBOLS = _profile.get("SYMBOLS") or [
     "BTC/USD",
     "ETH/USD",
     "XRP/USD",
@@ -248,7 +288,7 @@ OHLCV_LIMIT      = _profile.get("OHLCV_LIMIT", 100)
 CASH_RESERVE          = _profile.get("CASH_RESERVE", 0.20)
 MAX_POSITION_FRACTION = _profile.get("MAX_POSITION_FRACTION", 0.10)
 MAX_POSITIONS         = _profile.get("MAX_POSITIONS", 8)
-RISK_FRACTION         = 0.01
+RISK_FRACTION         = _profile.get("RISK_FRACTION", 0.01)
 STOP_LOSS_PCT         = _profile.get("STOP_LOSS_PCT", 0.015)
 ATR_STOP_MULTIPLIER   = _profile.get("ATR_STOP_MULTIPLIER", 1.5)
 TRAIL_PCT             = 0.039
@@ -353,6 +393,13 @@ SYMBOL_WINRATE_PENALTY_FACTOR     = _profile.get("SYMBOL_WINRATE_PENALTY_FACTOR"
 CALYPSO_TIER1_MAX = _profile.get("CALYPSO_TIER1_MAX", 0.05)
 CALYPSO_TIER2_MAX = _profile.get("CALYPSO_TIER2_MAX", 0.05)
 CALYPSO_TIER3_MAX = _profile.get("CALYPSO_TIER3_MAX", 0.05)
+
+APEX_TP_ATR_MULT      = _profile.get("APEX_TP_ATR_MULT", 3.0)
+APEX_EMA_FAST         = _profile.get("APEX_EMA_FAST", 20)
+APEX_EMA_SLOW         = _profile.get("APEX_EMA_SLOW", 50)
+APEX_VOLUME_MULT      = _profile.get("APEX_VOLUME_MULT", 1.5)
+APEX_VPIN_BLOCK       = _profile.get("APEX_VPIN_BLOCK", 0.80)
+APEX_TREND_TIMEFRAME  = _profile.get("APEX_TREND_TIMEFRAME", "4h")
 
 
 STATUS_FILE           = f"kraken-bot/{BOT_ID}_status.json"

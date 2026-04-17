@@ -21,16 +21,17 @@ _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-EXPECTED_JOB_COUNT = 16
+EXPECTED_JOB_COUNT = 13
 COMMENTARY_TTL_SECONDS = 1800
 
 _commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 _kraken_commentary_cache: dict[str, Any] = {"text": None, "generated_at": None, "ts": 0}
 
 KRAKEN_BOT_PROFILES = {
-    "davy-jones": {"display_name": "Davy Jones' Portfolio", "db_id": 1, "strategy_label": "Conservative", "port": 8085},
-    "blackbeard": {"display_name": "Blackbeard's Fleet", "db_id": 2, "strategy_label": "Aggressive", "port": 8086},
-    "calypso":    {"display_name": "Calypso's Tide", "db_id": 3, "strategy_label": "mean_reversion_conservative", "port": 8087},
+    "davy-jones":    {"display_name": "Davy Jones' Portfolio", "db_id": 1, "strategy_label": "Conservative", "port": 8085},
+    "blackbeard":    {"display_name": "Blackbeard's Fleet", "db_id": 2, "strategy_label": "Aggressive", "port": 8086},
+    "calypso":       {"display_name": "Calypso's Tide", "db_id": 3, "strategy_label": "mean_reversion_conservative", "port": 8087},
+    "apex-predator": {"display_name": "Apex Predator", "db_id": 4, "strategy_label": "Dual-TF Momentum Scalper", "port": 8088},
 }
 
 _kraken_commentary_caches: dict[str, dict[str, Any]] = {

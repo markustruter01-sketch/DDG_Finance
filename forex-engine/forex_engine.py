@@ -1,8 +1,8 @@
 """
 forex_engine.py — The Navigator: Autonomous AI Forex Swing-Trading Engine (Bot #6)
 ====================================================================================
-4-Hour (H4) cycle. 5 major pairs. Groq LLM = Macro Compass only.
-100% algorithmic execution. $100k paper capital.
+4-Hour (H4) cycle. 10 pairs (5 USD majors + USD/CHF + 4 liquid crosses).
+Groq LLM = Macro Compass only. 100% algorithmic execution. $100k paper capital.
 
 Strategy:
   1. Check news blackout → skip if high-impact event within 4h
@@ -349,7 +349,7 @@ def _prefetch_reference_prices():
 # permitted to hold or enter.  It is intentionally NOT derived from forex_config.PAIRS
 # so that editing the config cannot silently expand the universe.
 # To add a pair you must edit BOTH this constant AND forex_config.PAIRS.
-# Mandate: EUR/USD · GBP/USD · USD/JPY · AUD/USD · USD/CAD  (5 majors only)
+# Mandate: 10 pairs — 5 USD majors + USD/CHF + 4 liquid JPY/GBP crosses
 # ────────────────────────────────────────────────────────────────────────────
 _PERMITTED_PAIRS: frozenset[str] = frozenset({
     "EURUSD=X",   # EUR/USD
@@ -357,6 +357,11 @@ _PERMITTED_PAIRS: frozenset[str] = frozenset({
     "JPY=X",      # USD/JPY
     "AUDUSD=X",   # AUD/USD
     "CAD=X",      # USD/CAD
+    "CHF=X",      # USD/CHF
+    "EURGBP=X",   # EUR/GBP
+    "AUDJPY=X",   # AUD/JPY
+    "GBPJPY=X",   # GBP/JPY
+    "EURJPY=X",   # EUR/JPY
 })
 
 logger.info(
@@ -764,6 +769,18 @@ def _run_cycle_inner() -> dict:
                 elif rsi > RSI_OVERBOUGHT and allowed_dir in ("short", "both"):
                     direction = "short"
                     scan_entry["signal"] = "RSI_OVERBOUGHT → SHORT"
+
+                # Per-pair scan log — always visible at INFO level for auditing
+                _rsi_zone = (
+                    "OVERSOLD ✓" if rsi < RSI_OVERSOLD else
+                    "OVERBOUGHT ✓" if rsi > RSI_OVERBOUGHT else
+                    f"neutral ({RSI_OVERSOLD}–{RSI_OVERBOUGHT})"
+                )
+                logger.info(
+                    f"Navigator | {label:10s} | RSI={rsi:.1f} [{_rsi_zone}] | "
+                    f"price={current_price:.5f} | bias={allowed_dir:5s} | "
+                    f"signal={'→ ' + direction.upper() if direction else 'none'}"
+                )
 
                 if direction is None:
                     scan_results.append(scan_entry)

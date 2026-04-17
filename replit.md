@@ -24,6 +24,17 @@ The project uses a monorepo structure managed by pnpm workspaces and includes:
 -   **Scheduler**: 2 registered jobs — `intraday_cycle` (Mon-Fri every 15 min, 09:01-15:46 ET) and `evening_postmortem` (Mon-Fri 16:10 ET). `crypto_cycle` and `gemini_self_critic` retired.
 -   **Key Features**: 15-minute intraday cycles (NYSE hours), smart data caching, kill switch, ratchet stops, slippage tracking, and a shared risk library.
 -   **RAG Memory Architecture**: A 4-phase Retrieval-Augmented Generation layer for deterministic post-mortem logging, context-aware prompt injection, and deriving permanent hardcoded rules from failure patterns.
+-   **10-Addition Diagnostic Report Overhaul (COMPLETE)**: `report_sections.py` now includes 10 new sections wired into `export_diagnostic_report()` in `portfolio.py`:
+    -   ADD 1: Live Code Parameter Snapshot (Oracle, Kraken ×3, Navigator, Poseidon) — reads from DB + code + live_state.json at report time
+    -   ADD 2: Cycle Execution Audit Log (Oracle scan funnel, Kraken signal table, Poseidon pair table)
+    -   ADD 3: Parameter Integrity / Drift Monitor — compares current kraken_adaptive_params vs baseline in `logs/param_baseline.json`
+    -   ADD 4: Filter Effectiveness (7-day rolling) — VPIN blocks, Oracle RSI/score/EMA funnel, Poseidon ADF pass rate
+    -   ADD 5: Fleet Health Scorecard (0-100 score, all 8 bots, top of report)
+    -   ADD 6: Execution Quality — All Bots (expanded from Oracle-only, includes Kraken fees, Navigator spreads, Poseidon legs)
+    -   ADD 7: Daily P&L Attribution — per-bot per-day table from equity_snapshots deltas, last 7 trading days
+    -   ADD 8: Open Position Risk Summary — all open positions across all bots with stop distances
+    -   ADD 9: System Infrastructure Status — heartbeats, data connection ages, scheduler jobs, system errors
+    -   ADD 10: Changes Since Last Report — equity/param/trade/regime diffs; state saved to `logs/last_report_state.json`
 
 ## Trading Dashboard (React/Vite)
 

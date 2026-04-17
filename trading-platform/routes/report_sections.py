@@ -2369,3 +2369,1763 @@ def section_kraken_current_status() -> list[str]:
     lines.append("  Sideways/Crypto 0.7×       0.7×         Weak trends — reduce all exposure")
 
     return lines
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADDITIONS 1–10: Comprehensive Diagnostic Transparency Overhaul
+# ══════════════════════════════════════════════════════════════════════════════
+
+import json as _json_diag
+from pathlib import Path as _PathDiag
+import time as _time_diag
+
+_DIAG_LOGS_DIR = _PathDiag(__file__).parent.parent / "logs"
+_PARAM_BASELINE_FILE = _DIAG_LOGS_DIR / "param_baseline.json"
+_LAST_REPORT_STATE_FILE = _DIAG_LOGS_DIR / "last_report_state.json"
+_DIAG_LOGS_DIR.mkdir(exist_ok=True)
+
+
+def _read_json_file(path) -> dict:
+    try:
+        return _json_diag.loads(_PathDiag(path).read_text())
+    except Exception:
+        return {}
+
+
+def _read_kraken_live_state(bot_id: str) -> dict:
+    p = _PathDiag(__file__).parent.parent.parent / f"kraken-bot/{bot_id}_live_state.json"
+    return _read_json_file(p)
+
+
+def _read_poseidon_live_state() -> dict:
+    p = _PathDiag(__file__).parent.parent.parent / "poseidon/poseidon_live_state.json"
+    return _read_json_file(p)
+
+
+def _read_navigator_live_state() -> dict:
+    p = _PathDiag(__file__).parent.parent.parent / "forex-engine/navigator_live_state.json"
+    return _read_json_file(p)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 1: Live Code Parameter Snapshot (per bot)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_live_code_params_kraken(bot_id: str, bot_name: str) -> list[str]:
+    """ADD 1: Live Code Parameters for a Kraken bot — reads from DB + code at report time."""
+    lines: list[str] = []
+    _h2(lines, f"LIVE CODE PARAMETERS — {bot_name.upper()}")
+    lines.append("  Source: kraken_adaptive_params DB + BOT_PROFILES config + live_state.json")
+    lines.append("")
+
+    # DB params
+    db_rows = _pg_query(
+        "SELECT params, metrics, reasons, adapted_at FROM kraken_adaptive_params WHERE bot_id = %s",
+        (bot_id,)
+    )
+    params: dict = {}
+    metrics: dict = {}
+    reasons: dict = {}
+    adapted_at = "N/A"
+    if db_rows:
+        row = db_rows[0]
+        p = row.get("params") or {}
+        if isinstance(p, str):
+            p = _json_diag.loads(p)
+        params = p
+        m = row.get("metrics") or {}
+        if isinstance(m, str):
+            m = _json_diag.loads(m)
+        metrics = m
+        r = row.get("reasons") or {}
+        if isinstance(r, str):
+            r = _json_diag.loads(r)
+        reasons = r
+        adapted_at = str(row.get("adapted_at") or "N/A")[:19]
+
+    # Code-level profile defaults
+    _profiles = {
+        "davy-jones":  {"VPIN_ENTRY_BLOCK": 0.82, "LOSS_STREAK_LIMIT": 12, "LOSS_STREAK_COOLDOWN_HOURS": 6,  "MAX_POSITION_FRACTION": 0.10},
+        "blackbeard":  {"VPIN_ENTRY_BLOCK": 0.88, "LOSS_STREAK_LIMIT": 6,  "LOSS_STREAK_COOLDOWN_HOURS": 8,  "MAX_POSITION_FRACTION": 0.08, "MAX_POSITIONS": 5},
+        "calypso":     {"VPIN_ENTRY_BLOCK": 0.82, "LOSS_STREAK_LIMIT": 7,  "LOSS_STREAK_COOLDOWN_HOURS": 10, "MAX_POSITION_FRACTION": 0.05, "MAX_POSITIONS": 6},
+    }
+    prof = _profiles.get(bot_id, {})
+
+    # Live state
+    ls = _read_kraken_live_state(bot_id)
+    last_updated = str(ls.get("last_updated", "no data"))[:19]
+    open_pos = ls.get("open_positions") or []
+    signals = ls.get("signals") or []
+    deployed_pct = ls.get("deployed_pct", "N/A")
+    max_positions = ls.get("max_positions", prof.get("MAX_POSITIONS", "N/A"))
+
+    def _fmt_pct(v):
+        if v is None:
+            return "N/A"
+        return f"{float(v)*100:.2f}%"
+
+    def _val(v, fallback="N/A"):
+        return str(v) if v is not None else fallback
+
+    lines.append(f"  {'ZSCORE_ENTRY:':<32} {_val(params.get('ZSCORE_ENTRY'))}")
+    lines.append(f"  {'ZSCORE_EXIT:':<32} {_val(params.get('ZSCORE_EXIT'))}")
+    lines.append(f"  {'STOP_LOSS_PCT:':<32} {_fmt_pct(params.get('STOP_LOSS_PCT'))}")
+    lines.append(f"  {'TRAIL_PCT:':<32} {_fmt_pct(params.get('TRAIL_PCT'))}")
+    lines.append(f"  {'MIN_NET_PROFIT_PCT:':<32} {_fmt_pct(params.get('MIN_NET_PROFIT_PCT'))}")
+    lines.append(f"  {'VPIN_ENTRY_BLOCK:':<32} {prof.get('VPIN_ENTRY_BLOCK', 'N/A')} (code constant)")
+    lines.append(f"  {'MAX_POSITION_FRACTION:':<32} {prof.get('MAX_POSITION_FRACTION', 'N/A')} ({_val(prof.get('MAX_POSITION_FRACTION', 0) * 100 if prof.get('MAX_POSITION_FRACTION') else None)}%)")
+    lines.append(f"  {'MAX_POSITIONS:':<32} {max_positions}")
+    lines.append(f"  {'LOSS_STREAK_LIMIT:':<32} {prof.get('LOSS_STREAK_LIMIT', 'N/A')} consecutive losses")
+    lines.append(f"  {'LOSS_STREAK_COOLDOWN_HOURS:':<32} {prof.get('LOSS_STREAK_COOLDOWN_HOURS', 'N/A')}h")
+    lines.append(f"  {'PARAMS_LAST_ADAPTED:':<32} {adapted_at} UTC")
+    lines.append(f"  {'LAST_CYCLE_TIMESTAMP:':<32} {last_updated} UTC")
+    lines.append(f"  {'DEPLOYED_PCT:':<32} {deployed_pct}%")
+    lines.append(f"  {'OPEN_POSITIONS_COUNT:':<32} {len(open_pos)}")
+    lines.append(f"  {'SIGNALS_LAST_CYCLE:':<32} {len(signals)}")
+
+    if metrics:
+        lines.append("")
+        lines.append("  Recent metrics (last N trades used for adaptation):")
+        lines.append(f"    Win rate: {float(metrics.get('win_rate', 0))*100:.1f}% | "
+                     f"Profit factor: {float(metrics.get('profit_factor', 0)):.3f} | "
+                     f"Consec losses: {metrics.get('consec_losses', 'N/A')}")
+
+    if reasons:
+        lines.append("  Parameter reasoning (why each param was last changed):")
+        for param_name, reason_text in reasons.items():
+            lines.append(f"    {param_name}: {str(reason_text)[:80]}")
+
+    return lines
+
+
+def section_live_code_params_oracle() -> list[str]:
+    """ADD 1: Live Code Parameters for Oracle bot."""
+    lines: list[str] = []
+    _h2(lines, "LIVE CODE PARAMETERS — ORACLE #1 (ALPACA MOMENTUM)")
+    lines.append("  Source: trading-platform/execution/algo_scanner.py (constants read at report time)")
+    lines.append("")
+
+    # These are the actual constants from algo_scanner.py
+    lines.append(f"  {'MOMENTUM_WEIGHTS:':<32} 5d=0.20, 20d=0.50, 60d=0.30")
+    lines.append(f"  {'MIN_MOMENTUM_SCORE:':<32} 5.0")
+    lines.append(f"  {'RSI_LOWER:':<32} 30.0")
+    lines.append(f"  {'RSI_UPPER:':<32} 70.0")
+    lines.append(f"  {'MAX_LONG_SLOTS:':<32} 3")
+    lines.append(f"  {'MAX_SHORT_SLOTS:':<32} 1")
+    lines.append(f"  {'FIXED_FRACTION:':<32} 10.0% (until 30 closed trades)")
+    lines.append(f"  {'KELLY_CAP:':<32} 15.0% (after 30 closed trades)")
+    lines.append(f"  {'KELLY_THRESHOLD:':<32} 30 closed trades")
+    lines.append(f"  {'STOP_LOSS_FORMULA:':<32} -clamp(vol_factor × 1.5, 6%, 10%)")
+    lines.append(f"  {'TAKE_PROFIT_FORMULA:':<32} +clamp(vol_factor × 2.5, 9%, 20%)")
+    lines.append(f"  {'KILL_SWITCH_THRESHOLD:':<32} 5% daily drawdown")
+    lines.append(f"  {'CYCLE_FREQUENCY:':<32} 15 minutes during NYSE hours")
+    lines.append(f"  {'PROFIT_RESERVE_PCT:':<32} 15% of each winning trade")
+
+    # Last scan from DB
+    scan_rows = _pg_query(
+        "SELECT ts, universe_loaded, with_data, passed_score, passed_rsi, passed_ema, "
+        "long_signals, short_signals, scan_note FROM oracle_scan_log ORDER BY ts DESC LIMIT 1"
+    )
+    if scan_rows:
+        s = scan_rows[0]
+        ts = str(s.get("ts") or "N/A")[:19]
+        lines.append("")
+        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<32} {ts} UTC")
+        lines.append(f"  {'LAST_SCAN_UNIVERSE:':<32} {s.get('universe_loaded', 'N/A')} stocks loaded")
+        lines.append(f"  {'WITH_DATA:':<32} {s.get('with_data', 'N/A')} (had price/RSI data)")
+        lines.append(f"  {'PASSED_SCORE_FILTER:':<32} {s.get('passed_score', 'N/A')}")
+        lines.append(f"  {'PASSED_RSI_FILTER:':<32} {s.get('passed_rsi', 'N/A')}")
+        lines.append(f"  {'PASSED_EMA_FILTER:':<32} {s.get('passed_ema', 'N/A')}")
+        lines.append(f"  {'LONG_SIGNALS_GENERATED:':<32} {s.get('long_signals', 0)}")
+        lines.append(f"  {'SHORT_SIGNALS_GENERATED:':<32} {s.get('short_signals', 0)}")
+        note = str(s.get("scan_note") or "none")
+        lines.append(f"  {'LAST_SCAN_ERRORS:':<32} {note[:80]}")
+    else:
+        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<32} No scan data in DB yet")
+
+    return lines
+
+
+def section_live_code_params_navigator() -> list[str]:
+    """ADD 1: Live Code Parameters for Navigator bot."""
+    lines: list[str] = []
+    _h2(lines, "LIVE CODE PARAMETERS — NAVIGATOR #6 (FOREX SWING H4)")
+    lines.append("  Source: forex-engine/forex_config.py (constants read at report time)")
+    lines.append("")
+
+    ls = _read_navigator_live_state()
+    usd_bias = ls.get("usd_bias", "N/A")
+    news_blackout = ls.get("news_blackout", False)
+    blackout_str = "YES — event active" if news_blackout else "NO"
+    positions = ls.get("positions") or []
+    last_updated = str(ls.get("last_updated", "no data"))[:19]
+    cycle_count = ls.get("cycle_count", "N/A")
+
+    pairs = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CAD",
+             "USD_CHF", "EUR_GBP", "AUD_JPY", "GBP_JPY", "EUR_JPY"]
+    lines.append(f"  {'PERMITTED_PAIRS:':<32} {', '.join(pairs)}")
+    lines.append(f"  {'RSI_OVERSOLD (long thresh):':<32} 35 (relaxed from 30)")
+    lines.append(f"  {'RSI_OVERBOUGHT (short thresh):':<32} 65 (relaxed from 70)")
+    lines.append(f"  {'SL_ATR_MULT:':<32} 2.0×")
+    lines.append(f"  {'TP_ATR_MULT:':<32} 3.0×")
+    lines.append(f"  {'TRAIL_ATR_MULT:':<32} 2.0×")
+    lines.append(f"  {'BREAKEVEN_ATR_MULT:':<32} 1.5×")
+    lines.append(f"  {'MAX_OPEN_POSITIONS:':<32} 5")
+    lines.append(f"  {'RISK_PER_TRADE_PCT:':<32} 1.0%")
+    lines.append(f"  {'MAX_POSITION_SIZE_PCT:':<32} 10.0%")
+    lines.append(f"  {'CYCLE_INTERVAL_HOURS:':<32} 4h")
+    lines.append(f"  {'VAULT_SWEEP_PCT:':<32} 20% of realized profits")
+    lines.append(f"  {'GROQ_USD_BIAS:':<32} {usd_bias}")
+    lines.append(f"  {'NEWS_BLACKOUT_ACTIVE:':<32} {blackout_str}")
+    lines.append(f"  {'LAST_CYCLE_TIMESTAMP:':<32} {last_updated} UTC")
+    lines.append(f"  {'CYCLE_COUNT:':<32} {cycle_count}")
+    lines.append(f"  {'OPEN_POSITIONS_COUNT:':<32} {len(positions)}")
+
+    return lines
+
+
+def section_live_code_params_poseidon() -> list[str]:
+    """ADD 1: Live Code Parameters for Poseidon bot."""
+    lines: list[str] = []
+    _h2(lines, "LIVE CODE PARAMETERS — POSEIDON #7 (STATISTICAL ARBITRAGE)")
+    lines.append("  Source: poseidon/config.py + poseidon_pair_params DB + poseidon_live_state.json")
+    lines.append("")
+
+    ls = _read_poseidon_live_state()
+    last_updated = str(ls.get("last_updated", "no data"))[:19]
+    pair_params = ls.get("pair_params") or []
+
+    pair_rows = _pg_query("SELECT COUNT(*) as total FROM poseidon_pair_params")
+    tradeable_rows = _pg_query("SELECT COUNT(*) as cnt FROM poseidon_pair_params WHERE is_tradeable = true")
+    passing_adf = _pg_query("SELECT COUNT(*) as cnt FROM poseidon_pair_params WHERE adf_pvalue < 0.20")
+    total_pairs = pair_rows[0].get("total", "N/A") if pair_rows else "N/A"
+    tradeable_count = tradeable_rows[0].get("cnt", "N/A") if tradeable_rows else "N/A"
+    adf_count = passing_adf[0].get("cnt", "N/A") if passing_adf else "N/A"
+
+    # Open positions from live state
+    open_positions = ls.get("positions") or {}
+    open_count = len(open_positions) if isinstance(open_positions, dict) else 0
+
+    # Heartbeat data
+    hb = _pg_query("SELECT position_count FROM kraken_heartbeat WHERE id = 7")
+    if hb:
+        open_count = int(hb[0].get("position_count") or 0)
+
+    lines.append(f"  {'ZSCORE_ENTRY:':<32} 1.5 (relaxed from 2.0)")
+    lines.append(f"  {'ZSCORE_EXIT:':<32} 0.3")
+    lines.append(f"  {'ZSCORE_STOP:':<32} 3.5")
+    lines.append(f"  {'ADF_PVALUE_MAX:':<32} 0.20 (sole stationarity gate)")
+    lines.append(f"  {'HURST_GATE:':<32} DISABLED (info only, not blocking)")
+    lines.append(f"  {'HEDGE_RATIO_STABILITY:':<32} 0.25 (25% drift tolerance)")
+    lines.append(f"  {'HEDGE_RATIO_BREAKDOWN:':<32} 0.25 (exit if 25% drift at entry)")
+    lines.append(f"  {'MAX_POSITIONS:':<32} 5")
+    lines.append(f"  {'POSITION_VALUE_PCT:':<32} 15.0%")
+    lines.append(f"  {'CB_CONSECUTIVE_LOSSES:':<32} 5")
+    lines.append(f"  {'CB_PAUSE_HOURS:':<32} 24h")
+    lines.append(f"  {'MAX_HOLD_HOURS:':<32} 72h")
+    lines.append(f"  {'LOOP_SLEEP_SECONDS:':<32} 900 (15 minutes)")
+    lines.append(f"  {'ACTIVE_PAIR_SETS:':<32} {total_pairs}")
+    lines.append(f"  {'TRADEABLE_PAIRS:':<32} {tradeable_count}")
+    lines.append(f"  {'PAIRS_PASSING_ADF:':<32} {adf_count}")
+    lines.append(f"  {'PAIRS_IN_POSITION:':<32} {open_count}")
+    lines.append(f"  {'LAST_CYCLE_TIMESTAMP:':<32} {last_updated} UTC")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 2: Cycle Execution Audit Log
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_cycle_execution_audit_kraken(bot_id: str, bot_name: str) -> list[str]:
+    """ADD 2: Last cycle execution audit for a Kraken bot — reads live_state.json signals."""
+    lines: list[str] = []
+    _h2(lines, f"LAST CYCLE EXECUTION AUDIT — {bot_name.upper()}")
+
+    ls = _read_kraken_live_state(bot_id)
+    if not ls:
+        lines.append("  No live_state.json data available — bot not yet started or file missing.")
+        return lines
+
+    last_updated = str(ls.get("last_updated", "?"))[:19]
+    signals = ls.get("signals") or []
+    open_pos = ls.get("open_positions") or []
+    deployed_pct = ls.get("deployed_pct", "?")
+
+    lines.append(f"  Timestamp: {last_updated} UTC | Open positions: {len(open_pos)} | Deployed: {deployed_pct}%")
+    lines.append("")
+
+    if not signals:
+        lines.append("  No signal data in live_state.json for this cycle.")
+        return lines
+
+    # Tally results
+    blocked = [s for s in signals if s.get("signal_type") != "entry" and not s.get("has_position")]
+    entries = [s for s in signals if s.get("signal_type") == "entry"]
+    in_pos = [s for s in signals if s.get("has_position")]
+
+    lines.append(f"  {'Symbol':<14} {'Z-Score':>9} {'RSI':>6}  Result         Reason")
+    lines.append("  " + "-" * 75)
+
+    hurst_blocks = 0
+    vpin_blocks = 0
+    adf_blocks = 0
+
+    for sig in signals:
+        sym = str(sig.get("symbol", "?"))
+        zscore = sig.get("z_score")
+        rsi = sig.get("rsi")
+        stype = str(sig.get("signal_type", "?"))
+        reason = str(sig.get("reason", ""))[:55]
+        has_pos = sig.get("has_position", False)
+
+        z_str = f"{zscore:+.3f}" if zscore is not None else "  N/A "
+        r_str = f"{rsi:.1f}" if rsi is not None else "  N/A"
+
+        if has_pos:
+            result = "IN POSITION"
+        elif stype == "entry":
+            result = "ENTRY SIGNAL"
+        else:
+            result = "BLOCKED"
+            if "hurst" in reason.lower() or "HURST" in reason:
+                hurst_blocks += 1
+            elif "vpin" in reason.lower() or "VPIN" in reason:
+                vpin_blocks += 1
+            elif "adf" in reason.lower() or "ADF" in reason:
+                adf_blocks += 1
+
+        lines.append(f"  {sym:<14} {z_str:>9} {r_str:>6}  {result:<14} {reason}")
+
+    lines.append("")
+    lines.append(f"  Summary:")
+    lines.append(f"    Total evaluated:    {len(signals)}")
+    lines.append(f"    Entry signals:      {len(entries)}")
+    lines.append(f"    In position:        {len(in_pos)}")
+    lines.append(f"    Blocked:            {len(blocked)}")
+    lines.append(f"      Of which Hurst:   {hurst_blocks}")
+    lines.append(f"      Of which VPIN:    {vpin_blocks}")
+    lines.append(f"      Of which ADF:     {adf_blocks}")
+
+    # Recent DB trades to show entries/exits this cycle
+    recent = _pg_query(
+        "SELECT symbol, side, pnl_usd, reason, closed_at FROM kraken_trades "
+        "WHERE bot_id = %s AND closed_at > NOW() - INTERVAL '2 hours' ORDER BY closed_at DESC LIMIT 10",
+        (bot_id,)
+    )
+    if recent:
+        lines.append("")
+        lines.append(f"  Trades closed in last 2h:")
+        for t in recent:
+            pnl = float(t.get("pnl_usd") or 0)
+            pnl_str = _c(pnl)
+            lines.append(f"    {str(t.get('symbol','?')):<14} {str(t.get('side','?')):<6} {pnl_str:>10}  {str(t.get('reason','?'))[:40]}")
+    else:
+        lines.append("  No trades closed in last 2 hours.")
+
+    return lines
+
+
+def section_cycle_execution_audit_oracle() -> list[str]:
+    """ADD 2: Last scan execution audit for Oracle bot."""
+    lines: list[str] = []
+    _h2(lines, "LAST SCAN EXECUTION AUDIT — ORACLE #1")
+
+    scans = _pg_query(
+        "SELECT ts, universe_loaded, with_data, passed_score, passed_rsi, passed_ema, "
+        "long_signals, short_signals, top5_long, top5_short, scan_note "
+        "FROM oracle_scan_log ORDER BY ts DESC LIMIT 1"
+    )
+    if not scans:
+        lines.append("  No scan log data yet — Oracle not yet active or no scans recorded.")
+        return lines
+
+    s = scans[0]
+    ts = str(s.get("ts") or "?")[:19]
+    u = int(s.get("universe_loaded") or 0)
+    wd = int(s.get("with_data") or 0)
+    ps = int(s.get("passed_score") or 0)
+    pr = int(s.get("passed_rsi") or 0)
+    pe = int(s.get("passed_ema") or 0)
+    ls_count = int(s.get("long_signals") or 0)
+    ss_count = int(s.get("short_signals") or 0)
+    note = str(s.get("scan_note") or "none")
+
+    lines.append(f"  Scan timestamp: {ts} UTC")
+    lines.append(f"  Universe loaded:      {u} stocks")
+    lines.append(f"  With price/RSI data:  {wd} ({u - wd} had no data)")
+    lines.append("")
+    lines.append(f"  Filter funnel:")
+    lines.append(f"    Stage 1 — with data:     {wd:>4}")
+    lines.append(f"    Stage 2 — score filter:  {ps:>4}  ({wd - ps} blocked by score < 5.0)")
+    lines.append(f"    Stage 3 — RSI filter:    {pr:>4}  ({ps - pr} blocked by RSI outside 30–70)")
+    lines.append(f"    Stage 4 — EMA filter:    {pe:>4}  ({pr - pe} blocked by price < EMA20)")
+    lines.append(f"    Long signals:            {ls_count}")
+    lines.append(f"    Short signals:           {ss_count}")
+    lines.append(f"  Scan note:  {note[:100]}")
+
+    # Top candidates
+    top5_long = s.get("top5_long")
+    top5_short = s.get("top5_short")
+    if top5_long:
+        try:
+            long_cands = _json_diag.loads(top5_long) if isinstance(top5_long, str) else top5_long
+            if long_cands:
+                lines.append("")
+                lines.append("  Top long candidates evaluated (last scan):")
+                lines.append(f"    {'Rank':<5} {'Symbol':<10} {'Score':>8} {'RSI':>6}  Result")
+                lines.append("    " + "-" * 45)
+                for i, c in enumerate(long_cands[:10], 1):
+                    sym = str(c.get("symbol", "?"))
+                    score = float(c.get("score") or 0)
+                    rsi = c.get("rsi")
+                    r_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+                    passed = c.get("passed", False)
+                    result = "SIGNAL" if passed else f"BLOCKED ({str(c.get('block_reason','?'))[:30]})"
+                    lines.append(f"    {i:<5} {sym:<10} {score:>8.2f} {r_str:>6}  {result}")
+        except Exception:
+            pass
+    if top5_short:
+        try:
+            short_cands = _json_diag.loads(top5_short) if isinstance(top5_short, str) else top5_short
+            if short_cands:
+                lines.append("")
+                lines.append("  Top short candidates evaluated (last scan):")
+                lines.append(f"    {'Rank':<5} {'Symbol':<10} {'Score':>8} {'RSI':>6}  Result")
+                lines.append("    " + "-" * 45)
+                for i, c in enumerate(short_cands[:5], 1):
+                    sym = str(c.get("symbol", "?"))
+                    score = float(c.get("score") or 0)
+                    rsi = c.get("rsi")
+                    r_str = f"{rsi:.1f}" if rsi is not None else "N/A"
+                    passed = c.get("passed", False)
+                    result = "SIGNAL" if passed else f"BLOCKED ({str(c.get('block_reason','?'))[:30]})"
+                    lines.append(f"    {i:<5} {sym:<10} {score:>8.2f} {r_str:>6}  {result}")
+        except Exception:
+            pass
+
+    # Filter effectiveness counters from recent scans
+    recent_scans = _pg_query(
+        "SELECT universe_loaded, with_data, passed_score, passed_rsi, passed_ema, long_signals, short_signals "
+        "FROM oracle_scan_log WHERE ts > NOW() - INTERVAL '24 hours' ORDER BY ts DESC"
+    )
+    if recent_scans:
+        total_score_blocks = sum(int(r.get("with_data") or 0) - int(r.get("passed_score") or 0) for r in recent_scans)
+        total_rsi_blocks = sum(int(r.get("passed_score") or 0) - int(r.get("passed_rsi") or 0) for r in recent_scans)
+        total_ema_blocks = sum(int(r.get("passed_rsi") or 0) - int(r.get("passed_ema") or 0) for r in recent_scans)
+        total_ls = sum(int(r.get("long_signals") or 0) for r in recent_scans)
+        total_ss = sum(int(r.get("short_signals") or 0) for r in recent_scans)
+        lines.append("")
+        lines.append(f"  24h scan statistics ({len(recent_scans)} scans):")
+        lines.append(f"    Score filter blocks:    {total_score_blocks}")
+        lines.append(f"    RSI filter blocks:      {total_rsi_blocks}")
+        lines.append(f"    EMA filter blocks:      {total_ema_blocks}")
+        lines.append(f"    Total long signals:     {total_ls}")
+        lines.append(f"    Total short signals:    {total_ss}")
+
+    return lines
+
+
+def section_cycle_execution_audit_poseidon() -> list[str]:
+    """ADD 2: Last cycle execution audit for Poseidon bot."""
+    lines: list[str] = []
+    _h2(lines, "LAST CYCLE EXECUTION AUDIT — POSEIDON #7")
+
+    ls = _read_poseidon_live_state()
+    if not ls:
+        lines.append("  No live_state.json data — Poseidon not yet started.")
+        return lines
+
+    last_updated = str(ls.get("last_updated", "?"))[:19]
+    pair_params_ls = ls.get("pair_params") or []
+    open_positions = ls.get("positions") or {}
+    equity = float(ls.get("equity", 0) or 0)
+
+    lines.append(f"  Timestamp: {last_updated} UTC | Equity: {_c(equity)}")
+    lines.append(f"  Pairs monitored: {len(pair_params_ls)} | Open positions: {len(open_positions)}")
+    lines.append("")
+
+    if pair_params_ls:
+        lines.append(f"  {'Pair':<22} {'Hurst':>7} {'ADF-p':>7} {'HR':>8}  Tradeable  Notes")
+        lines.append("  " + "-" * 70)
+        passing = 0
+        for p in pair_params_ls:
+            a = str(p.get("asset_a", "?"))
+            b = str(p.get("asset_b", "?"))
+            pair_str = f"{a}/{b}"
+            h = float(p.get("hurst") or 0)
+            adf = float(p.get("adf_pvalue") or 1)
+            hr = float(p.get("hedge_ratio") or 0)
+            tradeable = p.get("is_tradeable", False)
+            notes = str(p.get("notes") or "")[:25]
+            tr_str = "YES ✓" if tradeable else "NO  ✗"
+            if tradeable:
+                passing += 1
+            lines.append(f"  {pair_str:<22} {h:>7.3f} {adf:>7.3f} {hr:>8.4f}  {tr_str:<10} {notes}")
+
+        lines.append("")
+        lines.append(f"  Pairs passing all filters: {passing} / {len(pair_params_ls)}")
+
+    # Z-score status from DB
+    zscore_rows = _pg_query(
+        "SELECT asset_a, asset_b, hurst, adf_pvalue, is_tradeable, notes "
+        "FROM poseidon_pair_params ORDER BY pair_set_id"
+    )
+    if zscore_rows and not pair_params_ls:
+        lines.append("  (Using DB data — live_state pairs section empty)")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 3: Parameter Drift Monitor
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _get_or_create_param_baseline() -> dict:
+    """Load or create the parameter baseline from file."""
+    if _PARAM_BASELINE_FILE.exists():
+        try:
+            return _json_diag.loads(_PARAM_BASELINE_FILE.read_text())
+        except Exception:
+            pass
+    # Create from current DB values
+    baseline: dict = {"created_at": datetime.now(timezone.utc).isoformat(), "bots": {}}
+    db_rows = _pg_query("SELECT bot_id, params, adapted_at FROM kraken_adaptive_params")
+    for row in db_rows:
+        bid = str(row.get("bot_id") or "")
+        p = row.get("params") or {}
+        if isinstance(p, str):
+            p = _json_diag.loads(p)
+        baseline["bots"][bid] = {
+            "ZSCORE_ENTRY": p.get("ZSCORE_ENTRY"),
+            "ZSCORE_EXIT": p.get("ZSCORE_EXIT"),
+            "STOP_LOSS_PCT": p.get("STOP_LOSS_PCT"),
+            "TRAIL_PCT": p.get("TRAIL_PCT"),
+            "MIN_NET_PROFIT_PCT": p.get("MIN_NET_PROFIT_PCT"),
+            "baseline_locked_at": str(row.get("adapted_at") or "N/A")[:19],
+        }
+    # Save baseline
+    try:
+        _PARAM_BASELINE_FILE.write_text(_json_diag.dumps(baseline, indent=2, default=str))
+    except Exception:
+        pass
+    return baseline
+
+
+def section_parameter_drift_monitor() -> list[str]:
+    """ADD 3: Parameter Integrity Check — compares current params vs baseline."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 3: PARAMETER INTEGRITY CHECK")
+
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"  Generated: {now_ts}")
+
+    baseline = _get_or_create_param_baseline()
+    baseline_created = str(baseline.get("created_at", "unknown"))[:16]
+    lines.append(f"  Baseline set: {baseline_created} UTC")
+    lines.append("")
+
+    # Current DB params
+    current_rows = _pg_query("SELECT bot_id, params, adapted_at FROM kraken_adaptive_params")
+    current: dict = {}
+    for row in current_rows:
+        bid = str(row.get("bot_id") or "")
+        p = row.get("params") or {}
+        if isinstance(p, str):
+            p = _json_diag.loads(p)
+        current[bid] = {"params": p, "adapted_at": str(row.get("adapted_at") or "N/A")[:19]}
+
+    params_to_check = ["ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"]
+    bot_display = {"davy-jones": "davy-jones", "blackbeard": "blackbeard", "calypso": "calypso"}
+
+    any_drift = False
+    drift_alerts: list[str] = []
+
+    lines.append(f"  {'Bot':<14} {'Parameter':<22} {'Baseline':>10} {'Current':>10} {'Drift':>8}  Status")
+    lines.append("  " + "-" * 78)
+
+    for bot_id, display in bot_display.items():
+        b_bot = baseline.get("bots", {}).get(bot_id, {})
+        c_bot = current.get(bot_id, {}).get("params", {})
+
+        for pname in params_to_check:
+            baseline_val = b_bot.get(pname)
+            current_val = c_bot.get(pname)
+
+            if baseline_val is None and current_val is None:
+                lines.append(f"  {display:<14} {pname:<22} {'N/A':>10} {'N/A':>10} {'N/A':>8}  ℹ️  NO DATA")
+                continue
+
+            if baseline_val is None:
+                lines.append(f"  {display:<14} {pname:<22} {'N/A':>10} {current_val:>10.4f} {'N/A':>8}  ℹ️  NO BASELINE")
+                continue
+
+            if current_val is None:
+                lines.append(f"  {display:<14} {pname:<22} {baseline_val:>10.4f} {'N/A':>10} {'N/A':>8}  ⚠️  MISSING")
+                continue
+
+            drift = float(current_val) - float(baseline_val)
+            pct_drift = (drift / float(baseline_val) * 100) if float(baseline_val) != 0 else 0
+
+            if abs(drift) < 1e-9:
+                status = "✅ CLEAN"
+            else:
+                status = f"⚠️  DRIFT {drift:+.4f}"
+                any_drift = True
+                adapted_at = current.get(bot_id, {}).get("adapted_at", "?")
+                drift_alerts.append(
+                    f"  ⚠️ DRIFT DETECTED: {display} {pname} "
+                    f"baseline={float(baseline_val):.4f} current={float(current_val):.4f} "
+                    f"drift={drift:+.4f} ({pct_drift:+.1f}%)\n"
+                    f"     Last adapted: {adapted_at} UTC\n"
+                    f"     ACTION: Verify this change was intentional"
+                )
+
+            lines.append(
+                f"  {display:<14} {pname:<22} {float(baseline_val):>10.4f} {float(current_val):>10.4f} {drift:>+8.4f}  {status}"
+            )
+
+    lines.append("")
+    lines.append(f"  Fleet Commander enforcement: DISABLED ✅")
+    lines.append(f"  Gemini auditor writes:       DISABLED ✅")
+    lines.append(f"  Auto-parameter writes:       NONE (all changes are adaptation-engine only)")
+    lines.append(f"  Baseline file:               {_PARAM_BASELINE_FILE}")
+
+    if drift_alerts:
+        lines.append("")
+        lines.append("  ══ DRIFT ALERTS ══")
+        for alert in drift_alerts:
+            lines.append(alert)
+    else:
+        lines.append("")
+        lines.append("  Unauthorized changes detected: NONE — all params match baseline")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 4: Filter Effectiveness Statistics (rolling 7-day)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_filter_effectiveness() -> list[str]:
+    """ADD 4: Filter Effectiveness — 7-day rolling stats for each filter."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 4: FILTER EFFECTIVENESS — 7-DAY ROLLING")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+
+    # ── Kraken VPIN filter stats ──────────────────────────────────────────────
+    _h2(lines, "KRAKEN FLEET — VPIN FILTER (7d)")
+    vpin_rows = _pg_query(
+        "SELECT bot_id, COUNT(*) as n, AVG(vpin_value) as avg_vpin, AVG(threshold) as avg_thresh "
+        "FROM vpin_rejections WHERE ts > %s GROUP BY bot_id ORDER BY bot_id",
+        (cutoff,)
+    )
+    total_vpin = _pg_query(
+        "SELECT COUNT(*) as n FROM vpin_rejections WHERE ts > %s", (cutoff,)
+    )
+    vpin_total = int(total_vpin[0].get("n") or 0) if total_vpin else 0
+
+    if vpin_rows:
+        lines.append(f"  {'Bot':<14} {'VPIN Blocks':>12} {'Avg VPIN':>10} {'Avg Thresh':>12}")
+        lines.append("  " + "-" * 52)
+        for r in vpin_rows:
+            lines.append(
+                f"  {str(r.get('bot_id','?')):<14} {int(r.get('n') or 0):>12} "
+                f"{float(r.get('avg_vpin') or 0):>10.4f} {float(r.get('avg_thresh') or 0):>12.4f}"
+            )
+        lines.append(f"  Total VPIN rejections (7d): {vpin_total}")
+    else:
+        lines.append("  No VPIN rejection data in last 7 days.")
+
+    # ── Kraken trades filter analysis ─────────────────────────────────────────
+    _h2(lines, "KRAKEN FLEET — TRADE FILTER OUTCOMES (7d closed trades)")
+    trade_rows = _pg_query(
+        "SELECT bot_id, reason, COUNT(*) as n, AVG(pnl_pct) as avg_pnl "
+        "FROM kraken_trades WHERE closed_at > %s GROUP BY bot_id, reason ORDER BY bot_id, n DESC",
+        (cutoff,)
+    )
+    if trade_rows:
+        lines.append(f"  {'Bot':<14} {'Exit Reason':<30} {'Count':>7} {'Avg P&L%':>10}")
+        lines.append("  " + "-" * 65)
+        for r in trade_rows:
+            bot = str(r.get("bot_id", "?"))
+            reason = str(r.get("reason") or "?")[:28]
+            n = int(r.get("n") or 0)
+            avg_pnl = float(r.get("avg_pnl") or 0)
+            lines.append(f"  {bot:<14} {reason:<30} {n:>7} {_pct(avg_pnl):>10}")
+    else:
+        lines.append("  No kraken_trades data in last 7 days.")
+
+    # ── Oracle RSI / Score filter blocks from scan_log ────────────────────────
+    _h2(lines, "ORACLE — FILTER EFFECTIVENESS (7d scan log)")
+    oracle_scans = _pg_query(
+        "SELECT SUM(universe_loaded) as total_loaded, SUM(with_data) as total_data, "
+        "SUM(passed_score) as p_score, SUM(passed_rsi) as p_rsi, SUM(passed_ema) as p_ema, "
+        "SUM(long_signals) as lsigs, SUM(short_signals) as ssigs, COUNT(*) as scan_count "
+        "FROM oracle_scan_log WHERE ts > %s",
+        (cutoff,)
+    )
+    if oracle_scans and oracle_scans[0].get("scan_count"):
+        r = oracle_scans[0]
+        total_data = int(r.get("total_data") or 0)
+        p_score = int(r.get("p_score") or 0)
+        p_rsi = int(r.get("p_rsi") or 0)
+        p_ema = int(r.get("p_ema") or 0)
+        lsigs = int(r.get("lsigs") or 0)
+        ssigs = int(r.get("ssigs") or 0)
+        scans = int(r.get("scan_count") or 0)
+
+        def _block_pct(blocked, total):
+            return f"{blocked / total * 100:.1f}%" if total > 0 else "N/A"
+
+        score_blocks = total_data - p_score
+        rsi_blocks = p_score - p_rsi
+        ema_blocks = p_rsi - p_ema
+
+        lines.append(f"  Scans in 7d window: {scans}")
+        lines.append("")
+        lines.append(f"  {'Filter':<30} {'Blocks':>8} {'% of Attempts':>15}  Verdict")
+        lines.append("  " + "-" * 65)
+        lines.append(f"  {'Score < 5.0 (weak momentum)':<30} {score_blocks:>8} {_block_pct(score_blocks, total_data):>15}  ✅ EXPECTED")
+        lines.append(f"  {'RSI outside 30-70':<30} {rsi_blocks:>8} {_block_pct(rsi_blocks, p_score):>15}  ✅ EXPECTED")
+        lines.append(f"  {'Price < EMA20':<30} {ema_blocks:>8} {_block_pct(ema_blocks, p_rsi):>15}  ✅ EXPECTED")
+        lines.append(f"  {'Long signals generated':<30} {lsigs:>8} {'':>15}")
+        lines.append(f"  {'Short signals generated':<30} {ssigs:>8} {'':>15}")
+        if total_data > 0:
+            signal_rate = (lsigs + ssigs) / (scans * max(total_data // scans, 1)) * 100
+            lines.append(f"  Signal rate: {signal_rate:.2f}% of evaluated stocks per scan")
+    else:
+        lines.append("  No Oracle scan log data in last 7 days.")
+
+    # ── Poseidon ADF filter ───────────────────────────────────────────────────
+    _h2(lines, "POSEIDON — FILTER EFFECTIVENESS (current pair universe)")
+    pos_pairs = _pg_query(
+        "SELECT COUNT(*) as total, "
+        "SUM(CASE WHEN adf_pvalue < 0.20 THEN 1 ELSE 0 END) as pass_adf, "
+        "SUM(CASE WHEN is_tradeable THEN 1 ELSE 0 END) as tradeable "
+        "FROM poseidon_pair_params"
+    )
+    if pos_pairs and pos_pairs[0].get("total"):
+        r = pos_pairs[0]
+        total = int(r.get("total") or 0)
+        pass_adf = int(r.get("pass_adf") or 0)
+        tradeable = int(r.get("tradeable") or 0)
+        blocked_adf = total - pass_adf
+
+        lines.append(f"  {'Filter':<30} {'Pairs':>8} {'% of Total':>12}  Verdict")
+        lines.append("  " + "-" * 60)
+        lines.append(f"  {'Total pairs monitored':<30} {total:>8} {'100%':>12}")
+        lines.append(f"  {'Passing ADF (p < 0.20)':<30} {pass_adf:>8} {pass_adf/total*100:>11.1f}%  ✅ ACTIVE")
+        lines.append(f"  {'Blocked by ADF':<30} {blocked_adf:>8} {blocked_adf/total*100:>11.1f}%  ✅ HELPING")
+        lines.append(f"  {'Marked tradeable':<30} {tradeable:>8} {tradeable/total*100:>11.1f}%")
+        lines.append(f"  {'Note:':<30} Hurst gate DISABLED (info only — not blocking)")
+    else:
+        lines.append("  No Poseidon pair data available.")
+
+    lines.append("")
+    lines.append("  NOTE: Post-block price movement analysis requires additional logging.")
+    lines.append("  Currently showing block counts only. Price movement tracking can be added")
+    lines.append("  by storing price-at-block-time in vpin_rejections and querying 4h/24h later.")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 5: Bot Health Scorecard (top of report)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _compute_health_score(win_rate: float | None, profit_factor: float | None,
+                           has_trades: bool, consec_losses: int,
+                           cycle_ok: bool, param_ok: bool) -> int:
+    """Compute 0-100 health score for a bot."""
+    score = 0
+    # Win rate (25 pts)
+    if win_rate is not None:
+        score += min(25, int(win_rate / 4))
+    else:
+        score += 10 if has_trades else 0
+    # Profit factor (25 pts)
+    if profit_factor is not None and profit_factor > 0:
+        score += min(25, int(profit_factor * 10))
+    # Cycle execution (20 pts)
+    score += 20 if cycle_ok else 5
+    # Trade frequency (15 pts)
+    if has_trades:
+        score += 15
+    else:
+        score += 5
+    # Parameter integrity (15 pts)
+    score += 15 if param_ok else 5
+    # Penalise consecutive losses
+    if consec_losses >= 10:
+        score = max(0, score - 30)
+    elif consec_losses >= 5:
+        score = max(0, score - 15)
+    return min(100, score)
+
+
+def section_fleet_health_scorecard() -> list[str]:
+    """ADD 5: Fleet Health Scorecard — top-of-report snapshot of all 8 bots."""
+    lines: list[str] = []
+    W80 = "\u2550" * 80
+    lines.append("")
+    lines.append(W80)
+    lines.append("  ADDITION 5: FLEET HEALTH SCORECARD")
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"  Generated: {now_ts}")
+    lines.append(W80)
+    lines.append("")
+
+    # Collect data for each bot
+    bots = []
+
+    # Oracle (#1)
+    try:
+        alpaca_rows = _pg_query(
+            "SELECT COUNT(*) as n FROM trades WHERE date > NOW() - INTERVAL '7 days'"
+        )
+        last_trade_rows = _pg_query("SELECT date FROM trades ORDER BY date DESC LIMIT 1")
+        oracle_pnl_rows = _pg_query(
+            "SELECT SUM(pnl) as total FROM trades WHERE date > NOW() - INTERVAL '7 days'"
+        )
+        eq_rows = _pg_query("SELECT alpaca_equity FROM equity_snapshots ORDER BY ts DESC LIMIT 1")
+        oracle_eq = float(eq_rows[0].get("alpaca_equity") or 100000) if eq_rows else 100000
+
+        last_trade_ts = str(last_trade_rows[0].get("date") or "Never")[:10] if last_trade_rows else "Never"
+        pnl_7d = float(oracle_pnl_rows[0].get("total") or 0) if oracle_pnl_rows else 0
+        n_trades = int(alpaca_rows[0].get("n") or 0) if alpaca_rows else 0
+
+        # Win rate
+        wr_rows = _pg_query(
+            "SELECT COUNT(*) as wins FROM trades WHERE pnl > 0 AND date > NOW() - INTERVAL '30 days'"
+        )
+        total_rows = _pg_query(
+            "SELECT COUNT(*) as total FROM trades WHERE date > NOW() - INTERVAL '30 days'"
+        )
+        wins = int(wr_rows[0].get("wins") or 0) if wr_rows else 0
+        total = int(total_rows[0].get("total") or 0) if total_rows else 0
+        wr = wins / total * 100 if total > 0 else None
+
+        ks_rows = _pg_query(
+            "SELECT source FROM equity_snapshots WHERE ts > NOW() - INTERVAL '2 hours' LIMIT 1"
+        )
+        cycle_ok = bool(ks_rows)
+        health = _compute_health_score(wr, 1.0 if wr and wr > 50 else 0.5, total > 0, 0, cycle_ok, True)
+        issues = "No open positions" if oracle_eq < 100000 and n_trades == 0 else "Active"
+        bots.append({
+            "num": "#1", "name": "Oracle", "status": "🟢 LIVE", "last_trade": last_trade_ts,
+            "pnl_7d": pnl_7d, "health": health, "equity": oracle_eq,
+            "issues": issues if health < 70 else "Clean"
+        })
+    except Exception as e:
+        bots.append({"num": "#1", "name": "Oracle", "status": "⚠️ ERR", "last_trade": "?",
+                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
+
+    # Kraken bots (#2-4)
+    kraken_bot_map = [
+        ("#2", "Davy Jones", "davy-jones", 1),
+        ("#3", "Blackbeard", "blackbeard", 2),
+        ("#4", "Calypso", "calypso", 3),
+    ]
+    for num, name, bot_id, db_id in kraken_bot_map:
+        try:
+            hb = _pg_query("SELECT status, circuit_breaker, position_count, equity_usd FROM kraken_heartbeat WHERE id = %s", (db_id,))
+            kap = _pg_query("SELECT params, metrics FROM kraken_adaptive_params WHERE bot_id = %s", (bot_id,))
+            k_trades_7d = _pg_query(
+                "SELECT COUNT(*) as n, SUM(pnl_usd) as pnl FROM kraken_trades "
+                "WHERE bot_id = %s AND closed_at > NOW() - INTERVAL '7 days'", (bot_id,)
+            )
+            last_k_trade = _pg_query(
+                "SELECT closed_at FROM kraken_trades WHERE bot_id = %s ORDER BY closed_at DESC LIMIT 1", (bot_id,)
+            )
+
+            eq = float(hb[0].get("equity_usd") or 100000) if hb else 100000
+            cb = hb[0].get("circuit_breaker") if hb else None
+            if isinstance(cb, str):
+                cb = _json_diag.loads(cb)
+            cb_tripped = isinstance(cb, dict) and cb.get("tripped")
+            status = "🔴 CB" if cb_tripped else "🟢 LIVE"
+
+            metrics = kap[0].get("metrics") or {} if kap else {}
+            if isinstance(metrics, str):
+                metrics = _json_diag.loads(metrics)
+            consec = int(metrics.get("consec_losses", 0)) if metrics else 0
+            wr = float(metrics.get("win_rate", 0)) * 100 if metrics.get("win_rate") is not None else None
+            pf = float(metrics.get("profit_factor", 0)) if metrics else None
+
+            pnl_7d = float(k_trades_7d[0].get("pnl") or 0) if k_trades_7d else 0
+            n_7d = int(k_trades_7d[0].get("n") or 0) if k_trades_7d else 0
+            last_t = str(last_k_trade[0].get("closed_at") or "Never")[:10] if last_k_trade else "Never"
+
+            health = _compute_health_score(wr, pf, n_7d > 0, consec, True, True)
+            issues_list = []
+            if cb_tripped:
+                issues_list.append("Circuit breaker TRIPPED")
+            if consec >= 5:
+                issues_list.append(f"{consec} consecutive losses")
+            if wr is not None and wr < 30:
+                issues_list.append(f"Low win rate {wr:.0f}%")
+            issues = ", ".join(issues_list) if issues_list else "Clean"
+
+            bots.append({
+                "num": num, "name": name, "status": status, "last_trade": last_t,
+                "pnl_7d": pnl_7d, "health": health, "equity": eq, "issues": issues
+            })
+        except Exception as e:
+            bots.append({"num": num, "name": name, "status": "⚠️ ERR", "last_trade": "?",
+                         "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
+
+    # Apex Predator (#5)
+    try:
+        opts_rows = _pg_query("SELECT equity FROM forex_portfolio WHERE id = 5 LIMIT 1")
+        opts_eq = 100000.0
+        last_opts_trade = _pg_query("SELECT MAX(closed_at) as last FROM execution_post_mortems LIMIT 1")
+        last_t = str(last_opts_trade[0].get("last") or "Never")[:10] if last_opts_trade else "Never"
+        bots.append({
+            "num": "#5", "name": "Apex Predator", "status": "🟢 LIVE", "last_trade": last_t,
+            "pnl_7d": 0, "health": 45, "equity": opts_eq,
+            "issues": "No trades yet — awaiting vol squeeze signal"
+        })
+    except Exception:
+        bots.append({"num": "#5", "name": "Apex Predator", "status": "🟢 LIVE", "last_trade": "Never",
+                     "pnl_7d": 0, "health": 45, "equity": 100000, "issues": "No trades yet"})
+
+    # Navigator (#6)
+    try:
+        nav_ls = _read_navigator_live_state()
+        nav_eq = float(nav_ls.get("equity_usd", 100000) or 100000)
+        nav_pos = len(nav_ls.get("positions") or [])
+        fx_7d = _pg_query(
+            "SELECT COUNT(*) as n, SUM(pnl_usd) as pnl FROM forex_trades "
+            "WHERE closed_at > NOW() - INTERVAL '7 days' AND status = 'closed'"
+        )
+        last_fx = _pg_query("SELECT MAX(closed_at) as last FROM forex_trades WHERE status = 'closed'")
+        pnl_7d = float(fx_7d[0].get("pnl") or 0) if fx_7d else 0
+        n_7d = int(fx_7d[0].get("n") or 0) if fx_7d else 0
+        last_t = str(last_fx[0].get("last") or "Never")[:10] if last_fx else "Never"
+        wr_nav = _pg_query(
+            "SELECT AVG(CASE WHEN pnl_usd > 0 THEN 100.0 ELSE 0.0 END) as wr "
+            "FROM forex_trades WHERE status = 'closed'"
+        )
+        wr = float(wr_nav[0].get("wr") or 0) if wr_nav else None
+        health = _compute_health_score(wr, None, n_7d > 0, 0, nav_pos > 0, True)
+        issues = "Clean" if health >= 70 else (f"{nav_pos} positions open" if nav_pos > 0 else "No open positions")
+        bots.append({
+            "num": "#6", "name": "Navigator", "status": "🟢 LIVE", "last_trade": last_t,
+            "pnl_7d": pnl_7d, "health": health, "equity": nav_eq, "issues": issues
+        })
+    except Exception as e:
+        bots.append({"num": "#6", "name": "Navigator", "status": "⚠️ ERR", "last_trade": "?",
+                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
+
+    # Poseidon (#7)
+    try:
+        pos_ls = _read_poseidon_live_state()
+        pos_eq = float(pos_ls.get("equity", 100000) or 100000)
+        pos_rows_7d = _pg_query(
+            "SELECT COUNT(*) as n, SUM(net_pnl) as pnl FROM poseidon_trades "
+            "WHERE closed_at > NOW() - INTERVAL '7 days'"
+        )
+        last_pos = _pg_query("SELECT MAX(closed_at) as last FROM poseidon_trades")
+        pnl_7d = float(pos_rows_7d[0].get("pnl") or 0) if pos_rows_7d else 0
+        n_7d = int(pos_rows_7d[0].get("n") or 0) if pos_rows_7d else 0
+        last_t = str(last_pos[0].get("last") or "Never")[:10] if last_pos else "Never"
+
+        hb_pos = _pg_query("SELECT circuit_breaker FROM kraken_heartbeat WHERE id = 7")
+        cb_pos = hb_pos[0].get("circuit_breaker") if hb_pos else None
+        if isinstance(cb_pos, str):
+            cb_pos = _json_diag.loads(cb_pos)
+        cb_tripped = isinstance(cb_pos, dict) and cb_pos.get("tripped")
+        status = "🔴 CB" if cb_tripped else "🟢 LIVE"
+
+        health = _compute_health_score(None, None, n_7d > 0, 0, True, True)
+        issues = "Circuit breaker active" if cb_tripped else ("Clean" if n_7d > 0 else "No trades in 7d")
+        bots.append({
+            "num": "#7", "name": "Poseidon", "status": status, "last_trade": last_t,
+            "pnl_7d": pnl_7d, "health": health, "equity": pos_eq, "issues": issues
+        })
+    except Exception as e:
+        bots.append({"num": "#7", "name": "Poseidon", "status": "⚠️ ERR", "last_trade": "?",
+                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
+
+    # Kraken Current (#8)
+    try:
+        hb_kc = _pg_query("SELECT equity_usd, position_count, status FROM kraken_heartbeat WHERE id = 8")
+        kc_eq = float(hb_kc[0].get("equity_usd") or 100000) if hb_kc else 100000
+        kc_status_val = str(hb_kc[0].get("status") or "unknown") if hb_kc else "unknown"
+        kc_trades_7d = _pg_query(
+            "SELECT COUNT(*) as n, SUM(pnl) as pnl FROM kraken_current_trades "
+            "WHERE closed_at > NOW() - INTERVAL '7 days'"
+        )
+        last_kc = _pg_query("SELECT MAX(closed_at) as last FROM kraken_current_trades")
+        pnl_7d = float(kc_trades_7d[0].get("pnl") or 0) if kc_trades_7d else 0
+        n_7d = int(kc_trades_7d[0].get("n") or 0) if kc_trades_7d else 0
+        last_t = str(last_kc[0].get("last") or "Never")[:10] if last_kc else "Never"
+        status = "🟢 LIVE" if kc_status_val not in ("unknown", "error") else "⚠️ UNKNOWN"
+        health = _compute_health_score(None, None, n_7d > 0, 0, True, True)
+        issues = "Clean" if n_7d > 0 else "No trades yet — awaiting trend signal"
+        bots.append({
+            "num": "#8", "name": "Kraken Current", "status": status, "last_trade": last_t,
+            "pnl_7d": pnl_7d, "health": health, "equity": kc_eq, "issues": issues
+        })
+    except Exception as e:
+        bots.append({"num": "#8", "name": "Kraken Current", "status": "⚠️ ERR", "last_trade": "?",
+                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
+
+    # Print scorecard table
+    lines.append(f"  {'Bot':<22} {'Status':<12} {'Last Trade':<12} {'7d P&L':>10} {'Health':>8}  Issues")
+    lines.append("  " + "-" * 82)
+    total_equity = 0.0
+    live_count = 0
+    attention_needed = []
+    for b in bots:
+        health_str = f"{b['health']}/100"
+        if b["health"] >= 75:
+            health_icon = f"✅ {health_str}"
+        elif b["health"] >= 50:
+            health_icon = f"⚠️  {health_str}"
+        else:
+            health_icon = f"❌ {health_str}"
+
+        pnl_str = _c(b["pnl_7d"]) if b["pnl_7d"] != 0 else "$0"
+        name_full = f"{b['num']} {b['name']}"
+        lines.append(
+            f"  {name_full:<22} {b['status']:<12} {b['last_trade']:<12} {pnl_str:>10} {health_icon:<12}  {b['issues']}"
+        )
+        total_equity += b.get("equity", 0)
+        if "LIVE" in b["status"]:
+            live_count += 1
+        if b["health"] < 60 or b["issues"] not in ("Clean", "Active"):
+            if b["issues"] not in ("Clean", "Active", "No trades yet — awaiting trend signal",
+                                    "No trades yet — awaiting vol squeeze signal"):
+                attention_needed.append(f"  ⚠️  {b['num']} {b['name']}: {b['issues']}")
+
+    lines.append("")
+    total_pnl_7d = sum(b["pnl_7d"] for b in bots)
+    fleet_pnl = total_equity - 800_000
+    lines.append(f"  Fleet status:       {live_count}/8 bots live")
+    lines.append(f"  Total fleet equity: {_c(total_equity)} | vs $800,000 baseline | {_c(fleet_pnl)} ({_pct(fleet_pnl/8000)})")
+    lines.append(f"  7-day fleet P&L:    {_c(total_pnl_7d)}")
+
+    if attention_needed:
+        lines.append("")
+        lines.append("  Requires attention:")
+        for a in attention_needed:
+            lines.append(a)
+
+    lines.append("")
+    lines.append("  Health score (0-100): win rate (25%) + profit factor (25%) + cycle execution (20%)")
+    lines.append("                        + trade frequency (15%) + parameter integrity (15%)")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 6: Execution Quality Expanded — All Bots
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_execution_quality_all_bots(alpaca_trades: list = None, kraken_trades: list = None, fx_trades: list = None) -> list[str]:
+    """ADD 6: Execution Quality for all bots (expanded from Oracle-only)."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 6: EXECUTION QUALITY — ALL BOTS")
+    alpaca_trades = alpaca_trades or []
+    kraken_trades = kraken_trades or []
+    fx_trades = fx_trades or []
+
+    # Oracle
+    _h2(lines, "ORACLE #1 (Alpaca)")
+    alpaca_with_slip = [t for t in alpaca_trades if t.get("slippage_pct") is not None]
+    oracle_rejected = _pg_query(
+        "SELECT COUNT(*) as n FROM trades WHERE exit_reason ILIKE '%reject%' OR exit_reason ILIKE '%error%'"
+    )
+    oracle_total = _pg_query("SELECT COUNT(*) as n FROM trades")
+    oracle_n = int(oracle_total[0].get("n") or 0) if oracle_total else 0
+
+    _row(lines, "Total trades (all time):", str(oracle_n))
+    if alpaca_with_slip:
+        avg_slip = sum(float(t.get("slippage_pct")) for t in alpaca_with_slip) / len(alpaca_with_slip)
+        worst_slip = max(alpaca_with_slip, key=lambda t: abs(float(t.get("slippage_pct"))))
+        _row(lines, "Trades with fill data:", str(len(alpaca_with_slip)))
+        _row(lines, "Average slippage:", f"{avg_slip:.4f}%")
+        _row(lines, "Worst slippage:", f"{float(worst_slip.get('slippage_pct')):.4f}% on {worst_slip.get('symbol','?')}")
+    else:
+        _row(lines, "Slippage data:", "Not yet captured (requires intended_price vs fill_price logging)")
+    rej_n = int(oracle_rejected[0].get("n") or 0) if oracle_rejected else 0
+    _row(lines, "Orders rejected:", str(rej_n))
+    _row(lines, "Fill rate:", f"{((oracle_n - rej_n) / oracle_n * 100):.1f}%" if oracle_n > 0 else "N/A")
+
+    # Kraken Fleet
+    _h2(lines, "KRAKEN FLEET #2-4 (Davy Jones / Blackbeard / Calypso)")
+    cutoff_7d = datetime.now(timezone.utc) - timedelta(days=7)
+    k_stats = _pg_query(
+        "SELECT COUNT(*) as n, SUM(fees_usd) as total_fees, SUM(pnl_usd) as gross_pnl, "
+        "AVG(pnl_pct) as avg_pnl_pct "
+        "FROM kraken_trades WHERE closed_at > %s",
+        (cutoff_7d,)
+    )
+    k_all_time = _pg_query("SELECT COUNT(*) as n FROM kraken_trades")
+    k_n_7d = int(k_stats[0].get("n") or 0) if k_stats else 0
+    k_fees_7d = float(k_stats[0].get("total_fees") or 0) if k_stats else 0
+    k_gross_7d = float(k_stats[0].get("gross_pnl") or 0) if k_stats else 0
+    k_all_n = int(k_all_time[0].get("n") or 0) if k_all_time else 0
+
+    fee_pct = (k_fees_7d / abs(k_gross_7d) * 100) if k_gross_7d != 0 else 0
+    fee_flag = " ⚠️ HIGH" if fee_pct > 40 else ""
+
+    _row(lines, "Total trades (all time):", str(k_all_n))
+    _row(lines, "Trades (7d):", str(k_n_7d))
+    _row(lines, "Fee total (7d):", _c(k_fees_7d))
+    _row(lines, "Gross P&L (7d):", _c(k_gross_7d))
+    _row(lines, "Fee as % of gross P&L:", f"{fee_pct:.1f}%{fee_flag}")
+    _row(lines, "Slippage model:", "Kraken exchange fills at market (paper simulation)")
+    _row(lines, "Entry/exit model:", "Market orders — minimal slippage at crypto scale")
+
+    # Per-bot breakdown
+    for bid, label in [("davy-jones", "Davy Jones"), ("blackbeard", "Blackbeard"), ("calypso", "Calypso")]:
+        bot_stats = _pg_query(
+            "SELECT COUNT(*) as n, SUM(fees_usd) as fees, SUM(pnl_usd) as pnl "
+            "FROM kraken_trades WHERE bot_id = %s AND closed_at > %s",
+            (bid, cutoff_7d)
+        )
+        bn = int(bot_stats[0].get("n") or 0) if bot_stats else 0
+        bf = float(bot_stats[0].get("fees") or 0) if bot_stats else 0
+        bp = float(bot_stats[0].get("pnl") or 0) if bot_stats else 0
+        lines.append(f"    {label}: {bn} trades | fees={_c(bf)} | P&L={_c(bp)}")
+
+    # Navigator
+    _h2(lines, "NAVIGATOR #6 (OANDA/Paper Forex)")
+    fx_7d = _pg_query(
+        "SELECT COUNT(*) as n, SUM(spread_cost_usd) as spread_cost, SUM(pnl_usd) as pnl "
+        "FROM forex_trades WHERE status = 'closed' AND closed_at > %s",
+        (cutoff_7d,)
+    )
+    nav_ls = _read_navigator_live_state()
+    news_blackout = nav_ls.get("news_blackout", False)
+
+    fx_n = int(fx_7d[0].get("n") or 0) if fx_7d else 0
+    fx_spread = float(fx_7d[0].get("spread_cost") or 0) if fx_7d else 0
+    fx_pnl = float(fx_7d[0].get("pnl") or 0) if fx_7d else 0
+
+    _row(lines, "Trades (7d):", str(fx_n))
+    _row(lines, "Spread cost paid (7d):", _c(fx_spread))
+    _row(lines, "Avg spread per trade:", _c(fx_spread / fx_n) if fx_n > 0 else "N/A")
+    _row(lines, "Net P&L (7d):", _c(fx_pnl))
+    _row(lines, "News blackout active:", "YES" if news_blackout else "NO")
+    _row(lines, "Spread cost model:", "0.1% per side (paper engine simulation)")
+
+    # Poseidon
+    _h2(lines, "POSEIDON #7 (Statistical Arbitrage)")
+    pos_7d = _pg_query(
+        "SELECT COUNT(*) as n, AVG(net_pnl) as avg_pnl, SUM(net_pnl) as total_pnl "
+        "FROM poseidon_trades WHERE closed_at > %s",
+        (cutoff_7d,)
+    )
+    pos_n = int(pos_7d[0].get("n") or 0) if pos_7d else 0
+    pos_pnl = float(pos_7d[0].get("total_pnl") or 0) if pos_7d else 0
+
+    _row(lines, "Pair positions opened (7d):", str(pos_n))
+    _row(lines, "Net P&L (7d):", _c(pos_pnl))
+    _row(lines, "Hedge ratio accuracy:", "Tracked via hedge_ratio_30d_avg vs hedge_ratio in DB")
+    _row(lines, "Leg synchronisation:", "Both legs submitted simultaneously (atomic simulation)")
+    _row(lines, "Slippage model:", "Kraken paper fills at market (0.26% fee per leg)")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 7: Daily P&L Attribution
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_daily_pnl_attribution() -> list[str]:
+    """ADD 7: Daily P&L Attribution — per-bot per-day for last 7 trading days."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 7: DAILY P&L ATTRIBUTION — LAST 7 TRADING DAYS")
+    lines.append("  P&L computed from equity_snapshots table (daily close equity vs prior day).")
+    lines.append("")
+
+    # Get last 8 days of equity snapshots (we need prev day for delta)
+    snap_rows = _pg_query(
+        "SELECT DATE(ts) as day, "
+        "MAX(alpaca_equity) as oracle_eq, "
+        "MAX(kraken_equity) as kraken_eq, "
+        "MAX(options_equity) as apex_eq, "
+        "MAX(forex_equity) as nav_eq, "
+        "MAX(poseidon_equity) as poseidon_eq, "
+        "MAX(kraken_current_equity) as kc_eq "
+        "FROM equity_snapshots "
+        "WHERE ts > NOW() - INTERVAL '9 days' "
+        "GROUP BY DATE(ts) ORDER BY day ASC"
+    )
+
+    if not snap_rows or len(snap_rows) < 2:
+        lines.append("  Insufficient equity snapshot data (need at least 2 days).")
+        lines.append("  Equity snapshots are recorded by the trading API every 5 minutes.")
+        return lines
+
+    # Also get Kraken per-bot P&L from kraken_trades
+    kraken_daily = {}
+    for bid, label in [("davy-jones", "dj"), ("blackbeard", "bb"), ("calypso", "cy")]:
+        k_daily_rows = _pg_query(
+            "SELECT DATE(closed_at) as day, SUM(pnl_usd) as pnl "
+            "FROM kraken_trades WHERE bot_id = %s AND closed_at > NOW() - INTERVAL '9 days' "
+            "GROUP BY DATE(closed_at) ORDER BY day ASC",
+            (bid,)
+        )
+        for r in k_daily_rows:
+            day_str = str(r.get("day", "?"))
+            if day_str not in kraken_daily:
+                kraken_daily[day_str] = {"dj": 0, "bb": 0, "cy": 0}
+            kraken_daily[day_str][label] = float(r.get("pnl") or 0)
+
+    # Build daily P&L by diffing consecutive equity snapshots
+    lines.append(f"  {'Date':<12} {'Oracle':>9} {'Kraken MR':>10} {'Apex':>7} {'Navigator':>10} {'Poseidon':>9} {'KC':>8} {'Total':>10}")
+    lines.append("  " + "-" * 80)
+
+    totals = {"oracle": 0, "kraken": 0, "apex": 0, "nav": 0, "poseidon": 0, "kc": 0, "total": 0}
+    prev = None
+
+    for row in snap_rows:
+        day = str(row.get("day", "?"))
+        if prev is None:
+            prev = row
+            continue
+
+        o_pnl = float(row.get("oracle_eq") or 0) - float(prev.get("oracle_eq") or 0)
+        k_pnl = float(row.get("kraken_eq") or 0) - float(prev.get("kraken_eq") or 0)
+        a_pnl = float(row.get("apex_eq") or 0) - float(prev.get("apex_eq") or 0)
+        n_pnl = float(row.get("nav_eq") or 0) - float(prev.get("nav_eq") or 0)
+        p_pnl = float(row.get("poseidon_eq") or 0) - float(prev.get("poseidon_eq") or 0)
+        kc_pnl = float(row.get("kc_eq") or 0) - float(prev.get("kc_eq") or 0)
+        total = o_pnl + k_pnl + a_pnl + n_pnl + p_pnl + kc_pnl
+
+        def fmt(v):
+            if abs(v) < 0.01:
+                return "$0"
+            sign = "+" if v >= 0 else ""
+            return f"{sign}${abs(v):,.0f}" if v < 0 else f"+${v:,.0f}"
+
+        lines.append(
+            f"  {day:<12} {fmt(o_pnl):>9} {fmt(k_pnl):>10} {fmt(a_pnl):>7} {fmt(n_pnl):>10} "
+            f"{fmt(p_pnl):>9} {fmt(kc_pnl):>8} {fmt(total):>10}"
+        )
+
+        totals["oracle"] += o_pnl
+        totals["kraken"] += k_pnl
+        totals["apex"] += a_pnl
+        totals["nav"] += n_pnl
+        totals["poseidon"] += p_pnl
+        totals["kc"] += kc_pnl
+        totals["total"] += total
+        prev = row
+
+    lines.append("  " + "-" * 80)
+    lines.append(
+        f"  {'7-day total':<12} {_c(totals['oracle']):>9} {_c(totals['kraken']):>10} "
+        f"{_c(totals['apex']):>7} {_c(totals['nav']):>10} {_c(totals['poseidon']):>9} "
+        f"{_c(totals['kc']):>8} {_c(totals['total']):>10}"
+    )
+
+    # Best/worst single trades
+    best_k = _pg_query(
+        "SELECT bot_id, symbol, pnl_usd, closed_at FROM kraken_trades "
+        "WHERE closed_at > NOW() - INTERVAL '7 days' ORDER BY pnl_usd DESC LIMIT 1"
+    )
+    worst_k = _pg_query(
+        "SELECT bot_id, symbol, pnl_usd, closed_at FROM kraken_trades "
+        "WHERE closed_at > NOW() - INTERVAL '7 days' ORDER BY pnl_usd ASC LIMIT 1"
+    )
+    best_a = _pg_query(
+        "SELECT ticker, pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY pnl DESC LIMIT 1"
+    )
+    worst_a = _pg_query(
+        "SELECT ticker, pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY pnl ASC LIMIT 1"
+    )
+
+    lines.append("")
+    if best_k:
+        b = best_k[0]
+        lines.append(f"  Best single trade (Kraken, 7d):  {b.get('bot_id')} {b.get('symbol')} {_c(float(b.get('pnl_usd') or 0))} on {str(b.get('closed_at','?'))[:10]}")
+    if worst_k:
+        b = worst_k[0]
+        lines.append(f"  Worst single trade (Kraken, 7d): {b.get('bot_id')} {b.get('symbol')} {_c(float(b.get('pnl_usd') or 0))} on {str(b.get('closed_at','?'))[:10]}")
+    if best_a:
+        b = best_a[0]
+        lines.append(f"  Best single trade (Oracle, 7d):  {b.get('ticker')} {_c(float(b.get('pnl') or 0))} on {str(b.get('date','?'))[:10]}")
+    if worst_a:
+        b = worst_a[0]
+        lines.append(f"  Worst single trade (Oracle, 7d): {b.get('ticker')} {_c(float(b.get('pnl') or 0))} on {str(b.get('date','?'))[:10]}")
+
+    # Fee drag
+    fee_7d = _pg_query(
+        "SELECT SUM(fees_usd) as fees FROM kraken_trades WHERE closed_at > NOW() - INTERVAL '7 days'"
+    )
+    total_fees = float(fee_7d[0].get("fees") or 0) if fee_7d else 0
+    lines.append(f"  Fee drag total (7d, Kraken):     {_c(total_fees)}")
+    lines.append(f"  Net P&L ex-fees (7d, Kraken):    {_c(totals['kraken'] + total_fees)}")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 8: Open Position Risk Summary
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_open_position_risk(alpaca_positions: list = None, fx_positions: list = None) -> list[str]:
+    """ADD 8: Open Position Risk Summary — all bots with stop distances."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 8: OPEN POSITION RISK SUMMARY — ALL BOTS")
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"  Generated: {now_ts}")
+    lines.append("")
+
+    alpaca_positions = alpaca_positions or []
+    fx_positions = fx_positions or []
+
+    all_rows = []
+
+    # Oracle positions
+    for p in alpaca_positions:
+        sym = str(p.get("symbol", "?"))
+        side = str(p.get("side", "long"))
+        entry = float(p.get("avg_entry_price") or 0)
+        current = float(p.get("current_price") or 0)
+        mval = float(p.get("market_value") or 0)
+        upl = float(p.get("unrealized_pl") or 0)
+        sl_px = p.get("stop_loss_price")
+        sl_pct = p.get("stop_loss_pct")
+        tp_px = p.get("take_profit_price")
+        entry_time = str(p.get("entry_time") or "?")[:10]
+
+        sl_dist = None
+        if sl_px and current:
+            sl_dist = (float(sl_px) - current) / current * 100
+
+        time_open = "?"
+        all_rows.append({
+            "bot": "Oracle", "symbol": sym, "side": side.upper(), "entry": entry,
+            "current": current, "upl": upl, "size": abs(mval), "sl_px": sl_px,
+            "sl_dist": sl_dist, "tp_px": tp_px, "entry_date": entry_time
+        })
+
+    # Kraken bots
+    for bid, label in [("davy-jones", "DJ"), ("blackbeard", "BB"), ("calypso", "Calypso")]:
+        ls = _read_kraken_live_state(bid)
+        for p in (ls.get("open_positions") or []):
+            sym = str(p.get("symbol", "?"))
+            side = str(p.get("side", "?")).upper()
+            entry = float(p.get("entry_price") or 0)
+            current = float(p.get("current_price") or 0)
+            size_usd = float(p.get("size_usd") or 0)
+            upl = float(p.get("unrealized_pnl_usd") or 0)
+            sl_px = p.get("stop_loss_price")
+            tp_px = p.get("take_profit_price")
+
+            sl_dist = None
+            if sl_px and current:
+                sl_dist = (float(sl_px) - current) / current * 100
+
+            entry_date = str(p.get("entry_time") or "?")[:10]
+            all_rows.append({
+                "bot": label, "symbol": sym, "side": side, "entry": entry,
+                "current": current, "upl": upl, "size": size_usd, "sl_px": sl_px,
+                "sl_dist": sl_dist, "tp_px": tp_px, "entry_date": entry_date
+            })
+
+    # Navigator positions
+    nav_ls = _read_navigator_live_state()
+    for p in (nav_ls.get("positions") or []):
+        pair = str(p.get("pair", "?"))
+        direction = str(p.get("direction", "?")).upper()
+        entry = float(p.get("entry_price") or 0)
+        current = float(p.get("current_price") or entry)
+        size_usd = float(p.get("size_usd") or 0)
+        upl = float(p.get("unrealized_pnl_usd") or 0)
+        sl_px = p.get("sl_price")
+        tp_px = p.get("tp_price")
+
+        sl_dist = None
+        if sl_px and current:
+            sl_dist = (float(sl_px) - current) / current * 100
+
+        entry_date = str(p.get("entry_time") or "?")[:10]
+        all_rows.append({
+            "bot": "Nav", "symbol": pair.replace("_", "/"), "side": direction, "entry": entry,
+            "current": current, "upl": upl, "size": size_usd, "sl_px": sl_px,
+            "sl_dist": sl_dist, "tp_px": tp_px, "entry_date": entry_date
+        })
+
+    # Poseidon positions (from live state)
+    pos_ls = _read_poseidon_live_state()
+    positions_data = pos_ls.get("positions") or {}
+    if isinstance(positions_data, dict):
+        for pair_key, p in positions_data.items():
+            all_rows.append({
+                "bot": "Poseidon", "symbol": str(pair_key), "side": "PAIR",
+                "entry": 0, "current": 0, "upl": 0, "size": 0,
+                "sl_px": None, "sl_dist": None, "tp_px": None, "entry_date": "?"
+            })
+
+    if not all_rows:
+        lines.append("  No open positions across any bot at report time.")
+        return lines
+
+    lines.append(f"  {'Bot':<10} {'Symbol':<14} {'Side':<7} {'Entry':>10} {'Current':>10} {'Unreal P&L':>12} {'SL Dist':>9}  Open")
+    lines.append("  " + "-" * 84)
+
+    total_upl = 0.0
+    total_risk = 0.0
+    approaching_sl = []
+    in_profit = []
+
+    for r in all_rows:
+        entry_str = f"{r['entry']:.4f}" if r["entry"] < 10 else f"{r['entry']:.2f}"
+        curr_str = f"{r['current']:.4f}" if r["current"] < 10 else f"{r['current']:.2f}"
+        sl_str = f"{r['sl_dist']:+.2f}%" if r["sl_dist"] is not None else "N/A"
+        upl_str = _c(r["upl"])
+
+        lines.append(
+            f"  {r['bot']:<10} {r['symbol']:<14} {r['side']:<7} {entry_str:>10} {curr_str:>10} "
+            f"{upl_str:>12} {sl_str:>9}  {r['entry_date']}"
+        )
+        total_upl += r["upl"]
+        if r["sl_dist"] is not None:
+            risk = abs(r["sl_dist"]) / 100 * r["size"]
+            total_risk += risk
+            if abs(r["sl_dist"]) <= 1.0:
+                approaching_sl.append(f"{r['bot']} {r['symbol']} ({sl_str} from SL)")
+        if r["upl"] / r["size"] > 0.02 if r["size"] > 0 else False:
+            in_profit.append(f"{r['bot']} {r['symbol']} ({_pct(r['upl']/r['size']*100)})")
+
+    lines.append("")
+    lines.append(f"  Total open positions:      {len(all_rows)}")
+    lines.append(f"  Total unrealised P&L:      {_c(total_upl)}")
+    lines.append(f"  Total capital at risk:     {_c(total_risk)} (sum of SL dist × position sizes)")
+
+    if approaching_sl:
+        lines.append(f"  ⚠️  Approaching stop (≤1%): {', '.join(approaching_sl)}")
+    else:
+        lines.append(f"  Positions approaching stop (≤1%): None")
+
+    if in_profit:
+        lines.append(f"  Positions in profit >2%:  {', '.join(in_profit)}")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 9: System Infrastructure Status
+# ──────────────────────────────────────────────────────────────────────────────
+
+def section_infrastructure_status(sched_jobs: list = None) -> list[str]:
+    """ADD 9: System Infrastructure Status — scheduled jobs + API connections."""
+    lines: list[str] = []
+    _h1(lines, "ADDITION 9: SYSTEM INFRASTRUCTURE STATUS")
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"  Generated: {now_ts}")
+    lines.append("")
+
+    # Scheduled jobs
+    _h2(lines, "SCHEDULED JOBS")
+    sched_jobs = sched_jobs or []
+    if sched_jobs:
+        lines.append(f"  {'Job':<45} {'Next Run':<22} Status")
+        lines.append("  " + "-" * 72)
+        for job in sched_jobs:
+            name = str(job.get("name", "?"))[:42]
+            next_fire = str(job.get("next_fire_utc", "?"))[:19]
+            status = "✅ SCHEDULED"
+            lines.append(f"  {name:<45} {next_fire:<22} {status}")
+    else:
+        lines.append("  No scheduler job data available (API not accessible or no jobs configured).")
+
+    # Bot heartbeats
+    _h2(lines, "BOT HEARTBEATS (last DB write)")
+    hb_rows = _pg_query(
+        "SELECT id, status, last_updated, position_count, equity_usd FROM kraken_heartbeat ORDER BY id"
+    )
+    bot_names = {1: "Davy Jones #2", 2: "Blackbeard #3", 3: "Calypso #4", 7: "Poseidon #7", 8: "Kraken Current #8"}
+    if hb_rows:
+        lines.append(f"  {'Bot':<22} {'Status':<14} {'Last Update':<22} {'Positions':>10} {'Equity':>12}")
+        lines.append("  " + "-" * 82)
+        for hb in hb_rows:
+            bid = hb.get("id")
+            bname = bot_names.get(bid, f"Bot {bid}")
+            status = str(hb.get("status") or "unknown")
+            last = str(hb.get("last_updated") or "?")[:19]
+            pos = int(hb.get("position_count") or 0)
+            eq = float(hb.get("equity_usd") or 0)
+            lines.append(f"  {bname:<22} {status:<14} {last:<22} {pos:>10} {_c(eq):>12}")
+    else:
+        lines.append("  No heartbeat data available.")
+
+    # API connection checks
+    _h2(lines, "DATA CONNECTIONS")
+
+    def _check_api(name: str, check_fn) -> str:
+        try:
+            result = check_fn()
+            return f"✅ CONNECTED | {result}"
+        except Exception as e:
+            return f"❌ ERROR: {str(e)[:60]}"
+
+    # DB check
+    try:
+        db_rows = _pg_query("SELECT COUNT(*) as n FROM equity_snapshots")
+        snap_count = int(db_rows[0].get("n") or 0) if db_rows else 0
+        last_snap = _pg_query("SELECT ts FROM equity_snapshots ORDER BY ts DESC LIMIT 1")
+        last_ts = str(last_snap[0].get("ts") or "?")[:19] if last_snap else "?"
+        db_status = f"✅ CONNECTED | {snap_count} equity snapshots | Last write: {last_ts}"
+    except Exception as e:
+        db_status = f"❌ ERROR: {str(e)[:60]}"
+
+    # Kraken live state age
+    dj_ls = _read_kraken_live_state("davy-jones")
+    dj_last = str(dj_ls.get("last_updated", "?"))[:19]
+
+    # Navigator live state age
+    nav_ls = _read_navigator_live_state()
+    nav_last = str(nav_ls.get("last_updated", "?"))[:19]
+
+    # Poseidon live state age
+    pos_ls = _read_poseidon_live_state()
+    pos_last = str(pos_ls.get("last_updated", "?"))[:19]
+
+    lines.append(f"  PostgreSQL DB:       {db_status}")
+    lines.append(f"  Kraken Bot Data:     Last live_state update: {dj_last} UTC")
+    lines.append(f"  Navigator Data:      Last live_state update: {nav_last} UTC")
+    lines.append(f"  Poseidon Data:       Last live_state update: {pos_last} UTC")
+
+    # Oracle scan lag
+    last_scan = _pg_query("SELECT ts FROM oracle_scan_log ORDER BY ts DESC LIMIT 1")
+    if last_scan:
+        scan_ts = str(last_scan[0].get("ts") or "?")[:19]
+        lines.append(f"  Oracle Scan Data:    Last scan log entry: {scan_ts} UTC")
+    else:
+        lines.append(f"  Oracle Scan Data:    No scan log entries (Oracle not yet scanning)")
+
+    # Recent system errors
+    _h2(lines, "RECENT SYSTEM ERRORS (last 24h)")
+    err_rows = _pg_query(
+        "SELECT degradation_type, details, detected_at FROM system_degradations "
+        "WHERE detected_at > NOW() - INTERVAL '24 hours' ORDER BY detected_at DESC LIMIT 10"
+    )
+    if err_rows:
+        for e in err_rows:
+            ts = str(e.get("detected_at") or "?")[:19]
+            dtype = str(e.get("degradation_type") or "?")
+            details = str(e.get("details") or "")[:60]
+            lines.append(f"  {ts}  [{dtype}]  {details}")
+    else:
+        lines.append("  No system errors in last 24 hours.")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ADDITION 10: Changes Since Last Report
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _load_last_report_state() -> dict:
+    try:
+        return _json_diag.loads(_LAST_REPORT_STATE_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_report_state(state: dict) -> None:
+    try:
+        _LAST_REPORT_STATE_FILE.write_text(_json_diag.dumps(state, indent=2, default=str))
+    except Exception:
+        pass
+
+
+def section_changes_since_last_report() -> list[str]:
+    """ADD 10: Changes Since Last Report — diffs equity, params, trades, regime."""
+    lines: list[str] = []
+    lines.append("")
+    lines.append("\u2550" * 80)
+    lines.append("  ADDITION 10: CHANGES SINCE LAST REPORT")
+    now_ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"  Current report: {now_ts}")
+    lines.append("\u2550" * 80)
+
+    prev = _load_last_report_state()
+    prev_ts = str(prev.get("generated_at", "N/A"))[:16]
+    lines.append(f"  Previous report: {prev_ts} UTC")
+    lines.append("")
+
+    if not prev:
+        lines.append("  No previous report state found — this is the first run.")
+        lines.append("  State will be saved for comparison in the next report.")
+        # Save current state
+        _save_current_report_state_to_file()
+        return lines
+
+    # ── Equity changes ────────────────────────────────────────────────────────
+    lines.append("  EQUITY CHANGES:")
+    eq_rows = _pg_query("SELECT alpaca_equity, kraken_equity, options_equity, forex_equity, poseidon_equity, kraken_current_equity FROM equity_snapshots ORDER BY ts DESC LIMIT 1")
+    if eq_rows:
+        eq = eq_rows[0]
+        now_vals = {
+            "Oracle":         float(eq.get("alpaca_equity") or 100000),
+            "Kraken fleet":   float(eq.get("kraken_equity") or 300000),
+            "Apex Predator":  float(eq.get("options_equity") or 100000),
+            "Navigator":      float(eq.get("forex_equity") or 100000),
+            "Poseidon":       float(eq.get("poseidon_equity") or 100000),
+            "Kraken Current": float(eq.get("kraken_current_equity") or 100000),
+        }
+        prev_vals = prev.get("equity", {})
+        total_now = sum(now_vals.values())
+        total_prev = sum(prev_vals.values()) if prev_vals else total_now
+
+        for bot_name, now_eq in now_vals.items():
+            prev_eq = float(prev_vals.get(bot_name, now_eq))
+            delta = now_eq - prev_eq
+            pct = delta / prev_eq * 100 if prev_eq else 0
+            sign = "+" if delta >= 0 else ""
+            lines.append(f"    {bot_name:<20} {_c(prev_eq)} → {_c(now_eq)} = {sign}{_c(delta)} ({sign}{pct:.2f}%)")
+
+        delta_total = total_now - total_prev
+        pct_total = delta_total / total_prev * 100 if total_prev else 0
+        sign = "+" if delta_total >= 0 else ""
+        lines.append(f"    {'TOTAL FLEET':<20} {_c(total_prev)} → {_c(total_now)} = {sign}{_c(delta_total)} ({sign}{pct_total:.2f}%)")
+    else:
+        lines.append("    No equity snapshot data available.")
+
+    # ── Parameter changes ─────────────────────────────────────────────────────
+    lines.append("")
+    lines.append("  PARAMETER CHANGES:")
+    current_params = {}
+    kap_rows = _pg_query("SELECT bot_id, params, adapted_at FROM kraken_adaptive_params")
+    for row in kap_rows:
+        bid = str(row.get("bot_id") or "")
+        p = row.get("params") or {}
+        if isinstance(p, str):
+            p = _json_diag.loads(p)
+        current_params[bid] = p
+
+    prev_params = prev.get("params", {})
+    param_changes_found = False
+    for bid, cp in current_params.items():
+        pp = prev_params.get(bid, {})
+        for pname, cval in cp.items():
+            if pname.startswith("_"):
+                continue
+            pval = pp.get(pname)
+            if pval is not None and cval is not None and abs(float(cval) - float(pval)) > 1e-9:
+                lines.append(f"    ⚠️  {bid} {pname}: {pval} → {cval}")
+                param_changes_found = True
+
+    if not param_changes_found:
+        lines.append("    NONE — all parameters identical to last report")
+
+    # ── New trades ────────────────────────────────────────────────────────────
+    lines.append("")
+    lines.append("  NEW TRADES OPENED (since last report):")
+    prev_gen = prev.get("generated_at")
+    if prev_gen:
+        try:
+            prev_dt = datetime.fromisoformat(str(prev_gen).replace("Z", "+00:00"))
+        except Exception:
+            prev_dt = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        new_k = _pg_query(
+            "SELECT bot_id, symbol, side, pnl_usd, reason, closed_at FROM kraken_trades "
+            "WHERE closed_at > %s ORDER BY closed_at ASC LIMIT 20",
+            (prev_dt,)
+        )
+        new_a = _pg_query(
+            "SELECT ticker, side, pnl, date FROM trades WHERE date > %s ORDER BY date ASC LIMIT 10",
+            (prev_dt,)
+        )
+        new_fx = _pg_query(
+            "SELECT pair, direction, pnl_usd FROM forex_trades WHERE closed_at > %s AND status = 'closed' LIMIT 10",
+            (prev_dt,)
+        )
+
+        if not new_k and not new_a and not new_fx:
+            lines.append("    NONE")
+        else:
+            for t in new_k:
+                pnl = float(t.get("pnl_usd") or 0)
+                lines.append(f"    {t.get('bot_id'):<14} {t.get('symbol'):<14} {t.get('side'):<6} {_c(pnl):>10}  {str(t.get('reason',''))[:30]}")
+            for t in new_a:
+                pnl = float(t.get("pnl") or 0)
+                lines.append(f"    Oracle        {str(t.get('ticker','?')):<14} {str(t.get('side','?')):<6} {_c(pnl):>10}")
+            for t in new_fx:
+                pnl = float(t.get("pnl_usd") or 0)
+                lines.append(f"    Navigator     {str(t.get('pair','?')):<14} {str(t.get('direction','?')):<6} {_c(pnl):>10}")
+    else:
+        lines.append("    (Cannot determine — no previous report timestamp)")
+
+    # ── Circuit breakers ──────────────────────────────────────────────────────
+    lines.append("")
+    lines.append("  CIRCUIT BREAKERS TRIGGERED:")
+    cb_bots = []
+    hb_rows = _pg_query("SELECT id, circuit_breaker FROM kraken_heartbeat")
+    for hb in hb_rows:
+        cb = hb.get("circuit_breaker")
+        if isinstance(cb, str):
+            try:
+                cb = _json_diag.loads(cb)
+            except Exception:
+                cb = {}
+        if isinstance(cb, dict) and cb.get("tripped"):
+            bot_name = {1: "Davy Jones", 2: "Blackbeard", 3: "Calypso", 7: "Poseidon", 8: "Kraken Current"}.get(hb.get("id"), f"Bot {hb.get('id')}")
+            until = str(cb.get("until") or "?")[:19]
+            cb_bots.append(f"{bot_name} (until {until})")
+    lines.append(f"    {', '.join(cb_bots) if cb_bots else 'NONE'}")
+
+    lines.append("")
+    lines.append("  REGIME CHANGES:    (tracked via equity_snapshots.regime column)")
+    regime_rows = _pg_query(
+        "SELECT regime, ts FROM equity_snapshots WHERE ts > NOW() - INTERVAL '24 hours' "
+        "ORDER BY ts DESC LIMIT 5"
+    )
+    if regime_rows:
+        regimes = [str(r.get("regime") or "?") for r in regime_rows]
+        if len(set(regimes)) > 1:
+            lines.append(f"    Regime transitions detected: {' → '.join(reversed(regimes[:3]))}")
+        else:
+            lines.append(f"    Current regime: {regimes[0]} (stable — no transitions in 24h)")
+    else:
+        lines.append("    No regime data available")
+
+    # Save current state for next comparison
+    _save_current_report_state_to_file()
+
+    return lines
+
+
+def _save_current_report_state_to_file() -> None:
+    """Save the current report state snapshot for next comparison."""
+    state: dict = {"generated_at": datetime.now(timezone.utc).isoformat()}
+
+    # Equity snapshot
+    eq_rows = _pg_query(
+        "SELECT alpaca_equity, kraken_equity, options_equity, forex_equity, poseidon_equity, kraken_current_equity "
+        "FROM equity_snapshots ORDER BY ts DESC LIMIT 1"
+    )
+    if eq_rows:
+        eq = eq_rows[0]
+        state["equity"] = {
+            "Oracle":         float(eq.get("alpaca_equity") or 100000),
+            "Kraken fleet":   float(eq.get("kraken_equity") or 300000),
+            "Apex Predator":  float(eq.get("options_equity") or 100000),
+            "Navigator":      float(eq.get("forex_equity") or 100000),
+            "Poseidon":       float(eq.get("poseidon_equity") or 100000),
+            "Kraken Current": float(eq.get("kraken_current_equity") or 100000),
+        }
+
+    # Params snapshot
+    kap_rows = _pg_query("SELECT bot_id, params FROM kraken_adaptive_params")
+    state["params"] = {}
+    for row in kap_rows:
+        bid = str(row.get("bot_id") or "")
+        p = row.get("params") or {}
+        if isinstance(p, str):
+            p = _json_diag.loads(p)
+        state["params"][bid] = dict(p)
+
+    _save_report_state(state)

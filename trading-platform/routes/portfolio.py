@@ -1010,6 +1010,16 @@ async def export_diagnostic_report():
 
     lines += _rs.section_fleet_operations_log()
 
+    try:
+        lines += _rs.section_changes_since_last_report()
+    except Exception as _e10:
+        lines.append(f"  [ADD 10: Changes Since Last Report — error: {_e10}]")
+
+    try:
+        lines += _rs.section_fleet_health_scorecard()
+    except Exception as _e5:
+        lines.append(f"  [ADD 5: Fleet Health Scorecard — error: {_e5}]")
+
     lines.append("@@PART1@@")
     h1("SECTION 1: SYSTEM STATUS & RISK ENVIRONMENT")
     row("Report timestamp:", ts)
@@ -1036,6 +1046,11 @@ async def export_diagnostic_report():
             lines.append(f"    \u2022 {job.get('name','?'):<45} next: {str(job.get('next_fire_utc','?'))[:19]}")
 
     _report_ks_state = ks_state
+
+    try:
+        lines += _rs.section_infrastructure_status(sched_jobs=sched_jobs)
+    except Exception as _e9:
+        lines.append(f"  [ADD 9: Infrastructure Status — error: {_e9}]")
 
     try:
         acct      = get_account()
@@ -1339,6 +1354,15 @@ async def export_diagnostic_report():
     lines += _rs.section_consecutive_streaks("Oracle #1", alpaca_trades)
     lines += _rs.section_rolling_metrics("Oracle #1", alpaca_trades, equity_source="oracle")
 
+    try:
+        lines += _rs.section_live_code_params_oracle()
+    except Exception as _e1a:
+        lines.append(f"  [ADD 1 Oracle params — error: {_e1a}]")
+    try:
+        lines += _rs.section_cycle_execution_audit_oracle()
+    except Exception as _e2a:
+        lines.append(f"  [ADD 2 Oracle cycle audit — error: {_e2a}]")
+
     lines.append("@@PART2@@")
     h1("SECTION 3: KRAKEN FLEET \u2014 ALL 3 CRYPTO BOTS (24/7)")
 
@@ -1564,6 +1588,26 @@ async def export_diagnostic_report():
         lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)
     lines += _rs.section_rolling_metrics("Kraken Fleet", _all_kraken_trades_all, equity_source="kraken")
 
+    for _k1_bid, _k1_prof in KRAKEN_BOT_PROFILES.items():
+        try:
+            lines += _rs.section_live_code_params_kraken(_k1_bid, _k1_prof["display_name"])
+        except Exception as _ek1:
+            lines.append(f"  [ADD 1 Kraken {_k1_bid} params — error: {_ek1}]")
+        try:
+            lines += _rs.section_cycle_execution_audit_kraken(_k1_bid, _k1_prof["display_name"])
+        except Exception as _ek2:
+            lines.append(f"  [ADD 2 Kraken {_k1_bid} cycle audit — error: {_ek2}]")
+
+    try:
+        lines += _rs.section_parameter_drift_monitor()
+    except Exception as _e3:
+        lines.append(f"  [ADD 3 Parameter Drift Monitor — error: {_e3}]")
+
+    try:
+        lines += _rs.section_filter_effectiveness()
+    except Exception as _e4:
+        lines.append(f"  [ADD 4 Filter Effectiveness — error: {_e4}]")
+
     lines.append("@@PART3@@")
     h1("SECTION 4: APEX PREDATOR \u2014 OPTIONS ENGINE (Bot #5)")
 
@@ -1768,6 +1812,11 @@ async def export_diagnostic_report():
     lines += _rs.section_consecutive_streaks("Navigator #6", _fx_trades)
     lines += _rs.section_rolling_metrics("Navigator #6", _fx_trades, equity_source="forex")
 
+    try:
+        lines += _rs.section_live_code_params_navigator()
+    except Exception as _e1n:
+        lines.append(f"  [ADD 1 Navigator params — error: {_e1n}]")
+
     lines.append("@@SEC6@@")
     h1("SECTION 6: COMBINED FLEET PORTFOLIO \u2014 ALL 8 BOTS")
 
@@ -1855,6 +1904,19 @@ async def export_diagnostic_report():
         kraken_current_equity=_kc_equity,
     )
 
+    try:
+        lines += _rs.section_daily_pnl_attribution()
+    except Exception as _e7:
+        lines.append(f"  [ADD 7 Daily P&L Attribution — error: {_e7}]")
+
+    try:
+        lines += _rs.section_open_position_risk(
+            alpaca_positions=positions,
+            fx_positions=_fx_positions,
+        )
+    except Exception as _e8:
+        lines.append(f"  [ADD 8 Open Position Risk — error: {_e8}]")
+
     lines.append("@@CORR@@")
     lines += _rs.section_cross_bot_correlation()
 
@@ -1864,9 +1926,25 @@ async def export_diagnostic_report():
         kraken_trades=_all_kraken_trades_all,
         fx_trades=_fx_trades,
     )
+    try:
+        lines += _rs.section_execution_quality_all_bots(
+            alpaca_trades=alpaca_trades,
+            kraken_trades=_all_kraken_trades_all,
+            fx_trades=_fx_trades,
+        )
+    except Exception as _e6:
+        lines.append(f"  [ADD 6 Execution Quality All Bots — error: {_e6}]")
 
     lines.append("@@SEC_POSEIDON@@")
     lines += _rs.section_poseidon_status()
+    try:
+        lines += _rs.section_live_code_params_poseidon()
+    except Exception as _e1p:
+        lines.append(f"  [ADD 1 Poseidon params — error: {_e1p}]")
+    try:
+        lines += _rs.section_cycle_execution_audit_poseidon()
+    except Exception as _e2p:
+        lines.append(f"  [ADD 2 Poseidon cycle audit — error: {_e2p}]")
 
     lines.append("@@SEC_KC@@")
     lines += _rs.section_kraken_current_status()

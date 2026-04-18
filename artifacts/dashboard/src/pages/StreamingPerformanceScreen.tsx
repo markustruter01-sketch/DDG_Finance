@@ -56,6 +56,7 @@ const BOT_META: Record<string, { icon: string; color: string; startCap: number; 
   "davy-jones":     { icon: "⚓", color: C.cyan,   startCap: 100_000, label: "Davy Jones" },
   "blackbeard":     { icon: "☠️", color: C.red,    startCap: 100_000, label: "Blackbeard" },
   "calypso":        { icon: "🌊", color: C.violet, startCap: 100_000, label: "Calypso" },
+  "apex-predator":  { icon: "🦅", color: C.orange, startCap: 100_000, label: "Apex Predator" },
   "poseidon":       { icon: "🔱", color: C.blue,   startCap: 100_000, label: "Poseidon" },
   "kraken-current": { icon: "🐙", color: C.green,  startCap: 100_000, label: "Kraken Current" },
 };
@@ -102,9 +103,10 @@ export default function StreamingPerformanceScreen() {
   const fleetBots = fl?.bots ?? [];
   const fleetPnL  = fleetBots.reduce((s, b) => s + b.equity_usd - b.starting_balance_usd, 0);
   const fleetEquity = fleetBots.reduce((s, b) => s + b.equity_usd, 0);
-  const fleetTrades = fleetBots.reduce((s, b) => s + b.trades, 0);
-  const fleetWins   = fleetBots.reduce((s, b) => s + b.wins, 0);
-  const fleetWinRate = fleetTrades > 0 ? (fleetWins / fleetTrades) * 100 : null;
+  const fleetTrades = fl?.total_trades ?? fleetBots.reduce((s, b) => s + b.trades, 0);
+  const fleetWins   = fl?.total_wins   ?? fleetBots.reduce((s, b) => s + b.wins, 0);
+  // Single canonical win rate — always the server-computed value, no client-side arithmetic drift
+  const fleetWinRate = fl?.fleet_win_rate ?? (fleetTrades > 0 ? (fleetWins / fleetTrades) * 100 : null);
 
   /* overall win rate — attribution returns 0-100 already */
   const overallWinRate = at?.overall.win_rate ?? null;
@@ -329,9 +331,9 @@ export default function StreamingPerformanceScreen() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
               {[
-                { label: "Total Trades", value: totalTrades > 0 ? String(totalTrades) : "—", color: C.text },
-                { label: "Win Rate",     value: overallWinRate != null ? `${overallWinRate.toFixed(0)}%` : (fleetWinRate != null ? `${fleetWinRate.toFixed(0)}%` : "—"), color: (overallWinRate ?? fleetWinRate ?? 0) >= 50 ? C.green : C.red },
-                { label: "Total Wins",   value: at?.overall.wins != null ? String(at.overall.wins) : (j?.summary.wins != null ? String(j.summary.wins) : "—"), color: C.green },
+                { label: "Total Trades", value: fleetTrades > 0 ? String(fleetTrades) : "—", color: C.text },
+                { label: "Win Rate",     value: fleetWinRate != null ? `${fleetWinRate.toFixed(0)}%` : "—", color: fleetWinRate != null ? (fleetWinRate >= 50 ? C.green : C.red) : C.dim },
+                { label: "Total Wins",   value: fleetTrades > 0 ? String(fleetWins) : "—", color: C.green },
                 { label: "Avg P&L",      value: at?.overall.avg_pnl_pct != null ? `${at.overall.avg_pnl_pct > 0 ? "+" : ""}${at.overall.avg_pnl_pct.toFixed(1)}%` : (j?.summary.avg_pnl != null ? `${j.summary.avg_pnl > 0 ? "+" : ""}${j.summary.avg_pnl.toFixed(1)}%` : "—"), color: pnlColor(at?.overall.avg_pnl_pct ?? j?.summary.avg_pnl) },
               ].map(({ label, value, color }) => (
                 <div key={label}>

@@ -1,5 +1,5 @@
 {
-  "cash": 1489.769456986356,
+  "cash": 1641.8904412181582,
   "positions": {
     "BTC/USD": {
       "symbol": "BTC/USD",
@@ -11,29 +11,12 @@
       "ema_fast": 73297.25945965812,
       "ema_slow": 70980.00634107793,
       "adx": 29.911046157107187,
-      "best_price": 74963.3,
-      "stop_level": 71778.017520032,
+      "best_price": 75723.4,
+      "stop_level": 73808.81752003198,
       "trail_immediate": false,
-      "trailing_active": false,
+      "trailing_active": true,
       "opened_at": "2026-04-15T07:18:48.632007+00:00",
       "fees_paid": 52.0
-    },
-    "ETH/USD": {
-      "symbol": "ETH/USD",
-      "direction": "long",
-      "units": 8.647329829342677,
-      "entry_price": 2311.65,
-      "stop_distance": 84.21970671937724,
-      "position_value": 19989.600000000002,
-      "ema_fast": 2290.478125842219,
-      "ema_slow": 2191.1670350510744,
-      "adx": 28.315898537849204,
-      "best_price": 2366.55,
-      "stop_level": 2227.4302932806227,
-      "trail_immediate": false,
-      "trailing_active": false,
-      "opened_at": "2026-04-15T07:18:48.632769+00:00",
-      "fees_paid": 51.97296
     },
     "HYPE/USD": {
       "symbol": "HYPE/USD",
@@ -62,7 +45,7 @@
       "ema_fast": 615.4172555736214,
       "ema_slow": 610.9510356234363,
       "adx": 27.189905207777976,
-      "best_price": 622.85,
+      "best_price": 630.47,
       "stop_level": 610.1078535397935,
       "trail_immediate": false,
       "trailing_active": false,
@@ -85,10 +68,27 @@
       "trailing_active": false,
       "opened_at": "2026-04-16T07:43:58.975954+00:00",
       "fees_paid": 46.30313008104665
+    },
+    "XRP/USD": {
+      "symbol": "XRP/USD",
+      "direction": "long",
+      "units": 14070.97367994278,
+      "entry_price": 1.42607,
+      "stop_distance": 0.0455960129981589,
+      "position_value": 20066.193435756,
+      "ema_fast": 1.4330649671272722,
+      "ema_slow": 1.3831473426700194,
+      "adx": 50.58621370852474,
+      "best_price": 1.42607,
+      "stop_level": 1.380473987001841,
+      "trail_immediate": true,
+      "trailing_active": true,
+      "opened_at": "2026-04-18T20:28:43.589023+00:00",
+      "fees_paid": 52.17210293296559
     }
   },
-  "total_trades": 7,
+  "total_trades": 8,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-16T07:43:58.975997+00:00"
+  "updated_at": "2026-04-18T20:28:43.589116+00:00"
 }

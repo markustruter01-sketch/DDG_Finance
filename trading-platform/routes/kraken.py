@@ -354,12 +354,14 @@ async def kraken_fleet_summary() -> dict:
                                   "equity_usd": 100_000.0, "cash_usd": 0.0,
                                   "starting_balance_usd": 100_000.0, "trades": 0, "wins": 0, "pnl_usd": 0.0})
 
+            fleet_win_rate = round(total_wins / total_trades * 100, 1) if total_trades > 0 else None
             return {
                 "total_equity_usd": round(total_equity, 2),
                 "total_cash_usd": round(total_cash, 2),
                 "total_starting_usd": round(total_starting, 2),
                 "total_trades": total_trades,
                 "total_wins": total_wins,
+                "fleet_win_rate": fleet_win_rate,
                 "total_pnl_usd": round(total_pnl_usd, 2),
                 "bot_count": len(bots_out),
                 "bots": bots_out,

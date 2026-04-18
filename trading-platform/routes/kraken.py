@@ -122,6 +122,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                            fees_usd, reason, closed_at, paper
                     FROM   kraken_trades
                     WHERE  bot_id = %s
+                      AND  closed_at >= NOW() - INTERVAL '30 days'
                     ORDER  BY closed_at ASC
                     """,
                     (bid,)
@@ -238,9 +239,9 @@ async def kraken_fleet_summary() -> dict:
                     # All-time trade count and win count (no date filter)
                     _fsc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) "
+                        "SUM(CASE WHEN pnl_usd > %s THEN 1 ELSE 0 END) "
                         "FROM kraken_trades WHERE bot_id = %s",
-                        (_bid,)
+                        (_WIN_THRESHOLD, _bid)
                     )
                     _tr = _fsc.fetchone()
                     if _tr:
@@ -280,8 +281,9 @@ async def kraken_fleet_summary() -> dict:
                         ps_cash = float(_psr[1] or 0)
                     _psc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) "
-                        "FROM poseidon_trades"
+                        "SUM(CASE WHEN net_pnl > %s THEN 1 ELSE 0 END) "
+                        "FROM poseidon_trades",
+                        (_WIN_THRESHOLD,)
                     )
                     _ptr = _psc.fetchone()
                     ps_trades = int(_ptr[0] or 0) if _ptr else 0
@@ -323,8 +325,9 @@ async def kraken_fleet_summary() -> dict:
                         kc_cash = float(_kcr[1] or 0)
                     _kcc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) "
-                        "FROM kraken_current_trades"
+                        "SUM(CASE WHEN pnl_usd > %s THEN 1 ELSE 0 END) "
+                        "FROM kraken_current_trades",
+                        (_WIN_THRESHOLD,)
                     )
                     _ktr = _kcc.fetchone()
                     kc_trades = int(_ktr[0] or 0) if _ktr else 0
@@ -496,8 +499,8 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     signals       = _live.get("signals", kdata.get("signals", []))
     strategy_trades = [t for t in recent_trades if t.get("reason") != "rebalance_liquidation"]
     rebalance_trades = [t for t in recent_trades if t.get("reason") == "rebalance_liquidation"]
-    wins          = [t for t in strategy_trades if (t.get("pnl_usd") or 0) > 0]
-    losses        = [t for t in strategy_trades if (t.get("pnl_usd") or 0) <= 0]
+    wins          = [t for t in strategy_trades if (t.get("pnl_usd") or 0) > _WIN_THRESHOLD]
+    losses        = [t for t in strategy_trades if (t.get("pnl_usd") or 0) <= _WIN_THRESHOLD]
     win_rate      = _win_rate(strategy_trades, "pnl_usd")
 
     pos_text = "\n".join(

@@ -123,10 +123,12 @@ async def pair_learning():
         ORDER BY bot_id, symbol
     """)
 
-    # Aggregate win rates from kraken_trades per bot+symbol
-    trade_rows = _pg_query("""
+    # Aggregate win rates from kraken_trades per bot+symbol.
+    # Threshold matches core.metrics.WIN_THRESHOLD — passed as parameter to stay in sync.
+    trade_rows = _pg_query(
+        """
         SELECT bot_id, symbol,
-               COUNT(*) FILTER (WHERE pnl_usd > 0) AS wins,
+               COUNT(*) FILTER (WHERE pnl_usd > %s) AS wins,
                COUNT(*) AS total,
                SUM(pnl_usd) AS total_pnl,
                MAX(closed_at) AS last_trade_at
@@ -134,7 +136,9 @@ async def pair_learning():
         WHERE closed_at IS NOT NULL
         GROUP BY bot_id, symbol
         ORDER BY bot_id, symbol
-    """)
+        """,
+        (_WIN_THRESHOLD,)
+    )
 
     # Build win-rate lookup: (bot_id, symbol) -> stats
     wr_lookup: dict = {}

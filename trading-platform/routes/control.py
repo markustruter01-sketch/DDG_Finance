@@ -549,12 +549,28 @@ async def emergency_liquidate() -> dict:
         f"held {len(held)} (vault), errors {len(errors)}"
     )
 
+    market_open = is_market_open()
+    ks_state = ks_get_state()
+    pending = ks_state.get("pending_liquidation", False)
+
+    if market_open and not pending:
+        fill_note = f"{len(closed)} position(s) closing — market is open, orders will fill shortly. Kill switch is active."
+    else:
+        fill_note = "Market is closed. Positions will be force-closed automatically when the market opens. Kill switch is active."
+
     return {
         "status": "emergency_liquidated",
-        "closed": closed,
-        "held": held,
+        "positions_closed": closed,
+        "positions_held": held,
         "errors": errors,
-        "kill_switch": ks_get_state(),
+        "kill_switch": ks_state,
+        "market_open": market_open,
+        "pending_liquidation": pending,
+        "fill_note": fill_note,
+        "message": (
+            f"Emergency liquidation complete — {len(closed)} closed, "
+            f"{len(held)} vault-protected, {len(errors)} error(s)."
+        ),
     }
 
 

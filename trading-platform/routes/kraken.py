@@ -219,16 +219,21 @@ async def kraken_fleet_summary() -> dict:
                 pnl = 0.0
 
                 with _fsconn.cursor() as _fsc:
-                    _fsc.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = %s", (_dbid,))
-                    _hr = _fsc.fetchone()
-                    if _hr:
-                        eq = float(_hr[0] or 0)
-
+                    # Read starting balance FIRST so we can use it as equity floor
                     _fsc.execute("SELECT starting_balance_usd, cash_usd FROM kraken_portfolio WHERE id = %s", (_dbid,))
                     _pr = _fsc.fetchone()
                     if _pr:
                         starting = float(_pr[0] or 100_000)
                         cash = float(_pr[1] or 0)
+
+                    _fsc.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = %s", (_dbid,))
+                    _hr = _fsc.fetchone()
+                    if _hr:
+                        eq = float(_hr[0] or 0)
+                    # If heartbeat shows 0 the bot has not completed its first cycle yet;
+                    # use starting_balance so we don't wrongly subtract $100k from fleet total.
+                    if eq <= 0:
+                        eq = starting
 
                     # All-time trade count and win count (no date filter)
                     _fsc.execute(

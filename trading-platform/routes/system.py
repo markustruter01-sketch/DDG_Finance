@@ -222,8 +222,8 @@ async def system_health_architecture() -> dict:
             (8, "kraken-current", "Kraken Current"),
         ]
         _ARCH_STALE_THRESHOLDS = {
-            "kraken-current": 16200,  # 4-hour cycle + 30min buffer
-            "poseidon":        1800,  # 15-min cycle — standard threshold
+            "kraken-current": 18000,  # 4-hour cycle + 1h buffer
+            "poseidon":        2400,  # 15-min cycle + 25-min buffer
         }
         _bot_levels: list[str] = []
         _bot_detail_parts: list[str] = []
@@ -251,7 +251,9 @@ async def system_health_architecture() -> dict:
                             _kstatus = _kr["status"] or "unknown"
                             _kick_pending = bool(_kr.get("force_refresh", False))
                             _stale_threshold = _ARCH_STALE_THRESHOLDS.get(_arch_bot_id, 1800)
-                            _warn_threshold  = _stale_threshold // 3
+                            # Warn only when 75% of stale threshold is reached, not 33%.
+                            # Prevents false DEGRADED alerts for normal cycle gaps.
+                            _warn_threshold  = int(_stale_threshold * 0.75)
                             if _kstatus == "error":
                                 _blevel = "red"
                             elif _kage and _kage > _stale_threshold:

@@ -718,18 +718,23 @@ async def risk_metrics() -> dict:
                 downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
                 sortino = float((mean_ret - rf_per_period) / downside_std * np.sqrt(periods_per_year)) if downside_std and downside_std > 0 else None
                 max_dd = round(abs(float(np.min(arr))) * 100, 2)
-                ann_return = round(mean_ret * periods_per_year * 100, 2)
-                calmar = round(ann_return / max_dd, 3) if max_dd > 0 else None
-                vol_annual = round(std_ret * np.sqrt(periods_per_year) * 100, 2) if std_ret > 0 else None
+                # Only annualise when there are enough trades; otherwise the figure
+                # is statistically meaningless and produces extreme values.
+                MIN_TRADES_ANNUALISED = 30
+                enough = len(trade_returns) >= MIN_TRADES_ANNUALISED
+                ann_return = round(mean_ret * periods_per_year * 100, 2) if enough else None
+                calmar = round(ann_return / max_dd, 3) if (enough and ann_return is not None and max_dd > 0) else None
+                vol_annual = round(std_ret * np.sqrt(periods_per_year) * 100, 2) if (std_ret > 0 and enough) else None
                 return {
-                    "sharpe_ratio": round(sharpe, 3) if sharpe is not None else None,
-                    "sortino_ratio": round(sortino, 3) if sortino is not None else None,
+                    "sharpe_ratio": round(sharpe, 3) if (sharpe is not None and enough) else None,
+                    "sortino_ratio": round(sortino, 3) if (sortino is not None and enough) else None,
                     "max_drawdown_pct": max_dd,
                     "calmar_ratio": calmar,
                     "volatility_annual_pct": vol_annual,
                     "annualised_return_pct": ann_return,
                     "data_points": len(trade_returns),
                     "period_days": len(trade_returns) * 30,
+                    "insufficient_data": not enough,
                     "source": "trade_journal",
                     "message": f"Estimated from {len(trade_returns)} closed trades (30-day hold assumption)",
                 }
@@ -797,19 +802,28 @@ async def risk_metrics() -> dict:
         if dd > max_dd:
             max_dd = dd
 
-    ann_return = mean_ret * 252 * 100
-    calmar = round(ann_return / max_dd, 3) if max_dd > 0 else None
+    # Annualised figures are only meaningful with sufficient history.
+    # With < 30 data points the extrapolation produces wild numbers (e.g. -98%)
+    # that are statistically meaningless and mislead the user.
+    MIN_DAYS_FOR_ANNUALISED = 30
+    enough_data = len(daily_returns) >= MIN_DAYS_FOR_ANNUALISED
+
+    ann_return = round(mean_ret * 252 * 100, 2) if enough_data else None
+    calmar = round(ann_return / max_dd, 3) if (enough_data and ann_return is not None and max_dd > 0) else None
     vol_annual = round(std_ret * np.sqrt(252) * 100, 2)
+    sharpe_out = round(sharpe, 3) if (enough_data and sharpe is not None) else None
+    sortino_out = round(sortino, 3) if (enough_data and sortino is not None) else None
 
     return {
-        "sharpe_ratio": round(sharpe, 3) if sharpe is not None else None,
-        "sortino_ratio": round(sortino, 3) if sortino is not None else None,
+        "sharpe_ratio": sharpe_out,
+        "sortino_ratio": sortino_out,
         "max_drawdown_pct": round(max_dd, 2),
         "calmar_ratio": calmar,
-        "volatility_annual_pct": vol_annual,
-        "annualised_return_pct": round(ann_return, 2),
+        "volatility_annual_pct": vol_annual if enough_data else None,
+        "annualised_return_pct": ann_return,
         "data_points": len(daily_returns),
         "period_days": len(snapshots),
+        "insufficient_data": not enough_data,
     }
 
 

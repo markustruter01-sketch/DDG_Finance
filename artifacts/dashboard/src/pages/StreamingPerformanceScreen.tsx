@@ -217,7 +217,7 @@ export default function StreamingPerformanceScreen() {
         <RiskCard
           label="Ann. Return"
           value={fmtPct(rm?.annualised_return_pct)}
-          sub={rm?.period_days ? `${rm.period_days}d window · ${rm.data_points ?? 0} pts` : "Awaiting data"}
+          sub={rm?.insufficient_data ? `Need 30+ days (${rm.data_points ?? 0} pts so far)` : rm?.period_days ? `${rm.period_days}d window · ${rm.data_points ?? 0} pts` : "Awaiting data"}
           accent={rm?.annualised_return_pct != null ? (rm.annualised_return_pct >= 0 ? C.green : C.red) : C.dim}
         />
       </div>

@@ -133,7 +133,7 @@ BOT_PROFILES = {
         "RSI_OVERBOUGHT": 55,            # 1h RSI crossing down from above 55 = bearish
         "APEX_EMA_FAST": 20,             # 4h EMA for trend filter
         "APEX_EMA_SLOW": 50,
-        "APEX_VOLUME_MULT": 1.5,         # volume must be 1.5× 20-bar average
+        "APEX_VOLUME_MULT": 0.75,        # volume must be 0.75× 20-bar average (lowered from 1.5× — weekend crypto volume is typically 0.1–0.8×)
         "APEX_VPIN_BLOCK": 0.80,         # block if VPIN > 0.80 (toxic flow)
         # Timeframes
         "OHLCV_TIMEFRAME": "1h",         # primary candles for RSI
@@ -397,7 +397,7 @@ CALYPSO_TIER3_MAX = _profile.get("CALYPSO_TIER3_MAX", 0.05)
 APEX_TP_ATR_MULT      = _profile.get("APEX_TP_ATR_MULT", 3.0)
 APEX_EMA_FAST         = _profile.get("APEX_EMA_FAST", 20)
 APEX_EMA_SLOW         = _profile.get("APEX_EMA_SLOW", 50)
-APEX_VOLUME_MULT      = _profile.get("APEX_VOLUME_MULT", 1.5)
+APEX_VOLUME_MULT      = _profile.get("APEX_VOLUME_MULT", 0.75)
 APEX_VPIN_BLOCK       = _profile.get("APEX_VPIN_BLOCK", 0.80)
 APEX_TREND_TIMEFRAME  = _profile.get("APEX_TREND_TIMEFRAME", "4h")
 

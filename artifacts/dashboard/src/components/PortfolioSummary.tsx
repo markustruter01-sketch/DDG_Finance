@@ -83,7 +83,7 @@ export function CombinedPortfolioSummary() {
   const apexStart     = apexBot?.starting_balance_usd ?? 100_000;
   const apexPnlPct    = apexStart > 0 ? (apexPnl / apexStart) * 100 : 0;
 
-  const forexEquity   = fxState?.total_equity ?? 100_000;
+  const forexEquity   = fxState?.total_equity || 100_000;
   const forexPnl      = fxState?.total_pnl ?? 0;
   const forexTrades   = fxState?.total_trades ?? 0;
   const forexWins     = fxState?.total_wins ?? 0;

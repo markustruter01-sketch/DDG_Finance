@@ -1008,12 +1008,14 @@ async def _run_pipeline_inner(
             options_eq = float(_opts_st.get("paper_equity", 0))
         except Exception:
             pass
-        forex_eq = 0.0
+        forex_eq = 100_000.0
         try:
             from routes._deps import _get_forex_engine as _gfx_snap
             _fx_snap = _gfx_snap()
             if _fx_snap:
-                forex_eq = float(_fx_snap.get_state().get("paper_equity", 0))
+                _fx_val = float(_fx_snap.get_state().get("paper_equity", 0))
+                if _fx_val > 0:
+                    forex_eq = _fx_val
         except Exception:
             pass
         poseidon_eq = 0.0

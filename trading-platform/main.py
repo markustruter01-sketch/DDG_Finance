@@ -138,9 +138,9 @@ async def lifespan(app: FastAPI):
             fx = _get_forex_engine()
             if fx:
                 fx_state = fx.get_state()
-                forex_eq = float(fx_state.get("paper_equity", 0))
+                forex_eq = float(fx_state.get("paper_equity", 0)) or 100_000.0
         except Exception:
-            forex_eq = 0.0
+            forex_eq = 100_000.0
         poseidon_eq = 100_000.0
         kc_eq = 100_000.0
         try:
@@ -178,24 +178,20 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Equity Heartbeat | Failed: {_e}")
 
     try:
-        from db.postgres import get_equity_curve as _gec
-        if not _gec(limit=1):
-            await _record_equity_snapshot_now()
-            logger.info("Equity Curve | Startup snapshot seeded (table was empty)")
-        else:
-            logger.debug("Equity Curve | Table already has data — skipping startup seed")
+        await _record_equity_snapshot_now()
+        logger.info("Equity Curve | Startup snapshot written")
     except Exception as _ese:
-        logger.warning(f"Equity Curve | Startup seed failed (non-fatal): {_ese}")
+        logger.warning(f"Equity Curve | Startup snapshot failed (non-fatal): {_ese}")
 
     scheduler.add_job(
         func=_equity_heartbeat_sync,
-        trigger=_ITrigger(hours=1),
+        trigger=_ITrigger(minutes=15),
         id="equity_curve_heartbeat",
-        name="Equity Curve Hourly Heartbeat",
+        name="Equity Curve 15-min Heartbeat",
         replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("Equity curve heartbeat registered (1-hour interval)")
+    logger.info("Equity curve heartbeat registered (15-min interval)")
 
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")

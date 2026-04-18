@@ -24,7 +24,7 @@ export function FleetPerformanceHero() {
 
   const alpacaEquity = summary?.portfolio_totals.equity ?? 0;
   const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
-  const forexEquity = fxState?.total_equity ?? 100_000;
+  const forexEquity = fxState?.total_equity || 100_000;
   const grandTotal = computeFleetEquity(alpacaEquity, krakenFleetEquity, 0, forexEquity);
 
   const alpacaWins = journal?.summary?.wins ?? 0;

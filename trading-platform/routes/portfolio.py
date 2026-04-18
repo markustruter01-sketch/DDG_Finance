@@ -1092,6 +1092,11 @@ async def export_diagnostic_report():
     lines += _rs.section_fleet_operations_log()
 
     try:
+        lines += _rs.section_platform_audit_changelog()
+    except Exception as _e_ac:
+        lines.append(f"  [Platform Audit Changelog — error: {_e_ac}]")
+
+    try:
         lines += _rs.section_changes_since_last_report()
     except Exception as _e10:
         lines.append(f"  [ADD 10: Changes Since Last Report — error: {_e10}]")
@@ -1676,91 +1681,83 @@ async def export_diagnostic_report():
         lines.append(f"  [ADD 4 Filter Effectiveness — error: {_e4}]")
 
     lines.append("@@PART3@@")
-    h1("SECTION 4: APEX PREDATOR \u2014 OPTIONS ENGINE (Bot #5)")
-
-    _opts_state = {}
-    _opts_positions = []
-
-    _opts_equity   = _opts_state.get("paper_equity", _opts_state.get("total_equity", 100_000))
-    _opts_deployed = _opts_state.get("deployed_capital", 0)
-    _opts_unrealized = _opts_state.get("unrealized_pnl", 0)
-    _opts_trades   = _opts_state.get("total_trades", 0)
-    _opts_wins     = _opts_state.get("total_wins", 0)
-    _opts_paused   = _opts_state.get("paused", False)
-    _opts_paper    = _opts_state.get("paper_mode", True)
-    _opts_start    = 100_000.0
-    _opts_pnl      = _opts_equity - _opts_start
-
-    h2("OVERVIEW")
-    row("Capital pool:", "Options \u2014 Paper Trading (Volatility Squeeze Strategy)")
-    row("Bot status:", "PAUSED" if _opts_paused else "RUNNING")
-    row("Paper trading:", "YES" if _opts_paper else "NO \u2014 LIVE FUNDS")
-    row("Starting capital:", _c(_opts_start))
-    row("Current equity:", _c(_opts_equity))
-    row("Total P&L:", f"{_c(_opts_pnl)} ({_pct((_opts_pnl/_opts_start)*100)})")
-    row("Deployed capital:", _c(_opts_deployed))
-    row("Unrealized P&L:", _c(_opts_unrealized))
-    row("Total trades:", str(_opts_trades))
-    row("Wins:", str(_opts_wins))
-    _opts_wr = (_opts_wins / _opts_trades * 100) if _opts_trades > 0 else 0
-    row("Win rate:", _pct(_opts_wr, 1))
-
-    h2("CURRENT OPTIONS POSITIONS")
-    if not _opts_positions:
-        lines.append("  No open options positions.")
-    else:
-        for op in _opts_positions:
-            sym      = op.get("symbol", "?")
-            strategy = op.get("strategy", "?")
-            status   = op.get("status", "?")
-            cost     = op.get("total_cost", 0)
-            cur_val  = op.get("current_value", 0)
-            pnl_op   = cur_val - cost
-            entry_t  = str(op.get("entry_time") or op.get("opened_at") or "?")[:16]
-            lines.append(f"\n  {sym} \u2014 {strategy}")
-            row("Status:", status, indent=2)
-            row("Total cost:", _c(cost), indent=2)
-            row("Current value:", _c(cur_val), indent=2)
-            row("Unrealized P&L:", _c(pnl_op), indent=2)
-            row("Entry time:", entry_t, indent=2)
-            legs = op.get("legs", [])
-            if legs:
-                for leg in legs:
-                    leg_type = leg.get("type", "?")
-                    strike   = leg.get("strike", "?")
-                    exp      = str(leg.get("expiration", "?"))[:10]
-                    qty_l    = leg.get("quantity", 0)
-                    lines.append(f"      Leg: {leg_type} strike={strike} exp={exp} qty={qty_l}")
-
-    h2("OPTIONS STRATEGY PARAMETERS")
+    h1("SECTION 4: APEX PREDATOR \u2014 KRAKEN CRYPTO MOMENTUM (Bot #5)")
     lines += [
-        "  Strategy:          Volatility Squeeze \u2192 Long Straddle (100% quant, LLM-free)",
-        "  Scan schedule:     Daily at 3:30 PM ET (Mon\u2013Fri)",
-        "  Capital fence:     20% of equity max deployed at any time",
-        "  Entry:             Bollinger Band squeeze + low IV rank \u2192 buy ATM straddle",
-        "  Exit:              Profit target or time decay threshold",
-        "  Paper mode:        Simulated fills with real option chain data",
+        "  NOTE: The options engine was retired in Apr 2026. Apex Predator now runs",
+        "  on the Kraken crypto momentum strategy (bot_id='apex-predator') within",
+        "  kraken-bot, sharing the same engine as Davy Jones / Blackbeard / Calypso",
+        "  but with a distinct strategy profile (momentum breakout, 1h+4h EMA filter).",
+        "",
     ]
 
-    lines += _rs.section_trade_mechanics_apex()
-    lines += _rs.section_apex_scan_log()
+    # ── Load live Apex Predator Kraken data ─────────────────────────────────────
+    import psycopg2 as _pg2_ap
+    import psycopg2.extras as _pg2x_ap
+    _DB_URL_AP = os.environ.get("DATABASE_URL")
+    _ap_trades: list = []
+    _ap_equity = 100_000.0
+    _ap_cash   = 0.0
+    try:
+        with _pg2_ap.connect(_DB_URL_AP) as _ap_conn:
+            with _ap_conn.cursor(cursor_factory=_pg2x_ap.RealDictCursor) as _ap_cur:
+                _ap_cur.execute(
+                    "SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd, "
+                    "fees_usd, reason, closed_at FROM kraken_trades "
+                    "WHERE bot_id = 'apex-predator' AND closed_at IS NOT NULL "
+                    "ORDER BY closed_at DESC"
+                )
+                _ap_trades = [dict(r) for r in _ap_cur.fetchall()]
+            with _ap_conn.cursor() as _ap_port_cur:
+                _ap_port_cur.execute(
+                    "SELECT equity_usd, cash_usd FROM kraken_portfolio WHERE bot_id = 'apex-predator'"
+                )
+                _ap_port = _ap_port_cur.fetchone()
+                if _ap_port:
+                    _ap_equity = float(_ap_port[0] or 100_000)
+                    _ap_cash   = float(_ap_port[1] or 0)
+    except Exception as _ap_exc:
+        lines.append(f"  [Apex Predator DB read failed: {_ap_exc}]")
 
-    _opts_all_trades: list = []
-    _opts_trades_db = _Path(__file__).parent.parent / "_options_state" / "trades.db"
-    if _opts_trades_db.exists():
-        try:
-            import sqlite3 as _sq3
-            _sq_conn = _sq3.connect(str(_opts_trades_db))
-            _sq_conn.row_factory = _sq3.Row
-            _sq_cur = _sq_conn.execute("SELECT * FROM options_trades ORDER BY closed_at ASC")
-            _opts_all_trades = [dict(r) for r in _sq_cur.fetchall()]
-            _sq_conn.close()
-        except Exception:
-            pass
+    from core.metrics import win_rate as _ap_win_rate, WIN_THRESHOLD as _ap_wt
+    _ap_start = 100_000.0
+    _ap_pnl   = _ap_equity - _ap_start
+    _ap_strat_trades = [t for t in _ap_trades if t.get("reason") != "rebalance_liquidation"]
+    _ap_wins  = [t for t in _ap_strat_trades if float(t.get("pnl_usd") or 0) > _ap_wt]
+    _ap_wr    = _ap_win_rate(_ap_strat_trades, "pnl_usd")
+
+    h2("OVERVIEW")
+    row("Capital pool:", "Kraken \u2014 Crypto Momentum Paper Trading")
+    row("Strategy profile:", "apex-predator (momentum breakout, 1h RSI + 4h EMA trend)")
+    row("Paper trading:", "YES \u2014 Kraken paper account")
+    row("Starting capital:", _c(_ap_start))
+    row("Current equity:", _c(_ap_equity))
+    row("Total P&L:", f"{_c(_ap_pnl)} ({_pct((_ap_pnl / _ap_start) * 100)})")
+    row("Cash on hand:", _c(_ap_cash))
+    row("Total strategy trades:", str(len(_ap_strat_trades)))
+    row("Wins (pnl > WIN_THRESHOLD):", str(len(_ap_wins)))
+    row("Win rate:", _pct(_ap_wr, 1) if _ap_wr is not None else "N/A (no trades)")
+
+    h2("RECENT APEX PREDATOR TRADES (last 10)")
+    if _ap_strat_trades:
+        lines.append(f"  {'Date':<12} {'Symbol':<12} {'Side':<6} {'PnL USD':>10} {'PnL %':>8}  Reason")
+        lines.append("  " + "\u2500" * 62)
+        for _apt in _ap_strat_trades[:10]:
+            _apt_date  = str(_apt.get("closed_at") or "")[:10]
+            _apt_sym   = str(_apt.get("symbol") or "?")[:11]
+            _apt_side  = str(_apt.get("side") or "?")[:5]
+            _apt_pnl   = float(_apt.get("pnl_usd") or 0)
+            _apt_pct   = float(_apt.get("pnl_pct") or 0)
+            _apt_rsn   = str(_apt.get("reason") or "")[:20]
+            _apt_sign  = "+" if _apt_pnl >= 0 else ""
+            lines.append(f"  {_apt_date:<12} {_apt_sym:<12} {_apt_side:<6} {_apt_sign}{_apt_pnl:>9,.2f} {_apt_sign}{_apt_pct:>6.2f}%  {_apt_rsn}")
+    else:
+        lines.append("  No trades recorded yet for apex-predator.")
+
+    lines += _rs.section_trade_mechanics_apex()
 
     lines += _rs.section_daily_equity_history("Apex Predator #5", source="options")
-    lines += _rs.section_consecutive_streaks("Apex Predator #5", _opts_all_trades)
-    lines += _rs.section_rolling_metrics("Apex Predator #5", _opts_all_trades, equity_source="options")
+    lines += _rs.section_consecutive_streaks("Apex Predator #5", _ap_strat_trades)
+    lines += _rs.section_rolling_metrics("Apex Predator #5", _ap_strat_trades, equity_source="options")
 
     h1("SECTION 5: THE NAVIGATOR \u2014 FOREX SWING ENGINE (Bot #6)")
 
@@ -1955,12 +1952,12 @@ async def export_diagnostic_report():
         equity=equity,
         kraken_equity=_all_kraken_equity,
         kraken_starting=_all_kraken_starting,
-        opts_equity=_opts_equity,
+        opts_equity=0.0,
         fx_equity=_fx_equity,
         positions=positions,
         kraken_per_bot_equity=_kraken_per_bot_equity,
         fx_positions=_fx_positions,
-        opts_positions=_opts_positions,
+        opts_positions=[],
         ks_state=_report_ks_state,
         poseidon_equity=_poseidon_equity,
         kraken_current_equity=_kc_equity,
@@ -2146,6 +2143,7 @@ async def export_diagnostic_report():
 
     clean_lines = [l for l in lines if not l.startswith("@@")]
     report_text = "\n".join(clean_lines)
+    report_text = report_text.encode("utf-8", errors="replace").decode("utf-8")
     filename = f"trading-report-{now_utc.strftime('%Y-%m-%d_%H%M%S')}.txt"
 
     global _last_report_lines_with_markers

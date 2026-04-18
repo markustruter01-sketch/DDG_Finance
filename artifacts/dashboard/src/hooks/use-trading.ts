@@ -440,6 +440,28 @@ export function useManualSweep() {
   });
 }
 
+export interface VaultSnapshot {
+  date: string;
+  daily_vaulted: number;
+  cumulative_vaulted: number;
+}
+
+export interface VaultHistory {
+  count: number;
+  snapshots: VaultSnapshot[];
+  total_vaulted_usd: number;
+}
+
+export function useVaultHistory(days = 90) {
+  return useQuery<VaultHistory>({
+    queryKey: ["/vault/history", days],
+    queryFn: async () => (await api.get(`/vault/history?days=${days}`)).data,
+    refetchInterval: useVisibleInterval(120_000),
+    staleTime: 90_000,
+    retry: 1,
+  });
+}
+
 // --- Auditor Agent ---
 
 export interface AuditFinding {

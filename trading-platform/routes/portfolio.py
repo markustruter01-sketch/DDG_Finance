@@ -531,6 +531,106 @@ async def vault_state() -> dict:
     return {"initialised": True, "vaulted_24h": round(vaulted_24h, 2), **state}
 
 
+@portfolio_router.get("/vault/history", tags=["Vault"])
+async def vault_history(days: int = 90) -> dict:
+    """Return daily vault growth snapshots derived from trade history."""
+    from execution.profit_sweep import _use_pg, _pg_conn, get_vault_state
+    from datetime import datetime, timedelta
+
+    days = max(1, min(days, 730))  # clamp to 1–730 days
+
+    snapshots: list[dict] = []
+    total_vaulted = 0.0
+
+    try:
+        state = get_vault_state()
+        if state:
+            total_vaulted = float(state.get("total_vaulted_usd") or 0.0)
+    except Exception:
+        pass
+
+    if not _use_pg():
+        return {"count": 0, "snapshots": [], "total_vaulted_usd": total_vaulted}
+
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        with _pg_conn() as conn:
+            with conn.cursor() as cur:
+                # Kraken contributions per day
+                cur.execute("""
+                    SELECT DATE(closed_at) AS day,
+                           SUM(pnl_usd * 0.20) AS amount
+                    FROM kraken_trades
+                    WHERE pnl_usd > 0 AND closed_at >= %s
+                    GROUP BY DATE(closed_at)
+                """, (cutoff,))
+                kraken_rows = cur.fetchall()
+
+                # Forex contributions per day
+                forex_rows = []
+                try:
+                    cur.execute("""
+                        SELECT DATE(exit_time) AS day,
+                               SUM(pnl_usd * 0.20) AS amount
+                        FROM forex_trades
+                        WHERE pnl_usd > 0 AND exit_time >= %s
+                        GROUP BY DATE(exit_time)
+                    """, (cutoff,))
+                    forex_rows = cur.fetchall()
+                except Exception:
+                    pass
+
+        # Merge and aggregate by day
+        daily: dict[str, float] = {}
+        for row in kraken_rows:
+            day_str = str(row[0])
+            daily[day_str] = daily.get(day_str, 0.0) + float(row[1] or 0)
+        for row in forex_rows:
+            day_str = str(row[0])
+            daily[day_str] = daily.get(day_str, 0.0) + float(row[1] or 0)
+
+        sorted_days = sorted(daily.keys())
+
+        # Compute cumulative totals from trade history
+        trade_total = sum(daily.values())
+
+        # Distribute any remaining vault balance (from Alpaca HWM sweeps)
+        # proportionally on the first available day or as a seed entry
+        alpaca_remainder = max(0.0, total_vaulted - trade_total)
+        if alpaca_remainder > 0.01 and sorted_days:
+            # Prepend seed entry one day before earliest trade record
+            from datetime import date as _date, timedelta as _td
+            first_day = sorted_days[0]
+            seed_day = str((_date.fromisoformat(first_day) - _td(days=1)))
+            daily[seed_day] = daily.get(seed_day, 0.0) + alpaca_remainder
+            sorted_days = sorted(daily.keys())
+        elif alpaca_remainder > 0.01:
+            # No trade data — single seed entry today
+            seed_day = str(datetime.utcnow().date())
+            daily[seed_day] = alpaca_remainder
+            sorted_days = [seed_day]
+
+        cumulative = 0.0
+        for day_str in sorted_days:
+            amt = daily[day_str]
+            cumulative += amt
+            snapshots.append({
+                "date": day_str,
+                "daily_vaulted": round(amt, 2),
+                "cumulative_vaulted": round(cumulative, 2),
+            })
+
+    except Exception as exc:
+        logger.warning(f"Vault history error: {exc}")
+        return {"count": 0, "snapshots": [], "total_vaulted_usd": total_vaulted, "error": str(exc)}
+
+    return {
+        "count": len(snapshots),
+        "snapshots": snapshots,
+        "total_vaulted_usd": total_vaulted,
+    }
+
+
 @portfolio_router.post("/vault/sweep", tags=["Vault"])
 async def manual_vault_sweep(dry_run: bool = False) -> dict:
     from execution.profit_sweep import run_profit_sweep

@@ -6,8 +6,20 @@ import {
   useSentiment,
   useStatusSummary,
   useVault,
+  useVaultHistory,
 } from "@/hooks/use-trading";
 import { DDGBadge } from "@/components/DDGBadge";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  type TooltipProps,
+} from "recharts";
+import type { ValueType, NameType } from "recharts/types/component/DefaultTooltipContent";
 
 /* ── palette ─────────────────────────────────────────────── */
 const C = {
@@ -88,7 +100,8 @@ export default function StreamingPerformanceScreen() {
   const fleet   = useKrakenFleetSummary();
   const sent    = useSentiment();
   const status  = useStatusSummary();
-  const vaultData = useVault();
+  const vaultData    = useVault();
+  const vaultHistory = useVaultHistory(90);
 
   const rm  = risk.data;
   const j   = journal.data;
@@ -417,6 +430,148 @@ export default function StreamingPerformanceScreen() {
           </div>
         </div>
       </div>
+
+      {/* ══ ROW 3: VAULT GROWTH CHART ════════════════════════════ */}
+      {(() => {
+        const snapshots = vaultHistory.data?.snapshots ?? [];
+        const hasData   = snapshots.length >= 1;
+        const chartData = snapshots.map((s) => ({
+          date:  s.date.slice(5),
+          total: s.cumulative_vaulted,
+          daily: s.daily_vaulted,
+        }));
+
+        function vaultTooltip({ active, payload, label }: TooltipProps<ValueType, NameType>) {
+          if (!active || !payload?.length) return null;
+          const cumulative = typeof payload[0]?.value === "number" ? payload[0].value : null;
+          const daily      = typeof payload[1]?.value === "number" ? payload[1].value : null;
+          return (
+            <div style={{
+              background: "rgba(2,6,23,0.96)",
+              border: "1px solid rgba(251,191,36,0.25)",
+              borderRadius: 8,
+              padding: "8px 12px",
+              fontFamily: "monospace",
+              fontSize: 11,
+            }}>
+              <div style={{ color: C.dim, marginBottom: 4 }}>{String(label ?? "")}</div>
+              {cumulative != null && (
+                <div style={{ color: "#fbbf24", fontWeight: 900 }}>
+                  Total: ${cumulative.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+              )}
+              {daily != null && (
+                <div style={{ color: C.green, marginTop: 2 }}>
+                  +${daily.toLocaleString(undefined, { maximumFractionDigits: 0 })} today
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <div style={{
+            background: C.panel,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            backdropFilter: "blur(14px)",
+            flexShrink: 0,
+            height: 130,
+            padding: "10px 18px 8px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontFamily: "monospace", letterSpacing: "0.14em", textTransform: "uppercase", color: C.dim }}>
+                ◈ Vault Growth — 90-Day Trend
+              </span>
+              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                {vaultHistory.data?.total_vaulted_usd != null && (
+                  <span style={{ fontSize: 11, fontFamily: "monospace" }}>
+                    <span style={{ color: C.dim }}>Total Vaulted: </span>
+                    <span style={{ color: "#fbbf24", fontWeight: 900 }}>
+                      ${Math.round(vaultHistory.data.total_vaulted_usd).toLocaleString()}
+                    </span>
+                  </span>
+                )}
+                {hasData && (
+                  <span style={{ fontSize: 10, fontFamily: "monospace", color: C.dim }}>
+                    {snapshots.length} data points
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ flex: 1, minHeight: 0 }}>
+              {vaultHistory.isLoading ? (
+                <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: C.dim, fontSize: 11, fontFamily: "monospace" }}>
+                  Loading vault history…
+                </div>
+              ) : !hasData ? (
+                <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: C.dim, fontSize: 11, fontFamily: "monospace" }}>
+                  {vaultHistory.data?.total_vaulted_usd
+                    ? `$${Math.round(vaultHistory.data.total_vaulted_usd).toLocaleString()} vaulted — historical breakdown accumulating`
+                    : "No vault history yet — profits accrue here after first sweep"}
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="vaultGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#fbbf24" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#fbbf24" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="rgba(255,255,255,0.04)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "rgba(148,163,184,0.5)", fontSize: 9, fontFamily: "monospace" }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={{ fill: "rgba(148,163,184,0.5)", fontSize: 9, fontFamily: "monospace" }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={48}
+                      tickFormatter={(v) => v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`}
+                      domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.1)]}
+                    />
+                    <Tooltip content={vaultTooltip} />
+                    <Area
+                      type="monotone"
+                      dataKey="total"
+                      stroke="#fbbf24"
+                      strokeWidth={2}
+                      fill="url(#vaultGrad)"
+                      dot={false}
+                      activeDot={{ r: 3, fill: "#fbbf24", stroke: "none" }}
+                      name="Cumulative"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="daily"
+                      stroke={C.green}
+                      strokeWidth={1}
+                      fill="none"
+                      dot={false}
+                      activeDot={{ r: 2, fill: C.green, stroke: "none" }}
+                      strokeDasharray="3 2"
+                      name="Daily"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
     </div>

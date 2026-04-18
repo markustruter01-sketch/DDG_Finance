@@ -230,19 +230,20 @@ async def kraken_fleet_summary() -> dict:
                         starting = float(_pr[0] or 100_000)
                         cash = float(_pr[1] or 0)
 
+                    # All-time trade count and win count (no date filter)
                     _fsc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END), "
-                        "COALESCE(SUM(pnl_usd), 0) "
-                        "FROM kraken_trades WHERE bot_id = %s "
-                        "AND closed_at >= '2026-04-13 00:00:00+00'",
+                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) "
+                        "FROM kraken_trades WHERE bot_id = %s",
                         (_bid,)
                     )
                     _tr = _fsc.fetchone()
                     if _tr:
                         trades_count = int(_tr[0] or 0)
                         wins_count = int(_tr[1] or 0)
-                        pnl = float(_tr[2] or 0)
+
+                    # Total PnL = equity - starting (includes unrealized gains from open positions)
+                    pnl = eq - starting
 
                 total_equity += eq
                 total_cash += cash
@@ -274,13 +275,14 @@ async def kraken_fleet_summary() -> dict:
                         ps_cash = float(_psr[1] or 0)
                     _psc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END), "
-                        "COALESCE(SUM(net_pnl), 0) FROM poseidon_trades"
+                        "SUM(CASE WHEN net_pnl > 0 THEN 1 ELSE 0 END) "
+                        "FROM poseidon_trades"
                     )
                     _ptr = _psc.fetchone()
                     ps_trades = int(_ptr[0] or 0) if _ptr else 0
                     ps_wins   = int(_ptr[1] or 0) if _ptr else 0
-                    ps_pnl    = float(_ptr[2] or 0) if _ptr else 0.0
+                    # Total PnL = equity - starting (includes unrealized from open positions)
+                    ps_pnl = ps_eq - 100_000.0
                 total_equity += ps_eq
                 total_cash   += ps_cash
                 total_starting += 100_000.0
@@ -316,13 +318,14 @@ async def kraken_fleet_summary() -> dict:
                         kc_cash = float(_kcr[1] or 0)
                     _kcc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), "
-                        "COALESCE(SUM(pnl), 0) FROM kraken_current_trades"
+                        "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) "
+                        "FROM kraken_current_trades"
                     )
                     _ktr = _kcc.fetchone()
                     kc_trades = int(_ktr[0] or 0) if _ktr else 0
                     kc_wins   = int(_ktr[1] or 0) if _ktr else 0
-                    kc_pnl    = float(_ktr[2] or 0) if _ktr else 0.0
+                    # Total PnL = equity - starting (includes unrealized from open positions)
+                    kc_pnl = kc_eq - 100_000.0
                 total_equity += kc_eq
                 total_cash   += kc_cash
                 total_starting += 100_000.0

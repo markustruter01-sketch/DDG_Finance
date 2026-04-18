@@ -71,7 +71,7 @@ export function CombinedPortfolioSummary() {
   const krakenPnl         = fleetSummary?.total_pnl_usd ?? kraken?.paper_summary?.all_time_pnl_usd ?? 0;
   const krakenTrades      = fleetSummary?.total_trades ?? kraken?.paper_summary?.total_trades ?? 0;
   const krakenWins        = fleetSummary?.total_wins ?? kraken?.paper_summary?.win_count ?? 0;
-  const krakenStart       = fleetSummary?.total_starting_usd ?? 500_000;
+  const krakenStart       = fleetSummary?.total_starting_usd ?? 600_000;
   const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 

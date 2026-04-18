@@ -21,6 +21,7 @@ from routes._deps import (
     _resolve_bot,
     _persist_commentary_caches,
 )
+from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
 
 kraken_router = APIRouter()
 
@@ -323,7 +324,7 @@ async def kraken_fleet_summary() -> dict:
                         kc_cash = float(_kcr[1] or 0)
                     _kcc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) "
+                        "SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) "
                         "FROM kraken_current_trades"
                     )
                     _ktr = _kcc.fetchone()
@@ -498,7 +499,7 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     rebalance_trades = [t for t in recent_trades if t.get("reason") == "rebalance_liquidation"]
     wins          = [t for t in strategy_trades if (t.get("pnl_usd") or 0) > 0]
     losses        = [t for t in strategy_trades if (t.get("pnl_usd") or 0) <= 0]
-    win_rate      = (len(wins) / len(strategy_trades) * 100) if strategy_trades else None
+    win_rate      = _win_rate(strategy_trades, "pnl_usd")
 
     pos_text = "\n".join(
         f"  {p.get('side','').upper()} {p['symbol']}: "
@@ -743,7 +744,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
     pnl_usd  = [t.get("pnl_usd", 0) for t in strategy_only]
     wins     = [u for u in pnl_usd if u > 0]
     losses   = [u for u in pnl_usd if u <= 0]
-    win_rate = (len(wins) / len(strategy_only)) * 100 if strategy_only else 0
+    win_rate = _win_rate(strategy_only, "pnl_usd") or 0
 
     total_pnl_pct_all = sum(t.get("pnl_pct", 0) for t in trades)
     total_pnl_usd_all = sum(t.get("pnl_usd", 0) for t in trades)

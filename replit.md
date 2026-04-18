@@ -77,6 +77,14 @@ The project employs a monorepo structure using pnpm workspaces, integrating seve
 -   **Persistence**: `fleet_audit.json`, `fleet_audit_history.json`, `veto_conditions.json`.
 -   **Dashboard Integration**: `FleetCommanderPanel.tsx` displays audit verdicts.
 
+## Platform-Wide Refactor (Completed Apr 2026)
+
+-   **Metrics SSoT**: `trading-platform/core/metrics.py` — single source of truth for `win_rate`, `profit_factor`, `risk_metrics` (Sharpe/Sortino/max DD/Calmar/vol). All callers consolidated (kraken.py, new_bots.py, report_sections.py, portfolio.py). Uses ddof=1 consistently; ratios gated at n≥10; annualised at n≥30.
+-   **DB Column Migration**: `kraken_current_trades.pnl` renamed to `pnl_usd`. Updated in db_utils.py, report_sections.py, kraken.py (fleet-summary), and all SQL queries.
+-   **RSI Consistency**: `forex-engine/indicators.py` now uses Wilder's EMA smoothing (matches `kraken-bot/logic.py`). Previously used SMA.
+-   **Dead Code**: `trading-platform/routes/options.py` removed (router was never registered in main.py). Options hooks in frontend disabled (`enabled: false`) to stop 404 polling.
+-   **Sharpe/Sortino Consolidation**: All 3 separate implementations in `portfolio.py` now call `_compute_risk_metrics` from core.metrics (fixed ddof=0 bug in block 3).
+
 ## Alert Notification System
 
 -   **Channels**: Telegram Bot API and Discord webhooks (optional).

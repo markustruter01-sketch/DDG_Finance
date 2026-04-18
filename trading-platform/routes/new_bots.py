@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from fastapi import APIRouter
+from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
 
 new_bots_router = APIRouter()
 
@@ -52,10 +53,10 @@ async def poseidon_state():
     cash = float(port[0]["cash_usd"]) if port else 100_000.0
     open_pos = int(port[0]["open_positions"]) if port else 0
 
-    wins = sum(1 for t in trade_rows if float(t.get("net_pnl") or 0) > 0)
     total_trades = len(trade_rows)
     total_pnl = sum(float(t.get("net_pnl") or 0) for t in trade_rows)
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else None
+    wins = sum(1 for t in trade_rows if float(t.get("net_pnl") or 0) > 0)
+    win_rate = _win_rate(trade_rows, "net_pnl")
 
     paused = bool(hb[0].get("bot_paused")) if hb else False
     status = str(hb[0].get("status") or "INITIALISING") if hb else "INITIALISING"
@@ -279,7 +280,7 @@ async def kraken_current_state():
     """Return current state of Bot #8 Kraken Current (trend following)."""
     port = _pg_query("SELECT equity_usd, cash_usd, open_positions FROM kraken_current_portfolio WHERE id = 8")
     hb = _pg_query("SELECT bot_paused, position_count, status FROM kraken_heartbeat WHERE id = 8")
-    trade_rows = _pg_query("SELECT pnl FROM kraken_current_trades")
+    trade_rows = _pg_query("SELECT pnl_usd FROM kraken_current_trades")
     scan_rows = _pg_query("""
         SELECT DISTINCT ON (symbol) symbol, ema_fast, ema_slow, adx, hurst, direction, passed, block_reason
         FROM kraken_current_signal_scan ORDER BY symbol, scanned_at DESC
@@ -289,10 +290,10 @@ async def kraken_current_state():
     eq = float(port[0]["equity_usd"]) if port else 100_000.0
     cash = float(port[0]["cash_usd"]) if port else 100_000.0
 
-    wins = sum(1 for t in trade_rows if float(t.get("pnl") or 0) > 0)
     total_trades = len(trade_rows)
-    total_pnl = sum(float(t.get("pnl") or 0) for t in trade_rows)
-    win_rate = (wins / total_trades * 100) if total_trades > 0 else None
+    total_pnl = sum(float(t.get("pnl_usd") or 0) for t in trade_rows)
+    wins = sum(1 for t in trade_rows if float(t.get("pnl_usd") or 0) > 0)
+    win_rate = _win_rate(trade_rows, "pnl_usd")
 
     paused = bool(hb[0].get("bot_paused")) if hb else False
     status = str(hb[0].get("status") or "INITIALISING") if hb else "INITIALISING"

@@ -27,24 +27,30 @@ def calculate_atr(highs: list[float], lows: list[float], closes: list[float], pe
 
 
 def calculate_rsi(closes: list[float], period: int = 14) -> float:
+    """
+    RSI using Wilder's EMA smoothing — identical algorithm to kraken-bot/logic.py.
+    Simple-average (SMA) RSI gives different values; Wilder's is the industry standard.
+    """
     if len(closes) < period + 1:
         return 50.0
 
-    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
-    recent = deltas[-(period):]
+    changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains   = [max(c, 0.0) for c in changes]
+    losses  = [abs(min(c, 0.0)) for c in changes]
 
-    gains = [d for d in recent if d > 0]
-    losses = [-d for d in recent if d < 0]
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
 
-    avg_gain = sum(gains) / period if gains else 0.0
-    avg_loss = sum(losses) / period if losses else 0.0
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
-    if avg_loss == 0:
-        return 100.0 if avg_gain > 0 else 50.0
+    if avg_loss == 0.0:
+        return 100.0
 
-    rs = avg_gain / avg_loss
+    rs  = avg_gain / avg_loss
     rsi = 100.0 - (100.0 / (1.0 + rs))
-    return float(rsi)
+    return round(rsi, 2)
 
 
 def fetch_h4_candles(symbol: str, count: int = 100) -> pd.DataFrame:

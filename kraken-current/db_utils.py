@@ -161,7 +161,7 @@ def record_trade(trade: dict):
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO kraken_current_trades
-                        (symbol, direction, entry_price, exit_price, units, pnl, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at)
+                        (symbol, direction, entry_price, exit_price, units, pnl_usd, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 """, (
                     trade.get("symbol"), trade.get("direction"), trade.get("entry_price"),

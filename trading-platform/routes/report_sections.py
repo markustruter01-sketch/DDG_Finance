@@ -12,6 +12,7 @@ import os
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
 
 logger = logging.getLogger("report_sections")
 
@@ -2223,14 +2224,12 @@ def section_poseidon_status() -> list[str]:
         total = len(all_trades)
         wins = [t for t in all_trades if float(t.get("net_pnl") or 0) > 0]
         losses = [t for t in all_trades if float(t.get("net_pnl") or 0) < 0]
-        win_rate = len(wins) / total * 100 if total else 0
-        gross_profit = sum(float(t.get("net_pnl") or 0) for t in wins)
-        gross_loss = abs(sum(float(t.get("net_pnl") or 0) for t in losses))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+        win_rate = _win_rate(all_trades, "net_pnl") or 0
+        pf = _profit_factor(all_trades, "net_pnl")
         avg_hold = sum(float(t.get("holding_hours") or 0) for t in all_trades) / total if total else 0
         _row(lines, "Total trades:", str(total))
         _row(lines, "Win rate:", _pct(win_rate))
-        _row(lines, "Profit factor:", f"{profit_factor:.2f}×")
+        _row(lines, "Profit factor:", f"{pf:.2f}×" if pf is not None else "N/A")
         _row(lines, "Avg holding time:", f"{avg_hold:.1f} hours")
         if wins:
             best = max(wins, key=lambda t: float(t.get("net_pnl") or 0))
@@ -2315,18 +2314,18 @@ def section_kraken_current_status() -> list[str]:
     # Recent trades
     _h2(lines, "RECENT CLOSED TRADES")
     trade_rows = _pg_query("""
-        SELECT symbol, direction, entry_price, exit_price, pnl, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at
+        SELECT symbol, direction, entry_price, exit_price, pnl_usd, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at
         FROM kraken_current_trades
         ORDER BY closed_at DESC LIMIT 10
     """)
     if trade_rows:
-        wins = sum(1 for t in trade_rows if float(t.get("pnl") or 0) > 0)
-        total_pnl = sum(float(t.get("pnl") or 0) for t in trade_rows)
+        wins = sum(1 for t in trade_rows if float(t.get("pnl_usd") or 0) > 0)
+        total_pnl = sum(float(t.get("pnl_usd") or 0) for t in trade_rows)
         lines.append(f"  Recent 10 trades: {wins} wins / {len(trade_rows)-wins} losses | Net P&L: {_c(total_pnl)}")
         lines.append(f"  {'Symbol':<10} {'Dir':<8} {'Entry':>10} {'Exit':>10} {'P&L':>10} {'Days':>6}  Reason")
         lines.append("  " + "-" * 70)
         for t in trade_rows:
-            pnl = float(t.get("pnl") or 0)
+            pnl = float(t.get("pnl_usd") or 0)
             lines.append(
                 f"  {str(t.get('symbol')):<10} {str(t.get('direction')):<8} "
                 f"{float(t.get('entry_price') or 0):>10.2f} {float(t.get('exit_price') or 0):>10.2f} "
@@ -2337,26 +2336,24 @@ def section_kraken_current_status() -> list[str]:
 
     # Performance metrics
     _h2(lines, "PERFORMANCE METRICS")
-    all_trades = _pg_query("SELECT pnl, holding_days, symbol FROM kraken_current_trades ORDER BY closed_at DESC")
+    all_trades = _pg_query("SELECT pnl_usd, holding_days, symbol FROM kraken_current_trades ORDER BY closed_at DESC")
     if all_trades:
         total = len(all_trades)
-        wins = [t for t in all_trades if float(t.get("pnl") or 0) > 0]
-        losses = [t for t in all_trades if float(t.get("pnl") or 0) < 0]
-        win_rate = len(wins) / total * 100 if total else 0
-        gross_profit = sum(float(t.get("pnl") or 0) for t in wins)
-        gross_loss = abs(sum(float(t.get("pnl") or 0) for t in losses))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
+        wins = [t for t in all_trades if float(t.get("pnl_usd") or 0) > 0]
+        losses = [t for t in all_trades if float(t.get("pnl_usd") or 0) < 0]
+        win_rate = _win_rate(all_trades, "pnl_usd") or 0
+        pf = _profit_factor(all_trades, "pnl_usd")
         avg_hold = sum(float(t.get("holding_days") or 0) for t in all_trades) / total if total else 0
         _row(lines, "Total trades:", str(total))
         _row(lines, "Win rate:", _pct(win_rate))
-        _row(lines, "Profit factor:", f"{profit_factor:.2f}×")
+        _row(lines, "Profit factor:", f"{pf:.2f}×" if pf is not None else "N/A")
         _row(lines, "Avg holding time:", f"{avg_hold:.1f} days")
         if wins:
-            best = max(wins, key=lambda t: float(t.get("pnl") or 0))
-            _row(lines, "Best trade:", f"{_c(float(best.get('pnl')))} ({best.get('symbol')})")
+            best = max(wins, key=lambda t: float(t.get("pnl_usd") or 0))
+            _row(lines, "Best trade:", f"{_c(float(best.get('pnl_usd')))} ({best.get('symbol')})")
         if losses:
-            worst = min(losses, key=lambda t: float(t.get("pnl") or 0))
-            _row(lines, "Worst trade:", f"{_c(float(worst.get('pnl')))} ({worst.get('symbol')})")
+            worst = min(losses, key=lambda t: float(t.get("pnl_usd") or 0))
+            _row(lines, "Worst trade:", f"{_c(float(worst.get('pnl_usd')))} ({worst.get('symbol')})")
     else:
         _row(lines, "Status:", "No completed trades yet")
 
@@ -3355,11 +3352,11 @@ def section_fleet_health_scorecard() -> list[str]:
         kc_eq = float(hb_kc[0].get("equity_usd") or 100000) if hb_kc else 100000
         kc_status_val = str(hb_kc[0].get("status") or "unknown") if hb_kc else "unknown"
         kc_trades_7d = _pg_query(
-            "SELECT COUNT(*) as n, SUM(pnl) as pnl FROM kraken_current_trades "
+            "SELECT COUNT(*) as n, SUM(pnl_usd) as pnl_usd FROM kraken_current_trades "
             "WHERE closed_at > NOW() - INTERVAL '7 days'"
         )
         last_kc = _pg_query("SELECT MAX(closed_at) as last FROM kraken_current_trades")
-        pnl_7d = float(kc_trades_7d[0].get("pnl") or 0) if kc_trades_7d else 0
+        pnl_7d = float(kc_trades_7d[0].get("pnl_usd") or 0) if kc_trades_7d else 0
         n_7d = int(kc_trades_7d[0].get("n") or 0) if kc_trades_7d else 0
         last_t = str(last_kc[0].get("last") or "Never")[:10] if last_kc else "Never"
         status = "🟢 LIVE" if kc_status_val not in ("unknown", "error") else "⚠️ UNKNOWN"

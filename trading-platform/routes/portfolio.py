@@ -15,6 +15,7 @@ from loguru import logger
 
 from core.pipeline import get_last_run
 from core.market_clock import is_market_open
+from core.metrics import risk_metrics as _compute_risk_metrics
 from execution.broker import get_account, get_positions, get_open_orders
 from analysis.trade_journal import (
     get_journal_summary, get_recent_losses, get_recent_wins,
@@ -708,35 +709,10 @@ async def risk_metrics() -> dict:
                 if _kt.get("pnl_percentage") is not None:
                     trade_returns.append(float(_kt["pnl_percentage"]) / 100.0)
             if len(trade_returns) >= 2:
-                arr = np.array(trade_returns)
-                mean_ret = float(np.mean(arr))
-                std_ret = float(np.std(arr, ddof=1))
-                periods_per_year = 252 / 30
-                rf_per_period = 0.05 / periods_per_year
-                sharpe = float((mean_ret - rf_per_period) / std_ret * np.sqrt(periods_per_year)) if std_ret > 0 else None
-                downside = arr[arr < 0]
-                downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
-                sortino = float((mean_ret - rf_per_period) / downside_std * np.sqrt(periods_per_year)) if downside_std and downside_std > 0 else None
-                max_dd = round(abs(float(np.min(arr))) * 100, 2)
-                # Ratios (Sharpe/Sortino/Vol) are meaningful with 10+ trades.
-                # Annualised return / Calmar need 30+ to avoid wild extrapolation.
-                MIN_TRADES_RATIOS = 10
-                MIN_TRADES_ANNUALISED = 30
-                enough_ratios = len(trade_returns) >= MIN_TRADES_RATIOS
-                enough_annualised = len(trade_returns) >= MIN_TRADES_ANNUALISED
-                ann_return = round(mean_ret * periods_per_year * 100, 2) if enough_annualised else None
-                calmar = round(ann_return / max_dd, 3) if (enough_annualised and ann_return is not None and max_dd > 0) else None
-                vol_annual = round(std_ret * np.sqrt(periods_per_year) * 100, 2) if (std_ret > 0 and enough_ratios) else None
+                _rm = _compute_risk_metrics(trade_returns, periods_per_year=252 / 30)
                 return {
-                    "sharpe_ratio": round(sharpe, 3) if (sharpe is not None and enough_ratios) else None,
-                    "sortino_ratio": round(sortino, 3) if (sortino is not None and enough_ratios) else None,
-                    "max_drawdown_pct": max_dd,
-                    "calmar_ratio": calmar,
-                    "volatility_annual_pct": vol_annual,
-                    "annualised_return_pct": ann_return,
-                    "data_points": len(trade_returns),
+                    **_rm,
                     "period_days": len(trade_returns) * 30,
-                    "insufficient_data": not enough_annualised,
                     "source": "trade_journal",
                     "message": f"Estimated from {len(trade_returns)} closed trades (30-day hold assumption)",
                 }
@@ -773,7 +749,6 @@ async def risk_metrics() -> dict:
             "message": "No performance data yet — run a post-mortem cycle to start tracking",
         }
 
-    import numpy as np
     daily_returns = [s["daily_pnl_pct"] / 100.0 for s in snapshots if s.get("daily_pnl_pct") is not None]
 
     if len(daily_returns) < 2:
@@ -783,50 +758,10 @@ async def risk_metrics() -> dict:
             "volatility_annual_pct": None, "data_points": len(daily_returns),
         }
 
-    arr = np.array(daily_returns)
-    mean_ret = float(np.mean(arr))
-    std_ret = float(np.std(arr, ddof=1))
-    rf_daily = 0.05 / 252
-
-    sharpe = float((mean_ret - rf_daily) / std_ret * np.sqrt(252)) if std_ret > 0 else None
-
-    downside = arr[arr < 0]
-    downside_std = float(np.std(downside, ddof=1)) if len(downside) > 1 else None
-    sortino = float((mean_ret - rf_daily) / downside_std * np.sqrt(252)) if downside_std and downside_std > 0 else None
-
     equities = [s["equity"] for s in snapshots if s.get("equity")]
-    max_dd = 0.0
-    peak = equities[0] if equities else 0
-    for eq in equities:
-        if eq > peak:
-            peak = eq
-        dd = (peak - eq) / peak * 100 if peak > 0 else 0
-        if dd > max_dd:
-            max_dd = dd
-
-    # Ratios (Sharpe/Sortino/Vol) are meaningful with 10+ daily data points.
-    # Annualised return / Calmar need 30+ to avoid wild extrapolation (e.g. -98%).
-    MIN_DAYS_FOR_RATIOS = 10
-    MIN_DAYS_FOR_ANNUALISED = 30
-    enough_ratios = len(daily_returns) >= MIN_DAYS_FOR_RATIOS
-    enough_annualised = len(daily_returns) >= MIN_DAYS_FOR_ANNUALISED
-
-    ann_return = round(mean_ret * 252 * 100, 2) if enough_annualised else None
-    calmar = round(ann_return / max_dd, 3) if (enough_annualised and ann_return is not None and max_dd > 0) else None
-    vol_annual = round(std_ret * np.sqrt(252) * 100, 2)
-    sharpe_out = round(sharpe, 3) if (enough_ratios and sharpe is not None) else None
-    sortino_out = round(sortino, 3) if (enough_ratios and sortino is not None) else None
-
     return {
-        "sharpe_ratio": sharpe_out,
-        "sortino_ratio": sortino_out,
-        "max_drawdown_pct": round(max_dd, 2),
-        "calmar_ratio": calmar,
-        "volatility_annual_pct": vol_annual if enough_ratios else None,
-        "annualised_return_pct": ann_return,
-        "data_points": len(daily_returns),
+        **_compute_risk_metrics(daily_returns, equity_curve=equities or None),
         "period_days": len(snapshots),
-        "insufficient_data": not enough_annualised,
     }
 
 
@@ -1275,27 +1210,8 @@ async def export_diagnostic_report():
         snapshots = get_performance_snapshots(limit=90)
         equities = [s.get("total_equity", 0) for s in snapshots if s.get("total_equity")]
         if len(equities) >= 2:
-            returns = _np.diff(equities) / _np.array(equities[:-1])
-            mean_r = float(_np.mean(returns))
-            std_r  = float(_np.std(returns))
-            rf     = 0.05 / 252
-            min_e  = min(equities)
-            max_e  = max(equities[:equities.index(min_e)+1]) if min_e in equities else equities[0]
-            max_dd = round(((max_e - min_e) / max_e) * 100, 2) if max_e > 0 else 0
-            ann_r  = mean_r * 252
-            sharpe = float((mean_r - rf) / std_r * _np.sqrt(252)) if std_r > 0 else None
-            neg_r  = returns[returns < 0]
-            ds     = float(_np.std(neg_r)) if len(neg_r) > 0 else None
-            sortino = float((mean_r - rf) / ds * _np.sqrt(252)) if ds and ds > 0 else None
-            calmar  = round(ann_r / (max_dd / 100), 3) if max_dd > 0 else None
-            risk_metrics = {
-                "sharpe_ratio": round(sharpe, 3) if sharpe else None,
-                "sortino_ratio": round(sortino, 3) if sortino else None,
-                "max_drawdown_pct": max_dd,
-                "calmar_ratio": calmar,
-                "volatility_annual_pct": round(std_r * _np.sqrt(252) * 100, 2),
-                "data_points": len(equities),
-            }
+            returns = list(_np.diff(equities) / _np.array(equities[:-1]))
+            risk_metrics = _compute_risk_metrics(returns, equity_curve=equities)
         elif equities:
             risk_metrics = {"data_points": len(equities)}
     except Exception:

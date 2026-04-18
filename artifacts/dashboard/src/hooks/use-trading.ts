@@ -1391,30 +1391,30 @@ export interface OptionsPendingTrade extends OptionsPosition {
 export function useOptionsState() {
   return useQuery<OptionsState>({
     queryKey: ["/options/state"],
-    queryFn: async () => (await api.get("/options/state")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    queryFn: async () => ({ status: "retired", active: false, positions: [], pending: [] } as unknown as OptionsState),
+    enabled: false,
     retry: false,
-    staleTime: 5_000,
+    staleTime: Infinity,
   });
 }
 
 export function useOptionsPositions() {
   return useQuery<{ positions: OptionsPosition[]; count: number }>({
     queryKey: ["/options/positions"],
-    queryFn: async () => (await api.get("/options/positions")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    queryFn: async () => ({ positions: [], count: 0 }),
+    enabled: false,
     retry: false,
-    staleTime: 5_000,
+    staleTime: Infinity,
   });
 }
 
 export function useOptionsPending() {
   return useQuery<{ pending: OptionsPendingTrade[]; count: number }>({
     queryKey: ["/options/pending"],
-    queryFn: async () => (await api.get("/options/pending")).data,
-    refetchInterval: useVisibleInterval(10_000),
+    queryFn: async () => ({ pending: [], count: 0 }),
+    enabled: false,
     retry: false,
-    staleTime: 5_000,
+    staleTime: Infinity,
   });
 }
 

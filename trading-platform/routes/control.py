@@ -243,41 +243,10 @@ def _liquidate_forex_positions() -> dict:
 
 
 def _liquidate_options_positions() -> dict:
-    closed = []
-    errors = []
-    try:
-        import importlib as _il
-        opts = _il.import_module("options_engine")
-        positions = opts._get_positions()
-        if not positions:
-            return {"closed": [], "errors": []}
-
-        for pos in positions:
-            pos_id = pos.get("id")
-            symbol = pos.get("symbol", "?")
-            try:
-                result = opts.close_position_by_id(pos_id, exit_reason="rebalance_liquidation")
-                if result and not result.get("error"):
-                    closed.append({
-                        "symbol": symbol,
-                        "pnl": round(result.get("pnl", 0), 2),
-                    })
-                    logger.info(
-                        f"Rebalance | Options closed {symbol} straddle | P&L: ${result.get('pnl', 0):+,.2f}"
-                    )
-                else:
-                    err_msg = result.get("error", "unknown") if result else "no result"
-                    errors.append({"symbol": symbol, "error": err_msg})
-            except Exception as exc:
-                logger.error(f"Rebalance | Options failed to close {symbol}: {exc}")
-                errors.append({"symbol": symbol, "error": str(exc)})
-
-    except Exception as exc:
-        logger.error(f"Rebalance | Options liquidation error: {exc}")
-        errors.append({"symbol": "all", "error": str(exc)})
-
-    logger.info(f"Rebalance | Options: closed {len(closed)} positions, {len(errors)} errors")
-    return {"closed": closed, "errors": errors}
+    """Options engine retired — Apex Predator (Bot #5) now runs as Kraken crypto momentum.
+    No options positions to liquidate; returns empty result immediately."""
+    logger.info("Rebalance | Options engine retired — skipping options liquidation")
+    return {"closed": [], "errors": []}
 
 
 class RunRequest(BaseModel):
@@ -343,13 +312,7 @@ async def manual_postmortem() -> dict:
                 _a_equity = float(_ga2().get("equity", 0) or 0)
             except Exception:
                 _a_equity = 0.0
-            _o_equity = 0.0
-            try:
-                import importlib as _il_pm
-                _opts_pm = _il_pm.import_module("options_engine")
-                _o_equity = float(_opts_pm.get_state().get("paper_equity", 0))
-            except Exception:
-                pass
+            _o_equity = 0.0  # Options engine retired; Apex Predator now runs as Kraken crypto momentum
             _f_equity = 0.0
             try:
                 from routes._deps import _get_forex_engine as _gfx_pm

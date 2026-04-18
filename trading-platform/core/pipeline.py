@@ -239,11 +239,23 @@ async def run_afterhours_crypto_cycle(dry_run: bool = False) -> dict:
             std_20 = float(closes.rolling(20).std().iloc[-1])
             z_score = (price - mean_20) / std_20 if std_20 > 0 else 0.0
 
-            delta = closes.diff()
-            gain = delta.clip(lower=0).rolling(14).mean()
-            loss = (-delta.clip(upper=0)).rolling(14).mean()
-            rs = gain / loss.replace(0, float("nan"))
-            rsi = float((100 - 100 / (1 + rs)).iloc[-1])
+            # Wilder's EMA RSI — consistent with forex-engine/indicators.py and
+            # all Kraken bots. Rolling SMA (.rolling(14).mean()) gives different
+            # values; Wilder's is the industry standard used everywhere else.
+            _rsi_period = 14
+            _cl = closes.tolist()
+            if len(_cl) < _rsi_period + 1:
+                rsi = 50.0
+            else:
+                _ch = [_cl[i] - _cl[i - 1] for i in range(1, len(_cl))]
+                _g  = [max(c, 0.0) for c in _ch]
+                _l  = [abs(min(c, 0.0)) for c in _ch]
+                _ag = sum(_g[:_rsi_period]) / _rsi_period
+                _al = sum(_l[:_rsi_period]) / _rsi_period
+                for _i in range(_rsi_period, len(_g)):
+                    _ag = (_ag * (_rsi_period - 1) + _g[_i]) / _rsi_period
+                    _al = (_al * (_rsi_period - 1) + _l[_i]) / _rsi_period
+                rsi = 100.0 if _al == 0.0 else round(100.0 - 100.0 / (1.0 + _ag / _al), 2)
 
             return {
                 "symbol": symbol,
@@ -1000,14 +1012,7 @@ async def _run_pipeline_inner(
         kraken_equity = get_kraken_equity()
         alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
         regime = _state.get("last_regime")
-        options_eq = 0.0
-        try:
-            import importlib as _il_snap
-            _opts_snap = _il_snap.import_module("options_engine")
-            _opts_st = _opts_snap.get_state()
-            options_eq = float(_opts_st.get("paper_equity", 0))
-        except Exception:
-            pass
+        options_eq = 0.0  # Options engine retired; Apex Predator now runs as Kraken crypto momentum
         forex_eq = 100_000.0
         try:
             from routes._deps import _get_forex_engine as _gfx_snap

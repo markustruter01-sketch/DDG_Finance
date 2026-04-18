@@ -22,7 +22,12 @@ def calculate_atr(highs: list[float], lows: list[float], closes: list[float], pe
     if len(true_ranges) < period:
         return 0.0
 
-    atr = np.mean(true_ranges[-period:])
+    # Wilder's EMA smoothing: seed with SMA of first `period` true ranges,
+    # then apply the recursive filter atr = (atr * (period-1) + tr) / period.
+    # Matches math_auditor.verified_atr() exactly — do NOT use np.mean() here.
+    atr = sum(true_ranges[:period]) / period
+    for tr in true_ranges[period:]:
+        atr = (atr * (period - 1) + tr) / period
     return float(atr)
 
 

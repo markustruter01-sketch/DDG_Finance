@@ -894,8 +894,9 @@ async def export_diagnostic_report():
     from analysis.attribution import compute_attribution as _attr
     from analysis.learning_journal import get_journal_entries as _lj
     from analysis.groq_budget import budget as _groq_budget
-    import options_engine as _opts
     from routes import report_sections as _rs
+    # options_engine retired — Apex Predator (Bot #5) now runs as Kraken crypto momentum
+    _opts = None
 
     now_utc = _dt.now(_tz.utc)
     ts = now_utc.strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1577,12 +1578,8 @@ async def export_diagnostic_report():
     lines.append("@@PART3@@")
     h1("SECTION 4: APEX PREDATOR \u2014 OPTIONS ENGINE (Bot #5)")
 
-    try:
-        _opts_state = _opts.get_full_state()
-        _opts_positions = _opts._get_positions()
-    except Exception:
-        _opts_state = {}
-        _opts_positions = []
+    _opts_state = {}
+    _opts_positions = []
 
     _opts_equity   = _opts_state.get("paper_equity", _opts_state.get("total_equity", 100_000))
     _opts_deployed = _opts_state.get("deployed_capital", 0)

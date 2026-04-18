@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from fastapi import APIRouter
-from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
+from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 new_bots_router = APIRouter()
 
@@ -55,7 +55,7 @@ async def poseidon_state():
 
     total_trades = len(trade_rows)
     total_pnl = sum(float(t.get("net_pnl") or 0) for t in trade_rows)
-    wins = sum(1 for t in trade_rows if float(t.get("net_pnl") or 0) > 0)
+    wins = sum(1 for t in trade_rows if float(t.get("net_pnl") or 0) > _WIN_THRESHOLD)
     win_rate = _win_rate(trade_rows, "net_pnl")
 
     paused = bool(hb[0].get("bot_paused")) if hb else False
@@ -167,7 +167,7 @@ async def pair_learning():
             "wins": wins,
             "losses": total - wins,
             "total_trades": total,
-            "win_rate": (wins / total * 100) if total > 0 else None,
+            "win_rate": round(wins / total * 100.0, 2) if total > 0 else None,
             "total_pnl": wr.get("total_pnl", 0),
             "last_trade_at": wr.get("last_trade_at"),
         })
@@ -292,7 +292,7 @@ async def kraken_current_state():
 
     total_trades = len(trade_rows)
     total_pnl = sum(float(t.get("pnl_usd") or 0) for t in trade_rows)
-    wins = sum(1 for t in trade_rows if float(t.get("pnl_usd") or 0) > 0)
+    wins = sum(1 for t in trade_rows if float(t.get("pnl_usd") or 0) > _WIN_THRESHOLD)
     win_rate = _win_rate(trade_rows, "pnl_usd")
 
     paused = bool(hb[0].get("bot_paused")) if hb else False

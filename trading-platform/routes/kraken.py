@@ -21,7 +21,7 @@ from routes._deps import (
     _resolve_bot,
     _persist_commentary_caches,
 )
-from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
+from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 kraken_router = APIRouter()
 
@@ -122,7 +122,6 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                            fees_usd, reason, closed_at, paper
                     FROM   kraken_trades
                     WHERE  bot_id = %s
-                      AND  closed_at >= '2026-04-13 00:00:00+00'
                     ORDER  BY closed_at ASC
                     """,
                     (bid,)
@@ -136,7 +135,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                     d["closed_at"] = d["closed_at"].isoformat()
                 all_trades.append(d)
 
-            wins = [t for t in all_trades if (t.get("pnl_usd") or 0) > 0]
+            wins = [t for t in all_trades if (t.get("pnl_usd") or 0) > _WIN_THRESHOLD]
             paper_summary = {
                 "starting_balance_usd": starting,
                 "cash_usd":             round(cash_usd, 2),
@@ -701,7 +700,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
                                fees_usd, reason, closed_at, paper
                         FROM   kraken_trades
                         WHERE  bot_id = %s
-                          AND  closed_at >= '2026-04-13 00:00:00+00'
+                          AND  closed_at >= NOW() - INTERVAL '30 days'
                         ORDER  BY closed_at ASC
                         """,
                         (bid,)

@@ -10,6 +10,12 @@ import math
 import time
 from typing import Optional
 
+try:
+    import numpy as _np
+    _NUMPY_OK = True
+except ImportError:
+    _NUMPY_OK = False
+
 from loguru import logger
 
 # ── OLS Regression ────────────────────────────────────────────────────────────
@@ -55,15 +61,24 @@ def calculate_zscore(spread_series: list[float], lookback: int = 60) -> Optional
     """
     Z-score of the most recent spread against rolling mean/std.
     lookback is in hours (data points).
+
+    Two corrections applied vs. the original implementation:
+    1. Out-of-sample window: mean and std are computed on spread_series[-(lookback+1):-1]
+       (the PRIOR lookback bars), so the current bar is scored against a distribution
+       that does NOT include itself.  Including the current bar in its own distribution
+       artificially shrinks extreme z-scores (self-referential bias).
+    2. Bessel's correction (N-1 denominator) for sample standard deviation.
     """
-    if len(spread_series) < lookback:
-        window = spread_series
-    else:
-        window = spread_series[-lookback:]
-    if len(window) < 5:
+    n = len(spread_series)
+    if n < 6:
         return None
-    mean = sum(window) / len(window)
-    variance = sum((v - mean) ** 2 for v in window) / len(window)
+    # Use prior bars only (exclude the current bar from the reference window)
+    history = spread_series[-(lookback + 1):-1] if n > lookback else spread_series[:-1]
+    if len(history) < 5:
+        return None
+    mean = sum(history) / len(history)
+    # Sample variance with Bessel's correction
+    variance = sum((v - mean) ** 2 for v in history) / max(len(history) - 1, 1)
     std = math.sqrt(variance)
     if std < 1e-10:
         return 0.0
@@ -122,47 +137,95 @@ def hurst_exponent(series: list[float], max_lag: int = 20) -> float:
 
 # ── ADF Test (simplified) ─────────────────────────────────────────────────────
 
-def adf_pvalue(series: list[float]) -> float:
+def adf_pvalue(series: list[float], max_lags: int = 4) -> float:
     """
-    Simplified ADF (Augmented Dickey-Fuller) test.
-    Tests the null hypothesis that the series has a unit root (non-stationary).
-    Returns approximate p-value. p < 0.10 → stationary → good for pairs trading.
+    Augmented Dickey-Fuller test with lag selection by AIC.
 
-    Uses a simplified OLS regression: Δy_t = α + β*y_{t-1} + ε
-    Then estimates the t-statistic for β and maps to approximate p-value.
+    Regression: Δy_t = α + β·y_{t-1} + Σ γ_j·Δy_{t-j} + ε  (j = 1..lags)
+
+    The augmented lags whiten the residuals, making the t-statistic for β
+    asymptotically valid.  The original implementation used only 1 lag, which
+    inflated the t-statistic for autocorrelated spread series and caused false
+    signals of stationarity.
+
+    Lag count is selected by AIC (min over 0..max_lags).
+    Uses numpy for OLS; falls back to 0-lag OLS if numpy unavailable.
+
+    Returns approximate p-value mapping of MacKinnon critical values
+    (with constant, no trend).
     """
-    if len(series) < 10:
+    if len(series) < 20:
         return 1.0
     try:
-        # First differences and lagged levels
-        y_lag = series[:-1]
         dy = [series[i] - series[i - 1] for i in range(1, len(series))]
-        n = len(dy)
-        if n < 5:
-            return 1.0
-        # OLS: Δy = alpha + beta * y_lag
-        sum_x = sum(y_lag)
-        sum_y = sum(dy)
-        sum_xx = sum(xi * xi for xi in y_lag)
-        sum_xy = sum(xi * yi for xi, yi in zip(y_lag, dy))
-        denom = n * sum_xx - sum_x ** 2
-        if abs(denom) < 1e-12:
-            return 1.0
-        beta = (n * sum_xy - sum_x * sum_y) / denom
-        alpha = (sum_y - beta * sum_x) / n
-        # Residuals and standard error
-        residuals = [dy[i] - alpha - beta * y_lag[i] for i in range(n)]
-        sse = sum(r * r for r in residuals)
-        se_beta_sq_denom = sum((xi - sum_x / n) ** 2 for xi in y_lag)
-        if se_beta_sq_denom < 1e-12:
-            return 1.0
-        se_beta = math.sqrt((sse / max(n - 2, 1)) / se_beta_sq_denom)
-        if se_beta < 1e-12:
-            return 1.0
-        t_stat = beta / se_beta
-        # Map ADF t-stat to approximate p-value
-        # Critical values for ADF (no trend/constant):
-        # 1%: -3.43, 5%: -2.86, 10%: -2.57
+        y_lag = series[:-1]
+        n_full = len(dy)
+
+        if _NUMPY_OK:
+            best_aic = float("inf")
+            best_t = 0.0
+
+            for lags in range(0, min(max_lags + 1, n_full // 5)):
+                # Trim to aligned sample: skip first `lags` rows
+                n = n_full - lags
+                if n < 10:
+                    break
+
+                Y = _np.array(dy[lags:], dtype=float)
+                # Design: [1, y_lag, Δy_{t-1}, ..., Δy_{t-lags}]
+                cols = [_np.ones(n), _np.array(y_lag[lags:], dtype=float)]
+                for j in range(1, lags + 1):
+                    cols.append(_np.array(dy[lags - j: n_full - j], dtype=float))
+                X = _np.column_stack(cols)
+
+                try:
+                    B, _, _, _ = _np.linalg.lstsq(X, Y, rcond=None)
+                except _np.linalg.LinAlgError:
+                    continue
+
+                residuals = Y - X @ B
+                sse = float(_np.dot(residuals, residuals))
+                k = X.shape[1]
+                if sse <= 0 or n <= k:
+                    continue
+
+                aic = n * math.log(sse / n) + 2 * k
+                if aic < best_aic:
+                    best_aic = aic
+                    # Var(β) = s² · [(X'X)⁻¹]_{11}
+                    s2 = sse / (n - k)
+                    try:
+                        XtX_inv = _np.linalg.inv(X.T @ X)
+                        var_beta = s2 * float(XtX_inv[1, 1])
+                    except _np.linalg.LinAlgError:
+                        continue
+                    if var_beta <= 0:
+                        continue
+                    best_t = float(B[1]) / math.sqrt(var_beta)
+
+            t_stat = best_t
+
+        else:
+            # Pure-Python fallback: 0-lag OLS (original behaviour)
+            n = n_full
+            sum_x = sum(y_lag)
+            sum_y = sum(dy)
+            sum_xx = sum(xi * xi for xi in y_lag)
+            sum_xy = sum(xi * yi for xi, yi in zip(y_lag, dy))
+            denom = n * sum_xx - sum_x ** 2
+            if abs(denom) < 1e-12:
+                return 1.0
+            beta = (n * sum_xy - sum_x * sum_y) / denom
+            alpha = (sum_y - beta * sum_x) / n
+            residuals = [dy[i] - alpha - beta * y_lag[i] for i in range(n)]
+            sse = sum(r * r for r in residuals)
+            se_denom = sum((xi - sum_x / n) ** 2 for xi in y_lag)
+            if se_denom < 1e-12:
+                return 1.0
+            se_beta = math.sqrt((sse / max(n - 2, 1)) / se_denom)
+            t_stat = beta / se_beta if se_beta > 1e-12 else 0.0
+
+        # MacKinnon (1994) approximate critical values — with constant, no trend
         if t_stat < -3.43:
             return 0.01
         elif t_stat < -2.86:

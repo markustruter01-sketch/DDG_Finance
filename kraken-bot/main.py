@@ -797,12 +797,19 @@ def open_position(
     regime_at_entry: str = "Unknown",
     entry_zscore: float | None = None,
     zscore_source: str = "raw",
+    atr_stop_price: float | None = None,
+    entry_atr: float = 0.0,
+    entry_atr_mult: float = 2.0,
 ) -> bool:
     """
     Open a position — simulated (paper mode) or real (live mode).
 
     PAPER mode → calls paper_engine.paper_open_position()
     LIVE mode  → places a real market order via ccxt
+
+    atr_stop_price / entry_atr / entry_atr_mult are persisted into the paper
+    engine's position dict so they survive cycle reloads and can be used to
+    recalculate the stop correctly on tranche scale-ins (Bug #7 fix).
     """
     global open_positions, consecutive_losses
 
@@ -813,6 +820,9 @@ def open_position(
             regime_at_entry=regime_at_entry,
             entry_zscore=entry_zscore,
             zscore_source=zscore_source,
+            atr_stop_price=atr_stop_price,
+            entry_atr=entry_atr,
+            entry_atr_mult=entry_atr_mult,
         )
         if success:
             # Sync in-memory state from the paper engine's persisted state
@@ -2233,6 +2243,8 @@ def run_cycle() -> None:
                                     symbol, "short", size_usd, current_price,
                                     regime_at_entry=_regime_label_canonical,
                                     entry_zscore=sym_z_score, zscore_source=zscore_source,
+                                    atr_stop_price=_atr_stop, entry_atr=sym_atr,
+                                    entry_atr_mult=_bs_sl_mult,
                                 ):
                                     deployed_usd += size_usd
                                     if symbol in open_positions:
@@ -2368,6 +2380,8 @@ def run_cycle() -> None:
                     symbol, _apex_dir, _apex_size, current_price,
                     regime_at_entry=_regime_label_canonical,
                     entry_zscore=sym_z_score, zscore_source=zscore_source,
+                    atr_stop_price=_apex_atr_stop, entry_atr=sym_atr,
+                    entry_atr_mult=ATR_STOP_MULTIPLIER,
                 ):
                     deployed_usd += _apex_size
                     if symbol in open_positions:
@@ -2549,7 +2563,9 @@ def run_cycle() -> None:
                         )
                         if open_position(symbol, _swing_side, size_usd, current_price,
                                          regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
-                                         zscore_source=zscore_source):
+                                         zscore_source=zscore_source,
+                                         atr_stop_price=_atr_stop, entry_atr=sym_atr,
+                                         entry_atr_mult=SWING_SL_ATR_MULT):
                             _cycle_new_entries += 1
                             deployed_usd += size_usd
                             if symbol in open_positions:
@@ -2733,7 +2749,9 @@ def run_cycle() -> None:
                     _atr_stop = get_atr_stop_price("long", current_price, sym_atr, multiplier=_sym_atr_mult)
                     if open_position(symbol, "long", _scout_size, current_price,
                                      regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
-                                     zscore_source=zscore_source):
+                                     zscore_source=zscore_source,
+                                     atr_stop_price=_atr_stop, entry_atr=sym_atr,
+                                     entry_atr_mult=_sym_atr_mult):
                         deployed_usd += _scout_size
                         if symbol in open_positions:
                             open_positions[symbol]["atr_stop_price"] = _atr_stop
@@ -2884,7 +2902,9 @@ def run_cycle() -> None:
                     )
                     if open_position(symbol, "long", _t1_size, current_price,
                                      regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
-                                     zscore_source=zscore_source):
+                                     zscore_source=zscore_source,
+                                     atr_stop_price=_atr_stop, entry_atr=sym_atr,
+                                     entry_atr_mult=_long_sl_mult):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:
@@ -3025,7 +3045,9 @@ def run_cycle() -> None:
                     )
                     if open_position(symbol, "short", _t1_size, current_price,
                                      regime_at_entry=_regime_label_canonical, entry_zscore=sym_z_score,
-                                     zscore_source=zscore_source):
+                                     zscore_source=zscore_source,
+                                     atr_stop_price=_atr_stop, entry_atr=sym_atr,
+                                     entry_atr_mult=_short_sl_mult):
                         deployed_usd += _t1_size
                         # Store ATR stop price in the position for check_stops()
                         if symbol in open_positions:

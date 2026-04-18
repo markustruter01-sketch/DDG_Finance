@@ -197,7 +197,9 @@ def calculate_zscore(closes: list[float], window: int = 20) -> float:
 
     recent = closes[-window:]
     mean   = sum(recent) / len(recent)
-    variance = sum((p - mean) ** 2 for p in recent) / len(recent)
+    # Bessel's correction (N-1) gives sample variance, which is the correct
+    # estimator for standard deviation of the underlying distribution.
+    variance = sum((p - mean) ** 2 for p in recent) / max(len(recent) - 1, 1)
     std_dev  = math.sqrt(variance)
 
     if std_dev == 0.0:

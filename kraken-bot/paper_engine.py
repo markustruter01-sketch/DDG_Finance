@@ -134,6 +134,11 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
     Return the total simulated account value:
       cash  +  current market value of all open positions.
 
+    For LONG positions:  value = size_units × current_price
+    For SHORT positions: value = size_usd + (entry_price − current_price) × size_units
+                         (capital locked up plus unrealised profit/loss)
+                         When price falls below entry the equity correctly increases.
+
     current_prices: optional dict of {symbol: current_price}.
     If not provided, open positions are valued at their entry price.
     """
@@ -142,7 +147,11 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
 
     for sym, pos in p["positions"].items():
         price = (current_prices or {}).get(sym, pos["entry_price"])
-        equity += pos["size_units"] * price
+        if pos["side"] == "long":
+            equity += pos["size_units"] * price
+        else:
+            # Short: original capital plus unrealised P&L (positive when price falls)
+            equity += pos["size_usd"] + (pos["entry_price"] - price) * pos["size_units"]
 
     return equity
 
@@ -239,12 +248,19 @@ def paper_open_position(
     regime_at_entry: str = "Unknown",
     entry_zscore: float | None = None,
     zscore_source: str = "raw",
+    atr_stop_price: float | None = None,
+    entry_atr: float = 0.0,
+    entry_atr_mult: float = 2.0,
 ) -> bool:
     """
     Simulate opening a position at the current market price with dynamic slippage.
 
     Deducts the position value plus the entry fee from cash.
     Returns True on success, False if there is not enough cash.
+
+    atr_stop_price / entry_atr / entry_atr_mult are stored in the position dict
+    so they persist across cycle reloads and can be recalculated correctly on
+    tranche scale-ins.
     """
     from config import PAPER_FEE_PCT
 
@@ -279,6 +295,9 @@ def paper_open_position(
         "regime_at_entry": regime_at_entry,
         "entry_zscore":    entry_zscore,
         "zscore_source":   zscore_source,
+        "atr_stop_price":  atr_stop_price,
+        "entry_atr":       entry_atr,
+        "entry_atr_mult":  entry_atr_mult,
     }
 
     _save_portfolio()
@@ -364,6 +383,18 @@ def paper_scale_in_position(
     else:
         pos["best_price"] = min(pos.get("best_price", fill_price), fill_price)
 
+    # Recalculate ATR stop using the new weighted-average entry and the stored
+    # ATR / multiplier from T1.  Without this update the stop remains anchored
+    # to the T1 price even though the average entry has moved, making the stop
+    # proportionally too tight or too loose relative to the actual cost basis.
+    _e_atr  = pos.get("entry_atr", 0.0)
+    _e_mult = pos.get("entry_atr_mult", 2.0)
+    if _e_atr > 0 and _e_mult > 0:
+        if pos["side"] == "long":
+            pos["atr_stop_price"] = round(new_entry - _e_atr * _e_mult, 8)
+        else:
+            pos["atr_stop_price"] = round(new_entry + _e_atr * _e_mult, 8)
+
     p["cash_usd"] -= total_cost
 
     _save_portfolio()
@@ -416,7 +447,15 @@ def paper_close_position(symbol: str, current_price: float, reason: str, atr: fl
     total_fees    = pos.get("entry_fee", 0) + exit_fee
     net_pnl_usd   = gross_pnl_usd - total_fees
 
-    p["cash_usd"] += net_value
+    # Return original capital + gross P&L - exit fee.
+    # This formula is correct for BOTH longs and shorts:
+    #   Long:  size_usd + (fill - entry)/entry * size_usd - exit_fee
+    #          = size_units * fill_price - exit_fee  (same as old net_value)
+    #   Short: size_usd + (entry - fill)/entry * size_usd - exit_fee
+    #          > size_usd when profitable (price fell), correctly increasing cash.
+    # The old code used net_value = size_units * fill_price - exit_fee, which for
+    # shorts returned LESS than size_usd on a profitable trade, inverting P&L.
+    p["cash_usd"] += pos["size_usd"] + gross_pnl_usd - exit_fee
 
     trade_record = {
         "symbol":          symbol,

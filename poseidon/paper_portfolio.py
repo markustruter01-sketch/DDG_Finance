@@ -145,7 +145,11 @@ class PaperPortfolio:
             "consecutive_losses": self.consecutive_losses,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        self.state_file.write_text(json.dumps(d, indent=2))
+        # Atomic write: write to .tmp then rename so a mid-write crash never
+        # produces a corrupt state file that would wipe the portfolio on restart.
+        tmp = self.state_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d, indent=2))
+        tmp.replace(self.state_file)
 
     def equity(self, current_prices: dict[str, float]) -> float:
         """Total equity = cash + unrealised P&L of all positions."""
@@ -162,7 +166,11 @@ class PaperPortfolio:
 
     def open_position(self, pos: PairPosition) -> bool:
         """Open a pair position. Returns False if insufficient funds."""
-        cost = pos.position_value * 2  # both legs require margin
+        # In pairs trading one leg's proceeds fund the other, so the cash
+        # requirement is one leg's value (position_value).  The previous check
+        # of position_value * 2 was inconsistent with the actual deduction of
+        # position_value * 1 and allowed capital over-deployment.
+        cost = pos.position_value
         if cost > self.cash:
             logger.warning(f"Poseidon | Insufficient cash for pair {pos.pair_set_id}: need ${cost:.0f}, have ${self.cash:.0f}")
             return False

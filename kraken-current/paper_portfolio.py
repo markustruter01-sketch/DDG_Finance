@@ -147,7 +147,11 @@ class PaperPortfolio:
             "circuit_breaker_until": self.circuit_breaker_until,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        self.state_file.write_text(json.dumps(d, indent=2))
+        # Atomic write: write to .tmp then rename so a mid-write crash never
+        # produces a corrupt state file that would wipe the portfolio on restart.
+        tmp = self.state_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d, indent=2))
+        tmp.replace(self.state_file)
 
     def equity(self, current_prices: dict[str, float]) -> float:
         total = self.cash

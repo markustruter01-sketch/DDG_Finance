@@ -178,6 +178,49 @@ def momentum_return(closes: list[float], days: int = 10, candles_per_day: int = 
     return (closes[-1] - prev) / prev
 
 
+# ── VPIN (Volume-Synchronised Probability of Informed Trading) ────────────────
+
+def calculate_vpin(
+    opens: list[float],
+    closes: list[float],
+    volumes: list[float],
+    window: int = 50,
+) -> float:
+    """
+    Simplified VPIN using bulk volume classification.
+
+    Each bar's volume is classified as buy-initiated (close >= open) or
+    sell-initiated (close < open).  VPIN is the absolute order-flow imbalance
+    normalised by total volume over the rolling window:
+
+        VPIN = |buy_vol - sell_vol| / total_vol ∈ [0, 1]
+
+    High VPIN (> 0.88) signals toxic/informed order flow — a period when
+    informed traders dominate and market-makers widen spreads.  Entering
+    trend positions in such conditions often results in adverse fills and
+    increased reversal risk.
+
+    Returns 0.0 when insufficient data.
+    """
+    n = min(len(opens), len(closes), len(volumes))
+    if n < 5:
+        return 0.0
+    start = max(0, n - window)
+    buy_vol = 0.0
+    total_vol = 0.0
+    for i in range(start, n):
+        v = volumes[i]
+        if v <= 0:
+            continue
+        total_vol += v
+        if closes[i] >= opens[i]:
+            buy_vol += v
+    if total_vol <= 0:
+        return 0.0
+    sell_vol = total_vol - buy_vol
+    return min(abs(buy_vol - sell_vol) / total_vol, 1.0)
+
+
 # ── Position Sizing ───────────────────────────────────────────────────────────
 
 def calculate_position_size(

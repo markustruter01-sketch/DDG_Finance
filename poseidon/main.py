@@ -494,8 +494,11 @@ def write_live_state(current_prices: dict[str, float], equity: float):
             "current_price_b": pb,
             **pnl,
         }
-    Path(LIVE_STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
-    Path(LIVE_STATE_FILE).write_text(json.dumps(state, indent=2, default=str))
+    _live_path = Path(LIVE_STATE_FILE)
+    _live_path.parent.mkdir(parents=True, exist_ok=True)
+    _tmp = _live_path.with_suffix(".tmp")
+    _tmp.write_text(json.dumps(state, indent=2, default=str))
+    _tmp.replace(_live_path)
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────

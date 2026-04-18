@@ -45,7 +45,7 @@ from config import (
 from trend_engine import (
     calculate_ema, calculate_atr, calculate_adx, hurst_exponent,
     momentum_return, calculate_position_size, evaluate_trend_signal,
-    update_trailing_stop,
+    update_trailing_stop, calculate_vpin,
 )
 from paper_portfolio import TrendPosition, PaperPortfolio
 from db_utils import (
@@ -114,8 +114,12 @@ def refresh_universe(force: bool = False):
 
 # ── Regime loading ────────────────────────────────────────────────────────────
 
+_regime_file_missing_warned = False
+
+
 def load_regime() -> str:
     """Load crypto regime from shared state file."""
+    global _regime_file_missing_warned
     regime_files = [
         os.path.join(_REPO_ROOT, "kraken-bot", "crypto_regime.json"),
         os.path.join(_REPO_ROOT, "trading-platform", "data", "crypto_regime.json"),
@@ -124,9 +128,18 @@ def load_regime() -> str:
         if os.path.exists(f):
             try:
                 data = json.loads(Path(f).read_text())
+                _regime_file_missing_warned = False  # reset if file reappears
                 return data.get("regime", "Sideways")
             except Exception:
                 pass
+    if not _regime_file_missing_warned:
+        logger.warning(
+            "KrakenCurrent | Regime file not found at any configured path — "
+            "defaulting to 'Sideways'. Position sizing uses REGIME_SIDEWAYS_MULT "
+            "for all trades regardless of actual market conditions. "
+            f"Searched: {regime_files}"
+        )
+        _regime_file_missing_warned = True
     return "Sideways"
 
 
@@ -142,22 +155,23 @@ def regime_multiplier(regime: str, direction: str) -> float:
 
 # ── Market data ───────────────────────────────────────────────────────────────
 
-def fetch_ohlcv(symbol: str) -> tuple[list, list, list, list]:
-    """Fetch OHLCV bars. Returns (closes, highs, lows, opens)."""
+def fetch_ohlcv(symbol: str) -> tuple[list, list, list, list, list]:
+    """Fetch OHLCV bars. Returns (closes, highs, lows, opens, volumes)."""
     if exchange is None:
-        return [], [], [], []
+        return [], [], [], [], []
     try:
         bars = exchange.fetch_ohlcv(symbol, OHLCV_TIMEFRAME, limit=OHLCV_LIMIT)
         if not bars:
-            return [], [], [], []
-        closes = [float(b[4]) for b in bars if b[4]]
-        highs = [float(b[2]) for b in bars if b[2]]
-        lows = [float(b[3]) for b in bars if b[3]]
-        opens = [float(b[1]) for b in bars if b[1]]
-        return closes, highs, lows, opens
+            return [], [], [], [], []
+        closes  = [float(b[4]) for b in bars if b[4]]
+        highs   = [float(b[2]) for b in bars if b[2]]
+        lows    = [float(b[3]) for b in bars if b[3]]
+        opens   = [float(b[1]) for b in bars if b[1]]
+        volumes = [float(b[5]) if len(b) > 5 and b[5] else 0.0 for b in bars]
+        return closes, highs, lows, opens, volumes
     except Exception as e:
         logger.warning(f"KrakenCurrent | fetch_ohlcv {symbol} failed: {e}")
-        return [], [], [], []
+        return [], [], [], [], []
 
 
 def fetch_current_price(symbol: str) -> float | None:
@@ -180,7 +194,7 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
         if not price:
             continue
 
-        closes, highs, lows, _ = ohlcv_data.get(sym, ([], [], [], []))
+        closes, highs, lows, _, _vol = ohlcv_data.get(sym, ([], [], [], [], []))
         atr = calculate_atr(highs, lows, closes) if closes else pos.stop_distance / ATR_STOP_MULTIPLIER
         adx = calculate_adx(highs, lows, closes) if closes else 0
 
@@ -233,8 +247,11 @@ def scan_for_entries(current_prices: dict[str, float], ohlcv_data: dict[str, tup
         return []
 
     for sym in _active_symbols:
-        closes, highs, lows, _ = ohlcv_data.get(sym, ([], [], [], []))
+        closes, highs, lows, opens, volumes = ohlcv_data.get(sym, ([], [], [], [], []))
         price = current_prices.get(sym, 0)
+
+        # Compute live VPIN from bar volumes (bulk volume classification)
+        vpin = calculate_vpin(opens, closes, volumes, window=50)
 
         result = evaluate_trend_signal(
             closes, highs, lows,
@@ -244,9 +261,10 @@ def scan_for_entries(current_prices: dict[str, float], ohlcv_data: dict[str, tup
             adx_min=ADX_ENTRY_MIN,
             hurst_min=HURST_MIN,
             momentum_days=MOMENTUM_DAYS,
-            vpin=0.0,  # VPIN integration handled by platform
+            vpin=vpin,
             vpin_block=VPIN_ENTRY_BLOCK,
         )
+        result["vpin"] = round(vpin, 4)
         result["symbol"] = sym
 
         scan_results.append(result)
@@ -333,8 +351,11 @@ def write_live_state(current_prices: dict[str, float], equity: float, scan_resul
             "unrealised_pnl": pos.unrealised_pnl(price),
             "holding_days": pos.holding_days(),
         }
-    Path(LIVE_STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
-    Path(LIVE_STATE_FILE).write_text(json.dumps(state, indent=2, default=str))
+    _live_path = Path(LIVE_STATE_FILE)
+    _live_path.parent.mkdir(parents=True, exist_ok=True)
+    _tmp = _live_path.with_suffix(".tmp")
+    _tmp.write_text(json.dumps(state, indent=2, default=str))
+    _tmp.replace(_live_path)
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
@@ -377,9 +398,9 @@ def main():
             ohlcv_data: dict[str, tuple] = {}
             current_prices: dict[str, float] = {}
             for sym in _active_symbols:
-                closes, highs, lows, opens = fetch_ohlcv(sym)
+                closes, highs, lows, opens, volumes = fetch_ohlcv(sym)
                 if closes:
-                    ohlcv_data[sym] = (closes, highs, lows, opens)
+                    ohlcv_data[sym] = (closes, highs, lows, opens, volumes)
                     current_prices[sym] = closes[-1]
 
             logger.info(f"KrakenCurrent | OHLCV loaded for {len(ohlcv_data)}/{len(_active_symbols)} symbols")

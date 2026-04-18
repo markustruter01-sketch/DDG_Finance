@@ -5,6 +5,7 @@ import {
   useKrakenFleetSummary,
   useSentiment,
   useStatusSummary,
+  useVault,
 } from "@/hooks/use-trading";
 import { DDGBadge } from "@/components/DDGBadge";
 
@@ -87,6 +88,7 @@ export default function StreamingPerformanceScreen() {
   const fleet   = useKrakenFleetSummary();
   const sent    = useSentiment();
   const status  = useStatusSummary();
+  const vaultData = useVault();
 
   const rm  = risk.data;
   const j   = journal.data;
@@ -94,6 +96,7 @@ export default function StreamingPerformanceScreen() {
   const fl  = fleet.data;
   const sg  = sent.data;
   const st  = status.data;
+  const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
 
   const cryptoFG = sg?.crypto_fear_greed?.value;
   const marketFG = sg?.market_fear_greed?.value;
@@ -179,6 +182,12 @@ export default function StreamingPerformanceScreen() {
           </span>
           <span style={{ fontSize: 14, fontFamily: "monospace", fontWeight: 900, color: pnlColor(fleetPnL) }}>
             FLEET P&L: {fmtMoney(fleetPnL)}
+          </span>
+          <span style={{ fontSize: 11, fontFamily: "monospace", color: "rgba(251,191,36,0.8)" }}>
+            VAULT:{" "}
+            <span style={{ fontWeight: 900, color: "#fbbf24" }}>
+              {totalVaulted != null ? `$${Math.round(totalVaulted).toLocaleString()}` : "—"}
+            </span>
           </span>
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
   useSentiment,
   usePoseidonState,
   useKrakenCurrentState,
+  useVault,
 } from "@/hooks/use-trading";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { AnimatedValue } from "@/components/streaming/AnimatedValue";
@@ -72,6 +73,7 @@ function HeroStrip() {
   const { data: fxState } = useForexState();
   const { data: sentiment } = useSentiment();
   const { data: curve } = useEquityCurve(1500);
+  const { data: vault } = useVault();
   const { wins, losses, totalTrades } = useRealFeed(50);
 
   const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
@@ -175,6 +177,16 @@ function HeroStrip() {
           <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(148,163,184,0.5)" }}>Win Rate</div>
           <span className="text-lg font-mono font-black text-white">{winRate}%</span>
         </div>
+      </div>
+
+      <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />
+
+      <div className="text-center">
+        <div className="text-[9px] uppercase tracking-widest font-bold" style={{ color: "rgba(251,191,36,0.5)" }}>Vault</div>
+        <AnimatedValue
+          value={vault?.total_vaulted_usd != null ? `$${Math.round(vault.total_vaulted_usd).toLocaleString()}` : "—"}
+          className="text-base font-mono font-bold text-yellow-400"
+        />
       </div>
 
       <div className="h-8 w-px" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} />

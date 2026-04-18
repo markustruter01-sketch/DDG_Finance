@@ -1,4 +1,4 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useOptionsState, useOptionsPositions, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
@@ -428,8 +428,7 @@ export default function StreamingBotsScreen() {
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: optionsState } = useOptionsState();
-  const { data: optionsPosRaw } = useOptionsPositions();
+  const { data: vault } = useVault();
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
   const { data: poseidonState } = usePoseidonState();
@@ -455,16 +454,11 @@ export default function StreamingBotsScreen() {
   const caEquity = caPerf?.current_equity ?? caStatus?.total_equity_usd ?? null;
   const caTopPair = caStatus?.open_positions?.[0]?.symbol;
 
-  const apexEquity = optionsState?.total_equity ?? optionsState?.paper_equity ?? null;
-  const apexPositionsArr = Array.isArray(optionsPosRaw) ? optionsPosRaw : [];
-  const apexTopPair = apexPositionsArr[0]?.symbol;
-  const apexOpenList: OpenPosSummary[] = apexPositionsArr.map((p) => ({
-    symbol: p.symbol,
-    side: "long" as const,
-    entry_price: p.premium_per_contract ?? 0,
-    unrealized_pnl_usd: p.unrealized_pnl ?? 0,
-    size_usd: p.total_cost ?? 0,
-  }));
+  const { data: apexKrakenPerf } = useKrakenPerformance("apex-predator");
+  const { data: apexKrakenStatus } = useKrakenStatus("apex-predator");
+
+  const apexKrakenEquity = apexKrakenPerf?.current_equity ?? apexKrakenStatus?.total_equity_usd ?? null;
+  const apexKrakenTopPair = apexKrakenStatus?.open_positions?.[0]?.symbol;
 
   const navEquity = forexState?.total_equity ?? forexState?.paper_equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
@@ -499,7 +493,7 @@ export default function StreamingBotsScreen() {
   }));
   const kcTopPair = kcOpenList[0]?.symbol;
 
-  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
+  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexKrakenEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
   const fleetTotal = allEquities.length === 8 ? allEquities.reduce((s, e) => s + e, 0) : null;
   const fleetPnl = fleetTotal != null ? fleetTotal - FLEET_STARTING_CAPITAL : null;
 
@@ -576,41 +570,20 @@ export default function StreamingBotsScreen() {
       openPositionsList: caStatus?.open_positions,
     },
     {
-      id: "apex",
+      id: "apex-predator",
       name: "Apex Predator",
       icon: "🦅",
-      exchange: "Alpaca · Options",
+      exchange: "Kraken · Momentum",
       color: "#f97316",
       glow: "#f97316",
-      equity: apexEquity,
-      paused: optionsState?.paused ?? false,
-      winCount: optionsState?.total_wins ?? 0,
-      lossCount: (optionsState?.total_trades ?? 0) - (optionsState?.total_wins ?? 0),
-      openPositions: apexPositionsArr.length,
-      topPair: apexTopPair,
-      openPositionsList: apexOpenList,
-      strategyConfig: [
-        {
-          label: "Cap Fence",
-          value: `${((optionsState?.capital_fence_pct ?? 0.05) * 100).toFixed(0)}%`,
-          color: "#f97316",
-        },
-        {
-          label: "Fenced",
-          value: `$${(optionsState?.fenced_capital ?? 5000).toLocaleString()}`,
-          color: "#94a3b8",
-        },
-        {
-          label: "Circuit Brk",
-          value: optionsState?.circuit_breaker_active ? "ACTIVE" : "OFF",
-          color: optionsState?.circuit_breaker_active ? "#f87171" : "#10b981",
-        },
-        {
-          label: "Mode",
-          value: optionsState?.paper_mode ? "PAPER" : "LIVE",
-          color: optionsState?.paper_mode ? "#fbbf24" : "#10b981",
-        },
-      ],
+      equity: apexKrakenEquity,
+      paused: apexKrakenStatus?.bot_paused ?? false,
+      winCount: apexKrakenPerf?.win_count ?? 0,
+      lossCount: apexKrakenPerf?.loss_count ?? 0,
+      openPositions: apexKrakenStatus?.open_positions?.length ?? 0,
+      topPair: apexKrakenTopPair,
+      krakenBotKey: "apex_predator",
+      openPositionsList: apexKrakenStatus?.open_positions,
     },
     {
       id: "navigator",
@@ -742,6 +715,12 @@ export default function StreamingBotsScreen() {
           <div className="text-center">
             <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>STARTING CAPITAL</div>
             <div className="text-xs font-black font-mono" style={{ color: "rgba(203,213,225,0.6)" }}>${FLEET_STARTING_CAPITAL.toLocaleString()}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: "rgba(251,191,36,0.5)" }}>VAULT</div>
+            <div className="text-xs font-black font-mono" style={{ color: "#fbbf24" }}>
+              {vault?.total_vaulted_usd != null ? `$${Math.round(vault.total_vaulted_usd).toLocaleString()}` : "—"}
+            </div>
           </div>
         </div>
 

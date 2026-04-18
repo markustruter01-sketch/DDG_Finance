@@ -347,6 +347,10 @@ async def system_health_architecture() -> dict:
         positions = get_positions()
         acct_dict = _acct_cache if _acct_cache is not None else get_account()
         equity_val = float(acct_dict["equity"])
+        # Use the larger of current equity or the bot's intended starting capital ($100k).
+        # This prevents a bot that has taken losses from generating false-positive
+        # concentration alarms simply because its account shrank.
+        reference_equity = max(equity_val, 100_000.0)
         total_market = sum(float(p["market_value"]) for p in positions) if positions else 0
         _EXEMPT_SYMBOLS = {"SGOV", "JEPQ"}
         active_positions = [p for p in positions if p.get("symbol", "") not in _EXEMPT_SYMBOLS]
@@ -355,10 +359,10 @@ async def system_health_architecture() -> dict:
             level = "green"
             max_pct = 0.0
         else:
-            max_pct = (max_single / equity_val * 100) if equity_val > 0 else 0
-            if max_pct > 15.0:
+            max_pct = (max_single / reference_equity * 100) if reference_equity > 0 else 0
+            if max_pct > 20.0:
                 level = "red"
-            elif max_pct > 12.0:
+            elif max_pct > 15.0:
                 level = "yellow"
             else:
                 level = "green"

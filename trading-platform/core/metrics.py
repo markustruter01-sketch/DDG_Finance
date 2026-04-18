@@ -56,6 +56,18 @@ def win_rate(
     return wins / len(trades) * 100.0
 
 
+def win_rate_from_counts(wins: int, total: int) -> float | None:
+    """
+    Return win rate as a percentage (0–100) from pre-aggregated win/total counts.
+
+    Use when individual trade rows are not available (e.g. SQL GROUP BY results).
+    Returns None when total is zero.
+    """
+    if total == 0:
+        return None
+    return round(wins / total * 100.0, 2)
+
+
 # ---------------------------------------------------------------------------
 # 2. Profit Factor
 # ---------------------------------------------------------------------------

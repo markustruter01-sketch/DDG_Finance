@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import os
 from fastapi import APIRouter
-from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
+from core.metrics import win_rate as _win_rate, win_rate_from_counts as _win_rate_from_counts, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 new_bots_router = APIRouter()
 
@@ -171,7 +171,7 @@ async def pair_learning():
             "wins": wins,
             "losses": total - wins,
             "total_trades": total,
-            "win_rate": round(wins / total * 100.0, 2) if total > 0 else None,
+            "win_rate": _win_rate_from_counts(wins, total),
             "total_pnl": wr.get("total_pnl", 0),
             "last_trade_at": wr.get("last_trade_at"),
         })

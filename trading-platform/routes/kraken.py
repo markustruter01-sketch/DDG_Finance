@@ -744,8 +744,8 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
 
     pnl_list = [t.get("pnl_pct", 0) for t in strategy_only]
     pnl_usd  = [t.get("pnl_usd", 0) for t in strategy_only]
-    wins     = [u for u in pnl_usd if u > 0]
-    losses   = [u for u in pnl_usd if u <= 0]
+    wins     = [u for u in pnl_usd if u > _WIN_THRESHOLD]
+    losses   = [u for u in pnl_usd if u <= _WIN_THRESHOLD]
     win_rate = _win_rate(strategy_only, "pnl_usd") or 0
 
     total_pnl_pct_all = sum(t.get("pnl_pct", 0) for t in trades)
@@ -759,7 +759,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         by_symbol[sym]["trades"]        += 1
         by_symbol[sym]["total_pnl_pct"] += t.get("pnl_pct", 0)
         by_symbol[sym]["total_pnl_usd"] += t.get("pnl_usd", 0)
-        if (t.get("pnl_usd") or 0) > 0:
+        if (t.get("pnl_usd") or 0) > _WIN_THRESHOLD:
             by_symbol[sym]["wins"] += 1
 
     for sym in by_symbol:

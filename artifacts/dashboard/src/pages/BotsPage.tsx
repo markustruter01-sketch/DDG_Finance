@@ -435,22 +435,6 @@ export default function BotsPage() {
           )}
 
           <GenericBotCard
-            name="Apex Predator"
-            icon="🦅"
-            color="#f97316"
-            strategy="Crypto — dual-TF momentum scalper (15 pairs, 1h/4h)"
-            equity={apexEquity}
-            positions={apexPositions}
-            isLoading={fleetLoading}
-            paused={false}
-            winCount={apexWins}
-            lossCount={apexLosses}
-            winRate={apexWinRate}
-            totalTrades={apexTotalTrades}
-            strategyConfig={apexStrategyConfig}
-          />
-
-          <GenericBotCard
             name="Navigator"
             icon="🧭"
             color="#10b981"

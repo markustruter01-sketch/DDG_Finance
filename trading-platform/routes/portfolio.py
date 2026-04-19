@@ -1419,12 +1419,30 @@ async def export_diagnostic_report():
         for regime, v in sorted(by_regime.items()):
             lines.append(f"    {regime:<12} {v.get('count',0)} trades | {_pct(v.get('win_rate',0))} win | avg {_pct(v.get('avg_pnl_pct'))}")
 
-    lines += _rs.section_trade_mechanics_oracle()
-    lines += _rs.section_oracle_regime_transparency()
-    lines += _rs.section_daily_equity_history("Oracle #1", source="oracle")
-    lines += _rs.section_regime_performance("Oracle #1", source="oracle")
-    lines += _rs.section_consecutive_streaks("Oracle #1", alpaca_trades)
-    lines += _rs.section_rolling_metrics("Oracle #1", alpaca_trades, equity_source="oracle")
+    try:
+        lines += _rs.section_trade_mechanics_oracle()
+    except Exception as _etmo:
+        lines.append(f"  [section_trade_mechanics_oracle error: {_etmo}]")
+    try:
+        lines += _rs.section_oracle_regime_transparency()
+    except Exception as _eort:
+        lines.append(f"  [section_oracle_regime_transparency error: {_eort}]")
+    try:
+        lines += _rs.section_daily_equity_history("Oracle #1", source="oracle")
+    except Exception as _eodh:
+        lines.append(f"  [section_daily_equity_history oracle error: {_eodh}]")
+    try:
+        lines += _rs.section_regime_performance("Oracle #1", source="oracle")
+    except Exception as _eorp:
+        lines.append(f"  [section_regime_performance oracle error: {_eorp}]")
+    try:
+        lines += _rs.section_consecutive_streaks("Oracle #1", alpaca_trades)
+    except Exception as _eocs:
+        lines.append(f"  [section_consecutive_streaks oracle error: {_eocs}]")
+    try:
+        lines += _rs.section_rolling_metrics("Oracle #1", alpaca_trades, equity_source="oracle")
+    except Exception as _eorm:
+        lines.append(f"  [section_rolling_metrics oracle error: {_eorm}]")
 
     try:
         lines += _rs.section_live_code_params_oracle()
@@ -1638,27 +1656,66 @@ async def export_diagnostic_report():
         lines.append("  No trade data in kraken_trades DB yet.")
 
     lines.append("@@KRAKEN_SUPP@@")
-    lines += _rs.section_trade_mechanics_kraken()
-    lines += _rs.section_vpin_shadow_log()
-    lines += _rs.section_vpin_calibration()
-    lines += _rs.section_daily_equity_history("Kraken Fleet", source="kraken")
-    lines += _rs.section_regime_performance("Kraken Fleet", source="kraken")
+    try:
+        lines += _rs.section_trade_mechanics_kraken()
+    except Exception as _etmk:
+        lines.append(f"  [section_trade_mechanics_kraken error: {_etmk}]")
+    try:
+        lines += _rs.section_vpin_shadow_log()
+    except Exception as _evsl:
+        lines.append(f"  [section_vpin_shadow_log error: {_evsl}]")
+    try:
+        lines += _rs.section_vpin_calibration()
+    except Exception as _evc:
+        lines.append(f"  [section_vpin_calibration error: {_evc}]")
+    try:
+        lines += _rs.section_daily_equity_history("Kraken Fleet", source="kraken")
+    except Exception as _ekdh:
+        lines.append(f"  [section_daily_equity_history kraken error: {_ekdh}]")
+    try:
+        lines += _rs.section_regime_performance("Kraken Fleet", source="kraken")
+    except Exception as _ekrp:
+        lines.append(f"  [section_regime_performance kraken error: {_ekrp}]")
     for _rpm_bid, _rpm_prof in KRAKEN_BOT_PROFILES.items():
-        lines += _rs.section_regime_performance_matrix(_rpm_prof["display_name"], _rpm_bid)
+        try:
+            lines += _rs.section_regime_performance_matrix(_rpm_prof["display_name"], _rpm_bid)
+        except Exception as _erpm:
+            lines.append(f"  [section_regime_performance_matrix {_rpm_bid} error: {_erpm}]")
     for _cas_bid, _cas_prof in KRAKEN_BOT_PROFILES.items():
-        lines += _rs.section_correlation_aware_sizing(_cas_prof["display_name"], _cas_bid)
+        try:
+            lines += _rs.section_correlation_aware_sizing(_cas_prof["display_name"], _cas_bid)
+        except Exception as _ecas:
+            lines.append(f"  [section_correlation_aware_sizing {_cas_bid} error: {_ecas}]")
     for _ppa_bid, _ppa_prof in KRAKEN_BOT_PROFILES.items():
-        lines += _rs.section_per_pair_auto_params(_ppa_prof["display_name"], _ppa_bid)
+        try:
+            lines += _rs.section_per_pair_auto_params(_ppa_prof["display_name"], _ppa_bid)
+        except Exception as _eppa:
+            lines.append(f"  [section_per_pair_auto_params {_ppa_bid} error: {_eppa}]")
     for _hm_bid in KRAKEN_BOT_PROFILES:
-        lines += _rs.section_strategy_health_monitor(_hm_bid)
+        try:
+            lines += _rs.section_strategy_health_monitor(_hm_bid)
+        except Exception as _eshm:
+            lines.append(f"  [section_strategy_health_monitor {_hm_bid} error: {_eshm}]")
     for _wfo_bid in KRAKEN_BOT_PROFILES:
-        lines += _rs.section_walk_forward_optimizer(_wfo_bid)
+        try:
+            lines += _rs.section_walk_forward_optimizer(_wfo_bid)
+        except Exception as _ewfo:
+            lines.append(f"  [section_walk_forward_optimizer {_wfo_bid} error: {_ewfo}]")
     for _bt_bid in KRAKEN_BOT_PROFILES:
-        lines += _rs.section_historical_backtest(_bt_bid)
+        try:
+            lines += _rs.section_historical_backtest(_bt_bid)
+        except Exception as _ebt:
+            lines.append(f"  [section_historical_backtest {_bt_bid} error: {_ebt}]")
     for _streak_bid, _streak_prof in KRAKEN_BOT_PROFILES.items():
-        _streak_name = _streak_prof["display_name"]
-        lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)
-    lines += _rs.section_rolling_metrics("Kraken Fleet", _all_kraken_trades_all, equity_source="kraken")
+        try:
+            _streak_name = _streak_prof["display_name"]
+            lines += _rs.section_consecutive_streaks_kraken(_streak_name, _streak_bid)
+        except Exception as _eskk:
+            lines.append(f"  [section_consecutive_streaks_kraken {_streak_bid} error: {_eskk}]")
+    try:
+        lines += _rs.section_rolling_metrics("Kraken Fleet", _all_kraken_trades_all, equity_source="kraken")
+    except Exception as _ekrm:
+        lines.append(f"  [section_rolling_metrics kraken error: {_ekrm}]")
 
     for _k1_bid, _k1_prof in KRAKEN_BOT_PROFILES.items():
         try:
@@ -2166,7 +2223,14 @@ _last_report_lines_with_markers: list[str] = []
 async def export_report_parts():
     from starlette.responses import JSONResponse
 
-    await export_diagnostic_report()
+    try:
+        await export_diagnostic_report()
+    except Exception as _top_exc:
+        logger.error(f"export_diagnostic_report failed: {_top_exc}", exc_info=True)
+        return JSONResponse(
+            content={"error": f"Report generation failed: {_top_exc}"},
+            status_code=500,
+        )
 
     lines = _last_report_lines_with_markers
     if not lines:
@@ -2197,6 +2261,7 @@ async def export_report_parts():
     result = {}
     for name, part_lines in [("p1", p1), ("p2", p2), ("p3", p3), ("p4", p4)]:
         text = "\n".join(part_lines)
+        text = text.encode("utf-8", errors="replace").decode("utf-8")
         result[name] = {
             "filename": f"report-{name}.txt",
             "text": text,

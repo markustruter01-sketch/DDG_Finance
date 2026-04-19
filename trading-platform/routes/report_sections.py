@@ -3215,7 +3215,7 @@ def section_fleet_health_scorecard() -> list[str]:
         )
         last_trade_rows = _pg_query("SELECT date FROM trades ORDER BY date DESC LIMIT 1")
         oracle_pnl_rows = _pg_query(
-            "SELECT SUM(pnl) as total FROM trades WHERE date > NOW() - INTERVAL '7 days'"
+            "SELECT SUM(realized_pnl) as total FROM trades WHERE date > NOW() - INTERVAL '7 days'"
         )
         eq_rows = _pg_query("SELECT alpaca_equity FROM equity_snapshots ORDER BY ts DESC LIMIT 1")
         oracle_eq = float(eq_rows[0].get("alpaca_equity") or 100000) if eq_rows else 100000
@@ -3226,7 +3226,7 @@ def section_fleet_health_scorecard() -> list[str]:
 
         # Win rate
         wr_rows = _pg_query(
-            "SELECT COUNT(*) as wins FROM trades WHERE pnl > 0 AND date > NOW() - INTERVAL '30 days'"
+            "SELECT COUNT(*) as wins FROM trades WHERE realized_pnl > 0 AND date > NOW() - INTERVAL '30 days'"
         )
         total_rows = _pg_query(
             "SELECT COUNT(*) as total FROM trades WHERE date > NOW() - INTERVAL '30 days'"
@@ -3524,7 +3524,7 @@ def section_execution_quality_all_bots(alpaca_trades: list = None, kraken_trades
     # Navigator
     _h2(lines, "NAVIGATOR #6 (OANDA/Paper Forex)")
     fx_7d = _pg_query(
-        "SELECT COUNT(*) as n, SUM(spread_cost_usd) as spread_cost, SUM(pnl_usd) as pnl "
+        "SELECT COUNT(*) as n, 0.0 as spread_cost, SUM(pnl_usd) as pnl "
         "FROM forex_trades WHERE status = 'closed' AND closed_at > %s",
         (cutoff_7d,)
     )
@@ -3664,10 +3664,10 @@ def section_daily_pnl_attribution() -> list[str]:
         "WHERE closed_at > NOW() - INTERVAL '7 days' ORDER BY pnl_usd ASC LIMIT 1"
     )
     best_a = _pg_query(
-        "SELECT ticker, pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY pnl DESC LIMIT 1"
+        "SELECT ticker, realized_pnl as pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY realized_pnl DESC LIMIT 1"
     )
     worst_a = _pg_query(
-        "SELECT ticker, pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY pnl ASC LIMIT 1"
+        "SELECT ticker, realized_pnl as pnl, date FROM trades WHERE date > NOW() - INTERVAL '7 days' ORDER BY realized_pnl ASC LIMIT 1"
     )
 
     lines.append("")
@@ -4161,7 +4161,7 @@ def section_changes_since_last_report() -> list[str]:
             (prev_dt,)
         )
         new_a = _pg_query(
-            "SELECT ticker, side, pnl, date FROM trades WHERE date > %s ORDER BY date ASC LIMIT 10",
+            "SELECT ticker, side, realized_pnl as pnl, date FROM trades WHERE date > %s ORDER BY date ASC LIMIT 10",
             (prev_dt,)
         )
         new_fx = _pg_query(

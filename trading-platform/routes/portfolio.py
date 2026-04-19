@@ -1766,7 +1766,9 @@ async def export_diagnostic_report():
                 _ap_trades = [dict(r) for r in _ap_cur.fetchall()]
             with _ap_conn.cursor() as _ap_port_cur:
                 _ap_port_cur.execute(
-                    "SELECT equity_usd, cash_usd FROM kraken_portfolio WHERE bot_id = 'apex-predator'"
+                    "SELECT cash_usd + COALESCE("
+                    "  (SELECT SUM((val->>'size_usd')::float) FROM jsonb_each(positions) AS p(key, val)),"
+                    "  0) AS equity_usd, cash_usd FROM kraken_portfolio WHERE bot_id = 'apex-predator'"
                 )
                 _ap_port = _ap_port_cur.fetchone()
                 if _ap_port:

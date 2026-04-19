@@ -2,6 +2,7 @@ import { useMemo, useRef, useEffect } from "react";
 import {
   useJournal, useKrakenPerformance, useOptionsState, useForexState,
   useKrakenStatus, useLivePositions, useForexPositions, useForexTrades,
+  usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 
@@ -47,11 +48,14 @@ export function useRealFeed(maxTrades = 20) {
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
   const caStatus = useKrakenStatus("calypso");
+  const apexStatus = useKrakenStatus("apex-predator");
   const { data: livePositions } = useLivePositions();
   const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: fxTrades } = useForexTrades();
+  const { data: poseidonState } = usePoseidonState();
+  const { data: kcState } = useKrakenCurrentState();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -106,9 +110,10 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data, bot: "Davy Jones", icon: "⚓" },
-      { data: bbStatus.data, bot: "Blackbeard", icon: "🏴‍☠️" },
-      { data: caStatus.data, bot: "Calypso", icon: "🌊" },
+      { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
+      { data: bbStatus.data,   bot: "Blackbeard",    icon: "🏴‍☠️" },
+      { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
+      { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
     ];
     const journalIds = new Set(all.map(t => t.id));
     for (const { data, bot, icon } of krakenRecent) {
@@ -156,7 +161,7 @@ export function useRealFeed(maxTrades = 20) {
 
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, fxTrades]);
+  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, apexStatus.data, fxTrades]);
 
   const krakenWins = useMemo(() =>
     [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),
@@ -274,9 +279,10 @@ export function useRealFeed(maxTrades = 20) {
     const all: OpenPosition[] = [];
 
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data, bot: "Davy Jones", icon: "⚓" },
-      { data: bbStatus.data, bot: "Blackbeard", icon: "🏴‍☠️" },
-      { data: caStatus.data, bot: "Calypso", icon: "🌊" },
+      { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
+      { data: bbStatus.data,   bot: "Blackbeard",    icon: "🏴‍☠️" },
+      { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
+      { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -330,8 +336,37 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
+    if (poseidonState?.open_trades) {
+      for (const t of poseidonState.open_trades) {
+        const symbol = `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`;
+        all.push({
+          id: `poseidon-${t.pair_set_id}`,
+          bot: "Poseidon", icon: "🔱",
+          symbol,
+          side: t.direction,
+          pnlPct: t.position_value > 0 ? (t.total_pnl / t.position_value) * 100 : 0,
+          pnlUsd: t.total_pnl,
+          sizeUsd: t.position_value,
+        });
+      }
+    }
+
+    if (kcState?.open_positions_list) {
+      for (const p of kcState.open_positions_list) {
+        all.push({
+          id: `kc-${p.symbol}`,
+          bot: "Kraken Current", icon: "⚡",
+          symbol: p.symbol,
+          side: p.direction,
+          pnlPct: p.position_value > 0 ? (p.unrealised_pnl / p.position_value) * 100 : 0,
+          pnlUsd: p.unrealised_pnl,
+          sizeUsd: p.position_value,
+        });
+      }
+    }
+
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions]);
+  }, [djStatus.data, bbStatus.data, caStatus.data, apexStatus.data, livePositions, fxPositions, poseidonState, kcState]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());
   const initialized = useRef(false);

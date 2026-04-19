@@ -463,9 +463,10 @@ def verified_momentum_score(
 # ─────────────────────────────────────────────────────────────────────────────
 
 KRAKEN_BOTS = {
-    "davy-jones": {"window": 20, "timeframe": "1h"},
-    "blackbeard":  {"window": 20, "timeframe": "1h"},
-    "calypso":     {"window": 20, "timeframe": "1h"},
+    "davy-jones":    {"window": 20, "timeframe": "1h"},
+    "blackbeard":    {"window": 20, "timeframe": "1h"},
+    "calypso":       {"window": 20, "timeframe": "1h"},
+    "apex-predator": {"window": 20, "timeframe": "1h"},
 }
 
 
@@ -868,11 +869,12 @@ def audit_position_sizing(audit_mode: str = "quick") -> int:
     oracle_stats = _pg_query(
         """
         SELECT COUNT(*) as n,
-               AVG(CASE WHEN pnl > 0 THEN pnl ELSE NULL END) as avg_win,
-               AVG(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE NULL END) as avg_loss,
-               SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END)::float / COUNT(*) as win_rate
+               AVG(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE NULL END) as avg_win,
+               AVG(CASE WHEN realized_pnl < 0 THEN ABS(realized_pnl) ELSE NULL END) as avg_loss,
+               SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END)::float / COUNT(*) as win_rate
         FROM trades
-        WHERE exit_reason NOT IN ('rebalance_liquidation') OR exit_reason IS NULL
+        WHERE (exit_reason NOT IN ('rebalance_liquidation') OR exit_reason IS NULL)
+          AND realized_pnl IS NOT NULL
         """
     )
     if oracle_stats:
@@ -925,14 +927,14 @@ def audit_kelly_oracle(audit_mode: str = "full") -> int:
         """
         SELECT
             COUNT(*) as n,
-            SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
-            AVG(CASE WHEN pnl > 0 THEN pnl ELSE NULL END) as avg_win_usd,
-            AVG(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE NULL END) as avg_loss_usd,
-            SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END) as gross_profit,
-            SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END) as gross_loss
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins,
+            AVG(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE NULL END) as avg_win_usd,
+            AVG(CASE WHEN realized_pnl < 0 THEN ABS(realized_pnl) ELSE NULL END) as avg_loss_usd,
+            SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END) as gross_profit,
+            SUM(CASE WHEN realized_pnl < 0 THEN ABS(realized_pnl) ELSE 0 END) as gross_loss
         FROM trades
         WHERE (exit_reason NOT IN ('rebalance_liquidation') OR exit_reason IS NULL)
-          AND pnl IS NOT NULL
+          AND realized_pnl IS NOT NULL
         """
     )
     if not stats:
@@ -1252,6 +1254,76 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 audit_mode=audit_mode,
             )
             checks += 1
+
+    # ── kraken-current (uses kraken_current_trades, pnl_usd only) ────────────
+    kc_raw = _pg_query(
+        "SELECT pnl_usd FROM kraken_current_trades WHERE pnl_usd IS NOT NULL"
+    )
+    if kc_raw:
+        kc_wins = sum(1 for r in kc_raw if float(r["pnl_usd"]) > 0)
+        kc_n = len(kc_raw)
+        kc_wr = kc_wins / kc_n if kc_n > 0 else 0.0
+        kc_gross_profit = sum(float(r["pnl_usd"]) for r in kc_raw if float(r["pnl_usd"]) > 0)
+        kc_gross_loss = abs(sum(float(r["pnl_usd"]) for r in kc_raw if float(r["pnl_usd"]) < 0))
+        kc_pf = kc_gross_profit / kc_gross_loss if kc_gross_loss > 0 else (999.0 if kc_gross_profit > 0 else 0.0)
+        _log_result(
+            "kraken-current", "profit_factor",
+            {"n": kc_n, "gross_profit_usd": kc_gross_profit, "gross_loss_usd": kc_gross_loss},
+            bot_output=kc_pf, auditor_output=kc_pf,
+            notes=(
+                f"kraken-current: raw USD PF={kc_pf:.3f} from {kc_n} closed trades. "
+                f"gross_profit=${kc_gross_profit:,.2f} gross_loss=${kc_gross_loss:,.2f}. "
+                "No pair-params comparison available (USD-only table)."
+            ),
+            audit_mode=audit_mode,
+        )
+        checks += 1
+        _log_result(
+            "kraken-current", "win_rate",
+            {"n": kc_n, "wins": kc_wins},
+            bot_output=kc_wr, auditor_output=kc_wr,
+            notes=(
+                f"kraken-current: raw WR={kc_wr:.3f} ({kc_wins}/{kc_n} trades). "
+                "No pair-params comparison available — raw-only measurement."
+            ),
+            audit_mode=audit_mode,
+        )
+        checks += 1
+
+    # ── poseidon (uses poseidon_trades, net_pnl) ──────────────────────────────
+    ps_raw = _pg_query(
+        "SELECT net_pnl FROM poseidon_trades WHERE net_pnl IS NOT NULL"
+    )
+    if ps_raw:
+        ps_wins = sum(1 for r in ps_raw if float(r["net_pnl"]) > 0)
+        ps_n = len(ps_raw)
+        ps_wr = ps_wins / ps_n if ps_n > 0 else 0.0
+        ps_gross_profit = sum(float(r["net_pnl"]) for r in ps_raw if float(r["net_pnl"]) > 0)
+        ps_gross_loss = abs(sum(float(r["net_pnl"]) for r in ps_raw if float(r["net_pnl"]) < 0))
+        ps_pf = ps_gross_profit / ps_gross_loss if ps_gross_loss > 0 else (999.0 if ps_gross_profit > 0 else 0.0)
+        _log_result(
+            "poseidon", "profit_factor",
+            {"n": ps_n, "gross_profit_usd": ps_gross_profit, "gross_loss_usd": ps_gross_loss},
+            bot_output=ps_pf, auditor_output=ps_pf,
+            notes=(
+                f"poseidon: raw USD PF={ps_pf:.3f} from {ps_n} closed pair trades. "
+                f"gross_profit=${ps_gross_profit:,.2f} gross_loss=${ps_gross_loss:,.2f}. "
+                "Computed from poseidon_trades.net_pnl (combined leg P&L)."
+            ),
+            audit_mode=audit_mode,
+        )
+        checks += 1
+        _log_result(
+            "poseidon", "win_rate",
+            {"n": ps_n, "wins": ps_wins},
+            bot_output=ps_wr, auditor_output=ps_wr,
+            notes=(
+                f"poseidon: raw WR={ps_wr:.3f} ({ps_wins}/{ps_n} pair trades). "
+                "Win = net_pnl > 0 on combined long+short legs."
+            ),
+            audit_mode=audit_mode,
+        )
+        checks += 1
 
     return checks
 

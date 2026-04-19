@@ -1104,36 +1104,58 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
     # Kraken per-bot
     for bot_id in KRAKEN_BOTS:
         stored = _pg_query(
-            "SELECT profit_factor, win_rate FROM kraken_pair_params WHERE bot_id = %s LIMIT 1",
+            """
+            SELECT
+                SUM(win_rate * trade_count) / NULLIF(SUM(trade_count)::float, 0) AS weighted_wr,
+                SUM(win_rate * trade_count * avg_win_pct)                         AS gross_profit_pct,
+                SUM((1.0 - win_rate) * trade_count * avg_loss_pct)               AS gross_loss_pct,
+                SUM(trade_count)                                                  AS n_tracked
+            FROM kraken_pair_params
+            WHERE bot_id = %s
+            """,
             (bot_id,),
         )
         raw_trades = _pg_query(
-            "SELECT pnl_usd FROM kraken_trades WHERE bot_id = %s AND pnl_usd IS NOT NULL",
+            "SELECT pnl_usd, pnl_pct FROM kraken_trades WHERE bot_id = %s AND pnl_usd IS NOT NULL",
             (bot_id,),
         )
 
         if not raw_trades:
             continue
 
-        gross_profit = sum(float(r["pnl_usd"]) for r in raw_trades if float(r["pnl_usd"]) > 0)
-        gross_loss = abs(sum(float(r["pnl_usd"]) for r in raw_trades if float(r["pnl_usd"]) < 0))
         wins = sum(1 for r in raw_trades if float(r["pnl_usd"]) > 0)
         n = len(raw_trades)
-
-        audit_pf = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
         audit_wr = wins / n if n > 0 else 0.0
 
-        stored_pf = float(stored[0].get("profit_factor") or 0) if stored else None
-        stored_wr = float(stored[0].get("win_rate") or 0) if stored else None
+        gross_profit_pct = sum(float(r["pnl_pct"]) for r in raw_trades if r["pnl_pct"] is not None and float(r["pnl_pct"]) > 0)
+        gross_loss_pct = abs(sum(float(r["pnl_pct"]) for r in raw_trades if r["pnl_pct"] is not None and float(r["pnl_pct"]) < 0))
+        audit_pf_pct = gross_profit_pct / gross_loss_pct if gross_loss_pct > 0 else (999.0 if gross_profit_pct > 0 else 0.0)
+
+        stored_row = stored[0] if stored else {}
+        weighted_wr = stored_row.get("weighted_wr")
+        stored_gross_profit_pct = stored_row.get("gross_profit_pct")
+        stored_gross_loss_pct = stored_row.get("gross_loss_pct")
+
+        stored_wr = float(weighted_wr) if weighted_wr is not None else None
+        gp = float(stored_gross_profit_pct or 0.0)
+        gl = float(stored_gross_loss_pct or 0.0)
+        if stored_gross_profit_pct is None and stored_gross_loss_pct is None:
+            stored_pf = None
+        elif gl > 0:
+            stored_pf = gp / gl
+        elif gp > 0:
+            stored_pf = 999.0
+        else:
+            stored_pf = 0.0
 
         if stored_pf is not None:
             _log_result(
                 bot_id, "profit_factor",
-                {"n": n, "gross_profit": gross_profit, "gross_loss": gross_loss},
-                bot_output=stored_pf, auditor_output=audit_pf,
+                {"n": n, "gross_profit_pct": gross_profit_pct, "gross_loss_pct": gross_loss_pct},
+                bot_output=stored_pf, auditor_output=audit_pf_pct,
                 notes=(
-                    f"{bot_id}: stored PF={stored_pf:.3f} vs auditor PF={audit_pf:.3f} "
-                    f"from {n} raw trades. Discrepancy may indicate filtered/wrong query in report."
+                    f"{bot_id}: pair-params reconstructed PF={stored_pf:.3f} vs auditor pnl_pct PF={audit_pf_pct:.3f} "
+                    f"from {n} raw trades (both computed on pct-PnL basis)."
                 ),
                 audit_mode=audit_mode,
             )
@@ -1145,8 +1167,8 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 {"n": n, "wins": wins},
                 bot_output=stored_wr, auditor_output=audit_wr,
                 notes=(
-                    f"{bot_id}: stored WR={stored_wr:.3f} vs auditor WR={audit_wr:.3f} "
-                    f"from {n} raw trades. Discrepancy may indicate filtering inconsistency."
+                    f"{bot_id}: pair-params weighted avg WR={stored_wr:.3f} vs raw trades WR={audit_wr:.3f} "
+                    f"from {n} raw trades."
                 ),
                 audit_mode=audit_mode,
             )

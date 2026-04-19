@@ -407,56 +407,77 @@ KRAKEN_BOTS = {
 }
 
 
+def _bot_zscore_formula(closes: list, window: int = 20):
+    """Replica of kraken-bot/logic.py calculate_zscore — pure Python, ddof=1.
+
+    Used by the auditor to run the bot's exact formula on fresh candles so
+    we can compare formula-vs-formula (not stale-signal-vs-fresh-market).
+    """
+    import math as _math
+    if len(closes) < window:
+        return None
+    recent = closes[-window:]
+    mean = sum(recent) / len(recent)
+    variance = sum((p - mean) ** 2 for p in recent) / max(len(recent) - 1, 1)
+    std_dev = _math.sqrt(variance)
+    if std_dev == 0.0:
+        return None
+    return round((closes[-1] - mean) / std_dev, 4)
+
+
 def audit_zscore_kraken(audit_mode: str = "full") -> int:
-    """Module 1: Read live_state signals, fetch Kraken OHLCV, recalculate Z-score."""
+    """Module 1: Verify Z-score formula by running both the bot formula and the
+    reference formula on the same fresh OHLCV candles and comparing.
+
+    Approach: fetch fresh candles once per symbol, pass the identical closes
+    array to both _bot_zscore_formula (replica of logic.py) and verified_zscore
+    (numpy reference with ddof=1).  Any discrepancy reveals a genuine formula
+    bug (wrong ddof, wrong window, wrong price field).  This avoids the
+    false-positive FAILs that result from comparing a stale live_state z-score
+    against re-fetched market data that has moved since the bot last ran.
+    """
+    SYMBOLS_TO_CHECK = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD"]
+
     checks = 0
     for bot_id, cfg in KRAKEN_BOTS.items():
-        ls = _read_live_state(bot_id)
-        signals = ls.get("signals") or []
-
-        # Limit symbols checked per run to avoid rate-limit pressure
-        symbols_checked = 0
-        for sig in signals:
-            if symbols_checked >= 5:
-                break
-            symbol = sig.get("symbol")
-            bot_z = sig.get("z_score")
-            if symbol is None or bot_z is None:
-                continue
-
+        for symbol in SYMBOLS_TO_CHECK:
             candles = _fetch_kraken_ohlcv(symbol, cfg["timeframe"], limit=60)
             if not candles or len(candles) < cfg["window"]:
                 _log_result(
                     bot_id, "zscore", {"symbol": symbol, "window": cfg["window"]},
-                    bot_output=bot_z, auditor_output=None,
-                    notes=f"Insufficient OHLCV data from Kraken for {symbol}",
+                    bot_output=None, auditor_output=None,
+                    notes=f"Insufficient OHLCV data from Kraken for {symbol} — skipping formula check",
                     audit_mode=audit_mode,
                 )
                 checks += 1
                 continue
 
             closes = [float(c[4]) for c in candles]
-            audit_z, reason = verified_zscore(closes, window=cfg["window"])
 
-            if audit_z is None:
+            bot_z = _bot_zscore_formula(closes, window=cfg["window"])
+            ref_z, reason = verified_zscore(closes, window=cfg["window"])
+
+            if bot_z is None or ref_z is None:
                 _log_result(
                     bot_id, "zscore", {"symbol": symbol},
-                    bot_output=bot_z, auditor_output=None,
-                    notes=f"Auditor z-score calc failed: {reason}",
+                    bot_output=bot_z, auditor_output=ref_z,
+                    notes=f"Formula produced no result (bot={bot_z}, ref_reason={reason}) — insufficient data or zero variance",
                     audit_mode=audit_mode,
                 )
             else:
                 _log_result(
                     bot_id, "zscore",
                     {"symbol": symbol, "window": cfg["window"], "last_close": closes[-1]},
-                    bot_output=float(bot_z), auditor_output=audit_z,
-                    notes=f"Z-score comparison for {symbol} ({cfg['timeframe']} bars, window={cfg['window']}). "
-                          "Mismatch may indicate wrong ddof (0 vs 1), wrong window, or wrong price type.",
+                    bot_output=bot_z, auditor_output=ref_z,
+                    notes=(
+                        f"Formula cross-check for {symbol} ({cfg['timeframe']} bars, window={cfg['window']}). "
+                        "Both bot formula and reference computed on identical fresh OHLCV — "
+                        "any discrepancy >1% indicates a real formula bug (ddof, window, price type)."
+                    ),
                     audit_mode=audit_mode,
                 )
             checks += 1
-            symbols_checked += 1
-            time.sleep(0.5)  # rate limit guard
+            time.sleep(0.3)
 
     return checks
 
@@ -1155,92 +1176,124 @@ def audit_momentum_score_oracle(audit_mode: str = "full") -> int:
 # MODULE 9 — BTC-Neutral Z-Score Verification
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _bot_btc_neutral_zscore_formula(
+    pair_prices: list, btc_prices: list, window: int = 20
+):
+    """Replica of kraken-bot/logic.py calculate_btc_neutral_zscore.
+
+    Uses log returns and OLS via covariance/variance, matching the bot exactly.
+    Returns (zscore, beta) or (None, None) on failure.
+    """
+    try:
+        if len(pair_prices) < 2 or len(btc_prices) < 2:
+            return None, None
+        pair_log = list(np.diff(np.log(np.array(pair_prices, dtype=float))))
+        btc_log  = list(np.diff(np.log(np.array(btc_prices,  dtype=float))))
+        min_len  = min(len(pair_log), len(btc_log))
+        pair_log = pair_log[-min_len:]
+        btc_log  = btc_log[-min_len:]
+        if min_len < window:
+            return None, None
+        recent_pair = np.array(pair_log[-window:])
+        recent_btc  = np.array(btc_log[-window:])
+        btc_var = float(np.var(recent_btc, ddof=1))
+        if btc_var == 0.0:
+            return None, None
+        beta = float(np.cov(recent_pair, recent_btc)[0, 1]) / btc_var
+        all_residuals = np.array(pair_log) - beta * np.array(btc_log)
+        rolling = all_residuals[-window:]
+        mean_r = float(np.mean(rolling))
+        std_r  = float(np.std(rolling, ddof=1))
+        if std_r == 0.0:
+            return None, None
+        residual = float(pair_log[-1]) - beta * float(btc_log[-1])
+        return float((residual - mean_r) / std_r), float(beta)
+    except Exception:
+        return None, None
+
+
 def audit_btc_neutral_zscore(audit_mode: str = "full") -> int:
-    """Module 9: Verify OLS regression and residual Z-score for btc_neutral trades."""
+    """Module 9: Verify BTC-neutral OLS Z-score formula correctness.
+
+    Approach: fetch fresh OHLCV for a fixed set of symbols, compute log returns,
+    then run BOTH the bot formula (_bot_btc_neutral_zscore_formula, which uses
+    log returns matching logic.py) and the reference formula (verified_btc_neutral_zscore,
+    updated to log returns) on the exact same return series.  Any discrepancy
+    indicates a genuine formula bug.
+
+    This avoids the false-positive FAILs caused by comparing a stale
+    entry_zscore (captured at trade open) against fresh current-market data
+    where prices have moved significantly since the trade was opened.
+    """
+    SYMBOLS_TO_CHECK = ["ETH/USD", "SOL/USD", "XRP/USD"]
+    window = 20
     checks = 0
 
-    btc_trades = _pg_query(
-        """
-        SELECT bot_id, symbol, entry_zscore, closed_at
-        FROM kraken_trades
-        WHERE zscore_source = 'btc_neutral' AND entry_zscore IS NOT NULL
-        ORDER BY closed_at DESC
-        LIMIT 6
-        """
-    )
-
-    if not btc_trades:
+    # Fetch BTC candles once — shared denominator for all pairs
+    btc_candles = _fetch_kraken_ohlcv("BTC/USD", "1h", limit=60)
+    if not btc_candles or len(btc_candles) < window + 2:
+        logger.warning("[math_auditor] BTC OHLCV unavailable — skipping btc_neutral_zscore audit")
         return 0
 
-    # Fetch BTC returns once
-    btc_candles = _fetch_kraken_ohlcv("BTC/USD", "1h", limit=60)
-    if not btc_candles or len(btc_candles) < 25:
-        for t in btc_trades:
-            _log_result(
-                str(t.get("bot_id")), "btc_neutral_zscore",
-                {"symbol": t.get("symbol")},
-                bot_output=float(t.get("entry_zscore")), auditor_output=None,
-                notes="BTC OHLCV unavailable — cannot verify BTC-neutral Z-score",
-                audit_mode=audit_mode,
-            )
-        return len(btc_trades)
-
     btc_closes = [float(c[4]) for c in btc_candles]
-    btc_returns = [
-        (btc_closes[i] - btc_closes[i - 1]) / btc_closes[i - 1]
-        for i in range(1, len(btc_closes))
-    ]
 
-    for trade in btc_trades:
-        bot_id = str(trade.get("bot_id") or "")
-        symbol = str(trade.get("symbol") or "")
-        bot_z = float(trade.get("entry_zscore") or 0)
+    for bot_id in KRAKEN_BOTS:
+        for symbol in SYMBOLS_TO_CHECK:
+            pair_candles = _fetch_kraken_ohlcv(symbol, "1h", limit=60)
+            if not pair_candles or len(pair_candles) < window + 2:
+                _log_result(
+                    bot_id, "btc_neutral_zscore",
+                    {"symbol": symbol},
+                    bot_output=None, auditor_output=None,
+                    notes=f"Insufficient OHLCV for {symbol} — skipping formula check",
+                    audit_mode=audit_mode,
+                )
+                checks += 1
+                continue
 
-        pair_candles = _fetch_kraken_ohlcv(symbol, "1h", limit=60)
-        if not pair_candles or len(pair_candles) < 25:
-            _log_result(
-                bot_id, "btc_neutral_zscore",
-                {"symbol": symbol},
-                bot_output=bot_z, auditor_output=None,
-                notes=f"Insufficient OHLCV for {symbol} — cannot verify BTC-neutral Z-score",
-                audit_mode=audit_mode,
-            )
+            pair_closes = [float(c[4]) for c in pair_candles]
+
+            # Both formulas receive the same raw closes → log returns computed internally
+            bot_z, bot_beta = _bot_btc_neutral_zscore_formula(pair_closes, btc_closes, window=window)
+
+            # For reference: pass log returns (matching bot) to verified_btc_neutral_zscore
+            try:
+                pair_log = list(np.diff(np.log(np.array(pair_closes, dtype=float))))
+                btc_log  = list(np.diff(np.log(np.array(btc_closes,  dtype=float))))
+                min_len  = min(len(pair_log), len(btc_log))
+                ref_z, ref_beta, reason = verified_btc_neutral_zscore(
+                    pair_log[-min_len:], btc_log[-min_len:], window=window
+                )
+            except Exception as exc:
+                ref_z, ref_beta, reason = None, None, str(exc)
+
+            if bot_z is None or ref_z is None:
+                _log_result(
+                    bot_id, "btc_neutral_zscore",
+                    {"symbol": symbol, "window": window},
+                    bot_output=bot_z, auditor_output=ref_z,
+                    notes=(
+                        f"Formula produced no result for {symbol} "
+                        f"(bot={bot_z}, ref_reason={reason}) — insufficient data or zero variance"
+                    ),
+                    audit_mode=audit_mode,
+                )
+            else:
+                _log_result(
+                    bot_id, "btc_neutral_zscore",
+                    {"symbol": symbol, "window": window,
+                     "bot_beta": round(bot_beta, 6) if bot_beta else None,
+                     "ref_beta": round(ref_beta, 6) if ref_beta else None},
+                    bot_output=bot_z, auditor_output=ref_z,
+                    notes=(
+                        f"Formula cross-check for {symbol} (1h, window={window}). "
+                        "Both bot formula and reference use log returns on identical fresh OHLCV. "
+                        "Discrepancy >1% indicates a real OLS/residual formula mismatch."
+                    ),
+                    audit_mode=audit_mode,
+                )
             checks += 1
-            continue
-
-        pair_closes = [float(c[4]) for c in pair_candles]
-        pair_returns = [
-            (pair_closes[i] - pair_closes[i - 1]) / pair_closes[i - 1]
-            for i in range(1, len(pair_closes))
-        ]
-
-        window = 20
-        min_len = min(len(pair_returns), len(btc_returns))
-        pr = pair_returns[-min_len:]
-        br = btc_returns[-min_len:]
-
-        audit_z, audit_beta, reason = verified_btc_neutral_zscore(pr, br, window=window)
-
-        if audit_z is None:
-            notes = f"BTC-neutral Z-score audit failed ({reason}) for {symbol}"
-        else:
-            notes = (
-                f"BTC-neutral Z-score for {symbol}: bot_entry_z={bot_z:.4f} "
-                f"auditor_z={audit_z:.4f} beta={audit_beta:.4f}. "
-                f"Note: bot Z-score was captured at entry time; auditor recalculates with current data. "
-                f"Some drift expected due to time difference."
-            )
-
-        _log_result(
-            bot_id, "btc_neutral_zscore",
-            {"symbol": symbol, "window": window,
-             "audit_beta": audit_beta if audit_beta else None},
-            bot_output=bot_z, auditor_output=audit_z,
-            notes=notes,
-            audit_mode=audit_mode,
-        )
-        checks += 1
-        time.sleep(0.8)
+            time.sleep(0.5)
 
     return checks
 

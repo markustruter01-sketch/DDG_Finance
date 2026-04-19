@@ -192,7 +192,7 @@ def calculate_zscore(closes: list[float], window: int = 20) -> float:
     Returns:
         Z-score (can be negative or positive). Returns 0.0 if insufficient data.
     """
-    if len(closes) < window + 1:
+    if len(closes) < window:
         return 0.0
 
     recent = closes[-window:]

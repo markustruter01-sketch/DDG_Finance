@@ -415,13 +415,13 @@ def _bot_zscore_formula(closes: list, window: int = 20):
     """
     import math as _math
     if len(closes) < window:
-        return None
+        return None  # insufficient data — cannot produce result
     recent = closes[-window:]
     mean = sum(recent) / len(recent)
     variance = sum((p - mean) ** 2 for p in recent) / max(len(recent) - 1, 1)
     std_dev = _math.sqrt(variance)
     if std_dev == 0.0:
-        return None
+        return 0.0  # exact mirror of bot: returns 0.0 on zero variance
     return round((closes[-1] - mean) / std_dev, 4)
 
 

@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
   Send, Shield, Swords, Target, RotateCcw, Pause, Zap,
-  Bot, User, Loader2, Check, X, ChevronDown, AlertTriangle, ArrowRight, Info,
-  ScanSearch, Copy, ClipboardCheck,
+  Bot, User, Loader2, Check, X, ChevronDown, ChevronUp, AlertTriangle, ArrowRight, Info,
+  ScanSearch, Copy, ClipboardCheck, Brain, Play, CheckCircle2, XCircle, Clock,
 } from "lucide-react";
-import { useFleetParams, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
+import { useFleetParams, useClaudeAuditStages, useTriggerClaudeStage, type AuditStageInfo, type BotParamBounds, type BotParamData } from "@/hooks/use-trading";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
 
@@ -353,6 +353,206 @@ function ParamsPanel() {
   );
 }
 
+const STAGE_SHORT: Record<string, string> = {
+  s1_analysis:       "Analysis",
+  s2_core_execution: "Core/Exec",
+  s3_routes:         "Routes",
+  s4_infrastructure: "Infra",
+  s5_dashboard_logic:"Dash Logic",
+  s6_components_a:   "UI A–M",
+  s7_components_b:   "UI N–Z",
+  s8_synthesis:      "Synthesis",
+};
+
+const STAGE_VERDICT_STYLE: Record<string, { dot: string; label: string; badge: string }> = {
+  PASS:            { dot: "bg-emerald-400", label: "text-emerald-400", badge: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300" },
+  NEEDS_ATTENTION: { dot: "bg-amber-400",   label: "text-amber-400",   badge: "bg-amber-500/15 border-amber-500/30 text-amber-300" },
+  CRITICAL:        { dot: "bg-red-400",     label: "text-red-400",     badge: "bg-red-500/15 border-red-500/30 text-red-300" },
+  HEALTHY:         { dot: "bg-emerald-400", label: "text-emerald-400", badge: "bg-emerald-500/15 border-emerald-500/30 text-emerald-300" },
+  DEGRADED:        { dot: "bg-amber-400",   label: "text-amber-400",   badge: "bg-amber-500/15 border-amber-500/30 text-amber-300" },
+  failed:          { dot: "bg-red-500",     label: "text-red-400",     badge: "bg-red-500/15 border-red-500/30 text-red-400" },
+};
+
+function formatCooldown(s: number) {
+  if (s <= 0) return "Ready";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  if (h > 0) return `${h}h ${m}m cooldown`;
+  if (m > 0) return `${m}m ${sec}s cooldown`;
+  return `${sec}s cooldown`;
+}
+
+function ClaudeAuditPanel() {
+  const { data: stagesData, refetch } = useClaudeAuditStages();
+  const triggerMutation = useTriggerClaudeStage();
+  const [selectedId, setSelectedId] = useState<string>("s1_analysis");
+  const [expanded, setExpanded] = useState(true);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const iv = setInterval(() => setTick(t => t + 1), 4000);
+    return () => clearInterval(iv);
+  }, []);
+
+  useEffect(() => {
+    if (triggerMutation.isSuccess) { setTimeout(() => refetch(), 2000); }
+  }, [triggerMutation.isSuccess, refetch]);
+
+  const stages: AuditStageInfo[] = stagesData?.stages || [];
+  const anyRunning = stages.some(s => s.run_state.in_progress);
+  const selected = stages.find(s => s.id === selectedId);
+
+  return (
+    <div className="border-b border-white/[0.06] bg-[#0a0e1a]">
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Brain className="w-3.5 h-3.5 text-violet-400" />
+          <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">Claude Deep Audit</span>
+          <span className="text-[10px] text-slate-500">8-stage · claude-3-5-sonnet · full codebase</span>
+          {anyRunning && (
+            <span className="flex items-center gap-1 text-[10px] text-violet-300 bg-violet-500/15 border border-violet-500/30 rounded-full px-2 py-0.5">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running
+            </span>
+          )}
+        </div>
+        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-3">
+          {stages.length === 0 ? (
+            <div className="text-xs text-slate-500 py-2">Loading stages…</div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {stages.map((stage, i) => {
+                  const verdict = stage.last_result?.stage_verdict || (stage.last_result?.status === "failed" ? "failed" : null);
+                  const vstyle = verdict ? (STAGE_VERDICT_STYLE[verdict] || null) : null;
+                  const isSelected = stage.id === selectedId;
+                  const isRunning = stage.run_state.in_progress;
+                  return (
+                    <button
+                      key={stage.id}
+                      onClick={() => setSelectedId(stage.id)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-medium transition-all ${
+                        isSelected
+                          ? "bg-violet-600/25 border-violet-500/50 text-violet-200"
+                          : "bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/20"
+                      }`}
+                    >
+                      <span className="text-slate-600 font-mono text-[9px]">{i + 1}</span>
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        isRunning ? "bg-violet-400 animate-pulse" :
+                        vstyle ? vstyle.dot : "bg-white/15"
+                      }`} />
+                      {STAGE_SHORT[stage.id] || stage.id}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selected && (
+                <div className="rounded-xl border border-white/[0.08] bg-slate-900/60 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-bold text-white">{selected.name}</span>
+                        {(() => {
+                          const verdict = selected.last_result?.stage_verdict || (selected.last_result?.status === "failed" ? "failed" : null);
+                          const vstyle = verdict ? (STAGE_VERDICT_STYLE[verdict] || null) : null;
+                          return verdict && vstyle ? (
+                            <span className={`text-[10px] px-2 py-0.5 rounded border font-semibold ${vstyle.badge}`}>{verdict}</span>
+                          ) : null;
+                        })()}
+                        {selected.run_state.in_progress && (
+                          <span className="text-[10px] px-2 py-0.5 rounded border bg-violet-500/15 border-violet-500/30 text-violet-300 flex items-center gap-1">
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Running…
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 leading-relaxed">{selected.description}</p>
+                      {selected.last_result?.summary && (
+                        <p className="text-[11px] text-slate-300 mt-1.5 pt-1.5 border-t border-white/[0.05] leading-relaxed">
+                          {selected.last_result.summary}
+                        </p>
+                      )}
+                      {selected.last_result?.key_risks && selected.last_result.key_risks.length > 0 && (
+                        <div className="mt-2 space-y-0.5">
+                          {selected.last_result.key_risks.slice(0, 3).map((r, i) => (
+                            <div key={i} className="flex items-start gap-1.5 text-[11px] text-amber-300/80">
+                              <AlertTriangle className="w-2.5 h-2.5 mt-0.5 flex-shrink-0" />
+                              <span>{r}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {selected.last_result?.completed_at && (
+                        <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-600">
+                          <Clock className="w-2.5 h-2.5" />
+                          {new Date(selected.last_result.completed_at).toLocaleString()}
+                        </div>
+                      )}
+                      {selected.run_state.error && (
+                        <p className="text-[11px] text-red-400 mt-1.5 flex items-center gap-1">
+                          <XCircle className="w-3 h-3" /> {selected.run_state.error}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex-shrink-0">
+                      {selected.run_state.in_progress || anyRunning ? (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          {selected.run_state.in_progress ? "Running" : "Busy"}
+                        </div>
+                      ) : selected.cooldown_remaining_seconds > 0 ? (
+                        <div className="text-[10px] text-slate-500 text-right">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          {formatCooldown(selected.cooldown_remaining_seconds)}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => triggerMutation.mutate(selected.id)}
+                          disabled={triggerMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/30 border border-violet-500/40 text-violet-300 text-xs font-semibold hover:bg-violet-600/50 transition-all disabled:opacity-50"
+                        >
+                          <Play className="w-3 h-3" />
+                          Run Stage {stages.findIndex(s => s.id === selected.id) + 1}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {selected.last_result && !selected.run_state.in_progress && (
+                    <div className="mt-2 pt-2 border-t border-white/[0.05] flex gap-3 text-[10px] text-slate-500">
+                      {(selected.last_result.critical_issues?.length ?? 0) > 0 && (
+                        <span className="text-red-400">● {selected.last_result.critical_issues!.length} critical</span>
+                      )}
+                      {(selected.last_result.high_issues?.length ?? 0) > 0 && (
+                        <span className="text-orange-400">● {selected.last_result.high_issues!.length} high</span>
+                      )}
+                      {(selected.last_result.medium_issues?.length ?? 0) > 0 && (
+                        <span className="text-amber-400">● {selected.last_result.medium_issues!.length} medium</span>
+                      )}
+                      {(selected.last_result.positive_notes?.length ?? 0) > 0 && (
+                        <span className="text-emerald-400">
+                          <CheckCircle2 className="w-2.5 h-2.5 inline mr-0.5" />
+                          {selected.last_result.positive_notes!.length} positive
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function CommanderPage() {
   const [input, setInput] = useState("");
   const [showParams, setShowParams] = useState(true);
@@ -427,21 +627,6 @@ export default function CommanderPage() {
     },
   });
 
-  const auditMutation = useMutation({
-    mutationFn: async () => {
-      const resp = await fetch(`${BASE}/fleet-commander/code-audit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      return resp.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["fleet-chat-history"] });
-      scrollToBottom();
-    },
-  });
-
   const handleSend = () => {
     const msg = input.trim();
     if (!msg || chatMutation.isPending) return;
@@ -454,11 +639,6 @@ export default function CommanderPage() {
     chatMutation.mutate({ quick_action: actionId });
   };
 
-  const handleCodeAudit = () => {
-    if (auditMutation.isPending || chatMutation.isPending) return;
-    auditMutation.mutate();
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col">
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-slate-950/95 backdrop-blur-xl px-4 py-3">
@@ -469,7 +649,7 @@ export default function CommanderPage() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-none">Fleet Commander</h1>
-              <p className="text-[10px] text-slate-500">Gemini-powered fleet control</p>
+              <p className="text-[10px] text-slate-500">Gemini chat · Claude deep audit</p>
             </div>
           </div>
           <button
@@ -492,7 +672,7 @@ export default function CommanderPage() {
                   <button
                     key={action.id}
                     onClick={() => handleQuickAction(action.id)}
-                    disabled={chatMutation.isPending || auditMutation.isPending}
+                    disabled={chatMutation.isPending}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-white/[0.08] bg-slate-900/60 hover:bg-slate-800/80 transition-all disabled:opacity-40 group"
                   >
                     <Icon className="w-3.5 h-3.5 transition-colors" style={{ color: action.color }} />
@@ -500,21 +680,10 @@ export default function CommanderPage() {
                   </button>
                 );
               })}
-              <button
-                onClick={handleCodeAudit}
-                disabled={auditMutation.isPending || chatMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-indigo-500/30 bg-indigo-950/40 hover:bg-indigo-900/60 transition-all disabled:opacity-40 group"
-              >
-                {auditMutation.isPending
-                  ? <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-                  : <ScanSearch className="w-3.5 h-3.5 text-indigo-400" />
-                }
-                <span className="text-indigo-300 group-hover:text-indigo-100 transition-colors">
-                  {auditMutation.isPending ? "Auditing…" : "Code Audit"}
-                </span>
-              </button>
             </div>
           </div>
+
+          <ClaudeAuditPanel />
 
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
             {historyLoading && (
@@ -565,22 +734,6 @@ export default function CommanderPage() {
               </motion.div>
             )}
 
-            {auditMutation.isPending && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start mb-3">
-                <div className="flex gap-2.5 w-full max-w-[96%]">
-                  <div className="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
-                    <ScanSearch className="w-3.5 h-3.5 text-indigo-400" />
-                  </div>
-                  <div className="flex-1 rounded-xl px-3.5 py-2.5 bg-indigo-950/60 border border-indigo-500/20">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
-                      <span className="text-sm text-indigo-300">Scanning codebase and auditing with Gemini… (30–90s)</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
             <div ref={chatEndRef} />
           </div>
 
@@ -592,12 +745,12 @@ export default function CommanderPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
                 placeholder="Ask Fleet Commander..."
-                disabled={chatMutation.isPending || auditMutation.isPending}
+                disabled={chatMutation.isPending}
                 className="flex-1 bg-slate-900/80 border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 transition-colors disabled:opacity-50"
               />
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || chatMutation.isPending || auditMutation.isPending}
+                disabled={!input.trim() || chatMutation.isPending}
                 className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/50 transition-all disabled:opacity-30"
               >
                 <Send className="w-4 h-4" />

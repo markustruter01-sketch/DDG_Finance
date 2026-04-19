@@ -243,7 +243,7 @@ def calculate_btc_neutral_zscore(
         recent_pair = pair_returns[-zscore_window:]
         recent_btc  = btc_returns[-zscore_window:]
 
-        btc_var = float(np.var(recent_btc))
+        btc_var = float(np.var(recent_btc, ddof=1))
         if btc_var == 0.0:
             return None
 
@@ -253,7 +253,7 @@ def calculate_btc_neutral_zscore(
         rolling_residuals = all_residuals[-zscore_window:]
 
         mean_res = float(np.mean(rolling_residuals))
-        std_res  = float(np.std(rolling_residuals))
+        std_res  = float(np.std(rolling_residuals, ddof=1))
         if std_res == 0.0:
             return None
 

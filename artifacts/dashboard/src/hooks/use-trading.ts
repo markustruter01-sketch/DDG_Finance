@@ -2014,3 +2014,164 @@ export function useMathAuditRecent(limit: number = 30, statusFilter: "ALL" | "FA
     staleTime: 15_000,
   });
 }
+
+// --- Claude Multi-Stage Audit ---
+
+export interface AuditIssue {
+  file: string;
+  function: string;
+  issue: string;
+  recommendation: string;
+}
+
+export interface AuditParameterConcern {
+  file: string;
+  issue: string;
+  recommendation: string;
+}
+
+export interface ClaudeCodeIssue {
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+  file: string;
+  function: string;
+  issue: string;
+  recommendation: string;
+}
+
+export interface ClaudeBotAssessment {
+  bot_id: string;
+  verdict: "GOOD" | "WARNING" | "CRITICAL";
+  win_rate_assessment: string;
+  pnl_assessment: string;
+  parameter_assessment: string;
+  flags: string[];
+}
+
+export interface ClaudeActionItem {
+  priority: number;
+  category: string;
+  action: string;
+  impact: string;
+}
+
+export interface ClaudeParamRecommendation {
+  bot_id: string;
+  parameter: string;
+  current_value: string;
+  recommended_value: string;
+  reasoning: string;
+}
+
+export interface AuditStageResult {
+  stage_id: string;
+  stage_name: string;
+  run_id?: string;
+  generated_at?: string;
+  model?: string;
+  elapsed_seconds?: number;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  total_tokens?: number;
+  estimated_cost_usd?: number;
+  status: string;
+  error?: string;
+  summary_log?: string;
+  // Stages 1–7 fields
+  stage_verdict?: "PASS" | "NEEDS_ATTENTION" | "CRITICAL";
+  summary?: string;
+  critical_issues?: AuditIssue[];
+  high_issues?: AuditIssue[];
+  medium_issues?: AuditIssue[];
+  parameter_concerns?: AuditParameterConcern[];
+  key_risks?: string[];
+  positive_notes?: string[];
+  // Stage 8 synthesis fields
+  system_health_verdict?: "HEALTHY" | "DEGRADED" | "CRITICAL";
+  health_summary?: string;
+  per_bot_assessment?: ClaudeBotAssessment[];
+  code_issues?: ClaudeCodeIssue[];
+  parameter_recommendations?: ClaudeParamRecommendation[];
+  cross_bot_risks?: string[];
+  frontend_ui_issues?: string[];
+  action_items?: ClaudeActionItem[];
+  stage_key_findings?: Record<string, string[]>;
+  raw_response?: string;
+}
+
+export interface AuditStageInfo {
+  id: string;
+  order: number;
+  name: string;
+  description: string;
+  is_synthesis: boolean;
+  last_result: {
+    status: string;
+    generated_at?: string;
+    elapsed_seconds?: number;
+    total_tokens?: number;
+    estimated_cost_usd?: number;
+    stage_verdict?: string;
+    summary?: string;
+    critical_count?: number;
+    high_count?: number;
+    medium_count?: number;
+  } | null;
+  cooldown: {
+    locked: boolean;
+    next_available: string | null;
+    seconds_remaining: number;
+  };
+  run_state: {
+    in_progress: boolean;
+    run_id: string | null;
+    started_at: string | null;
+    error: string | null;
+  };
+}
+
+export function useClaudeAuditStages() {
+  return useQuery<{ stages: AuditStageInfo[]; count: number }>({
+    queryKey: ["/claude-review/stages"],
+    queryFn: async () => (await api.get("/claude-review/stages")).data,
+    refetchInterval: useVisibleInterval(5_000),
+    staleTime: 3_000,
+    retry: 1,
+  });
+}
+
+export function useClaudeStageResult(stageId: string) {
+  return useQuery<AuditStageResult>({
+    queryKey: ["/claude-review/stage", stageId],
+    queryFn: async () => (await api.get(`/claude-review/stage/${stageId}`)).data,
+    refetchInterval: useVisibleInterval(10_000),
+    staleTime: 8_000,
+    retry: 1,
+    enabled: !!stageId,
+  });
+}
+
+export function useTriggerClaudeStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (stageId: string) =>
+      (await api.post(`/claude-review/trigger/${stageId}`)).data,
+    onSuccess: (_data, stageId) => {
+      qc.invalidateQueries({ queryKey: ["/claude-review/stages"] });
+      qc.invalidateQueries({ queryKey: ["/claude-review/stage", stageId] });
+    },
+  });
+}
+
+export function useClaudeReviewHistory() {
+  return useQuery<{ history: unknown[]; count: number }>({
+    queryKey: ["/claude-review/history"],
+    queryFn: async () => (await api.get("/claude-review/history")).data,
+    refetchInterval: useVisibleInterval(60_000),
+    staleTime: 55_000,
+    retry: 1,
+  });
+}
+
+// Keep legacy export so any other import sites still compile
+export function useClaudeReviewStatus() { return useClaudeAuditStages(); }
+export function useTriggerClaudeReview() { return useTriggerClaudeStage(); }

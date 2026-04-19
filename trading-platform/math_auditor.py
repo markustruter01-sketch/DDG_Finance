@@ -1067,39 +1067,118 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
     """Module 7: Calculate profit factor and win rate from raw DB and compare to stored."""
     checks = 0
 
-    # Oracle
+    # ── Oracle (Alpaca-based bot) ────────────────────────────────────────────
+    # Per-symbol stats are stored in kraken_pair_params WHERE bot_id IS NULL.
+    # Use the same trade-count-weighted aggregate approach as the Kraken section
+    # to avoid the apples-to-oranges mismatch (arbitrary single row vs. overall
+    # win rate) that previously caused false-positive FAIL results on Kraken bots.
+    oracle_stored = _pg_query(
+        """
+        SELECT
+            SUM(win_rate * trade_count) / NULLIF(SUM(trade_count)::float, 0) AS weighted_wr,
+            SUM(win_rate * trade_count * avg_win_pct)                         AS gross_profit_pct,
+            SUM((1.0 - win_rate) * trade_count * avg_loss_pct)               AS gross_loss_pct,
+            SUM(trade_count)                                                  AS n_tracked
+        FROM kraken_pair_params
+        WHERE bot_id IS NULL
+        """
+    )
     oracle_raw = _pg_query(
         """
-        SELECT pnl, exit_reason FROM trades
-        WHERE exit_reason NOT IN ('rebalance_liquidation') OR exit_reason IS NULL
+        SELECT pnl_percentage, exit_reason FROM trades
+        WHERE (exit_reason IS NULL OR exit_reason NOT IN ('rebalance_liquidation'))
+          AND status IN ('Closed_Win', 'Closed_Loss', 'Closed')
+          AND pnl_percentage IS NOT NULL
         """
     )
-    oracle_stored = _pg_query(
-        "SELECT AVG(profit_factor) as pf, AVG(win_rate) as wr FROM kraken_pair_params WHERE bot_id IS NULL LIMIT 1"
-    )
     if oracle_raw:
-        filtered = [r for r in oracle_raw if r.get("exit_reason") != "rebalance_liquidation"]
-        if filtered:
-            gross_profit = sum(float(r.get("pnl") or 0) for r in filtered if (r.get("pnl") or 0) > 0)
-            gross_loss = abs(sum(float(r.get("pnl") or 0) for r in filtered if (r.get("pnl") or 0) < 0))
-            wins = sum(1 for r in filtered if (r.get("pnl") or 0) > 0)
-            n = len(filtered)
-            audit_pf = gross_profit / gross_loss if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
-            audit_wr = wins / n if n > 0 else 0.0
+        wins = sum(1 for r in oracle_raw if float(r.get("pnl_percentage") or 0) > 0)
+        n = len(oracle_raw)
+        audit_wr = wins / n if n > 0 else 0.0
 
+        gross_profit_pct = sum(
+            float(r["pnl_percentage"]) for r in oracle_raw
+            if float(r.get("pnl_percentage") or 0) > 0
+        )
+        gross_loss_pct = abs(sum(
+            float(r["pnl_percentage"]) for r in oracle_raw
+            if float(r.get("pnl_percentage") or 0) < 0
+        ))
+        audit_pf_pct = (
+            gross_profit_pct / gross_loss_pct if gross_loss_pct > 0
+            else (999.0 if gross_profit_pct > 0 else 0.0)
+        )
+
+        stored_row = oracle_stored[0] if oracle_stored else {}
+        weighted_wr = stored_row.get("weighted_wr")
+        stored_gross_profit_pct = stored_row.get("gross_profit_pct")
+        stored_gross_loss_pct = stored_row.get("gross_loss_pct")
+        n_tracked = int(stored_row.get("n_tracked") or 0)
+
+        stored_wr = float(weighted_wr) if weighted_wr is not None else None
+        gp = float(stored_gross_profit_pct or 0.0)
+        gl = float(stored_gross_loss_pct or 0.0)
+        if stored_gross_profit_pct is None and stored_gross_loss_pct is None:
+            stored_pf = None
+        elif gl > 0:
+            stored_pf = gp / gl
+        elif gp > 0:
+            stored_pf = 999.0
+        else:
+            stored_pf = 0.0
+
+        if stored_pf is not None:
             _log_result(
                 "oracle", "profit_factor",
-                {"n": n, "wins": wins, "gross_profit": gross_profit, "gross_loss": gross_loss},
-                bot_output=audit_pf,  # we compare auditor vs auditor (no stored value)
-                auditor_output=audit_pf,
+                {"n_raw": n, "n_tracked": n_tracked,
+                 "gross_profit_pct": gross_profit_pct, "gross_loss_pct": gross_loss_pct},
+                bot_output=stored_pf, auditor_output=audit_pf_pct,
                 notes=(
-                    f"Oracle profit factor from {n} raw trades (excl. rebalance_liquidation): "
-                    f"PF={audit_pf:.3f} WR={audit_wr:.1%}. "
-                    f"Gross profit=${gross_profit:,.2f} Gross loss=${gross_loss:,.2f}."
+                    f"Oracle (Alpaca): pair-params trade-count-weighted PF={stored_pf:.3f} vs "
+                    f"auditor pct-PnL PF={audit_pf_pct:.3f} from {n} raw closed trades "
+                    f"(pair-params covers {n_tracked} tracked trades). "
+                    "Both computed on pct-PnL basis."
                 ),
                 audit_mode=audit_mode,
             )
-            checks += 1
+        else:
+            _log_result(
+                "oracle", "profit_factor",
+                {"n_raw": n, "gross_profit_pct": gross_profit_pct, "gross_loss_pct": gross_loss_pct},
+                bot_output=None, auditor_output=None,
+                notes=(
+                    f"Oracle (Alpaca): no per-symbol params in kraken_pair_params "
+                    f"(bot_id IS NULL) — insufficient_data for stored-vs-raw comparison. "
+                    f"Raw-only: PF={audit_pf_pct:.3f} from {n} closed trades."
+                ),
+                audit_mode=audit_mode,
+            )
+        checks += 1
+
+        if stored_wr is not None:
+            _log_result(
+                "oracle", "win_rate",
+                {"n_raw": n, "wins": wins, "n_tracked": n_tracked},
+                bot_output=stored_wr, auditor_output=audit_wr,
+                notes=(
+                    f"Oracle (Alpaca): pair-params trade-count-weighted WR={stored_wr:.3f} vs "
+                    f"raw trades WR={audit_wr:.3f} from {n} closed trades."
+                ),
+                audit_mode=audit_mode,
+            )
+        else:
+            _log_result(
+                "oracle", "win_rate",
+                {"n_raw": n, "wins": wins},
+                bot_output=None, auditor_output=None,
+                notes=(
+                    f"Oracle (Alpaca): no per-symbol params in kraken_pair_params "
+                    f"(bot_id IS NULL) — insufficient_data for stored-vs-raw comparison. "
+                    f"Raw-only: WR={audit_wr:.3f} ({wins}/{n} closed trades)."
+                ),
+                audit_mode=audit_mode,
+            )
+        checks += 1
 
     # Kraken per-bot
     for bot_id in KRAKEN_BOTS:

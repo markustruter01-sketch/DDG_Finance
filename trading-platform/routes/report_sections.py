@@ -2207,21 +2207,39 @@ def section_poseidon_status() -> list[str]:
         lines.append("  Pair parameters not yet populated — waiting for first calculation cycle.")
         lines.append("  This initialises on first bot startup (takes ~3 minutes).")
 
-    # Open positions
+    # Open positions — read directly from live state JSON which has current prices + per-leg P&L
     _h2(lines, "OPEN PAIR POSITIONS")
-    pos_rows = _pg_query("""
-        SELECT pair_set_id, asset_a, asset_b, direction, entry_zscore
-        FROM poseidon_trades
-        WHERE closed_at IS NULL OR closed_at > NOW() - INTERVAL '1 hour'
-        LIMIT 3
-    """)
-    # Fallback: check heartbeat
-    hb_rows = _pg_query("SELECT position_count FROM kraken_heartbeat WHERE id = 7")
-    open_count = int(hb_rows[0].get("position_count") or 0) if hb_rows else 0
-    if open_count == 0:
+    _ls_open = _read_poseidon_live_state()
+    _live_pos = _ls_open.get("positions") or {}
+    if not _live_pos:
         lines.append("  None — no open pair positions (fully liquid)")
     else:
-        lines.append(f"  {open_count} positions open. See live_state.json for details.")
+        _open_pnl_total = 0.0
+        lines.append(f"  {len(_live_pos)} pair position(s) open:\n")
+        lines.append(f"  {'#':<4} {'Asset A':<12} {'Asset B':<12} {'Direction':<14} {'A entry':>10} {'A curr':>10} {'A P&L':>9} {'B entry':>10} {'B curr':>10} {'B P&L':>9} {'Total P&L':>10}  Opened")
+        lines.append("  " + "-" * 120)
+        for _pid, _p in sorted(_live_pos.items(), key=lambda _x: int(_x[0])):
+            _aa  = str(_p.get("asset_a", "?"))
+            _ab  = str(_p.get("asset_b", "?"))
+            _dir = "S:A / L:B" if _p.get("direction") == "short_a_long_b" else "L:A / S:B"
+            _lae = float(_p.get("leg_a_entry") or 0)
+            _lbe = float(_p.get("leg_b_entry") or 0)
+            _lac = float(_p.get("current_price_a") or _p.get("leg_a_current") or 0)
+            _lbc = float(_p.get("current_price_b") or _p.get("leg_b_current") or 0)
+            _lap = float(_p.get("leg_a_pnl") or 0)
+            _lbp = float(_p.get("leg_b_pnl") or 0)
+            _tp  = float(_p.get("total_pnl") or 0)
+            _oa  = str(_p.get("opened_at") or "?")[:16].replace("T", " ")
+            _open_pnl_total += _tp
+            def _fp(_v):
+                return f"{_v:.5f}" if _v < 1 else (f"{_v:.3f}" if _v < 100 else f"{_v:.2f}")
+            lines.append(
+                f"  {_pid:<4} {_aa:<12} {_ab:<12} {_dir:<14} "
+                f"{_fp(_lae):>10} {_fp(_lac):>10} {_c(_lap):>9} "
+                f"{_fp(_lbe):>10} {_fp(_lbc):>10} {_c(_lbp):>9} "
+                f"{_c(_tp):>10}  {_oa}"
+            )
+        lines.append(f"\n  Combined unrealised P&L across {len(_live_pos)} pairs: {_c(_open_pnl_total)}")
 
     # Recent trades
     _h2(lines, "RECENT CLOSED TRADES")
@@ -3783,15 +3801,24 @@ def section_open_position_risk(alpaca_positions: list = None, fx_positions: list
             "sl_dist": sl_dist, "tp_px": tp_px, "entry_date": entry_date
         })
 
-    # Poseidon positions (from live state)
+    # Poseidon positions (from live state) — real pair names, prices, and P&L
     pos_ls = _read_poseidon_live_state()
     positions_data = pos_ls.get("positions") or {}
     if isinstance(positions_data, dict):
         for pair_key, p in positions_data.items():
+            _paa  = str(p.get("asset_a", "?")).replace("/USD", "")
+            _pab  = str(p.get("asset_b", "?")).replace("/USD", "")
+            _psym = f"{_paa}/{_pab}"[:14]
+            _pdir = "S:A/L:B" if p.get("direction") == "short_a_long_b" else "L:A/S:B"
+            _pent = float(p.get("leg_a_entry") or 0)
+            _pcur = float(p.get("current_price_a") or p.get("leg_a_current") or 0)
+            _pupl = float(p.get("total_pnl") or 0)
+            _psz  = float(p.get("position_value") or 0)
+            _poa  = str(p.get("opened_at") or "?")[:10]
             all_rows.append({
-                "bot": "Poseidon", "symbol": str(pair_key), "side": "PAIR",
-                "entry": 0, "current": 0, "upl": 0, "size": 0,
-                "sl_px": None, "sl_dist": None, "tp_px": None, "entry_date": "?"
+                "bot": "Poseidon", "symbol": _psym, "side": _pdir,
+                "entry": _pent, "current": _pcur, "upl": _pupl, "size": _psz,
+                "sl_px": None, "sl_dist": None, "tp_px": None, "entry_date": _poa
             })
 
     if not all_rows:

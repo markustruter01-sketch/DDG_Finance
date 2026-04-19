@@ -38,7 +38,7 @@ def _db_conn() -> psycopg2.extensions.connection:
 
 
 def ensure_table() -> None:
-    """Create math_audit_log table if not exists."""
+    """Create math_audit_log table if not exists, then apply schema migrations."""
     ddl = """
     CREATE TABLE IF NOT EXISTS math_audit_log (
         id BIGSERIAL PRIMARY KEY,
@@ -50,7 +50,7 @@ def ensure_table() -> None:
         auditor_output DOUBLE PRECISION,
         discrepancy DOUBLE PRECISION,
         discrepancy_pct DOUBLE PRECISION,
-        status VARCHAR(8) NOT NULL DEFAULT 'PASS',
+        status VARCHAR(20) NOT NULL DEFAULT 'PASS',
         severity VARCHAR(12) NOT NULL DEFAULT 'INFO',
         notes TEXT,
         audit_mode VARCHAR(16) DEFAULT 'full'
@@ -66,6 +66,68 @@ def ensure_table() -> None:
         conn.commit()
     except Exception as exc:
         logger.warning(f"[math_auditor] Table creation failed: {exc}")
+    finally:
+        conn.close()
+    _apply_migrations()
+
+
+def _apply_migrations() -> None:
+    """
+    Apply idempotent schema and data migrations to math_audit_log.
+
+    Migration 1 (Task #137): Widen status column from VARCHAR(8) to VARCHAR(20)
+    so that the 'stale_methodology' marker fits, then mark all pre-fix FAIL rows
+    (42 zscore + 24 btc_neutral_zscore + 12 win_rate + 12 profit_factor = 90 rows)
+    that accumulated before the Task #135 timing-mismatch fix as 'stale_methodology'.
+    These were false positives caused by comparing stale signals against fresh
+    market data and should not count as genuine formula failures.
+    """
+    migrations = [
+        # M1a: Widen status column — idempotent: no-op if already >= VARCHAR(20)
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'math_audit_log'
+                  AND column_name = 'status'
+                  AND character_maximum_length < 20
+            ) THEN
+                ALTER TABLE math_audit_log
+                    ALTER COLUMN status TYPE VARCHAR(20);
+            END IF;
+        END $$;
+        """,
+        # M1b: Mark pre-Task-135 false-positive FAIL rows as stale_methodology.
+        # Targets only rows that are still 'FAIL'; already-updated rows are skipped.
+        # The window '2026-04-19 02:00:00+00' – '2026-04-19 02:30:00+00' tightly
+        # brackets the observed false-positive burst (02:06–02:23 UTC) and the
+        # formula_name filter limits the scope to the four known-affected formulas,
+        # preventing any legitimate historical FAILs outside this window from being
+        # reclassified.
+        """
+        UPDATE math_audit_log
+        SET
+            status = 'stale_methodology',
+            notes  = COALESCE(notes, '') ||
+                     ' [Marked stale: pre-Task-135 false positive caused by'
+                     ' timing mismatch between stale signals and fresh market data.]'
+        WHERE status = 'FAIL'
+          AND formula_name IN ('zscore', 'btc_neutral_zscore', 'win_rate', 'profit_factor')
+          AND audit_timestamp >= '2026-04-19 02:00:00+00'
+          AND audit_timestamp <  '2026-04-19 02:30:00+00';
+        """,
+    ]
+    conn = _db_conn()
+    try:
+        with conn.cursor() as cur:
+            for stmt in migrations:
+                cur.execute(stmt)
+        conn.commit()
+        logger.info("[math_auditor] Schema migrations applied successfully.")
+    except Exception as exc:
+        logger.warning(f"[math_auditor] Migration failed: {exc}")
+        conn.rollback()
     finally:
         conn.close()
 

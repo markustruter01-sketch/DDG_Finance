@@ -5,6 +5,7 @@ import {
   useKrakenFleetSummary,
   useSentiment,
   useStatusSummary,
+  useForexState,
   useVault,
   useVaultHistory,
 } from "@/hooks/use-trading";
@@ -100,6 +101,7 @@ export default function StreamingPerformanceScreen() {
   const fleet   = useKrakenFleetSummary();
   const sent    = useSentiment();
   const status  = useStatusSummary();
+  const forex   = useForexState();
   const vaultData    = useVault();
   const vaultHistory = useVaultHistory(90);
 
@@ -109,16 +111,29 @@ export default function StreamingPerformanceScreen() {
   const fl  = fleet.data;
   const sg  = sent.data;
   const st  = status.data;
+  const fx  = forex.data;
   const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
 
   const cryptoFG = sg?.crypto_fear_greed?.value;
   const marketFG = sg?.market_fear_greed?.value;
   const regime   = st?.groq?.regime ?? "—";
 
-  /* fleet P&L from equity – starting cap */
+  /* Kraken 6-bot P&L from equity – starting cap */
   const fleetBots = fl?.bots ?? [];
-  const fleetPnL  = fleetBots.reduce((s, b) => s + b.equity_usd - b.starting_balance_usd, 0);
-  const fleetEquity = fleetBots.reduce((s, b) => s + b.equity_usd, 0);
+  const krakenPnL  = fleetBots.reduce((s, b) => s + b.equity_usd - b.starting_balance_usd, 0);
+  const krakenEquity = fleetBots.reduce((s, b) => s + b.equity_usd, 0);
+
+  /* Oracle (Alpaca) P&L — portfolio_totals.initial_capital is not populated; use $100k starting */
+  const oracleEquity = st?.portfolio_totals?.equity ?? 0;
+  const oraclePnl = oracleEquity > 0 ? oracleEquity - 100_000 : 0;
+
+  /* Navigator (Forex) P&L — paper_equity includes open unrealized P&L */
+  const navEquity = fx?.paper_equity ?? 0;
+  const navPnl = navEquity > 0 ? navEquity - 100_000 : 0;
+
+  /* Full 8-bot fleet totals */
+  const fleetPnL    = krakenPnL + oraclePnl + navPnl;
+  const fleetEquity = krakenEquity + oracleEquity + navEquity;
   const fleetTrades = fl?.total_trades ?? fleetBots.reduce((s, b) => s + b.trades, 0);
   const fleetWins   = fl?.total_wins   ?? fleetBots.reduce((s, b) => s + b.wins, 0);
   // Single canonical win rate — always the server-computed value, no client-side arithmetic drift

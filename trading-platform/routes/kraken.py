@@ -721,9 +721,19 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
                     )
                     _hr = _hc.fetchone()
                     if _hr:
-                        current_equity = _hr[0] or 0
+                        current_equity = float(_hr[0]) if _hr[0] and _hr[0] > 0 else 0.0
                         cycle_count    = _hr[1] or 0
                         bot_status     = _hr[2] or "not_started"
+                # If heartbeat equity is 0/unset (bot not started yet), use starting_balance
+                # as the equity floor — same logic applied in fleet-summary
+                if current_equity <= 0:
+                    with _pgconn.cursor() as _sc:
+                        _sc.execute(
+                            "SELECT starting_balance_usd FROM kraken_portfolio WHERE id = %s",
+                            (db_id,)
+                        )
+                        _sr = _sc.fetchone()
+                        current_equity = float(_sr[0] or 100_000) if _sr else 100_000.0
             finally:
                 _pgconn.close()
         except Exception as exc:

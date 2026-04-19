@@ -506,6 +506,15 @@ function ClaudeAuditPanel() {
                           <Loader2 className="w-3 h-3 animate-spin" />
                           {selected.run_state.in_progress ? "Running" : "Busy"}
                         </div>
+                      ) : selected.run_state.error ? (
+                        <button
+                          onClick={() => triggerMutation.mutate(selected.id)}
+                          disabled={triggerMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/25 border border-red-500/40 text-red-300 text-xs font-semibold hover:bg-red-600/40 transition-all disabled:opacity-50"
+                        >
+                          <Play className="w-3 h-3" />
+                          Retry Stage {stages.findIndex(s => s.id === selected.id) + 1}
+                        </button>
                       ) : selected.cooldown_remaining_seconds > 0 ? (
                         <div className="text-[10px] text-slate-500 text-right">
                           <Clock className="w-3 h-3 inline mr-1" />

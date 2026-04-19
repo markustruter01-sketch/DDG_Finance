@@ -1259,6 +1259,15 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
     kc_raw = _pg_query(
         "SELECT pnl_usd FROM kraken_current_trades WHERE pnl_usd IS NOT NULL"
     )
+    if not kc_raw:
+        for _metric in ("profit_factor", "win_rate"):
+            _log_result(
+                "kraken-current", _metric, {},
+                bot_output=None, auditor_output=None,
+                notes="kraken-current: 0 closed trades — insufficient_data for win_rate/profit_factor.",
+                audit_mode=audit_mode,
+            )
+            checks += 1
     if kc_raw:
         kc_wins = sum(1 for r in kc_raw if float(r["pnl_usd"]) > 0)
         kc_n = len(kc_raw)
@@ -1294,6 +1303,15 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
     ps_raw = _pg_query(
         "SELECT net_pnl FROM poseidon_trades WHERE net_pnl IS NOT NULL"
     )
+    if not ps_raw:
+        for _metric in ("profit_factor", "win_rate"):
+            _log_result(
+                "poseidon", _metric, {},
+                bot_output=None, auditor_output=None,
+                notes="poseidon: 0 closed trades — insufficient_data for win_rate/profit_factor.",
+                audit_mode=audit_mode,
+            )
+            checks += 1
     if ps_raw:
         ps_wins = sum(1 for r in ps_raw if float(r["net_pnl"]) > 0)
         ps_n = len(ps_raw)

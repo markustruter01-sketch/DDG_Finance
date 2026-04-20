@@ -345,7 +345,7 @@ def verified_zscore(prices: list, window: int = 20) -> tuple:
     if std == 0:
         return None, "zero_variance"
     zscore = (float(prices[-1]) - mean) / std
-    return float(zscore), "ok"
+    return round(float(zscore), 4), "ok"
 
 
 def verified_rsi(prices: list, period: int = 14) -> tuple:
@@ -1091,6 +1091,7 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
         WHERE (exit_reason IS NULL OR exit_reason NOT IN ('rebalance_liquidation'))
           AND status IN ('Closed_Win', 'Closed_Loss', 'Closed')
           AND pnl_percentage IS NOT NULL
+          AND date >= CURRENT_DATE - INTERVAL '30 days'
         """
     )
     if oracle_raw:
@@ -1137,8 +1138,8 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 bot_output=stored_pf, auditor_output=audit_pf_pct,
                 notes=(
                     f"Oracle (Alpaca): pair-params trade-count-weighted PF={stored_pf:.3f} vs "
-                    f"auditor pct-PnL PF={audit_pf_pct:.3f} from {n} raw closed trades "
-                    f"(pair-params covers {n_tracked} tracked trades). "
+                    f"auditor pct-PnL PF={audit_pf_pct:.3f} from {n} raw closed trades (last 30 days) "
+                    f"(pair-params covers {n_tracked} tracked trades, same 30-day window). "
                     "Both computed on pct-PnL basis."
                 ),
                 audit_mode=audit_mode,
@@ -1164,7 +1165,7 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 bot_output=stored_wr, auditor_output=audit_wr,
                 notes=(
                     f"Oracle (Alpaca): pair-params trade-count-weighted WR={stored_wr:.3f} vs "
-                    f"raw trades WR={audit_wr:.3f} from {n} closed trades."
+                    f"raw trades WR={audit_wr:.3f} from {n} closed trades (last 30 days, same window as pair-params)."
                 ),
                 audit_mode=audit_mode,
             )
@@ -1197,7 +1198,7 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
             (bot_id,),
         )
         raw_trades = _pg_query(
-            "SELECT pnl_usd, pnl_pct FROM kraken_trades WHERE bot_id = %s AND pnl_usd IS NOT NULL",
+            "SELECT pnl_usd, pnl_pct FROM kraken_trades WHERE bot_id = %s AND pnl_usd IS NOT NULL AND closed_at >= NOW() - INTERVAL '30 days'",
             (bot_id,),
         )
 
@@ -1236,7 +1237,7 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 bot_output=stored_pf, auditor_output=audit_pf_pct,
                 notes=(
                     f"{bot_id}: pair-params reconstructed PF={stored_pf:.3f} vs auditor pnl_pct PF={audit_pf_pct:.3f} "
-                    f"from {n} raw trades (both computed on pct-PnL basis)."
+                    f"from {n} raw trades (last 30 days, same window as pair-params; both on pct-PnL basis)."
                 ),
                 audit_mode=audit_mode,
             )
@@ -1249,7 +1250,7 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
                 bot_output=stored_wr, auditor_output=audit_wr,
                 notes=(
                     f"{bot_id}: pair-params weighted avg WR={stored_wr:.3f} vs raw trades WR={audit_wr:.3f} "
-                    f"from {n} raw trades."
+                    f"from {n} raw trades (last 30 days, same window as pair-params)."
                 ),
                 audit_mode=audit_mode,
             )

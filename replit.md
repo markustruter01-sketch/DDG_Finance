@@ -1,6 +1,6 @@
 # Overview
 
-This project is a pnpm workspace monorepo designed to deliver an AI Quantitative Trading Platform, a Trading Dashboard, and the AlgoEdge SaaS Platform. Its primary goal is to provide an autonomous trading system with advanced monitoring capabilities and a public-facing platform, leveraging AI for market analysis and decision-making to achieve high efficiency and continuous learning.
+This project is a pnpm workspace monorepo designed to deliver an AI Quantitative Trading Platform and a Trading Dashboard. Its primary goal is to provide an autonomous trading system with advanced monitoring capabilities, leveraging AI for market analysis and decision-making to achieve high efficiency and continuous learning.
 
 # User Preferences
 

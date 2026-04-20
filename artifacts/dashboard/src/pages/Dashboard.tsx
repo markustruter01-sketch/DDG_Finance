@@ -25,7 +25,6 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import {
   Activity, ShieldAlert, TrendingUp,
   WifiOff, AlertTriangle, Brain,
-  ExternalLink,
   FileText, Mail,
   DollarSign, Percent, Bot, BarChart2,
   Code, ShieldCheck, Copy, Check, X,
@@ -182,15 +181,7 @@ function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <a
-            href="/saas/"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-500/40 bg-indigo-500/10 text-indigo-400 text-xs font-semibold hover:bg-indigo-500/20 hover:border-indigo-500/60 transition-all select-none"
-            title="Switch to AlgoEdge SaaS Platform"
-          >
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-indigo-600 text-white text-[9px] font-black">AE</span>
-            <span className="hidden sm:inline">AlgoEdge</span>
-            <ExternalLink className="h-3 w-3 opacity-70" />
-          </a>
+
 
           <EmergencyHeaderButtons />
 

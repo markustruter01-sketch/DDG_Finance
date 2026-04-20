@@ -49,7 +49,7 @@ export function WhitepaperContent() {
             ["PostgreSQL + SQLite", "Trade journals, vault ledgers, ratchet stops, degradation log", "psycopg2 + sqlite3"],
             ["React Dashboard", "Real-time monitoring, HITL controls, 6-tab multi-bot UI", "React 19 / Vite / TanStack Query"],
             ["Alert System", "Batched profitable trade notifications with configurable frequency", "Telegram Bot API / Discord Webhooks"],
-            ["AlgoEdge SaaS", "Public Trading-as-a-Service product with paper portfolio", "FastAPI port 8099 / React / Stripe"],
+
           ]}
         />
       </Section>
@@ -867,21 +867,6 @@ export function WhitepaperContent() {
           <p>All Alpaca broker calls wrapped in full-jitter exponential backoff:</p>
           <Formula>delay = random.uniform(0, min(60s, 1s × 2^attempt))</Formula>
           <p>Max 5 retries before allowing failure. Global rate limiter: 300ms minimum between any two Alpaca calls. Market timing via Alpaca <Mono>/v2/clock</Mono> API (holiday-aware, irregular-session-aware).</p>
-        </SubSection>
-      </Section>
-
-      {/* Section 14 — AlgoEdge SaaS */}
-      <Section title="AlgoEdge SaaS Platform">
-        <SimpleBox>
-          <p>AlgoEdge is a public website where anyone can pay a monthly subscription and watch a paper-trading version of the AI strategy run in real time. No real money — fully simulated. Think of it as a live demo you pay to access.</p>
-        </SimpleBox>
-
-        <SubSection title="Architecture">
-          <p>Separate React + Vite frontend backed by FastAPI on port 8099. Architecturally isolated from the primary trading platform. Uses an independent <Mono>saas_paper_portfolio.json</Mono> tracking a simulated capital pool — no real broker calls are ever made from the SaaS layer.</p>
-        </SubSection>
-
-        <SubSection title="Stripe Subscription Billing">
-          <p>Subscription management via Stripe API. Webhook handlers: <Mono>checkout.session.completed</Mono>, <Mono>customer.subscription.deleted</Mono>, <Mono>invoice.payment_failed</Mono>. Paid-tier endpoints gated by Stripe subscription status in API middleware.</p>
         </SubSection>
       </Section>
 

@@ -171,33 +171,6 @@ CREATE TABLE IF NOT EXISTS equity_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_equity_snapshots_ts ON equity_snapshots (ts DESC);
 
--- ── AlgoEdge SaaS users ────────────────────────────────────────────────────
--- One row per registered SaaS user.
--- Stripe IDs are stored here; all subscription state is sourced from Stripe.
---
--- active_license_tier values:
---   NULL      → free / no active subscription
---   'tier1'   → Crypto Engine  ($19.96/4-weeks)  — Kraken access only
---   'tier2'   → Equities Engine ($39.96/4-weeks) — Alpaca access only
---   'tier3'   → Combined Hub   ($51.96/4-weeks)  — Kraken + Alpaca access
-CREATE TABLE IF NOT EXISTS saas_users (
-    id                    TEXT PRIMARY KEY,            -- Replit user ID or UUID
-    email                 TEXT NOT NULL UNIQUE,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    stripe_customer_id    TEXT,                        -- cus_...
-    stripe_subscription_id TEXT,                       -- sub_...
-    active_license_tier   TEXT CHECK (
-        active_license_tier IN ('tier1', 'tier2', 'tier3')
-    ),
-    billing_cycle_end     TIMESTAMPTZ,                 -- next renewal date from Stripe
-    tier_granted_at       TIMESTAMPTZ,                 -- when tier was last activated
-    is_active             BOOLEAN NOT NULL DEFAULT TRUE
-);
-
-CREATE INDEX IF NOT EXISTS idx_saas_users_email       ON saas_users (email);
-CREATE INDEX IF NOT EXISTS idx_saas_users_stripe_cust ON saas_users (stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_saas_users_tier        ON saas_users (active_license_tier);
-
 -- ── System Degradation Log ─────────────────────────────────────────────────
 -- Persistent record of every detected system failure or degradation event.
 -- Written by the auto-heal monitor, HTTP middleware, and manual captures.

@@ -7,7 +7,7 @@ All endpoint handlers live in ``routes/`` sub-modules.  This file keeps only:
   • lifespan (scheduler bootstrap, DB init, commentary cache load)
   • DegradationCaptureMiddleware
   • app / router creation
-  • router wire-up (include_router for trading-api + SaaS routers)
+  • router wire-up (include_router for trading-api routers)
 """
 
 import asyncio
@@ -504,7 +504,3 @@ for sub_router in ALL_ROUTERS:
 
 app.include_router(router)
 
-from saas_router import saas_router                          # noqa: E402
-from saas_stripe_router import stripe_bp                     # noqa: E402
-app.include_router(saas_router)
-app.include_router(stripe_bp, prefix="/saas-api")

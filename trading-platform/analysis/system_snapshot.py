@@ -32,7 +32,6 @@ from loguru import logger
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _TRADING_PLATFORM = _REPO_ROOT / "trading-platform"
 _DASHBOARD_SRC = _REPO_ROOT / "artifacts" / "dashboard" / "src"
-_SAAS_SRC = _REPO_ROOT / "artifacts" / "saas" / "src"
 
 _LOG_DIR = _TRADING_PLATFORM / "logs"
 

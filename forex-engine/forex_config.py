@@ -175,7 +175,13 @@ CROSS_QUOTE_USD = {
 }
 
 
-def get_quote_to_usd(pair: str, current_price: float, latest_prices: dict) -> float:
+def get_quote_to_usd(pair: str, current_price: float, latest_prices: dict):
+    """Return the USD conversion factor for a pair, or None if unavailable.
+
+    Returns None (never 1.0 as a fallback) when a required cross-pair reference
+    price (e.g. JPY=X for EUR/JPY) is not cached.  Callers must treat None as
+    "skip this pair this cycle" rather than treating 1.0 parity as valid.
+    """
     import logging
     if PAIR_DIRECTIONS.get(pair) == "counter_usd":
         return 1.0
@@ -188,8 +194,9 @@ def get_quote_to_usd(pair: str, current_price: float, latest_prices: dict) -> fl
         if ref_price and ref_price > 0:
             return ref_price if method == "multiply" else 1.0 / ref_price
         logging.getLogger("forex_config").warning(
-            f"Cross-pair {pair}: ref {ref_sym} price unavailable, using conv=1.0"
+            f"Cross-pair {pair}: ref {ref_sym} price unavailable — skipping pair this cycle"
         )
+        return None
     return 1.0
 
 

@@ -313,6 +313,8 @@ def _calculate_units(equity: float, entry_price: float, sl_distance: float, pair
         return 0
 
     conv = get_quote_to_usd(pair, entry_price, _latest_prices)
+    if conv is None:
+        return 0
     pip_value_per_unit = pip_size * conv
 
     if pip_value_per_unit <= 0:
@@ -332,16 +334,26 @@ _CROSS_REF_SYMBOLS = sorted(set(ref for ref, _ in CROSS_QUOTE_USD.values()))
 
 
 def _prefetch_reference_prices():
+    import time as _time
     for ref_sym in _CROSS_REF_SYMBOLS:
         if ref_sym in _latest_prices:
             continue
-        try:
-            candles = fetch_h4_candles(ref_sym, count=5)
-            if candles is not None and not candles.empty:
-                _latest_prices[ref_sym] = float(candles.iloc[-1]["Close"])
-                logger.debug(f"Forex | Pre-fetched ref price {ref_sym} = {_latest_prices[ref_sym]:.5f}")
-        except Exception as exc:
-            logger.warning(f"Forex | Failed to pre-fetch ref price {ref_sym}: {exc}")
+        for attempt in range(2):
+            try:
+                candles = fetch_h4_candles(ref_sym, count=5)
+                if candles is not None and not candles.empty:
+                    _latest_prices[ref_sym] = float(candles.iloc[-1]["Close"])
+                    logger.debug(f"Forex | Pre-fetched ref price {ref_sym} = {_latest_prices[ref_sym]:.5f}")
+                    break
+                if attempt == 0:
+                    logger.debug(f"Forex | ref price {ref_sym} returned empty on attempt 1 — retrying")
+                    _time.sleep(1.5)
+            except Exception as exc:
+                if attempt == 0:
+                    logger.debug(f"Forex | ref price {ref_sym} attempt 1 failed: {exc} — retrying")
+                    _time.sleep(1.5)
+                else:
+                    logger.warning(f"Forex | Failed to pre-fetch ref price {ref_sym} after 2 attempts: {exc}")
 
 
 # ── HARD PAIR WHITELIST ──────────────────────────────────────────────────────
@@ -803,6 +815,10 @@ def _run_cycle_inner() -> dict:
                     continue
 
                 conv = get_quote_to_usd(pair, current_price, _latest_prices)
+                if conv is None:
+                    scan_entry["signal"] += " (ref price unavailable, skipped)"
+                    scan_results.append(scan_entry)
+                    continue
                 size_usd = units * current_price * conv
 
                 cap = available * 0.95
@@ -900,7 +916,7 @@ def _write_live_state():
             pnl_raw = (entry - current_price) * pos.get("units", 0)
 
         conv = get_quote_to_usd(pair, current_price, _latest_prices)
-        pnl_usd = pnl_raw * conv
+        pnl_usd = pnl_raw * conv if conv is not None else 0.0
 
         pip_size = PIP_SIZE.get(pair, 0.0001)
         if direction == "long":
@@ -996,7 +1012,7 @@ def get_positions() -> list[dict]:
             pnl_raw = (entry - current_price) * pos.get("units", 0)
 
         conv = get_quote_to_usd(pair, current_price, _latest_prices)
-        pnl_usd = pnl_raw * conv
+        pnl_usd = pnl_raw * conv if conv is not None else 0.0
 
         pip_size = PIP_SIZE.get(pair, 0.0001)
         pnl_pips = ((current_price - entry) / pip_size) if direction == "long" else ((entry - current_price) / pip_size)

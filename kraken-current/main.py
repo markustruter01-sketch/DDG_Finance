@@ -51,7 +51,7 @@ from paper_portfolio import TrendPosition, PaperPortfolio
 from db_utils import (
     ensure_kraken_current_tables, write_heartbeat, write_portfolio,
     record_trade, record_signal_scan, get_kraken_current_equity,
-    check_and_clear_force_refresh,
+    check_and_clear_force_refresh, upsert_positions,
 )
 
 # ── Exchange setup ────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ except Exception as e:
     exchange = None
 
 PORTFOLIO_FILE = os.path.join(_DIR, "kc_paper_portfolio.json")
-portfolio = PaperPortfolio(PORTFOLIO_FILE, PAPER_STARTING_BALANCE)
+portfolio: PaperPortfolio = None  # type: ignore[assignment]  # initialized in main() after DB tables are ready
 
 _cycle = 0
 
@@ -361,7 +361,7 @@ def write_live_state(current_prices: dict[str, float], equity: float, scan_resul
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 def main():
-    global _cycle
+    global _cycle, portfolio
     logger.info(f"""
 =================================================================
   PAPER TRADING MODE  —  {DISPLAY_NAME}
@@ -372,6 +372,16 @@ def main():
 """)
 
     ensure_kraken_current_tables()
+
+    # Initialize portfolio AFTER tables are ready so DB fallback can work on first run
+    portfolio = PaperPortfolio(PORTFOLIO_FILE, PAPER_STARTING_BALANCE)
+    if portfolio.positions:
+        logger.info(
+            f"KrakenCurrent | Startup positions ({len(portfolio.positions)}): "
+            + ", ".join(portfolio.positions.keys())
+        )
+    else:
+        logger.info("KrakenCurrent | Startup: no open positions")
 
     # Build market universe on startup
     logger.info(f"KrakenCurrent | Building initial market universe (top {_UNIVERSE_SIZE})...")
@@ -419,6 +429,7 @@ def main():
             # Write to DB
             write_heartbeat(equity, len(portfolio.positions), _cycle)
             write_portfolio(equity, portfolio.cash, len(portfolio.positions))
+            upsert_positions(portfolio.positions, current_prices, regime)
             if scan_results:
                 record_signal_scan(scan_results)
             write_live_state(current_prices, equity, scan_results, regime)

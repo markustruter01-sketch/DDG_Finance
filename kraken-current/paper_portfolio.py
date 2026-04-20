@@ -117,6 +117,7 @@ class PaperPortfolio:
         self._load()
 
     def _load(self):
+        json_loaded = False
         if self.state_file.exists():
             try:
                 d = json.loads(self.state_file.read_text())
@@ -127,15 +128,37 @@ class PaperPortfolio:
                 self.total_trades = int(d.get("total_trades", 0))
                 self.equity_7d_low = float(d.get("equity_7d_low", self.starting_balance))
                 self.circuit_breaker_until = d.get("circuit_breaker_until")
-                return
+                json_loaded = True
             except Exception as e:
                 logger.warning(f"KrakenCurrent | Portfolio load failed: {e}")
-        self.cash = self.starting_balance
-        self.positions = {}
-        self.total_trades = 0
-        self.equity_7d_low = self.starting_balance
-        self.circuit_breaker_until = None
-        self._save()
+        if not json_loaded:
+            self.cash = self.starting_balance
+            self.positions = {}
+            self.total_trades = 0
+            self.equity_7d_low = self.starting_balance
+            self.circuit_breaker_until = None
+        # If no positions were found (JSON missing, corrupt, or empty), try DB fallback
+        if not self.positions:
+            try:
+                from db_utils import load_positions_from_db
+                db_rows = load_positions_from_db()
+                if db_rows:
+                    for row in db_rows:
+                        sym = row.get("symbol")
+                        if sym:
+                            self.positions[sym] = TrendPosition.from_dict(row)
+                    reason = "JSON missing/empty" if not json_loaded else "JSON had no positions"
+                    logger.info(
+                        f"KrakenCurrent | {reason} — restored {len(self.positions)} position(s) "
+                        f"from database: {list(self.positions.keys())}"
+                    )
+                    # Re-create the JSON file so future startups use the fast local path
+                    self._save()
+                    return
+            except Exception as e:
+                logger.warning(f"KrakenCurrent | DB position fallback failed: {e}")
+        if not json_loaded:
+            self._save()
 
     def _save(self):
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -199,6 +222,11 @@ class PaperPortfolio:
         self.total_trades += 1
         del self.positions[symbol]
         self._save()
+        try:
+            from db_utils import delete_position, BOT_ID
+            delete_position(f"{BOT_ID}_{symbol}")
+        except Exception as e:
+            logger.warning(f"KrakenCurrent | DB delete_position failed for {symbol}: {e}")
         logger.info(f"KrakenCurrent | Closed {pos.direction} {symbol} @ ${exit_price:.4f} P&L=${pnl:+.2f} ({reason})")
         return {
             "symbol": symbol,

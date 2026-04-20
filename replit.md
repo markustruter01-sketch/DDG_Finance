@@ -17,7 +17,7 @@ The project employs a monorepo structure using pnpm workspaces, integrating seve
 -   **Trading Engines**:
     -   **Poseidon Statistical Arbitrage Engine**: 15-min cycle, dynamic pair discovery, Z-score, ADF, hedge ratio drift for entry.
     -   **Navigator Forex Engine**: 4-hour H4 cycle, expanded active pair universe, RSI-based signals, per-pair logging.
-    -   **Oracle #1 Engine (Pure Momentum v3.1)**: Deterministic momentum scanner for NYSE/NASDAQ stocks, composite scoring, fixed Kelly sizing, 15 min cycles during market hours.
+    -   **Oracle #1 Engine (Stock Trend Follower v1.0)**: Deterministic EMA20/EMA50 crossover + ADX≥25 trend-following scanner for 253 NYSE/NASDAQ stocks. ATR-based Kelly sizing (1.5% equity risk / ATR×2.0, max 20%), 5L + 2S max slots. Trailing stops (ATR×2.0, ratchets after 1.5×ATR profit), EMA-reversal, ADX-weakness, and 15-day max-hold exits. 4-hour min-hold. 15-min cycles during market hours.
 -   **Oracle Profit Reserve**: 15% of winning Oracle trade gross profit swept to a DB ledger.
 -   **Database**: PostgreSQL (primary), SQLite (fallback) for journaling and snapshots.
 -   **Architecture**: Modular pipeline design, RAG Memory for post-mortem logging and rule derivation.

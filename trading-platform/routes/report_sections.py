@@ -385,15 +385,18 @@ def section_trade_mechanics_navigator() -> list[str]:
 
 def section_oracle_regime_transparency() -> list[str]:
     lines: list[str] = []
-    _h2(lines, "ORACLE #1 — STRATEGY STATUS & MOMENTUM SCAN")
+    _h2(lines, "ORACLE #1 — STOCK TREND FOLLOWER v1.0")
 
     lines += [
-        "  STRATEGY: Pure Momentum v3.0 (deterministic — no LLM, no SGOV, no JEPQ)",
-        "  Universe: ~250 NYSE/NASDAQ stocks  |  Scan frequency: every 15 min (market hours only)",
+        "  STRATEGY: Stock Trend Follower v1.0 (deterministic — no LLM, no SGOV, no JEPQ)",
+        "  Universe: ~253 NYSE/NASDAQ stocks  |  Scan frequency: every 15 min (market hours only)",
         "",
-        "  SCORE = 5d_return*0.20 + 20d_return*0.50 + 60d_return*0.30",
-        "  LONG  filters: score>0, RSI 30-70, price>EMA20  (top 6 max)",
-        "  SHORT filters: score<0, RSI 30-70, price<EMA20  (bottom 3 max, ETB check)",
+        "  ENTRY (LONG): EMA20 > EMA50 AND ADX≥25 AND 10d_return>0 AND RSI 40-75 AND price>EMA20",
+        "  ENTRY (SHORT): EMA20 < EMA50 AND ADX≥25 AND 10d_return<0 AND RSI 25-60 AND price<EMA20",
+        "  SIZING: 1.5% equity risk / (ATR×2.0) per position  |  max 20% per slot",
+        "  MAX SLOTS: 5 long + 2 short = 7 total",
+        "  EXIT: trailing stop (ATR×2.0) | EMA cross reversal | ADX<20 | 15 trading-day max",
+        "  MIN HOLD: 4 hours before signal-based exits fire",
         "",
     ]
 
@@ -407,33 +410,49 @@ def section_oracle_regime_transparency() -> list[str]:
         lines.append("  Oracle Profit Reserve: unavailable")
 
     lines.append("")
-    lines.append("  LAST MOMENTUM SCAN RESULTS (from pipeline state):")
+    lines.append("  LAST STF SCAN RESULTS (from pipeline state):")
     try:
         from core.pipeline import _state as _pipeline_state
         _scanner = _pipeline_state.get("last_algo_scanner") or {}
-        _top5_long  = _scanner.get("top5_long",  [])
-        _top5_short = _scanner.get("top5_short", [])
-        _scan_type  = _scanner.get("scan_type", "N/A")
-        _universe   = _scanner.get("universe_scanned", 0)
-        _n_signals  = _scanner.get("active_signals", 0)
+        _top5_long   = _scanner.get("top5_long",  [])
+        _top5_short  = _scanner.get("top5_short", [])
+        _scan_type   = _scanner.get("scan_type", "N/A")
+        _universe    = _scanner.get("universe_scanned", 0)
+        _n_signals   = _scanner.get("active_signals", 0)
+        _stages      = _scanner.get("filter_stages", {})
 
         _row(lines, "Scan type:", _scan_type)
         _row(lines, "Universe scanned:", str(_universe))
-        _row(lines, "Long signals:", str(_n_signals))
+        if _stages:
+            _row(lines, "  With indicator data:", str(_stages.get("with_data", "N/A")))
+            _row(lines, "  Passed ADX≥25:", str(_stages.get("passed_adx", "N/A")))
+            _row(lines, "  Passed RSI+momentum:", str(_stages.get("passed_rsi", "N/A")))
+        _row(lines, "New long signals:", str(_n_signals))
 
         if _top5_long:
-            lines.append("  Top 5 long candidates:")
+            lines.append("  Top 5 qualifying longs:")
             for c in _top5_long:
-                score = c.get("score") or c.get("composite_score") or 0
-                rsi   = c.get("rsi") or 0
-                lines.append(f"    {c['ticker']:10s}  score={score:+.2f}  RSI={rsi:.0f}")
+                spread  = c.get("ema_spread", 0)
+                adx     = c.get("adx", 0)
+                ret10d  = c.get("ret10d_pct", 0)
+                rsi     = c.get("rsi", 0)
+                atr     = c.get("atr", 0)
+                lines.append(
+                    f"    {c['ticker']:10s}  EMA_spread={spread:+.2f}%  ADX={adx:.0f}"
+                    f"  10d={ret10d:+.1f}%  RSI={rsi:.0f}  ATR={atr:.2f}"
+                )
 
         if _top5_short:
-            lines.append("  Bottom 5 short candidates:")
+            lines.append("  Top 5 qualifying shorts:")
             for c in _top5_short:
-                score = c.get("score") or c.get("composite_score") or 0
-                rsi   = c.get("rsi") or 0
-                lines.append(f"    {c['ticker']:10s}  score={score:+.2f}  RSI={rsi:.0f}")
+                spread  = c.get("ema_spread", 0)
+                adx     = c.get("adx", 0)
+                ret10d  = c.get("ret10d_pct", 0)
+                rsi     = c.get("rsi", 0)
+                lines.append(
+                    f"    {c['ticker']:10s}  EMA_spread={spread:+.2f}%  ADX={adx:.0f}"
+                    f"  10d={ret10d:+.1f}%  RSI={rsi:.0f}"
+                )
     except Exception:
         lines.append("  Pipeline state unavailable — scan data will populate after first cycle.")
 
@@ -2545,27 +2564,42 @@ def section_live_code_params_kraken(bot_id: str, bot_name: str) -> list[str]:
 
 
 def section_live_code_params_oracle() -> list[str]:
-    """ADD 1: Live Code Parameters for Oracle bot."""
+    """ADD 1: Live Code Parameters for Oracle bot (Stock Trend Follower v1.0)."""
     lines: list[str] = []
-    _h2(lines, "LIVE CODE PARAMETERS — ORACLE #1 (ALPACA MOMENTUM)")
-    lines.append("  Source: trading-platform/execution/algo_scanner.py (constants read at report time)")
+    _h2(lines, "LIVE CODE PARAMETERS — ORACLE #1 (STOCK TREND FOLLOWER v1.0)")
+    lines.append("  Source: trading-platform/execution/algo_scanner.py")
     lines.append("")
 
-    # These are the actual constants from algo_scanner.py
-    lines.append(f"  {'MOMENTUM_WEIGHTS:':<32} 5d=0.20, 20d=0.50, 60d=0.30")
-    lines.append(f"  {'MIN_MOMENTUM_SCORE:':<32} 5.0")
-    lines.append(f"  {'RSI_LOWER:':<32} 30.0")
-    lines.append(f"  {'RSI_UPPER:':<32} 70.0")
-    lines.append(f"  {'MAX_LONG_SLOTS:':<32} 3")
-    lines.append(f"  {'MAX_SHORT_SLOTS:':<32} 1")
-    lines.append(f"  {'FIXED_FRACTION:':<32} 10.0% (until 30 closed trades)")
-    lines.append(f"  {'KELLY_CAP:':<32} 15.0% (after 30 closed trades)")
-    lines.append(f"  {'KELLY_THRESHOLD:':<32} 30 closed trades")
-    lines.append(f"  {'STOP_LOSS_FORMULA:':<32} -clamp(vol_factor × 1.5, 6%, 10%)")
-    lines.append(f"  {'TAKE_PROFIT_FORMULA:':<32} +clamp(vol_factor × 2.5, 9%, 20%)")
-    lines.append(f"  {'KILL_SWITCH_THRESHOLD:':<32} 5% daily drawdown")
-    lines.append(f"  {'CYCLE_FREQUENCY:':<32} 15 minutes during NYSE hours")
-    lines.append(f"  {'PROFIT_RESERVE_PCT:':<32} 15% of each winning trade")
+    # Import live constants from the scanner
+    try:
+        from execution.algo_scanner import (
+            STRATEGY_NAME, EMA_FAST, EMA_SLOW, ADX_PERIOD, ADX_ENTRY_MIN, ADX_EXIT_MIN,
+            ATR_PERIOD, ATR_MULTIPLIER, TRAIL_TRIGGER, RISK_PER_TRADE, MAX_POSITION_PCT,
+            MAX_LONG_SLOTS, MAX_SHORT_SLOTS, LONG_RSI_LOW, LONG_RSI_HIGH,
+            SHORT_RSI_LOW, SHORT_RSI_HIGH, MOMENTUM_DAYS,
+        )
+        lines.append(f"  {'STRATEGY:':<36} {STRATEGY_NAME}")
+        lines.append(f"  {'EMA_FAST / EMA_SLOW:':<36} EMA{EMA_FAST} / EMA{EMA_SLOW}")
+        lines.append(f"  {'ADX_PERIOD:':<36} {ADX_PERIOD}")
+        lines.append(f"  {'ADX_ENTRY_MIN (trend entry):':<36} {ADX_ENTRY_MIN}")
+        lines.append(f"  {'ADX_EXIT_MIN (trend exit):':<36} {ADX_EXIT_MIN}")
+        lines.append(f"  {'ATR_PERIOD:':<36} {ATR_PERIOD}")
+        lines.append(f"  {'ATR_MULTIPLIER (stop distance):':<36} {ATR_MULTIPLIER}×")
+        lines.append(f"  {'TRAIL_TRIGGER (profit before trail):':<36} {TRAIL_TRIGGER}× ATR")
+        lines.append(f"  {'RISK_PER_TRADE:':<36} {RISK_PER_TRADE*100:.1f}% of equity")
+        lines.append(f"  {'MAX_POSITION_PCT:':<36} {MAX_POSITION_PCT*100:.0f}% of equity (hard cap)")
+        lines.append(f"  {'MAX_LONG_SLOTS:':<36} {MAX_LONG_SLOTS}")
+        lines.append(f"  {'MAX_SHORT_SLOTS:':<36} {MAX_SHORT_SLOTS}")
+        lines.append(f"  {'LONG_RSI_RANGE:':<36} {LONG_RSI_LOW:.0f} – {LONG_RSI_HIGH:.0f}")
+        lines.append(f"  {'SHORT_RSI_RANGE:':<36} {SHORT_RSI_LOW:.0f} – {SHORT_RSI_HIGH:.0f}")
+        lines.append(f"  {'MOMENTUM_CONFIRMATION:':<36} {MOMENTUM_DAYS}-day return")
+        lines.append(f"  {'STOP_FORMULA:':<36} fill ± ATR × {ATR_MULTIPLIER}")
+        lines.append(f"  {'EXIT_CONDITIONS:':<36} trailing_stop | ema_reversal | adx_weak | max_15d")
+        lines.append(f"  {'MIN_HOLD:':<36} 4 hours (signal exits suppressed before this)")
+        lines.append(f"  {'CYCLE_FREQUENCY:':<36} 15 min during NYSE hours")
+        lines.append(f"  {'PROFIT_RESERVE_PCT:':<36} 15% of each winning trade")
+    except Exception as _ce:
+        lines.append(f"  (constants unavailable: {_ce})")
 
     # Last scan from DB
     scan_rows = _pg_query(
@@ -2576,18 +2610,17 @@ def section_live_code_params_oracle() -> list[str]:
         s = scan_rows[0]
         ts = str(s.get("ts") or "N/A")[:19]
         lines.append("")
-        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<32} {ts} UTC")
-        lines.append(f"  {'LAST_SCAN_UNIVERSE:':<32} {s.get('universe_loaded', 'N/A')} stocks loaded")
-        lines.append(f"  {'WITH_DATA:':<32} {s.get('with_data', 'N/A')} (had price/RSI data)")
-        lines.append(f"  {'PASSED_SCORE_FILTER:':<32} {s.get('passed_score', 'N/A')}")
-        lines.append(f"  {'PASSED_RSI_FILTER:':<32} {s.get('passed_rsi', 'N/A')}")
-        lines.append(f"  {'PASSED_EMA_FILTER:':<32} {s.get('passed_ema', 'N/A')}")
-        lines.append(f"  {'LONG_SIGNALS_GENERATED:':<32} {s.get('long_signals', 0)}")
-        lines.append(f"  {'SHORT_SIGNALS_GENERATED:':<32} {s.get('short_signals', 0)}")
+        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<36} {ts} UTC")
+        lines.append(f"  {'LAST_SCAN_UNIVERSE:':<36} {s.get('universe_loaded', 'N/A')} stocks loaded")
+        lines.append(f"  {'WITH_INDICATOR_DATA:':<36} {s.get('with_data', 'N/A')} (≥55 bars, valid ATR)")
+        lines.append(f"  {'PASSED_ADX≥25:':<36} {s.get('passed_score', 'N/A')}")
+        lines.append(f"  {'PASSED_RSI+MOMENTUM:':<36} {s.get('passed_rsi', 'N/A')}")
+        lines.append(f"  {'LONG_SIGNALS_GENERATED:':<36} {s.get('long_signals', 0)}")
+        lines.append(f"  {'SHORT_SIGNALS_GENERATED:':<36} {s.get('short_signals', 0)}")
         note = str(s.get("scan_note") or "none")
-        lines.append(f"  {'LAST_SCAN_ERRORS:':<32} {note[:80]}")
+        lines.append(f"  {'SCAN_NOTE:':<36} {note[:80]}")
     else:
-        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<32} No scan data in DB yet")
+        lines.append(f"  {'LAST_SCAN_TIMESTAMP:':<36} No scan data in DB yet")
 
     return lines
 

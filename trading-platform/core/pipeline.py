@@ -737,78 +737,178 @@ async def _run_pipeline_inner(
         logger.warning(f"Pipeline | Blackout check failed: {exc} — continuing")
 
     # ── Oracle Pure Momentum Scan (replaces LLM analysis cycle) ─────────────
-    # Deterministic momentum ranking — no Groq/Gemini LLM calls.
+    # Deterministic trend-following scan — no Groq/Gemini LLM calls.
+    # Strategy: Stock Trend Follower v1.0 (EMA20/EMA50 + ADX + ATR sizing).
     # Regime = "Sideways" is used as the schema label (passes validator for
     # non-LETF / non-bear-hedge tickers; momentum_equity asset_class bypasses
     # the ticker-universe check entirely).
     allocation: Union[RegimeAnalysisOutput, CryptoAnalysisOutput, None] = None
     using_fallback = False
     _oracle_short_signals: list = []
+    _oracle_stf_protected: frozenset[str] = frozenset()  # open trend positions to preserve
 
     try:
-        logger.info("Pipeline | Oracle Step 1: Pure momentum scan (no LLM)...")
-        from execution.broker import get_positions as _scan_gpos
+        logger.info("Pipeline | Oracle STF Step 1: Fetching positions + momentum universe...")
+        from execution.broker import get_positions as _scan_gpos, get_account as _scan_acct
         from analysis.schemas import RegimeAnalysisOutput as _ScanRAO, RegimeAllocationSlot as _ScanRAS
         from execution.algo_scanner import run_algo_scan as _run_scan
 
         _open_pos  = _scan_gpos()
         _open_syms = {p["symbol"] for p in _open_pos}
 
-        # ── Fetch momentum universe data before running the scan ─────────────
+        # ── One-time STF activation: liquidate all legacy Oracle positions ────
+        # On the very first cycle after deploying Stock Trend Follower v1.0,
+        # close every open Alpaca position so the new strategy starts clean.
+        # A flag file ensures this runs exactly once and never again.
+        from pathlib import Path as _FlagPath
+        _STF_FLAG = _FlagPath(__file__).parent.parent / "data" / "stf_v1_activated.flag"
+        _STF_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        if not _STF_FLAG.exists():
+            logger.warning(
+                "Pipeline | STF v1.0 ACTIVATION — closing all legacy Oracle positions at market..."
+            )
+            _CRYPTO_SKIP = frozenset({"BTCUSD", "ETHUSD", "SOLUSD", "AVAXUSD"})
+            for _liq_pos in _open_pos:
+                _liq_sym = _liq_pos["symbol"]
+                if _liq_sym in _CRYPTO_SKIP:
+                    continue
+                try:
+                    from execution.broker import close_position as _liq_close
+                    _liq_close(_liq_sym)
+                    logger.info(f"  STF liquidation: closed {_liq_sym}")
+                    # Mark trade closed in journal
+                    try:
+                        from db.postgres import get_conn as _liq_gc, is_pg_available as _liq_pg
+                        if _liq_pg():
+                            _raw_pnl = float(_liq_pos.get("unrealized_pl", 0) or 0)
+                            _cost    = float(_liq_pos.get("cost_basis", _liq_pos.get("market_value", 0) or 0))
+                            _pct     = (_raw_pnl / abs(_cost) * 100) if _cost else 0.0
+                            with _liq_gc() as _liq_c:
+                                with _liq_c.cursor() as _liq_cur:
+                                    _liq_cur.execute(
+                                        "UPDATE trades SET status='Closed_Loss', exit_reason='stf_v1_activation_liquidation', "
+                                        "realized_pnl=%s, pnl_percentage=%s "
+                                        "WHERE ticker=%s AND status='Active'",
+                                        (round(_raw_pnl, 2), round(_pct, 4), _liq_sym),
+                                    )
+                    except Exception as _liq_dbe:
+                        logger.debug(f"  STF liquidation DB update failed for {_liq_sym}: {_liq_dbe}")
+                    # Remove ratchet stop
+                    try:
+                        from execution.ratchet_stop import delete_stop as _liq_del
+                        _liq_del(_liq_sym)
+                    except Exception:
+                        pass
+                except Exception as _liq_exc:
+                    logger.error(f"  STF liquidation failed for {_liq_sym}: {_liq_exc}")
+            _STF_FLAG.write_text("STF v1.0 activated — legacy positions liquidated\n")
+            logger.info("Pipeline | STF v1.0 activation complete — flag written, new strategy live.")
+            # Refresh open positions after liquidation
+            _open_pos  = _scan_gpos()
+            _open_syms = {p["symbol"] for p in _open_pos}
+
+        # ── Fetch momentum universe data before running the scan ──────────────
         # get_cached_momentum_data() starts as None on every cold boot.
         # fetch_momentum_universe() pulls 1-year daily bars for all ~250
         # tickers from Alpaca and populates the in-process cache.
         # Without this call the scan always returns universe_scanned=0.
-        from data.yfinance_client import fetch_momentum_universe as _fetch_mom
-        logger.info("Pipeline | Oracle Step 1a: fetching momentum universe (~250 tickers)...")
+        from data.yfinance_client import fetch_momentum_universe as _fetch_mom, get_cached_momentum_data as _get_mom_cache
+        logger.info("Pipeline | Oracle STF Step 1a: fetching momentum universe (~250 tickers)...")
         await _fetch_mom()
 
-        _algo_result = _run_scan(open_symbols=_open_syms)
+        # ── Oracle Exit Manager (STF v1.0) ─────────────────────────────────
+        # Run BEFORE the entry scan so that exiting positions free their slots.
+        # Manages trailing stops and checks EMA reversal / ADX / time exits.
+        # Non-fatal — if it fails, existing positions continue unchanged.
+        _CRYPTO_SKIP = frozenset({"BTCUSD", "ETHUSD", "SOLUSD", "AVAXUSD"})
+        if _open_pos:
+            try:
+                from execution.oracle_exit_manager import (
+                    run_oracle_exit_checks as _run_exits,
+                    execute_exits as _exec_exits,
+                )
+                _mom_cache = _get_mom_cache()
+                _exit_list = _run_exits(_mom_cache, dry_run=dry_run)
+                if _exit_list:
+                    _exit_result = _exec_exits(_exit_list, dry_run=dry_run)
+                    result.setdefault("oracle_exits", []).extend(_exit_result.get("closed", []))
+                    logger.info(
+                        f"Pipeline | Oracle exits: closed={len(_exit_result.get('closed', []))} "
+                        f"errors={len(_exit_result.get('errors', []))}"
+                    )
+                    # Refresh positions after exits
+                    _open_pos  = _scan_gpos()
+                    _open_syms = {p["symbol"] for p in _open_pos}
+            except Exception as _em_exc:
+                logger.warning(f"Pipeline | Oracle exit manager failed (non-fatal): {_em_exc}")
+
+        # Positions still open after exit manager = protected from stale rotation
+        _oracle_stf_protected = frozenset(
+            sym for sym in _open_syms if sym not in _CRYPTO_SKIP
+        )
+
+        # Equity for ATR-based position sizing
+        try:
+            _stf_acct  = _scan_acct()
+            _stf_equity = float(_stf_acct.get("equity", 100_000.0) or 100_000.0)
+        except Exception:
+            _stf_equity = 100_000.0
+
+        _algo_result = _run_scan(open_symbols=_open_syms, equity=_stf_equity)
         _long_slots  = _algo_result.get("signals", [])
         _oracle_short_signals = _algo_result.get("short_signals", [])
 
         result["algo_scanner"] = {
-            "scan_type":        "pure_momentum",
+            "scan_type":        "stock_trend_follower_v1",
             "active_signals":   len(_long_slots),
             "activated":        bool(_long_slots or _oracle_short_signals),
             "universe_scanned": _algo_result.get("universe_scanned", 0),
             "top5_long":        _algo_result.get("top5_long", []),
             "top5_short":       _algo_result.get("top5_short", []),
+            "filter_stages":    _algo_result.get("filter_stages", {}),
         }
 
-        if not _long_slots:
+        if not _long_slots and not _oracle_stf_protected:
             logger.info(
-                "Pipeline | Oracle momentum scan: no long candidates pass all filters "
+                "Pipeline | Oracle STF scan: no signals and no open positions "
                 "— holding cash this cycle"
             )
             result["status"]       = "ok"
-            result["market_regime"] = "Momentum: no qualifying long candidates — holding cash"
-            _update_state(result, started, trading_mode="momentum_no_signals")
+            result["market_regime"] = "STF: no qualifying trend signals — holding cash"
+            _update_state(result, started, trading_mode="stf_no_signals")
             return result
+
+        if not _long_slots:
+            logger.info(
+                f"Pipeline | Oracle STF scan: no new entry signals (holding "
+                f"{len(_oracle_stf_protected)} open trend position(s))"
+            )
 
         _alloc_slots = [_ScanRAS.model_validate({**s, "slot": i + 1}) for i, s in enumerate(_long_slots)]
 
         allocation = _ScanRAO(
             regime="Sideways",
             regime_rationale=(
-                f"Oracle pure momentum: {len(_alloc_slots)} long signal(s), "
-                f"{len(_oracle_short_signals)} short signal(s) — "
-                f"deterministic ranking, no LLM"
+                f"Oracle STF v1.0: {len(_alloc_slots)} new long(s), "
+                f"{len(_oracle_short_signals)} short(s), "
+                f"{len(_oracle_stf_protected)} position(s) held — "
+                f"EMA20/EMA50 + ADX + ATR sizing"
             ),
             allocations=_alloc_slots,
         )
 
         logger.info(
-            f"Pipeline | Oracle scan: {len(_alloc_slots)} longs + "
-            f"{len(_oracle_short_signals)} shorts ready for execution"
+            f"Pipeline | Oracle STF: {len(_alloc_slots)} new longs + "
+            f"{len(_oracle_short_signals)} shorts + "
+            f"{len(_oracle_stf_protected)} held positions — proceeding to execution"
         )
 
     except Exception as exc:
-        logger.error(f"Pipeline | Oracle momentum scan FAILED: {exc}")
+        logger.error(f"Pipeline | Oracle STF scan FAILED: {exc}")
         result["status"] = "analysis_failed"
-        result["errors"].append(f"Momentum scan failed: {exc}")
+        result["errors"].append(f"STF scan failed: {exc}")
         _persist_emergency_regime(spy_override, spy_change, cycle_num)
-        _update_state(result, started, trading_mode="momentum_error")
+        _update_state(result, started, trading_mode="stf_error")
         return result
 
     # ── Build allocation summary (same path for fresh and fallback allocations) ──
@@ -846,7 +946,13 @@ async def _run_pipeline_inner(
         logger.info("Pipeline | Step 2: Executing allocations...")
         _pipeline_regime = str(allocation.regime) if hasattr(allocation, "regime") else _state.get("last_regime")
         _ah_reserved = float(result.get("afterhours_reserved_cash", 0.0))
-        exec_result = execute_allocations(allocation, dry_run=dry_run, regime_label=_pipeline_regime, reserved_cash=_ah_reserved)
+        exec_result = execute_allocations(
+            allocation,
+            dry_run=dry_run,
+            regime_label=_pipeline_regime,
+            reserved_cash=_ah_reserved,
+            additional_protected=_oracle_stf_protected,
+        )
         result["execution"] = {
             "placed":  len(exec_result["placed"]),
             "closed":  len(exec_result["closed"]),

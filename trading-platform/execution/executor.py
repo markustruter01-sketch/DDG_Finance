@@ -118,6 +118,7 @@ def execute_allocations(
     dry_run: bool = False,
     regime_label: str | None = None,
     reserved_cash: float = 0.0,
+    additional_protected: frozenset | None = None,
 ) -> dict:
     logger.info("=" * 60)
     logger.info("EXECUTION CYCLE STARTING")
@@ -169,7 +170,9 @@ def execute_allocations(
 
     is_crypto_only = isinstance(output, CryptoAnalysisOutput)
 
-    protected_symbols: set[str] = set()  # Oracle v3.0: no protected vault symbols
+    # Merge STF-protected positions: open trend positions that the exit manager
+    # has NOT scheduled for exit are kept running and must never be stale-rotated.
+    protected_symbols: set[str] = set(additional_protected or frozenset())
 
     active_tickers_raw = {
         a.ticker for a in output.allocations

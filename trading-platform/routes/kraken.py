@@ -148,6 +148,8 @@ async def kraken_status(bot_id: str | None = None) -> dict:
             }
 
             equity       = round(hb.get("equity_usd", 0), 2)
+            if equity <= 0:
+                equity = float(starting)
             deployed_usd = equity - cash_usd if equity > cash_usd else 0.0
             deployed_pct = round((deployed_usd / equity) * 100, 1) if equity > 0 else 0.0
 

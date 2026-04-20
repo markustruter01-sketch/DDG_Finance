@@ -534,7 +534,7 @@ def audit_zscore_kraken(audit_mode: str = "full") -> int:
                     bot_output=bot_z, auditor_output=ref_z,
                     notes=(
                         f"Formula cross-check for {symbol} ({cfg['timeframe']} bars, window={cfg['window']}). "
-                        "Both bot formula and reference computed on identical fresh OHLCV — "
+                        "Both bot formula and reference computed on identical fresh OHLCV and rounded to 4 decimal places — "
                         "any discrepancy >1% indicates a real formula bug (ddof, window, price type)."
                     ),
                     audit_mode=audit_mode,

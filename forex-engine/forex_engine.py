@@ -883,6 +883,36 @@ def _run_cycle_inner() -> dict:
     return _state
 
 
+def _write_navigator_heartbeat() -> None:
+    """Write Navigator equity to kraken_heartbeat so fleet monitor can see it."""
+    try:
+        import psycopg2 as _pg2_hb, os as _os_hb
+        _dsn = _os_hb.environ.get("DATABASE_URL")
+        if not _dsn:
+            return
+        equity = get_paper_equity(current_prices=_latest_prices)
+        positions = get_paper_positions()
+        _hb_conn = _pg2_hb.connect(_dsn)
+        try:
+            with _hb_conn.cursor() as _cur:
+                _cur.execute("""
+                    INSERT INTO kraken_heartbeat
+                        (id, bot_id, equity_usd, position_count,
+                         status, bot_paused, last_updated)
+                    VALUES (6, 'navigator', %s, %s, 'running', FALSE, NOW())
+                    ON CONFLICT (id) DO UPDATE SET
+                        equity_usd     = EXCLUDED.equity_usd,
+                        position_count = EXCLUDED.position_count,
+                        status         = EXCLUDED.status,
+                        last_updated   = NOW()
+                """, (round(equity, 2), len(positions)))
+            _hb_conn.commit()
+        finally:
+            _hb_conn.close()
+    except Exception as exc:
+        logger.debug(f"Navigator | Heartbeat write failed (non-fatal): {exc}")
+
+
 def _write_heartbeat():
     equity = get_paper_equity(current_prices=_latest_prices)
     positions = get_paper_positions()
@@ -898,6 +928,7 @@ def _write_heartbeat():
         news_blackout=_state.get("news_blackout", False),
         error=_state.get("error"),
     )
+    _write_navigator_heartbeat()
 
 
 def _write_live_state():

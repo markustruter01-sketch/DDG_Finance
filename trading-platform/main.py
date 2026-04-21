@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI):
         try:
             import psycopg2 as _pg2eq, os as _oseq
             _dburlq = _oseq.environ.get("DATABASE_URL")
-            kraken_eq = 0.0
+            kraken_eq = 0.0  # Kraken bots run in a separate process — equity read from kraken_heartbeat DB table
             if _dburlq:
                 _eqconn = _pg2eq.connect(_dburlq)
                 try:

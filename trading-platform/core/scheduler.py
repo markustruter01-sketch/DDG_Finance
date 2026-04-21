@@ -39,6 +39,35 @@ _scheduler: AsyncIOScheduler | None = None
 _auto_trading_enabled: bool = True
 _last_reset_date: date | None = None
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ARCHITECTURAL NOTE — KRAKEN BOT PROCESS ISOLATION
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# The Kraken crypto bots (Davy Jones, Blackbeard, Calypso, Apex Predator,
+# Poseidon, Kraken Current) run in a SEPARATE PROCESS from this trading-platform
+# FastAPI/APScheduler process.
+#
+# Consequences:
+#   1. If this process crashes, the Kraken bots continue trading unattended.
+#      The math auditor, kill switch, and health monitor all stop — but Kraken
+#      bots keep running their own internal circuit breakers independently.
+#
+#   2. If the Kraken bot process crashes, this scheduler has no visibility.
+#      The kraken_heartbeat table going stale (>30 min) is the only signal.
+#      The degradation_tracker will alert on stale heartbeat within 5 min
+#      (TTL fixed from 1800s to 300s in audit fix F11).
+#
+#   3. There is no cross-process kill switch. A manual trip of the Alpaca
+#      kill switch does NOT stop Kraken bots. Use the /rebalance endpoint
+#      or directly pause each Kraken bot via its control file.
+#
+#   4. The math auditor runs in THIS process and cannot reach the Kraken bot
+#      process directly — it reads Kraken results from the DB only.
+#
+# Monitoring: kraken_heartbeat.last_updated must be < 30 min old per bot.
+# Alert threshold: 5 min stale (degradation_tracker _EVENT_TTL["kraken_api"]["stale"]).
+# ══════════════════════════════════════════════════════════════════════════════
+
 
 def get_scheduler() -> AsyncIOScheduler:
     global _scheduler

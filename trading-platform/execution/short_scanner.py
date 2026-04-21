@@ -75,6 +75,76 @@ _algo_short_state: dict[str, dict] = {}
 # Format: { "SPY": { "entry_price": float, "qty": int, "best_price": float, "entered_at": str } }
 
 
+def _load_short_state() -> None:
+    """Load persisted algo short positions from DB on startup."""
+    global _algo_short_state
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS algo_short_positions (
+                        symbol TEXT PRIMARY KEY,
+                        entry_price DOUBLE PRECISION NOT NULL,
+                        qty INTEGER NOT NULL,
+                        best_price DOUBLE PRECISION NOT NULL,
+                        entered_at TEXT NOT NULL,
+                        order_id TEXT
+                    )
+                """)
+                cur.execute("SELECT symbol, entry_price, qty, best_price, entered_at, order_id FROM algo_short_positions")
+                rows = cur.fetchall()
+                for row in rows:
+                    _algo_short_state[row[0]] = {
+                        "entry_price": row[1], "qty": row[2],
+                        "best_price": row[3], "entered_at": row[4], "order_id": row[5],
+                    }
+            conn.commit()
+        if _algo_short_state:
+            logger.info(f"ShortScanner | Loaded {len(_algo_short_state)} persisted short position(s) from DB")
+    except Exception as exc:
+        logger.warning(f"ShortScanner | Failed to load short state from DB: {exc}")
+
+
+def _save_short_position(symbol: str, state: dict) -> None:
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO algo_short_positions (symbol, entry_price, qty, best_price, entered_at, order_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        best_price = EXCLUDED.best_price,
+                        entered_at = EXCLUDED.entered_at
+                """, (symbol, state["entry_price"], state["qty"],
+                      state["best_price"], state["entered_at"], state.get("order_id")))
+            conn.commit()
+    except Exception as exc:
+        logger.debug(f"ShortScanner | State save failed for {symbol}: {exc}")
+
+
+def _delete_short_position(symbol: str) -> None:
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM algo_short_positions WHERE symbol = %s", (symbol,))
+            conn.commit()
+    except Exception as exc:
+        logger.debug(f"ShortScanner | State delete failed for {symbol}: {exc}")
+
+
+# Load persisted state on module import
+_load_short_state()
+
+
 # ── Signal computation ───────────────────────────────────────────────────────
 
 def _fetch_hourly_bars(ticker: str, n_bars: int = LOOKBACK_HOURS) -> Optional[list[float]]:
@@ -348,6 +418,7 @@ def _try_enter_short(
             "entered_at":  datetime.now(timezone.utc).isoformat(),
             "dry_run":     True,
         }
+        _save_short_position(ticker, _algo_short_state[ticker])
         return {
             "action":  "short_entry",
             "ticker":  ticker,
@@ -368,6 +439,7 @@ def _try_enter_short(
             "entered_at":  datetime.now(timezone.utc).isoformat(),
             "order_id":    order.get("id"),
         }
+        _save_short_position(ticker, _algo_short_state[ticker])
 
         # Place ATR stop-buy above fill
         from execution.ratchet_stop import initialise_ratchet_stop
@@ -437,6 +509,7 @@ def _try_exit_short(
         if ticker in _algo_short_state:
             logger.info(f"ShortScanner | {ticker} short position gone — removing state")
             _algo_short_state.pop(ticker, None)
+            _delete_short_position(ticker)
         return None
 
     current_price = float(pos.get("current_price", signals["close"]))
@@ -475,6 +548,7 @@ def _try_exit_short(
 
     if dry_run:
         _algo_short_state.pop(ticker, None)
+        _delete_short_position(ticker)
         return {"action": "short_exit", "ticker": ticker, "reason": reason, "dry_run": True}
 
     # Capture entry timestamp BEFORE deletion (needed for time-in-trade calc)
@@ -493,6 +567,7 @@ def _try_exit_short(
         delete_stop(ticker)
         delete_position_entry(ticker)   # Remove entry timestamp; fresh ts on next open
         _algo_short_state.pop(ticker, None)
+        _delete_short_position(ticker)
         logger.info(f"ShortScanner | {ticker} covered: {reason}")
 
         # ── RAG Memory Phase 2: generate and persist algo-cover lesson ─────

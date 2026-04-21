@@ -291,15 +291,12 @@ def evaluate_pair_signal(
     if len(prices_a) < 30 or len(prices_b) < 30:
         return result
 
-    # Compute log prices
-    log_a = [math.log(p) for p in prices_a if p > 0]
-    log_b = [math.log(p) for p in prices_b if p > 0]
-    if len(log_a) < 30 or len(log_b) < 30:
+    # Spread series — delegate to calculate_spread_series so alignment logic
+    # lives in one place: zip(prices_a, prices_b) filtering out any bar where
+    # either price is non-positive.
+    spread_series = calculate_spread_series(prices_a, prices_b, hedge_ratio)
+    if len(spread_series) < 30:
         return result
-
-    # Spread series
-    n = min(len(log_a), len(log_b))
-    spread_series = [log_a[i] - hedge_ratio * log_b[i] for i in range(n)]
 
     # Z-score
     zscore = calculate_zscore(spread_series, zscore_lookback)

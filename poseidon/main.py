@@ -236,8 +236,16 @@ def recalculate_hedge_ratio(pair: dict) -> dict | None:
     prices_b = prices_b[-n:]
 
     import math as _math
-    log_a = [_math.log(p) for p in prices_a if p > 0]
-    log_b = [_math.log(p) for p in prices_b if p > 0]
+    # Zip-align before taking logs so log_a[i] and log_b[i] always correspond
+    # to the same bar; independent filtering can produce lists of different
+    # lengths if one asset has a zero/missing price the other doesn't.
+    aligned_logs = [
+        (_math.log(pa), _math.log(pb))
+        for pa, pb in zip(prices_a, prices_b)
+        if pa > 0 and pb > 0
+    ]
+    log_a = [t[0] for t in aligned_logs]
+    log_b = [t[1] for t in aligned_logs]
 
     hedge = ols_hedge_ratio(log_a, log_b)
     spreads = calculate_spread_series(prices_a, prices_b, hedge)

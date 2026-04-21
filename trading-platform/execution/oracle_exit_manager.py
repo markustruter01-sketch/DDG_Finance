@@ -416,7 +416,14 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
                 pos     = all_positions.get(symbol, {})
                 raw_pnl = float(pos.get("unrealized_pl", 0) or 0)
                 cost    = float(pos.get("cost_basis",    0) or 0)
-                pnl_pct = (raw_pnl / abs(cost) * 100) if cost else 0.0
+                if cost:
+                    pnl_pct = raw_pnl / abs(cost) * 100
+                elif raw_pnl > 0:
+                    pnl_pct = 1.0    # cost_basis unavailable — use sign of raw P&L, small positive sentinel
+                elif raw_pnl < 0:
+                    pnl_pct = -1.0   # cost_basis unavailable — use sign of raw P&L, small negative sentinel
+                else:
+                    pnl_pct = 0.0    # flat exit
                 close_trade(
                     trade_id=trade_id,
                     pnl_percentage=round(pnl_pct, 4),

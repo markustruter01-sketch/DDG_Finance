@@ -216,6 +216,8 @@ def update_trade_outcome(
     pnl_percentage: float,
     realized_pnl: float | None = None,
 ) -> None:
+    # pnl_percentage sign determines win/loss — real dollar P&L is in realized_pnl.
+    # When cost_basis is unavailable from Alpaca, pnl_percentage is ±1.0 sentinel.
     status = "Closed_Win" if pnl_percentage >= 0 else "Closed_Loss"
 
     if _use_pg():
@@ -274,6 +276,8 @@ def close_trade(
     close_price         : fill price at close — used to compute slippage_pct
                           relative to intended_price stored at entry
     """
+    # pnl_percentage sign determines win/loss — real dollar P&L is in realized_pnl.
+    # When cost_basis is unavailable from Alpaca, pnl_percentage is ±1.0 sentinel.
     status = "Closed_Win" if pnl_percentage >= 0 else "Closed_Loss"
 
     if _use_pg():

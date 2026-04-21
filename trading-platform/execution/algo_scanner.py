@@ -71,7 +71,7 @@ ADX_EXIT_MIN     = 20.0   # exit when ADX falls below this (used by exit manager
 ATR_PERIOD       = 14
 ATR_MULTIPLIER   = 2.0    # stop = ATR × 2.0 below/above entry
 
-TRAIL_TRIGGER    = 1.5    # trailing stop activates after profit ≥ ATR × 1.5
+TRAIL_TRIGGER    = 2.5    # trailing stop activates after profit ≥ ATR × 2.5
 
 RISK_PER_TRADE   = 0.015  # 1.5% of equity per trade
 MAX_POSITION_PCT = 0.20   # hard cap 20% per position

@@ -234,15 +234,21 @@ def _check_position(
         )
         return
 
+    # Unrealised P&L for profit-buffer gates below.
+    unrealized_pnl = float(pos.get("unrealized_pl", 0) or 0)
+
     # ── 2. EMA crossover reversal ─────────────────────────────────────────────
+    # EMA reversal — only exit if position is in profit.
+    # An EMA crossover on a losing position is noise at this timeframe.
+    # Let the hard stop handle losers — don't stack two exit signals on a down move.
     ema_reversed = (
         (side == "long"  and ema20 < ema50) or
         (side == "short" and ema20 > ema50)
     )
-    if ema_reversed:
+    if ema_reversed and unrealized_pnl > 0:
         logger.warning(
             f"ExitManager | {symbol} ({side}): EMA REVERSAL — "
-            f"EMA20={ema20:.3f} EMA50={ema50:.3f}"
+            f"EMA20={ema20:.3f} EMA50={ema50:.3f} unrealized_pnl=${unrealized_pnl:.2f}"
         )
         exits.append({
             "symbol":      symbol,
@@ -253,10 +259,12 @@ def _check_position(
         return
 
     # ── 3. ADX weakness ───────────────────────────────────────────────────────
-    if adx > 0 and adx < ADX_EXIT_MIN:
+    # ADX weakness — only exit if position is in profit.
+    # An ADX fade on a losing position is noise — let the stop manage the loss.
+    if adx > 0 and adx < ADX_EXIT_MIN and unrealized_pnl > 0:
         logger.warning(
             f"ExitManager | {symbol} ({side}): ADX WEAK — "
-            f"ADX={adx:.1f} < {ADX_EXIT_MIN}"
+            f"ADX={adx:.1f} < {ADX_EXIT_MIN} unrealized_pnl=${unrealized_pnl:.2f}"
         )
         exits.append({
             "symbol":      symbol,

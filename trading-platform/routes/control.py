@@ -37,9 +37,11 @@ control_router = APIRouter()
 KRAKEN_FEE_PCT = 0.0026
 
 _KRAKEN_BOTS = {
-    "davy-jones": 1,
-    "blackbeard": 2,
-    "calypso":    3,
+    "davy-jones":     1,
+    "blackbeard":     2,
+    "calypso":        3,
+    "poseidon":       7,
+    "kraken-current": 8,
 }
 
 

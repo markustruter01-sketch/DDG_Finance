@@ -177,6 +177,54 @@ def compute_daily_var(
         return 0.0
 
     if len(portfolio_pnl) < 5:
+        # Portfolio has insufficient price history — compute ATR-based proxy VaR
+        # by summing per-position estimates. Prevents circuit breaker blindness
+        # on day-1 or newly-added positions.
+        proxy_var_total = 0.0
+        try:
+            import yfinance as _yf_proxy
+            confidence_z = 1.645 if confidence >= 0.95 else 1.282
+            for p in valid:
+                ticker = p.get("symbol") or p.get("ticker") or ""
+                position_value = abs(float(p.get("market_value") or 0))
+                if not ticker or position_value <= 0:
+                    continue
+                try:
+                    _hist = _yf_proxy.Ticker(ticker).history(period="30d", interval="1d")
+                    if len(_hist) < 14:
+                        continue
+                    _closes = _hist["Close"].tolist()
+                    _highs  = _hist["High"].tolist()
+                    _lows   = _hist["Low"].tolist()
+                    # Wilder ATR
+                    _trs = []
+                    for _i in range(1, len(_closes)):
+                        _tr = max(
+                            _highs[_i] - _lows[_i],
+                            abs(_highs[_i] - _closes[_i - 1]),
+                            abs(_lows[_i]  - _closes[_i - 1]),
+                        )
+                        _trs.append(_tr)
+                    if len(_trs) >= 14:
+                        _atr = sum(_trs[:14]) / 14
+                        for _j in range(14, len(_trs)):
+                            _atr = (_atr * 13 + _trs[_j]) / 14
+                        if _atr > 0 and _closes[-1] > 0:
+                            atr_pct = _atr / _closes[-1]
+                            proxy_var_total += position_value * atr_pct * confidence_z
+                            logger.debug(
+                                f"VaR | {ticker} ATR proxy: "
+                                f"atr_pct={atr_pct:.4f} "
+                                f"contribution=${position_value * atr_pct * confidence_z:,.2f}"
+                            )
+                except Exception as _pe:
+                    logger.debug(f"VaR | ATR proxy failed for {ticker}: {_pe}")
+        except Exception as _ve:
+            logger.debug(f"VaR | ATR proxy block failed: {_ve}")
+
+        if proxy_var_total > 0:
+            logger.info(f"VaR | Returning ATR proxy VaR=${proxy_var_total:,.2f} (insufficient price history)")
+            return proxy_var_total
         return 0.0
 
     # ── Historical simulation VaR ─────────────────────────────────────────────

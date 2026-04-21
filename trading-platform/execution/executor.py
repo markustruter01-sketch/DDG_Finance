@@ -486,28 +486,6 @@ def _execute_slot(
         })
         return results, remaining_cash
 
-    # ── Gemini Auditor Veto Gate ──────────────────────────────────────────────
-    # Read daily veto_conditions.json written by gemini_auditor.py (Task #26).
-    # Fail-open: if the file doesn't exist or is unparseable, is_vetoed()
-    # returns False and trading proceeds normally.
-    # SGOV and JEPQ (vault/cash tickers) are exempt from veto logic.
-    if ticker not in (CASH_TICKER, VAULT_TICKER):
-        try:
-            from core.veto_enforcer import is_vetoed as _is_vetoed
-            if _is_vetoed(ticker):
-                logger.warning(
-                    f"Veto Block | Slot {slot.slot}: {ticker} — "
-                    f"blocked by Gemini auditor veto conditions"
-                )
-                results["skipped"].append({
-                    "slot":   slot.slot,
-                    "ticker": ticker,
-                    "reason": "gemini_veto_block",
-                })
-                return results, remaining_cash
-        except Exception as _ve:
-            logger.debug(f"Executor | Veto check failed (non-fatal): {_ve}")
-
     # ── SGOV with non-zero kelly: Leveraged Fence Sweep ─────────────────────
     # These slots are injected by the allocator when the leveraged_risk group
     # exceeds the 20% cap. Buy SGOV directly — no heat/wash-sale checks needed.

@@ -178,7 +178,8 @@ def _liquidate_kraken_positions() -> dict:
         logger.error(f"Rebalance | Kraken liquidation DB error: {exc}")
         errors.append({"bot": "all", "error": str(exc)})
 
-    for bid in _KRAKEN_BOTS:
+    _KRAKEN_BOT_CONTROL_IDS = {"davy-jones", "blackbeard", "calypso"}
+    for bid in _KRAKEN_BOT_CONTROL_IDS:
         ctrl_path = _Path(f"../kraken-bot/{bid}_control.json")
         try:
             ctrl_data = {}

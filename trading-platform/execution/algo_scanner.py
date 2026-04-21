@@ -175,6 +175,12 @@ def _kelly_from_atr(equity: float, atr: float, price: float) -> float:
     position_value = shares × price → fraction = min(pv / equity, 20%)
     """
     if atr <= 0 or price <= 0 or equity <= 0:
+        if atr <= 0:
+            logger.warning(
+                f"AlgoScanner | kelly_from_atr: ATR={atr} for price={price:.4f} — "
+                f"signal will be silently skipped by executor (zero kelly). "
+                f"Check yfinance data quality for this ticker."
+            )
         return 0.0
     risk_amount    = equity * RISK_PER_TRADE
     stop_distance  = atr * ATR_MULTIPLIER
@@ -401,7 +407,13 @@ def scan_trend_signals(
     short_signals: list[dict] = []
 
     for i, c in enumerate(long_fresh[:MAX_LONG_SLOTS]):
-        kelly    = _kelly_from_atr(equity, c["atr"], c["price"])
+        kelly = _kelly_from_atr(equity, c["atr"], c["price"])
+        if kelly <= 0:
+            logger.warning(
+                f"AlgoScanner | Dropping {c['ticker']} from long signals — kelly=0 (ATR={c['atr']:.4f}). "
+                f"Signal generated but would be silently skipped by executor."
+            )
+            continue
         stop_pct = -round(c["atr"] * ATR_MULTIPLIER / c["price"], 4)
         long_signals.append({
             "slot":             i + 1,
@@ -428,7 +440,13 @@ def scan_trend_signals(
         )
 
     for i, c in enumerate(short_fresh[:MAX_SHORT_SLOTS]):
-        kelly    = _kelly_from_atr(equity, c["atr"], c["price"])
+        kelly = _kelly_from_atr(equity, c["atr"], c["price"])
+        if kelly <= 0:
+            logger.warning(
+                f"AlgoScanner | Dropping {c['ticker']} from short signals — kelly=0 (ATR={c['atr']:.4f}). "
+                f"Signal generated but would be silently skipped by executor."
+            )
+            continue
         stop_pct = round(c["atr"] * ATR_MULTIPLIER / c["price"], 4)
         short_signals.append({
             "slot":             i + 1,

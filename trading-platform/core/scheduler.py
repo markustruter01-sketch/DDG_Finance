@@ -139,7 +139,7 @@ async def _intraday_cycle() -> None:
             logger.error(f"Scheduler | Failed to reset kill switch: {exc}")
 
     try:
-        result = await run_pipeline(force=True, dry_run=False)
+        result = await run_pipeline(force=False, dry_run=False)
         logger.info(f"Scheduler | intraday_cycle complete: status={result['status']}")
     except Exception as exc:
         logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")

@@ -30,13 +30,13 @@ from loguru import logger
 # HTTP error events need fast re-alerting: 5 min.
 # Everything else defaults to 15 min.
 _EVENT_TTL: dict[tuple[str, str], int] = {
-    ("kraken_api",    "stale"):  1800,  # 30 min — stale data fires every 2 min when bot is unhealthy
-    ("platform_core", "stale"):  1800,  # 30 min — scheduler stall persists for hours
-    ("http",          "500"):     300,  # 5 min  — server errors may be transient; re-alert quickly
-    ("http",          "503"):     300,  # 5 min  — service-unavailable (e.g. AI rate-limit)
+    ("kraken_api",    "stale"):   300,  # 5 min — stale data during trading is critical
+    ("platform_core", "stale"):   300,  # 5 min — scheduler stall needs fast re-alerting
+    ("http",          "500"):     300,  # 5 min
+    ("http",          "503"):     300,  # 5 min
 }
 _DEFAULT_TTL = 900   # 15 min for all other (component, error_type) pairs
-_MAX_TTL     = 14400  # cap escalation at 4 h
+_MAX_TTL     = 300   # cap escalation at 5 min for trading-critical components
 
 # key → last recorded timestamp
 _recent_keys: dict[str, float] = {}

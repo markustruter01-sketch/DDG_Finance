@@ -3314,11 +3314,15 @@ def main() -> None:
                 f"(limit={LOSS_STREAK_LIMIT})"
             )
             if _streak >= LOSS_STREAK_LIMIT:
-                _pending_emergency_rebalance = True
+                # Emergency Gemini rebalance is permanently disabled (fleet_enforcer disabled).
+                # Log the streak condition but do NOT queue a rebalance — it would burn
+                # Gemini tokens on every restart with zero effect since enforcement is off.
                 logger.warning(
                     f"LossStreak | Streak {_streak} >= limit on startup — "
-                    f"Gemini emergency rebalance queued for first cycle (no cooldown)"
+                    f"emergency rebalance suppressed (Gemini enforcement permanently disabled). "
+                    f"Review strategy parameters manually if streak persists."
                 )
+                # _pending_emergency_rebalance intentionally NOT set
         elif _last_er_at is not None:
             logger.info(
                 f"LossStreak | All recent losses predate last emergency rebalance "

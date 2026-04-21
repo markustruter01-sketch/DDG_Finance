@@ -121,7 +121,7 @@ def _adx(
             trs.append(max(hl, hpc, lpc))
 
         def _smooth(series: list[float], p: int) -> list[float]:
-            r = [sum(series[:p])]
+            r = [sum(series[:p]) / p]
             for v in series[p:]:
                 r.append(r[-1] - r[-1] / p + v)
             return r

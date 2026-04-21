@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "GBP_USD",
+    "pnl_pct": 0,
+    "pnl_usd": 48.75,
+    "side": "SELL",
+    "reason": "take_profit",
+    "timestamp": "2026-04-21T20:07:03.918309+00:00"
+  }
+]

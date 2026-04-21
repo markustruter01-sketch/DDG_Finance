@@ -1,5 +1,5 @@
 {
-  "cash": 1054.7814116881236,
+  "cash": 988.0507263797372,
   "positions": {
     "CC/USD": {
       "symbol": "CC/USD",
@@ -62,7 +62,7 @@
       "ema_fast": 0.1697154186579083,
       "ema_slow": 0.1635599952013329,
       "adx": 33.13922835589356,
-      "best_price": 0.1741,
+      "best_price": 0.174176,
       "stop_level": 0.1674535425445358,
       "trail_immediate": false,
       "trailing_active": false,
@@ -72,23 +72,23 @@
     "XRP/USD": {
       "symbol": "XRP/USD",
       "direction": "long",
-      "units": 14014.574664512567,
-      "entry_price": 1.42825,
-      "stop_distance": 0.04166415564582687,
-      "position_value": 20016.316264590074,
-      "ema_fast": 1.4256793663359242,
-      "ema_slow": 1.3913201997143514,
+      "units": 13988.446710946824,
+      "entry_price": 1.42467,
+      "stop_distance": 0.04224701278868403,
+      "position_value": 19928.920375684615,
+      "ema_fast": 1.4253384139549719,
+      "ema_slow": 1.3912493086252424,
       "adx": 25.53036917526138,
-      "best_price": 1.42825,
-      "stop_level": 1.3865858443541732,
+      "best_price": 1.42467,
+      "stop_level": 1.382422987211316,
       "trail_immediate": false,
       "trailing_active": false,
-      "opened_at": "2026-04-21T00:06:17.904280+00:00",
-      "fees_paid": 52.04242228793419
+      "opened_at": "2026-04-21T02:16:52.058439+00:00",
+      "fees_paid": 51.81519297678
     }
   },
-  "total_trades": 13,
+  "total_trades": 14,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-21T00:06:17.904365+00:00"
+  "updated_at": "2026-04-21T02:16:52.058506+00:00"
 }

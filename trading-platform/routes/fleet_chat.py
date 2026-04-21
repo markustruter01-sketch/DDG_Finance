@@ -31,6 +31,9 @@ from analysis.gemini_auditor import (
     _is_daily_quota_error,
     _gemini_retry_wait,
 )
+# fleet_enforcer imports — used for MANUAL operator-approved parameter writes via chat UI only.
+# Automatic enforcement in run_fleet_commander() is permanently disabled.
+# This import path remains intentionally active for human-in-the-loop overrides.
 from analysis.fleet_enforcer import (
     BOUNDS, STEPS, BOT_ID_TO_DB_ID, FEE_FLOOR,
     _load_current_kraken_params, _write_kraken_params, _clamp, _limit_step,
@@ -613,6 +616,11 @@ async def fleet_chat_approve(request: ApproveRequest) -> dict:
 
         if applied:
             reasoning = rec.get("reasoning", "Manual chat approval")
+            logger.warning(
+                "FleetChat | Operator-approved parameter write via chat UI — "
+                "this bypasses automatic enforcement guards. "
+                "Verify recommended values before approving."
+            )
             ok = _write_kraken_params(db_id, bot_id, new_params, f"manual_chat: {reasoning}")
             if ok:
                 changes_applied.append({"bot_id": bot_id, "changes": applied})
@@ -734,6 +742,11 @@ async def _handle_reset_defaults() -> dict:
                 changes[pname] = {"before": cur_val, "after": stepped, "target_default": default_val}
 
         if changes:
+            logger.warning(
+                "FleetChat | Operator-approved parameter write via chat UI — "
+                "this bypasses automatic enforcement guards. "
+                "Verify recommended values before approving."
+            )
             ok = _write_kraken_params(db_id, bot_id, new_params, "manual_chat: reset_to_defaults")
             if ok:
                 reset_results.append({"bot_id": bot_id, "changes": changes})

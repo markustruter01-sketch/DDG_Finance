@@ -122,9 +122,15 @@ CYCLICAL_SECTORS: set[str] = {
     "international_adrs",
 }
 
+# Inverse ETFs are excluded from the momentum scan universe.
+# Oracle shorting an inverse ETF creates leveraged long exposure (e.g. shorting SQQQ = leveraged long QQQ).
+# They remain in INVERSE_BEAR_ETFS for use by the allocator's bear hedge logic only.
+_SCAN_EXCLUDED_SECTORS = {"inverse_bear_etfs"}
+
 FULL_UNIVERSE: list[str] = []
-for _sector_tickers in ALL_SECTORS.values():
-    FULL_UNIVERSE.extend(_sector_tickers)
+for _sector_name, _sector_tickers in ALL_SECTORS.items():
+    if _sector_name not in _SCAN_EXCLUDED_SECTORS:
+        FULL_UNIVERSE.extend(_sector_tickers)
 
 TICKER_TO_SECTOR: dict[str, str] = {}
 for _sector_name, _sector_tickers in ALL_SECTORS.items():

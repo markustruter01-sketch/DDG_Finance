@@ -4291,12 +4291,12 @@ def _save_current_report_state_to_file() -> None:
     if eq_rows:
         eq = eq_rows[0]
         state["equity"] = {
-            "Oracle":         float(eq.get("alpaca_equity") or 100000),
-            "Kraken fleet":   float(eq.get("kraken_equity") or 300000),
-            "Apex Predator":  float(eq.get("options_equity") or 100000),
-            "Navigator":      float(eq.get("forex_equity") or 100000),
-            "Poseidon":       float(eq.get("poseidon_equity") or 100000),
-            "Kraken Current": float(eq.get("kraken_current_equity") or 100000),
+            "Oracle":         float(eq.get("alpaca_equity") or 0.0),
+            "Kraken fleet":   float(eq.get("kraken_equity") or 0.0),
+            "Apex Predator":  float(eq.get("options_equity") or 0.0),
+            "Navigator":      float(eq.get("forex_equity") or 0.0),
+            "Poseidon":       float(eq.get("poseidon_equity") or 0.0),
+            "Kraken Current": float(eq.get("kraken_current_equity") or 0.0),
         }
 
     # Params snapshot

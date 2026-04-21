@@ -197,25 +197,27 @@ def _compute_zscore(closes: list[float]) -> float:
 
 
 def _compute_rsi(closes: list[float], period: int = ATR_PERIOD) -> float:
-    """Wilder RSI."""
+    """Wilder's RSI with recursive smoothing — consistent with algo_scanner.py and Kraken bots."""
     if len(closes) < period + 1:
         return 50.0
-    gains, losses = [], []
-    for i in range(1, len(closes)):
-        delta = closes[i] - closes[i - 1]
-        if delta >= 0:
-            gains.append(delta)
-            losses.append(0.0)
-        else:
-            gains.append(0.0)
-            losses.append(-delta)
 
-    avg_gain = float(np.mean(gains[-period:]))
-    avg_loss = float(np.mean(losses[-period:]))
+    changes = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains = [max(c, 0.0) for c in changes]
+    losses = [abs(min(c, 0.0)) for c in changes]
+
+    # Seed with simple average of first `period` bars
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+
+    # Wilder's recursive smoothing for remaining bars
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
     if avg_loss < 1e-10:
         return 100.0
     rs = avg_gain / avg_loss
-    return 100.0 - (100.0 / (1.0 + rs))
+    return round(100.0 - (100.0 / (1.0 + rs)), 2)
 
 
 def _compute_atr(closes: list[float]) -> float:

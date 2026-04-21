@@ -382,7 +382,7 @@ def scan_trend_signals(
             "rsi":        round(c["rsi"] or 0, 1),
             "atr":        round(c["atr"], 3),
         }
-        for c in long_cands[:5]
+        for c in long_fresh[:5]
     ]
     top5_short = [
         {
@@ -393,7 +393,7 @@ def scan_trend_signals(
             "rsi":        round(c["rsi"] or 0, 1),
             "atr":        round(c["atr"], 3),
         }
-        for c in short_cands[:5]
+        for c in short_fresh[:5]
     ]
 
     # ── Build final signal lists ──────────────────────────────────────────────

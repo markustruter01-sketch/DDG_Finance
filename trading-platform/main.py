@@ -138,21 +138,21 @@ async def lifespan(app: FastAPI):
             fx = _get_forex_engine()
             if fx:
                 fx_state = fx.get_state()
-                forex_eq = float(fx_state.get("paper_equity", 0)) or 100_000.0
+                forex_eq = float(fx_state.get("paper_equity", 0)) or 0.0
         except Exception:
-            forex_eq = 100_000.0
-        poseidon_eq = 100_000.0
-        kc_eq = 100_000.0
+            forex_eq = 0.0
+        poseidon_eq = 0.0
+        kc_eq = 0.0
         try:
             if _dburlq:
                 _ps_conn = _pg2eq.connect(_dburlq)
                 try:
                     with _ps_conn.cursor() as _pscur:
-                        _pscur.execute("SELECT equity_usd FROM poseidon_portfolio WHERE id = 7")
+                        _pscur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 7")
                         _ps_row = _pscur.fetchone()
                         if _ps_row and _ps_row[0]:
                             poseidon_eq = float(_ps_row[0])
-                        _pscur.execute("SELECT equity_usd FROM kraken_current_portfolio WHERE id = 8")
+                        _pscur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 8")
                         _kc_row = _pscur.fetchone()
                         if _kc_row and _kc_row[0]:
                             kc_eq = float(_kc_row[0])

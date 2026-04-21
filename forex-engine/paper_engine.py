@@ -185,49 +185,59 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     conv = get_quote_to_usd(pair, current_price, prices)
 
     if conv is None:
-        # Attempt live fallback for cross pairs (e.g. EURJPY, GBPJPY need USDJPY rate)
+        # Live fallback for cross pairs where quote currency isn't USD.
+        # EURJPY/GBPJPY need USDJPY rate to convert pip P&L to USD.
+        # Without this, P&L records as 0.0 — winning trades appear as breakeven.
         try:
             import yfinance as _yf_conv
             _pair_upper = pair.upper()
             if "JPY" in _pair_upper:
                 _ref = _yf_conv.Ticker("USDJPY=X").history(period="1d", interval="1m")
                 if not _ref.empty:
-                    _usdjpy = float(_ref["Close"].iloc[-1])
-                    if _usdjpy > 0:
-                        conv = 1.0 / _usdjpy
-            elif "CHF" in _pair_upper:
+                    _rate = float(_ref["Close"].iloc[-1])
+                    if _rate > 0:
+                        conv = 1.0 / _rate
+            elif "CHF" in _pair_upper and "USD" not in _pair_upper:
                 _ref = _yf_conv.Ticker("USDCHF=X").history(period="1d", interval="1m")
                 if not _ref.empty:
-                    _usdchf = float(_ref["Close"].iloc[-1])
-                    if _usdchf > 0:
-                        conv = 1.0 / _usdchf
-            elif "CAD" in _pair_upper:
+                    _rate = float(_ref["Close"].iloc[-1])
+                    if _rate > 0:
+                        conv = 1.0 / _rate
+            elif "CAD" in _pair_upper and "USD" not in _pair_upper:
                 _ref = _yf_conv.Ticker("USDCAD=X").history(period="1d", interval="1m")
                 if not _ref.empty:
-                    _usdcad = float(_ref["Close"].iloc[-1])
-                    if _usdcad > 0:
-                        conv = 1.0 / _usdcad
-            elif "AUD" in _pair_upper:
+                    _rate = float(_ref["Close"].iloc[-1])
+                    if _rate > 0:
+                        conv = 1.0 / _rate
+            elif "AUD" in _pair_upper and "USD" not in _pair_upper:
                 _ref = _yf_conv.Ticker("AUDUSD=X").history(period="1d", interval="1m")
                 if not _ref.empty:
-                    _audusd = float(_ref["Close"].iloc[-1])
-                    if _audusd > 0:
-                        conv = _audusd
+                    _rate = float(_ref["Close"].iloc[-1])
+                    if _rate > 0:
+                        conv = _rate
             elif "GBP" in _pair_upper and "USD" not in _pair_upper:
                 _ref = _yf_conv.Ticker("GBPUSD=X").history(period="1d", interval="1m")
                 if not _ref.empty:
-                    _gbpusd = float(_ref["Close"].iloc[-1])
-                    if _gbpusd > 0:
-                        conv = _gbpusd
+                    _rate = float(_ref["Close"].iloc[-1])
+                    if _rate > 0:
+                        conv = _rate
+            if conv is not None:
+                logger.info(
+                    f"paper_close_position | {pair}: used live yfinance conv={conv:.6f} "
+                    f"for cross-pair USD conversion"
+                )
         except Exception as _conv_exc:
-            logger.warning(f"paper_close_position | {pair}: live conv fallback failed: {_conv_exc}")
+            logger.warning(
+                f"paper_close_position | {pair}: live conv fallback failed: {_conv_exc}"
+            )
 
     if conv is None:
         logger.error(
             f"paper_close_position | {pair}: quote-to-USD conversion unavailable "
             f"after live fallback — P&L recorded as 0.0 USD. "
-            f"This trade result is unreliable. prices_dict={list(prices.keys())}"
+            f"Trade result is unreliable. prices_dict={list(prices.keys())}"
         )
+
     pnl_raw = pnl_raw * conv if conv is not None else 0.0
 
     exit_spread = size_usd * PAPER_SPREAD_COST_PCT

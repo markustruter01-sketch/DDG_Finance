@@ -92,8 +92,35 @@ def reset(opening_equity: float | None = None) -> None:
     """
     _state["tripped"] = False
     _state["drawdown_pct"] = 0.0
-    _state["opening_equity"] = opening_equity
-    logger.info(f"Kill switch reset | opening_equity={opening_equity}")
+
+    # Validate opening equity before accepting it as the daily baseline.
+    # A bad API response (None, 0, or implausible value) would corrupt
+    # the kill switch for the entire trading day.
+    if opening_equity is not None:
+        if opening_equity < 10_000:
+            logger.error(
+                f"Kill switch | Rejected opening_equity=${opening_equity:,.2f} — "
+                f"below $10k minimum. Kill switch baseline NOT updated. "
+                f"Previous baseline retained: ${_state['opening_equity']}"
+            )
+        else:
+            # Sanity check: new opening equity must be within 40% of previous baseline.
+            # This catches stale API responses, reconnection artifacts, or extreme overnight moves.
+            prev = _state.get("opening_equity")
+            if prev and prev > 0:
+                deviation = abs(opening_equity - prev) / prev
+                if deviation > 0.40:
+                    logger.error(
+                        f"Kill switch | Rejected opening_equity=${opening_equity:,.2f} — "
+                        f"deviates {deviation:.0%} from previous baseline ${prev:,.2f} (max 40%). "
+                        f"Previous baseline retained."
+                    )
+                else:
+                    _state["opening_equity"] = opening_equity
+            else:
+                _state["opening_equity"] = opening_equity
+
+    logger.info(f"Kill switch reset | opening_equity={_state['opening_equity']}")
     _persist_state_to_db()
 
 

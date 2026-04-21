@@ -680,7 +680,7 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
                     "sweep_amount":    sweep_amount,
                 }
 
-        new_hwm           = da_equity - sweep_amount
+        new_hwm           = da_equity
         new_total_vaulted = float(state["total_vaulted_usd"]) + sweep_amount
         new_total_sweeps  = int(state["total_sweeps"]) + 1
         today             = date.today().isoformat()

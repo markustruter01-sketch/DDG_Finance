@@ -250,12 +250,7 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Fleet Commander | Scheduled run failed (fail-open): {_fce}")
 
     _fc_schedule = [
-        (4, 15, "Pre-Market 4:15 AM"),
-        (9, 45, "Post-Open 9:45 AM"),
-        (12, 0, "Midday 12:00 PM"),
-        (15, 0, "Late Session 3:00 PM"),
         (17, 0, "Post-Close 5:00 PM"),
-        (22, 0, "Evening Crypto 10:00 PM"),
     ]
     for _fc_h, _fc_m, _fc_label in _fc_schedule:
         scheduler.add_job(

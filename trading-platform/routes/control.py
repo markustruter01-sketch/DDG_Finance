@@ -96,7 +96,19 @@ def _liquidate_kraken_positions() -> dict:
                             side = pos.get("side", "long")
                             entry_fee = float(pos.get("entry_fee", 0))
 
-                            current_price = live_prices.get(symbol, entry_price)
+                            current_price = live_prices.get(symbol)
+                            if current_price is None:
+                                logger.error(
+                                    f"Rebalance | No live price for {symbol} "
+                                    f"({bot_text_id}) — live_state.json missing or stale. "
+                                    f"Skipping this position to avoid marking at entry price."
+                                )
+                                errors.append({
+                                    "bot": bot_text_id,
+                                    "symbol": symbol,
+                                    "error": "no_live_price_available",
+                                })
+                                continue
 
                             exit_value = size_units * current_price
                             exit_fee = exit_value * KRAKEN_FEE_PCT

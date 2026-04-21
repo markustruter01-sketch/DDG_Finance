@@ -132,6 +132,19 @@ _SOURCE_FILES: list[str] = [
     "shared/market_snapshot_validator.py",
     "shared/risk_profile.py",
     "shared/var_circuit_breaker.py",
+    # ── Poseidon pairs trading engine (#7) ────────────────────────────────
+    "poseidon/main.py",
+    "poseidon/pairs_engine.py",
+    "poseidon/config.py",
+    "poseidon/paper_portfolio.py",
+    "poseidon/pair_discovery.py",
+    "poseidon/db_utils.py",
+    # ── Kraken Current trend engine (#8) ──────────────────────────────────
+    "kraken-current/main.py",
+    "kraken-current/trend_engine.py",
+    "kraken-current/config.py",
+    "kraken-current/paper_portfolio.py",
+    "kraken-current/db_utils.py",
     # ── Dashboard frontend ─────────────────────────────────────────────────
     "artifacts/dashboard/src/pages/Dashboard.tsx",
     "artifacts/dashboard/src/hooks/use-trading.ts",

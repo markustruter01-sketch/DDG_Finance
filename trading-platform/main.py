@@ -405,11 +405,11 @@ async def lifespan(app: FastAPI):
 
         scheduler.add_job(
             func=_math_audit_quick,
-            trigger=_ITrigger(seconds=60),
+            trigger=_ITrigger(minutes=15),
             id="math_audit_quick",
-            name="Math Auditor — Quick (ATR + sizing, 60s)",
+            name="Math Auditor — Quick (ATR + sizing, 15 min)",
             replace_existing=True,
-            misfire_grace_time=30,
+            misfire_grace_time=120,
         )
         scheduler.add_job(
             func=_math_audit_full,

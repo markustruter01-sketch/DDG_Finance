@@ -241,6 +241,6 @@ def get_poseidon_equity() -> float:
             with conn.cursor() as cur:
                 cur.execute("SELECT equity_usd FROM poseidon_portfolio WHERE id = 7")
                 row = cur.fetchone()
-                return float(row[0]) if row else 100_000.0
+                return float(row[0]) if row else 0.0
     except Exception:
-        return 100_000.0
+        return 0.0

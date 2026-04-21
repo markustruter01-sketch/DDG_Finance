@@ -235,9 +235,9 @@ def get_kraken_current_equity() -> float:
             with conn.cursor() as cur:
                 cur.execute("SELECT equity_usd FROM kraken_current_portfolio WHERE id = 8")
                 row = cur.fetchone()
-                return float(row[0]) if row else 100_000.0
+                return float(row[0]) if row else 0.0
     except Exception:
-        return 100_000.0
+        return 0.0
 
 
 def upsert_positions(positions: dict, current_prices: dict | None = None, regime: str | None = None):

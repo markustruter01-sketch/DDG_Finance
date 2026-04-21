@@ -926,8 +926,22 @@ async def _run_pipeline_inner(
         _effective_long_slots = [] if _suppress_oracle_longs else _long_slots
         _alloc_slots = [_ScanRAS.model_validate({**s, "slot": i + 1}) for i, s in enumerate(_effective_long_slots)]
 
+        # Read actual equity regime for correct trade tagging
+        _actual_regime_label = "Sideways"  # default
+        try:
+            import json as _regime_json
+            from pathlib import Path as _regime_path_cls
+            _regime_file = _regime_path_cls(__file__).parent.parent / "data" / "market_regime.json"
+            if _regime_file.exists():
+                _regime_data = _regime_json.loads(_regime_file.read_text())
+                _read_regime = str(_regime_data.get("regime", "Sideways")).strip()
+                if _read_regime in ("Bull", "Bear", "Sideways"):
+                    _actual_regime_label = _read_regime
+        except Exception as _re_exc:
+            logger.debug(f"Pipeline | Could not read market_regime.json for regime label: {_re_exc}")
+
         allocation = _ScanRAO(
-            regime="Sideways",
+            regime=_actual_regime_label,
             regime_rationale=(
                 f"Oracle STF v1.0: {len(_alloc_slots)} new long(s), "
                 f"{len(_oracle_short_signals)} short(s), "

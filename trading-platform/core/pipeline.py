@@ -760,10 +760,40 @@ async def _run_pipeline_inner(
         # On the very first cycle after deploying Stock Trend Follower v1.0,
         # close every open Alpaca position so the new strategy starts clean.
         # A flag file ensures this runs exactly once and never again.
-        from pathlib import Path as _FlagPath
-        _STF_FLAG = _FlagPath(__file__).parent.parent / "data" / "stf_v1_activated.flag"
-        _STF_FLAG.parent.mkdir(parents=True, exist_ok=True)
-        if not _STF_FLAG.exists():
+        def _stf_activated() -> bool:
+            try:
+                from db.postgres import get_conn, is_pg_available
+                if not is_pg_available():
+                    return True  # fail-safe: if DB down, assume activated to prevent liquidation
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "SELECT 1 FROM stf_activation_flags WHERE flag_key = 'stf_v1_activated' LIMIT 1"
+                        )
+                        return cur.fetchone() is not None
+            except Exception:
+                return True  # fail-safe
+
+        def _mark_stf_activated() -> None:
+            try:
+                from db.postgres import get_conn, is_pg_available
+                if is_pg_available():
+                    with get_conn() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("""
+                                CREATE TABLE IF NOT EXISTS stf_activation_flags (
+                                    flag_key TEXT PRIMARY KEY,
+                                    activated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                                )
+                            """)
+                            cur.execute(
+                                "INSERT INTO stf_activation_flags (flag_key) VALUES ('stf_v1_activated') ON CONFLICT DO NOTHING"
+                            )
+                        conn.commit()
+            except Exception as e:
+                logger.error(f"STF | Failed to write activation flag to DB: {e}")
+
+        if not _stf_activated():
             logger.warning(
                 "Pipeline | STF v1.0 ACTIVATION — closing all legacy Oracle positions at market..."
             )
@@ -801,7 +831,7 @@ async def _run_pipeline_inner(
                         pass
                 except Exception as _liq_exc:
                     logger.error(f"  STF liquidation failed for {_liq_sym}: {_liq_exc}")
-            _STF_FLAG.write_text("STF v1.0 activated — legacy positions liquidated\n")
+            _mark_stf_activated()
             logger.info("Pipeline | STF v1.0 activation complete — flag written, new strategy live.")
             # Refresh open positions after liquidation
             _open_pos  = _scan_gpos()

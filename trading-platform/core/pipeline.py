@@ -495,6 +495,15 @@ async def _run_pipeline_inner(
         except Exception as _spy_exc:
             logger.warning(f"Pipeline | SPY emergency check failed (non-fatal): {_spy_exc}")
 
+    # Conflict guard: when SPY emergency Bear override is active, suppress Oracle long entries
+    # to prevent Oracle longs and short scanner Bear shorts fighting on the same account.
+    _suppress_oracle_longs = spy_override
+    if _suppress_oracle_longs:
+        logger.warning(
+            "Pipeline | SPY emergency override active — Oracle long entries suppressed "
+            "to prevent conflict with short scanner Bear positions."
+        )
+
     # ── Market Reopen: Exit all afterhours crypto positions ───────────────────
     # At the start of each equity cycle (market is open), check for any open
     # Alpaca crypto positions (identified by BTCUSD/ETHUSD/SOLUSD/AVAXUSD).
@@ -914,7 +923,8 @@ async def _run_pipeline_inner(
                 f"{len(_oracle_stf_protected)} open trend position(s))"
             )
 
-        _alloc_slots = [_ScanRAS.model_validate({**s, "slot": i + 1}) for i, s in enumerate(_long_slots)]
+        _effective_long_slots = [] if _suppress_oracle_longs else _long_slots
+        _alloc_slots = [_ScanRAS.model_validate({**s, "slot": i + 1}) for i, s in enumerate(_effective_long_slots)]
 
         allocation = _ScanRAO(
             regime="Sideways",

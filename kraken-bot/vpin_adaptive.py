@@ -111,7 +111,7 @@ def get_dynamic_threshold(symbol: Optional[str] = None) -> float:
         return LEGACY_THRESHOLD
 
     mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
+    variance = sum((v - mean) ** 2 for v in values) / max(len(values) - 1, 1)
     stddev = math.sqrt(variance)
 
     threshold = mean + STDDEV_MULTIPLIER * stddev
@@ -144,7 +144,7 @@ def get_stats() -> dict:
         }
 
     mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
+    variance = sum((v - mean) ** 2 for v in values) / max(len(values) - 1, 1)
     stddev = math.sqrt(variance)
 
     return {

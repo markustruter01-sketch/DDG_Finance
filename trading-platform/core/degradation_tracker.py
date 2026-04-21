@@ -267,10 +267,16 @@ def _market_context(ts_iso: str) -> str:
     try:
         import datetime as _dt
         # Simple ET offset: UTC-5 (EST) / UTC-4 (EDT).
-        # Approximate: use -4 Apr-Oct, -5 Nov-Mar.
         ts_utc = _dt.datetime.fromisoformat(ts_iso.replace("Z", "+00:00"))
-        month = ts_utc.month
-        et_offset = -4 if 4 <= month <= 10 else -5
+        try:
+            from zoneinfo import ZoneInfo as _ZoneInfo
+            _ET_ZONE = _ZoneInfo("America/New_York")
+            _et_now = datetime.now(tz=_ET_ZONE)
+            et_offset = int(_et_now.utcoffset().total_seconds() // 3600)
+        except Exception:
+            # Fallback: approximate by month if zoneinfo unavailable
+            month = datetime.now().month
+            et_offset = -4 if 4 <= month <= 10 else -5
         ts_et = ts_utc + _dt.timedelta(hours=et_offset)
         weekday = ts_et.weekday()   # 0=Mon … 4=Fri
         t = ts_et.time()

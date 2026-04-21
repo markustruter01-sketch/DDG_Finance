@@ -137,7 +137,7 @@ def execute_allocations(
     # constants (60/40 ring-fence, 15% per-position cap, 18% reserve).
     # Oracle v3.0: SGOV and JEPQ are no longer protected — existing positions
     # in those tickers will be treated as stale and closed on the next cycle.
-    _SAFE_TICKERS: frozenset[str] = frozenset()  # no protected cash/vault tickers
+    _SAFE_TICKERS: frozenset[str] = frozenset({"JEPQ"})  # JEPQ vault protected from stale rotation
     _deployed_usd = sum(
         p.get("market_value", 0.0)
         for p in current_positions.values()

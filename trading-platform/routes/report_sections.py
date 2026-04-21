@@ -4408,7 +4408,7 @@ def section_math_audit_results() -> list[str]:
         lines.append("  Warnings: NONE")
 
     lines.append("")
-    lines.append("  Audit schedule:  quick (60s) | full (15 min) | deep (4h)")
+    lines.append("  Audit schedule:  quick (15 min) | full (15 min) | deep (4h)")
     lines.append("  Audit log:       math_audit_log table (last 1,000 entries retained)")
     lines.append("  Modules checked: Z-score · RSI · ATR/stop · Position sizing · Kelly")
     lines.append("                   Profit factor · Momentum score · BTC-neutral Z-score")

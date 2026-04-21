@@ -1053,3 +1053,39 @@ def upsert_pair_pause(
     except Exception as exc:
         logger.warning(f"DB | upsert_pair_pause({bot_id}, {symbol}) failed: {exc}")
         return False
+
+
+def get_flag(key: str) -> bool:
+    """Read a one-time boolean flag from the bot_flags table."""
+    try:
+        conn = _get_conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS bot_flags (
+                    flag_key TEXT PRIMARY KEY,
+                    value BOOLEAN NOT NULL DEFAULT TRUE,
+                    set_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+            cur.execute("SELECT value FROM bot_flags WHERE flag_key = %s", (key,))
+            row = cur.fetchone()
+            conn.commit()
+            return bool(row[0]) if row else False
+    except Exception as exc:
+        logger.warning(f"DB | get_flag({key}) failed: {exc}")
+        return False
+
+
+def set_flag(key: str, value: bool = True) -> None:
+    """Write a one-time boolean flag to the bot_flags table."""
+    try:
+        conn = _get_conn()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO bot_flags (flag_key, value)
+                VALUES (%s, %s)
+                ON CONFLICT (flag_key) DO UPDATE SET value = EXCLUDED.value, set_at = NOW()
+            """, (key, value))
+        conn.commit()
+    except Exception as exc:
+        logger.warning(f"DB | set_flag({key}) failed: {exc}")

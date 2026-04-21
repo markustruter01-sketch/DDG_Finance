@@ -3350,24 +3350,45 @@ def main() -> None:
     # Do an initial equity fetch before starting the loop
     refresh_equity()
 
-    # ── Swing bot transition: close any leftover scalp positions ──────────────
+    # ── Swing bot transition: close leftover scalp positions (ONE TIME ONLY) ───
+    # This transition runs ONCE and is permanently suppressed after completion
+    # by writing a flag to the DB. Without this gate, every restart closes
+    # all open positions when IS_SWING_BOT=True.
     if IS_SWING_BOT and PAPER_TRADING:
-        _transition_positions = list(open_positions.keys()) if open_positions else []
-        if not _transition_positions:
-            _transition_positions = list(get_paper_positions().keys())
-        if _transition_positions:
-            logger.warning(
-                f"SwingTransition | Found {len(_transition_positions)} existing position(s) from "
-                f"previous scalp strategy — closing all for clean swing start"
-            )
-            for _ts in _transition_positions:
-                try:
-                    close_position(_ts, reason="swing_transition_cleanup")
-                    logger.info(f"SwingTransition | Closed {_ts}")
-                except Exception as _te:
-                    logger.error(f"SwingTransition | Failed to close {_ts}: {_te}")
-            deployed_usd = sum(p["size_usd"] for p in open_positions.values())
-            logger.info("SwingTransition | Cleanup complete — starting fresh with swing strategy")
+        _transition_done = False
+        try:
+            import db as _db_trans
+            _transition_done = _db_trans.get_flag(f"swing_transition_done_{BOT_ID}")
+        except Exception as _tf:
+            logger.warning(f"SwingTransition | Could not read DB flag: {_tf}")
+
+        if not _transition_done:
+            _transition_positions = list(open_positions.keys()) if open_positions else []
+            if not _transition_positions:
+                _transition_positions = list(get_paper_positions().keys())
+            if _transition_positions:
+                logger.warning(
+                    f"SwingTransition | ONE-TIME cleanup: closing {len(_transition_positions)} "
+                    f"position(s) from previous scalp strategy"
+                )
+                for _ts in _transition_positions:
+                    try:
+                        close_position(_ts, reason="swing_transition_cleanup")
+                        logger.info(f"SwingTransition | Closed {_ts}")
+                    except Exception as _te:
+                        logger.error(f"SwingTransition | Failed to close {_ts}: {_te}")
+                logger.info("SwingTransition | Cleanup complete — starting fresh with swing strategy")
+            else:
+                logger.info("SwingTransition | No existing positions found — nothing to close")
+
+            # Write the one-time flag regardless of whether positions existed
+            try:
+                _db_trans.set_flag(f"swing_transition_done_{BOT_ID}", True)
+                logger.info(f"SwingTransition | DB flag written — will not run again on future restarts")
+            except Exception as _tf2:
+                logger.warning(f"SwingTransition | Could not write DB flag: {_tf2} — will re-run next restart")
+        else:
+            logger.debug("SwingTransition | Already completed (DB flag set) — skipping")
 
     # ── Outer restart loop ────────────────────────────────────────────────────
     while True:

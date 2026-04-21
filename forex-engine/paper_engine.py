@@ -79,7 +79,7 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
         else:
             pnl = (pos["entry_price"] - price) * pos["units"]
         conv = get_quote_to_usd(pair, price, prices)
-        pnl_usd = pnl * conv
+        pnl_usd = pnl * conv if conv is not None else 0.0
         equity += pos["size_usd"] + pnl_usd
 
     return equity
@@ -183,7 +183,12 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     prices = latest_prices or {}
     prices[pair] = current_price
     conv = get_quote_to_usd(pair, current_price, prices)
-    pnl_raw = pnl_raw * conv
+    if conv is None:
+        import logging as _logging
+        _logging.getLogger("paper_engine").warning(
+            f"paper_close_position | {pair}: ref price unavailable — PnL recorded as 0.0 USD"
+        )
+    pnl_raw = pnl_raw * conv if conv is not None else 0.0
 
     exit_spread = size_usd * PAPER_SPREAD_COST_PCT
     entry_spread = pos.get("spread_cost", 0)

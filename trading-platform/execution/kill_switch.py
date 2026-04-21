@@ -27,6 +27,60 @@ _state: dict = {
 }
 
 
+def _load_state_from_db() -> None:
+    """Load persisted kill switch state from DB on startup."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS kill_switch_state (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        tripped BOOLEAN NOT NULL DEFAULT FALSE,
+                        opening_equity DOUBLE PRECISION,
+                        drawdown_pct DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+                cur.execute("SELECT tripped, opening_equity, drawdown_pct FROM kill_switch_state WHERE id = 1")
+                row = cur.fetchone()
+                if row:
+                    _state["tripped"] = bool(row[0])
+                    _state["opening_equity"] = float(row[1]) if row[1] else None
+                    _state["drawdown_pct"] = float(row[2]) if row[2] else 0.0
+            conn.commit()
+    except Exception as exc:
+        logger.warning(f"Kill switch | Failed to load state from DB (non-fatal): {exc}")
+
+
+def _persist_state_to_db() -> None:
+    """Write current kill switch state to DB."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO kill_switch_state (id, tripped, opening_equity, drawdown_pct)
+                    VALUES (1, %s, %s, %s)
+                    ON CONFLICT (id) DO UPDATE SET
+                        tripped = EXCLUDED.tripped,
+                        opening_equity = EXCLUDED.opening_equity,
+                        drawdown_pct = EXCLUDED.drawdown_pct,
+                        updated_at = NOW()
+                """, (_state["tripped"], _state["opening_equity"], _state["drawdown_pct"]))
+            conn.commit()
+    except Exception as exc:
+        logger.debug(f"Kill switch | State persist failed (non-fatal): {exc}")
+
+
+# Load persisted state on module import
+_load_state_from_db()
+
+
 def reset(opening_equity: float | None = None) -> None:
     """
     Reset the kill switch state for a new trading day.
@@ -40,6 +94,7 @@ def reset(opening_equity: float | None = None) -> None:
     _state["drawdown_pct"] = 0.0
     _state["opening_equity"] = opening_equity
     logger.info(f"Kill switch reset | opening_equity={opening_equity}")
+    _persist_state_to_db()
 
 
 def is_tripped() -> bool:
@@ -89,6 +144,7 @@ def check(current_equity: float | None = None) -> bool:
                 f"Liquidating all positions immediately!"
             )
             _state["tripped"] = True
+            _persist_state_to_db()
             n = close_all_positions()
             logger.critical(f"Kill switch | {n} positions liquidated. Trading halted for the day.")
             return True

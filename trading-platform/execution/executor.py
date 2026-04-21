@@ -132,6 +132,22 @@ def execute_allocations(
     current_positions = {p["symbol"]: p for p in get_positions()}
     logger.info(f"Current open positions: {list(current_positions.keys()) or 'none'}")
 
+    # DB-backed active ticker guard — prevents duplicate positions when Alpaca
+    # position feed lags behind order placement (race condition) or when the
+    # allocator returns the same ticker across multiple slots.
+    _db_active_tickers: set[str] = set()
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if is_pg_available():
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT DISTINCT ticker FROM trades WHERE status = 'Active'"
+                    )
+                    _db_active_tickers = {row[0] for row in cur.fetchall()}
+    except Exception as _dat_exc:
+        logger.warning(f"Executor | Could not load active tickers from DB: {_dat_exc}")
+
     # ── RiskProfile enforcement ───────────────────────────────────────────────
     # Build a RiskProfile using live account data and the Alpaca platform
     # constants (60/40 ring-fence, 15% per-position cap, 18% reserve).
@@ -600,6 +616,7 @@ def _execute_slot(
         })
         return results, remaining_cash
 
+    # Primary guard: Alpaca broker position feed
     if symbol in current_positions:
         existing_value = current_positions[symbol]["market_value"]
         target_value   = notional_usd
@@ -610,11 +627,19 @@ def _execute_slot(
                 f"Slot {slot.slot}: {ticker:10s} → HOLD "
                 f"(existing=${existing_value:,.2f}, target=${target_value:,.2f}, diff={diff_pct:.1%})"
             )
-            results["skipped"].append({
-                "slot": slot.slot, "ticker": ticker,
-                "reason": f"already_held_within_10pct (diff={diff_pct:.1%})",
-            })
+            results["skipped"].append({"slot": slot.slot, "ticker": ticker,
+                                       "reason": f"already_held_within_10pct (diff={diff_pct:.1%})"})
             return results, remaining_cash
+
+    # Secondary guard: DB active trades table — catches race conditions where
+    # Alpaca position feed hasn't updated yet after a recent order placement.
+    if symbol in _db_active_tickers:
+        logger.info(
+            f"Slot {slot.slot}: {ticker:10s} → SKIP (active_in_db — Alpaca feed may be lagging)"
+        )
+        results["skipped"].append({"slot": slot.slot, "ticker": ticker,
+                                   "reason": "active_in_db_dedup"})
+        return results, remaining_cash
 
     heat = _get_heat_metrics(ticker)
     overheated = heat["is_overheated"]

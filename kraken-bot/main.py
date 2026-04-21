@@ -1735,10 +1735,19 @@ def run_cycle() -> None:
             if symbol in open_positions:
                 pos = open_positions[symbol]
 
+                # Compute what best_price would become this cycle, but do NOT write it
+                # yet.  check_stops (and swing/apex exit checks) must evaluate the
+                # trailing stop against the PREVIOUS cycle's peak.  Updating first
+                # would let a flash-wick spike best_price to an unreachable level in
+                # the same cycle that triggers the stop, causing a premature exit.
+                # best_price is written to pos AFTER the stop check confirms the
+                # position remains open.
+                if pos["best_price"] is None:
+                    pos["best_price"] = pos["entry_price"]
                 if pos["side"] == "long":
-                    pos["best_price"] = max(pos["best_price"], current_price)
+                    _new_best_price = max(pos["best_price"], current_price)
                 else:
-                    pos["best_price"] = min(pos["best_price"], current_price)
+                    _new_best_price = min(pos["best_price"], current_price)
 
                 if IS_SWING_BOT:
                     # ── SWING EXIT PATH (Blackbeard / Calypso — new strategies) ──
@@ -1766,6 +1775,10 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                     else:
+                        # Position still open — now safe to advance best_price for
+                        # next cycle's trailing stop evaluation.
+                        if symbol in open_positions:
+                            open_positions[symbol]["best_price"] = _new_best_price
                         _s_pnl = (
                             (current_price - pos["entry_price"]) / pos["entry_price"]
                             if pos["side"] == "long"
@@ -1821,6 +1834,9 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                     else:
+                        # Position still open — now safe to advance best_price.
+                        if symbol in open_positions:
+                            open_positions[symbol]["best_price"] = _new_best_price
                         _s_pnl = (
                             (current_price - pos["entry_price"]) / pos["entry_price"]
                             if pos["side"] == "long"
@@ -1850,18 +1866,13 @@ def run_cycle() -> None:
                 # ATR-based TP (3×), SL (1.5×), and trailing stop (activates at
                 # +1.5 ATR profit, trails at 1.5 ATR from best price).
                 if IS_MOMENTUM_SCALPER:
-                    # Update best favorable price for trailing stop
+                    # Capture last cycle's best price for the stop check.  The update
+                    # to _apex_trail_prices happens AFTER the exit check so that a
+                    # flash-wick can't spike the trailing floor within the same cycle.
                     _prior_best = _apex_trail_prices.get(symbol)
-                    if pos["side"] == "long":
-                        _apex_trail_prices[symbol] = max(
-                            current_price,
-                            _prior_best if _prior_best is not None else current_price,
-                        )
-                    else:
-                        _apex_trail_prices[symbol] = min(
-                            current_price,
-                            _prior_best if _prior_best is not None else current_price,
-                        )
+                    _apex_best_for_check = (
+                        _prior_best if _prior_best is not None else current_price
+                    )
                     _apex_exit = evaluate_momentum_exit(
                         side=pos["side"],
                         entry_price=pos["entry_price"],
@@ -1870,7 +1881,7 @@ def run_cycle() -> None:
                         sl_atr_mult=ATR_STOP_MULTIPLIER,
                         tp_atr_mult=APEX_TP_ATR_MULT,
                         trail_atr_mult=ATR_STOP_MULTIPLIER,
-                        best_price=_apex_trail_prices.get(symbol),
+                        best_price=_apex_best_for_check,
                     )
                     if _apex_exit:
                         close_position(symbol, reason=_apex_exit, atr=sym_atr)
@@ -1881,6 +1892,15 @@ def run_cycle() -> None:
                             "has_position": False,
                         })
                     else:
+                        # Position still open — now advance best_price for next cycle.
+                        if pos["side"] == "long":
+                            _apex_trail_prices[symbol] = max(
+                                current_price, _apex_best_for_check
+                            )
+                        else:
+                            _apex_trail_prices[symbol] = min(
+                                current_price, _apex_best_for_check
+                            )
                         _ax_pnl = (
                             (current_price - pos["entry_price"]) / pos["entry_price"]
                             if pos["side"] == "long"
@@ -1940,6 +1960,9 @@ def run_cycle() -> None:
                         "has_position": False,
                     })
                 elif symbol in open_positions:
+                    # Stop not triggered — now safe to advance best_price for
+                    # next cycle's trailing stop evaluation.
+                    open_positions[symbol]["best_price"] = _new_best_price
                     unrealised_pnl_pct = (
                         (current_price - pos["entry_price"]) / pos["entry_price"]
                         if pos["side"] == "long"

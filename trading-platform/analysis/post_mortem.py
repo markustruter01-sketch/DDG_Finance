@@ -189,10 +189,13 @@ async def run_post_mortem() -> dict[str, Any]:
         # ── Close trade with all Phase 1 RAG fields ────────────────────────
         # Replaces update_trade_fill_price() + update_trade_outcome() with
         # a single atomic call that also stores exit_reason / time / slippage.
+        _qty = float(journal_entry.get("qty") or journal_entry.get("shares") or 0)
+        realized_pnl_val = round(pnl_pct / 100.0 * entry_price * _qty, 2) if _qty > 0 else None
         try:
             close_trade(
                 trade_id=order_id,
                 pnl_percentage=pnl_pct,
+                realized_pnl=realized_pnl_val,
                 exit_reason=exit_reason,
                 time_in_trade_hours=time_in_hours,
                 close_price=exit_price,
@@ -204,7 +207,7 @@ async def run_post_mortem() -> dict[str, Any]:
                 from analysis.trade_journal import update_trade_outcome
                 if actual_fill is None:
                     update_trade_fill_price(order_id, exit_price)
-                update_trade_outcome(order_id, pnl_pct)
+                update_trade_outcome(order_id, pnl_pct, realized_pnl=realized_pnl_val)
             except Exception:
                 pass
 

@@ -211,7 +211,11 @@ def update_trade_fill_price(trade_id: str, actual_fill_price: float) -> None:
 
 # ── update_trade_outcome ───────────────────────────────────────────────────
 
-def update_trade_outcome(trade_id: str, pnl_percentage: float) -> None:
+def update_trade_outcome(
+    trade_id: str,
+    pnl_percentage: float,
+    realized_pnl: float | None = None,
+) -> None:
     status = "Closed_Win" if pnl_percentage >= 0 else "Closed_Loss"
 
     if _use_pg():
@@ -220,9 +224,11 @@ def update_trade_outcome(trade_id: str, pnl_percentage: float) -> None:
             with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE trades
-                    SET pnl_percentage = %s, status = %s
+                    SET pnl_percentage = %s,
+                        status         = %s,
+                        realized_pnl   = COALESCE(%s, realized_pnl)
                     WHERE trade_id = %s AND status = 'Active'
-                """, (pnl_percentage, status, trade_id))
+                """, (pnl_percentage, status, realized_pnl, trade_id))
                 updated = cur.rowcount
         if updated == 0:
             logger.warning(f"Trade journal | No active trade found for id={trade_id}")
@@ -232,9 +238,11 @@ def update_trade_outcome(trade_id: str, pnl_percentage: float) -> None:
         with _sqlite_conn() as conn:
             cursor = conn.execute("""
                 UPDATE trades
-                SET pnl_percentage = ?, status = ?
+                SET pnl_percentage = ?,
+                    status         = ?,
+                    realized_pnl   = COALESCE(?, realized_pnl)
                 WHERE trade_id = ? AND status = 'Active'
-            """, (pnl_percentage, status, trade_id))
+            """, (pnl_percentage, status, realized_pnl, trade_id))
             if cursor.rowcount == 0:
                 logger.warning(f"Trade journal | No active trade for id={trade_id}")
             else:

@@ -182,6 +182,7 @@ from logic import (
     build_tranche_orders,
     get_position_size,
     check_circuit_breaker,
+    check_cumulative_performance_breaker,
     check_stops,
     VPINDecayTracker,
     compute_volatility_state,
@@ -1266,6 +1267,33 @@ def run_cycle() -> None:
     write_live_state()
 
     # ── Pause check — dashboard can pause the bot without stopping the workflow ─
+    # Auto-resume if pause window has expired
+    _resume_after = None
+    try:
+        import pathlib as _pl_rc
+        _ctrl_file = _pl_rc.Path(CONTROL_FILE)
+        ctrl_data = json.loads(_ctrl_file.read_text()) if _ctrl_file.exists() else {}
+        _resume_after = ctrl_data.get("resume_after")
+    except Exception:
+        ctrl_data = {}
+    if _resume_after:
+        try:
+            _resume_dt = datetime.fromisoformat(_resume_after)
+            if _resume_dt.tzinfo is None:
+                _resume_dt = _resume_dt.replace(tzinfo=timezone.utc)
+            if datetime.now(tz=timezone.utc) >= _resume_dt:
+                logger.info(
+                    f"Bot | Pause window expired (was until {_resume_after}) — auto-resuming"
+                )
+                ctrl_data["paused"] = False
+                ctrl_data.pop("resume_after", None)
+                ctrl_data.pop("pause_reason", None)
+                _ctrl_file.write_text(
+                    json.dumps(ctrl_data, indent=2)
+                )
+                # Fall through — don't skip this cycle
+        except Exception as _re:
+            logger.warning(f"Bot | resume_after parse failed: {_re}")
     if is_bot_paused():
         logger.info("Cycle | Bot is PAUSED by dashboard — skipping signal processing")
         write_status()
@@ -1300,6 +1328,36 @@ def run_cycle() -> None:
         write_status()
         write_live_state()
         return
+
+    # ── Cumulative performance circuit breaker ────────────────────────────────
+    _should_pause, _perf_reason = check_cumulative_performance_breaker(
+        bot_id=BOT_ID,
+        min_trades=20,
+        min_win_rate=0.35,
+        lookback_trades=20,
+        pause_hours=24,
+    )
+    if _should_pause:
+        logger.warning(
+            f"PerfBreaker | {BOT_ID} cumulative performance breaker tripped: "
+            f"{_perf_reason} — pausing bot for 24 hours"
+        )
+        # Write pause to control file so the outer loop sees it
+        try:
+            from pathlib import Path as _Path
+            _ctrl = _Path(CONTROL_FILE)
+            _ctrl_data = json.loads(_ctrl.read_text()) if _ctrl.exists() else {}
+            _ctrl_data["paused"] = True
+            _ctrl_data["pause_reason"] = f"perf_breaker: {_perf_reason}"
+            _ctrl_data["paused_at"] = datetime.now(tz=timezone.utc).isoformat()
+            _ctrl_data["resume_after"] = (
+                datetime.now(tz=timezone.utc) + timedelta(hours=24)
+            ).isoformat()
+            _ctrl.write_text(json.dumps(_ctrl_data, indent=2))
+        except Exception as _pbe:
+            logger.error(f"PerfBreaker | Failed to write pause to control file: {_pbe}")
+        write_status()
+        return  # Skip this cycle entirely
 
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())

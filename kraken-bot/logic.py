@@ -809,6 +809,49 @@ def check_circuit_breaker(
     )
 
 
+def check_cumulative_performance_breaker(
+    bot_id: str,
+    min_trades: int = 20,
+    min_win_rate: float = 0.35,
+    lookback_trades: int = 20,
+    pause_hours: int = 24,
+) -> tuple[bool, str]:
+    """
+    Cumulative performance circuit breaker.
+
+    Fires when win rate over the last `lookback_trades` closed trades
+    falls below `min_win_rate`, regardless of consecutive loss streak resets.
+
+    This catches systematic strategy underperformance that the consecutive-loss
+    breaker misses due to rebalance resets.
+
+    Returns:
+        (should_pause: bool, reason: str)
+    """
+    try:
+        import db as _db_perf
+        recent = _db_perf.get_recent_trades(limit=lookback_trades)
+
+        # Only evaluate when we have enough trade history
+        closed = [t for t in recent if (t.get("pnl_usd") is not None)]
+        if len(closed) < min_trades:
+            return False, f"insufficient_history ({len(closed)}/{min_trades} trades)"
+
+        wins = sum(1 for t in closed if float(t.get("pnl_usd", 0)) >= 0)
+        win_rate = wins / len(closed)
+
+        if win_rate < min_win_rate:
+            return True, (
+                f"cumulative_win_rate={win_rate:.1%} < threshold={min_win_rate:.1%} "
+                f"over last {len(closed)} trades — strategy underperforming"
+            )
+
+        return False, f"win_rate={win_rate:.1%} over last {len(closed)} trades (ok)"
+
+    except Exception as exc:
+        return False, f"check_failed: {exc}"
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 9. Stop & Trail Check — Should We Exit This Position?  (UPGRADED)
 # ══════════════════════════════════════════════════════════════════════════════

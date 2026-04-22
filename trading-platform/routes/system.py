@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -1238,3 +1239,131 @@ async def regime_retrospective(days: int = 10) -> dict:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@system_router.get("/fleet/weekly-review")
+async def fleet_weekly_review():
+    """
+    Monday morning 5-query fleet health check.
+    Run this every week before market open.
+    """
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"error": "db_unavailable"}
+
+    result = {}
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+
+            # 1 — Fleet heartbeat
+            cur.execute("""
+                SELECT id, bot_id, equity_usd, status, bot_paused, last_updated
+                FROM kraken_heartbeat
+                ORDER BY id
+            """)
+            rows = cur.fetchall()
+            result["fleet_heartbeat"] = [
+                {
+                    "id": r[0], "bot_id": r[1],
+                    "equity_usd": float(r[2]) if r[2] else 0,
+                    "status": r[3], "paused": bool(r[4]),
+                    "last_updated": r[5].isoformat() if r[5] else None,
+                    "stale": (
+                        r[5] is not None and
+                        (datetime.now(timezone.utc) - r[5]).total_seconds() > 3600
+                    ),
+                }
+                for r in rows
+            ]
+
+            # 2 — Oracle trades this week
+            cur.execute("""
+                SELECT
+                    status,
+                    COUNT(*) as count,
+                    ROUND(AVG(realized_pnl)::numeric, 2) as avg_pnl,
+                    ROUND(SUM(realized_pnl)::numeric, 2) as total_pnl
+                FROM trades
+                WHERE closed_at > NOW() - INTERVAL '7 days'
+                AND status IN ('Closed_Win', 'Closed_Loss')
+                GROUP BY status
+            """)
+            rows = cur.fetchall()
+            result["oracle_week"] = [
+                {"status": r[0], "count": r[1],
+                 "avg_pnl": float(r[2]) if r[2] else None,
+                 "total_pnl": float(r[3]) if r[3] else None}
+                for r in rows
+            ]
+
+            # 3 — Vault ledger
+            cur.execute("""
+                SELECT hwm, total_vaulted_usd, total_sweeps, last_sweep_date
+                FROM vault_ledger WHERE id = 1
+            """)
+            row = cur.fetchone()
+            result["vault"] = {
+                "hwm": float(row[0]) if row else 0,
+                "total_vaulted": float(row[1]) if row else 0,
+                "total_sweeps": row[2] if row else 0,
+                "last_sweep": str(row[3]) if row else None,
+            } if row else {}
+
+            # 4 — Top 5 losses this week
+            cur.execute("""
+                SELECT ticker, realized_pnl, exit_reason,
+                       time_in_trade_hours, closed_at
+                FROM trades
+                WHERE status = 'Closed_Loss'
+                AND closed_at > NOW() - INTERVAL '7 days'
+                AND realized_pnl IS NOT NULL
+                ORDER BY realized_pnl ASC
+                LIMIT 5
+            """)
+            rows = cur.fetchall()
+            result["top_losses_week"] = [
+                {
+                    "ticker": r[0],
+                    "realized_pnl": float(r[1]) if r[1] else None,
+                    "exit_reason": r[2],
+                    "hold_hours": float(r[3]) if r[3] else None,
+                    "closed_at": r[4].isoformat() if r[4] else None,
+                }
+                for r in rows
+            ]
+
+            # 5 — Math auditor CRITICAL count
+            cur.execute("""
+                SELECT COUNT(DISTINCT (bot_id, formula_name)) as critical_count
+                FROM math_audit_log
+                WHERE status = 'FAIL'
+                AND audit_timestamp > NOW() - INTERVAL '24 hours'
+            """)
+            row = cur.fetchone()
+            result["math_audit_criticals"] = int(row[0]) if row else 0
+
+    # Fleet equity summary
+    oracle_eq = next(
+        (b["equity_usd"] for b in result["fleet_heartbeat"]
+         if b["bot_id"] == "oracle"), 0
+    )
+    kraken_eq = sum(
+        b["equity_usd"] for b in result["fleet_heartbeat"]
+        if b["bot_id"] not in ("oracle", "navigator")
+    )
+    result["fleet_summary"] = {
+        "total_equity": oracle_eq + kraken_eq,
+        "starting_capital": 800_000,
+        "pnl_usd": oracle_eq + kraken_eq - 800_000,
+        "pnl_pct": round((oracle_eq + kraken_eq - 800_000) / 800_000 * 100, 2),
+        "bots_paused": sum(
+            1 for b in result["fleet_heartbeat"] if b["paused"]
+        ),
+        "bots_stale": sum(
+            1 for b in result["fleet_heartbeat"] if b["stale"]
+        ),
+    }
+
+    result["generated_at"] = datetime.now(timezone.utc).isoformat()
+    return result

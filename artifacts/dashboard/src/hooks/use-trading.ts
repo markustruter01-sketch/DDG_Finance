@@ -2201,3 +2201,12 @@ export function useFleetResume() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["fleet-halt-status"] }),
   });
 }
+
+export function useWeeklyReview() {
+  return useQuery({
+    queryKey: ["weekly-review"],
+    queryFn: () => api.get("/fleet/weekly-review").then(r => r.data),
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 60_000,
+  });
+}

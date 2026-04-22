@@ -222,6 +222,7 @@ def _check_position(
                 "side":        side,
                 "price":       current_price,
                 "stop_price":  stop_price,
+                "hours_held":  hours_old,
             })
             return  # stop has priority — do not check other conditions
 
@@ -255,6 +256,7 @@ def _check_position(
             "exit_reason": "ema_reversal",
             "trade_id":    trade_id,
             "side":        side,
+            "hours_held":  hours_old,
         })
         return
 
@@ -271,6 +273,7 @@ def _check_position(
             "exit_reason": f"adx_weak ({adx:.1f})",
             "trade_id":    trade_id,
             "side":        side,
+            "hours_held":  hours_old,
         })
         return
 
@@ -285,6 +288,7 @@ def _check_position(
             "exit_reason": f"max_hold_{td_held}d",
             "trade_id":    trade_id,
             "side":        side,
+            "hours_held":  hours_old,
         })
         return
 
@@ -437,6 +441,8 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
                     pnl_percentage=round(pnl_pct, 4),
                     realized_pnl=round(raw_pnl, 2),
                     exit_reason=exit_reason,
+                    time_in_trade_hours=float(exit_info.get("hours_held") or 0) or None,
+                    close_price=float(pos.get("current_price") or 0) or None,
                 )
                 # Profit reserve sweep (15% of winning trades)
                 if raw_pnl > 0:

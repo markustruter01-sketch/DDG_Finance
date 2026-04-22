@@ -1078,6 +1078,15 @@ def close_position(symbol: str, reason: str, atr: float = 0.0) -> None:
         del _pending_tranches[symbol]
         _persist_tranches()
 
+    # Refresh per-pair params immediately after every close so adaptive sizing
+    # and entry gating (SymbolWR BLOCKED gate) use current win_rate / profit_factor,
+    # not stale data from the last scheduled AUTO_PARAMS_REFRESH_HOURS cycle.
+    try:
+        from per_pair_params import refresh_and_get as _ppp_refresh
+        _ppp_refresh(BOT_ID)
+    except Exception as _pp_exc:
+        logger.debug(f"Bot | pair_params post-close refresh failed (non-fatal): {_pp_exc}")
+
 
 def scale_into_position(symbol: str, tranche: dict, current_price: float) -> bool:
     """

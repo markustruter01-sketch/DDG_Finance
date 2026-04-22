@@ -478,7 +478,7 @@ export function tradingModeColor(mode: string | undefined): string {
   }
 }
 
-export const EXPECTED_JOBS = 4;
+export const EXPECTED_JOBS = 14;
 
 /**
  * Canonical 8-bot fleet equity formula.

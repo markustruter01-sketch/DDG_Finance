@@ -14,7 +14,7 @@ from itertools import combinations
 
 from loguru import logger
 
-from pairs_engine import ols_hedge_ratio, adf_pvalue, calculate_spread_series
+from pairs_engine import ols_hedge_ratio, adf_pvalue, calculate_spread_series, hurst_exponent
 
 
 # ── Helper math ───────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ def discover_pairs(
     min_corr: float = 0.85,
     adf_pvalue_max: float = 0.15,
     max_pairs: int = 50,
+    hurst_max: float = 0.55,
 ) -> list[dict]:
     """
     Discover cointegrated pairs from a symbol universe.
@@ -57,6 +58,7 @@ def discover_pairs(
         min_corr: minimum |log-price Pearson correlation| to advance to ADF
         adf_pvalue_max: max ADF p-value to qualify as cointegrated
         max_pairs: cap on returned pairs (sorted by ADF p-value ascending)
+        hurst_max: max Hurst exponent — pairs above this are trending, not mean-reverting
 
     Returns:
         List of pair dicts with keys:
@@ -121,14 +123,26 @@ def discover_pairs(
             tested += 1
 
             if adf_p < adf_pvalue_max:
+                # Hurst exponent gate — must be < hurst_max for mean-reverting behaviour
+                # Hurst > 0.5 = trending (will drift, not revert)
+                # Hurst < 0.5 = mean-reverting (what we need)
+                h = hurst_exponent(spreads)
+                if h >= hurst_max:
+                    logger.debug(
+                        f"PairDiscovery | {sym_a}/{sym_b} rejected — "
+                        f"Hurst={h:.3f} >= {hurst_max} (not mean-reverting)"
+                    )
+                    continue
+
                 tradeable.append({
                     "asset_a": sym_a,
                     "asset_b": sym_b,
                     "corr": round(corr, 4),
                     "adf_p": round(adf_p, 4),
+                    "hurst": round(h, 4),
                     "description": (
                         f"{sym_a.split('/')[0]} vs {sym_b.split('/')[0]} "
-                        f"(corr={corr:.2f}, ADF={adf_p:.3f})"
+                        f"(corr={corr:.2f}, ADF={adf_p:.3f}, Hurst={h:.3f})"
                     ),
                 })
 

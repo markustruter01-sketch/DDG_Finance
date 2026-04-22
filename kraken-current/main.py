@@ -392,6 +392,24 @@ def main():
         cycle_start = datetime.now(timezone.utc)
         logger.info(f"KrakenCurrent | === Cycle #{_cycle} at {cycle_start.isoformat()[:19]} UTC ===")
 
+        # ── Fleet halt check — cross-process emergency stop ───────────────────────
+        try:
+            import sys as _sys_fh
+            import os as _os_fh
+            _tp = _os_fh.path.join(_os_fh.path.dirname(_os_fh.path.abspath(__file__)), "..", "trading-platform")
+            if _tp not in _sys_fh.path:
+                _sys_fh.path.insert(0, _tp)
+            from core.fleet_halt import is_halted as _is_fleet_halted
+            if _is_fleet_halted():
+                logger.warning(
+                    f"Bot | FLEET HALT ACTIVE — skipping cycle. "
+                    f"Resume via POST /trading-api/fleet/resume"
+                )
+                time.sleep(60)
+                continue
+        except Exception as _fh_exc:
+            logger.debug(f"Bot | Fleet halt check failed (non-fatal, continuing): {_fh_exc}")
+
         # Self-healing kick: API can set force_refresh=TRUE to prompt universe refresh
         if check_and_clear_force_refresh():
             logger.info("KrakenCurrent | force_refresh flag detected — refreshing universe")

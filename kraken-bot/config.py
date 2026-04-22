@@ -108,6 +108,8 @@ BOT_PROFILES = {
         "CALYPSO_TIER1_MAX": 0.10,
         "CALYPSO_TIER2_MAX": 0.07,
         "CALYPSO_TIER3_MAX": 0.05,
+        "TREND_EMA_FAST": 50,
+        "TREND_EMA_SLOW": 200,
     },
     "apex-predator": {
         "display_name": "Apex Predator",

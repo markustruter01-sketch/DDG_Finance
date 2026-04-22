@@ -2,6 +2,6 @@
   "force_reload": false,
   "paused": true,
   "pause_reason": "perf_breaker: cumulative_win_rate=30.0% < threshold=35.0% over last 20 trades \u2014 strategy underperforming",
-  "paused_at": "2026-04-22T23:13:07.810872+00:00",
-  "resume_after": "2026-04-23T23:13:07.810880+00:00"
+  "paused_at": "2026-04-22T23:17:07.893135+00:00",
+  "resume_after": "2026-04-23T23:17:07.893145+00:00"
 }

@@ -48,7 +48,7 @@ def evaluate_momentum_breakout(
 
     vol_avg = sum(volumes[-volume_ma_period:]) / max(len(volumes[-volume_ma_period:]), 1)
     latest_vol = volumes[-1] if volumes else 0
-    volume_confirmed = latest_vol > vol_avg and vol_avg > 0
+    volume_confirmed = latest_vol > vol_avg * 1.5 and vol_avg > 0
 
     bullish_momentum = momentum_move > atr_threshold_usd
     bearish_momentum = momentum_move < -atr_threshold_usd
@@ -147,6 +147,10 @@ def evaluate_trend_following(
             conviction = 0.65
 
             ema_spread_pct = (ema_f - ema_s) / ema_s if ema_s > 0 else 0
+            # Hard gate — require meaningful EMA separation before entering.
+            # Spread < 0.5% means the trend is essentially flat — no signal to follow.
+            if ema_spread_pct < 0.005:
+                return result
             if ema_spread_pct > 0.005:
                 conviction += 0.10
             if ema_spread_pct > 0.01:
@@ -173,6 +177,10 @@ def evaluate_trend_following(
             conviction = 0.65
 
             ema_spread_pct = (ema_s - ema_f) / ema_s if ema_s > 0 else 0
+            # Hard gate — require meaningful EMA separation before entering.
+            # Spread < 0.5% means the trend is essentially flat — no signal to follow.
+            if ema_spread_pct < 0.005:
+                return result
             if ema_spread_pct > 0.005:
                 conviction += 0.10
             if ema_spread_pct > 0.01:

@@ -5,9 +5,10 @@ import {
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
-  useMathAuditSummary, useMathAuditRecent,
+  useMathAuditSummary, useMathAuditRecent, useWeeklyReview,
   type LivePosition,
 } from "@/hooks/use-trading";
+import { WeeklyReviewPanel } from "@/components/WeeklyReviewPanel";
 import { CRTOverlay, RegimeGlow, EquityEcho } from "@/components/VisualOverlays";
 import { FleetPerformanceHero } from "@/components/FleetPerformanceHero";
 import { AIImpactTimeline } from "@/components/AIImpactTimeline";
@@ -1910,6 +1911,18 @@ export default function Dashboard() {
               icon={<TrendingDown className="h-4 w-4 text-emerald-400/70" />}
             >
               <AllClosedTradesSection />
+            </CollapsableSection>
+          </SafeSection>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.105 }}>
+          <SafeSection label="Weekly Review">
+            <CollapsableSection
+              title="Monday Morning Review"
+              defaultOpen={false}
+              icon={<Activity className="h-4 w-4 text-blue-400/70" />}
+            >
+              <WeeklyReviewPanel />
             </CollapsableSection>
           </SafeSection>
         </motion.div>

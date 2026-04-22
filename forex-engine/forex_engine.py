@@ -754,6 +754,11 @@ def _run_cycle_inner() -> dict:
             if pair in positions:
                 continue
 
+            # ── Per-pair loss cooldown — skip pairs with 3+ consecutive losses ────────
+            if _db.is_pair_on_cooldown(pair, max_consecutive_losses=3):
+                logger.info(f"Navigator | {pair}: skipping — 3 consecutive losses, pair on cooldown")
+                continue
+
             # Hard whitelist gate — belt-and-suspenders even if PAIRS is edited
             if pair not in _PERMITTED_PAIRS:
                 logger.error(

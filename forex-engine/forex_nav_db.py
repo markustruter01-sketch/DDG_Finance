@@ -492,3 +492,48 @@ def insert_vault_sweep(sweep_date: str, amount: float, running_total: float, equ
     except Exception as exc:
         logger.warning(f"DB | insert_vault_sweep failed: {exc}")
         return False
+
+
+def get_pair_loss_streak(pair: str) -> int:
+    """Return consecutive losing trades for this pair, most recent first."""
+    if not _is_available():
+        return 0
+    try:
+        with _conn() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    SELECT pnl_usd FROM forex_trades
+                    WHERE bot_id = %s AND pair = %s AND status = 'closed'
+                    ORDER BY exit_time DESC
+                    LIMIT 5
+                    """,
+                    (BOT_ID, pair),
+                )
+                rows = cur.fetchall()
+        streak = 0
+        for row in rows:
+            if (row["pnl_usd"] or 0) < 0:
+                streak += 1
+            else:
+                break
+        return streak
+    except Exception as exc:
+        logger.warning(f"NavDB | get_pair_loss_streak failed: {exc}")
+        return 0
+
+
+def is_pair_on_cooldown(pair: str, max_consecutive_losses: int = 3) -> bool:
+    """
+    Return True if this pair has hit max_consecutive_losses in a row.
+    Cooldown clears automatically when a winning trade occurs on this pair
+    (because get_pair_loss_streak stops counting at the first win).
+    """
+    streak = get_pair_loss_streak(pair)
+    if streak >= max_consecutive_losses:
+        logger.info(
+            f"NavDB | {pair} cooldown active — {streak} consecutive losses "
+            f"(limit={max_consecutive_losses})"
+        )
+        return True
+    return False

@@ -1,23 +1,6 @@
 {
-  "cash": 1395.0037360216847,
+  "cash": 2186.646163905363,
   "positions": {
-    "XMR/USD": {
-      "symbol": "XMR/USD",
-      "direction": "long",
-      "units": 56.60031682667318,
-      "entry_price": 354.17,
-      "stop_distance": 11.255358233541552,
-      "position_value": 20046.13421050284,
-      "ema_fast": 350.3593115368997,
-      "ema_slow": 343.46684370943103,
-      "adx": 27.331836604131162,
-      "best_price": 386.98,
-      "stop_level": 375.7246417664585,
-      "trail_immediate": false,
-      "trailing_active": true,
-      "opened_at": "2026-04-20T22:39:59.787519+00:00",
-      "fees_paid": 52.119948947307385
-    },
     "XLM/USD": {
       "symbol": "XLM/USD",
       "direction": "long",
@@ -62,7 +45,7 @@
       "ema_fast": 0.000674556700944468,
       "ema_slow": 0.0006937114056331184,
       "adx": 47.34045561632832,
-      "best_price": 0.000672,
+      "best_price": 0.000669,
       "stop_level": 0.0007367424924323359,
       "trail_immediate": false,
       "trailing_active": false,
@@ -85,10 +68,27 @@
       "trailing_active": false,
       "opened_at": "2026-04-22T20:21:31.595351+00:00",
       "fees_paid": 52.168480989746946
+    },
+    "XMR/USD": {
+      "symbol": "XMR/USD",
+      "direction": "long",
+      "units": 54.15895192213917,
+      "entry_price": 367.78,
+      "stop_distance": 17.066632945720066,
+      "position_value": 19918.57933792434,
+      "ema_fast": 367.7694781302227,
+      "ema_slow": 350.1046145675234,
+      "adx": 40.30991104273609,
+      "best_price": 367.78,
+      "stop_level": 350.7133670542799,
+      "trail_immediate": false,
+      "trailing_active": false,
+      "opened_at": "2026-04-22T23:37:00.866543+00:00",
+      "fees_paid": 51.78830627860328
     }
   },
-  "total_trades": 20,
+  "total_trades": 21,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-22T20:21:31.595435+00:00"
+  "updated_at": "2026-04-22T23:37:00.866614+00:00"
 }

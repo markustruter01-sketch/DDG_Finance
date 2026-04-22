@@ -228,7 +228,8 @@ def update_trade_outcome(
                     UPDATE trades
                     SET pnl_percentage = %s,
                         status         = %s,
-                        realized_pnl   = COALESCE(%s, realized_pnl)
+                        realized_pnl   = COALESCE(%s, realized_pnl),
+                        closed_at      = NOW()
                     WHERE trade_id = %s AND status = 'Active'
                 """, (pnl_percentage, status, realized_pnl, trade_id))
                 updated = cur.rowcount
@@ -303,7 +304,8 @@ def close_trade(
                         realized_pnl        = %s,
                         time_in_trade_hours = %s,
                         actual_fill_price   = COALESCE(%s, actual_fill_price),
-                        slippage_pct        = %s
+                        slippage_pct        = %s,
+                        closed_at           = NOW()
                     WHERE trade_id = %s AND status = 'Active'
                 """, (pnl_percentage, status, exit_reason, realized_pnl,
                       time_in_trade_hours, close_price, slip, trade_id))

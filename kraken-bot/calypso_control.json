@@ -1,6 +1,4 @@
 {
   "force_reload": false,
-  "bot_paused": true,
-  "pause_reason": "audit_manual_pause_20_pct_win_rate",
-  "paused_at": "2026-04-21T21:31:57Z"
+  "bot_paused": false
 }

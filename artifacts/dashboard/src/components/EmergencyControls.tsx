@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, RefreshCw, X, Zap, ShieldOff, RotateCcw } from "lucide-react";
 import { useLiquidateAll, useSystemRestart, useForceRebalance } from "@/hooks/use-trading";
+import { useFleetHaltStatus, useFleetHalt, useFleetResume } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -193,6 +194,29 @@ export function EmergencyHeaderButtons() {
   const [showRebalanceModal, setShowRebalanceModal] = useState(false);
   const { toast } = useToast();
 
+  const { data: haltStatus } = useFleetHaltStatus();
+  const fleetHalt = useFleetHalt();
+  const fleetResume = useFleetResume();
+  const isHalted = haltStatus?.active ?? false;
+
+  const handleFleetHalt = async () => {
+    try {
+      await fleetHalt.mutateAsync("dashboard_emergency");
+      toast({ title: "FLEET HALTED", description: "All trading stopped across all bots.", variant: "destructive" });
+    } catch {
+      toast({ title: "Halt Failed", description: "Could not write halt flag to DB.", variant: "destructive" });
+    }
+  };
+
+  const handleFleetResume = async () => {
+    try {
+      await fleetResume.mutateAsync();
+      toast({ title: "Fleet Resumed", description: "Trading resumed across all bots." });
+    } catch {
+      toast({ title: "Resume Failed", description: "Could not clear halt flag.", variant: "destructive" });
+    }
+  };
+
   const handleRebalanceConfirm = () => {
     rebalance(undefined, {
       onSuccess: () => {
@@ -247,6 +271,26 @@ export function EmergencyHeaderButtons() {
       />
 
       <div className="flex items-center gap-1.5">
+        {isHalted ? (
+          <button
+            onClick={handleFleetResume}
+            disabled={fleetResume.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-green-500/20 border border-green-500/40 text-green-400 hover:bg-green-500/30 transition animate-pulse"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            RESUME FLEET
+          </button>
+        ) : (
+          <button
+            onClick={handleFleetHalt}
+            disabled={fleetHalt.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition"
+          >
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            HALT FLEET
+          </button>
+        )}
+
         <button
           onClick={() => setShowRebalanceModal(true)}
           disabled={isRebalancing}

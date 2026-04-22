@@ -2175,3 +2175,29 @@ export function useClaudeReviewHistory() {
 // Keep legacy export so any other import sites still compile
 export function useClaudeReviewStatus() { return useClaudeAuditStages(); }
 export function useTriggerClaudeReview() { return useTriggerClaudeStage(); }
+
+
+export function useFleetHaltStatus() {
+  return useQuery({
+    queryKey: ["fleet-halt-status"],
+    queryFn: () => api.get("/fleet/halt/status").then(r => r.data),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useFleetHalt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reason: string) =>
+      api.post(`/fleet/halt?reason=${encodeURIComponent(reason)}`).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fleet-halt-status"] }),
+  });
+}
+
+export function useFleetResume() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/fleet/resume").then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fleet-halt-status"] }),
+  });
+}

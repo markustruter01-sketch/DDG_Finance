@@ -51,29 +51,22 @@ def check_swing_exits(
     if pnl_usd >= tp_dist:
         return "swing_take_profit"
 
-    trail_trigger_dist = atr * trail_trigger_atr
+    trail_trigger_dist = atr * trail_trigger_atr   # profit threshold to activate trail
+
     if best_pnl_usd >= trail_trigger_dist:
+        # Trail is active — stop trails at trail_atr_mult × ATR below/above best price.
+        # No dead zone. No breakeven trap. Position either keeps running or stops out
+        # at a defined distance from its best level.
         trail_stop_dist = atr * trail_atr_mult
 
-        if best_pnl_usd >= atr * (trail_trigger_atr * 2):
-            if side == "long":
-                trail_stop_price = best_price - trail_stop_dist
-                if current_price <= trail_stop_price:
-                    return "swing_trailing_stop"
-            else:
-                trail_stop_price = best_price + trail_stop_dist
-                if current_price >= trail_stop_price:
-                    return "swing_trailing_stop"
+        if side == "long":
+            trail_stop_price = best_price - trail_stop_dist
+            if current_price <= trail_stop_price:
+                return "swing_trailing_stop"
         else:
-            be_buffer = atr * 0.1
-            if side == "long":
-                be_stop = entry_price + be_buffer
-                if current_price <= be_stop:
-                    return "swing_breakeven_stop"
-            else:
-                be_stop = entry_price - be_buffer
-                if current_price >= be_stop:
-                    return "swing_breakeven_stop"
+            trail_stop_price = best_price + trail_stop_dist
+            if current_price >= trail_stop_price:
+                return "swing_trailing_stop"
 
     if hours_held >= max_hold_hours:
         return "swing_time_expiry"

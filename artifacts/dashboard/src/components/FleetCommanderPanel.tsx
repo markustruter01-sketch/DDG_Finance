@@ -29,12 +29,17 @@ const claudeSeverityConfig: Record<string, { color: string; bg: string }> = {
 };
 
 const botNames: Record<string, string> = {
-  oracle: "Oracle #1",
-  davy_jones: "Davy Jones #2",
-  blackbeard: "Blackbeard #3",
-  calypso: "Calypso #4",
-  apex_predator: "Apex #5",
-  navigator: "Navigator #6",
+  oracle:           "Oracle #1",
+  "davy-jones":     "Davy Jones #2",
+  davy_jones:       "Davy Jones #2",
+  blackbeard:       "Blackbeard #3",
+  calypso:          "Calypso #4",
+  "apex-predator":  "Apex #5",
+  apex_predator:    "Apex #5",
+  navigator:        "Navigator #6",
+  poseidon:         "Poseidon #7",
+  "kraken-current": "Kraken Current #8",
+  kraken_current:   "Kraken Current #8",
 };
 
 function formatTime(iso: string | undefined) {

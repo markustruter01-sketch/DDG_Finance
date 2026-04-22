@@ -1343,26 +1343,32 @@ async def fleet_weekly_review():
             row = cur.fetchone()
             result["math_audit_criticals"] = int(row[0]) if row else 0
 
-    # Fleet equity summary
-    oracle_eq = next(
-        (b["equity_usd"] for b in result["fleet_heartbeat"]
-         if b["bot_id"] == "oracle"), 0
-    )
+            # 6 — Oracle + Navigator equity from equity_snapshots
+            cur.execute("""
+                SELECT alpaca_equity, forex_equity
+                FROM equity_snapshots
+                ORDER BY ts DESC LIMIT 1
+            """)
+            eq_row = cur.fetchone()
+            oracle_eq = float(eq_row[0]) if eq_row and eq_row[0] else 0.0
+            nav_eq    = float(eq_row[1]) if eq_row and eq_row[1] else 0.0
+
+    # Fleet equity summary (oracle_eq / nav_eq captured inside cursor block above)
     kraken_eq = sum(
         b["equity_usd"] for b in result["fleet_heartbeat"]
-        if b["bot_id"] not in ("oracle", "navigator")
+        if b["bot_id"] not in ("navigator",)
     )
+    total_eq = oracle_eq + nav_eq + kraken_eq
     result["fleet_summary"] = {
-        "total_equity": oracle_eq + kraken_eq,
+        "oracle_equity":    oracle_eq,
+        "navigator_equity": nav_eq,
+        "kraken_equity":    kraken_eq,
+        "total_equity":     total_eq,
         "starting_capital": 800_000,
-        "pnl_usd": oracle_eq + kraken_eq - 800_000,
-        "pnl_pct": round((oracle_eq + kraken_eq - 800_000) / 800_000 * 100, 2),
-        "bots_paused": sum(
-            1 for b in result["fleet_heartbeat"] if b["paused"]
-        ),
-        "bots_stale": sum(
-            1 for b in result["fleet_heartbeat"] if b["stale"]
-        ),
+        "pnl_usd":  round(total_eq - 800_000, 2),
+        "pnl_pct":  round((total_eq - 800_000) / 800_000 * 100, 2),
+        "bots_paused": sum(1 for b in result["fleet_heartbeat"] if b["paused"]),
+        "bots_stale":  sum(1 for b in result["fleet_heartbeat"] if b["stale"]),
     }
 
     result["generated_at"] = datetime.now(timezone.utc).isoformat()

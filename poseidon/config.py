@@ -39,15 +39,16 @@ FALLBACK_PAIR_SETS = [
 ]
 
 # ── Entry conditions ──────────────────────────────────────────────────────────
-ZSCORE_ENTRY = 1.5        # relaxed from 2.0 — still statistically significant; produces signals more frequently in crypto's lower-amplitude regimes
+ZSCORE_ENTRY = 2.0        # restored to 2.0 — requires spread 2 std devs from mean; 1.5 was entering on noise
 ZSCORE_EXIT = 0.3         # exit when |Z| < this (mean reversion complete)
 ZSCORE_STOP = 3.5         # stop loss when |Z| > this (divergence accelerating)
-# Hurst is NO LONGER used as an entry gate for Poseidon. ADF already tests
-# spread stationarity directly. Applying Hurst to the spread was double-filtering
-# and blocking almost all valid cointegrated pairs. Hurst is still computed and
-# logged for informational purposes only.
-HURST_MAX = 1.0           # effectively disabled — ADF is the sole stationarity gate
-ADF_PVALUE_MAX = 0.20     # relaxed from 0.15 — accepts t-stat < -1.95 (approx 20% confidence); crypto spreads are noisier than equity spreads
+# Hurst gates mean-reversion quality independently of ADF. ADF tests whether the
+# spread has a unit root (cointegration); Hurst tests whether it actually reverts.
+# A pair can pass ADF yet have Hurst > 0.5 (trending spread) — those are the
+# hedge_ratio_breakdown losses. Gate at 0.55 to enforce mean-reversion character
+# with a small buffer for estimation noise in 30-day windows.
+HURST_MAX = 0.55          # was 1.0 (disabled) — pairs above 0.5 trend rather than revert
+ADF_PVALUE_MAX = 0.05     # was 0.20 — standard 5% significance threshold; 20% was too permissive
 HEDGE_RATIO_STABILITY = 0.25  # relaxed from 0.15 — 25% drift tolerance over 30 days; volatility is higher in crypto
 
 # ── Position parameters ───────────────────────────────────────────────────────

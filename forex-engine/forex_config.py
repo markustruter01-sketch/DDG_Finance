@@ -201,10 +201,13 @@ def get_quote_to_usd(pair: str, current_price: float, latest_prices: dict):
 
 
 RSI_PERIOD = 14
-RSI_OVERSOLD = 35    # relaxed from 30 — sideways markets rarely hit RSI extremes
-RSI_OVERBOUGHT = 65  # relaxed from 70 — gives wider entry window in choppy conditions
+RSI_OVERSOLD  = 30
+RSI_OVERBOUGHT = 70
 
 ATR_PERIOD = 14
+ATR_MIN_PIPS = 8   # minimum ATR in pips before Navigator will trade
+                   # Below this, spread costs eat the entire R:R
+                   # EUR/USD pip = 0.0001, so ATR_MIN = 0.0008 price units
 
 SL_ATR_MULT = 2.0
 TP_ATR_MULT = 3.0

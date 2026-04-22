@@ -38,7 +38,7 @@ from forex_config import (
     PAPER_TRADING, PAPER_STARTING_BALANCE, PAPER_SPREAD_COST_PCT,
     PAIRS, PAIR_LABELS, PAIR_DIRECTIONS, JPY_PAIRS, USD_BASE_PAIRS, PIP_SIZE,
     CROSS_QUOTE_USD,
-    RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD,
+    RSI_PERIOD, RSI_OVERSOLD, RSI_OVERBOUGHT, ATR_PERIOD, ATR_MIN_PIPS,
     SL_ATR_MULT, TP_ATR_MULT, TRAIL_ATR_MULT, BREAKEVEN_ATR_MULT,
     MAX_RISK_PER_TRADE_PCT,
     MAX_OPEN_POSITIONS, MAX_POSITION_SIZE_PCT,
@@ -47,7 +47,7 @@ from forex_config import (
     CB_DRAWDOWN_THRESHOLD, CB_COOLDOWN_HOURS,
     get_quote_to_usd,
 )
-from indicators import calculate_atr, calculate_rsi, fetch_h4_candles
+from indicators import calculate_atr, calculate_rsi, calculate_ema, fetch_h4_candles
 from paper_engine import (
     get_paper_equity, get_paper_positions, get_paper_portfolio_summary,
     paper_open_position, paper_close_position, get_available_capital,
@@ -767,8 +767,8 @@ def _run_cycle_inner() -> dict:
             allowed_dir = allowed_directions.get(pair, "both")
 
             try:
-                candles = fetch_h4_candles(pair, count=100)
-                if candles.empty or len(candles) < ATR_PERIOD + 1:
+                candles = fetch_h4_candles(pair, count=250)
+                if candles.empty or len(candles) < 201:
                     scan_results.append({"pair": label, "status": "insufficient_data"})
                     continue
 
@@ -792,14 +792,41 @@ def _run_cycle_inner() -> dict:
 
                 direction = None
 
-                if rsi < RSI_OVERSOLD and allowed_dir in ("long", "both"):
+                # ── ATR minimum check — don't trade in dead-volatility conditions ─────────
+                pip_size = PIP_SIZE.get(pair, 0.0001)
+                atr_in_pips = atr / pip_size
+                if atr_in_pips < ATR_MIN_PIPS:
+                    logger.debug(
+                        f"Navigator | {label}: ATR={atr_in_pips:.1f} pips < "
+                        f"minimum {ATR_MIN_PIPS} — skipping (spread risk too high)"
+                    )
+                    scan_results.append(scan_entry)
+                    continue
+
+                # ── EMA trend filter — only enter in direction of trend ──────────────────
+                ema_50  = calculate_ema(closes, 50)
+                ema_200 = calculate_ema(closes, 200)
+                trend_up   = ema_50 > ema_200
+                trend_down = ema_50 < ema_200
+
+                # ── RSI signal — now requires trend alignment ─────────────────────────────
+                if rsi < RSI_OVERSOLD and allowed_dir in ("long", "both") and trend_up:
                     direction = "long"
                     scan_entry["signal"] = "RSI_OVERSOLD → LONG"
-                elif rsi > RSI_OVERBOUGHT and allowed_dir in ("short", "both"):
+                elif rsi > RSI_OVERBOUGHT and allowed_dir in ("short", "both") and trend_down:
                     direction = "short"
                     scan_entry["signal"] = "RSI_OVERBOUGHT → SHORT"
+                else:
+                    if rsi < RSI_OVERSOLD or rsi > RSI_OVERBOUGHT:
+                        logger.debug(
+                            f"Navigator | {label}: RSI signal present but blocked by trend filter "
+                            f"(RSI={rsi:.1f}, EMA50={ema_50:.5f}, EMA200={ema_200:.5f}, "
+                            f"trend_up={trend_up})"
+                        )
+                    scan_results.append(scan_entry)
+                    continue
 
-                # Per-pair scan log — always visible at INFO level for auditing
+                # Per-pair scan log — only for pairs passing all filters with active signal
                 _rsi_zone = (
                     "OVERSOLD ✓" if rsi < RSI_OVERSOLD else
                     "OVERBOUGHT ✓" if rsi > RSI_OVERBOUGHT else
@@ -810,10 +837,6 @@ def _run_cycle_inner() -> dict:
                     f"price={current_price:.5f} | bias={allowed_dir:5s} | "
                     f"signal={'→ ' + direction.upper() if direction else 'none'}"
                 )
-
-                if direction is None:
-                    scan_results.append(scan_entry)
-                    continue
 
                 sl_distance = atr * SL_ATR_MULT
                 tp_distance = atr * TP_ATR_MULT

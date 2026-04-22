@@ -58,6 +58,17 @@ def calculate_rsi(closes: list[float], period: int = 14) -> float:
     return round(rsi, 2)
 
 
+def calculate_ema(prices: list[float], period: int) -> float:
+    """Calculate EMA for trend direction filter."""
+    if len(prices) < period:
+        return prices[-1] if prices else 0.0
+    k = 2.0 / (period + 1)
+    ema = sum(prices[:period]) / period
+    for price in prices[period:]:
+        ema = price * k + ema * (1 - k)
+    return round(ema, 6)
+
+
 def fetch_h4_candles(symbol: str, count: int = 100) -> pd.DataFrame:
     df = _fetch_yahoo_direct(symbol)
     if df is None or df.empty:

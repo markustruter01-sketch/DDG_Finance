@@ -466,6 +466,18 @@ async def _run_pipeline_inner(
     dry_run: bool = False,
     crypto_only: bool = False,
 ) -> dict[str, Any]:
+    # ── Fleet halt check — cross-process emergency stop ───────────────────────
+    from core.fleet_halt import is_halted as _is_fleet_halted
+    if _is_fleet_halted():
+        logger.warning(
+            "Pipeline | FLEET HALT ACTIVE — skipping all pipeline logic. "
+            "Use POST /trading-api/fleet/resume to clear."
+        )
+        return {
+            "status": "fleet_halted",
+            "message": "Fleet emergency halt is active — no trades executed",
+        }
+
     started = datetime.now(timezone.utc)
     cycle_num = _state["run_count"] + 1
     mode_label = "CRYPTO-ONLY" if crypto_only else "FULL MARKET"

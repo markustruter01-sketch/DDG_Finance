@@ -417,6 +417,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_historical_prices_uq
     ON historical_prices (pair, timeframe, "timestamp");
 CREATE INDEX IF NOT EXISTS idx_historical_prices_pair_ts
     ON historical_prices (pair, timeframe, "timestamp" DESC);
+CREATE TABLE IF NOT EXISTS fleet_halt (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    active      BOOLEAN NOT NULL DEFAULT FALSE,
+    reason      TEXT,
+    halted_at   TIMESTAMPTZ,
+    halted_by   TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO fleet_halt (id, active) VALUES (1, FALSE) ON CONFLICT DO NOTHING;
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

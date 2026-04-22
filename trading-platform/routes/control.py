@@ -703,3 +703,32 @@ async def toggle_auto_trading(request: AutoTradingRequest) -> dict:
     logger.info(f"Auto-trading toggle requested: enabled={request.enabled}")
     result = set_auto_trading(request.enabled)
     return result
+
+
+@control_router.post("/fleet/halt")
+async def fleet_halt_endpoint(reason: str = "operator_manual"):
+    """Activate fleet-wide emergency halt — stops all new entries across all bots."""
+    from core.fleet_halt import set_halt, get_status
+    success = set_halt(True, reason=reason, halted_by="dashboard")
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to write halt flag to DB")
+    logger.warning(f"FLEET HALT ACTIVATED via API — reason: {reason}")
+    return {"halted": True, "reason": reason, "status": get_status()}
+
+
+@control_router.post("/fleet/resume")
+async def fleet_resume_endpoint():
+    """Clear fleet-wide emergency halt — resumes normal trading."""
+    from core.fleet_halt import set_halt, get_status
+    success = set_halt(False, reason="operator_resume", halted_by="dashboard")
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to clear halt flag in DB")
+    logger.info("Fleet halt cleared via API — trading resumed")
+    return {"halted": False, "status": get_status()}
+
+
+@control_router.get("/fleet/halt/status")
+async def fleet_halt_status():
+    """Return current fleet halt status."""
+    from core.fleet_halt import get_status
+    return get_status()

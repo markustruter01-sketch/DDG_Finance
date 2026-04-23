@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, RefreshCw, X, Zap, ShieldOff, RotateCcw } from "lucide-react";
+import { AlertTriangle, RefreshCw, X, Zap, ShieldOff, RotateCcw, FileText } from "lucide-react";
 import { useLiquidateAll, useSystemRestart, useForceRebalance } from "@/hooks/use-trading";
 import { useFleetHaltStatus, useFleetHalt, useFleetResume } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
@@ -182,6 +182,47 @@ function useEmergencyActions() {
 
 // ── Compact Header Buttons (always visible in sticky nav) ─────────────────────
 
+function ClaudeBriefButton() {
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/claude-context`);
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      const text = data.prompt as string;
+      const date = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `claude-brief-${date}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Claude Brief downloaded", description: `claude-brief-${date}.txt` });
+    } catch {
+      toast({ title: "Download failed", description: "Check that the trading API is running.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={loading}
+      title="Download Claude briefing — paste at the start of a new Claude session"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
+    >
+      {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
+      {loading ? "Generating..." : "Claude Brief"}
+    </button>
+  );
+}
+
 export function EmergencyHeaderButtons() {
   const {
     liquidate, restart,
@@ -271,6 +312,8 @@ export function EmergencyHeaderButtons() {
       />
 
       <div className="flex items-center gap-1.5">
+        <ClaudeBriefButton />
+
         {isHalted ? (
           <button
             onClick={handleFleetResume}

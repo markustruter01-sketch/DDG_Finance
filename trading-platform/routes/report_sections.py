@@ -238,6 +238,8 @@ def section_trade_mechanics_kraken() -> list[str]:
         "    Entry LONG:  z_score < -2.0  |  Entry SHORT: z_score > +2.0",
         "",
         "  RSI PER BOT (Relative Strength Index, 14-period, Wilder\u2019s EMA):",
+        # HARDCODED — must match BOT_PROFILES in kraken-bot/config.py lines 21-160
+        # If RSI thresholds change in config.py, update these four lines to match.
         "    Davy Jones (#2):    RSI_OVERSOLD=40  | RSI_OVERBOUGHT=60  (moderate mean-reversion)",
         "    Blackbeard (#3):    RSI_OVERSOLD=30  | RSI_OVERBOUGHT=70  (aggressive, wider bands)",
         "    Calypso (#4):       RSI_OVERSOLD=35  | RSI_OVERBOUGHT=65  (conservative mean-reversion)",

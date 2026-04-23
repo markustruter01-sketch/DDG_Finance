@@ -31,7 +31,7 @@ from routes._deps import (
 system_router = APIRouter(tags=["System"])
 
 
-@system_router.get("/health")
+@system_router.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict:
     jobs = get_job_status()
     last = get_last_run()

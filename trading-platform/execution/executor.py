@@ -304,12 +304,15 @@ def execute_allocations(
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         _regime_for_slot = regime_label or (output.regime if hasattr(output, "regime") else None)
+        _placed_before = len(results["placed"])
         results, remaining_cash = _execute_slot(
             slot, equity, max_position_usd, remaining_cash,
             current_positions, results, dry_run,
             var_tripped=_var_tripped,
             regime_at_entry=str(_regime_for_slot) if _regime_for_slot else None,
         )
+        if len(results["placed"]) > _placed_before:
+            _db_active_tickers.add(_normalize_symbol(slot.ticker))
 
     # Oracle v3.0: vault sweep disabled — JEPQ physical buy removed.
     # Profit reserve is tracked as a DB ledger via add_oracle_profit_contribution()

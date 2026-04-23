@@ -478,7 +478,7 @@ def scan_trend_signals(
         with_data=with_data,
         passed_adx=passed_adx,
         passed_rsi=passed_rsi,
-        passed_ema_cross=with_data,   # all with_data tickers were checked for crossover
+        passed_ema_cross=passed_rsi,   # tickers that passed EMA-direction + RSI + momentum (Stage 3)
         long_signals=len(long_signals),
         short_signals=len(short_signals),
         top5_long=top5_long,

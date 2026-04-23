@@ -23,6 +23,7 @@ Usage
 import functools
 import time
 import random
+import threading as _threading
 
 from loguru import logger
 
@@ -32,8 +33,10 @@ _BASE_WAIT   = 1.0    # seconds
 _WAIT_CAP    = 60.0   # seconds
 _MIN_SPACING = 0.30   # 300 ms floor between any two Alpaca calls (200 req/min)
 
-# Track last-call timestamp for spacing
+# Track last-call timestamp for spacing (shared across sync and async wrappers)
 _last_call_ts: float = 0.0
+_rate_limit_lock = _threading.Lock()
+_async_rate_limit_lock: "asyncio.Lock | None" = None
 
 
 def _is_rate_limit_error(exc: BaseException) -> bool:
@@ -65,13 +68,14 @@ def alpaca_retry(fn):
     def wrapper(*args, **kwargs):
         global _last_call_ts
 
-        # --- minimum spacing ---
-        elapsed = time.monotonic() - _last_call_ts
-        if elapsed < _MIN_SPACING:
-            time.sleep(_MIN_SPACING - elapsed)
+        # --- minimum spacing (atomic read-check-sleep-write under lock) ---
+        with _rate_limit_lock:
+            elapsed = time.monotonic() - _last_call_ts
+            if elapsed < _MIN_SPACING:
+                time.sleep(_MIN_SPACING - elapsed)
+            _last_call_ts = time.monotonic()
 
         for attempt in range(1, _MAX_TRIES + 1):
-            _last_call_ts = time.monotonic()
             try:
                 return fn(*args, **kwargs)
             except Exception as exc:
@@ -105,14 +109,20 @@ def alpaca_retry_async(fn):
 
     @functools.wraps(fn)
     async def wrapper(*args, **kwargs):
-        global _last_call_ts
+        global _last_call_ts, _async_rate_limit_lock
 
-        elapsed = time.monotonic() - _last_call_ts
-        if elapsed < _MIN_SPACING:
-            await asyncio.sleep(_MIN_SPACING - elapsed)
+        # --- lazy-init async lock (must be created inside a running loop) ---
+        if _async_rate_limit_lock is None:
+            _async_rate_limit_lock = asyncio.Lock()
+
+        # --- minimum spacing (atomic read-check-sleep-write under async lock) ---
+        async with _async_rate_limit_lock:
+            elapsed = time.monotonic() - _last_call_ts
+            if elapsed < _MIN_SPACING:
+                await asyncio.sleep(_MIN_SPACING - elapsed)
+            _last_call_ts = time.monotonic()
 
         for attempt in range(1, _MAX_TRIES + 1):
-            _last_call_ts = time.monotonic()
             try:
                 return await fn(*args, **kwargs)
             except Exception as exc:

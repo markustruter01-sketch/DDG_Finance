@@ -119,8 +119,11 @@ def _save_short_position(symbol: str, state: dict) -> None:
                     INSERT INTO algo_short_positions (symbol, entry_price, qty, best_price, entered_at, order_id)
                     VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (symbol) DO UPDATE SET
-                        best_price = EXCLUDED.best_price,
-                        entered_at = EXCLUDED.entered_at
+                        entry_price = EXCLUDED.entry_price,
+                        qty         = EXCLUDED.qty,
+                        best_price  = EXCLUDED.best_price,
+                        entered_at  = EXCLUDED.entered_at,
+                        order_id    = EXCLUDED.order_id
                 """, (symbol, state["entry_price"], state["qty"],
                       state["best_price"], state["entered_at"], state.get("order_id")))
             conn.commit()
@@ -221,14 +224,16 @@ def _compute_rsi(closes: list[float], period: int = ATR_PERIOD) -> float:
 
 
 def _compute_atr(closes: list[float]) -> float:
-    """Simple ATR approximation using daily closes (hourly here)."""
+    """Wilder's smoothed ATR using close-to-close range (hourly bars)."""
     if len(closes) < 2:
         return 0.0
     tr_list = [abs(closes[i] - closes[i - 1]) for i in range(1, len(closes))]
-    if not tr_list:
+    if len(tr_list) < ATR_PERIOD:
         return 0.0
-    period = min(ATR_PERIOD, len(tr_list))
-    return float(np.mean(tr_list[-period:]))
+    atr = sum(tr_list[:ATR_PERIOD]) / ATR_PERIOD
+    for tr in tr_list[ATR_PERIOD:]:
+        atr = (atr * (ATR_PERIOD - 1) + tr) / ATR_PERIOD
+    return float(atr)
 
 
 def _compute_signals(ticker: str) -> Optional[dict]:

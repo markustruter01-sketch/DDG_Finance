@@ -901,9 +901,9 @@ async def _run_pipeline_inner(
         # Equity for ATR-based position sizing
         try:
             _stf_acct  = _scan_acct()
-            _stf_equity = float(_stf_acct.get("equity", 100_000.0) or 100_000.0)
+            _stf_equity = float(_stf_acct.get("equity", 0.0) or 0.0)
         except Exception:
-            _stf_equity = 100_000.0
+            _stf_equity = 0.0
 
         _algo_result = _run_scan(open_symbols=_open_syms, equity=_stf_equity)
         _long_slots  = _algo_result.get("signals", [])
@@ -1185,7 +1185,7 @@ async def _run_pipeline_inner(
         alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
         regime = _state.get("last_regime")
         options_eq = 0.0  # Options engine retired; Apex Predator now runs as Kraken crypto momentum
-        forex_eq = 100_000.0
+        forex_eq = 0.0
         try:
             from routes._deps import _get_forex_engine as _gfx_snap
             _fx_snap = _gfx_snap()
@@ -1205,7 +1205,7 @@ async def _run_pipeline_inner(
                     if _row_ps:
                         poseidon_eq = float(_row_ps[0])
         except Exception:
-            poseidon_eq = 100_000.0
+            poseidon_eq = 0.0
         kc_eq = 0.0
         try:
             from db.postgres import get_conn as _gc_kc
@@ -1216,7 +1216,7 @@ async def _run_pipeline_inner(
                     if _row_kc:
                         kc_eq = float(_row_kc[0])
         except Exception:
-            kc_eq = 100_000.0
+            kc_eq = 0.0
         insert_equity_snapshot(
             alpaca_equity=alpaca_equity,
             kraken_equity=kraken_equity,

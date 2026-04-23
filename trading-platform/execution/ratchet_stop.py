@@ -97,8 +97,10 @@ def compute_atr(ticker: str) -> Optional[float]:
         if len(tr_list) < ATR_PERIOD:
             return None
 
-        # Wilder's smoothed ATR
-        atr = float(np.mean(tr_list[-ATR_PERIOD:]))
+        # Wilder's smoothed ATR — seed with SMA of first period, then EMA-smooth
+        atr = sum(tr_list[:ATR_PERIOD]) / ATR_PERIOD
+        for tr in tr_list[ATR_PERIOD:]:
+            atr = (atr * (ATR_PERIOD - 1) + tr) / ATR_PERIOD
         logger.debug(f"Ratchet | ATR({ATR_PERIOD}) for {ticker} = {atr:.4f}")
         return atr
 

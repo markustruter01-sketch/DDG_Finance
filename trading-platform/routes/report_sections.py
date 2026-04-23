@@ -2639,8 +2639,20 @@ def section_live_code_params_navigator() -> list[str]:
     pairs = ["EUR_USD", "GBP_USD", "USD_JPY", "AUD_USD", "USD_CAD",
              "USD_CHF", "EUR_GBP", "AUD_JPY", "GBP_JPY", "EUR_JPY"]
     lines.append(f"  {'PERMITTED_PAIRS:':<32} {', '.join(pairs)}")
-    lines.append(f"  {'RSI_OVERSOLD (long thresh):':<32} 35 (relaxed from 30)")
-    lines.append(f"  {'RSI_OVERBOUGHT (short thresh):':<32} 65 (relaxed from 70)")
+    _nav_rsi_oversold = 30
+    _nav_rsi_overbought = 70
+    try:
+        import sys as _sys, os as _os
+        _fe = _os.path.join(_os.path.dirname(__file__), '..', '..', 'forex-engine')
+        if _fe not in _sys.path:
+            _sys.path.insert(0, _fe)
+        import forex_config as _fc
+        _nav_rsi_oversold = getattr(_fc, 'RSI_OVERSOLD', 30)
+        _nav_rsi_overbought = getattr(_fc, 'RSI_OVERBOUGHT', 70)
+    except Exception:
+        pass
+    lines.append(f"  {'RSI_OVERSOLD (long thresh):':<32} {_nav_rsi_oversold}")
+    lines.append(f"  {'RSI_OVERBOUGHT (short thresh):':<32} {_nav_rsi_overbought}")
     lines.append(f"  {'SL_ATR_MULT:':<32} 2.0×")
     lines.append(f"  {'TP_ATR_MULT:':<32} 3.0×")
     lines.append(f"  {'TRAIL_ATR_MULT:':<32} 2.0×")

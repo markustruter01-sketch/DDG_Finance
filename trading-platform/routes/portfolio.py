@@ -2100,7 +2100,7 @@ async def export_diagnostic_report():
         "  parameter changes to the database. All bot parameters are managed",
         "  manually by the operator.",
         "",
-        "  Oracle #1 runs Pure Momentum v3.0 — fully deterministic, no LLM calls.",
+        "  Oracle #1 runs Stock Trend Follower v1.0 — fully deterministic, no LLM calls.",
         "  Kraken bots (#2-4) use fixed strategy parameters (no Gemini/Groq tuning).",
         "  Apex Predator (#5) and Navigator (#6) use quantitative rules only.",
         "",
@@ -2128,7 +2128,7 @@ async def export_diagnostic_report():
 
     h2("BOT #1: ORACLE (ALPACA) \u2014 HOW IT WORKS")
     lines += [
-        "  Version:           Pure Momentum v3.0 (fully deterministic \u2014 no LLM, no SGOV, no JEPQ)",
+        "  Version:           Stock Trend Follower v1.0 (fully deterministic \u2014 no LLM, no SGOV, no JEPQ)",
         "  Execution:         Alpaca paper trading (simulated US equities)",
         "  Cycle frequency:   Every 15 minutes during market hours",
         "  Universe:          ~250 NYSE/NASDAQ stocks (screened for liquidity)",

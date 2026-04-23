@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---
-    groq_api_key: str = Field(..., description="Gemini API key (GOOGLE_GEMINI_API_KEY — used by the LLM budget manager)")
+    groq_api_key: str = Field(..., description="Groq API key (GROQ_API_KEY) — used for Navigator news blackout detection")
     anthropic_api_key: str = Field(default="", description="Claude API key (optional future use)")
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (optional future use)")
 

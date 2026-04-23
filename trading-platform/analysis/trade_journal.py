@@ -64,7 +64,8 @@ def _init_sqlite() -> None:
                 time_in_trade_hours REAL,
                 exit_reason         TEXT,
                 realized_pnl        REAL,
-                slippage_pct        REAL
+                slippage_pct        REAL,
+                closed_at           TEXT
             )
         """)
         conn.execute("""
@@ -119,6 +120,8 @@ def _migrate_price_columns_sqlite(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE trades ADD COLUMN realized_pnl REAL")
     if "slippage_pct" not in existing:
         conn.execute("ALTER TABLE trades ADD COLUMN slippage_pct REAL")
+    if "closed_at" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN closed_at TEXT")
 
 
 def init_db() -> None:

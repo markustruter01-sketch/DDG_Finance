@@ -41,15 +41,21 @@ def _load_state_from_db() -> None:
                         tripped BOOLEAN NOT NULL DEFAULT FALSE,
                         opening_equity DOUBLE PRECISION,
                         drawdown_pct DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+                        pending_liquidation BOOLEAN NOT NULL DEFAULT FALSE,
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                 """)
-                cur.execute("SELECT tripped, opening_equity, drawdown_pct FROM kill_switch_state WHERE id = 1")
+                cur.execute("""
+                    ALTER TABLE kill_switch_state
+                    ADD COLUMN IF NOT EXISTS pending_liquidation BOOLEAN NOT NULL DEFAULT FALSE
+                """)
+                cur.execute("SELECT tripped, opening_equity, drawdown_pct, pending_liquidation FROM kill_switch_state WHERE id = 1")
                 row = cur.fetchone()
                 if row:
                     _state["tripped"] = bool(row[0])
                     _state["opening_equity"] = float(row[1]) if row[1] else None
                     _state["drawdown_pct"] = float(row[2]) if row[2] else 0.0
+                    _state["pending_liquidation"] = bool(row[3]) if row[3] is not None else False
             conn.commit()
     except Exception as exc:
         logger.warning(f"Kill switch | Failed to load state from DB (non-fatal): {exc}")
@@ -64,14 +70,15 @@ def _persist_state_to_db() -> None:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO kill_switch_state (id, tripped, opening_equity, drawdown_pct)
-                    VALUES (1, %s, %s, %s)
+                    INSERT INTO kill_switch_state (id, tripped, opening_equity, drawdown_pct, pending_liquidation)
+                    VALUES (1, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         tripped = EXCLUDED.tripped,
                         opening_equity = EXCLUDED.opening_equity,
                         drawdown_pct = EXCLUDED.drawdown_pct,
+                        pending_liquidation = EXCLUDED.pending_liquidation,
                         updated_at = NOW()
-                """, (_state["tripped"], _state["opening_equity"], _state["drawdown_pct"]))
+                """, (_state["tripped"], _state["opening_equity"], _state["drawdown_pct"], _state["pending_liquidation"]))
             conn.commit()
     except Exception as exc:
         logger.debug(f"Kill switch | State persist failed (non-fatal): {exc}")
@@ -193,6 +200,7 @@ def manual_trip(reason: str = "manual_emergency") -> None:
         f"Kill switch MANUALLY TRIPPED | reason={reason} | Trading halted immediately."
     )
     _state["tripped"] = True
+    _persist_state_to_db()
 
 
 def set_pending_liquidation(value: bool = True) -> None:
@@ -205,6 +213,7 @@ def set_pending_liquidation(value: bool = True) -> None:
     logger.critical(
         f"Kill switch | pending_liquidation={'SET' if value else 'CLEARED'}"
     )
+    _persist_state_to_db()
 
 
 def is_pending_liquidation() -> bool:

@@ -223,8 +223,12 @@ def compute_daily_var(
             logger.debug(f"VaR | ATR proxy block failed: {_ve}")
 
         if proxy_var_total > 0:
-            logger.info(f"VaR | Returning ATR proxy VaR=${proxy_var_total:,.2f} (insufficient price history)")
-            return proxy_var_total
+            proxy_var_pct = proxy_var_total / total_value
+            logger.info(
+                f"VaR | ATR proxy VaR={proxy_var_pct:.4f} "
+                f"(${proxy_var_total:,.2f} / ${total_value:,.2f} portfolio)"
+            )
+            return round(proxy_var_pct, 6)
         return 0.0
 
     # ── Historical simulation VaR ─────────────────────────────────────────────

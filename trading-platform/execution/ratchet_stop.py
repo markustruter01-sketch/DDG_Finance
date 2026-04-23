@@ -182,7 +182,8 @@ def _ensure_table_pg(conn) -> None:
                 atr            DOUBLE PRECISION NOT NULL,
                 atr_multiplier DOUBLE PRECISION NOT NULL DEFAULT 2.0,
                 side           TEXT NOT NULL DEFAULT 'long',
-                last_updated   DATE NOT NULL
+                last_updated   DATE NOT NULL,
+                stop_order_id  TEXT
             )
         """)
         # Safe schema migrations for upgrades from older schema versions
@@ -193,6 +194,10 @@ def _ensure_table_pg(conn) -> None:
         cur.execute("""
             ALTER TABLE ratchet_stops
             ADD COLUMN IF NOT EXISTS side TEXT NOT NULL DEFAULT 'long'
+        """)
+        cur.execute("""
+            ALTER TABLE ratchet_stops
+            ADD COLUMN IF NOT EXISTS stop_order_id TEXT
         """)
     conn.commit()
 
@@ -208,12 +213,14 @@ def _ensure_table_sqlite(db_path) -> None:
                 atr            REAL NOT NULL,
                 atr_multiplier REAL NOT NULL DEFAULT 2.0,
                 side           TEXT NOT NULL DEFAULT 'long',
-                last_updated   TEXT NOT NULL
+                last_updated   TEXT NOT NULL,
+                stop_order_id  TEXT
             )
         """)
         for col_ddl in [
             "ALTER TABLE ratchet_stops ADD COLUMN atr_multiplier REAL NOT NULL DEFAULT 2.0",
             "ALTER TABLE ratchet_stops ADD COLUMN side TEXT NOT NULL DEFAULT 'long'",
+            "ALTER TABLE ratchet_stops ADD COLUMN stop_order_id TEXT",
         ]:
             try:
                 conn.execute(col_ddl)
@@ -229,6 +236,7 @@ def save_stop(
     atr: float,
     atr_multiplier: float = ATR_MULTIPLIER,
     side: str = "long",
+    stop_order_id: str | None = None,
 ) -> None:
     today = date.today().isoformat()
     try:
@@ -238,16 +246,17 @@ def save_stop(
                 _ensure_table_pg(conn)
                 with conn.cursor() as cur:
                     cur.execute("""
-                        INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (symbol) DO UPDATE SET
                             stop_price     = EXCLUDED.stop_price,
                             fill_price     = EXCLUDED.fill_price,
                             atr            = EXCLUDED.atr,
                             atr_multiplier = EXCLUDED.atr_multiplier,
                             side           = EXCLUDED.side,
-                            last_updated   = EXCLUDED.last_updated
-                    """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today))
+                            last_updated   = EXCLUDED.last_updated,
+                            stop_order_id  = EXCLUDED.stop_order_id
+                    """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id))
                 conn.commit()
             # Record immutable entry timestamp (ON CONFLICT DO NOTHING keeps the FIRST open time)
             record_position_entry(symbol, entry_price=fill_price)
@@ -256,26 +265,27 @@ def save_stop(
     except Exception as exc:
         logger.warning(f"Ratchet | PG save failed for {symbol}: {exc} — falling back to SQLite")
 
-    _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today)
+    _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id)
 
 
-def _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today) -> None:
+def _save_stop_sqlite(symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id=None) -> None:
     import sqlite3
     from pathlib import Path
     db_path = Path(__file__).parent.parent / "trade_journal.db"
     _ensure_table_sqlite(db_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("""
-            INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ratchet_stops (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(symbol) DO UPDATE SET
                 stop_price     = excluded.stop_price,
                 fill_price     = excluded.fill_price,
                 atr            = excluded.atr,
                 atr_multiplier = excluded.atr_multiplier,
                 side           = excluded.side,
-                last_updated   = excluded.last_updated
-        """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today))
+                last_updated   = excluded.last_updated,
+                stop_order_id  = excluded.stop_order_id
+        """, (symbol, stop_price, fill_price, atr, atr_multiplier, side, today, stop_order_id))
         conn.commit()
     logger.debug(f"Ratchet | Saved stop for {symbol}: ${stop_price:.4f} mult={atr_multiplier}× side={side} (sqlite)")
 
@@ -289,7 +299,7 @@ def get_stop(symbol: str) -> Optional[dict]:
                 _ensure_table_pg(conn)
                 with conn.cursor() as cur:
                     cur.execute(
-                        "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated "
+                        "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id "
                         "FROM ratchet_stops WHERE symbol = %s",
                         (symbol,),
                     )
@@ -303,6 +313,7 @@ def get_stop(symbol: str) -> Optional[dict]:
                     "atr_multiplier": row[4],
                     "side":           row[5] if row[5] else "long",
                     "last_updated":   str(row[6]),
+                    "stop_order_id":  row[7],
                 }
             return None
     except Exception as exc:
@@ -321,13 +332,14 @@ def _get_stop_sqlite(symbol: str) -> Optional[dict]:
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated "
+            "SELECT symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id "
             "FROM ratchet_stops WHERE symbol = ?",
             (symbol,),
         ).fetchone()
     if row:
         d = dict(row)
         d.setdefault("side", "long")
+        d.setdefault("stop_order_id", None)
         return d
     return None
 
@@ -445,7 +457,9 @@ def initialise_ratchet_stop(
             else:
                 from execution.broker import place_stop_order
                 result = place_stop_order(ticker, qty, stop_price)
-            logger.info(f"Ratchet | GTC stop placed for {ticker} [{side}]: {result['id']}")
+            order_id = result.get("id")
+            logger.info(f"Ratchet | GTC stop placed for {ticker} [{side}]: {order_id}")
+            save_stop(ticker, stop_price, fill_price, atr_used, atr_mult, side=side, stop_order_id=order_id)
             return {
                 "stop_price":     stop_price,
                 "atr":            atr_used,
@@ -509,18 +523,26 @@ def maybe_ratchet(ticker: str, current_price: float, qty: float, dry_run: bool =
 
     if not dry_run:
         try:
-            from execution.broker import cancel_all_orders
-            cancel_all_orders()   # cancel existing stop for this ticker
+            from execution.broker import cancel_order
+            old_order_id = existing.get("stop_order_id")
+            if old_order_id:
+                cancel_order(old_order_id)
+            else:
+                logger.warning(
+                    f"Ratchet | No stop_order_id on record for {ticker} — skipping cancel (will not cancel other positions' stops)"
+                )
             if side == "short":
                 from execution.broker import place_short_stop_order
                 result = place_short_stop_order(ticker, int(qty), new_stop)
             else:
                 from execution.broker import place_stop_order
                 result = place_stop_order(ticker, qty, new_stop)
+            new_order_id = result.get("id")
+            save_stop(ticker, new_stop, existing["fill_price"], atr_used, atr_mult, side=side, stop_order_id=new_order_id)
             logger.info(
                 f"Ratchet | {ticker} [{side}] stop ratcheted "
                 f"${existing['stop_price']:.4f} → ${new_stop:.4f} "
-                f"| mult={atr_mult}× | new order {result['id']}"
+                f"| mult={atr_mult}× | new order {new_order_id}"
             )
             return {
                 "stop_price":     new_stop,

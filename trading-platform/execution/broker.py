@@ -342,6 +342,18 @@ def cancel_all_orders() -> int:
 
 
 @alpaca_retry
+def cancel_order(order_id: str) -> bool:
+    """Cancel a single order by ID. Returns True on success."""
+    try:
+        _client().cancel_order_by_id(order_id)
+        logger.info(f"Broker | Cancelled order {order_id}")
+        return True
+    except Exception as exc:
+        logger.warning(f"Broker | Failed to cancel order {order_id}: {exc}")
+        return False
+
+
+@alpaca_retry
 def close_all_positions() -> int:
     logger.warning("Broker | Closing ALL positions (kill switch)")
     closed = _client().close_all_positions(cancel_orders=True)

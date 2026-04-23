@@ -1373,3 +1373,62 @@ async def fleet_weekly_review():
 
     result["generated_at"] = datetime.now(timezone.utc).isoformat()
     return result
+
+
+@system_router.get("/review-flags")
+async def get_review_flags():
+    """Return all pending review flags for dashboard display."""
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"flags": [], "error": "db_unavailable"}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT flag_key, title, description, due_date,
+                       priority, status, created_at, resolved_note
+                FROM review_flags
+                WHERE status = 'pending'
+                ORDER BY
+                    CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                    due_date ASC
+            """)
+            rows = cur.fetchall()
+    from datetime import date as _date
+    today = _date.today()
+    return {
+        "flags": [
+            {
+                "flag_key":    r[0],
+                "title":       r[1],
+                "description": r[2],
+                "due_date":    str(r[3]),
+                "priority":    r[4],
+                "status":      r[5],
+                "created_at":  r[6].isoformat() if r[6] else None,
+                "overdue":     r[3] < today if r[3] else False,
+                "days_until":  (r[3] - today).days if r[3] else None,
+            }
+            for r in rows
+        ],
+        "pending_count": len(rows),
+        "high_priority_count": sum(1 for r in rows if r[4] == "high"),
+    }
+
+
+@system_router.post("/review-flags/{flag_key}/resolve")
+async def resolve_review_flag(flag_key: str, note: str = ""):
+    """Manually resolve a review flag after reporting back to Claude."""
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE review_flags
+                SET status = 'resolved',
+                    resolved_at = NOW(),
+                    resolved_note = %s
+                WHERE flag_key = %s AND status = 'pending'
+            """, (note or "Manually resolved", flag_key))
+        conn.commit()
+    return {"resolved": flag_key}

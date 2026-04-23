@@ -5,7 +5,7 @@ import {
   useLivePositions, useKrakenStatus, useKrakenPerformance,
   useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
-  useMathAuditSummary, useMathAuditRecent, useWeeklyReview,
+  useMathAuditSummary, useMathAuditRecent, useWeeklyReview, useReviewFlags,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { WeeklyReviewPanel } from "@/components/WeeklyReviewPanel";
@@ -160,6 +160,51 @@ function SystemStatusBanner() {
           </span>
         )}
         {BudgetMeter}
+      </div>
+    </div>
+  );
+}
+
+function ReviewFlagsBanner() {
+  const { data } = useReviewFlags();
+  const flags = data?.flags ?? [];
+  const highPriority = flags.filter((f: any) => f.priority === "high");
+  const overdue = flags.filter((f: any) => f.overdue);
+
+  if (flags.length === 0) return null;
+
+  return (
+    <div className="w-full bg-violet-500/10 border-b border-violet-500/20 px-4 py-2">
+      <div className="max-w-[1600px] mx-auto flex items-center gap-3">
+        <span className="text-violet-400 text-xs font-bold uppercase tracking-wider flex-shrink-0">
+          📋 Review Due
+        </span>
+        <div className="flex items-center gap-2 overflow-x-auto flex-1 scrollbar-none">
+          {flags.slice(0, 4).map((f: any) => (
+            <span
+              key={f.flag_key}
+              className={cn(
+                "flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-medium border",
+                f.overdue
+                  ? "bg-red-500/15 border-red-500/30 text-red-400"
+                  : f.priority === "high"
+                  ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+                  : "bg-violet-500/15 border-violet-500/30 text-violet-400"
+              )}
+            >
+              {f.overdue ? "⚠ OVERDUE: " : f.days_until === 0 ? "TODAY: " : `${f.days_until}d: `}
+              {f.title}
+            </span>
+          ))}
+          {flags.length > 4 && (
+            <span className="text-[10px] text-muted-foreground flex-shrink-0">
+              +{flags.length - 4} more
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] text-violet-400/60 flex-shrink-0">
+          Report to Claude when due
+        </span>
       </div>
     </div>
   );
@@ -1863,6 +1908,7 @@ export default function Dashboard() {
       <PositionChangeNotifier />
       <Header />
       <SystemStatusBanner />
+      <ReviewFlagsBanner />
       <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-2">
         <BlackoutBanner />
       </div>

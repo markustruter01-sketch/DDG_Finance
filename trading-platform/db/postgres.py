@@ -426,6 +426,20 @@ CREATE TABLE IF NOT EXISTS fleet_halt (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 INSERT INTO fleet_halt (id, active) VALUES (1, FALSE) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS review_flags (
+    id          BIGSERIAL PRIMARY KEY,
+    flag_key    TEXT NOT NULL UNIQUE,
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL,
+    due_date    DATE NOT NULL,
+    priority    TEXT NOT NULL DEFAULT 'medium',
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolved_note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_review_flags_status ON review_flags (status, due_date);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

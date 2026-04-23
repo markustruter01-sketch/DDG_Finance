@@ -2210,3 +2210,11 @@ export function useWeeklyReview() {
     staleTime: 60_000,
   });
 }
+
+export function useReviewFlags() {
+  return useQuery({
+    queryKey: ["review-flags"],
+    queryFn: () => api.get("/review-flags").then(r => r.data),
+    refetchInterval: 10 * 60 * 1000,
+  });
+}

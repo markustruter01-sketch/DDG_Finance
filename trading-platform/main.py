@@ -378,6 +378,18 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC) — TRUE price-based")
 
+    # ── Review Flag Scheduler — daily performance checks ─────────────────────
+    from core.review_scheduler import run_scheduled_checks as _run_review_checks
+    scheduler.add_job(
+        func=_run_review_checks,
+        trigger=_CronTrigger(hour=17, minute=30, timezone="America/New_York"),
+        id="daily_review_flags",
+        name="Daily Review Flag Checker (5:30 PM ET)",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("ReviewScheduler | Registered: daily_review_flags (5:30 PM ET)")
+
     # ── Math Auditor — independent formula verification ─────────────────────
     try:
         from math_auditor import ensure_table as _ma_ensure, run_quick_audit, run_full_audit, run_deep_audit

@@ -49,6 +49,26 @@ def ensure_poseidon_tables():
                     ALTER TABLE kraken_heartbeat
                     ADD COLUMN IF NOT EXISTS force_refresh BOOLEAN NOT NULL DEFAULT FALSE;
                 """)
+                # Momentum strategy trades table (single-asset, replaces pairs schema)
+                cur.execute("""
+                CREATE TABLE IF NOT EXISTS poseidon_momentum_trades (
+                    id            BIGSERIAL PRIMARY KEY,
+                    symbol        TEXT NOT NULL,
+                    direction     TEXT NOT NULL,
+                    entry_price   DOUBLE PRECISION NOT NULL,
+                    exit_price    DOUBLE PRECISION NOT NULL,
+                    units         DOUBLE PRECISION NOT NULL,
+                    position_usd  DOUBLE PRECISION NOT NULL,
+                    net_pnl       DOUBLE PRECISION NOT NULL,
+                    holding_hours DOUBLE PRECISION,
+                    atr           DOUBLE PRECISION,
+                    reason        TEXT,
+                    closed_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    bot_id        TEXT NOT NULL DEFAULT 'poseidon'
+                );
+                CREATE INDEX IF NOT EXISTS idx_poseidon_momentum_trades_closed_at
+                    ON poseidon_momentum_trades (closed_at DESC);
+                """)
                 cur.execute("""
                 CREATE TABLE IF NOT EXISTS poseidon_pair_params (
                     id              BIGSERIAL PRIMARY KEY,
@@ -211,6 +231,32 @@ def record_trade(trade: dict):
                 ))
     except Exception as e:
         logger.warning(f"Poseidon DB | trade record failed: {e}")
+
+
+def record_momentum_trade(trade: dict):
+    """Record a single-asset momentum trade to poseidon_momentum_trades."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO poseidon_momentum_trades
+                        (symbol, direction, entry_price, exit_price, units,
+                         position_usd, net_pnl, holding_hours, atr, reason, closed_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (
+                    trade.get("symbol"),
+                    trade.get("direction"),
+                    trade.get("entry_price"),
+                    trade.get("exit_price"),
+                    trade.get("units"),
+                    trade.get("position_usd"),
+                    trade.get("net_pnl"),
+                    trade.get("holding_hours"),
+                    trade.get("atr"),
+                    trade.get("reason"),
+                ))
+    except Exception as e:
+        logger.warning(f"Poseidon DB | momentum trade record failed: {e}")
 
 
 def get_pair_params(pair_set_id: int) -> Optional[dict]:

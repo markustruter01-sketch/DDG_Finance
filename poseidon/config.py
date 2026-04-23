@@ -1,97 +1,78 @@
 """
-config.py — Poseidon Bot Configuration
-Bot #7: Statistical Arbitrage / Pairs Trading on Kraken
-$100,000 paper capital | 15-minute cycle
+config.py — Poseidon Bot (#7)
+Strategy: Dual-Timeframe Momentum with Volume Confirmation
+Exchange: Kraken (crypto)
+Cycle: 15 minutes
+Capital: $95,175 paper
 """
-from __future__ import annotations
 import os
 
-BOT_ID = "poseidon"
-DISPLAY_NAME = "Poseidon"
-DB_ID = 7
-STRATEGY_TYPE = "pairs_trading"
-STRATEGY_LABEL = "Statistical Arbitrage"
-PAPER_STARTING_BALANCE = 100_000.0
-PAPER_FEE_PCT = 0.0026
-LOOP_SLEEP_SECONDS = 900  # 15 minutes
+BOT_ID           = "poseidon"
+DISPLAY_NAME     = "Poseidon (#7)"
+DB_ID            = 7
 
-# ── Dynamic pair discovery ────────────────────────────────────────────────────
-UNIVERSE_SIZE = 250        # top N coins by market cap to fetch from CoinGecko
-MIN_PAIR_CORR = 0.85       # minimum |log-price correlation| to run ADF
-ADF_PVALUE_MAX_DISCOVERY = 0.20  # relaxed from 0.15 — crypto spreads are noisier; 0.20 still confirms approximate stationarity
-MAX_UNIVERSE_PAIRS = 50    # max pairs held in the tradeable universe
-DISCOVERY_HOURS = 24       # full rediscovery interval
-DISCOVERY_DAILY_DAYS = 30  # days of daily closes used during discovery
+# ── Capital ───────────────────────────────────────────────────────────────────
+PAPER_STARTING_BALANCE = 95_175.84  # current equity after pairs trading losses
+PAPER_FEE_PCT          = 0.0026     # Kraken taker fee per leg
 
-# Fallback pairs used if CoinGecko is unavailable at startup
-# Fix 5: expanded from 5 → 10 pair sets, adding stronger idiosyncratic divergence pairs
-FALLBACK_PAIR_SETS = [
-    {"pair_set_id": 1,  "asset_a": "ETH/USD",  "asset_b": "BTC/USD",  "description": "ETH vs BTC (beta spread)"},
-    {"pair_set_id": 2,  "asset_a": "ADA/USD",  "asset_b": "SOL/USD",  "description": "ADA vs SOL (L1 alts)"},
-    {"pair_set_id": 3,  "asset_a": "AVAX/USD", "asset_b": "SOL/USD",  "description": "AVAX vs SOL (smart contract L1s)"},
-    {"pair_set_id": 4,  "asset_a": "DOT/USD",  "asset_b": "ATOM/USD", "description": "DOT vs ATOM (interoperability)"},
-    {"pair_set_id": 5,  "asset_a": "LINK/USD", "asset_b": "UNI/USD",  "description": "LINK vs UNI (DeFi infrastructure)"},
-    {"pair_set_id": 6,  "asset_a": "BNB/USD",  "asset_b": "ETH/USD",  "description": "BNB vs ETH (exchange token vs platform)"},
-    {"pair_set_id": 7,  "asset_a": "LTC/USD",  "asset_b": "BCH/USD",  "description": "LTC vs BCH (Bitcoin fork pair)"},
-    {"pair_set_id": 8,  "asset_a": "LINK/USD", "asset_b": "DOT/USD",  "description": "LINK vs DOT (oracle vs interoperability)"},
-    {"pair_set_id": 9,  "asset_a": "INJ/USD",  "asset_b": "AVAX/USD", "description": "INJ vs AVAX (DeFi L1s)"},
-    {"pair_set_id": 10, "asset_a": "DYM/USD",  "asset_b": "ARB/USD",  "description": "DYM vs ARB (modular L2 vs Ethereum L2)"},
+# ── Cycle ─────────────────────────────────────────────────────────────────────
+LOOP_SLEEP_SECONDS = 900   # 15-minute cycle
+
+# ── Universe ──────────────────────────────────────────────────────────────────
+# Top liquid pairs by Kraken USD volume — not CoinGecko market cap.
+# These have tight spreads and deep books. Updated manually as market evolves.
+SYMBOLS = [
+    "BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "ADA/USD",
+    "AVAX/USD", "DOT/USD", "LINK/USD", "MATIC/USD", "ATOM/USD",
+    "UNI/USD", "LTC/USD", "BCH/USD", "NEAR/USD", "APT/USD",
+    "OP/USD", "ARB/USD", "INJ/USD", "TIA/USD", "SEI/USD",
 ]
 
-# ── Entry conditions ──────────────────────────────────────────────────────────
-ZSCORE_ENTRY = 2.0        # restored to 2.0 — requires spread 2 std devs from mean; 1.5 was entering on noise
-ZSCORE_EXIT = 0.3         # exit when |Z| < this (mean reversion complete)
-ZSCORE_STOP = 3.5         # stop loss when |Z| > this (divergence accelerating)
-# Hurst gates mean-reversion quality independently of ADF. ADF tests whether the
-# spread has a unit root (cointegration); Hurst tests whether it actually reverts.
-# A pair can pass ADF yet have Hurst > 0.5 (trending spread) — those are the
-# hedge_ratio_breakdown losses. Gate at 0.55 to enforce mean-reversion character
-# with a small buffer for estimation noise in 30-day windows.
-HURST_MAX = 0.55          # was 1.0 (disabled) — pairs above 0.5 trend rather than revert
-ADF_PVALUE_MAX = 0.05     # was 0.20 — standard 5% significance threshold; 20% was too permissive
-HEDGE_RATIO_STABILITY = 0.25  # relaxed from 0.15 — 25% drift tolerance over 30 days; volatility is higher in crypto
+# ── Position Sizing ───────────────────────────────────────────────────────────
+MAX_POSITIONS        = 4      # max 4 concurrent positions
+RISK_PER_TRADE       = 0.015  # risk 1.5% of equity per trade
+MAX_POSITION_PCT     = 0.20   # hard cap 20% equity per position
+MIN_POSITION_USD     = 200.0  # minimum position size
 
-# ── Position parameters ───────────────────────────────────────────────────────
-POSITION_VALUE_PCT = 0.15  # reduced from 0.20 — 15% per pair; max 5 positions = 75% deployed
-MAX_POSITIONS = 5          # increased from 3 — allows up to 5 simultaneous pair positions across 10 pair sets
+# ── Strategy Parameters — 4H Trend Filter ────────────────────────────────────
+EMA_FAST             = 21     # 4h candles: 21 bars = 84h trend
+EMA_SLOW             = 55     # 4h candles: 55 bars = 220h trend
+EMA_MIN_SPREAD_PCT   = 0.003  # EMAs must be 0.3% apart — no flat-market entries
 
-# ── Time-based exit ───────────────────────────────────────────────────────────
-MAX_HOLD_HOURS = 72        # exit after 72 hours regardless
+# ── Strategy Parameters — 1H Entry Timing ────────────────────────────────────
+RSI_PERIOD           = 14
+RSI_LONG_MIN         = 38    # long entry: RSI must be in this range (pullback zone)
+RSI_LONG_MAX         = 58    # not overbought
+RSI_SHORT_MIN        = 42    # short entry: RSI must be in this range
+RSI_SHORT_MAX        = 62    # not oversold
 
-# ── Hedge ratio recalculation ─────────────────────────────────────────────────
-HEDGE_RATIO_RECALC_HOURS = 24    # recalculate every 24 hours
-OLS_LOOKBACK_DAYS = 60           # 60 days of hourly data for OLS
-ZSCORE_LOOKBACK_HOURS = 60       # rolling Z-score window (60 hours = 2.5 days)
-SPREAD_HISTORY_HOURS = 168       # 7 days for hedge ratio stability check
-HEDGE_RATIO_BREAKDOWN = 0.25     # exit if hedge ratio drifts 25% from entry
+# ── Strategy Parameters — Volume Confirmation ─────────────────────────────────
+VOLUME_MA_PERIOD     = 20    # 20-bar volume moving average
+VOLUME_MIN_MULT      = 1.5   # current volume must be 1.5x the MA
 
-# ── Circuit breaker ───────────────────────────────────────────────────────────
-CB_CONSECUTIVE_LOSSES = 5        # pause after 5 consecutive losses
-CB_PAUSE_HOURS = 24              # pause duration
+# ── Strategy Parameters — ATR Stops ──────────────────────────────────────────
+ATR_PERIOD           = 14
+ATR_STOP_MULT        = 2.5   # hard stop at 2.5x ATR from entry
+ATR_TRAIL_TRIGGER    = 2.0   # trail activates after 2.0x ATR profit
+ATR_TRAIL_MULT       = 2.0   # trail sits 2.0x ATR below/above best price
 
-# ── Kraken exchange ───────────────────────────────────────────────────────────
-KRAKEN_API_KEY = os.environ.get("KRAKEN_API_KEY", "")
+# ── Hold Time ─────────────────────────────────────────────────────────────────
+MAX_HOLD_HOURS       = 120   # 5 days max hold — force close regardless of P&L
+MIN_HOLD_HOURS       = 4     # no exits checked before 4 hours (noise filter)
+
+# ── Circuit Breaker ───────────────────────────────────────────────────────────
+CB_CONSECUTIVE_LOSSES = 4    # pause after 4 consecutive losses
+CB_PAUSE_HOURS        = 24   # 24h pause
+
+# ── Shorts ────────────────────────────────────────────────────────────────────
+ALLOW_SHORTS         = True  # allow short positions
+MAX_SHORTS           = 1     # max 1 short at a time
+
+# ── Exchange ──────────────────────────────────────────────────────────────────
+KRAKEN_API_KEY    = os.environ.get("KRAKEN_API_KEY", "")
 KRAKEN_SECRET_KEY = os.environ.get("KRAKEN_SECRET_KEY", "")
 
-# Kraken pair name mapping (ccxt format → Kraken ticker)
-KRAKEN_SYMBOLS = {
-    "ETH/USD":  "XETHZUSD",
-    "BTC/USD":  "XXBTZUSD",
-    "ADA/USD":  "ADAUSD",
-    "SOL/USD":  "SOLUSD",
-    "AVAX/USD": "AVAXUSD",
-    "DOT/USD":  "DOTUSD",
-    "ATOM/USD": "ATOMUSD",
-    "LINK/USD": "LINKUSD",
-    "UNI/USD":  "UNIUSD",
-    # Fix 5 additions
-    "BNB/USD":  "BNBUSD",
-    "LTC/USD":  "XLTCZUSD",
-    "BCH/USD":  "BCHUSD",
-    "INJ/USD":  "INJUSD",
-    "DYM/USD":  "DYMUSD",
-    "ARB/USD":  "ARBUSD",
-}
-
-STATUS_FILE = "poseidon/poseidon_status.json"
-LIVE_STATE_FILE = "poseidon/poseidon_live_state.json"
+# ── State files ───────────────────────────────────────────────────────────────
+STATUS_FILE      = "poseidon/poseidon_status.json"
+LIVE_STATE_FILE  = "poseidon/poseidon_live_state.json"
+PORTFOLIO_FILE   = "poseidon/poseidon_paper_portfolio.json"

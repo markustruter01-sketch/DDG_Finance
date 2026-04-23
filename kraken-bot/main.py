@@ -3504,4 +3504,13 @@ def main() -> None:
 
 # ── Script entry point ────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    main()
+    import time as _wdtime
+    while True:
+        try:
+            main()
+        except KeyboardInterrupt:
+            print("[watchdog] KeyboardInterrupt — exiting cleanly")
+            break
+        except Exception as _wderr:
+            print(f"[watchdog] main() crashed ({type(_wderr).__name__}: {_wderr}) — restarting in 10s")
+            _wdtime.sleep(10)

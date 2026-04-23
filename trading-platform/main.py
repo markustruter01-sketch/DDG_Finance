@@ -390,6 +390,13 @@ async def lifespan(app: FastAPI):
     )
     logger.info("ReviewScheduler | Registered: daily_review_flags (5:30 PM ET)")
 
+    # ── Seed review flags immediately on startup (ensures production DB is populated) ─
+    try:
+        _run_review_checks()
+        logger.info("ReviewScheduler | Startup seed complete")
+    except Exception as _rev_err:
+        logger.warning(f"ReviewScheduler | Startup seed failed (non-fatal): {_rev_err}")
+
     # ── Math Auditor — independent formula verification ─────────────────────
     try:
         from math_auditor import ensure_table as _ma_ensure, run_quick_audit, run_full_audit, run_deep_audit

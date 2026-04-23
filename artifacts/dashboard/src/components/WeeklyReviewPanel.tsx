@@ -1,7 +1,8 @@
-import { useWeeklyReview } from "@/hooks/use-trading";
+import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState } from "@/hooks/use-trading";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 
 function fmt(v: number | null | undefined, prefix = "$") {
   if (v == null) return "—";
@@ -25,6 +26,22 @@ function timeAgo(iso: string | null | undefined) {
 
 export function WeeklyReviewPanel() {
   const { data, isLoading, isError } = useWeeklyReview();
+  const { data: portfolio } = usePortfolio();
+  const { data: fleetSummary } = useKrakenFleetSummary();
+  const { data: forexState } = useForexState();
+
+  const oracleEquity = portfolio?.account?.equity ?? 0;
+  const krakenEquity = fleetSummary?.total_equity_usd ?? 0;
+  const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
+  const liveTotal = computeFleetEquity(
+    oracleEquity > 0 ? oracleEquity : 0,
+    krakenEquity,
+    0,
+    forexEquity,
+  );
+  const liveTotalPnl = liveTotal - FLEET_STARTING_CAPITAL;
+  const liveTotalPnlPct = (liveTotalPnl / FLEET_STARTING_CAPITAL) * 100;
+  const equityReady = oracleEquity > 0 || krakenEquity > 0;
 
   if (isLoading) {
     return (
@@ -53,8 +70,6 @@ export function WeeklyReviewPanel() {
   const criticals = data.math_audit_criticals ?? 0;
   const vault = data.vault ?? {};
 
-  const totalPnl = summary.pnl_usd ?? 0;
-  const totalPnlPct = summary.pnl_pct ?? 0;
   const pausedCount = summary.bots_paused ?? 0;
   const staleCount = summary.bots_stale ?? 0;
 
@@ -92,13 +107,15 @@ export function WeeklyReviewPanel() {
 
       <CardContent className="space-y-4 pb-5">
 
-        {/* ── Fleet Equity ── */}
+        {/* ── Fleet Equity (live data, same source as main dashboard) ── */}
         <div className="rounded-xl border border-white/5 bg-white/3 p-4">
           <div className="text-[9px] uppercase tracking-widest text-muted-foreground mb-3 font-semibold">Fleet Equity</div>
           <div className="flex items-end justify-between">
             <div>
               <div className="text-2xl font-mono font-bold text-white tabular-nums">
-                ${(summary.total_equity ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                {equityReady
+                  ? `$${liveTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
                 of $800,000 starting
@@ -106,32 +123,40 @@ export function WeeklyReviewPanel() {
             </div>
             <div className={cn(
               "text-right",
-              totalPnl >= 0 ? "text-emerald-400" : "text-red-400"
+              liveTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"
             )}>
               <div className="text-lg font-mono font-bold">
-                {totalPnl >= 0 ? "+" : "−"}{fmt(totalPnl)}
+                {equityReady
+                  ? `${liveTotalPnl >= 0 ? "+" : "−"}${fmt(liveTotalPnl)}`
+                  : "—"}
               </div>
-              <div className="text-xs font-mono">{fmtPct(totalPnlPct)}</div>
+              <div className="text-xs font-mono">
+                {equityReady ? fmtPct(liveTotalPnlPct) : "—"}
+              </div>
             </div>
           </div>
 
           {/* Bot equity breakdown */}
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[
-              { label: "Oracle", val: summary.oracle_equity, start: 100000 },
-              { label: "Navigator", val: summary.navigator_equity, start: 100000 },
-              { label: "Kraken (6)", val: summary.kraken_equity, start: 600000 },
+              { label: "Oracle", val: oracleEquity > 0 ? oracleEquity : null, start: 100_000 },
+              { label: "Navigator", val: forexEquity > 0 ? forexEquity : null, start: 100_000 },
+              { label: "Kraken (6)", val: krakenEquity > 0 ? krakenEquity : null, start: 600_000 },
             ].map(({ label, val, start }) => {
-              const pnl = (val ?? 0) - start;
+              const pnl = val != null ? val - start : null;
               return (
                 <div key={label} className="rounded-lg bg-white/3 p-2">
                   <div className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</div>
                   <div className="text-xs font-mono font-bold text-white mt-0.5">
-                    ${(val ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {val != null
+                      ? `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                      : "—"}
                   </div>
-                  <div className={cn("text-[10px] font-mono", pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
-                    {pnl >= 0 ? "+" : "−"}{fmt(pnl)}
-                  </div>
+                  {pnl != null && (
+                    <div className={cn("text-[10px] font-mono", pnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+                      {pnl >= 0 ? "+" : "−"}{fmt(pnl)}
+                    </div>
+                  )}
                 </div>
               );
             })}

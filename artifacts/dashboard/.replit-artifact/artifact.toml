@@ -103,3 +103,52 @@ args = ["bash", "-c", "BOT_ID=calypso python3 kraken-bot/main.py"]
 [services.env]
 PORT = "8087"
 BOT_ID = "calypso"
+
+[[services]]
+name = "apex-predator-bot"
+paths = [ "/apex-predator-bot" ]
+localPort = 8088
+
+[services.development]
+run = "cd /home/runner/workspace && BOT_ID=apex-predator python3 kraken-bot/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "BOT_ID=apex-predator python3 kraken-bot/main.py"]
+
+[services.env]
+PORT = "8088"
+BOT_ID = "apex-predator"
+
+[[services]]
+name = "poseidon-bot"
+paths = [ "/poseidon-bot" ]
+localPort = 8089
+
+[services.development]
+run = "cd /home/runner/workspace && python3 poseidon/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "python3 poseidon/main.py"]
+
+[services.env]
+PORT = "8089"
+
+[[services]]
+name = "kraken-current-bot"
+paths = [ "/kraken-current-bot" ]
+localPort = 8090
+
+[services.development]
+run = "cd /home/runner/workspace && python3 kraken-current/main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["bash", "-c", "python3 kraken-current/main.py"]
+
+[services.env]
+PORT = "8090"

@@ -19,7 +19,7 @@ import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   EXPECTED_JOBS, tradingModeLabel, tradingModeColor,
-  computeFleetEquity, FLEET_STARTING_CAPITAL,
+  FLEET_STARTING_CAPITAL,
 } from "@/lib/dashboard-shared";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";

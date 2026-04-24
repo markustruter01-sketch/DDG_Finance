@@ -1,4 +1,4 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, useFleetEquity, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
@@ -431,6 +431,7 @@ export default function StreamingBotsScreen() {
   const { data: vault } = useVault();
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
+  const { data: fleetEq } = useFleetEquity();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
 
@@ -460,7 +461,7 @@ export default function StreamingBotsScreen() {
   const apexKrakenEquity = apexKrakenPerf?.current_equity ?? apexKrakenStatus?.total_equity_usd ?? null;
   const apexKrakenTopPair = apexKrakenStatus?.open_positions?.[0]?.symbol;
 
-  const navEquity = forexState?.total_equity ?? forexState?.paper_equity ?? null;
+  const navEquity = fleetEq?.navigator?.equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
     ? (forexPosRaw as ForexPosition[])
     : ((forexPosRaw as { positions?: ForexPosition[] } | null)?.positions ?? []);

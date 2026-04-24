@@ -91,8 +91,10 @@ class RegimeAllocationSlot(BaseModel):
     @field_validator("take_profit_pct")
     @classmethod
     def validate_take_profit(cls, v: float) -> float:
-        if v > 0.60:
-            raise ValueError("take_profit_pct cannot exceed +60% — unrealistic")
+        # Allow up to 1.0 (100%) — trend-following slots use 0.999 as a sentinel
+        # meaning "no fixed TP, rely on trailing stop" (see algo_scanner.py)
+        if v > 1.0:
+            raise ValueError("take_profit_pct cannot exceed 100%")
         return round(v, 4)
 
     @model_validator(mode="after")
@@ -245,8 +247,9 @@ class CryptoAllocationSlot(BaseModel):
     @field_validator("take_profit_pct")
     @classmethod
     def validate_take_profit(cls, v: float) -> float:
-        if v > 0.60:
-            raise ValueError("take_profit_pct cannot exceed +60%")
+        # Allow up to 1.0 (100%) — trend-following slots use 0.999 as a sentinel
+        if v > 1.0:
+            raise ValueError("take_profit_pct cannot exceed 100%")
         return round(v, 4)
 
     @model_validator(mode="after")

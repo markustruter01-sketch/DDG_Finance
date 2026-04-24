@@ -310,6 +310,7 @@ def execute_allocations(
             current_positions, results, dry_run,
             var_tripped=_var_tripped,
             regime_at_entry=str(_regime_for_slot) if _regime_for_slot else None,
+            db_active_tickers=_db_active_tickers,
         )
         if len(results["placed"]) > _placed_before:
             _db_active_tickers.add(_normalize_symbol(slot.ticker))
@@ -478,6 +479,7 @@ def _execute_slot(
     dry_run: bool,
     var_tripped: bool = False,
     regime_at_entry: str | None = None,
+    db_active_tickers: set = frozenset(),
 ) -> tuple[dict, float]:
     ticker = slot.ticker
     symbol = _normalize_symbol(ticker)
@@ -636,7 +638,7 @@ def _execute_slot(
 
     # Secondary guard: DB active trades table — catches race conditions where
     # Alpaca position feed hasn't updated yet after a recent order placement.
-    if symbol in _db_active_tickers:
+    if symbol in db_active_tickers:
         logger.info(
             f"Slot {slot.slot}: {ticker:10s} → SKIP (active_in_db — Alpaca feed may be lagging)"
         )

@@ -1,8 +1,8 @@
-import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState } from "@/hooks/use-trading";
+import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState, useFleetEquity } from "@/hooks/use-trading";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
+import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 
 function fmt(v: number | null | undefined, prefix = "$") {
   if (v == null) return "—";
@@ -29,19 +29,25 @@ export function WeeklyReviewPanel() {
   const { data: portfolio } = usePortfolio();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: forexState } = useForexState();
+  const { data: fleetEq } = useFleetEquity();
 
-  const oracleEquity = portfolio?.account?.equity ?? 0;
-  const krakenEquity = fleetSummary?.total_equity_usd ?? 0;
-  const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
-  const liveTotal = computeFleetEquity(
-    oracleEquity > 0 ? oracleEquity : 0,
-    krakenEquity,
-    0,
-    forexEquity,
-  );
-  const liveTotalPnl = liveTotal - FLEET_STARTING_CAPITAL;
+  const liveTotal = fleetEq?.fleet_total?.equity ?? 0;
+  const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? 0;
   const liveTotalPnlPct = (liveTotalPnl / FLEET_STARTING_CAPITAL) * 100;
-  const equityReady = oracleEquity > 0 || krakenEquity > 0;
+  const equityReady = liveTotal > 0;
+
+  const oracleEquity = fleetEq?.oracle?.equity ?? null;
+  const forexEquity = fleetEq?.navigator?.equity ?? null;
+  const krakenEquity = ([
+    fleetEq?.davy_jones?.equity,
+    fleetEq?.blackbeard?.equity,
+    fleetEq?.calypso?.equity,
+    fleetEq?.apex?.equity,
+    fleetEq?.poseidon?.equity,
+    fleetEq?.kraken_current?.equity,
+  ].every(v => v != null)
+    ? [fleetEq?.davy_jones?.equity ?? 0, fleetEq?.blackbeard?.equity ?? 0, fleetEq?.calypso?.equity ?? 0, fleetEq?.apex?.equity ?? 0, fleetEq?.poseidon?.equity ?? 0, fleetEq?.kraken_current?.equity ?? 0].reduce((a, b) => a + b, 0)
+    : null);
 
   if (isLoading) {
     return (
@@ -139,9 +145,9 @@ export function WeeklyReviewPanel() {
           {/* Bot equity breakdown */}
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[
-              { label: "Oracle", val: oracleEquity > 0 ? oracleEquity : null, start: 100_000 },
-              { label: "Navigator", val: forexEquity > 0 ? forexEquity : null, start: 100_000 },
-              { label: "Kraken (6)", val: krakenEquity > 0 ? krakenEquity : null, start: 600_000 },
+              { label: "Oracle", val: oracleEquity, start: 100_000 },
+              { label: "Navigator", val: forexEquity, start: 100_000 },
+              { label: "Kraken (6)", val: krakenEquity, start: 600_000 },
             ].map(({ label, val, start }) => {
               const pnl = val != null ? val - start : null;
               return (

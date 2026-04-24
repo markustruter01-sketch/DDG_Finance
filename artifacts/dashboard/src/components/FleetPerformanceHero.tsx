@@ -3,13 +3,14 @@ import { cn, formatCurrency } from "@/lib/utils";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useForexState,
-  usePoseidonState, useKrakenCurrentState,
+  usePoseidonState, useKrakenCurrentState, useFleetEquity,
 } from "@/hooks/use-trading";
-import { BOT_THEMES, MiniSparkline, computeFleetEquity, type KrakenTradeEntry } from "@/lib/dashboard-shared";
+import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
 
 export function FleetPerformanceHero() {
   const { data: summary } = useStatusSummary();
   const { data: fleetSummary } = useKrakenFleetSummary();
+  const { data: fleetEq } = useFleetEquity();
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
   const { data: fxState } = useForexState();
@@ -22,10 +23,7 @@ export function FleetPerformanceHero() {
   const bbStatus = useKrakenStatus("blackbeard");
   const caStatus = useKrakenStatus("calypso");
 
-  const alpacaEquity = summary?.portfolio_totals.equity ?? 0;
-  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
-  const forexEquity = fxState?.total_equity || 100_000;
-  const grandTotal = computeFleetEquity(alpacaEquity, krakenFleetEquity, 0, forexEquity);
+  const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;

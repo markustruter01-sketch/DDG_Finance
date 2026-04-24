@@ -765,6 +765,41 @@ export function useSentiment() {
   });
 }
 
+// --- Fleet Equity (single source of truth) ---
+
+export interface BotEquity {
+  equity: number;
+  pnl: number;
+  pnl_pct: number;
+  starting: number;
+  positions: number;
+  source: string;
+}
+
+export interface FleetEquityData {
+  oracle: BotEquity;
+  davy_jones: BotEquity;
+  blackbeard: BotEquity;
+  calypso: BotEquity;
+  apex: BotEquity;
+  navigator: BotEquity;
+  poseidon: BotEquity;
+  kraken_current: BotEquity;
+  fleet_total: BotEquity;
+  generated_at: string;
+  errors: string[];
+}
+
+export function useFleetEquity() {
+  return useQuery<FleetEquityData>({
+    queryKey: ["fleet-equity"],
+    queryFn: async () => (await api.get("/fleet/equity")).data,
+    refetchInterval: useVisibleInterval(15_000),
+    staleTime: 10_000,
+    retry: 1,
+  });
+}
+
 // --- Economic Calendar ---
 
 export interface BlackoutState {

@@ -494,9 +494,9 @@ export const EXPECTED_JOBS = 14;
  *                       krakenFleetEquity. Pass 0 or omit.
  *   forexEquity       — Navigator (Bot #6, forex paper account)
  *
- * CRITICAL: Do NOT add Poseidon or Kraken Current equity separately.
- * They are already included inside krakenFleetEquity via fleet-summary.
- * Adding them again inflates the total by ~$200k.
+ * @deprecated Use the `useFleetEquity()` hook instead, which reads from the
+ * canonical `/fleet/equity` endpoint (single source of truth for all bot equity).
+ * This helper predates that endpoint and may produce stale/incorrect totals.
  */
 export function computeFleetEquity(
   alpacaEquity: number,

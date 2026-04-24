@@ -8,6 +8,7 @@ import {
   useForexPositions,
   usePoseidonState,
   useKrakenCurrentState,
+  useFleetEquity,
   type AIIntervention,
   type ForexPosition,
 } from "@/hooks/use-trading";
@@ -271,13 +272,14 @@ export default function BotsPage() {
   const { data: forexPositionsRaw, isLoading: forexPosLoading } = useForexPositions();
   const { data: poseidonState, isLoading: poseidonLoading } = usePoseidonState();
   const { data: kcState, isLoading: kcLoading } = useKrakenCurrentState();
+  const { data: fleetEq } = useFleetEquity();
 
   const previousParams = useMemo(
     () => derivePreviousParams(aiTimeline?.interventions),
     [aiTimeline]
   );
 
-  const oracleEquity = portfolio?.account?.equity ?? null;
+  const oracleEquity = fleetEq?.oracle?.equity ?? null;
   const oraclePositions: GenericPosition[] = (portfolio?.positions ?? [])
     .filter((p) => (p.market_value ?? 0) > 10)
     .map((p) => ({
@@ -288,14 +290,14 @@ export default function BotsPage() {
     }));
 
   const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-  const apexEquity = apexBot?.equity_usd ?? null;
+  const apexEquity = fleetEq?.apex?.equity ?? null;
   const apexPositions: GenericPosition[] = [];
   const apexTotalTrades = apexBot?.trades ?? 0;
   const apexWins = apexBot?.wins ?? 0;
   const apexLosses = apexTotalTrades - apexWins;
   const apexWinRate = apexTotalTrades > 0 ? (apexWins / apexTotalTrades) * 100 : null;
 
-  const navEquity = forexState?.total_equity ?? forexState?.paper_equity ?? null;
+  const navEquity = fleetEq?.navigator?.equity ?? null;
   const rawPositions: ForexPosition[] = Array.isArray(forexPositionsRaw)
     ? (forexPositionsRaw as ForexPosition[])
     : ((forexPositionsRaw as { positions?: ForexPosition[] } | null)?.positions ?? []);
@@ -348,7 +350,7 @@ export default function BotsPage() {
     },
   ];
 
-  const poseidonEquity = poseidonState?.total_equity ?? null;
+  const poseidonEquity = fleetEq?.poseidon?.equity ?? null;
   const poseidonWins = poseidonState?.total_wins ?? 0;
   const poseidonTotalTrades = poseidonState?.total_trades ?? 0;
   const poseidonLosses = poseidonTotalTrades - poseidonWins;
@@ -366,7 +368,7 @@ export default function BotsPage() {
     { label: "Max Pairs", value: `${poseidonState?.max_pairs ?? 3} open`, color: "#cbd5e1" },
   ];
 
-  const kcEquity = kcState?.total_equity ?? null;
+  const kcEquity = fleetEq?.kraken_current?.equity ?? null;
   const kcWins = kcState?.total_wins ?? 0;
   const kcTotalTrades = kcState?.total_trades ?? 0;
   const kcLosses = kcTotalTrades - kcWins;
@@ -423,15 +425,20 @@ export default function BotsPage() {
               <Loader2 className="w-6 h-6 text-slate-500 animate-spin" />
             </div>
           ) : (
-            krakenBots?.map((bot) => (
-              <BotCard
-                key={bot.bot_id}
-                botId={bot.bot_id}
-                displayName={bot.display_name}
-                strategyLabel={bot.strategy_label}
-                previousParams={previousParams[bot.bot_id.replace(/-/g, "_")]}
-              />
-            ))
+            krakenBots?.map((bot) => {
+              const botKey = bot.bot_id.replace(/-/g, "_") as keyof typeof fleetEq;
+              const botEquity = fleetEq?.[botKey] as { equity?: number } | undefined;
+              return (
+                <BotCard
+                  key={bot.bot_id}
+                  botId={bot.bot_id}
+                  displayName={bot.display_name}
+                  strategyLabel={bot.strategy_label}
+                  previousParams={previousParams[bot.bot_id.replace(/-/g, "_")]}
+                  equity={botEquity?.equity ?? null}
+                />
+              );
+            })
           )}
 
           <GenericBotCard

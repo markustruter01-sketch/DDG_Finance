@@ -1,9 +1,9 @@
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   usePortfolio, useLivePositions, useVault, useKrakenStatus, useKrakenFleetSummary,
-  useExportReport, useForexState,
+  useExportReport, useForexState, useFleetEquity,
 } from "@/hooks/use-trading";
-import { AnimatedCurrency, RollingCurrency, computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
+import { AnimatedCurrency, RollingCurrency } from "@/lib/dashboard-shared";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui";
 import {
@@ -20,6 +20,7 @@ export function CombinedPortfolioSummary() {
   const { data: kraken }    = useKrakenStatus();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: fxState }   = useForexState();
+  const { data: fleetEq }   = useFleetEquity();
   const exportReport        = useExportReport();
   const { toast }           = useToast();
 
@@ -36,12 +37,12 @@ export function CombinedPortfolioSummary() {
     }
   };
 
-  const alpacaEquity        = portfolio?.account.equity          ?? 0;
+  const alpacaEquity        = fleetEq?.oracle?.equity ?? 0;
   const alpacaCash          = portfolio?.account.cash            ?? 0;
   const alpacaBuying        = portfolio?.account.buying_power    ?? 0;
   const alpacaInitialMargin = portfolio?.account.initial_margin  ?? 0;
   const alpacaStart         = 100_000;
-  const alpacaPnl           = alpacaEquity - alpacaStart;
+  const alpacaPnl           = fleetEq?.oracle?.pnl ?? 0;
   const alpacaPnlPct        = (alpacaPnl / alpacaStart) * 100;
   const alpacaProfit        = alpacaPnl >= 0;
 
@@ -65,10 +66,24 @@ export function CombinedPortfolioSummary() {
 
   const krakenReady       = !!kraken && kraken.status !== "not_started";
   const krakenBotPaused   = kraken?.bot_paused ?? false;
-  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? kraken?.total_equity_usd ?? 0;
+  const krakenFleetEquity = [
+    fleetEq?.davy_jones?.equity ?? 0,
+    fleetEq?.blackbeard?.equity ?? 0,
+    fleetEq?.calypso?.equity ?? 0,
+    fleetEq?.apex?.equity ?? 0,
+    fleetEq?.poseidon?.equity ?? 0,
+    fleetEq?.kraken_current?.equity ?? 0,
+  ].reduce((a, b) => a + b, 0);
   const krakenDeployed    = kraken?.deployed_pct ?? 0;
   const krakenPaper       = kraken?.paper_trading ?? true;
-  const krakenPnl         = fleetSummary?.total_pnl_usd ?? kraken?.paper_summary?.all_time_pnl_usd ?? 0;
+  const krakenPnl         = [
+    fleetEq?.davy_jones?.pnl ?? 0,
+    fleetEq?.blackbeard?.pnl ?? 0,
+    fleetEq?.calypso?.pnl ?? 0,
+    fleetEq?.apex?.pnl ?? 0,
+    fleetEq?.poseidon?.pnl ?? 0,
+    fleetEq?.kraken_current?.pnl ?? 0,
+  ].reduce((a, b) => a + b, 0);
   const krakenTrades      = fleetSummary?.total_trades ?? kraken?.paper_summary?.total_trades ?? 0;
   const krakenWins        = fleetSummary?.total_wins ?? kraken?.paper_summary?.win_count ?? 0;
   const krakenStart       = fleetSummary?.total_starting_usd ?? 600_000;
@@ -76,15 +91,15 @@ export function CombinedPortfolioSummary() {
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
   const apexBot       = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-  const apexEquity    = apexBot?.equity_usd ?? 0;
-  const apexPnl       = apexBot?.pnl_usd ?? 0;
+  const apexEquity    = fleetEq?.apex?.equity ?? 0;
+  const apexPnl       = fleetEq?.apex?.pnl ?? 0;
   const apexTrades    = apexBot?.trades ?? 0;
   const apexWins      = apexBot?.wins ?? 0;
   const apexStart     = apexBot?.starting_balance_usd ?? 100_000;
   const apexPnlPct    = apexStart > 0 ? (apexPnl / apexStart) * 100 : 0;
 
-  const forexEquity   = fxState?.total_equity || 100_000;
-  const forexPnl      = fxState?.total_pnl ?? 0;
+  const forexEquity   = fleetEq?.navigator?.equity ?? 0;
+  const forexPnl      = fleetEq?.navigator?.pnl ?? 0;
   const forexTrades   = fxState?.total_trades ?? 0;
   const forexWins     = fxState?.total_wins ?? 0;
   const forexPaper    = fxState?.paper_mode ?? true;
@@ -92,14 +107,9 @@ export function CombinedPortfolioSummary() {
   const forexPnlPct   = (forexPnl / forexStart) * 100;
   const forexPosCount = fxState?.position_count ?? 0;
 
-  const grandTotal = computeFleetEquity(
-    alpacaEquity,
-    krakenReady || fleetSummary ? krakenFleetEquity : 0,
-    0,
-    forexEquity,
-  );
+  const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
 
-  const grandPnl = alpacaPnl + krakenPnl + forexPnl;
+  const grandPnl = fleetEq?.fleet_total?.pnl ?? 0;
   const grandProfit = grandPnl >= 0;
 
   return (

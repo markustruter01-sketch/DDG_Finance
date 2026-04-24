@@ -17,9 +17,9 @@ import {
   useAdminLearningSnapshot,
   usePoseidonState,
   useKrakenCurrentState,
+  useFleetEquity,
 } from "@/hooks/use-trading";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
-import { computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 
 function checkWebGL(): boolean {
   try {
@@ -1030,6 +1030,7 @@ export function OrbVisualiser() {
   const { data: curve         } = useEquityCurve(300);
   const { data: auditor       } = useAuditorReport();
   const { data: snapshot      } = useAdminLearningSnapshot();
+  const { data: fleetEqOrb    } = useFleetEquity();
   const { trades: closedTradesFeed, openPositions: openTradesFeed } = useRealFeed(12);
 
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
@@ -1124,17 +1125,8 @@ export function OrbVisualiser() {
     return Math.max(journalTs, auditorTs, snapshotTs);
   }, [journal, auditor, snapshot]);
 
-  // P&L = total current equity minus $800k starting capital (8 bots × $100k each).
-  // krakenEq from fleet-summary now includes Poseidon (#7) and Kraken Current (#8).
-  const combinedPnl = useMemo(() => {
-    const alpacaEq    = summary?.portfolio_totals?.equity ?? 0;
-    const krakenEq    = fleet?.total_equity_usd ?? 0;
-    const optEq       = optState?.paper_equity ?? 100_000;
-    const fxEq        = fxState?.paper_equity  ?? 100_000;
-    const totalEquity = computeFleetEquity(alpacaEq, krakenEq, optEq, fxEq);
-    if (totalEquity === 0) return 0;
-    return totalEquity - FLEET_STARTING_CAPITAL;
-  }, [summary, fleet, optState, fxState]);
+  // P&L = total current equity minus starting capital — single source of truth.
+  const combinedPnl = fleetEqOrb?.fleet_total?.pnl ?? 0;
 
   const orbData: OrbData = {
     openPositions,

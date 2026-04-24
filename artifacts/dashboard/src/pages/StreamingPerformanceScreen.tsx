@@ -5,9 +5,9 @@ import {
   useKrakenFleetSummary,
   useSentiment,
   useStatusSummary,
-  useForexState,
   useVault,
   useVaultHistory,
+  useFleetEquity,
 } from "@/hooks/use-trading";
 import { DDGBadge } from "@/components/DDGBadge";
 import {
@@ -101,7 +101,6 @@ export default function StreamingPerformanceScreen() {
   const fleet   = useKrakenFleetSummary();
   const sent    = useSentiment();
   const status  = useStatusSummary();
-  const forex   = useForexState();
   const vaultData    = useVault();
   const vaultHistory = useVaultHistory(90);
 
@@ -111,29 +110,19 @@ export default function StreamingPerformanceScreen() {
   const fl  = fleet.data;
   const sg  = sent.data;
   const st  = status.data;
-  const fx  = forex.data;
   const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
+  const { data: fleetEq } = useFleetEquity();
 
   const cryptoFG = sg?.crypto_fear_greed?.value;
   const marketFG = sg?.market_fear_greed?.value;
   const regime   = st?.groq?.regime ?? "—";
 
-  /* Kraken 6-bot P&L from equity – starting cap */
+  /* Kraken 6-bot P&L from fleet-summary bot rows (for per-bot matrix display) */
   const fleetBots = fl?.bots ?? [];
-  const krakenPnL  = fleetBots.reduce((s, b) => s + b.equity_usd - b.starting_balance_usd, 0);
-  const krakenEquity = fleetBots.reduce((s, b) => s + b.equity_usd, 0);
 
-  /* Oracle (Alpaca) P&L — portfolio_totals.initial_capital is not populated; use $100k starting */
-  const oracleEquity = st?.portfolio_totals?.equity ?? 0;
-  const oraclePnl = oracleEquity > 0 ? oracleEquity - 100_000 : 0;
-
-  /* Navigator (Forex) P&L — paper_equity includes open unrealized P&L */
-  const navEquity = fx?.paper_equity ?? 0;
-  const navPnl = navEquity > 0 ? navEquity - 100_000 : 0;
-
-  /* Full 8-bot fleet totals */
-  const fleetPnL    = krakenPnL + oraclePnl + navPnl;
-  const fleetEquity = krakenEquity + oracleEquity + navEquity;
+  /* Full 8-bot fleet totals from single source of truth */
+  const fleetEquity = fleetEq?.fleet_total?.equity ?? 0;
+  const fleetPnL    = fleetEq?.fleet_total?.pnl ?? 0;
   const fleetTrades = fl?.total_trades ?? fleetBots.reduce((s, b) => s + b.trades, 0);
   const fleetWins   = fl?.total_wins   ?? fleetBots.reduce((s, b) => s + b.wins, 0);
   // Single canonical win rate — always the server-computed value, no client-side arithmetic drift
@@ -306,7 +295,20 @@ export default function StreamingPerformanceScreen() {
           <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
             {fleetBots.length > 0 ? fleetBots.map((bot) => {
               const meta = BOT_META[bot.bot_id] ?? { icon: "🤖", color: C.label, startCap: 100_000, label: bot.bot_id };
-              const pnl  = bot.equity_usd - meta.startCap;
+              const botEqData = (() => {
+                if (!fleetEq) return null;
+                const m: Record<string, typeof fleetEq.davy_jones> = {
+                  "davy-jones":      fleetEq.davy_jones,
+                  "blackbeard":      fleetEq.blackbeard,
+                  "calypso":         fleetEq.calypso,
+                  "apex-predator":   fleetEq.apex,
+                  "poseidon":        fleetEq.poseidon,
+                  "kraken-current":  fleetEq.kraken_current,
+                };
+                return m[bot.bot_id] ?? null;
+              })();
+              const equity = botEqData?.equity ?? null;
+              const pnl = botEqData?.pnl ?? null;
               const wr   = bot.trades > 0 ? (bot.wins / bot.trades) * 100 : null;
               return (
                 <div key={bot.bot_id} style={{
@@ -323,7 +325,7 @@ export default function StreamingPerformanceScreen() {
                       {meta.label}
                     </div>
                     <div style={{ fontSize: 9, fontFamily: "monospace", color: C.dim, marginTop: 2 }}>
-                      ${(bot.equity_usd / 1000).toFixed(1)}k equity
+                      {equity != null ? `$${(equity / 1000).toFixed(1)}k equity` : "— equity"}
                     </div>
                   </div>
                   {/* win rate with mini bar */}

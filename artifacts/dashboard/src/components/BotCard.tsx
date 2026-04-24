@@ -37,6 +37,7 @@ interface BotCardProps {
   displayName: string;
   strategyLabel?: string;
   previousParams?: Record<string, number>;
+  equity?: number | null;
 }
 
 function fmtPnl(v: number) {
@@ -45,7 +46,7 @@ function fmtPnl(v: number) {
   return v >= 0 ? `+$${abs.toFixed(2)}` : `-$${abs.toFixed(2)}`;
 }
 
-export function BotCard({ botId, displayName, strategyLabel, previousParams }: BotCardProps) {
+export function BotCard({ botId, displayName, strategyLabel, previousParams, equity }: BotCardProps) {
   const { data: status, isLoading: statusLoading } = useKrakenStatus(botId);
   const { data: perf, isLoading: perfLoading } = useKrakenPerformance(botId);
   const { data: fleetParams } = useFleetParams();
@@ -58,8 +59,8 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
 
   const isLoading = statusLoading || perfLoading;
 
-  const currentEquity = perf?.current_equity ?? status?.total_equity_usd ?? 0;
-  const truePnl = currentEquity > 0 ? currentEquity - STARTING_BALANCE : null;
+  const currentEquity = equity ?? null;
+  const truePnl = currentEquity != null && currentEquity > 0 ? currentEquity - STARTING_BALANCE : null;
 
   return (
     <div
@@ -94,7 +95,7 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
           </div>
           <p className="text-[10px] text-slate-500 mt-0.5 truncate">{meta.strategy}</p>
         </div>
-        {currentEquity > 0 && (
+        {currentEquity != null && currentEquity > 0 && (
           <div className="text-right flex-shrink-0">
             <div className="text-xs font-mono font-bold text-white">
               ${currentEquity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
@@ -182,7 +183,9 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams }: B
                 <div>
                   <div className="text-[9px] text-slate-600 uppercase tracking-wider">Total Equity</div>
                   <div className="text-[12px] font-mono font-bold text-white">
-                    ${currentEquity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    {currentEquity != null
+                      ? `$${currentEquity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                      : "—"}
                   </div>
                 </div>
                 <div>

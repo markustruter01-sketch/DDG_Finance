@@ -6,6 +6,7 @@ import {
   useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
   useMathAuditSummary, useMathAuditRecent, useWeeklyReview, useReviewFlags,
+  useFleetEquity,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { WeeklyReviewPanel } from "@/components/WeeklyReviewPanel";
@@ -393,36 +394,14 @@ function PositionChangeNotifier() {
 
 function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
-  const { data: portfolio } = usePortfolio();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: forexState } = useForexState();
-  const { data: davyPerf } = useKrakenPerformance("davy-jones");
-  const { data: bbPerf } = useKrakenPerformance("blackbeard");
-  const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: journal } = useJournal();
+  const { data: fleetEquity } = useFleetEquity();
 
-  // Oracle equity comes from the Alpaca portfolio endpoint, not from /status
-  // (which does not include portfolio_totals).
-  const alpacaEquity = portfolio?.account?.equity ?? 0;
-  const krakenFleetEquity = fleetSummary?.total_equity_usd ?? 0;
-  const forexEquity = forexState?.total_equity ?? forexState?.paper_equity ?? 100_000;
-  // krakenReady = true as soon as fleetSummary data has arrived (not gated on isLoading
-  // which can stay truthy across re-renders while a background refetch is in flight).
-  const krakenReady = fleetSummary != null;
-  // Show "—" only on the very first render before ANY real data has arrived.
-  // Once any single source responds, show the live (progressively-updating) total.
-  const anyLoading = alpacaEquity === 0 && !krakenReady && forexState == null;
-  const grandTotal = computeFleetEquity(
-    alpacaEquity > 0 ? alpacaEquity : 0,
-    krakenFleetEquity,
-    0,
-    forexEquity,
-  );
-
-  // True P&L = grand total minus the $800k starting capital (8 bots × $100k each).
-  // Guard: do not show until all key equity pools have loaded.
-  const equitiesReady = alpacaEquity > 0 && krakenReady && forexState != null;
-  const totalPnl: number | null = equitiesReady ? grandTotal - FLEET_STARTING_CAPITAL : null;
+  const grandTotal = fleetEquity?.fleet_total?.equity ?? 0;
+  const anyLoading = fleetEquity == null;
+  const totalPnl: number | null = fleetEquity != null ? (fleetEquity.fleet_total?.pnl ?? null) : null;
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;

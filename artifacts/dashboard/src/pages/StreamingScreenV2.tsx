@@ -15,10 +15,11 @@ import {
   usePoseidonState,
   useKrakenCurrentState,
   useVault,
+  useFleetEquity,
 } from "@/hooks/use-trading";
 import { useRealFeed } from "@/components/streaming/useRealFeed";
 import { AnimatedValue } from "@/components/streaming/AnimatedValue";
-import { MiniSparkline, computeFleetEquity, FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
+import { MiniSparkline } from "@/lib/dashboard-shared";
 import { formatCurrency } from "@/lib/utils";
 
 
@@ -68,20 +69,13 @@ function PulsingDot({ color }: { color: string }) {
 
 function HeroStrip() {
   const { data: summary } = useStatusSummary();
-  const { data: fleet } = useKrakenFleetSummary();
-  const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
   const { data: sentiment } = useSentiment();
   const { data: curve } = useEquityCurve(1500);
   const { data: vault } = useVault();
   const { wins, losses, totalTrades } = useRealFeed(50);
+  const { data: fleetEqHero } = useFleetEquity();
 
-  const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
-  // krakenEq (fleet-summary) already includes all 5 kraken bots: DJ, BB, Cal, Poseidon, KC
-  const krakenEq = fleet?.total_equity_usd ?? 0;
-  const optEq = optState?.paper_equity ?? 0;
-  const fxEq = fxState?.paper_equity ?? 0;
-  const totalEquity = computeFleetEquity(alpacaEq, krakenEq, optEq, fxEq);
+  const totalEquity = fleetEqHero?.fleet_total?.equity ?? 0;
 
   const pnl24h = useMemo(() => {
     if (!curve?.snapshots?.length) return { value: 0, pct: 0, label: "24H P&L" };
@@ -274,11 +268,9 @@ function BotTilesRow() {
   const { data: fxPos } = useForexPositions();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
+  const { data: fleetEq } = useFleetEquity();
 
-  const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
   const oracleStatus = summary?.system_health?.system_status ?? "offline";
-  // initial_capital is not populated in portfolio_totals; use the known $100k starting balance
-  const oraclePnl = alpacaEq > 0 ? alpacaEq - 100_000 : 0;
   const oraclePositions = livePos?.count ?? 0;
   const { botStats, trades: recentTrades } = useRealFeed(50);
   const oracleStats = botStats.find(b => b.name === "Oracle");
@@ -331,7 +323,8 @@ function BotTilesRow() {
 
   const bots = [
     {
-      key: "oracle", equity: alpacaEq, pnl: oraclePnl, status: oracleStatus,
+      key: "oracle", equity: fleetEq?.oracle?.equity ?? 0, pnl: fleetEq?.oracle?.pnl ?? 0,
+      status: oracleStatus,
       thinkingText: summary?.groq?.regime ? `Regime: ${summary.groq.regime}` : "",
       posCount: oraclePositions, cycleCount: oracleCycles,
       winCount: oracleWins, lossCount: oracleLosses, color: BOT_META.oracle.color,
@@ -340,8 +333,7 @@ function BotTilesRow() {
       signalStrength: undefined as string | undefined,
     },
     {
-      key: "davy-jones", equity: djStatus?.total_equity_usd ?? 0,
-      pnl: djStatus?.paper_summary?.starting_balance_usd ? (djStatus.total_equity_usd ?? 0) - djStatus.paper_summary.starting_balance_usd : 0,
+      key: "davy-jones", equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0,
       status: djStatus?.status ?? "offline", thinkingText: djStatus?.thinking_text ?? "",
       posCount: djStatus?.position_count ?? 0, cycleCount: djStatus?.cycle_count ?? 0,
       winCount: djPerf?.win_count ?? 0, lossCount: djPerf?.loss_count ?? 0,
@@ -349,8 +341,7 @@ function BotTilesRow() {
       currentTicker: djSig.ticker, lastSignal: djSig.signal, signalStrength: djSig.strength,
     },
     {
-      key: "blackbeard", equity: bbStatus?.total_equity_usd ?? 0,
-      pnl: bbStatus?.paper_summary?.starting_balance_usd ? (bbStatus.total_equity_usd ?? 0) - bbStatus.paper_summary.starting_balance_usd : 0,
+      key: "blackbeard", equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0,
       status: bbStatus?.status ?? "offline", thinkingText: bbStatus?.thinking_text ?? "",
       posCount: bbStatus?.position_count ?? 0, cycleCount: bbStatus?.cycle_count ?? 0,
       winCount: bbPerf?.win_count ?? 0, lossCount: bbPerf?.loss_count ?? 0,
@@ -358,8 +349,7 @@ function BotTilesRow() {
       currentTicker: bbSig.ticker, lastSignal: bbSig.signal, signalStrength: bbSig.strength,
     },
     {
-      key: "calypso", equity: caStatus?.total_equity_usd ?? 0,
-      pnl: caStatus?.paper_summary?.starting_balance_usd ? (caStatus.total_equity_usd ?? 0) - caStatus.paper_summary.starting_balance_usd : 0,
+      key: "calypso", equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0,
       status: caStatus?.status ?? "offline", thinkingText: caStatus?.thinking_text ?? "",
       posCount: caStatus?.position_count ?? 0, cycleCount: caStatus?.cycle_count ?? 0,
       winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
@@ -368,10 +358,8 @@ function BotTilesRow() {
     },
     {
       key: "apex",
-      equity: apexStatus?.total_equity_usd ?? apexPerf?.current_equity ?? 0,
-      pnl: apexStatus?.paper_summary?.starting_balance_usd
-        ? (apexStatus.total_equity_usd ?? 0) - apexStatus.paper_summary.starting_balance_usd
-        : (apexStatus?.total_equity_usd ?? 0) > 0 ? (apexStatus?.total_equity_usd ?? 0) - 100_000 : 0,
+      equity: fleetEq?.apex?.equity ?? 0,
+      pnl: fleetEq?.apex?.pnl ?? 0,
       status: apexStatus?.status ?? "offline",
       thinkingText: apexStatus?.thinking_text ?? "",
       posCount: apexStatus?.position_count ?? 0,
@@ -384,8 +372,8 @@ function BotTilesRow() {
       signalStrength: undefined as string | undefined,
     },
     {
-      key: "navigator", equity: fxState?.paper_equity ?? 0,
-      pnl: fxState?.total_pnl ?? 0, status: fxState?.status ?? "offline",
+      key: "navigator", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0,
+      status: fxState?.status ?? "offline",
       thinkingText: fxState?.usd_bias ? `USD Bias: ${fxState.usd_bias}` : "",
       posCount: fxState?.position_count ?? 0, cycleCount: fxState?.cycle_count ?? 0,
       winCount: fxState?.total_wins ?? 0,
@@ -396,8 +384,7 @@ function BotTilesRow() {
       signalStrength: fxTopScan?.rsi != null ? `RSI ${fxTopScan.rsi.toFixed(0)}` : undefined,
     },
     {
-      key: "poseidon", equity: poseidonState?.total_equity ?? 0,
-      pnl: (poseidonState?.total_equity ?? 100_000) - (poseidonState?.starting_capital ?? 100_000),
+      key: "poseidon", equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0,
       status: poseidonState?.status ?? "offline",
       thinkingText: poseidonState ? `${poseidonState.open_positions} pairs · Z>${poseidonState.zscore_entry}` : "",
       posCount: poseidonState?.open_positions ?? 0,
@@ -412,8 +399,7 @@ function BotTilesRow() {
       signalStrength: undefined as string | undefined,
     },
     {
-      key: "kraken-current", equity: kcState?.total_equity ?? 0,
-      pnl: (kcState?.total_equity ?? 100_000) - (kcState?.starting_capital ?? 100_000),
+      key: "kraken-current", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0,
       status: kcState?.status ?? "offline",
       thinkingText: kcState ? `${kcState.open_positions}/${kcState.max_positions} pos · EMA${kcState.ema_fast}/${kcState.ema_slow}` : "",
       posCount: kcState?.open_positions ?? 0,
@@ -766,6 +752,7 @@ function EquitySidebar() {
   const { data: apexKrakenStatus } = useKrakenStatus("apex-predator");
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
+  const { data: fleetEq } = useFleetEquity();
 
   const equityData = useMemo(() => {
     if (!curve?.snapshots?.length) return [];
@@ -844,53 +831,28 @@ function EquitySidebar() {
 
   const botEquityRows = useMemo(() => {
     const rows: Array<{ name: string; icon: string; equity: number; pnl: number; color: string; vaultUsd?: number }> = [];
-    const alpacaEq = summary?.portfolio_totals?.equity ?? 0;
-    // portfolio_totals.initial_capital is not populated; use the known $100k starting balance
-    rows.push({ name: "Oracle", icon: "🔮", equity: alpacaEq, pnl: alpacaEq > 0 ? alpacaEq - 100_000 : 0, color: "#8b5cf6" });
-
-    const krakenBots = [
-      { data: djStatus, name: "Davy Jones", icon: "⚓", color: "#22d3ee" },
-      { data: bbStatus, name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
-      { data: caStatus, name: "Calypso", icon: "🌊", color: "#a855f7" },
-    ];
-    for (const { data, name, icon, color } of krakenBots) {
-      if (!data) continue;
-      const eq = data.total_equity_usd ?? 0;
-      const start = data.paper_summary?.starting_balance_usd ?? 100_000;
-      rows.push({ name, icon, equity: eq, pnl: eq > 0 ? eq - start : 0, color });
-    }
-
-    // Apex is now a Kraken momentum bot — use kraken status, not optState
-    if (apexKrakenStatus) {
-      const apexEq = apexKrakenStatus.total_equity_usd ?? 0;
-      const apexStart = apexKrakenStatus.paper_summary?.starting_balance_usd ?? 100_000;
-      rows.push({ name: "Apex Predator", icon: "🦅", equity: apexEq, pnl: apexEq > 0 ? apexEq - apexStart : 0, color: "#f97316" });
-    }
-    if (fxState) {
-      const navEq = fxState.paper_equity ?? 0;
-      rows.push({
-        name: "Navigator", icon: "🧭", equity: navEq,
-        pnl: navEq > 0 ? navEq - 100_000 : 0, color: "#10b981",
-        vaultUsd: fxState.vault_total_usd,
-      });
-    }
-    if (poseidonState) {
-      const peq = poseidonState.total_equity ?? 0;
-      rows.push({ name: "Poseidon", icon: "🔱", equity: peq, pnl: peq - (poseidonState.starting_capital ?? 100_000), color: "#6366f1" });
-    }
-    if (kcState) {
-      const keq = kcState.total_equity ?? 0;
-      rows.push({ name: "Kraken Current", icon: "🌊", equity: keq, pnl: keq - (kcState.starting_capital ?? 100_000), color: "#06b6d4" });
-    }
+    rows.push({ name: "Oracle", icon: "🔮", equity: fleetEq?.oracle?.equity ?? 0, pnl: fleetEq?.oracle?.pnl ?? 0, color: "#8b5cf6" });
+    rows.push({ name: "Davy Jones", icon: "⚓", equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0, color: "#22d3ee" });
+    rows.push({ name: "Blackbeard", icon: "🏴‍☠️", equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
+    rows.push({ name: "Calypso", icon: "🌊", equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0, color: "#a855f7" });
+    rows.push({ name: "Apex Predator", icon: "🦅", equity: fleetEq?.apex?.equity ?? 0, pnl: fleetEq?.apex?.pnl ?? 0, color: "#f97316" });
+    rows.push({ name: "Navigator", icon: "🧭", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
+    rows.push({ name: "Poseidon", icon: "🔱", equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
+    rows.push({ name: "Kraken Current", icon: "🌊", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0, color: "#06b6d4" });
     return rows;
-  }, [summary, djStatus, bbStatus, caStatus, apexKrakenStatus, fxState, poseidonState, kcState]);
+  }, [fleetEq, fxState]);
 
   const segments = useMemo(() => {
-    const alpacaEq  = summary?.portfolio_totals?.equity ?? 0;
-    // krakenEq (fleet-summary) already includes all 6 Kraken bots: DJ, BB, Cal, Apex, Poseidon, KC
-    const krakenEq  = fleet?.total_equity_usd ?? 0;
-    const fxEq      = fxState?.paper_equity ?? 0;
-    // Do NOT add poseidon/kcState separately — they are already inside krakenEq
+    const alpacaEq = fleetEq?.oracle?.equity ?? 0;
+    const krakenEq = [
+      fleetEq?.davy_jones?.equity ?? 0,
+      fleetEq?.blackbeard?.equity ?? 0,
+      fleetEq?.calypso?.equity ?? 0,
+      fleetEq?.apex?.equity ?? 0,
+      fleetEq?.poseidon?.equity ?? 0,
+      fleetEq?.kraken_current?.equity ?? 0,
+    ].reduce((a, b) => a + b, 0);
+    const fxEq = fleetEq?.navigator?.equity ?? 0;
     const total = alpacaEq + krakenEq + fxEq;
     if (total <= 0) return [];
     return [
@@ -898,7 +860,7 @@ function EquitySidebar() {
       { label: "Crypto",  pct: (krakenEq  / total) * 100, color: "#22d3ee" },
       { label: "Forex",   pct: (fxEq      / total) * 100, color: "#10b981" },
     ].filter(s => s.pct > 0.5);
-  }, [summary, fleet, fxState]);
+  }, [fleetEq]);
 
   return (
     <div className="w-72 shrink-0 flex flex-col gap-2 min-h-0 overflow-auto px-2">

@@ -135,8 +135,8 @@ BOT_PROFILES = {
         "MAX_POSITION_FRACTION": 0.15,
         "CASH_RESERVE": 0.20,
         # Entry signal thresholds
-        "RSI_OVERSOLD": 45,              # 1h RSI crossing up from below 45 = bullish
-        "RSI_OVERBOUGHT": 55,            # 1h RSI crossing down from above 55 = bearish
+        "RSI_OVERSOLD": 35,              # 1h RSI crossing up from below 35 = bullish (was 45 — too tight)
+        "RSI_OVERBOUGHT": 65,            # 1h RSI crossing down from above 65 = bearish (was 55 — too tight)
         "APEX_EMA_FAST": 20,             # 4h EMA for trend filter
         "APEX_EMA_SLOW": 50,
         "APEX_VOLUME_MULT": 0.75,        # volume must be 0.75× 20-bar average (lowered from 1.5× — weekend crypto volume is typically 0.1–0.8×)

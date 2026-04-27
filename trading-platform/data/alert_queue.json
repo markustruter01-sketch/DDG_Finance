@@ -16,5 +16,14 @@
     "side": "SELL",
     "reason": "take_profit",
     "timestamp": "2026-04-23T09:45:16.161721+00:00"
+  },
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "AUD_USD",
+    "pnl_pct": 0,
+    "pnl_usd": 12.16,
+    "side": "SELL",
+    "reason": "trailing_stop",
+    "timestamp": "2026-04-24T22:54:35.030001+00:00"
   }
 ]

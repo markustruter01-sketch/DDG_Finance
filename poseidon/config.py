@@ -8,7 +8,7 @@ Capital: $95,175 paper
 import os
 
 BOT_ID           = "poseidon"
-DISPLAY_NAME     = "Poseidon (#7)"
+DISPLAY_NAME     = "FOMO Fred"
 DB_ID            = 7
 
 # ── Capital ───────────────────────────────────────────────────────────────────

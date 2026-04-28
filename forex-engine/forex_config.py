@@ -226,7 +226,7 @@ CB_DRAWDOWN_THRESHOLD = 0.03
 CB_COOLDOWN_HOURS = 8
 
 BOT_ID = "navigator"
-BOT_DISPLAY_NAME = "The Navigator"
+BOT_DISPLAY_NAME = "Forex Gump"
 BOT_DB_ID = 10
 BOT_STRATEGY_LABEL = "Forex Swing (H4)"
 

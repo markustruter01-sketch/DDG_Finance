@@ -215,7 +215,8 @@ from paper_engine import (
 # STRATEGY FLAGS & MARKET-CAP TIER LOOKUP (mean_reversion_conservative)
 # ══════════════════════════════════════════════════════════════════════════════
 
-IS_MRC_BOT = BOT_STRATEGY_TYPE == "mean_reversion_conservative"
+IS_MRC_BOT    = BOT_STRATEGY_TYPE == "mean_reversion_conservative"
+IS_JEROME_BOT = BOT_STRATEGY_TYPE == "llm_commodity"
 
 _MRC_TIER1 = frozenset({
     "BTC/USD", "ETH/USD", "BNB/USD", "SOL/USD", "XRP/USD",
@@ -1274,6 +1275,14 @@ def run_cycle() -> None:
             return
     except Exception as _fh_exc:
         logger.debug(f"Bot | Fleet halt check failed (non-fatal, continuing): {_fh_exc}")
+
+    # ── Jerome commodity macro bot — delegates to jerome_strategy, then returns ─
+    if IS_JEROME_BOT:
+        from config import BOT_PROFILES, BOT_ID as _jerome_bot_id
+        _jerome_profile = BOT_PROFILES[_jerome_bot_id]
+        from jerome_strategy import run_jerome_cycle
+        run_jerome_cycle(profile=_jerome_profile, db_id=_jerome_profile.get("db_id", 2))
+        return
 
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
     _cycle_new_entries: int = 0

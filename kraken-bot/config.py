@@ -40,45 +40,36 @@ BOT_PROFILES = {
         "LOSS_STREAK_COOLDOWN_HOURS": 6,
     },
     "blackbeard": {
-        "display_name": "Blackbeard's Fleet",
-        "db_id": 2,
-        "strategy_type": "flow_sentiment",
-        "strategy_label": "Flow Sentiment",
-        "BLACKLIST": ["ALGO/USD", "OP/USD", "RENDER/USD"],
-        "RSI_OVERSOLD": 30,
-        "RSI_OVERBOUGHT": 70,
-        "ZSCORE_ENTRY": 0.8,
-        "CASH_RESERVE": 0.15,
-        "MAX_POSITION_FRACTION": 0.08,
-        "MAX_POSITIONS": 5,
-        "STOP_LOSS_PCT": 0.02,
-        "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.88,
-        "OHLCV_TIMEFRAME": "1h",
-        "OHLCV_LIMIT": 100,
-        "LOOP_SLEEP_SECONDS": 60,
-        "SWING_TP_ATR_MULT": 3.0,
-        "SWING_SL_ATR_MULT": 2.5,
-        "SWING_TRAIL_TRIGGER_ATR": 1.5,
-        "SWING_TRAIL_ATR_MULT": 1.5,
-        "SWING_MIN_HOLD_HOURS": 1,
-        "SWING_MAX_HOLD_HOURS": 24,
-        "FLOW_IMBALANCE_LONG_THRESHOLD": 0.65,
-        "FLOW_IMBALANCE_SHORT_THRESHOLD": 0.35,
-        "FLOW_VPIN_MAX": 0.75,
-        "FLOW_VPIN_SPIKE_BLOCK": 0.85,
-        "FLOW_RSI_MIN": 40,
-        "FLOW_RSI_MAX": 60,
-        "FLOW_VOLUME_MA_PERIOD": 20,
-        "FLOW_VOLUME_MULT": 1.5,
-        "MIN_CONVICTION": 0.60,
-        "MAX_NEW_ENTRIES_PER_CYCLE": 2,
-        "LOSS_STREAK_LIMIT": 6,
-        "LOSS_STREAK_COOLDOWN_HOURS": 8,
-        "SYMBOL_WINRATE_LOOKBACK": 15,
-        "SYMBOL_WINRATE_PENALTY_THRESHOLD": 0.30,
-        "SYMBOL_WINRATE_RECOVERY_THRESHOLD": 0.40,
-        "SYMBOL_WINRATE_PENALTY_FACTOR": 0.70,
+        "display_name":      "Jerome",
+        "db_id":             2,
+        "strategy_type":     "llm_commodity",
+        "strategy_label":    "LLM Commodity Macro",
+        # ── Alpaca account (Jerome's dedicated paper account) ──────────────────
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        # ── Groq / cycle settings ──────────────────────────────────────────────
+        "GROQ_CYCLE_HOURS":  [9, 21],   # UTC hours to fire Groq analysis
+        "LOOP_SLEEP_SECONDS": 900,       # 15-min polling (exits checked every cycle)
+        # ── Universe ──────────────────────────────────────────────────────────
+        "COMMODITY_UNIVERSE": [
+            "GLD", "SLV", "GDX", "GDXJ", "PPLT",
+            "USO", "BNO", "UNG", "XLE", "OIH",
+            "DBA", "WEAT", "CORN", "SOYB", "JO",
+            "COPX", "JJC", "PDBC", "GSG", "DJP",
+        ],
+        "COMMODITY_THEMES": {
+            "precious_metals": ["GLD", "SLV", "GDX", "GDXJ", "PPLT"],
+            "energy":          ["USO", "BNO", "UNG", "XLE", "OIH"],
+            "agriculture":     ["DBA", "WEAT", "CORN", "SOYB", "JO"],
+            "industrial":      ["COPX", "JJC", "PDBC", "GSG", "DJP"],
+        },
+        # ── Risk management ───────────────────────────────────────────────────
+        "MAX_POSITIONS":     3,
+        "STOP_LOSS_PCT":     0.04,     # 4% hard stop per position
+        "TAKE_PROFIT_PCT":   0.08,     # 8% default take-profit
+        "MAX_HOLD_DAYS":     21,       # time-stop
+        "MIN_CONVICTION":    0.65,     # Groq conviction threshold to enter
     },
     "calypso": {
         "display_name": "Calypso's Tide",

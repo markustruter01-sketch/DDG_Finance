@@ -69,6 +69,7 @@ def get_investment_decisions(
                     f"GroqInvestor | Got {len(decisions.get('enter', []))} entries "
                     f"and {len(decisions.get('close', []))} closes on attempt {attempt}"
                 )
+                _persist_decision(decisions, raw)
                 return decisions
         except Exception as exc:
             logger.warning(f"GroqInvestor | Attempt {attempt} failed: {exc}")
@@ -277,3 +278,33 @@ def _parse_and_validate(raw: str, context: dict) -> Optional[dict]:
     logger.info(f"GroqInvestor | reasoning: {decisions.get('reasoning', '')}")
 
     return decisions
+
+
+def _persist_decision(decisions: dict, raw_response: str) -> None:
+    """Persist Gemini decision to DB for audit trail."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO navigator_groq_decisions
+                        (market_regime, usd_bias, reasoning,
+                         entries_count, closes_count,
+                         raw_response, entries_json, closes_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    decisions.get("market_regime", ""),
+                    decisions.get("usd_bias", ""),
+                    decisions.get("reasoning", ""),
+                    len(decisions.get("enter", [])),
+                    len(decisions.get("close", [])),
+                    raw_response[:5000],
+                    json.dumps(decisions.get("enter", [])),
+                    json.dumps(decisions.get("close", [])),
+                ))
+            conn.commit()
+        logger.info("GroqInvestor | Decision persisted to DB")
+    except Exception as exc:
+        logger.debug(f"GroqInvestor | DB persist failed (non-fatal): {exc}")

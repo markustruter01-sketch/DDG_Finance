@@ -1,5 +1,5 @@
 {
-  "cash": 1184.5403394222558,
+  "cash": 2124.8015548295953,
   "positions": {
     "USD1/USD": {
       "symbol": "USD1/USD",
@@ -18,23 +18,6 @@
       "opened_at": "2026-04-21T20:10:10.530210+00:00",
       "fees_paid": 52.20324452498894
     },
-    "U/USD": {
-      "symbol": "U/USD",
-      "direction": "short",
-      "units": 24897760.588056374,
-      "entry_price": 0.00068,
-      "stop_distance": 5.674249243233585e-05,
-      "position_value": 16930.477199878336,
-      "ema_fast": 0.000674556700944468,
-      "ema_slow": 0.0006937114056331184,
-      "adx": 47.34045561632832,
-      "best_price": 0.000615,
-      "stop_level": 0.0006717424924323358,
-      "trail_immediate": false,
-      "trailing_active": true,
-      "opened_at": "2026-04-22T00:10:04.972744+00:00",
-      "fees_paid": 44.01924071968367
-    },
     "SKY/USD": {
       "symbol": "SKY/USD",
       "direction": "long",
@@ -45,10 +28,10 @@
       "ema_fast": 0.08065831341244632,
       "ema_slow": 0.07709904238615528,
       "adx": 36.75353258658116,
-      "best_price": 0.08527,
-      "stop_level": 0.08018204354837469,
+      "best_price": 0.08672,
+      "stop_level": 0.08351204354837469,
       "trail_immediate": false,
-      "trailing_active": false,
+      "trailing_active": true,
       "opened_at": "2026-04-22T20:21:31.595351+00:00",
       "fees_paid": 52.168480989746946
     },
@@ -79,16 +62,33 @@
       "ema_fast": 0.32478439105470086,
       "ema_slow": 0.32496006620143353,
       "adx": 27.342057577338938,
-      "best_price": 0.323751,
+      "best_price": 0.322904,
       "stop_level": 0.3266853938721631,
       "trail_immediate": false,
       "trailing_active": false,
       "opened_at": "2026-04-27T07:08:54.424188+00:00",
       "fees_paid": 52.576990866350236
+    },
+    "STABLE/USD": {
+      "symbol": "STABLE/USD",
+      "direction": "long",
+      "units": 448145.7684708131,
+      "entry_price": 0.03593,
+      "stop_distance": 0.0031222415198890762,
+      "position_value": 16101.877461156313,
+      "ema_fast": 0.03467215221833765,
+      "ema_slow": 0.030129923181751943,
+      "adx": 56.00944539270891,
+      "best_price": 0.03593,
+      "stop_level": 0.03280775848011092,
+      "trail_immediate": true,
+      "trailing_active": true,
+      "opened_at": "2026-04-28T22:17:52.726074+00:00",
+      "fees_paid": 41.864881399006414
     }
   },
-  "total_trades": 23,
+  "total_trades": 24,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-04-27T07:08:54.424253+00:00"
+  "updated_at": "2026-04-28T22:17:52.726141+00:00"
 }

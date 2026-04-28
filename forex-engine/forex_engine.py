@@ -1,17 +1,19 @@
 """
-forex_engine.py — The Navigator: Autonomous AI Forex Swing-Trading Engine (Bot #6)
-====================================================================================
-4-Hour (H4) cycle. 10 pairs (5 USD majors + USD/CHF + 4 liquid crosses).
-Groq LLM = Macro Compass only. 100% algorithmic execution. $100k paper capital.
+forex_engine.py — The Navigator: Groq LLM Forex Investment Engine (Bot #6)
+===========================================================================
+4-Hour (H4) cycle — exit/SL/TP management runs every cycle.
+Groq LLM makes new ENTRY decisions twice daily: 08:00 UTC + 20:00 UTC.
+Holds positions for days-to-weeks (2–14 day horizon).
 
 Strategy:
-  1. Check news blackout → skip if high-impact event within 4h
-  2. Groq Macro Compass → USD_BULLISH / USD_BEARISH / NEUTRAL
-  3. Technical filter → RSI extremes + ATR sizing
-  4. Dynamic lot sizing → max 1.5% risk per trade
-  5. Bracket orders → SL = 2.0×ATR, TP = 3.0×ATR (1:1.5 R:R)
-  6. Check open positions for SL/TP hits
-  7. Capital Vault → Friday 4PM EST sweep
+  1. Every 4H cycle: check open positions for SL/TP/time-stop hits
+  2. 08:00 UTC / 20:00 UTC only: Groq investment analysis
+     a. Fetch forex pair prices + macro indicators (DXY, VIX, Gold, SPY)
+     b. Groq Llama-3.3-70B analyses context and returns structured JSON
+     c. Validator sanity-checks Groq output (conviction ≥ 0.6, R:R ≥ 1.0)
+     d. Execute validated entries via paper engine
+     e. Close positions early if Groq recommends
+  3. Capital Vault → Friday 4PM EST sweep
 """
 
 import os
@@ -20,6 +22,7 @@ import json
 import time
 import threading
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 from loguru import logger
 
@@ -77,6 +80,29 @@ _latest_prices: dict[str, float] = {}
 
 _USD_BIAS_CACHE: dict = {"bias": "NEUTRAL", "thesis": "", "cached_at": 0}
 _USD_BIAS_CACHE_TTL = 4 * 3600
+
+# ── Groq investor state ────────────────────────────────────────────────────────
+_last_groq_cycle: Optional[datetime] = None
+
+# Maps Groq's "EUR/USD" display format → internal yfinance ticker
+_GROQ_PAIR_MAP: dict[str, str] = {
+    "EUR/USD": "EURUSD=X",
+    "GBP/USD": "GBPUSD=X",
+    "USD/JPY": "JPY=X",
+    "AUD/USD": "AUDUSD=X",
+    "USD/CAD": "CAD=X",
+    "USD/CHF": "CHF=X",
+    "EUR/GBP": "EURGBP=X",
+    "EUR/JPY": "EURJPY=X",
+    "GBP/JPY": "GBPJPY=X",
+    "AUD/JPY": "AUDJPY=X",
+}
+# Reverse: internal ticker → "EUR/USD" display format (for formatting open positions)
+_GROQ_PAIR_REVERSE: dict[str, str] = {v: k for k, v in _GROQ_PAIR_MAP.items()}
+
+# Groq investment cycles fire at 08:00 and 20:00 UTC (window = first 15 min)
+_GROQ_CYCLE_HOURS = (8, 20)
+_GROQ_CYCLE_WINDOW_MINUTES = 15
 
 
 def is_bot_paused() -> bool:
@@ -583,6 +609,26 @@ def _check_open_positions():
                             pass
                 return result
 
+            # ── Groq time-stop: close if max_hold_days exceeded ───────────────
+            groq_hold_days = pos.get("groq_max_hold_days")
+            if groq_hold_days:
+                entry_time_str = pos.get("entry_time", "")
+                if entry_time_str:
+                    try:
+                        et = datetime.fromisoformat(entry_time_str)
+                        hours_held = (datetime.now(tz=timezone.utc) - et).total_seconds() / 3600.0
+                        groq_hold_hours = float(groq_hold_days) * 24.0
+                        if hours_held >= groq_hold_hours:
+                            label = PAIR_LABELS.get(pair, pair)
+                            logger.info(
+                                f"Navigator | TIME STOP: {label} held {hours_held:.0f}h "
+                                f">= {groq_hold_hours:.0f}h ({groq_hold_days}d max) — closing"
+                            )
+                            _close_and_journal(pair, current_price, "groq_time_stop")
+                            continue
+                    except Exception as _ts_exc:
+                        logger.debug(f"Navigator | Time-stop check failed for {pair}: {_ts_exc}")
+
             if direction == "long":
                 if current_price <= sl:
                     reason = "trailing_stop" if sl > pos.get("original_sl", sl) else "stop_loss"
@@ -629,6 +675,256 @@ def _check_vault_sweep():
             )
         except Exception:
             pass
+
+
+# ── Groq investor helpers ──────────────────────────────────────────────────────
+
+def _should_run_groq_cycle() -> bool:
+    """
+    Returns True if we are inside the 08:00–08:15 UTC or 20:00–20:15 UTC window
+    AND we have not already run a Groq cycle in the last 60 minutes.
+    """
+    global _last_groq_cycle
+    now = datetime.now(timezone.utc)
+    if now.hour not in _GROQ_CYCLE_HOURS or now.minute >= _GROQ_CYCLE_WINDOW_MINUTES:
+        return False
+    if _last_groq_cycle is not None:
+        elapsed = (now - _last_groq_cycle).total_seconds()
+        if elapsed < 3600:
+            return False
+    _last_groq_cycle = now
+    logger.info(f"Navigator | Groq investment cycle triggered at {now.strftime('%H:%M UTC')}")
+    return True
+
+
+def _format_open_positions_for_groq(positions: dict) -> list[dict]:
+    """
+    Converts the internal positions dict (keyed by "EURUSD=X") into a list
+    of dicts using the "EUR/USD" display format that Groq understands.
+    """
+    result = []
+    now = datetime.now(timezone.utc)
+    for ticker, pos in positions.items():
+        display_pair = _GROQ_PAIR_REVERSE.get(ticker, ticker)
+        entry_time_str = pos.get("entry_time", "")
+        hours_held = 0.0
+        if entry_time_str:
+            try:
+                et = datetime.fromisoformat(entry_time_str)
+                hours_held = (now - et).total_seconds() / 3600.0
+            except Exception:
+                pass
+        current_price = _latest_prices.get(ticker, pos.get("entry_price", 0))
+        entry_price   = pos.get("entry_price", 0)
+        size_usd      = pos.get("size_usd", 0)
+        direction     = pos.get("direction", "long")
+        sign = 1 if direction == "long" else -1
+        unrealised = 0.0
+        if entry_price > 0:
+            pct_move = (current_price - entry_price) / entry_price
+            unrealised = size_usd * pct_move * sign
+        result.append({
+            "pair":               display_pair,
+            "direction":          direction,
+            "entry_price":        round(entry_price, 5),
+            "current_price":      round(current_price, 5),
+            "unrealised_pnl_usd": round(unrealised, 2),
+            "hours_held":         round(hours_held, 1),
+            "size_usd":           round(size_usd, 2),
+        })
+    return result
+
+
+def _open_groq_position(entry: dict, equity: float, available: float) -> bool:
+    """
+    Translates a validated Groq entry decision into a paper_open_position() call.
+
+    entry keys: pair (EUR/USD), direction, conviction, position_size_pct,
+                stop_loss_pips, take_profit_pips, max_hold_days, thesis
+    """
+    display_pair = entry["pair"]
+    ticker = _GROQ_PAIR_MAP.get(display_pair)
+    if not ticker:
+        logger.warning(f"Navigator | _open_groq_position: no internal ticker for {display_pair!r}")
+        return False
+
+    direction    = entry["direction"]
+    size_pct     = entry["position_size_pct"]
+    sl_pips      = entry["stop_loss_pips"]
+    tp_pips      = entry["take_profit_pips"]
+    max_hold_days = entry["max_hold_days"]
+    thesis       = entry["thesis"]
+    conviction   = entry["conviction"]
+
+    # Use latest fetched price; fall back to yfinance fast fetch
+    current_price = _latest_prices.get(ticker)
+    if not current_price:
+        try:
+            import yfinance as yf
+            data = yf.Ticker(ticker).history(period="1d", interval="1m")
+            current_price = float(data["Close"].iloc[-1]) if not data.empty else None
+        except Exception as exc:
+            logger.warning(f"Navigator | Price fetch failed for {ticker}: {exc}")
+    if not current_price:
+        logger.warning(f"Navigator | Cannot open {display_pair} — price unavailable")
+        return False
+
+    pip_size = PIP_SIZE.get(ticker, 0.0001)
+    sl_distance = sl_pips * pip_size
+    tp_distance = tp_pips * pip_size
+
+    if direction == "long":
+        sl_price = current_price - sl_distance
+        tp_price = current_price + tp_distance
+    else:
+        sl_price = current_price + sl_distance
+        tp_price = current_price - tp_distance
+
+    size_usd = equity * size_pct
+    size_usd = min(size_usd, available * 0.95)
+    if size_usd < 500:
+        logger.warning(f"Navigator | {display_pair}: position size too small (${size_usd:.0f})")
+        return False
+
+    units = round(size_usd / current_price) if current_price > 0 else 0
+    if units <= 0:
+        logger.warning(f"Navigator | {display_pair}: computed 0 units — skipping")
+        return False
+
+    llm_thesis = f"Groq ({conviction:.0%} conviction, {max_hold_days}d hold): {thesis}"
+
+    logger.info(
+        f"Navigator | GROQ ENTRY {display_pair} {direction.upper()} "
+        f"@ {current_price:.5f} | SL={sl_price:.5f} TP={tp_price:.5f} "
+        f"size=${size_usd:,.0f} ({size_pct:.0%} equity) hold={max_hold_days}d | {thesis}"
+    )
+
+    result = paper_open_position(
+        pair=ticker,
+        direction=direction,
+        size_usd=size_usd,
+        entry_price=current_price,
+        units=units,
+        sl_price=sl_price,
+        tp_price=tp_price,
+        llm_thesis=llm_thesis,
+    )
+    if not result:
+        return False
+
+    # Store Groq metadata for time-stop logic in position check
+    try:
+        update_position_fields(ticker, {"groq_max_hold_days": max_hold_days, "groq_thesis": thesis})
+    except Exception as exc:
+        logger.debug(f"Navigator | update_position_fields failed (non-fatal): {exc}")
+
+    try:
+        _journal.log_trade_open(
+            pair=PAIR_LABELS.get(ticker, ticker),
+            direction=direction,
+            entry_price=current_price,
+            sl_price=sl_price,
+            tp_price=tp_price,
+            units=units,
+            llm_thesis=llm_thesis,
+            usd_bias=_state.get("usd_bias", "NEUTRAL"),
+            rsi_at_entry=None,
+            atr_at_entry=None,
+        )
+    except Exception:
+        pass
+
+    return True
+
+
+def _close_groq_position(display_pair: str, reason: str) -> None:
+    """Close an open position identified by its display pair name (e.g. 'EUR/USD')."""
+    ticker = _GROQ_PAIR_MAP.get(display_pair)
+    if not ticker:
+        logger.warning(f"Navigator | Groq early-close: unknown pair {display_pair!r}")
+        return
+    positions = get_paper_positions()
+    if ticker not in positions:
+        logger.info(f"Navigator | Groq early-close {display_pair}: not open, skipping")
+        return
+    current_price = _latest_prices.get(ticker)
+    if not current_price:
+        logger.warning(f"Navigator | Groq early-close {display_pair}: price unavailable")
+        return
+    _close_and_journal(ticker, current_price, f"groq_early_close: {reason}")
+    logger.info(f"Navigator | GROQ EARLY CLOSE {display_pair} @ {current_price:.5f} | {reason}")
+
+
+def _run_groq_entries(equity: float, positions: dict, available: float) -> None:
+    """
+    Full Groq investment cycle:
+      1. Fetch market context
+      2. Ask Groq for decisions
+      3. Execute validated entries (skip if pair already open)
+      4. Close positions Groq wants to exit early
+    """
+    from market_context import get_market_context
+    from groq_investor import get_investment_decisions
+
+    open_positions_fmt = _format_open_positions_for_groq(positions)
+    logger.info(f"Navigator | Fetching market context for Groq ({len(open_positions_fmt)} open positions)...")
+
+    try:
+        context = get_market_context(open_positions_fmt)
+        pairs_available = list(context.get("forex_pairs", {}).keys())
+        macro_available = list(context.get("macro_indicators", {}).keys())
+        logger.info(f"Navigator | Market context: {len(pairs_available)} pairs, {len(macro_available)} macro indicators")
+        if context.get("errors"):
+            logger.debug(f"Navigator | Context warnings: {context['errors']}")
+    except Exception as exc:
+        logger.error(f"Navigator | Failed to fetch market context: {exc}")
+        return
+
+    try:
+        decisions = get_investment_decisions(context, equity=equity, max_positions=MAX_OPEN_POSITIONS)
+    except Exception as exc:
+        logger.error(f"Navigator | Groq decision call failed: {exc}")
+        return
+
+    _state["usd_bias"] = decisions.get("usd_bias", "neutral").upper()
+
+    # Handle early closes first (frees up capacity before entering)
+    for close_rec in decisions.get("close", []):
+        pair_display = close_rec.get("pair", "")
+        close_reason = close_rec.get("reason", "groq_recommendation")
+        try:
+            _close_groq_position(pair_display, close_reason)
+        except Exception as exc:
+            logger.warning(f"Navigator | Groq close failed for {pair_display}: {exc}")
+
+    # Refresh positions after closes
+    positions = get_paper_positions()
+    available = get_available_capital()
+
+    # Execute new entries
+    entries_filled = 0
+    for entry in decisions.get("enter", []):
+        pair_display = entry.get("pair", "")
+        ticker = _GROQ_PAIR_MAP.get(pair_display)
+        if ticker and ticker in positions:
+            logger.info(f"Navigator | Skipping {pair_display} — already open")
+            continue
+        if len(positions) + entries_filled >= MAX_OPEN_POSITIONS:
+            logger.info(f"Navigator | Max positions reached — stopping entries")
+            break
+        try:
+            ok = _open_groq_position(entry, equity, available)
+            if ok:
+                entries_filled += 1
+                available = get_available_capital()
+        except Exception as exc:
+            logger.warning(f"Navigator | Entry failed for {pair_display}: {exc}")
+
+    logger.info(
+        f"Navigator | Groq cycle complete — "
+        f"{entries_filled} positions entered, "
+        f"{len(decisions.get('close', []))} close recommendations processed"
+    )
 
 
 def run_cycle() -> dict:
@@ -732,184 +1028,29 @@ def _run_cycle_inner() -> dict:
             _write_heartbeat()
             return _state
 
-        bias, thesis = _get_usd_bias()
-        _state["usd_bias"] = bias
+        positions  = get_paper_positions()
+        equity     = get_paper_equity(current_prices=_latest_prices)
+        available  = get_available_capital()
+        open_count = len(positions)
 
-        allowed_directions = _filter_pairs_by_bias(bias)
+        logger.info(
+            f"Navigator | Open positions: {open_count}/{MAX_OPEN_POSITIONS} | "
+            f"Equity: ${equity:,.2f} | Available: ${available:,.2f}"
+        )
 
-        positions = get_paper_positions()
-        if len(positions) >= MAX_OPEN_POSITIONS:
-            _state["status"] = "idle"
-            _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
-            logger.info(f"Forex | Max positions ({MAX_OPEN_POSITIONS}) reached — scan only, no new entries")
-            _write_heartbeat()
-            return _state
-
-        equity = get_paper_equity(current_prices=_latest_prices)
-        available = get_available_capital()
-
-        scan_results = []
-
-        for pair in PAIRS:
-            if pair in positions:
-                continue
-
-            # ── Per-pair loss cooldown — skip pairs with 3+ consecutive losses ────────
-            if _db.is_pair_on_cooldown(pair, max_consecutive_losses=3):
-                logger.info(f"Navigator | {pair}: skipping — 3 consecutive losses, pair on cooldown")
-                continue
-
-            # Hard whitelist gate — belt-and-suspenders even if PAIRS is edited
-            if pair not in _PERMITTED_PAIRS:
-                logger.error(
-                    f"Navigator | ENTRY BLOCKED: {pair} is not in the hard pair whitelist "
-                    f"({', '.join(sorted(_PERMITTED_PAIRS))}). "
-                    f"Update _PERMITTED_PAIRS in forex_engine.py to permit this pair."
-                )
-                continue
-
-            label = PAIR_LABELS[pair]
-            allowed_dir = allowed_directions.get(pair, "both")
-
-            try:
-                candles = fetch_h4_candles(pair, count=250)
-                if candles.empty or len(candles) < 201:
-                    scan_results.append({"pair": label, "status": "insufficient_data"})
-                    continue
-
-                closes = candles["Close"].tolist()
-                highs = candles["High"].tolist()
-                lows = candles["Low"].tolist()
-                current_price = closes[-1]
-                _latest_prices[pair] = current_price
-
-                atr = calculate_atr(highs, lows, closes, ATR_PERIOD)
-                rsi = calculate_rsi(closes, RSI_PERIOD)
-
-                scan_entry = {
-                    "pair": label,
-                    "price": round(current_price, 5),
-                    "atr": round(atr, 5),
-                    "rsi": round(rsi, 1),
-                    "bias_filter": allowed_dir,
-                    "signal": None,
-                }
-
-                direction = None
-
-                # ── ATR minimum check — don't trade in dead-volatility conditions ─────────
-                pip_size = PIP_SIZE.get(pair, 0.0001)
-                atr_in_pips = atr / pip_size
-                if atr_in_pips < ATR_MIN_PIPS:
-                    logger.debug(
-                        f"Navigator | {label}: ATR={atr_in_pips:.1f} pips < "
-                        f"minimum {ATR_MIN_PIPS} — skipping (spread risk too high)"
-                    )
-                    scan_results.append(scan_entry)
-                    continue
-
-                # ── EMA trend filter — only enter in direction of trend ──────────────────
-                ema_50  = calculate_ema(closes, 50)
-                ema_200 = calculate_ema(closes, 200)
-                trend_up   = ema_50 > ema_200
-                trend_down = ema_50 < ema_200
-
-                # ── RSI signal — now requires trend alignment ─────────────────────────────
-                if rsi < RSI_OVERSOLD and allowed_dir in ("long", "both") and trend_up:
-                    direction = "long"
-                    scan_entry["signal"] = "RSI_OVERSOLD → LONG"
-                elif rsi > RSI_OVERBOUGHT and allowed_dir in ("short", "both") and trend_down:
-                    direction = "short"
-                    scan_entry["signal"] = "RSI_OVERBOUGHT → SHORT"
-                else:
-                    if rsi < RSI_OVERSOLD or rsi > RSI_OVERBOUGHT:
-                        logger.debug(
-                            f"Navigator | {label}: RSI signal present but blocked by trend filter "
-                            f"(RSI={rsi:.1f}, EMA50={ema_50:.5f}, EMA200={ema_200:.5f}, "
-                            f"trend_up={trend_up})"
-                        )
-                    scan_results.append(scan_entry)
-                    continue
-
-                # Per-pair scan log — only for pairs passing all filters with active signal
-                _rsi_zone = (
-                    "OVERSOLD ✓" if rsi < RSI_OVERSOLD else
-                    "OVERBOUGHT ✓" if rsi > RSI_OVERBOUGHT else
-                    f"neutral ({RSI_OVERSOLD}–{RSI_OVERBOUGHT})"
-                )
+        # ── Groq investment cycle (fires at 08:00 UTC and 20:00 UTC only) ─────
+        if _should_run_groq_cycle():
+            if open_count < MAX_OPEN_POSITIONS:
+                _run_groq_entries(equity, positions, available)
+            else:
                 logger.info(
-                    f"Navigator | {label:10s} | RSI={rsi:.1f} [{_rsi_zone}] | "
-                    f"price={current_price:.5f} | bias={allowed_dir:5s} | "
-                    f"signal={'→ ' + direction.upper() if direction else 'none'}"
+                    f"Navigator | Groq cycle fired but max positions "
+                    f"({MAX_OPEN_POSITIONS}) already open — no new entries"
                 )
+        else:
+            logger.info("Navigator | Not a Groq cycle window — exit management only this pass")
 
-                sl_distance = atr * SL_ATR_MULT
-                tp_distance = atr * TP_ATR_MULT
-
-                if direction == "long":
-                    sl_price = current_price - sl_distance
-                    tp_price = current_price + tp_distance
-                else:
-                    sl_price = current_price + sl_distance
-                    tp_price = current_price - tp_distance
-
-                units = _calculate_units(equity, current_price, sl_distance, pair)
-                if units <= 0:
-                    scan_entry["signal"] += " (units=0, skipped)"
-                    scan_results.append(scan_entry)
-                    continue
-
-                conv = get_quote_to_usd(pair, current_price, _latest_prices)
-                if conv is None:
-                    scan_entry["signal"] += " (ref price unavailable, skipped)"
-                    scan_results.append(scan_entry)
-                    continue
-                size_usd = units * current_price * conv
-
-                cap = available * 0.95
-                if size_usd > cap:
-                    ratio = cap / size_usd
-                    size_usd = cap
-                    units = max(1, round(units * ratio))
-
-                if size_usd < 500:
-                    scan_entry["signal"] += " (size too small)"
-                    scan_results.append(scan_entry)
-                    continue
-
-                result = paper_open_position(
-                    pair=pair,
-                    direction=direction,
-                    size_usd=size_usd,
-                    entry_price=current_price,
-                    units=units,
-                    sl_price=sl_price,
-                    tp_price=tp_price,
-                    llm_thesis=f"{bias}: {thesis}",
-                )
-
-                if result:
-                    scan_entry["signal"] += " → FILLED"
-                    available = get_available_capital()
-                    try:
-                        _journal.log_trade_open(
-                            pair=PAIR_LABELS.get(pair, pair), direction=direction,
-                            entry_price=current_price, sl_price=sl_price, tp_price=tp_price,
-                            units=units, llm_thesis=f"{bias}: {thesis}",
-                            usd_bias=bias, rsi_at_entry=rsi, atr_at_entry=atr,
-                        )
-                    except Exception:
-                        pass
-                else:
-                    scan_entry["signal"] += " → REJECTED (capital)"
-
-                scan_results.append(scan_entry)
-
-            except Exception as exc:
-                logger.warning(f"Forex | Scan failed for {label}: {exc}")
-                scan_results.append({"pair": label, "status": "error", "error": str(exc)})
-
-        _state["last_scan_results"] = scan_results
+        _state["last_scan_results"] = []
         _state["last_scan"] = datetime.now(tz=timezone.utc).isoformat()
         _state["status"] = "idle"
 

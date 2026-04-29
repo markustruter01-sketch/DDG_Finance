@@ -1240,6 +1240,17 @@ export function useToggleKrakenAutoTrading(botId?: string) {
   });
 }
 
+export function useForceResume(botId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ bot_id: string; status: string; message: string }, Error, void>({
+    mutationFn: async () => (await api.post(`/kraken/${botId}/force-resume`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/kraken/status", botId] });
+      qc.invalidateQueries({ queryKey: ["/kraken/auto-trading", botId] });
+    },
+  });
+}
+
 export function useSystemRestart() {
   const qc = useQueryClient();
   return useMutation<SystemRestartResult, Error, void>({

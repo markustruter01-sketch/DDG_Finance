@@ -576,6 +576,36 @@ def _check_force_reload() -> bool:
     return False
 
 
+def _check_force_resume() -> bool:
+    """Check if the dashboard has set force_resume=true in the control file.
+    If found, clear the circuit breaker, reset consecutive loss counter,
+    un-pause the bot, and consume the flag."""
+    import json as _json, pathlib as _pl
+    ctrl = _pl.Path(CONTROL_FILE)
+    if not ctrl.exists():
+        return False
+    try:
+        data = _json.loads(ctrl.read_text())
+        if data.get("force_resume"):
+            global circuit_breaker_until, consecutive_losses
+            circuit_breaker_until = None
+            consecutive_losses = 0
+            data["force_resume"] = False
+            data["bot_paused"] = False
+            data.pop("paused", None)
+            data.pop("pause_reason", None)
+            data.pop("resume_after", None)
+            ctrl.write_text(_json.dumps(data, indent=2))
+            logger.warning(
+                "FORCE RESUME | Circuit breaker cleared, loss streak reset, "
+                "bot unpaused via dashboard override"
+            )
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _do_force_reload() -> None:
     """Reload portfolio from DB, replacing all in-memory state."""
     global open_positions, total_equity
@@ -1355,6 +1385,9 @@ def run_cycle() -> None:
 
     if PAPER_TRADING:
         open_positions = get_paper_positions()
+
+    # ── Force-resume: clear circuit breaker / loss streak on operator request ─
+    _check_force_resume()
 
     # ── Step 2: Check if circuit breaker is still active ─────────────────────
     now_utc = datetime.now(tz=timezone.utc)

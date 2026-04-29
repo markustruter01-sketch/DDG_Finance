@@ -1,6 +1,7 @@
-import { useKrakenStatus, useKrakenPerformance, useFleetParams, type BotParamBounds } from "@/hooks/use-trading";
+import { useState } from "react";
+import { useKrakenStatus, useKrakenPerformance, useFleetParams, useForceResume, type BotParamBounds } from "@/hooks/use-trading";
 import { ParameterScale } from "./ParameterScale";
-import { TrendingUp, TrendingDown, Anchor, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Anchor, Loader2, Zap } from "lucide-react";
 
 const PARAM_ORDER = ["ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"];
 
@@ -50,6 +51,8 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
   const { data: status, isLoading: statusLoading } = useKrakenStatus(botId);
   const { data: perf, isLoading: perfLoading } = useKrakenPerformance(botId);
   const { data: fleetParams } = useFleetParams();
+  const forceResume = useForceResume(botId);
+  const [resumedAt, setResumedAt] = useState<number | null>(null);
 
   const botKey = botId.replace(/-/g, "_");
   const meta = BOT_META[botKey] ?? { color: "#6b7280", icon: "🤖", strategy: strategyLabel ?? "Automated trading bot" };
@@ -61,6 +64,22 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
 
   const currentEquity = equity ?? null;
   const truePnl = currentEquity != null && currentEquity > 0 ? currentEquity - STARTING_BALANCE : null;
+
+  const botStatus = status?.status ?? "not_started";
+  const cbActive = status?.circuit_breaker?.active ?? false;
+  const cbUntil = status?.circuit_breaker?.paused_until ?? null;
+  const isSuspended = status?.bot_paused || cbActive ||
+    botStatus === "paused_circuit_breaker" ||
+    botStatus === "paused_loss_streak" ||
+    botStatus === "paused_dashboard";
+
+  const justResumed = resumedAt != null && Date.now() - resumedAt < 10_000;
+
+  function handleForceResume() {
+    forceResume.mutate(undefined, {
+      onSuccess: () => setResumedAt(Date.now()),
+    });
+  }
 
   return (
     <div
@@ -84,12 +103,12 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
               <span
                 className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                 style={{
-                  color: status.bot_paused ? "#f59e0b" : "#10b981",
-                  background: status.bot_paused ? "#f59e0b18" : "#10b98118",
-                  border: `1px solid ${status.bot_paused ? "#f59e0b30" : "#10b98130"}`,
+                  color: cbActive ? "#ef4444" : isSuspended ? "#f59e0b" : "#10b981",
+                  background: cbActive ? "#ef444418" : isSuspended ? "#f59e0b18" : "#10b98118",
+                  border: `1px solid ${cbActive ? "#ef444430" : isSuspended ? "#f59e0b30" : "#10b98130"}`,
                 }}
               >
-                {status.bot_paused ? "paused" : "live"}
+                {cbActive ? "circuit breaker" : isSuspended ? "paused" : "live"}
               </span>
             )}
           </div>
@@ -104,6 +123,56 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
           </div>
         )}
       </div>
+
+      {isSuspended && (
+        <div
+          className="px-4 py-2.5 flex items-center justify-between gap-3 border-b"
+          style={{
+            borderColor: cbActive ? "#ef444425" : "#f59e0b25",
+            background: cbActive ? "#ef44440a" : "#f59e0b0a",
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <div
+              className="text-[10px] font-bold uppercase tracking-wider"
+              style={{ color: cbActive ? "#ef4444" : "#f59e0b" }}
+            >
+              {cbActive ? "⚡ Circuit Breaker Active" : "⏸ Bot Paused"}
+            </div>
+            {cbUntil && (
+              <div className="text-[9px] text-slate-500 mt-0.5 truncate">
+                Resumes {new Date(cbUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} UTC
+              </div>
+            )}
+          </div>
+          {justResumed ? (
+            <span className="text-[10px] font-bold text-emerald-400 flex-shrink-0">
+              ✓ Override sent
+            </span>
+          ) : (
+            <button
+              onClick={handleForceResume}
+              disabled={forceResume.isPending}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider flex-shrink-0 transition-all active:scale-95"
+              style={{
+                background: "#f59e0b18",
+                border: "1px solid #f59e0b40",
+                color: "#f59e0b",
+                opacity: forceResume.isPending ? 0.5 : 1,
+                cursor: forceResume.isPending ? "not-allowed" : "pointer",
+              }}
+              title="Force-clear circuit breaker and resume this bot"
+            >
+              {forceResume.isPending ? (
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              ) : (
+                <Zap className="w-2.5 h-2.5" />
+              )}
+              Force Resume
+            </button>
+          )}
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex-1 flex items-center justify-center py-8">

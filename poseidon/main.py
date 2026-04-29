@@ -108,6 +108,32 @@ def fetch_symbol_data(symbol: str) -> dict | None:
 
 # ── Circuit breaker ───────────────────────────────────────────────────────────
 
+_POSEIDON_CONTROL_FILE = Path(_DIR) / "poseidon_control.json"
+
+
+def _check_force_resume() -> bool:
+    """Check if the dashboard has set force_resume=true in poseidon_control.json.
+    If found, clear the in-memory circuit breaker and reset consecutive losses."""
+    global _circuit_breaker_until
+    if not _POSEIDON_CONTROL_FILE.exists():
+        return False
+    try:
+        data = json.loads(_POSEIDON_CONTROL_FILE.read_text())
+        if data.get("force_resume"):
+            _circuit_breaker_until = None
+            portfolio.consecutive_losses = 0
+            data["force_resume"] = False
+            _POSEIDON_CONTROL_FILE.write_text(json.dumps(data, indent=2))
+            logger.warning(
+                "Poseidon | FORCE RESUME — circuit breaker cleared and loss streak reset "
+                "via dashboard override"
+            )
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def is_circuit_breaker_active() -> bool:
     global _circuit_breaker_until
     if _circuit_breaker_until is None:
@@ -354,6 +380,9 @@ def main():
         # Force-refresh flag: acknowledge and clear (no pair discovery for momentum)
         if check_and_clear_force_refresh():
             logger.info("Poseidon | force_refresh flag cleared (momentum — no discovery required)")
+
+        # Force-resume: clear circuit breaker on operator override
+        _check_force_resume()
 
         try:
             # Fetch current prices for all symbols

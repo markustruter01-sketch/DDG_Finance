@@ -655,9 +655,73 @@ class KrakenControlRequest(BaseModel):
 async def kraken_toggle_auto_trading(request: KrakenControlRequest, bot_id: str | None = None) -> dict:
     bid, _ = _resolve_bot(bot_id)
     ctrl = _Path(f"../kraken-bot/{bid}_control.json")
-    ctrl.write_text(_json.dumps({"bot_paused": request.bot_paused}, indent=2))
+    existing: dict = {}
+    if ctrl.exists():
+        try:
+            existing = _json.loads(ctrl.read_text())
+        except Exception:
+            pass
+    existing["bot_paused"] = request.bot_paused
+    ctrl.write_text(_json.dumps(existing, indent=2))
     logger.info(f"Kraken bot {bid} {'PAUSED' if request.bot_paused else 'RESUMED'} via dashboard toggle")
     return {"bot_id": bid, "bot_paused": request.bot_paused, "message": f"Kraken bot {bid} paused" if request.bot_paused else f"Kraken bot {bid} resumed"}
+
+
+_POSEIDON_CONTROL_FILE = _Path("../poseidon/poseidon_control.json")
+
+
+@kraken_router.post("/kraken/{bot_id}/force-resume", tags=["Kraken Bot"])
+async def kraken_force_resume(bot_id: str) -> dict:
+    """Force-clear a bot's circuit breaker and self-pause state.
+    The bot picks up the flag on its next cycle (within ~15–30 seconds).
+    Supports: davy-jones, blackbeard, calypso, apex-predator, poseidon."""
+    bid = bot_id.lower().strip()
+
+    if bid in ("poseidon", "fomo-fred", "fomo_fred"):
+        ctrl = _POSEIDON_CONTROL_FILE
+        existing: dict = {}
+        if ctrl.exists():
+            try:
+                existing = _json.loads(ctrl.read_text())
+            except Exception:
+                pass
+        existing["force_resume"] = True
+        ctrl.write_text(_json.dumps(existing, indent=2))
+        logger.warning(f"FORCE RESUME requested for Poseidon (FOMO Fred)")
+        return {
+            "bot_id": "poseidon",
+            "status": "force_resume_set",
+            "message": "Force-resume flag set — Poseidon will clear its circuit breaker on next cycle (~15s)",
+        }
+
+    valid_kraken_bots = {"davy-jones", "blackbeard", "calypso", "apex-predator"}
+    if bid not in valid_kraken_bots:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown bot '{bid}'. Valid: {sorted(valid_kraken_bots | {'poseidon'})}",
+        )
+
+    ctrl = _Path(f"../kraken-bot/{bid}_control.json")
+    existing = {}
+    if ctrl.exists():
+        try:
+            existing = _json.loads(ctrl.read_text())
+        except Exception:
+            pass
+    existing["force_resume"] = True
+    existing["bot_paused"] = False
+    existing.pop("paused", None)
+    existing.pop("pause_reason", None)
+    existing.pop("resume_after", None)
+    ctrl.write_text(_json.dumps(existing, indent=2))
+
+    logger.warning(f"FORCE RESUME requested for {bid} — circuit breaker will clear on next cycle")
+    return {
+        "bot_id": bid,
+        "status": "force_resume_set",
+        "message": f"Force-resume flag set — {bid} will clear its circuit breaker on next cycle (~30s)",
+    }
 
 
 @kraken_router.get("/kraken/performance", tags=["Kraken Bot"])

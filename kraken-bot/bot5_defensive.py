@@ -105,7 +105,7 @@ def _detect_regime() -> tuple[Regime, dict]:
 
     logger.info(
         f"Bot5 | Regime check — "
-        f"SPY={spy_current:.2f} EMA200={spy_ema200:.2f if spy_ema200 else 'N/A'} "
+        f"SPY={spy_current:.2f} EMA200={f'{spy_ema200:.2f}' if spy_ema200 else 'N/A'} "
         f"spy_above_ema200={spy_above_ema200} VIX={vix_current:.2f}"
     )
 

@@ -1314,6 +1314,38 @@ def run_cycle() -> None:
         run_jerome_cycle(profile=_jerome_profile, db_id=_jerome_profile.get("db_id", 2))
         return
 
+    # ── Phase 2: New Alpaca-based strategy dispatches ─────────────────────────
+    # All 4 check BOT_PAUSED first and return immediately if True.
+    # Follows Jerome's `return` pattern (run_cycle() is a function, not a loop).
+
+    if BOT_STRATEGY_TYPE == "etf_trend":
+        from config import BOT_PROFILES, BOT_ID as _b2_id
+        _b2_profile = BOT_PROFILES[_b2_id]
+        from bot2_spy_qqq import run_bot2_cycle
+        run_bot2_cycle(profile=_b2_profile, db_id=_b2_profile.get("db_id", 1))
+        return
+
+    elif BOT_STRATEGY_TYPE == "etf_rotation":
+        from config import BOT_PROFILES, BOT_ID as _b4_id
+        _b4_profile = BOT_PROFILES[_b4_id]
+        from bot4_sector import run_bot4_cycle
+        run_bot4_cycle(profile=_b4_profile, db_id=_b4_profile.get("db_id", 3))
+        return
+
+    elif BOT_STRATEGY_TYPE == "etf_defensive":
+        from config import BOT_PROFILES, BOT_ID as _b5_id
+        _b5_profile = BOT_PROFILES[_b5_id]
+        from bot5_defensive import run_bot5_cycle
+        run_bot5_cycle(profile=_b5_profile, db_id=_b5_profile.get("db_id", 4))
+        return
+
+    elif BOT_STRATEGY_TYPE == "llm_bonds":
+        from config import BOT_PROFILES, BOT_ID as _b7_id
+        _b7_profile = BOT_PROFILES[_b7_id]
+        from bot7_strategy import run_bot7_cycle
+        run_bot7_cycle(profile=_b7_profile, db_id=_b7_profile.get("db_id", 7))
+        return
+
     cycle_signals: list[dict] = []  # built up during this cycle, written at end
     _cycle_new_entries: int = 0
     cycle_microstructure: dict[str, dict] = {}

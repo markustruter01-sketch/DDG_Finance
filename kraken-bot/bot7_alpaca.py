@@ -1,0 +1,97 @@
+"""
+bot7_alpaca.py — Alpaca execution engine for Bot #7 (Macro Bond Trader).
+
+Follows Jerome's exact pattern (jerome_alpaca.py).
+Uses the same ALPACA_BB paper account credentials as Jerome.
+"""
+from __future__ import annotations
+import logging
+from typing import Optional
+
+logger = logging.getLogger("bot7.alpaca")
+
+
+class Bot7Alpaca:
+    """Handles all Alpaca interactions for the Macro Bond Trader account."""
+
+    def __init__(self, api_key: str, secret_key: str,
+                 base_url: str = "https://paper-api.alpaca.markets"):
+        import alpaca_trade_api as tradeapi
+        self.api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        logger.info("Bot7Alpaca | Connected to Alpaca paper account")
+
+    def get_account(self) -> dict:
+        acc = self.api.get_account()
+        return {
+            "equity":       float(acc.equity),
+            "cash":         float(acc.cash),
+            "buying_power": float(acc.buying_power),
+        }
+
+    def get_open_positions(self) -> list[dict]:
+        """Return live Alpaca positions with key metrics."""
+        positions = self.api.list_positions()
+        result = []
+        for p in positions:
+            entry   = float(p.avg_entry_price)
+            current = float(p.current_price)
+            side    = p.side
+            unrealised_pct = (
+                (current - entry) / entry * 100
+                if side == "long"
+                else (entry - current) / entry * 100
+            )
+            result.append({
+                "symbol":             p.symbol,
+                "direction":          side,
+                "qty":                float(p.qty),
+                "entry_price":        entry,
+                "current_price":      current,
+                "unrealised_pnl_usd": float(p.unrealized_pl),
+                "unrealised_pct":     round(unrealised_pct, 3),
+                "market_value":       float(p.market_value),
+            })
+        return result
+
+    def place_order(
+        self,
+        symbol: str,
+        side: str,
+        notional: float,
+    ) -> Optional[dict]:
+        """Place a fractional notional market order."""
+        try:
+            order = self.api.submit_order(
+                symbol=symbol,
+                notional=round(notional, 2),
+                side=side,
+                type="market",
+                time_in_force="day",
+            )
+            logger.info(
+                f"Bot7Alpaca | ORDER PLACED: {side.upper()} {symbol} "
+                f"notional=${notional:,.2f} order_id={order.id}"
+            )
+            return {"order_id": order.id, "symbol": symbol,
+                    "side": side, "notional": notional}
+        except Exception as exc:
+            logger.error(f"Bot7Alpaca | Order failed {side} {symbol}: {exc}")
+            return None
+
+    def close_position(self, symbol: str) -> bool:
+        """Close entire position in a symbol."""
+        try:
+            self.api.close_position(symbol)
+            logger.info(f"Bot7Alpaca | CLOSED position: {symbol}")
+            return True
+        except Exception as exc:
+            logger.error(f"Bot7Alpaca | Close failed {symbol}: {exc}")
+            return False
+
+    def is_market_open(self) -> bool:
+        try:
+            clock = self.api.get_clock()
+            return clock.is_open
+        except Exception as exc:
+            logger.warning(f"Bot7Alpaca | Clock check failed: {exc} — assuming closed")
+            return False

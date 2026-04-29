@@ -145,6 +145,80 @@ BOT_PROFILES = {
         "STOP_LOSS_PCT": 0.015,
         "VPIN_ENTRY_BLOCK": 0.80,
     },
+
+    # ── Phase 2: New Alpaca-based bots (built paused, staggered activation) ───
+    #
+    # All 4 share the ALPACA_BB paper account with Jerome.
+    # All start with BOT_PAUSED=True — flip to False on the activation schedule:
+    #   Week 2: bot2_spy_qqq   (db_id=1, replaces Davy Jones)
+    #   Week 3: bot4_sector    (db_id=3, replaces Calypso)
+    #   Week 4: bot7_macro_bond (db_id=7, replaces FOMO Fred/Poseidon)
+    #   Week 5: bot5_defensive  (db_id=4, replaces Apex Predator)
+    #
+    # ACTIVATION CHECKLIST (run before flipping BOT_PAUSED=False):
+    #   1. UPDATE kraken_heartbeat SET bot_id=<new>, bot_display_name=<new>
+    #      WHERE id=<db_id>;
+    #   2. Set BOT_PAUSED=False in this file.
+    #   3. Restart the relevant workflow.
+
+    "bot2_spy_qqq": {
+        "display_name":      "SPY/QQQ Trend",
+        "db_id":             1,              # replaces Davy Jones (id=1)
+        "strategy_type":     "etf_trend",
+        "strategy_label":    "SPY/QQQ Long-Only Trend",
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "STARTING_CAPITAL":  100_000,
+        "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
+        "BOT_PAUSED":        True,           # Week 2 activation
+    },
+    "bot4_sector": {
+        "display_name":      "Sector Rotation",
+        "db_id":             3,              # replaces Calypso (id=3)
+        "strategy_type":     "etf_rotation",
+        "strategy_label":    "SPDR Sector Momentum",
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "STARTING_CAPITAL":  100_000,
+        "LOOP_SLEEP_SECONDS": 3600,          # hourly check; rebalance only Mondays
+        "BOT_PAUSED":        True,           # Week 3 activation
+    },
+    "bot5_defensive": {
+        "display_name":      "Defensive Guardian",
+        "db_id":             4,              # replaces Apex Predator (id=4)
+        "strategy_type":     "etf_defensive",
+        "strategy_label":    "Risk-Off Defensive Allocation",
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "STARTING_CAPITAL":  100_000,
+        "LOOP_SLEEP_SECONDS": 3600,          # hourly check; regime detection each cycle
+        "BOT_PAUSED":        True,           # Week 5 activation
+    },
+    "bot7_macro_bond": {
+        "display_name":      "Macro Bond Trader",
+        "db_id":             7,              # replaces FOMO Fred/Poseidon (id=7)
+        "strategy_type":     "llm_bonds",
+        "strategy_label":    "Groq Fixed Income Macro",
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "STARTING_CAPITAL":  100_000,
+        "BOND_UNIVERSE":     ["TLT", "IEF", "SHY", "TIP", "HYG", "LQD", "EMB"],
+        "CYCLE_HOURS_UTC":   [13, 22],       # 9AM ET + 6PM ET
+        "LOOP_SLEEP_SECONDS": 900,           # 15-min polling (exits every cycle)
+        "MAX_POSITIONS":     3,
+        "STOP_LOSS_PCT":     0.04,
+        "TAKE_PROFIT_PCT":   0.08,
+        "MAX_HOLD_DAYS":     60,
+        "MIN_HOLD_DAYS":     14,
+        "MIN_CONVICTION":    0.65,
+        "POSITION_SIZE_MIN": 0.10,
+        "POSITION_SIZE_MAX": 0.30,
+        "BOT_PAUSED":        True,           # Week 4 activation
+    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "davy-jones")

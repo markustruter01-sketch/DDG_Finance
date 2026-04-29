@@ -540,9 +540,9 @@ export default function StreamingBotsScreen() {
     },
     {
       id: "blackbeard",
-      name: "Blackbeard",
+      name: "Jerome",
       icon: "🏴‍☠️",
-      exchange: "Kraken · Crypto",
+      exchange: "Kraken · Commodities",
       color: "#ef4444",
       glow: "#ef4444",
       equity: bbEquity,
@@ -588,7 +588,7 @@ export default function StreamingBotsScreen() {
     },
     {
       id: "navigator",
-      name: "Navigator",
+      name: "Forex Gump",
       icon: "🧭",
       exchange: "Oanda · Forex",
       color: "#10b981",
@@ -625,7 +625,7 @@ export default function StreamingBotsScreen() {
     },
     {
       id: "poseidon",
-      name: "Poseidon",
+      name: "FOMO Fred",
       icon: "🔱",
       exchange: "Kraken · Pairs",
       color: "#8b5cf6",

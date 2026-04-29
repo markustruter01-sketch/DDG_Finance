@@ -118,12 +118,12 @@ const COMPONENT_LABELS: Record<string, string> = {
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
   options_bot: "Apex Predator",
-  forex_bot: "The Navigator",
+  forex_bot: "Forex Gump",
   alert_system: "Alert System",
   kraken_davy_jones: "Davy Jones",
-  kraken_blackbeard: "Blackbeard",
+  kraken_blackbeard: "Jerome",
   kraken_calypso: "Calypso",
-  kraken_poseidon: "Poseidon",
+  kraken_poseidon: "FOMO Fred",
   kraken_kraken_current: "Kraken Current",
 };
 
@@ -975,9 +975,9 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 if (perBotNodes.length === 0) return null;
                 const BOT_DISPLAY: Record<string, string> = {
                   kraken_davy_jones: "Davy Jones",
-                  kraken_blackbeard: "Blackbeard",
+                  kraken_blackbeard: "Jerome",
                   kraken_calypso: "Calypso",
-                  kraken_poseidon: "Poseidon",
+                  kraken_poseidon: "FOMO Fred",
                   kraken_kraken_current: "Kraken Current",
                 };
                 return (

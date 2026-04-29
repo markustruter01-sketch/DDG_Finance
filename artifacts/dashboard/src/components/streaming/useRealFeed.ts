@@ -72,14 +72,14 @@ export function useRealFeed(maxTrades = 20) {
         if (isKraken) {
           const thesis = (t.original_thesis || "").toLowerCase();
           if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) {
-            bot = "Blackbeard"; icon = "🏴‍☠️";
+            bot = "Jerome"; icon = "🏴‍☠️";
           } else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) {
             bot = "Calypso"; icon = "🌊";
           } else {
             bot = "Davy Jones"; icon = "⚓";
           }
         } else if (isForex) {
-          bot = "Navigator"; icon = "🧭";
+          bot = "Forex Gump"; icon = "🧭";
         } else if (isOptions) {
           bot = "Apex Predator"; icon = "🎯";
         }
@@ -111,7 +111,7 @@ export function useRealFeed(maxTrades = 20) {
 
     const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
       { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
-      { data: bbStatus.data,   bot: "Blackbeard",    icon: "🏴‍☠️" },
+      { data: bbStatus.data,   bot: "Jerome",    icon: "🏴‍☠️" },
       { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
       { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
     ];
@@ -147,7 +147,7 @@ export function useRealFeed(maxTrades = 20) {
           : 0;
         all.push({
           id: `fx-${ft.id}`,
-          bot: "Navigator",
+          bot: "Forex Gump",
           icon: "🧭",
           symbol: ft.pair.replace("_", "/"),
           side: ft.direction || "",
@@ -214,7 +214,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (bbPerf.data?.has_data) {
       stats.push({
-        name: "Blackbeard", icon: "🏴‍☠️",
+        name: "Jerome", icon: "🏴‍☠️",
         totalPnl: bbPerf.data.total_pnl_usd ?? 0,
         totalPnlPct: bbPerf.data.total_pnl_pct ?? 0,
         wins: bbPerf.data.win_count, losses: bbPerf.data.loss_count,
@@ -245,7 +245,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (fxState) {
       stats.push({
-        name: "Navigator", icon: "🧭",
+        name: "Forex Gump", icon: "🧭",
         totalPnl: 0,
         totalPnlPct: 0,
         wins: fxState.total_wins ?? 0,
@@ -280,7 +280,7 @@ export function useRealFeed(maxTrades = 20) {
 
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
       { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
-      { data: bbStatus.data,   bot: "Blackbeard",    icon: "🏴‍☠️" },
+      { data: bbStatus.data,   bot: "Jerome",    icon: "🏴‍☠️" },
       { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
       { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
     ];
@@ -326,7 +326,7 @@ export function useRealFeed(maxTrades = 20) {
         const pnlPct = p.size_usd > 0 ? (p.unrealized_pnl_usd / p.size_usd) * 100 : 0;
         all.push({
           id: `nav-${p.pair}`,
-          bot: "Navigator", icon: "🧭",
+          bot: "Forex Gump", icon: "🧭",
           symbol: p.pair.replace("_", "/"),
           side: p.direction,
           pnlPct,
@@ -341,7 +341,7 @@ export function useRealFeed(maxTrades = 20) {
         const symbol = `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`;
         all.push({
           id: `poseidon-${t.pair_set_id}`,
-          bot: "Poseidon", icon: "🔱",
+          bot: "FOMO Fred", icon: "🔱",
           symbol,
           side: t.direction,
           pnlPct: t.position_value > 0 ? (t.total_pnl / t.position_value) * 100 : 0,

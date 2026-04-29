@@ -37,18 +37,18 @@ const MAX_OPEN = 6;
 const BOT_COLORS: Record<string, string> = {
   "Oracle": "#8b5cf6",
   "Davy Jones": "#22d3ee",
-  "Blackbeard": "#ef4444",
+  "Jerome": "#ef4444",
   "Calypso": "#3b82f6",
   "Apex Predator": "#f59e0b",
-  "Navigator": "#a78bfa",
+  "Forex Gump": "#a78bfa",
 };
 
 function getBotAbbrev(name: string): string {
   if (name === "Davy Jones") return "DJ";
-  if (name === "Blackbeard") return "BB";
+  if (name === "Jerome") return "JRM";
   if (name === "Calypso") return "CAL";
   if (name === "Apex Predator") return "APEX";
-  if (name === "Navigator") return "NAV";
+  if (name === "Forex Gump") return "FGP";
   if (name === "Oracle") return "ORC";
   return name.slice(0, 3).toUpperCase();
 }

@@ -80,10 +80,10 @@ export function FleetPerformanceHero() {
     results.push({ name: "Apex Predator", icon: "🦅", dailyPnl: apexPnl });
 
     const forexPnlToday = fxState?.total_pnl ?? 0;
-    results.push({ name: "Navigator", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
+    results.push({ name: "Forex Gump", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
     const poseidonPnl = poseidonState?.total_pnl ?? 0;
-    results.push({ name: "Poseidon", icon: "🔱", dailyPnl: poseidonPnl });
+    results.push({ name: "FOMO Fred", icon: "🔱", dailyPnl: poseidonPnl });
 
     const kcPnl = kcState?.total_pnl ?? 0;
     results.push({ name: "Kraken Current", icon: "🌊", dailyPnl: kcPnl });
@@ -117,12 +117,12 @@ export function FleetPerformanceHero() {
     const fxPnl = fxState?.total_pnl ?? 0;
     const fxEquity = fxState?.total_equity ?? 100_000;
     const fxPct = fxEquity > 0 ? (fxPnl / fxEquity) * 100 : 0;
-    krakenLines.push({ id: "forex", name: "Navigator", icon: "🧭", accent: "#14b8a6", curve: fxPct !== 0 ? [0, fxPct * 0.25, fxPct * 0.5, fxPct * 0.75, fxPct] : [0] });
+    krakenLines.push({ id: "forex", name: "Forex Gump", icon: "🧭", accent: "#14b8a6", curve: fxPct !== 0 ? [0, fxPct * 0.25, fxPct * 0.5, fxPct * 0.75, fxPct] : [0] });
 
     const psPnl = poseidonState?.total_pnl ?? 0;
     const psEq = poseidonState?.total_equity ?? 100_000;
     const psPct = psEq > 0 ? (psPnl / psEq) * 100 : 0;
-    krakenLines.push({ id: "poseidon", name: "Poseidon", icon: "🔱", accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
+    krakenLines.push({ id: "poseidon", name: "FOMO Fred", icon: "🔱", accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
 
     const kcPnlVal = kcState?.total_pnl ?? 0;
     const kcEqVal = kcState?.total_equity ?? 100_000;

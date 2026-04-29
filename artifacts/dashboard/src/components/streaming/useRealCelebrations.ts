@@ -138,10 +138,10 @@ export function useRealCelebrations() {
         let bot = "Oracle", icon = "🔮";
         if (isKraken) {
           const thesis = (t.original_thesis || "").toLowerCase();
-          if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) { bot = "Blackbeard"; icon = "🏴‍☠️"; }
+          if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) { bot = "Jerome"; icon = "🏴‍☠️"; }
           else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) { bot = "Calypso"; icon = "🌊"; }
           else { bot = "Davy Jones"; icon = "⚓"; }
-        } else if (isForex) { bot = "Navigator"; icon = "🧭"; }
+        } else if (isForex) { bot = "Forex Gump"; icon = "🧭"; }
         else if (isOptions) { bot = "Apex Predator"; icon = "🎯"; }
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
         const entry: RealTradeEntry = { bot, icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
@@ -152,7 +152,7 @@ export function useRealCelebrations() {
 
     const krakenBots = [
       { data: djStatus.data, perf: djPerf.data, bot: "Davy Jones", icon: "⚓" },
-      { data: bbStatus.data, perf: bbPerf.data, bot: "Blackbeard", icon: "🏴‍☠️" },
+      { data: bbStatus.data, perf: bbPerf.data, bot: "Jerome", icon: "🏴‍☠️" },
       { data: caStatus.data, perf: caPerf.data, bot: "Calypso", icon: "🌊" },
     ];
     for (const { data, bot, icon } of krakenBots) {
@@ -185,7 +185,7 @@ export function useRealCelebrations() {
         const pnlUsd = Math.abs(p.unrealized_pnl_usd);
         if (pnlUsd < 0.01) continue;
         const arr = isWin ? wins : losses;
-        arr.push({ bot: "Navigator", icon: "🧭", symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
+        arr.push({ bot: "Forex Gump", icon: "🧭", symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
       }
     }
 
@@ -193,15 +193,15 @@ export function useRealCelebrations() {
       wins.push(
         { bot: "Oracle", icon: "🔮", symbol: "SPY", pnlUsd: 12.50, isWin: true, source: "placeholder" },
         { bot: "Davy Jones", icon: "⚓", symbol: "BTC/USD", pnlUsd: 24.80, isWin: true, source: "placeholder" },
-        { bot: "Navigator", icon: "🧭", symbol: "EUR/USD", pnlUsd: 8.30, isWin: true, source: "placeholder" },
-        { bot: "Blackbeard", icon: "🏴‍☠️", symbol: "SOL/USD", pnlUsd: 15.60, isWin: true, source: "placeholder" },
+        { bot: "Forex Gump", icon: "🧭", symbol: "EUR/USD", pnlUsd: 8.30, isWin: true, source: "placeholder" },
+        { bot: "Jerome", icon: "🏴‍☠️", symbol: "SOL/USD", pnlUsd: 15.60, isWin: true, source: "placeholder" },
         { bot: "Calypso", icon: "🌊", symbol: "ETH/USD", pnlUsd: 18.20, isWin: true, source: "placeholder" },
         { bot: "Apex Predator", icon: "🎯", symbol: "SPY 450C", pnlUsd: 32.00, isWin: true, source: "placeholder" },
       );
     }
     if (losses.length === 0) {
       losses.push(
-        { bot: "Navigator", icon: "🧭", symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
+        { bot: "Forex Gump", icon: "🧭", symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
         { bot: "Davy Jones", icon: "⚓", symbol: "ADA/USD", pnlUsd: 4.20, isWin: false, source: "placeholder" },
       );
     }

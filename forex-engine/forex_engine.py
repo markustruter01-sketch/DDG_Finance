@@ -1057,7 +1057,7 @@ def _run_cycle_inner() -> dict:
         _check_vault_sweep()
 
         elapsed = time.time() - cycle_start
-        logger.info(f"Forex | Cycle #{_state['cycle_count']} complete in {elapsed:.1f}s — {len(scan_results)} pairs scanned")
+        logger.info(f"Forex | Cycle #{_state['cycle_count']} complete in {elapsed:.1f}s — {len(_state.get('last_scan_results', []))} pairs scanned")
 
     except Exception as exc:
         _state["status"] = "error"

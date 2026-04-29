@@ -68,10 +68,10 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 /* ── bot config ──────────────────────────────────────────── */
 const BOT_META: Record<string, { icon: string; color: string; startCap: number; label: string }> = {
   "davy-jones":     { icon: "⚓", color: C.cyan,   startCap: 100_000, label: "Davy Jones" },
-  "blackbeard":     { icon: "☠️", color: C.red,    startCap: 100_000, label: "Blackbeard" },
+  "blackbeard":     { icon: "☠️", color: C.red,    startCap: 100_000, label: "Jerome" },
   "calypso":        { icon: "🌊", color: C.violet, startCap: 100_000, label: "Calypso" },
   "apex-predator":  { icon: "🦅", color: C.orange, startCap: 100_000, label: "Apex Predator" },
-  "poseidon":       { icon: "🔱", color: C.blue,   startCap: 100_000, label: "Poseidon" },
+  "poseidon":       { icon: "🔱", color: C.blue,   startCap: 100_000, label: "FOMO Fred" },
   "kraken-current": { icon: "🐙", color: C.green,  startCap: 100_000, label: "Kraken Current" },
 };
 

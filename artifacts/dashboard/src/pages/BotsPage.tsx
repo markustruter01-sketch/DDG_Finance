@@ -442,7 +442,7 @@ export default function BotsPage() {
           )}
 
           <GenericBotCard
-            name="Navigator"
+            name="Forex Gump"
             icon="🧭"
             color="#10b981"
             strategy="Forex — USD-bias macro trend following"
@@ -458,7 +458,7 @@ export default function BotsPage() {
           />
 
           <GenericBotCard
-            name="Poseidon"
+            name="FOMO Fred"
             icon="🔱"
             color="#8b5cf6"
             strategy="Crypto pairs trading — statistical arbitrage (Z-score)"

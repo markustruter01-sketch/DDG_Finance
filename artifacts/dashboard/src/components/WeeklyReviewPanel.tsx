@@ -146,7 +146,7 @@ export function WeeklyReviewPanel() {
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[
               { label: "Oracle", val: oracleEquity, start: 100_000 },
-              { label: "Navigator", val: forexEquity, start: 100_000 },
+              { label: "Forex Gump", val: forexEquity, start: 100_000 },
               { label: "Kraken (6)", val: krakenEquity, start: 600_000 },
             ].map(({ label, val, start }) => {
               const pnl = val != null ? val - start : null;

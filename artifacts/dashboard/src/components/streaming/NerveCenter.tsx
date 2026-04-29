@@ -10,10 +10,10 @@ import {
 const BOTS = [
   { id: "oracle", name: "Oracle", subtitle: "Stocks Bot", icon: "🔮", angle: 270, color: "#facc15" },
   { id: "davy-jones", name: "Davy Jones", subtitle: "Crypto Bot #1", icon: "⚓", angle: 330, color: "#22d3ee" },
-  { id: "blackbeard", name: "Blackbeard", subtitle: "Crypto Bot #2", icon: "🏴‍☠️", angle: 30, color: "#f97316" },
+  { id: "blackbeard", name: "Jerome", subtitle: "Crypto Bot #2", icon: "🏴‍☠️", angle: 30, color: "#f97316" },
   { id: "calypso", name: "Calypso", subtitle: "Crypto Bot #3", icon: "🌊", angle: 90, color: "#a78bfa" },
   { id: "apex", name: "Apex Predator", subtitle: "Options Bot", icon: "🎯", angle: 150, color: "#ef4444" },
-  { id: "navigator", name: "Navigator", subtitle: "Forex Bot", icon: "🧭", angle: 210, color: "#14b8a6" },
+  { id: "navigator", name: "Forex Gump", subtitle: "Forex Bot", icon: "🧭", angle: 210, color: "#14b8a6" },
 ];
 
 const ALGO_SNIPPETS = [
@@ -381,7 +381,7 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
 
     const krakenBots: Array<{ data: typeof djStatus.data; botKey: string; bot: string; icon: string; color: string }> = [
       { data: djStatus.data, botKey: "davy-jones", bot: "Davy Jones", icon: "⚓", color: "#22d3ee" },
-      { data: bbStatus.data, botKey: "blackbeard", bot: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
+      { data: bbStatus.data, botKey: "blackbeard", bot: "Jerome", icon: "🏴‍☠️", color: "#f97316" },
       { data: caStatus.data, botKey: "calypso", bot: "Calypso", icon: "🌊", color: "#a78bfa" },
     ];
     for (const { data, botKey, bot, icon, color } of krakenBots) {
@@ -412,7 +412,7 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     for (const p of fxPositions?.positions ?? []) {
       const reasons = TRADE_REASONS.navigator;
       insights.push({
-        bot: "Navigator", icon: "🧭", color: "#14b8a6",
+        bot: "Forex Gump", icon: "🧭", color: "#14b8a6",
         symbol: p.pair.replace("_", "/"), side: p.direction,
         pnlUsd: p.unrealized_pnl_usd,
         reason: reasons[Math.abs(p.pair.charCodeAt(0)) % reasons.length],

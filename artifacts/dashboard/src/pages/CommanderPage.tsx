@@ -295,7 +295,7 @@ function ParamsPanel() {
 
   const botLabels: Record<string, { name: string; color: string }> = {
     davy_jones: { name: "Davy Jones", color: "#f59e0b" },
-    blackbeard: { name: "Blackbeard", color: "#ef4444" },
+    blackbeard: { name: "Jerome", color: "#ef4444" },
     calypso: { name: "Calypso", color: "#8b5cf6" },
   };
 

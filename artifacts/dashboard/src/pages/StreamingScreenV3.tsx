@@ -37,7 +37,7 @@ const BOT_ICONS: Record<string, string> = {
 
 const BOT_NAMES: Record<string, string> = {
   "davy-jones": "Davy Jones",
-  blackbeard: "Blackbeard",
+  blackbeard: "Jerome",
   calypso: "Calypso",
 };
 

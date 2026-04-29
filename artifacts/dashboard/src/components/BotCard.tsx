@@ -21,7 +21,7 @@ const BOT_META: Record<string, { color: string; icon: string; strategy: string }
   blackbeard: {
     color: "#ef4444",
     icon: "🏴‍☠️",
-    strategy: "Aggressive momentum breakout",
+    strategy: "LLM Commodity Macro — Groq ETF investor",
   },
   calypso: {
     color: "#8b5cf6",

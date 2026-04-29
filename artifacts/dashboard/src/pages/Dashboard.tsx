@@ -1481,7 +1481,7 @@ function AllClosedTradesSection() {
     // Kraken bots — each returns up to 50 recent trades
     const krakenBots: { status: typeof davyStatus; name: string; color: string }[] = [
       { status: davyStatus, name: "Davy Jones #2", color: "text-emerald-400" },
-      { status: bbStatus,   name: "Blackbeard #3", color: "text-amber-400"   },
+      { status: bbStatus,   name: "Jerome #3",      color: "text-amber-400"   },
       { status: caStatus,   name: "Calypso #4",    color: "text-violet-400"  },
     ];
     for (const { status, name, color } of krakenBots) {

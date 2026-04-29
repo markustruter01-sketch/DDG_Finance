@@ -26,11 +26,11 @@ import { formatCurrency } from "@/lib/utils";
 const BOT_META: Record<string, { icon: string; color: string; label: string }> = {
   oracle:           { icon: "🔮", color: "#8b5cf6", label: "Oracle #1" },
   "davy-jones":     { icon: "⚓", color: "#22d3ee", label: "Davy Jones #2" },
-  blackbeard:       { icon: "🏴‍☠️", color: "#f97316", label: "Blackbeard #3" },
+  blackbeard:       { icon: "🏴‍☠️", color: "#f97316", label: "Jerome #3" },
   calypso:          { icon: "🌊", color: "#a855f7", label: "Calypso #4" },
   apex:             { icon: "🎯", color: "#f59e0b", label: "Apex Predator #5" },
-  navigator:        { icon: "🧭", color: "#10b981", label: "Navigator #6" },
-  poseidon:         { icon: "🔱", color: "#8b5cf6", label: "Poseidon #7" },
+  navigator:        { icon: "🧭", color: "#10b981", label: "Forex Gump #6" },
+  poseidon:         { icon: "🔱", color: "#8b5cf6", label: "FOMO Fred #7" },
   "kraken-current": { icon: "🌊", color: "#06b6d4", label: "Kraken Current #8" },
 };
 
@@ -469,7 +469,7 @@ function NeuralFeed() {
 
     const krakenBots = [
       { data: djStatus, key: "davy-jones", bot: "Davy Jones", icon: "⚓", color: "#22d3ee" },
-      { data: bbStatus, key: "blackbeard", bot: "Blackbeard", icon: "🏴‍☠️", color: "#f97316" },
+      { data: bbStatus, key: "blackbeard", bot: "Jerome", icon: "🏴‍☠️", color: "#f97316" },
       { data: caStatus, key: "calypso", bot: "Calypso", icon: "🌊", color: "#a855f7" },
     ];
 
@@ -576,7 +576,7 @@ function NeuralFeed() {
       fxParts.push(`→ ${fxDecision}`);
       newLines.push({
         id: `fx-bias-${fxState.usd_bias}-${fxState.cycle_count}-${fxState.position_count}`,
-        ts: now, bot: "Navigator", icon: "🧭", color: "#10b981",
+        ts: now, bot: "Forex Gump", icon: "🧭", color: "#10b981",
         text: fxParts.join(" | "),
         type: "thinking",
       });
@@ -589,7 +589,7 @@ function NeuralFeed() {
           scanParts.push(`→ ${scanDecision}`);
           newLines.push({
             id: `fx-scan-${scan.pair}-${scan.signal}-${fxState.cycle_count}`,
-            ts: now, bot: "Navigator", icon: "🧭", color: "#10b981",
+            ts: now, bot: "Forex Gump", icon: "🧭", color: "#10b981",
             text: scanParts.join(" | "),
             type: scan.signal ? "signal" : "thinking",
             highConviction: !!scan.signal,
@@ -612,7 +612,7 @@ function NeuralFeed() {
       }
       newLines.push({
         id: `poseidon-state-${poseidonState.open_positions}-${Math.round(poseidonState.total_equity)}`,
-        ts: now, bot: "Poseidon", icon: "🔱", color: "#8b5cf6",
+        ts: now, bot: "FOMO Fred", icon: "🔱", color: "#8b5cf6",
         text: posParts.join(" | "),
         type: "thinking",
       });
@@ -787,13 +787,13 @@ function EquitySidebar() {
       result.push({ name: "Oracle", icon: "🔮", color: "#8b5cf6", data: snaps.map(s => s.alpaca_equity) });
     }
     result.push({ name: "Davy Jones", icon: "⚓", color: "#22d3ee", data: krakenBotCurves.dj });
-    result.push({ name: "Blackbeard", icon: "🏴‍☠️", color: "#f97316", data: krakenBotCurves.bb });
+    result.push({ name: "Jerome", icon: "🏴‍☠️", color: "#f97316", data: krakenBotCurves.bb });
     result.push({ name: "Calypso", icon: "🌊", color: "#a855f7", data: krakenBotCurves.ca });
     if (curve?.snapshots?.length) {
       const snaps = curve.snapshots;
       result.push({ name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) });
-      result.push({ name: "Navigator", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) });
-      result.push({ name: "Poseidon", icon: "🔱", color: "#6366f1", data: snaps.map(s => (s as Record<string, number>).poseidon_equity ?? 0) });
+      result.push({ name: "Forex Gump", icon: "🧭", color: "#10b981", data: snaps.map(s => s.forex_equity) });
+      result.push({ name: "FOMO Fred", icon: "🔱", color: "#6366f1", data: snaps.map(s => (s as Record<string, number>).poseidon_equity ?? 0) });
       result.push({ name: "KC", icon: "🌊", color: "#06b6d4", data: snaps.map(s => (s as Record<string, number>).kraken_current_equity ?? 0) });
     }
     return result;
@@ -833,11 +833,11 @@ function EquitySidebar() {
     const rows: Array<{ name: string; icon: string; equity: number; pnl: number; color: string; vaultUsd?: number }> = [];
     rows.push({ name: "Oracle", icon: "🔮", equity: fleetEq?.oracle?.equity ?? 0, pnl: fleetEq?.oracle?.pnl ?? 0, color: "#8b5cf6" });
     rows.push({ name: "Davy Jones", icon: "⚓", equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0, color: "#22d3ee" });
-    rows.push({ name: "Blackbeard", icon: "🏴‍☠️", equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
+    rows.push({ name: "Jerome", icon: "🏴‍☠️", equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
     rows.push({ name: "Calypso", icon: "🌊", equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0, color: "#a855f7" });
     rows.push({ name: "Apex Predator", icon: "🦅", equity: fleetEq?.apex?.equity ?? 0, pnl: fleetEq?.apex?.pnl ?? 0, color: "#f97316" });
-    rows.push({ name: "Navigator", icon: "🧭", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
-    rows.push({ name: "Poseidon", icon: "🔱", equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
+    rows.push({ name: "Forex Gump", icon: "🧭", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
+    rows.push({ name: "FOMO Fred", icon: "🔱", equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
     rows.push({ name: "Kraken Current", icon: "🌊", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0, color: "#06b6d4" });
     return rows;
   }, [fleetEq, fxState]);

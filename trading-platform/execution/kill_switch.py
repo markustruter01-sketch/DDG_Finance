@@ -103,8 +103,9 @@ def reset(opening_equity: float | None = None) -> None:
     # Validate opening equity before accepting it as the daily baseline.
     # A bad API response (None, 0, or implausible value) would corrupt
     # the kill switch for the entire trading day.
+    _MIN_VALID_OPENING_EQUITY = 10_000  # floor below which API data is considered corrupt
     if opening_equity is not None:
-        if opening_equity < 10_000:
+        if opening_equity < _MIN_VALID_OPENING_EQUITY:
             logger.error(
                 f"Kill switch | Rejected opening_equity=${opening_equity:,.2f} — "
                 f"below $10k minimum. Kill switch baseline NOT updated. "

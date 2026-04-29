@@ -62,10 +62,11 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
 
     base_ttl = _EVENT_TTL.get((component, error_type), _DEFAULT_TTL)
     count    = _escalation_counts.get(key, 0)
-    # Each prior recording doubles the quiet window (2⁰=1× … 2²=4× etc.)
-    # Trading-critical events (base_ttl ≤ 300) are capped at _CRITICAL_ALERT_CEILING so they
-    # re-alert frequently even under escalation.  Non-critical events use _BACKOFF_MAX_TTL so
-    # the exponential backoff can reduce noise during prolonged incidents.
+    # Escalation: base_ttl × 2^count, capped by ceiling chosen by event class.
+    # Trading-critical events (base_ttl ≤ _CRITICAL_ALERT_CEILING=300): ceiling=300s —
+    #   re-alert every 5 min regardless of count (fast incident visibility).
+    # Non-critical events (base_ttl > 300): ceiling=_BACKOFF_MAX_TTL=1800s —
+    #   backoff: 15 min → 30 min → 30 min (capped), reducing noise on prolonged incidents.
     _ceiling = _CRITICAL_ALERT_CEILING if base_ttl <= _CRITICAL_ALERT_CEILING else _BACKOFF_MAX_TTL
     ttl = min(base_ttl * (2 ** count), _ceiling)
 

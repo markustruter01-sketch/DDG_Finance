@@ -232,14 +232,28 @@ def get_latest_price(ticker: str) -> float | None:
     return None
 
 
+# ── Data client singleton (stock) ───────────────────────────────────────────
+# One TLS handshake per process rather than one per price fetch.
+_stock_data_client: "StockHistoricalDataClient | None" = None
+
+
+def _get_stock_data_client():
+    """Return cached StockHistoricalDataClient — one TLS handshake per process."""
+    global _stock_data_client
+    if _stock_data_client is None:
+        from alpaca.data.historical import StockHistoricalDataClient
+        _stock_data_client = StockHistoricalDataClient(
+            api_key=settings.alpaca_api_key,
+            secret_key=settings.alpaca_secret_key,
+        )
+        logger.debug("Broker | StockHistoricalDataClient singleton created")
+    return _stock_data_client
+
+
 @alpaca_retry
 def _get_latest_stock_price(ticker: str) -> float | None:
-    from alpaca.data.historical import StockHistoricalDataClient
     from alpaca.data.requests import StockLatestTradeRequest
-    data_client = StockHistoricalDataClient(
-        api_key=settings.alpaca_api_key,
-        secret_key=settings.alpaca_secret_key,
-    )
+    data_client = _get_stock_data_client()
     req = StockLatestTradeRequest(symbol_or_symbols=ticker)
     trades = data_client.get_stock_latest_trade(req)
     if ticker in trades:

@@ -43,8 +43,8 @@ _last_reset_date: date | None = None
 # ARCHITECTURAL NOTE — KRAKEN BOT PROCESS ISOLATION
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# The Kraken crypto bots (Davy Jones, Blackbeard, Calypso, Apex Predator,
-# Poseidon, Kraken Current) run in a SEPARATE PROCESS from this trading-platform
+# The Kraken crypto bots (Davy Jones, Jerome, Calypso, Apex Predator,
+# FOMO Fred, Kraken Current, Forex Gump) run in a SEPARATE PROCESS from this trading-platform
 # FastAPI/APScheduler process.
 #
 # Consequences:
@@ -257,7 +257,7 @@ def set_auto_trading(enabled: bool) -> dict:
             if job.id not in _ALWAYS_ACTIVE_JOBS:
                 job.resume()
         _auto_trading_enabled = True
-        logger.info("AUTO-TRADING ENABLED — trading scheduler jobs resumed (24/7 crypto + market hours ETFs)")
+        logger.info("AUTO-TRADING ENABLED — trading scheduler jobs resumed (market hours ETFs + 24/7 Kraken crypto bots)")
     else:
         for job in scheduler.get_jobs():
             if job.id not in _ALWAYS_ACTIVE_JOBS:

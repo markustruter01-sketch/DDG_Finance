@@ -1428,6 +1428,41 @@ def run_cycle() -> None:
         write_status()
         return  # Skip this cycle entirely
 
+    # ── HWM Drawdown Guard (8% from all-time equity peak) ────────────────────
+    try:
+        import sys as _sys_ddg, os as _os_ddg
+        _tp_ddg = _os_ddg.path.join(
+            _os_ddg.path.dirname(_os_ddg.path.abspath(__file__)), "..", "trading-platform"
+        )
+        if _tp_ddg not in _sys_ddg.path:
+            _sys_ddg.path.insert(0, _tp_ddg)
+        from core.bot_drawdown_guard import check_bot_drawdown as _check_dd
+        _dd = _check_dd(BOT_ID, total_equity)
+        if _dd["should_pause"]:
+            logger.warning(
+                f"DrawdownGuard | {BOT_DISPLAY_NAME} pausing — {_dd['reason']}"
+            )
+            try:
+                from pathlib import Path as _Path_dd
+                _ctrl_dd = _Path_dd(CONTROL_FILE)
+                _cd = json.loads(_ctrl_dd.read_text()) if _ctrl_dd.exists() else {}
+                _cd["bot_paused"] = True
+                _cd["pause_reason"] = _dd["reason"]
+                _cd["paused_at"] = datetime.now(tz=timezone.utc).isoformat()
+                _ctrl_dd.write_text(json.dumps(_cd, indent=2))
+            except Exception as _dde:
+                logger.error(f"DrawdownGuard | Failed to write pause: {_dde}")
+            write_status()
+            return
+        elif _dd["drawdown_pct"] >= 5:
+            logger.info(
+                f"DrawdownGuard | {BOT_DISPLAY_NAME} drawdown "
+                f"{_dd['drawdown_pct']:.1f}% from HWM ${_dd['hwm']:,.0f} — "
+                f"within limit"
+            )
+    except Exception as _ddg_exc:
+        logger.debug(f"DrawdownGuard | check failed (non-fatal): {_ddg_exc}")
+
     # ── Step 3: Process each symbol ──────────────────────────────────────────
     deployed_usd = sum(p["size_usd"] for p in open_positions.values())
 

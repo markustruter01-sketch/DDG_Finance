@@ -123,6 +123,21 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: daily_discord_pnl_report (daily 05:00 AEST Brisbane)")
 
+    scheduler.add_job(
+        func=_daily_benchmark_snapshot,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour=17,
+            minute=10,
+            timezone="America/New_York",
+        ),
+        id="daily_benchmark_snapshot",
+        name="SPY/QQQ/AGG Daily Benchmark Snapshot (17:10 ET)",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: daily_benchmark_snapshot (Mon–Fri 17:10 ET)")
+
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
@@ -284,3 +299,99 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
+
+
+async def _daily_benchmark_snapshot() -> None:
+    """
+    Fires Mon–Fri at 17:10 ET (10 min after market close).
+    Fetches SPY, QQQ, AGG closing prices from Yahoo Finance and records
+    the current fleet equity into benchmark_snapshots for 30-day comparison.
+    """
+    import asyncio
+    import json as _json
+    from datetime import date
+
+    logger.info("Scheduler | JOB STARTING: daily_benchmark_snapshot")
+    try:
+        closes = await asyncio.to_thread(_fetch_benchmark_closes)
+        if not closes:
+            logger.warning("Scheduler | daily_benchmark_snapshot: failed to fetch closes")
+            return
+
+        fleet_equity = await asyncio.to_thread(_fetch_fleet_equity_total)
+
+        today = date.today()
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            logger.warning("Scheduler | daily_benchmark_snapshot: DB unavailable")
+            return
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO benchmark_snapshots
+                        (snapshot_date, spy_close, qqq_close, agg_close, fleet_equity)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (snapshot_date) DO UPDATE
+                        SET spy_close    = EXCLUDED.spy_close,
+                            qqq_close    = EXCLUDED.qqq_close,
+                            agg_close    = EXCLUDED.agg_close,
+                            fleet_equity = EXCLUDED.fleet_equity
+                """, (
+                    today,
+                    closes.get("SPY"),
+                    closes.get("QQQ"),
+                    closes.get("AGG"),
+                    fleet_equity,
+                ))
+            conn.commit()
+
+        logger.info(
+            f"Scheduler | daily_benchmark_snapshot: {today} — "
+            f"SPY={closes.get('SPY')} QQQ={closes.get('QQQ')} "
+            f"AGG={closes.get('AGG')} fleet=${fleet_equity:,.0f}"
+        )
+
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_benchmark_snapshot FAILED: {exc}")
+
+
+def _fetch_benchmark_closes() -> dict:
+    """Fetch previous-close prices for SPY, QQQ, AGG from Yahoo Finance."""
+    import urllib.request
+    results = {}
+    for ticker in ("SPY", "QQQ", "AGG"):
+        try:
+            url = (
+                f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+                f"?interval=1d&range=5d"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            closes = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+            closes = [c for c in closes if c is not None]
+            if closes:
+                results[ticker] = round(closes[-1], 4)
+        except Exception as e:
+            logger.warning(f"Scheduler | benchmark_closes: {ticker} fetch failed — {e}")
+    return results
+
+
+def _fetch_fleet_equity_total() -> float:
+    """Sum all heartbeat equity values as a quick fleet total."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return 0.0
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
+                row = cur.fetchone()
+        return float(row[0]) if row else 0.0
+    except Exception:
+        return 0.0
+
+
+# Make _json importable inside the module-level function
+import json as _json

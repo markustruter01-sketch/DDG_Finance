@@ -1371,6 +1371,80 @@ async def fleet_weekly_review():
         "bots_stale":  sum(1 for b in result["fleet_heartbeat"] if b["stale"]),
     }
 
+    # ── 30-Day Benchmark Comparison ───────────────────────────────────────────
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT snapshot_date, spy_close, qqq_close, agg_close, fleet_equity
+                    FROM benchmark_snapshots
+                    WHERE snapshot_date >= CURRENT_DATE - INTERVAL '32 days'
+                    ORDER BY snapshot_date ASC
+                """)
+                bm_rows = cur.fetchall()
+
+        if len(bm_rows) >= 2:
+            oldest = bm_rows[0]
+            newest = bm_rows[-1]
+
+            def _pct(new, old):
+                if old and new and float(old) != 0:
+                    return round((float(new) - float(old)) / float(old) * 100, 2)
+                return None
+
+            spy_30d   = _pct(newest[1], oldest[1])
+            qqq_30d   = _pct(newest[2], oldest[2])
+            agg_30d   = _pct(newest[3], oldest[3])
+            fleet_30d = _pct(newest[4], oldest[4])
+
+            result["benchmark_30d"] = {
+                "period_start":   str(oldest[0]),
+                "period_end":     str(newest[0]),
+                "spy_return_pct":    spy_30d,
+                "qqq_return_pct":    qqq_30d,
+                "agg_return_pct":    agg_30d,
+                "fleet_return_pct":  fleet_30d,
+                "alpha_vs_spy":  round(fleet_30d - spy_30d, 2) if fleet_30d is not None and spy_30d is not None else None,
+                "alpha_vs_qqq":  round(fleet_30d - qqq_30d, 2) if fleet_30d is not None and qqq_30d is not None else None,
+                "data_points": len(bm_rows),
+            }
+        else:
+            result["benchmark_30d"] = {
+                "message": "Fewer than 2 benchmark snapshots recorded — check back after market close",
+                "data_points": len(bm_rows),
+            }
+
+        # ── Drawdown HWM states ────────────────────────────────────────────────
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT bot_id, hwm, pause_threshold_pct, is_paused_by_drawdown,
+                           CASE WHEN hwm > 0
+                                THEN ROUND(((hwm - (
+                                    SELECT COALESCE(equity_usd, hwm)
+                                    FROM kraken_heartbeat kh
+                                    WHERE kh.bot_id = bdh.bot_id
+                                    LIMIT 1
+                                )) / hwm * 100)::numeric, 2)
+                                ELSE 0 END AS drawdown_pct
+                    FROM bot_drawdown_hwm bdh
+                    ORDER BY bot_id
+                """)
+                dd_rows = cur.fetchall()
+        result["drawdown_states"] = [
+            {
+                "bot_id":         r[0],
+                "hwm":            float(r[1]) if r[1] else 0,
+                "threshold_pct":  float(r[2]) * 100 if r[2] else 8,
+                "paused_by_drawdown": bool(r[3]),
+                "current_drawdown_pct": float(r[4]) if r[4] else 0,
+            }
+            for r in dd_rows
+        ]
+    except Exception as _bm_exc:
+        result["benchmark_30d"] = {"error": str(_bm_exc)}
+        result["drawdown_states"] = []
+
     result["generated_at"] = datetime.now(timezone.utc).isoformat()
     return result
 

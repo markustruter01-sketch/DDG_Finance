@@ -398,6 +398,27 @@ def main():
 
             equity = portfolio.equity(current_prices)
 
+            # ── HWM Drawdown Guard ────────────────────────────────────────────
+            try:
+                from core.bot_drawdown_guard import check_bot_drawdown as _check_dd_p
+                _dd_p = _check_dd_p("poseidon", equity)
+                if _dd_p["should_pause"]:
+                    logger.warning(
+                        f"Poseidon | DrawdownGuard TRIGGERED — {_dd_p['reason']}"
+                    )
+                    data = json.loads(_POSEIDON_CONTROL_FILE.read_text()) if _POSEIDON_CONTROL_FILE.exists() else {}
+                    data["bot_paused"] = True
+                    data["pause_reason"] = _dd_p["reason"]
+                    data["paused_at"] = datetime.now(timezone.utc).isoformat()
+                    _POSEIDON_CONTROL_FILE.write_text(json.dumps(data, indent=2))
+                elif _dd_p["drawdown_pct"] >= 5:
+                    logger.info(
+                        f"Poseidon | DrawdownGuard: {_dd_p['drawdown_pct']:.1f}% from HWM "
+                        f"${_dd_p['hwm']:,.0f} — within 8% limit"
+                    )
+            except Exception as _ddg_p:
+                logger.debug(f"Poseidon | DrawdownGuard check failed (non-fatal): {_ddg_p}")
+
             # Exit checks — always run, never gated by circuit breaker
             check_exits(current_prices)
 

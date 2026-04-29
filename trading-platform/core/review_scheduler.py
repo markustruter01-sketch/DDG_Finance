@@ -96,9 +96,9 @@ def run_scheduled_checks() -> None:
 
                 _upsert_flag(
                     flag_key="blackbeard_apr30_review",
-                    title="Blackbeard 30-Day Performance Review",
+                    title="Jerome (#3) 30-Day Performance Review",
                     description=(
-                        f"Check Blackbeard win rate after Apr 17 catastrophe rolls out "
+                        f"Check Jerome win rate after Apr 17 catastrophe rolls out "
                         f"of the 30-day window. Current: {bb_wr:.1f}% on {bb_trades} trades. "
                         f"If still below 35%, hard pause like Calypso. "
                         f"Run: SELECT COUNT(*), SUM(CASE WHEN pnl_usd>0 THEN 1 ELSE 0 END) "
@@ -194,10 +194,7 @@ def run_scheduled_checks() -> None:
                            SUM(CASE WHEN pnl_usd > 0 THEN 1 ELSE 0 END) as wins
                     FROM forex_trades
                     WHERE status = 'closed'
-                    AND exit_time > (
-                        SELECT MIN(exit_time) FROM forex_trades
-                        WHERE status = 'closed' AND exit_time > '2026-04-22'
-                    )
+                    AND exit_time > '2026-04-28'
                 """)
                 row = cur.fetchone()
                 nav_trades = row[0] or 0
@@ -206,12 +203,12 @@ def run_scheduled_checks() -> None:
 
                 _upsert_flag(
                     flag_key="navigator_may15_review",
-                    title="Navigator Post-Fix 30-Trade Validation",
+                    title="Forex Gump Post-Conversion 30-Trade Validation",
                     description=(
-                        f"Navigator had 9.1% WR before fixes. 4 entry fixes applied Apr 22: "
+                        f"Forex Gump had 9.1% WR before fixes. 4 entry fixes applied Apr 22: "
                         f"RSI 30/70, EMA 50/200 trend filter, ATR minimum 8 pips, "
                         f"per-pair cooldown after 3 losses. "
-                        f"Post-fix trades so far: {nav_trades}, WR={nav_wr:.1f}%. "
+                        f"Post-conversion trades so far: {nav_trades}, WR={nav_wr:.1f}%. "
                         f"Need 30 trades to validate. "
                         f"Report win rate and avg P&L in pips back to Claude."
                     ),

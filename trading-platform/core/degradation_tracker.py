@@ -35,8 +35,9 @@ _EVENT_TTL: dict[tuple[str, str], int] = {
     ("http",          "500"):     300,  # 5 min
     ("http",          "503"):     300,  # 5 min
 }
-_DEFAULT_TTL = 900   # 15 min for all other (component, error_type) pairs
-_MAX_TTL     = 300   # cap escalation at 5 min for trading-critical components
+_DEFAULT_TTL             = 900   # 15 min for all other (component, error_type) pairs
+_CRITICAL_ALERT_CEILING  = 300   # cap for trading-critical events (base_ttl ≤ 300) — re-alert every 5 min max
+_BACKOFF_MAX_TTL         = 1800  # cap for non-critical events — allow exponential backoff up to 30 min
 
 # key → last recorded timestamp
 _recent_keys: dict[str, float] = {}
@@ -62,7 +63,11 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
     base_ttl = _EVENT_TTL.get((component, error_type), _DEFAULT_TTL)
     count    = _escalation_counts.get(key, 0)
     # Each prior recording doubles the quiet window (2⁰=1× … 2²=4× etc.)
-    ttl = min(base_ttl * (2 ** count), _MAX_TTL)
+    # Trading-critical events (base_ttl ≤ 300) are capped at _CRITICAL_ALERT_CEILING so they
+    # re-alert frequently even under escalation.  Non-critical events use _BACKOFF_MAX_TTL so
+    # the exponential backoff can reduce noise during prolonged incidents.
+    _ceiling = _CRITICAL_ALERT_CEILING if base_ttl <= _CRITICAL_ALERT_CEILING else _BACKOFF_MAX_TTL
+    ttl = min(base_ttl * (2 ** count), _ceiling)
 
     if (now - last) < ttl:
         return False

@@ -10,8 +10,8 @@ analysis phase and executes each slot:
   2. Liquidate positions no longer in today's plan (exits).
   3. For each active slot, compute notional USD from kelly_fraction × equity.
   4. ── POSITION SIZING CAP ────────────────────────────────────────────────
-     Hard cap: max notional per position = equity × 10%.
-     If LLM requests more, cap at the 10% limit and leave remainder in cash.
+     Hard cap: max notional per position = equity × 15%.
+     If LLM requests more, cap at the 15% limit and leave remainder in cash.
      ──────────────────────────────────────────────────────────────────────
   5. ── MARGIN BLOCK ───────────────────────────────────────────────────────
      Track remaining cash across slot executions.
@@ -234,7 +234,7 @@ def execute_allocations(
         f"Account equity: ${equity:,.2f} | settled_cash: ${raw_cash:,.2f} | "
         f"exit_proceeds: ${exit_proceeds:,.2f} | "
         f"available_cash: ${remaining_cash:,.2f} | "
-        f"max_position (10%): ${max_position_usd:,.2f}"
+        f"max_position (15%): ${max_position_usd:,.2f}"
     )
 
     if remaining_cash <= 0:
@@ -367,7 +367,7 @@ def _close_stale_positions(
 ) -> dict:
     stale = []
     for sym in current_positions:
-        if sym in active_symbols or sym == CASH_TICKER:
+        if sym in active_symbols:
             continue
         if sym in protected_symbols:
             logger.debug(f"Vault position {sym} is protected — never closing")

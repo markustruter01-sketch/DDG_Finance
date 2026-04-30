@@ -3389,6 +3389,10 @@ def _keepalive_loop() -> None:
             write_status()
         except Exception as exc:
             logger.debug(f"Keepalive | heartbeat write failed: {exc}")
+        try:
+            write_live_state()
+        except Exception as exc:
+            logger.debug(f"Keepalive | live-state write failed: {exc}")
         time.sleep(120)  # 2-minute interval
 
 

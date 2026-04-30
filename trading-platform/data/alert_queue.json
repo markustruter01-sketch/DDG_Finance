@@ -25,5 +25,14 @@
     "side": "SELL",
     "reason": "trailing_stop",
     "timestamp": "2026-04-24T22:54:35.030001+00:00"
+  },
+  {
+    "bot_name": "The Navigator (Forex)",
+    "symbol": "USD_CHF",
+    "pnl_pct": 0,
+    "pnl_usd": 101.04,
+    "side": "SELL",
+    "reason": "take_profit",
+    "timestamp": "2026-04-30T22:57:59.415103+00:00"
   }
 ]

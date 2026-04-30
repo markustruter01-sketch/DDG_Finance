@@ -63,28 +63,61 @@ async def poseidon_state():
 
     # Read live positions from the bot's JSON state file
     live_state = _read_live_state(_POSEIDON_LIVE_STATE)
-    live_positions_raw = live_state.get("positions", {})
 
-    # Normalise into a list for the frontend
+    # Supplement total_trades and total_pnl from live_state when DB is sparse
+    live_total = live_state.get("total_trades")
+    if live_total is not None and int(live_total) > total_trades:
+        total_trades = int(live_total)
+        wins = int(live_state.get("total_wins", wins))
+        win_rate = (wins / total_trades * 100) if total_trades > 0 else 0.0
+
+    # Support two position formats:
+    #   1. New momentum format: open_positions = [{symbol, direction, position_usd, unrealised_pnl, ...}]
+    #   2. Legacy pairs format: positions = {pair_id: {asset_a, asset_b, total_pnl, ...}}
+    momentum_list = live_state.get("open_positions")
+    pairs_dict    = live_state.get("positions", {})
+
     open_trades = []
-    for ps_id, pos in live_positions_raw.items():
-        open_trades.append({
-            "pair_set_id": pos.get("pair_set_id"),
-            "asset_a": pos.get("asset_a"),
-            "asset_b": pos.get("asset_b"),
-            "direction": pos.get("direction"),
-            "leg_a_side": pos.get("leg_a_side"),
-            "leg_b_side": pos.get("leg_b_side"),
-            "entry_zscore": pos.get("entry_zscore"),
-            "position_value": pos.get("position_value"),
-            "total_pnl": pos.get("total_pnl"),
-            "leg_a_entry": pos.get("leg_a_entry"),
-            "leg_b_entry": pos.get("leg_b_entry"),
-            "current_price_a": pos.get("current_price_a"),
-            "current_price_b": pos.get("current_price_b"),
-            "opened_at": pos.get("opened_at"),
-            "fees_paid": pos.get("fees_paid"),
-        })
+    if isinstance(momentum_list, list) and momentum_list:
+        for pos in momentum_list:
+            symbol = pos.get("symbol", "")
+            asset_base = symbol.replace("/USD", "")
+            open_trades.append({
+                "pair_set_id":    None,
+                "asset_a":        asset_base,
+                "asset_b":        "USD",
+                "direction":      pos.get("direction"),
+                "leg_a_side":     pos.get("direction"),
+                "leg_b_side":     None,
+                "entry_zscore":   None,
+                "position_value": pos.get("position_usd"),
+                "total_pnl":      pos.get("unrealised_pnl"),
+                "leg_a_entry":    pos.get("entry_price"),
+                "leg_b_entry":    None,
+                "current_price_a": pos.get("current_price"),
+                "current_price_b": None,
+                "opened_at":      pos.get("opened_at"),
+                "fees_paid":      None,
+            })
+    elif isinstance(pairs_dict, dict):
+        for ps_id, pos in pairs_dict.items():
+            open_trades.append({
+                "pair_set_id":    pos.get("pair_set_id"),
+                "asset_a":        pos.get("asset_a"),
+                "asset_b":        pos.get("asset_b"),
+                "direction":      pos.get("direction"),
+                "leg_a_side":     pos.get("leg_a_side"),
+                "leg_b_side":     pos.get("leg_b_side"),
+                "entry_zscore":   pos.get("entry_zscore"),
+                "position_value": pos.get("position_value"),
+                "total_pnl":      pos.get("total_pnl"),
+                "leg_a_entry":    pos.get("leg_a_entry"),
+                "leg_b_entry":    pos.get("leg_b_entry"),
+                "current_price_a": pos.get("current_price_a"),
+                "current_price_b": pos.get("current_price_b"),
+                "opened_at":      pos.get("opened_at"),
+                "fees_paid":      pos.get("fees_paid"),
+            })
 
     return {
         "total_equity": eq,

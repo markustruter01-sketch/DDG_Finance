@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
+
+import httpx
 from fastapi import APIRouter
+from loguru import logger
 from core.metrics import win_rate as _win_rate, win_rate_from_counts as _win_rate_from_counts, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 new_bots_router = APIRouter()
@@ -11,6 +15,75 @@ new_bots_router = APIRouter()
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _POSEIDON_LIVE_STATE = os.path.join(_REPO_ROOT, "poseidon", "poseidon_live_state.json")
 _KC_LIVE_STATE = os.path.join(_REPO_ROOT, "kraken-current", "kc_live_state.json")
+
+_KRAKEN_TICKER_URL = "https://api.kraken.com/0/public/Ticker"
+_TICKER_FETCH_TIMEOUT = 3.0
+_KRAKEN_BASE_ALIASES: dict[str, str] = {"BTC": "XBT", "DOGE": "XDG"}
+
+
+def _recompute_pnl_positions(positions: list[dict[str, Any]], size_field: str) -> None:
+    """Recompute unrealised_pnl in-place from entry_price and current_price."""
+    for pos in positions:
+        ep   = float(pos.get("entry_price", 0) or 0)
+        cp   = float(pos.get("current_price", ep) or ep)
+        size = float(pos.get(size_field, 0) or 0)
+        side = pos.get("direction", "long")
+        if ep > 0 and size > 0:
+            pnl = (cp - ep) / ep * size if side == "long" else (ep - cp) / ep * size
+            pos["unrealised_pnl"] = round(pnl, 2)
+
+
+async def _enrich_stale_positions_kraken(positions: list[dict[str, Any]], size_field: str) -> None:
+    """For positions where current_price == entry_price (stale startup state),
+    fetch live prices from Kraken public REST API and recompute P&L in-place."""
+    stale = [
+        p for p in positions
+        if abs(float(p.get("current_price", 0) or 0) - float(p.get("entry_price", 0) or 0)) < 1e-8
+        and float(p.get("entry_price", 0) or 0) > 0
+    ]
+    if not stale:
+        return
+
+    pairs = [p["symbol"].replace("/", "") for p in stale]
+    try:
+        async with httpx.AsyncClient(timeout=_TICKER_FETCH_TIMEOUT) as client:
+            resp = await client.get(_KRAKEN_TICKER_URL, params={"pair": ",".join(pairs)})
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("error"):
+            return
+        result: dict[str, Any] = data.get("result", {})
+        price_map: dict[str, float] = {k.upper(): float(v["c"][0]) for k, v in result.items()}
+
+        for pos in stale:
+            symbol = pos.get("symbol", "")
+            parts  = symbol.split("/")
+            base   = parts[0].upper() if parts else symbol.upper()
+            quote  = parts[1].upper() if len(parts) > 1 else "USD"
+            base_k = _KRAKEN_BASE_ALIASES.get(base, base)
+
+            live_price: float | None = None
+            for k, v in price_map.items():
+                if base_k in k and quote in k:
+                    live_price = v
+                    break
+            if live_price is None and base_k != base:
+                for k, v in price_map.items():
+                    if base in k and quote in k:
+                        live_price = v
+                        break
+            if live_price is None:
+                continue
+
+            ep   = float(pos.get("entry_price", 0) or 0)
+            size = float(pos.get(size_field, 0) or 0)
+            side = pos.get("direction", "long")
+            pos["current_price"] = round(live_price, 8)
+            if ep > 0 and size > 0:
+                pnl = (live_price - ep) / ep * size if side == "long" else (ep - live_price) / ep * size
+                pos["unrealised_pnl"] = round(pnl, 2)
+    except Exception as exc:
+        logger.debug(f"[new_bots] live-price fetch skipped: {exc}")
 
 
 def _pg_query(sql: str, params: tuple = ()):
@@ -76,6 +149,11 @@ async def poseidon_state():
     #   2. Legacy pairs format: positions = {pair_id: {asset_a, asset_b, total_pnl, ...}}
     momentum_list = live_state.get("open_positions")
     pairs_dict    = live_state.get("positions", {})
+
+    # Recompute P&L and enrich stale prices for momentum positions
+    if isinstance(momentum_list, list) and momentum_list:
+        _recompute_pnl_positions(momentum_list, "position_usd")
+        await _enrich_stale_positions_kraken(momentum_list, "position_usd")
 
     open_trades = []
     if isinstance(momentum_list, list) and momentum_list:
@@ -338,6 +416,14 @@ async def kraken_current_state():
     # Read live positions from the bot's JSON state file
     live_state = _read_live_state(_KC_LIVE_STATE)
     live_positions_raw = live_state.get("positions", {})
+
+    # Recompute P&L and enrich stale prices before building the output list.
+    # We enrich the dict values in-place; iterating .items() afterwards preserves
+    # the dict-key fallback for any position that omits the "symbol" field.
+    raw_pos_list = list(live_positions_raw.values())
+    if raw_pos_list:
+        _recompute_pnl_positions(raw_pos_list, "position_value")
+        await _enrich_stale_positions_kraken(raw_pos_list, "position_value")
 
     open_positions_list = []
     for sym, pos in live_positions_raw.items():

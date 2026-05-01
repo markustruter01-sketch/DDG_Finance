@@ -730,7 +730,16 @@ def write_live_state() -> None:
 
     positions_list = []
     for sym, pos in open_positions.items():
-        current_price = latest_prices.get(sym, pos["entry_price"])
+        current_price = latest_prices.get(sym)
+        if current_price is None:
+            _f = globals().get("_ws_feed")
+            if _f is not None:
+                try:
+                    current_price = _f.get_last_price(sym)
+                except Exception:
+                    pass
+        if current_price is None:
+            current_price = pos["entry_price"]
         entry         = pos["entry_price"]
         best          = pos["best_price"]
         size          = pos["size_usd"]
@@ -3444,7 +3453,7 @@ def main() -> None:
     so the health monitor never sees the bot as stale, even during slow cycles.
     """
     import threading
-    global total_equity, consecutive_losses, loss_streak_paused_until, _pending_emergency_rebalance
+    global total_equity, open_positions, consecutive_losses, loss_streak_paused_until, _pending_emergency_rebalance
 
     _start_health_server()
 
@@ -3547,6 +3556,24 @@ def main() -> None:
 
     # Do an initial equity fetch before starting the loop
     refresh_equity()
+
+    # ── Load open positions into memory immediately after startup ─────────────
+    # The keepalive thread fires every 2 min and calls write_live_state().
+    # Without this block, open_positions is empty until the first trading cycle
+    # (900s–3600s away), so the dashboard shows +$0.00 P&L on all positions.
+    # Loading from the paper engine DB here ensures positions are in memory
+    # before the first keepalive tick.
+    try:
+        open_positions = get_paper_positions()
+        if open_positions:
+            logger.info(
+                f"Bot | Startup | Pre-loaded {len(open_positions)} position(s) from DB "
+                f"(${sum(p['size_usd'] for p in open_positions.values()):,.0f} deployed)"
+            )
+        write_live_state()
+        logger.info("Bot | Startup | Initial live-state written with current positions")
+    except Exception as _sl_exc:
+        logger.warning(f"Bot | Startup | Could not pre-load positions: {_sl_exc}")
 
     # ── Swing bot transition: close leftover scalp positions (ONE TIME ONLY) ───
     # This transition runs ONCE and is permanently suppressed after completion

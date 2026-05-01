@@ -151,6 +151,14 @@ class WebSocketFeed:
                 return snap.price
         return None
 
+    def get_last_price(self, symbol: str) -> Optional[float]:
+        """Return the last cached price regardless of staleness (for P&L display)."""
+        with self._lock:
+            snap = self._cache.get(symbol)
+            if snap and snap.price > 0:
+                return snap.price
+        return None
+
     def get_snapshot(self, symbol: str) -> Optional[TickerSnapshot]:
         with self._lock:
             snap = self._cache.get(symbol)

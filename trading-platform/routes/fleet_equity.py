@@ -69,10 +69,10 @@ def _fetch_fleet_equity() -> dict:
 
     # ── Kraken 4-bot family: Davy Jones, Blackbeard, Calypso, Apex ───────────
     KRAKEN_BOTS = [
-        ("davy_jones",  "davy-jones",    1),
-        ("blackbeard",  "blackbeard",    2),
-        ("calypso",     "calypso",       3),
-        ("apex",        "apex-predator", 4),
+        ("davy_jones",      "davy-jones",    1),
+        ("blackbeard",      "blackbeard",    2),
+        ("calypso",         "calypso",       3),
+        ("apex_predator",   "apex-predator", 4),
     ]
     conn = None
     try:
@@ -80,15 +80,26 @@ def _fetch_fleet_equity() -> dict:
         if conn is None:
             raise RuntimeError("DATABASE_URL not set")
 
-        # Open position counts per bot_id from kraken_trades
+        # Open position counts from kraken_portfolio.positions JSON.
+        # kraken_trades only stores CLOSED trades; open positions live in portfolio JSON.
+        import json as _json_fe
+        _DB_ID_TO_KEY = {1: "davy_jones", 2: "blackbeard", 3: "calypso", 4: "apex_predator"}
         open_pos_map: dict[str, int] = {}
         with conn.cursor(cursor_factory=_RealDictCursor) as cur:
             cur.execute(
-                "SELECT bot_id, COUNT(*) AS cnt FROM kraken_trades "
-                "WHERE closed_at IS NULL GROUP BY bot_id"
+                "SELECT id, positions FROM kraken_portfolio WHERE id = ANY(%s)",
+                ([1, 2, 3, 4],)
             )
             for row in cur.fetchall():
-                open_pos_map[row["bot_id"]] = int(row["cnt"] or 0)
+                pos_raw = row["positions"] or {}
+                if isinstance(pos_raw, str):
+                    try:
+                        pos_raw = _json_fe.loads(pos_raw)
+                    except Exception:
+                        pos_raw = {}
+                bot_key = _DB_ID_TO_KEY.get(row["id"], "")
+                if bot_key:
+                    open_pos_map[bot_key] = len(pos_raw) if pos_raw else 0
 
         for key, bid, db_id in KRAKEN_BOTS:
             try:
@@ -115,7 +126,7 @@ def _fetch_fleet_equity() -> dict:
                     "pnl": round(pnl, 2),
                     "pnl_pct": round((pnl / starting) * 100, 4) if starting > 0 else 0.0,
                     "starting": starting,
-                    "positions": open_pos_map.get(bid, 0),
+                    "positions": open_pos_map.get(key, 0),
                     "source": "kraken_db",
                 }
             except Exception as exc:
@@ -214,7 +225,7 @@ def _fetch_fleet_equity() -> dict:
         result["davy_jones"],
         result["blackbeard"],
         result["calypso"],
-        result["apex"],
+        result["apex_predator"],
         result["navigator"],
         result["poseidon"],
         result["kraken_current"],
@@ -254,7 +265,7 @@ async def fleet_equity():
             "davy_jones": _empty_bot("error"),
             "blackbeard": _empty_bot("error"),
             "calypso": _empty_bot("error"),
-            "apex": _empty_bot("error"),
+            "apex_predator": _empty_bot("error"),
             "navigator": _empty_bot("error"),
             "poseidon": _empty_bot("error"),
             "kraken_current": _empty_bot("error"),

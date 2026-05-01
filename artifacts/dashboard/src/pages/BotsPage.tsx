@@ -166,9 +166,15 @@ function GenericBotCard({
               <div>
                 <div className="text-[9px] text-slate-600 uppercase tracking-wider">W / L</div>
                 <div className="text-[12px] font-mono font-bold">
-                  <span className="text-emerald-400">{winCount ?? 0}</span>
-                  <span className="text-slate-600"> / </span>
-                  <span className="text-red-400">{lossCount ?? 0}</span>
+                  {winCount == null && lossCount == null ? (
+                    <span className="text-slate-500">—</span>
+                  ) : (
+                    <>
+                      <span className="text-emerald-400">{winCount ?? 0}</span>
+                      <span className="text-slate-600"> / </span>
+                      <span className="text-red-400">{lossCount ?? 0}</span>
+                    </>
+                  )}
                 </div>
               </div>
               <div>
@@ -185,7 +191,7 @@ function GenericBotCard({
                 ) : (
                   <>
                     <div className="text-[9px] text-slate-600 uppercase tracking-wider">Trades</div>
-                    <div className="text-[12px] font-mono font-bold text-slate-400">{totalTrades ?? 0}</div>
+                    <div className="text-[12px] font-mono font-bold text-slate-400">{totalTrades ?? "—"}</div>
                   </>
                 )}
               </div>
@@ -279,7 +285,7 @@ export default function BotsPage() {
     [aiTimeline]
   );
 
-  const oracleEquity = fleetEq?.oracle?.equity ?? null;
+  const oracleEquity = (portfolio as { account?: { equity?: number } } | undefined)?.account?.equity ?? null;
   const oraclePositions: GenericPosition[] = (portfolio?.positions ?? [])
     .filter((p) => (p.market_value ?? 0) > 10)
     .map((p) => ({
@@ -290,7 +296,7 @@ export default function BotsPage() {
     }));
 
   const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-  const apexEquity = fleetEq?.apex?.equity ?? null;
+  const apexEquity = fleetEq?.apex_predator?.equity ?? null;
   const apexPositions: GenericPosition[] = [];
   const apexTotalTrades = apexBot?.trades ?? 0;
   const apexWins = apexBot?.wins ?? 0;

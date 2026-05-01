@@ -29,6 +29,11 @@ const BOT_META: Record<string, { color: string; icon: string; strategy: string }
     icon: "🌊",
     strategy: "Conservative trend follower",
   },
+  apex_predator: {
+    color: "#f97316",
+    icon: "🦅",
+    strategy: "Dual-TF Momentum Scalper",
+  },
 };
 
 const STARTING_BALANCE = 100_000;

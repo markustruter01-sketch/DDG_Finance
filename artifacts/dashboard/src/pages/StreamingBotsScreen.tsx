@@ -556,7 +556,7 @@ export default function StreamingBotsScreen() {
     },
     {
       id: "calypso",
-      name: "Calypso",
+      name: "Calypso's Tide",
       icon: "🌊",
       exchange: "Kraken · Crypto",
       color: "#8b5cf6",

@@ -163,7 +163,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                 "last_updated":         hb.get("last_updated"),
                 "cycle_count":          hb.get("cycle_count", 0),
                 "total_equity_usd":     equity,
-                "position_count":       hb.get("position_count", 0),
+                "position_count":       len(open_positions),
                 "circuit_breaker":      hb.get("circuit_breaker") or {"active": False, "paused_until": None},
                 "error":                hb.get("error"),
                 "cash_usd":             round(cash_usd, 2),

@@ -70,7 +70,7 @@ export function CombinedPortfolioSummary() {
     fleetEq?.davy_jones?.equity ?? 0,
     fleetEq?.blackbeard?.equity ?? 0,
     fleetEq?.calypso?.equity ?? 0,
-    fleetEq?.apex?.equity ?? 0,
+    fleetEq?.apex_predator?.equity ?? 0,
     fleetEq?.poseidon?.equity ?? 0,
     fleetEq?.kraken_current?.equity ?? 0,
   ].reduce((a, b) => a + b, 0);
@@ -80,7 +80,7 @@ export function CombinedPortfolioSummary() {
     fleetEq?.davy_jones?.pnl ?? 0,
     fleetEq?.blackbeard?.pnl ?? 0,
     fleetEq?.calypso?.pnl ?? 0,
-    fleetEq?.apex?.pnl ?? 0,
+    fleetEq?.apex_predator?.pnl ?? 0,
     fleetEq?.poseidon?.pnl ?? 0,
     fleetEq?.kraken_current?.pnl ?? 0,
   ].reduce((a, b) => a + b, 0);
@@ -91,8 +91,8 @@ export function CombinedPortfolioSummary() {
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
   const apexBot       = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-  const apexEquity    = fleetEq?.apex?.equity ?? 0;
-  const apexPnl       = fleetEq?.apex?.pnl ?? 0;
+  const apexEquity    = fleetEq?.apex_predator?.equity ?? 0;
+  const apexPnl       = fleetEq?.apex_predator?.pnl ?? 0;
   const apexTrades    = apexBot?.trades ?? 0;
   const apexWins      = apexBot?.wins ?? 0;
   const apexStart     = apexBot?.starting_balance_usd ?? 100_000;

@@ -358,8 +358,8 @@ function BotTilesRow() {
     },
     {
       key: "apex",
-      equity: fleetEq?.apex?.equity ?? 0,
-      pnl: fleetEq?.apex?.pnl ?? 0,
+      equity: fleetEq?.apex_predator?.equity ?? 0,
+      pnl: fleetEq?.apex_predator?.pnl ?? 0,
       status: apexStatus?.status ?? "offline",
       thinkingText: apexStatus?.thinking_text ?? "",
       posCount: apexStatus?.position_count ?? 0,
@@ -835,7 +835,7 @@ function EquitySidebar() {
     rows.push({ name: "Davy Jones", icon: "⚓", equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0, color: "#22d3ee" });
     rows.push({ name: "Jerome", icon: "🏴‍☠️", equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
     rows.push({ name: "Calypso", icon: "🌊", equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0, color: "#a855f7" });
-    rows.push({ name: "Apex Predator", icon: "🦅", equity: fleetEq?.apex?.equity ?? 0, pnl: fleetEq?.apex?.pnl ?? 0, color: "#f97316" });
+    rows.push({ name: "Apex Predator", icon: "🦅", equity: fleetEq?.apex_predator?.equity ?? 0, pnl: fleetEq?.apex_predator?.pnl ?? 0, color: "#f97316" });
     rows.push({ name: "Forex Gump", icon: "🧭", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
     rows.push({ name: "FOMO Fred", icon: "🔱", equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
     rows.push({ name: "Kraken Current", icon: "🌊", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0, color: "#06b6d4" });
@@ -848,7 +848,7 @@ function EquitySidebar() {
       fleetEq?.davy_jones?.equity ?? 0,
       fleetEq?.blackbeard?.equity ?? 0,
       fleetEq?.calypso?.equity ?? 0,
-      fleetEq?.apex?.equity ?? 0,
+      fleetEq?.apex_predator?.equity ?? 0,
       fleetEq?.poseidon?.equity ?? 0,
       fleetEq?.kraken_current?.equity ?? 0,
     ].reduce((a, b) => a + b, 0);

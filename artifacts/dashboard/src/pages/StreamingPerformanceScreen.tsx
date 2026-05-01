@@ -301,7 +301,7 @@ export default function StreamingPerformanceScreen() {
                   "davy-jones":      fleetEq.davy_jones,
                   "blackbeard":      fleetEq.blackbeard,
                   "calypso":         fleetEq.calypso,
-                  "apex-predator":   fleetEq.apex,
+                  "apex-predator":   fleetEq.apex_predator,
                   "poseidon":        fleetEq.poseidon,
                   "kraken-current":  fleetEq.kraken_current,
                 };

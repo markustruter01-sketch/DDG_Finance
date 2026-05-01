@@ -7,7 +7,9 @@ import json as _json
 import os
 import time
 from pathlib import Path as _Path
+from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from loguru import logger
@@ -24,6 +26,87 @@ from routes._deps import (
 from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 kraken_router = APIRouter()
+
+_KRAKEN_TICKER_URL = "https://api.kraken.com/0/public/Ticker"
+_TICKER_FETCH_TIMEOUT = 3.0  # seconds
+
+
+def _recompute_pnl(positions: list[dict[str, Any]]) -> None:
+    """Recompute unrealized_pnl_usd/pct in-place from entry_price and current_price."""
+    for pos in positions:
+        ep   = float(pos.get("entry_price", 0) or 0)
+        cp   = float(pos.get("current_price", ep) or ep)
+        size = float(pos.get("size_usd", 0) or 0)
+        side = pos.get("side", "long")
+        if ep > 0 and size > 0:
+            pnl = (cp - ep) / ep * size if side == "long" else (ep - cp) / ep * size
+            pos["unrealized_pnl_usd"] = round(pnl, 2)
+            pos["unrealized_pnl_pct"] = round(pnl / size * 100, 4)
+
+
+# Kraken uses different internal names for some base currencies
+_KRAKEN_BASE_ALIASES: dict[str, str] = {
+    "BTC": "XBT",
+    "DOGE": "XDG",
+}
+
+
+def _match_kraken_pair(symbol: str, price_map: dict[str, float]) -> float | None:
+    """Find the live price for a ccxt-style symbol (e.g. 'ETH/USD') in the Kraken
+    ticker response dict whose keys use internal Kraken pair names (e.g. 'XETHZUSD')."""
+    parts = symbol.split("/")
+    base  = parts[0].upper() if parts else symbol.upper()
+    quote = parts[1].upper() if len(parts) > 1 else "USD"
+    base_kraken = _KRAKEN_BASE_ALIASES.get(base, base)
+
+    for k, v in price_map.items():
+        if base_kraken in k and quote in k:
+            return v
+    # Fallback: try original base name (in case alias wasn't needed)
+    if base_kraken != base:
+        for k, v in price_map.items():
+            if base in k and quote in k:
+                return v
+    return None
+
+
+async def _enrich_stale_positions(positions: list[dict[str, Any]]) -> None:
+    """For positions where current_price == entry_price (stale startup state),
+    fetch live prices from Kraken public REST API and recompute P&L in-place."""
+    stale = [
+        p for p in positions
+        if abs(float(p.get("current_price", 0) or 0) - float(p.get("entry_price", 0) or 0)) < 1e-8
+        and float(p.get("entry_price", 0) or 0) > 0
+    ]
+    if not stale:
+        return
+
+    # Send normalized pairs (Kraken accepts both formats; it returns internal names)
+    pairs = [p["symbol"].replace("/", "") for p in stale]
+    try:
+        async with httpx.AsyncClient(timeout=_TICKER_FETCH_TIMEOUT) as client:
+            resp = await client.get(_KRAKEN_TICKER_URL, params={"pair": ",".join(pairs)})
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("error"):
+            return
+        result: dict[str, Any] = data.get("result", {})
+        price_map: dict[str, float] = {k.upper(): float(v["c"][0]) for k, v in result.items()}
+
+        for pos in stale:
+            live_price = _match_kraken_pair(pos.get("symbol", ""), price_map)
+            if live_price is None:
+                continue
+            ep   = float(pos.get("entry_price", 0) or 0)
+            size = float(pos.get("size_usd", 0) or 0)
+            side = pos.get("side", "long")
+            pos["current_price"] = round(live_price, 4)
+            if ep > 0 and size > 0:
+                pnl = (live_price - ep) / ep * size if side == "long" else (ep - live_price) / ep * size
+                pos["unrealized_pnl_usd"] = round(pnl, 2)
+                pos["unrealized_pnl_pct"] = round(pnl / size * 100, 4)
+    except Exception as exc:
+        logger.debug(f"[kraken/status] live-price fetch skipped: {exc}")
 
 
 @kraken_router.get("/kraken/bots", tags=["Kraken Bot"])
@@ -114,6 +197,12 @@ async def kraken_status(bot_id: str | None = None) -> dict:
                         _db_positions = _pos_raw
 
             open_positions: list = _live_open_positions if _live_open_positions else _db_positions
+
+            # Always recompute P&L from stored entry_price/current_price to catch
+            # any math inconsistency; then fetch live prices for stale positions
+            # (where current_price == entry_price due to pre-WS startup write).
+            _recompute_pnl(open_positions)
+            await _enrich_stale_positions(open_positions)
 
             with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
                 _tc.execute(

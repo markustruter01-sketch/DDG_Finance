@@ -1,12 +1,14 @@
 """
-Regression tests for task #181: persist refreshed pairs leg prices back to
-the live-state file so restarts don't show $0 P&L.
+Regression tests for task #181 and #182: persist refreshed prices back to the
+live-state file so restarts don't show $0 P&L.
 
 Covers:
-  _enrich_stale_pairs_kraken  — returns True and updates prices in-place
-  _write_live_state           — atomic write; temp file cleaned up on failure
-  round-trip persistence      — after enrichment, reloading from disk retains
-                                updated current_price_a/b
+  _enrich_stale_pairs_kraken     — Poseidon pairs enrichment (task #181)
+  _enrich_stale_positions_kraken — KC bot positions enrichment (task #182)
+  _recompute_pnl_positions       — in-place P&L recompute for KC positions
+  _write_live_state              — atomic write; temp file cleaned up on failure
+  round-trip persistence         — after enrichment, reloading from disk retains
+                                   updated prices for both position formats
 """
 
 import asyncio
@@ -26,6 +28,8 @@ for _p in (_REPO_ROOT, _PLATFORM):
 
 from routes.new_bots import (
     _enrich_stale_pairs_kraken,
+    _enrich_stale_positions_kraken,
+    _recompute_pnl_positions,
     _write_live_state,
     _read_live_state,
 )
@@ -223,6 +227,166 @@ class TestPersistenceRoundTrip(unittest.IsolatedAsyncioTestCase):
                          "current_price_a should be persisted after enrichment")
         self.assertEqual(pos["current_price_b"], 62000.0,
                          "current_price_b should be persisted after enrichment")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# KC bot (_enrich_stale_positions_kraken) — task #182
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _stale_kc_positions(entry_price=50000.0, position_value=10000.0):
+    """Return a dict-of-dicts mirroring the KC bot's live_state["positions"] format."""
+    return {
+        "BTC/USD": {
+            "symbol": "BTC/USD",
+            "direction": "long",
+            "entry_price": entry_price,
+            "current_price": entry_price,   # stale — set equal to entry on startup
+            "unrealised_pnl": 0.0,
+            "position_value": position_value,
+            "units": position_value / entry_price,
+        }
+    }
+
+
+class TestEnrichStalePositionsKraken(unittest.IsolatedAsyncioTestCase):
+
+    async def test_returns_true_and_updates_price_when_stale(self):
+        positions = list(_stale_kc_positions().values())
+        ticker = {"XXBTZUSD": {"c": ["55000.0", "1"]}}
+
+        with patch("routes.new_bots.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=_mock_kraken_response(ticker))
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await _enrich_stale_positions_kraken(positions, "position_value")
+
+        self.assertTrue(result)
+        self.assertEqual(positions[0]["current_price"], 55000.0)
+        self.assertNotEqual(positions[0]["unrealised_pnl"], 0.0,
+                            "unrealised_pnl should be non-zero after enrichment")
+
+    async def test_returns_false_when_price_already_fresh(self):
+        positions = list(_stale_kc_positions().values())
+        positions[0]["current_price"] = 53000.0  # not stale
+
+        with patch("routes.new_bots.httpx.AsyncClient") as MockClient:
+            result = await _enrich_stale_positions_kraken(positions, "position_value")
+            MockClient.assert_not_called()
+
+        self.assertFalse(result)
+
+    async def test_returns_false_on_network_error(self):
+        positions = list(_stale_kc_positions().values())
+        entry_price = positions[0]["entry_price"]
+
+        with patch("routes.new_bots.httpx.AsyncClient") as MockClient:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=Exception("timeout"))
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await _enrich_stale_positions_kraken(positions, "position_value")
+
+        self.assertFalse(result)
+        self.assertEqual(positions[0]["current_price"], entry_price,
+                         "current_price should be unchanged after network error")
+
+
+class TestRecomputePnlPositions(unittest.TestCase):
+
+    def test_sets_unrealised_pnl_for_long(self):
+        positions = [{
+            "entry_price": 50000.0,
+            "current_price": 55000.0,
+            "position_value": 10000.0,
+            "direction": "long",
+        }]
+        _recompute_pnl_positions(positions, "position_value")
+        expected = (55000.0 - 50000.0) / 50000.0 * 10000.0
+        self.assertAlmostEqual(positions[0]["unrealised_pnl"], round(expected, 2), places=2)
+
+    def test_zero_pnl_when_price_equals_entry(self):
+        positions = [{
+            "entry_price": 50000.0,
+            "current_price": 50000.0,
+            "position_value": 10000.0,
+            "direction": "long",
+        }]
+        _recompute_pnl_positions(positions, "position_value")
+        self.assertEqual(positions[0]["unrealised_pnl"], 0.0)
+
+
+class TestKCPersistenceRoundTrip(unittest.IsolatedAsyncioTestCase):
+    """
+    Regression for task #182: KC bot restart should not show $0 P&L.
+
+    Scenario: bot wrote kc_live_state.json with current_price == entry_price
+    (stale startup state).  The kc_state() handler must enrich those prices,
+    write them back to disk, and ensure that reloading the file returns
+    current_price != entry_price and unrealised_pnl != 0.
+    """
+
+    async def test_enriched_prices_survive_write_and_reload(self):
+        positions_dict = _stale_kc_positions(entry_price=50000.0, position_value=10000.0)
+        live_state = {"positions": positions_dict}
+
+        ticker = {"XXBTZUSD": {"c": ["57000.0", "1"]}}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "kc_live_state.json")
+
+            with patch("routes.new_bots.httpx.AsyncClient") as MockClient:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(return_value=_mock_kraken_response(ticker))
+                MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+                MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                pos_list = list(live_state["positions"].values())
+                _recompute_pnl_positions(pos_list, "position_value")
+                updated = await _enrich_stale_positions_kraken(pos_list, "position_value")
+
+            self.assertTrue(updated, "Enrichment should return True for stale KC positions")
+
+            if updated:
+                for sym, enriched_pos in zip(live_state["positions"].keys(), pos_list):
+                    live_state["positions"][sym] = enriched_pos
+                _write_live_state(path, live_state)
+
+            reloaded = _read_live_state(path)
+
+        pos = reloaded["positions"]["BTC/USD"]
+        self.assertEqual(pos["current_price"], 57000.0,
+                         "current_price should be persisted after KC enrichment — "
+                         "a restart should not show the stale entry price")
+        self.assertNotEqual(pos["unrealised_pnl"], 0.0,
+                            "unrealised_pnl should be non-zero after KC enrichment persisted")
+
+    async def test_zero_pnl_not_persisted_when_enrichment_fails(self):
+        """If the Kraken API fails, the file should not be overwritten with stale data."""
+        positions_dict = _stale_kc_positions(entry_price=50000.0)
+        live_state = {"positions": positions_dict}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "kc_live_state.json")
+
+            with patch("routes.new_bots.httpx.AsyncClient") as MockClient:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(side_effect=Exception("network down"))
+                MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+                MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+                pos_list = list(live_state["positions"].values())
+                _recompute_pnl_positions(pos_list, "position_value")
+                updated = await _enrich_stale_positions_kraken(pos_list, "position_value")
+
+            self.assertFalse(updated, "Enrichment should return False on network failure")
+
+            file_written = os.path.exists(path)
+            self.assertFalse(file_written,
+                             "File should not be written when enrichment fails — "
+                             "no stale data should overwrite a previously good file")
 
 
 if __name__ == "__main__":

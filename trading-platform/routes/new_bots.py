@@ -565,18 +565,23 @@ async def kraken_current_state():
     live_state = _read_live_state(_KC_LIVE_STATE)
     live_positions_raw = live_state.get("positions", {})
 
-    # Recompute P&L and enrich stale prices before building the output list.
-    # We enrich the dict values in-place; iterating .items() afterwards preserves
-    # the dict-key fallback for any position that omits the "symbol" field.
-    raw_pos_list = list(live_positions_raw.values())
+    # Recompute P&L and enrich stale prices.  The KC bot stores positions as a
+    # dict-of-dicts; we extract the values into a list so the shared enrichment
+    # helpers can operate on them.  After enrichment, write results back into
+    # live_state["positions"] by symbol key before persisting.  Although Python
+    # dict.values() items are the same objects as the dict values (mutations are
+    # already reflected in live_state), the explicit key-by-key assignment makes
+    # the persistence data-flow unambiguous for future maintainers.
     kc_prices_updated = False
-    if raw_pos_list:
-        _recompute_pnl_positions(raw_pos_list, "position_value")
-        kc_prices_updated = await _enrich_stale_positions_kraken(raw_pos_list, "position_value")
+    if live_positions_raw:
+        pos_list = list(live_positions_raw.values())
+        _recompute_pnl_positions(pos_list, "position_value")
+        kc_prices_updated = await _enrich_stale_positions_kraken(pos_list, "position_value")
 
-    # Persist freshly-fetched prices back to disk so a restart doesn't reset P&L to $0
-    if kc_prices_updated:
-        _write_live_state(_KC_LIVE_STATE, live_state)
+        if kc_prices_updated:
+            for sym, updated_pos in zip(live_positions_raw.keys(), pos_list):
+                live_state["positions"][sym] = updated_pos
+            _write_live_state(_KC_LIVE_STATE, live_state)
 
     open_positions_list = []
     for sym, pos in live_positions_raw.items():

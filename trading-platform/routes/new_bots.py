@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import Any
 
 import httpx
@@ -33,25 +34,29 @@ def _recompute_pnl_positions(positions: list[dict[str, Any]], size_field: str) -
             pos["unrealised_pnl"] = round(pnl, 2)
 
 
-async def _enrich_stale_positions_kraken(positions: list[dict[str, Any]], size_field: str) -> None:
+async def _enrich_stale_positions_kraken(positions: list[dict[str, Any]], size_field: str) -> bool:
     """For positions where current_price == entry_price (stale startup state),
-    fetch live prices from Kraken public REST API and recompute P&L in-place."""
+    fetch live prices from Kraken public REST API and recompute P&L in-place.
+
+    Returns True if at least one position price was updated.
+    """
     stale = [
         p for p in positions
         if abs(float(p.get("current_price", 0) or 0) - float(p.get("entry_price", 0) or 0)) < 1e-8
         and float(p.get("entry_price", 0) or 0) > 0
     ]
     if not stale:
-        return
+        return False
 
     pairs = [p["symbol"].replace("/", "") for p in stale]
+    updated = False
     try:
         async with httpx.AsyncClient(timeout=_TICKER_FETCH_TIMEOUT) as client:
             resp = await client.get(_KRAKEN_TICKER_URL, params={"pair": ",".join(pairs)})
         resp.raise_for_status()
         data = resp.json()
         if data.get("error"):
-            return
+            return False
         result: dict[str, Any] = data.get("result", {})
         price_map: dict[str, float] = {k.upper(): float(v["c"][0]) for k, v in result.items()}
 
@@ -82,8 +87,10 @@ async def _enrich_stale_positions_kraken(positions: list[dict[str, Any]], size_f
             if ep > 0 and size > 0:
                 pnl = (live_price - ep) / ep * size if side == "long" else (ep - live_price) / ep * size
                 pos["unrealised_pnl"] = round(pnl, 2)
+            updated = True
     except Exception as exc:
         logger.debug(f"[new_bots] live-price fetch skipped: {exc}")
+    return updated
 
 
 def _recompute_pnl_pairs(pairs_dict: dict[str, Any]) -> None:
@@ -119,9 +126,12 @@ def _recompute_pnl_pairs(pairs_dict: dict[str, Any]) -> None:
         pos["total_pnl"] = round(pnl_a + pnl_b, 2)
 
 
-async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> None:
+async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> bool:
     """For pairs-format positions where leg prices are stale (current == entry),
-    fetch live USD prices from Kraken public REST API and recompute total_pnl."""
+    fetch live USD prices from Kraken public REST API and recompute total_pnl.
+
+    Returns True if at least one leg price was updated.
+    """
     assets_needed: set[str] = set()
     for pos in pairs_dict.values():
         ep_a = float(pos.get("leg_a_entry",    0) or 0)
@@ -136,16 +146,17 @@ async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> None:
             assets_needed.add(asset_b)
 
     if not assets_needed:
-        return
+        return False
 
     kraken_pairs = [f"{_KRAKEN_BASE_ALIASES.get(a, a)}USD" for a in assets_needed]
+    updated = False
     try:
         async with httpx.AsyncClient(timeout=_TICKER_FETCH_TIMEOUT) as client:
             resp = await client.get(_KRAKEN_TICKER_URL, params={"pair": ",".join(kraken_pairs)})
         resp.raise_for_status()
         data = resp.json()
         if data.get("error"):
-            return
+            return False
         result: dict[str, Any] = data.get("result", {})
         price_map: dict[str, float] = {k.upper(): float(v["c"][0]) for k, v in result.items()}
 
@@ -172,15 +183,18 @@ async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> None:
                 live_a = _find_price(asset_a)
                 if live_a is not None:
                     pos["current_price_a"] = round(live_a, 8)
+                    updated = True
 
             if ep_b > 0 and abs(cp_b - ep_b) < 1e-8 and asset_b and asset_b != "USD":
                 live_b = _find_price(asset_b)
                 if live_b is not None:
                     pos["current_price_b"] = round(live_b, 8)
+                    updated = True
 
         _recompute_pnl_pairs(pairs_dict)
     except Exception as exc:
         logger.debug(f"[new_bots] pairs live-price fetch skipped: {exc}")
+    return updated
 
 
 def _pg_query(sql: str, params: tuple = ()):
@@ -206,6 +220,33 @@ def _read_live_state(path: str) -> dict:
             return json.load(f)
     except Exception:
         return {}
+
+
+def _write_live_state(path: str, state: dict) -> None:
+    """Atomically overwrite the live-state JSON file.
+
+    Writes to a sibling temp file first, then renames into place so that a
+    crash mid-write never leaves a truncated file on disk.  The temp file is
+    always removed on failure to avoid accumulating orphan .tmp files.
+    """
+    tmp_path: str | None = None
+    try:
+        dir_name = os.path.dirname(path)
+        with tempfile.NamedTemporaryFile(
+            "w", dir=dir_name, suffix=".tmp", delete=False
+        ) as tmp:
+            json.dump(state, tmp, indent=2)
+            tmp_path = tmp.name
+        os.replace(tmp_path, path)
+        tmp_path = None  # rename succeeded; nothing left to clean up
+        logger.debug(f"[new_bots] live-state persisted → {path}")
+    except Exception as exc:
+        logger.warning(f"[new_bots] failed to persist live-state to {path}: {exc}")
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 @new_bots_router.get("/poseidon/state")
@@ -248,14 +289,19 @@ async def poseidon_state():
     pairs_dict    = live_state.get("positions", {})
 
     # Recompute P&L and enrich stale prices for momentum positions
+    prices_updated = False
     if isinstance(momentum_list, list) and momentum_list:
         _recompute_pnl_positions(momentum_list, "position_usd")
-        await _enrich_stale_positions_kraken(momentum_list, "position_usd")
+        prices_updated = await _enrich_stale_positions_kraken(momentum_list, "position_usd")
 
     # Recompute P&L and enrich stale prices for legacy pairs-format positions
     if isinstance(pairs_dict, dict) and pairs_dict and not (isinstance(momentum_list, list) and momentum_list):
         _recompute_pnl_pairs(pairs_dict)
-        await _enrich_stale_pairs_kraken(pairs_dict)
+        prices_updated = await _enrich_stale_pairs_kraken(pairs_dict)
+
+    # Persist freshly-fetched prices back to disk so a restart doesn't reset P&L to $0
+    if prices_updated:
+        _write_live_state(_POSEIDON_LIVE_STATE, live_state)
 
     open_trades = []
     if isinstance(momentum_list, list) and momentum_list:
@@ -523,9 +569,14 @@ async def kraken_current_state():
     # We enrich the dict values in-place; iterating .items() afterwards preserves
     # the dict-key fallback for any position that omits the "symbol" field.
     raw_pos_list = list(live_positions_raw.values())
+    kc_prices_updated = False
     if raw_pos_list:
         _recompute_pnl_positions(raw_pos_list, "position_value")
-        await _enrich_stale_positions_kraken(raw_pos_list, "position_value")
+        kc_prices_updated = await _enrich_stale_positions_kraken(raw_pos_list, "position_value")
+
+    # Persist freshly-fetched prices back to disk so a restart doesn't reset P&L to $0
+    if kc_prices_updated:
+        _write_live_state(_KC_LIVE_STATE, live_state)
 
     open_positions_list = []
     for sym, pos in live_positions_raw.items():

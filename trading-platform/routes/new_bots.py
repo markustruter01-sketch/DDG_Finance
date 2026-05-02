@@ -86,6 +86,103 @@ async def _enrich_stale_positions_kraken(positions: list[dict[str, Any]], size_f
         logger.debug(f"[new_bots] live-price fetch skipped: {exc}")
 
 
+def _recompute_pnl_pairs(pairs_dict: dict[str, Any]) -> None:
+    """Recompute total_pnl in-place for pairs-format positions (asset_a / asset_b legs).
+
+    Uses leg_a_units / leg_b_units (exact unit-based P&L) when present, falling back
+    to position_value / 2 per leg for older records that lack unit fields.
+    """
+    for pos in pairs_dict.values():
+        ep_a  = float(pos.get("leg_a_entry",    0) or 0)
+        cp_a  = float(pos.get("current_price_a", ep_a) or ep_a)
+        ep_b  = float(pos.get("leg_b_entry",    0) or 0)
+        cp_b  = float(pos.get("current_price_b", ep_b) or ep_b)
+        side_a = pos.get("leg_a_side", "long")
+        side_b = pos.get("leg_b_side", "short")
+
+        units_a = float(pos.get("leg_a_units", 0) or 0)
+        units_b = float(pos.get("leg_b_units", 0) or 0)
+
+        if units_a > 0 and units_b > 0:
+            # Exact unit-based calculation
+            pnl_a = units_a * (cp_a - ep_a) if side_a == "long" else units_a * (ep_a - cp_a)
+            pnl_b = units_b * (cp_b - ep_b) if side_b == "long" else units_b * (ep_b - cp_b)
+        else:
+            # Fallback: treat each leg as half of position_value
+            pos_val = float(pos.get("position_value", 0) or 0)
+            if pos_val <= 0:
+                continue
+            half  = pos_val / 2.0
+            pnl_a = ((cp_a - ep_a) / ep_a * half if side_a == "long" else (ep_a - cp_a) / ep_a * half) if ep_a > 0 else 0.0
+            pnl_b = ((cp_b - ep_b) / ep_b * half if side_b == "long" else (ep_b - cp_b) / ep_b * half) if ep_b > 0 else 0.0
+
+        pos["total_pnl"] = round(pnl_a + pnl_b, 2)
+
+
+async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> None:
+    """For pairs-format positions where leg prices are stale (current == entry),
+    fetch live USD prices from Kraken public REST API and recompute total_pnl."""
+    assets_needed: set[str] = set()
+    for pos in pairs_dict.values():
+        ep_a = float(pos.get("leg_a_entry",    0) or 0)
+        cp_a = float(pos.get("current_price_a", 0) or 0)
+        ep_b = float(pos.get("leg_b_entry",    0) or 0)
+        cp_b = float(pos.get("current_price_b", 0) or 0)
+        asset_a = pos.get("asset_a", "").upper()
+        asset_b = pos.get("asset_b", "").upper()
+        if ep_a > 0 and abs(cp_a - ep_a) < 1e-8 and asset_a and asset_a != "USD":
+            assets_needed.add(asset_a)
+        if ep_b > 0 and abs(cp_b - ep_b) < 1e-8 and asset_b and asset_b != "USD":
+            assets_needed.add(asset_b)
+
+    if not assets_needed:
+        return
+
+    kraken_pairs = [f"{_KRAKEN_BASE_ALIASES.get(a, a)}USD" for a in assets_needed]
+    try:
+        async with httpx.AsyncClient(timeout=_TICKER_FETCH_TIMEOUT) as client:
+            resp = await client.get(_KRAKEN_TICKER_URL, params={"pair": ",".join(kraken_pairs)})
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("error"):
+            return
+        result: dict[str, Any] = data.get("result", {})
+        price_map: dict[str, float] = {k.upper(): float(v["c"][0]) for k, v in result.items()}
+
+        def _find_price(asset: str) -> float | None:
+            asset_k = _KRAKEN_BASE_ALIASES.get(asset, asset)
+            for k, v in price_map.items():
+                if asset_k in k and "USD" in k:
+                    return v
+            if asset_k != asset:
+                for k, v in price_map.items():
+                    if asset in k and "USD" in k:
+                        return v
+            return None
+
+        for pos in pairs_dict.values():
+            ep_a   = float(pos.get("leg_a_entry",    0) or 0)
+            cp_a   = float(pos.get("current_price_a", 0) or 0)
+            ep_b   = float(pos.get("leg_b_entry",    0) or 0)
+            cp_b   = float(pos.get("current_price_b", 0) or 0)
+            asset_a = pos.get("asset_a", "").upper()
+            asset_b = pos.get("asset_b", "").upper()
+
+            if ep_a > 0 and abs(cp_a - ep_a) < 1e-8 and asset_a and asset_a != "USD":
+                live_a = _find_price(asset_a)
+                if live_a is not None:
+                    pos["current_price_a"] = round(live_a, 8)
+
+            if ep_b > 0 and abs(cp_b - ep_b) < 1e-8 and asset_b and asset_b != "USD":
+                live_b = _find_price(asset_b)
+                if live_b is not None:
+                    pos["current_price_b"] = round(live_b, 8)
+
+        _recompute_pnl_pairs(pairs_dict)
+    except Exception as exc:
+        logger.debug(f"[new_bots] pairs live-price fetch skipped: {exc}")
+
+
 def _pg_query(sql: str, params: tuple = ()):
     try:
         import psycopg2, psycopg2.extras
@@ -154,6 +251,11 @@ async def poseidon_state():
     if isinstance(momentum_list, list) and momentum_list:
         _recompute_pnl_positions(momentum_list, "position_usd")
         await _enrich_stale_positions_kraken(momentum_list, "position_usd")
+
+    # Recompute P&L and enrich stale prices for legacy pairs-format positions
+    if isinstance(pairs_dict, dict) and pairs_dict and not (isinstance(momentum_list, list) and momentum_list):
+        _recompute_pnl_pairs(pairs_dict)
+        await _enrich_stale_pairs_kraken(pairs_dict)
 
     open_trades = []
     if isinstance(momentum_list, list) and momentum_list:

@@ -428,7 +428,7 @@ async def kraken_fleet_summary() -> dict:
                         kc_cash = float(_kcr[1] or 0)
                     _kcc.execute(
                         "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_usd > %s THEN 1 ELSE 0 END) "
+                        "SUM(CASE WHEN pnl > %s THEN 1 ELSE 0 END) "
                         "FROM kraken_current_trades",
                         (_WIN_THRESHOLD,)
                     )

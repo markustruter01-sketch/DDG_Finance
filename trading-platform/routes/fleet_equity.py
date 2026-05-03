@@ -111,23 +111,38 @@ def _fetch_fleet_equity() -> dict:
                     pr = cur.fetchone()
                     starting = float(pr["starting_balance_usd"] or _STARTING) if pr else _STARTING
 
+                    # Audit fix H5: skip stale heartbeat reads (>5 min old).
+                    # If the bot died, fall back to starting balance and flag stale=True
+                    # so the dashboard can render an "UNRELIABLE" badge.
                     cur.execute(
-                        "SELECT equity_usd FROM kraken_heartbeat WHERE id = %s",
+                        """
+                        SELECT equity_usd,
+                               EXTRACT(EPOCH FROM (NOW() - last_updated))/60 AS mins_ago
+                          FROM kraken_heartbeat WHERE id = %s
+                        """,
                         (db_id,)
                     )
                     hr = cur.fetchone()
-                    eq = float(hr["equity_usd"] or 0) if hr else 0.0
+                    _mins = float(hr["mins_ago"]) if hr and hr.get("mins_ago") is not None else 9999.0
+                    _is_stale = _mins > 5.0
+                    eq = float(hr["equity_usd"] or 0) if (hr and not _is_stale) else 0.0
                     if eq <= 0:
                         eq = starting
 
                 pnl = eq - starting
+                # H5: when heartbeat is stale, also zero position count — last-known
+                # value from kraken_portfolio is just as untrustworthy as the equity.
+                _pos_count = 0 if _is_stale else open_pos_map.get(key, 0)
                 result[key] = {
                     "equity": round(eq, 2),
                     "pnl": round(pnl, 2),
                     "pnl_pct": round((pnl / starting) * 100, 4) if starting > 0 else 0.0,
                     "starting": starting,
-                    "positions": open_pos_map.get(key, 0),
+                    "positions": _pos_count,
                     "source": "kraken_db",
+                    # H5: surface heartbeat freshness so the UI can flag the bot
+                    "stale": bool(_is_stale),
+                    "heartbeat_mins_ago": round(_mins, 1) if _mins < 9999 else None,
                 }
             except Exception as exc:
                 errors.append(f"{key}: {exc}")
@@ -162,12 +177,27 @@ def _fetch_fleet_equity() -> dict:
                     "SELECT equity_usd FROM kraken_current_portfolio WHERE id = 8"
                 )
                 kcpr = cur.fetchone()
+                # H5: include heartbeat freshness so a dead bot doesn't show last-known
+                # data as if it were live.
                 cur.execute(
-                    "SELECT position_count FROM kraken_heartbeat WHERE id = 8"
+                    """
+                    SELECT position_count,
+                           EXTRACT(EPOCH FROM (NOW() - last_updated))/60 AS mins_ago
+                      FROM kraken_heartbeat WHERE id = 8
+                    """
                 )
                 kchb = cur.fetchone()
-            kc_eq = float(kcpr["equity_usd"] or _STARTING) if kcpr else _STARTING
-            kc_positions = int(kchb["position_count"] or 0) if kchb else 0
+            _kc_mins = float(kchb["mins_ago"]) if kchb and kchb.get("mins_ago") is not None else 9999.0
+            _kc_stale = _kc_mins > 5.0
+            # H5: when heartbeat is stale, fall back to starting balance for equity AND
+            # zero positions — kraken_current_portfolio cache is updated by the bot, so
+            # if the bot is dead its equity row is also untrustworthy.
+            if _kc_stale:
+                kc_eq = _STARTING
+                kc_positions = 0
+            else:
+                kc_eq = float(kcpr["equity_usd"] or _STARTING) if kcpr else _STARTING
+                kc_positions = int(kchb["position_count"] or 0) if kchb else 0
             kc_pnl = kc_eq - _STARTING
             result["kraken_current"] = {
                 "equity": round(kc_eq, 2),
@@ -176,6 +206,8 @@ def _fetch_fleet_equity() -> dict:
                 "starting": _STARTING,
                 "positions": kc_positions,
                 "source": "kraken_current_db",
+                "stale": bool(_kc_stale),
+                "heartbeat_mins_ago": round(_kc_mins, 1) if _kc_mins < 9999 else None,
             }
         except Exception as exc:
             errors.append(f"kraken_current: {exc}")

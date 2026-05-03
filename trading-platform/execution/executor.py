@@ -210,14 +210,23 @@ def execute_allocations(
         and sym not in protected_symbols
         and (not is_crypto_only or sym in KNOWN_CRYPTO_SYMBOLS)
     }
-    exit_proceeds = sum(
+    # Audit fix H9: do NOT credit projected exit_proceeds before the exit
+    # orders actually fill. Previously we credited the full market_value of
+    # every stale_symbol — if an exit hung, partial-filled, or was skipped by
+    # the min-hold gate inside _close_stale_positions, subsequent buy orders
+    # sized against phantom cash and could push the account into margin.
+    # We now seed remaining_cash from confirmed cash only; after
+    # _close_stale_positions runs we re-add proceeds for symbols whose close
+    # order was actually submitted (see post-close recompute below).
+    projected_exit_proceeds = sum(
         current_positions[sym]["market_value"]
         for sym in stale_symbols
         if current_positions[sym]["market_value"] > 0
     )
-    remaining_cash = max(raw_cash, 0.0) + exit_proceeds
+    remaining_cash = max(raw_cash, 0.0)
     # Hard cap: can never spend more than total equity (prevents cross-day margin)
     remaining_cash = min(remaining_cash, equity)
+    exit_proceeds = 0.0  # populated post-close (H9)
 
     # ── Afterhours capital holdback ──────────────────────────────────────────
     # If any afterhours crypto positions were unresolved at market reopen, their
@@ -232,7 +241,7 @@ def execute_allocations(
 
     logger.info(
         f"Account equity: ${equity:,.2f} | settled_cash: ${raw_cash:,.2f} | "
-        f"exit_proceeds: ${exit_proceeds:,.2f} | "
+        f"projected_exit_proceeds: ${projected_exit_proceeds:,.2f} (NOT yet credited \u2014 H9) | "
         f"available_cash: ${remaining_cash:,.2f} | "
         f"max_position (15%): ${max_position_usd:,.2f}"
     )
@@ -300,6 +309,42 @@ def execute_allocations(
     results = _close_stale_positions(
         current_positions, active_symbols, protected_symbols,
         results, dry_run, crypto_only=is_crypto_only,
+    )
+
+    # Audit fix H9: now that exits have been placed, credit proceeds ONLY for
+    # symbols whose close_position() actually returned an order object.
+    # Symbols that were skipped (min-hold gate) or errored out contribute $0.
+    # In dry-run mode, credit projected proceeds since no real orders were placed.
+    if dry_run:
+        confirmed_exit_proceeds = projected_exit_proceeds
+    else:
+        confirmed_exit_proceeds = 0.0
+        for _c in results.get("closed", []):
+            _csym = _c.get("symbol")
+            if _c.get("dry_run"):
+                continue
+            if not _c.get("order"):
+                continue
+            if _csym in current_positions:
+                _mv = current_positions[_csym].get("market_value", 0.0) or 0.0
+                if _mv > 0:
+                    confirmed_exit_proceeds += float(_mv)
+    remaining_cash = min(max(raw_cash, 0.0) + confirmed_exit_proceeds, equity)
+    if reserved_cash > 0:
+        remaining_cash = max(remaining_cash - reserved_cash, 0.0)
+    exit_proceeds = confirmed_exit_proceeds  # for downstream telemetry/log
+
+    if confirmed_exit_proceeds < projected_exit_proceeds - 0.01:
+        logger.warning(
+            f"H9 | Exit shortfall: projected ${projected_exit_proceeds:,.2f} but only "
+            f"${confirmed_exit_proceeds:,.2f} of close orders confirmed — "
+            f"sized buys will use the smaller (safer) cash figure."
+        )
+    logger.info(
+        f"H9 | Post-close cash: settled=${raw_cash:,.2f} + "
+        f"confirmed_exit_proceeds=${confirmed_exit_proceeds:,.2f} "
+        f"(projected was ${projected_exit_proceeds:,.2f}) "
+        f"\u2192 deployable=${remaining_cash:,.2f}"
     )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):

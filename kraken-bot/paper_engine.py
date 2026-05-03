@@ -22,6 +22,24 @@ on both entry and exit, so the numbers reflect realistic conditions.
 
 from __future__ import annotations
 
+
+# Audit fix H2: canonical unrealised-P&L helper.
+# Keep in sync with trading-platform/core/pnl_math.py — every paper engine
+# (kraken-bot, forex-engine, poseidon, kraken-current) uses the same formula
+# so short-side sign conventions never diverge again.
+def _compute_unrealized_pnl(side: str, entry: float, current: float,
+                            units: float, fees: float = 0.0) -> float:
+    s = (side or "").lower()
+    e, c, u, f = float(entry), float(current), float(units), float(fees)
+    if s == "long":
+        gross = (c - e) * u
+    elif s == "short":
+        gross = (e - c) * u
+    else:
+        raise ValueError(f"_compute_unrealized_pnl: unknown side {side!r}")
+    return gross - f
+
+
 import json
 import os
 from datetime import datetime, timezone
@@ -438,12 +456,14 @@ def paper_close_position(symbol: str, current_price: float, reason: str, atr: fl
     exit_fee   = exit_value * PAPER_FEE_PCT
     net_value  = exit_value - exit_fee
 
-    if pos["side"] == "long":
-        pnl_pct = ((fill_price - pos["entry_price"]) / pos["entry_price"]) * 100
-    else:
-        pnl_pct = ((pos["entry_price"] - fill_price) / pos["entry_price"]) * 100
-
-    gross_pnl_usd = pos["size_usd"] * (pnl_pct / 100)
+    # H2: derive gross USD pnl via the canonical helper (units = size_usd / entry).
+    # pnl_pct is computed from the same gross figure to keep the percentage
+    # representation in lock-step with the dollar P&L.
+    units = pos["size_usd"] / pos["entry_price"] if pos["entry_price"] else 0.0
+    gross_pnl_usd = _compute_unrealized_pnl(
+        pos["side"], pos["entry_price"], fill_price, units
+    )
+    pnl_pct = (gross_pnl_usd / pos["size_usd"]) * 100 if pos["size_usd"] else 0.0
     total_fees    = pos.get("entry_fee", 0) + exit_fee
     net_pnl_usd   = gross_pnl_usd - total_fees
 

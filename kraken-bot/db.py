@@ -76,6 +76,19 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
+-- Audit fix H4: prevent duplicate inserts on retry. Partial index — only
+-- enforced when order_id IS NOT NULL so legacy paper rows w/o order_id
+-- (and the older NULL paper-engine inserts) remain valid.
+-- Pre-index dedupe: collapse any pre-existing (bot_id, order_id) duplicates
+-- (keep the lowest id) so unique-index creation can't fail on legacy data.
+DELETE FROM kraken_trades a
+ USING kraken_trades b
+ WHERE a.order_id IS NOT NULL
+   AND a.bot_id = b.bot_id
+   AND a.order_id = b.order_id
+   AND a.id > b.id;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kraken_trades_bot_order
+    ON kraken_trades (bot_id, order_id) WHERE order_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
     id          INTEGER PRIMARY KEY,
@@ -636,6 +649,9 @@ def insert_trade(trade: dict) -> bool:
                          fees_usd, reason, closed_at, paper, order_id,
                          regime_at_entry, entry_zscore, zscore_source)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, %s, %s, %s, %s)
+                    -- Audit H4: dedup retry inserts on (bot_id, order_id)
+                    ON CONFLICT (bot_id, order_id) WHERE order_id IS NOT NULL
+                        DO NOTHING
                     """,
                     (
                         bot_id,

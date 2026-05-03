@@ -1480,17 +1480,31 @@ async def export_diagnostic_report():
                 _rptconn = _pg2rpt.connect(_dburlrpt)
                 try:
                     with _rptconn.cursor(cursor_factory=_pg2xrpt.RealDictCursor) as _rhc:
-                        _rhc.execute("SELECT * FROM kraken_heartbeat WHERE id = %s", (_kdbid,))
+                        _rhc.execute(
+                            """
+                            SELECT *,
+                                   EXTRACT(EPOCH FROM (NOW() - last_updated))/60 AS _mins_ago
+                              FROM kraken_heartbeat WHERE id = %s
+                            """,
+                            (_kdbid,)
+                        )
                         _rhr = _rhc.fetchone()
                         if _rhr:
+                            # Audit fix H5: don't trust position_count or equity from a
+                            # stale heartbeat (>5 min) — null them out so the export
+                            # report shows "UNRELIABLE" instead of last-known data.
+                            _hb_mins = float(_rhr["_mins_ago"]) if _rhr.get("_mins_ago") is not None else 9999.0
+                            _hb_stale = _hb_mins > 5.0
                             _ks = {
                                 "status":         _rhr["status"],
-                                "equity_usd":     _rhr["equity_usd"],
+                                "equity_usd":     _rhr["equity_usd"] if not _hb_stale else None,
                                 "cycle_count":    _rhr["cycle_count"],
                                 "bot_paused":     _rhr["bot_paused"],
                                 "paper_trading":  _rhr["paper_trading"],
                                 "last_updated":   _rhr["last_updated"].isoformat() if _rhr["last_updated"] else "N/A",
-                                "position_count": _rhr["position_count"],
+                                "position_count": _rhr["position_count"] if not _hb_stale else None,
+                                "stale_heartbeat": _hb_stale,
+                                "heartbeat_mins_ago": round(_hb_mins, 1) if _hb_mins < 9999 else None,
                             }
                     with _rptconn.cursor() as _rpc:
                         _rpc.execute(
@@ -1573,7 +1587,12 @@ async def export_diagnostic_report():
         if not _k_has_data:
             row("Bot status:", "DB UNAVAILABLE \u2014 no heartbeat data")
         else:
-            row("Bot status:", f"{'PAUSED' if k_paused else 'RUNNING'} ({k_status})")
+            # H5: flag stale heartbeats prominently in the export report
+            _stale_suffix = ""
+            if _ks.get("stale_heartbeat"):
+                _mins_old = _ks.get("heartbeat_mins_ago") or 0
+                _stale_suffix = f"  \u26a0 STALE HEARTBEAT ({_mins_old:.0f}m ago) \u2014 DATA UNRELIABLE"
+            row("Bot status:", f"{'PAUSED' if k_paused else 'RUNNING'} ({k_status}){_stale_suffix}")
         row("Paper trading:", "YES" if k_paper else "NO \u2014 LIVE FUNDS")
         row("Strategy:", _kstrat)
         row("Cycles completed:", str(k_cycles))

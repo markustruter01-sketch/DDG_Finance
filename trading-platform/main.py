@@ -413,6 +413,62 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC) — TRUE price-based")
 
+    # ── Audit fix M4: Nightly retention sweep (3:15 AM UTC) ──────────────────
+    # Tables grow forever without this. Defaults: 90-day window for high-volume
+    # series, longer for low-volume. Logged so the operator can verify counts.
+    def _retention_sweep() -> None:
+        from db.postgres import is_pg_available, get_conn
+        if not is_pg_available():
+            return
+        # (table, ts_column, retention_days) — kept conservative
+        plans = [
+            ("equity_snapshots",     "ts",        90),
+            ("system_degradations",  "ts",        90),
+            ("oracle_scan_log",      "ts",        90),
+            # historical_prices: keep daily candles (1d) ~3y, hourly ~90d via
+            # delete-by-timeframe so the backtester still has a long lookback.
+            # Hourly bars churn most; daily bars rarely.
+        ]
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    for table, ts_col, days in plans:
+                        try:
+                            cur.execute(
+                                f'DELETE FROM {table} WHERE "{ts_col}" < NOW() - INTERVAL %s',
+                                (f"{days} days",),
+                            )
+                            logger.info(
+                                f"M4 retention | {table}: deleted {cur.rowcount} rows "
+                                f"older than {days}d"
+                            )
+                        except Exception as _te:
+                            logger.warning(f"M4 retention | {table} sweep failed: {_te}")
+                    # historical_prices: hourly only (1d preserved indefinitely)
+                    try:
+                        cur.execute(
+                            'DELETE FROM historical_prices '
+                            'WHERE timeframe = %s AND "timestamp" < NOW() - INTERVAL %s',
+                            ("1h", "90 days"),
+                        )
+                        logger.info(
+                            f"M4 retention | historical_prices(1h): deleted {cur.rowcount} rows older than 90d"
+                        )
+                    except Exception as _te:
+                        logger.warning(f"M4 retention | historical_prices sweep failed: {_te}")
+        except Exception as _se:
+            logger.warning(f"M4 retention | Nightly sweep failed (non-fatal): {_se}")
+
+    scheduler.add_job(
+        func=_retention_sweep,
+        trigger=_CronTrigger(hour=3, minute=15, timezone="UTC"),
+        id="nightly_retention_sweep",
+        name="Nightly retention sweep (3:15 AM UTC) — M4",
+        replace_existing=True,
+        misfire_grace_time=1800,
+    )
+    logger.info("Retention | Registered: nightly_retention_sweep (3:15 AM UTC) — M4")
+
     # ── Review Flag Scheduler — daily performance checks ─────────────────────
     from core.review_scheduler import run_scheduled_checks as _run_review_checks
     scheduler.add_job(

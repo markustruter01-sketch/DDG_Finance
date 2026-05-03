@@ -14,6 +14,23 @@ from loguru import logger
 PAPER_FEE_PCT = 0.0026
 
 
+# Audit fix H2: canonical unrealised-P&L helper.
+# Keep in sync with trading-platform/core/pnl_math.py — every paper engine
+# (kraken-bot, forex-engine, poseidon, kraken-current) uses the same formula
+# so short-side sign conventions never diverge again.
+def _compute_unrealized_pnl(side: str, entry: float, current: float,
+                            units: float, fees: float = 0.0) -> float:
+    s = (side or "").lower()
+    e, c, u, f = float(entry), float(current), float(units), float(fees)
+    if s == "long":
+        gross = (c - e) * u
+    elif s == "short":
+        gross = (e - c) * u
+    else:
+        raise ValueError(f"_compute_unrealized_pnl: unknown side {side!r}")
+    return gross - f
+
+
 class TrendPosition:
     """A single open trend position."""
     def __init__(
@@ -71,10 +88,11 @@ class TrendPosition:
             return current_price >= self.stop_level
 
     def unrealised_pnl(self, current_price: float) -> float:
-        if self.direction == "long":
-            return (current_price - self.entry_price) * self.units - self.fees_paid
-        else:
-            return (self.entry_price - current_price) * self.units - self.fees_paid
+        # H2: canonical pnl helper (long/short sign convention)
+        return _compute_unrealized_pnl(
+            self.direction, self.entry_price, current_price,
+            self.units, self.fees_paid,
+        )
 
     def holding_days(self) -> float:
         opened = datetime.fromisoformat(self.opened_at.replace("Z", "+00:00"))

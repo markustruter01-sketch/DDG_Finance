@@ -87,10 +87,41 @@ def ensure_kraken_current_tables():
                     ema_slow        DOUBLE PRECISION,
                     adx_entry       DOUBLE PRECISION,
                     closed_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    bot_id          TEXT NOT NULL DEFAULT 'kraken-current'
+                    bot_id          TEXT NOT NULL DEFAULT 'kraken-current',
+                    order_id        TEXT
                 );
+                -- Audit fix H4: idempotent migration for pre-existing tables.
+                ALTER TABLE kraken_current_trades
+                    ADD COLUMN IF NOT EXISTS order_id TEXT;
+                -- Audit fix H4: rename legacy `pnl_usd` to `pnl` to match the
+                -- record_trade insert. Using DO block so it's idempotent.
+                DO $$
+                BEGIN
+                    IF EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_name='kraken_current_trades'
+                                  AND column_name='pnl_usd')
+                       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_name='kraken_current_trades'
+                                  AND column_name='pnl') THEN
+                        ALTER TABLE kraken_current_trades RENAME COLUMN pnl_usd TO pnl;
+                    END IF;
+                END$$;
+                -- Final safety: ensure pnl column exists either way.
+                ALTER TABLE kraken_current_trades
+                    ADD COLUMN IF NOT EXISTS pnl DOUBLE PRECISION;
                 CREATE INDEX IF NOT EXISTS idx_kc_trades_closed_at
                     ON kraken_current_trades (closed_at DESC);
+                -- Audit fix H4: prevent duplicate inserts on retry.
+                -- Pre-index dedupe so legacy duplicates can't block index creation.
+                DELETE FROM kraken_current_trades a
+                 USING kraken_current_trades b
+                 WHERE a.order_id IS NOT NULL
+                   AND a.bot_id = b.bot_id
+                   AND a.order_id = b.order_id
+                   AND a.id > b.id;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_kc_trades_bot_order
+                    ON kraken_current_trades (bot_id, order_id)
+                    WHERE order_id IS NOT NULL;
 
                 CREATE TABLE IF NOT EXISTS kraken_current_portfolio (
                     id              INTEGER PRIMARY KEY DEFAULT 8,
@@ -187,13 +218,17 @@ def record_trade(trade: dict):
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO kraken_current_trades
-                        (symbol, direction, entry_price, exit_price, units, pnl_usd, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        (symbol, direction, entry_price, exit_price, units, pnl, holding_days, reason, ema_fast, ema_slow, adx_entry, closed_at, order_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s)
+                    -- Audit H4: dedup retry inserts on (bot_id, order_id)
+                    ON CONFLICT (bot_id, order_id) WHERE order_id IS NOT NULL
+                        DO NOTHING
                 """, (
                     trade.get("symbol"), trade.get("direction"), trade.get("entry_price"),
                     trade.get("exit_price"), trade.get("units"), trade.get("pnl"),
                     trade.get("holding_days"), trade.get("reason"),
                     trade.get("ema_fast"), trade.get("ema_slow"), trade.get("adx"),
+                    trade.get("order_id"),
                 ))
     except Exception as e:
         logger.warning(f"KrakenCurrent DB | trade record failed: {e}")

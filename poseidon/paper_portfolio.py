@@ -16,6 +16,23 @@ from loguru import logger
 PAPER_FEE_PCT = 0.0026
 
 
+# Audit fix H2: canonical unrealised-P&L helper.
+# Keep in sync with trading-platform/core/pnl_math.py — every paper engine
+# (kraken-bot, forex-engine, poseidon, kraken-current) uses the same formula
+# so short-side sign conventions never diverge again.
+def _compute_unrealized_pnl(side: str, entry: float, current: float,
+                            units: float, fees: float = 0.0) -> float:
+    s = (side or "").lower()
+    e, c, u, f = float(entry), float(current), float(units), float(fees)
+    if s == "long":
+        gross = (c - e) * u
+    elif s == "short":
+        gross = (e - c) * u
+    else:
+        raise ValueError(f"_compute_unrealized_pnl: unknown side {side!r}")
+    return gross - f
+
+
 class PairPosition:
     """Represents a single open pair position (two legs)."""
     def __init__(
@@ -54,17 +71,18 @@ class PairPosition:
         )
 
     def current_pnl(self, price_a: float, price_b: float) -> dict:
-        """Compute unrealised P&L for both legs."""
-        if self.leg_a_side == "long":
-            leg_a_pnl = (price_a - self.leg_a_entry) * self.leg_a_units
-        else:
-            leg_a_pnl = (self.leg_a_entry - price_a) * self.leg_a_units
+        """Compute unrealised P&L for both legs.
 
-        if self.leg_b_side == "long":
-            leg_b_pnl = (price_b - self.leg_b_entry) * self.leg_b_units
-        else:
-            leg_b_pnl = (self.leg_b_entry - price_b) * self.leg_b_units
-
+        Audit fix H2: routes through the canonical compute_unrealized_pnl
+        helper (mirror of trading-platform/core/pnl_math.py) so the long/short
+        sign convention is identical across every engine.
+        """
+        leg_a_pnl = _compute_unrealized_pnl(
+            self.leg_a_side, self.leg_a_entry, price_a, self.leg_a_units
+        )
+        leg_b_pnl = _compute_unrealized_pnl(
+            self.leg_b_side, self.leg_b_entry, price_b, self.leg_b_units
+        )
         total_pnl = leg_a_pnl + leg_b_pnl - self.fees_paid
         return {
             "leg_a_pnl": leg_a_pnl,

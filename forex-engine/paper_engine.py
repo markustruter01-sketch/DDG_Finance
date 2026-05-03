@@ -16,6 +16,23 @@ from loguru import logger
 _portfolio: dict | None = None
 
 
+# Audit fix H2: canonical unrealised-P&L helper.
+# Keep in sync with trading-platform/core/pnl_math.py — every paper engine
+# (kraken-bot, forex-engine, poseidon, kraken-current) uses the same formula
+# so short-side sign conventions never diverge again.
+def _compute_unrealized_pnl(side: str, entry: float, current: float,
+                            units: float, fees: float = 0.0) -> float:
+    s = (side or "").lower()
+    e, c, u, f = float(entry), float(current), float(units), float(fees)
+    if s == "long":
+        gross = (c - e) * u
+    elif s == "short":
+        gross = (e - c) * u
+    else:
+        raise ValueError(f"_compute_unrealized_pnl: unknown side {side!r}")
+    return gross - f
+
+
 def _load_portfolio() -> dict:
     from forex_config import PAPER_STARTING_BALANCE
     import forex_nav_db as _db
@@ -74,10 +91,10 @@ def get_paper_equity(current_prices: dict[str, float] | None = None) -> float:
 
     for pair, pos in p["positions"].items():
         price = prices.get(pair, pos["entry_price"])
-        if pos["direction"] == "long":
-            pnl = (price - pos["entry_price"]) * pos["units"]
-        else:
-            pnl = (pos["entry_price"] - price) * pos["units"]
+        # H2: canonical pnl helper (long/short sign convention)
+        pnl = _compute_unrealized_pnl(
+            pos["direction"], pos["entry_price"], price, pos["units"]
+        )
         conv = get_quote_to_usd(pair, price, prices)
         pnl_usd = pnl * conv if conv is not None else 0.0
         equity += pos["size_usd"] + pnl_usd
@@ -175,10 +192,8 @@ def paper_close_position(pair: str, current_price: float, reason: str,
     units = pos["units"]
     size_usd = pos["size_usd"]
 
-    if direction == "long":
-        pnl_raw = (current_price - entry) * units
-    else:
-        pnl_raw = (entry - current_price) * units
+    # H2: canonical pnl helper (long/short sign convention)
+    pnl_raw = _compute_unrealized_pnl(direction, entry, current_price, units)
 
     prices = latest_prices or {}
     prices[pair] = current_price

@@ -103,11 +103,29 @@ class MomentumPortfolio:
             total += pos["position_usd"] + pnl
         return total
 
-    def _unrealised_pnl(self, pos: dict, current_price: float) -> float:
-        if pos["direction"] == "long":
-            return (current_price - pos["entry_price"]) * pos["units"] - pos["fees_paid"]
+    # Audit fix H2: canonical unrealised-P&L helper.
+    # Keep in sync with trading-platform/core/pnl_math.py — every paper engine
+    # (kraken-bot, forex-engine, poseidon, kraken-current, momentum) uses the
+    # same formula so short-side sign conventions never diverge.
+    @staticmethod
+    def _compute_unrealized_pnl(side: str, entry: float, current: float,
+                                units: float, fees: float = 0.0) -> float:
+        s = (side or "").lower()
+        e, c, u, f = float(entry), float(current), float(units), float(fees)
+        if s == "long":
+            gross = (c - e) * u
+        elif s == "short":
+            gross = (e - c) * u
         else:
-            return (pos["entry_price"] - current_price) * pos["units"] - pos["fees_paid"]
+            raise ValueError(f"_compute_unrealized_pnl: unknown side {side!r}")
+        return gross - f
+
+    def _unrealised_pnl(self, pos: dict, current_price: float) -> float:
+        # H2: canonical pnl helper (long/short sign convention)
+        return self._compute_unrealized_pnl(
+            pos["direction"], pos["entry_price"], current_price,
+            pos["units"], pos["fees_paid"],
+        )
 
     # ── Capacity checks ───────────────────────────────────────────────────────
 

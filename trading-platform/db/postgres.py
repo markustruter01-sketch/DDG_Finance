@@ -284,6 +284,19 @@ CREATE TABLE IF NOT EXISTS kraken_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
+-- Audit fix H4: prevent duplicate inserts on retry. Partial index — only
+-- enforced when order_id IS NOT NULL so legacy paper rows w/o order_id
+-- remain valid.
+-- Pre-index dedupe: collapse any pre-existing (bot_id, order_id) duplicates
+-- (keep the lowest id) so unique-index creation can't fail on legacy data.
+DELETE FROM kraken_trades a
+ USING kraken_trades b
+ WHERE a.order_id IS NOT NULL
+   AND a.bot_id = b.bot_id
+   AND a.order_id = b.order_id
+   AND a.id > b.id;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kraken_trades_bot_order
+    ON kraken_trades (bot_id, order_id) WHERE order_id IS NOT NULL;
 
 -- Multi-bot adaptive params upserted by adaptive_params.py every adaptation cycle.
 CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
@@ -336,6 +349,14 @@ CREATE TABLE IF NOT EXISTS capital_injections (
     reason      TEXT,
     bot_id      TEXT
 );
+-- Audit fix M4: speed up per-bot capital-injection lookups (bot reconciliation).
+CREATE INDEX IF NOT EXISTS idx_capital_injections_bot
+    ON capital_injections (bot_id, ts DESC);
+-- Audit fix M4: support nightly retention sweep on historical_prices —
+-- existing index is (pair, timeframe, timestamp); we need a (timeframe, ts)
+-- index so DELETE WHERE timeframe='1h' AND timestamp<... doesn't full-scan.
+CREATE INDEX IF NOT EXISTS idx_historical_prices_tf_ts
+    ON historical_prices (timeframe, "timestamp");
 
 -- VPIN rejection log (persistent record of VPIN-blocked entries)
 CREATE TABLE IF NOT EXISTS vpin_rejections (

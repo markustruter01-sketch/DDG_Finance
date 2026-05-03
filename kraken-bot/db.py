@@ -238,8 +238,8 @@ def _init_pool() -> None:
     bot_label = os.environ.get("BOT_ID", "kraken")
     for attempt in range(1, 4):
         try:
-            _pool = _pg_pool.ThreadedConnectionPool(minconn=1, maxconn=4, dsn=dsn)
-            logger.info(f"DB | Kraken ({bot_label}) connection pool initialised (min=1, max=4)")
+            _pool = _pg_pool.ThreadedConnectionPool(minconn=1, maxconn=8, dsn=dsn)
+            logger.info(f"DB | Kraken ({bot_label}) connection pool initialised (min=1, max=8)")
             return
         except Exception as exc:
             logger.warning(f"DB | Kraken ({bot_label}) pool init attempt {attempt}/3 failed: {exc}")

@@ -106,7 +106,19 @@ async def _enrich_stale_positions(positions: list[dict[str, Any]]) -> None:
                 pos["unrealized_pnl_usd"] = round(pnl, 2)
                 pos["unrealized_pnl_pct"] = round(pnl / size * 100, 4)
     except Exception as exc:
-        logger.debug(f"[kraken/status] live-price fetch skipped: {exc}")
+        # Audit fix M1: surface enrichment failures so the UI can flag stale prices.
+        logger.warning(f"[kraken/status] live-price enrichment failed: {exc}")
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="kraken_api",
+                severity="warning",
+                error_type="ticker_enrichment_failed",
+                message="Kraken ticker fetch failed during /kraken/status enrichment",
+                detail=f"stale_positions={len(stale)} error={exc!r}",
+            )
+        except Exception:
+            pass
 
 
 @kraken_router.get("/kraken/bots", tags=["Kraken Bot"])

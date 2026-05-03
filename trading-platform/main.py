@@ -339,9 +339,39 @@ async def lifespan(app: FastAPI):
                             logger.warning(f"OHLCV | {key}: {r.get('error')}")
                 except Exception as _ie:
                     logger.warning(f"OHLCV | Startup ingest failed (non-fatal): {_ie}")
+                    # Audit fix H6: surface silent ingest failures so the
+                    # dashboard knows historical_prices is empty.
+                    try:
+                        from core.degradation_tracker import record_degradation
+                        record_degradation(
+                            component="data_pipeline",
+                            severity="error",
+                            error_type="ohlcv_startup_ingest_failed",
+                            message=f"OHLCV startup ingest failed: {_ie!s}"[:480],
+                            detail=f"historical_prices may be empty; backtester will skip. {_ie!r}",
+                        )
+                    except Exception:
+                        pass
+
+            def _supervised_startup_ingest():
+                try:
+                    _startup_ingest()
+                except Exception as _se:
+                    logger.error(f"OHLCV | Background ingest thread crashed: {_se!r}")
+                    try:
+                        from core.degradation_tracker import record_degradation
+                        record_degradation(
+                            component="data_pipeline",
+                            severity="critical",
+                            error_type="ohlcv_thread_crash",
+                            message=f"OHLCV background thread crashed: {_se!s}"[:480],
+                            detail=f"{_se!r}",
+                        )
+                    except Exception:
+                        pass
 
             import threading as _threading_ohlcv
-            _t = _threading_ohlcv.Thread(target=_startup_ingest, daemon=True, name="ohlcv-startup-ingest")
+            _t = _threading_ohlcv.Thread(target=_supervised_startup_ingest, daemon=True, name="ohlcv-startup-ingest")
             _t.start()
             logger.info("OHLCV | Startup ingest launched in background thread")
         else:
@@ -483,35 +513,49 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
 
-_DEGRADATION_ENDPOINTS = {
-    "/ai/commentary", "/kraken/commentary", "/kraken/status",
-    "/kraken/performance", "/kraken/trades",
-    "/run", "/run/postmortem", "/status", "/health",
-    "/positions/live", "/portfolio",
-}
+# Audit fix H8: degradation tracker now captures ALL 5xx, not a hardcoded
+# whitelist.  Tracebacks are captured when the route raises an unhandled
+# exception so root-cause is visible without grepping logs.
+import traceback as _traceback
 
 
 class DegradationCaptureMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
-        response = await call_next(request)
-        if response.status_code in (500, 503):
-            path = request.url.path
-            if API_PREFIX in path:
-                short_path = path.replace(API_PREFIX, "")
-                relevant = any(short_path.startswith(ep) for ep in _DEGRADATION_ENDPOINTS)
-                if relevant:
-                    try:
-                        from core.degradation_tracker import record_degradation
-                        record_degradation(
-                            component="http",
-                            severity="error",
-                            error_type=str(response.status_code),
-                            message=f"HTTP {response.status_code} on {short_path}",
-                            detail=f"method={request.method} full_path={path}",
-                        )
-                    except Exception:
-                        pass
+        path = request.url.path
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            # Unhandled exception bubbled out of a route — record full traceback
+            # then re-raise so FastAPI's normal error handling still fires.
+            try:
+                from core.degradation_tracker import record_degradation
+                tb = _traceback.format_exc()[-1800:]
+                short_path = path.replace(API_PREFIX, "") if API_PREFIX in path else path
+                record_degradation(
+                    component="http",
+                    severity="critical",
+                    error_type=type(exc).__name__,
+                    message=f"Unhandled exception on {short_path}: {exc!s}"[:480],
+                    detail=f"method={request.method} full_path={path}\n{tb}",
+                )
+            except Exception:
+                pass
+            raise
+
+        if response.status_code >= 500:
+            try:
+                from core.degradation_tracker import record_degradation
+                short_path = path.replace(API_PREFIX, "") if API_PREFIX in path else path
+                record_degradation(
+                    component="http",
+                    severity="error" if response.status_code == 500 else "warning",
+                    error_type=str(response.status_code),
+                    message=f"HTTP {response.status_code} on {short_path}",
+                    detail=f"method={request.method} full_path={path}",
+                )
+            except Exception:
+                pass
         return response
 
 

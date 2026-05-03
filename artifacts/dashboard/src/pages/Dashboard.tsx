@@ -296,11 +296,13 @@ function ActivityTicker() {
     const entries: Array<{ key: string; text: string; color: string }> = [];
     if (positions?.positions) {
       for (const p of positions.positions) {
-        const pct = (p.unrealized_plpc * 100).toFixed(2);
+        const plpc = p.unrealized_plpc ?? 0;
+        const pl = p.unrealized_pl ?? 0;
+        const pct = (plpc * 100).toFixed(2);
         entries.push({
           key: `pos-${p.symbol}`,
-          text: `${p.symbol} ${p.unrealized_pl >= 0 ? "+" : ""}${pct}%`,
-          color: p.unrealized_pl >= 0 ? "text-green-400" : "text-red-400",
+          text: `${p.symbol} ${pl >= 0 ? "+" : ""}${pct}%`,
+          color: pl >= 0 ? "text-green-400" : "text-red-400",
         });
       }
     }
@@ -311,7 +313,7 @@ function ActivityTicker() {
         const prefix = t.status === "Closed_Win" ? "WIN" : "LOSS";
         entries.push({
           key: `j-${t.trade_id}`,
-          text: `${prefix} ${t.ticker} ${t.pnl_percentage >= 0 ? "+" : ""}${t.pnl_percentage.toFixed(2)}%`,
+          text: `${prefix} ${t.ticker} ${(t.pnl_percentage ?? 0) >= 0 ? "+" : ""}${(t.pnl_percentage ?? 0).toFixed(2)}%`,
           color: t.status === "Closed_Win" ? "text-green-400" : "text-red-400",
         });
       }
@@ -1599,7 +1601,7 @@ function AllClosedTradesSection() {
                   "px-3 py-2.5 text-right font-mono font-semibold tabular-nums whitespace-nowrap",
                   t.is_win ? "text-emerald-400" : "text-red-400"
                 )}>
-                  {t.pnl_pct >= 0 ? "+" : ""}{t.pnl_pct.toFixed(2)}%
+                  {(t.pnl_pct ?? 0) >= 0 ? "+" : ""}{(t.pnl_pct ?? 0).toFixed(2)}%
                 </td>
                 <td className={cn(
                   "px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap",

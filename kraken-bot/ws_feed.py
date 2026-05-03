@@ -202,23 +202,41 @@ class WebSocketFeed:
         logger.info("WebSocketFeed | Stopped")
 
     def _run_loop(self) -> None:
-        while self._running and self._reconnect_count < self._max_reconnects:
+        # Reliability fix (audit M10): never permanently give up on the WebSocket
+        # feed.  Falling back to REST polling burns API quota and increases latency.
+        # Use capped exponential backoff (max 60s) on every iteration -- including
+        # the common path where ``run_forever`` returns normally on close (no
+        # exception), which previously hot-spun the loop.  Only treat the session
+        # as "stable" (and reset backoff) if it lasted >=30s.
+        STABILITY_THRESHOLD_S = 30.0
+        while self._running:
+            session_start = time.time()
+            exc_repr = None
             try:
                 self._connect_and_listen()
             except Exception as exc:
-                self._connected = False
+                exc_repr = repr(exc)
+            self._connected = False
+            session_dur = time.time() - session_start
+
+            if not self._running:
+                break
+
+            if session_dur >= STABILITY_THRESHOLD_S and exc_repr is None:
+                # Stable session that closed cleanly -- reset backoff and reconnect promptly.
+                self._reconnect_count = 0
+                wait = 1.0
+            else:
                 self._reconnect_count += 1
                 self._stats["disconnects"] += 1
-                wait = min(2 ** self._reconnect_count, 30)
-                logger.warning(
-                    f"WebSocketFeed | Disconnected ({exc}), "
-                    f"reconnecting in {wait}s (attempt {self._reconnect_count})"
-                )
-                time.sleep(wait)
+                wait = min(2 ** min(self._reconnect_count, 6), 60)
 
-        if self._reconnect_count >= self._max_reconnects:
-            logger.error("WebSocketFeed | Max reconnects reached, falling back to REST")
-            self._running = False
+            reason = exc_repr or f"closed after {session_dur:.1f}s"
+            logger.warning(
+                f"WebSocketFeed | Disconnected ({reason}), "
+                f"reconnecting in {wait}s (attempt {self._reconnect_count})"
+            )
+            time.sleep(wait)
 
     def _connect_and_listen(self) -> None:
         try:
@@ -233,7 +251,9 @@ class WebSocketFeed:
 
         def on_open(ws):
             self._connected = True
-            self._reconnect_count = 0
+            # Note: _reconnect_count is reset by _run_loop only after the
+            # session proves stable (>=30s).  Resetting here causes a hot
+            # reconnect loop on the "connect-then-immediate-drop" failure mode.
             self._stats["connect_time"] = datetime.now(timezone.utc).isoformat()
             logger.info(f"WebSocketFeed | Connected to {KRAKEN_WS_URL}")
 

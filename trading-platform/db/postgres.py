@@ -66,9 +66,9 @@ def _init_pool() -> None:
         logger.warning("DB | No DATABASE_URL found — using SQLite fallback")
         return
     try:
-        _pool = pg_pool.ThreadedConnectionPool(minconn=1, maxconn=8, dsn=dsn)
+        _pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=20, dsn=dsn)
         _pg_ok = True
-        logger.info("DB | PostgreSQL connection pool initialised (min=1, max=8)")
+        logger.info("DB | PostgreSQL connection pool initialised (min=2, max=20)")
     except Exception as exc:
         logger.error(f"DB | Failed to create PostgreSQL pool: {exc} — falling back to SQLite")
         _pg_ok = False

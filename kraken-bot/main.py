@@ -3393,15 +3393,22 @@ def _keepalive_loop() -> None:
     refreshed at most 2 minutes behind real-time, well within the 30-minute
     auto-heal threshold.
     """
+    # Audit fix H6: outer try/except guard so an unexpected error (e.g. import
+    # failure inside write_status) cannot kill the keepalive thread silently.
+    # If the inner work raises something unexpected, log it loudly and keep
+    # looping — the auto-heal monitor depends on this thread surviving.
     while not getattr(_keepalive_loop, "_stop", False):
         try:
-            write_status()
-        except Exception as exc:
-            logger.debug(f"Keepalive | heartbeat write failed: {exc}")
-        try:
-            write_live_state()
-        except Exception as exc:
-            logger.debug(f"Keepalive | live-state write failed: {exc}")
+            try:
+                write_status()
+            except Exception as exc:
+                logger.warning(f"Keepalive | heartbeat write failed: {exc}")
+            try:
+                write_live_state()
+            except Exception as exc:
+                logger.warning(f"Keepalive | live-state write failed: {exc}")
+        except Exception as outer:
+            logger.error(f"Keepalive | unexpected error in loop body: {outer!r}")
         time.sleep(120)  # 2-minute interval
 
 

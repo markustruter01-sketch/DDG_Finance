@@ -226,6 +226,24 @@ def _log_result(
         if discrepancy_pct is not None
         else f"[math_audit] {status:4s} | {bot_id:<14} {formula_name:<30} | {notes}"
     )
+
+    # Audit fix H8: surface FAIL results to the platform-wide degradation
+    # tracker so the dashboard "system status" badge can show math integrity
+    # issues without operators having to read the math_audit_log table.
+    if status == "FAIL":
+        try:
+            from core.degradation_tracker import record_degradation
+            disc_str = f"{discrepancy_pct:.3f}%" if discrepancy_pct is not None else "n/a"
+            record_degradation(
+                component="math_auditor",
+                severity="critical" if sign_error else "error",
+                error_type=f"audit_fail_{formula_name}",
+                message=f"Math audit FAIL on {bot_id}/{formula_name} (Δ={disc_str})",
+                detail=f"bot_output={bot_output} auditor_output={auditor_output} sign_error={sign_error} notes={notes}",
+            )
+        except Exception:
+            pass
+
     return status, discrepancy_pct
 
 

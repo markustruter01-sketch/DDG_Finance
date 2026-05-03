@@ -26,9 +26,11 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
       <div className="flex flex-col gap-1">
         <AnimatePresence initial={false}>
           {sorted.map((bot, i) => {
+            const totalPnl = bot.totalPnl ?? 0;
+            const totalPnlPct = bot.totalPnlPct ?? 0;
             const winRate = bot.trades > 0 ? ((bot.wins / bot.trades) * 100).toFixed(0) : "0";
-            const hasPnlUsd = bot.totalPnl !== 0;
-            const pnlPositive = hasPnlUsd ? bot.totalPnl >= 0 : bot.totalPnlPct >= 0;
+            const hasPnlUsd = totalPnl !== 0;
+            const pnlPositive = hasPnlUsd ? totalPnl >= 0 : totalPnlPct >= 0;
             return (
               <motion.div
                 key={bot.name}
@@ -50,8 +52,8 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
                   style={{ color: pnlPositive ? "#4ade80" : "#fb923c" }}
                 >
                   {hasPnlUsd
-                    ? `${bot.totalPnl >= 0 ? "+" : ""}$${Math.abs(bot.totalPnl).toFixed(0)}`
-                    : `${bot.totalPnlPct >= 0 ? "+" : ""}${bot.totalPnlPct.toFixed(1)}%`
+                    ? `${totalPnl >= 0 ? "+" : ""}$${Math.abs(totalPnl).toFixed(0)}`
+                    : `${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(1)}%`
                   }
                 </span>
               </motion.div>

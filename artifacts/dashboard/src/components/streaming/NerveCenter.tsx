@@ -152,7 +152,8 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
   }
 
   const trade = displayTrades[currentIdx];
-  const isUp = trade.pnlUsd >= 0;
+  const tradePnl = trade.pnlUsd ?? 0;
+  const isUp = tradePnl >= 0;
 
   return (
     <div className="px-4 py-3">
@@ -198,7 +199,7 @@ function TradeDialogueBox({ trades }: { trades: TradeInsight[] }) {
               className="text-[15px] font-mono font-bold"
               style={{ color: isUp ? "#00ff88" : "#ff8c00" }}
             >
-              {isUp ? "+" : ""}${trade.pnlUsd.toFixed(2)}
+              {isUp ? "+" : ""}${tradePnl.toFixed(2)}
             </span>
           </div>
           <div className="text-[11px] leading-relaxed font-mono" style={{ color: "rgba(255,255,255,0.8)" }}>

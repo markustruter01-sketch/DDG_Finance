@@ -1,5 +1,5 @@
 {
-  "cash": 12104.35109648999,
+  "cash": 11199.455848682966,
   "positions": {
     "U/USD": {
       "symbol": "U/USD",
@@ -28,29 +28,12 @@
       "ema_fast": 0.10406960143237144,
       "ema_slow": 0.09859439010253489,
       "adx": 41.70705162718694,
-      "best_price": 0.1089172,
+      "best_price": 0.1102326,
       "stop_level": 0.10354239079162723,
       "trail_immediate": false,
       "trailing_active": false,
       "opened_at": "2026-05-01T03:00:54.014384+00:00",
       "fees_paid": 50.21108355958617
-    },
-    "SHIB/USD": {
-      "symbol": "SHIB/USD",
-      "direction": "long",
-      "units": 3022981078.837379,
-      "entry_price": 6.37e-06,
-      "stop_distance": 2.25139490670861e-07,
-      "position_value": 19256.389472194103,
-      "ema_fast": 6.239609183262934e-06,
-      "ema_slow": 6.1357302212177084e-06,
-      "adx": 28.391203905446446,
-      "best_price": 6.37e-06,
-      "stop_level": 6.144860509329139e-06,
-      "trail_immediate": false,
-      "trailing_active": false,
-      "opened_at": "2026-05-01T07:00:53.045743+00:00",
-      "fees_paid": 50.066612627704664
     },
     "WBT/USD": {
       "symbol": "WBT/USD",
@@ -62,10 +45,10 @@
       "ema_fast": 57.649410564995094,
       "ema_slow": 55.52473690980807,
       "adx": 36.705122915885234,
-      "best_price": 58.61,
-      "stop_level": 57.58751756737363,
+      "best_price": 59.74,
+      "stop_level": 58.80751756737363,
       "trail_immediate": false,
-      "trailing_active": false,
+      "trailing_active": true,
       "opened_at": "2026-05-03T01:15:40.069391+00:00",
       "fees_paid": 50.54912973245826
     },
@@ -79,16 +62,33 @@
       "ema_fast": 0.32966416777080026,
       "ema_slow": 0.3259271396220218,
       "adx": 25.633769847372843,
-      "best_price": 0.338895,
+      "best_price": 0.341182,
       "stop_level": 0.3338664842749523,
       "trail_immediate": false,
       "trailing_active": false,
       "opened_at": "2026-05-03T08:55:41.740330+00:00",
       "fees_paid": 50.40510852020679
+    },
+    "BTC/USD": {
+      "symbol": "BTC/USD",
+      "direction": "long",
+      "units": 0.24382645524637428,
+      "entry_price": 80050.5,
+      "stop_distance": 1710.65889536023,
+      "position_value": 19518.429655699885,
+      "ema_fast": 78873.76421459265,
+      "ema_slow": 76842.142102232,
+      "adx": 29.541929052489156,
+      "best_price": 80050.5,
+      "stop_level": 78339.84110463977,
+      "trail_immediate": false,
+      "trailing_active": false,
+      "opened_at": "2026-05-04T21:06:16.143774+00:00",
+      "fees_paid": 50.7479171048197
     }
   },
-  "total_trades": 33,
+  "total_trades": 34,
   "equity_7d_low": 100000.0,
   "circuit_breaker_until": null,
-  "updated_at": "2026-05-03T08:55:41.740415+00:00"
+  "updated_at": "2026-05-04T21:06:16.143888+00:00"
 }

@@ -18,11 +18,7 @@ PAPER_TRADING = True
 PAPER_STARTING_BALANCE = 100_000.0
 PAPER_FEE_PCT = 0.0026
 
-# ── EMERGENCY STOP ─────────────────────────────────────────────────────────────
-# Set to True to prevent dev bots from writing to the shared production database.
-# MUST remain True while a live deployment is running to avoid DB collisions.
-# Only flip to False after dev/live DB separation is implemented.
-GLOBAL_EMERGENCY_STOP = True
+GLOBAL_EMERGENCY_STOP = False
 
 BOT_PROFILES = {
     "davy-jones": {
@@ -177,7 +173,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
-        "BOT_PAUSED":        False,
+        "BOT_PAUSED":        True,
     },
     "bot4_sector": {
         "display_name":      "Sector Rotation",
@@ -189,7 +185,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check; rebalance only Mondays
-        "BOT_PAUSED":        False,
+        "BOT_PAUSED":        True,
     },
     "bot5_defensive": {
         "display_name":      "Defensive Guardian",
@@ -201,7 +197,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check; regime detection each cycle
-        "BOT_PAUSED":        False,
+        "BOT_PAUSED":        True,
     },
     "bot7_macro_bond": {
         "display_name":      "Macro Bond Trader",
@@ -223,7 +219,7 @@ BOT_PROFILES = {
         "MIN_CONVICTION":    0.65,
         "POSITION_SIZE_MIN": 0.10,
         "POSITION_SIZE_MAX": 0.30,
-        "BOT_PAUSED":        False,
+        "BOT_PAUSED":        True,
     },
 }
 

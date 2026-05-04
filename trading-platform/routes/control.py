@@ -40,6 +40,7 @@ _KRAKEN_BOTS = {
     "davy-jones":     1,
     "blackbeard":     2,
     "calypso":        3,
+    "apex-predator":  4,
     "poseidon":       7,
     "kraken-current": 8,
 }
@@ -66,6 +67,36 @@ def _liquidate_kraken_positions() -> dict:
                         live_prices[sym] = float(price)
         except Exception:
             pass
+
+    # Fallback: fetch any still-missing prices from Kraken public REST API
+    try:
+        import urllib.request as _ur
+        with get_conn() as _pc:
+            with _pc.cursor() as _cur:
+                for _bid, _did in _KRAKEN_BOTS.items():
+                    _cur.execute("SELECT positions FROM kraken_portfolio WHERE id = %s", (_did,))
+                    _row = _cur.fetchone()
+                    if not _row or not _row[0]:
+                        continue
+                    _pos = _row[0] if isinstance(_row[0], dict) else _json.loads(_row[0])
+                    for _sym in _pos:
+                        if _sym not in live_prices:
+                            try:
+                                _pair = _sym.replace("/", "")
+                                _url = f"https://api.kraken.com/0/public/Ticker?pair={_pair}"
+                                with _ur.urlopen(_url, timeout=5) as _resp:
+                                    _td = _json.loads(_resp.read())
+                                if not _td.get("error"):
+                                    _result = _td.get("result", {})
+                                    _first = next(iter(_result.values()), {})
+                                    _c = _first.get("c", [None])[0]
+                                    if _c:
+                                        live_prices[_sym] = float(_c)
+                                        logger.info(f"Rebalance | Kraken API fallback price {_sym}=${float(_c):,.4f}")
+                            except Exception as _pe:
+                                logger.warning(f"Rebalance | Could not fetch fallback price for {_sym}: {_pe}")
+    except Exception as _fe:
+        logger.warning(f"Rebalance | Fallback price fetch failed: {_fe}")
 
     closed = []
     errors = []
@@ -196,51 +227,108 @@ def _liquidate_kraken_positions() -> dict:
 
 
 def _liquidate_poseidon_positions() -> dict:
-    """Liquidate all Poseidon pairs trading positions via its JSON state file."""
+    """Liquidate all Poseidon positions via its JSON state files.
+
+    Handles two formats:
+    - Momentum format: poseidon_live_state.json has open_positions = [{symbol, unrealised_pnl, ...}]
+    - Pairs format:    poseidon_live_state.json has positions = {pair_key: {...}}
+    Also clears poseidon_paper_portfolio.json which mirrors the portfolio cash/positions.
+    """
     import json as _pj
     from pathlib import Path as _PP
 
     closed = []
     errors = []
 
-    state_file = _PP("../poseidon/poseidon_live_state.json")
-    if not state_file.exists():
-        logger.warning("Rebalance | Poseidon state file not found — nothing to liquidate")
+    live_state_file  = _PP("../poseidon/poseidon_live_state.json")
+    paper_port_file  = _PP("../poseidon/poseidon_paper_portfolio.json")
+
+    if not live_state_file.exists() and not paper_port_file.exists():
+        logger.warning("Rebalance | Poseidon state files not found — nothing to liquidate")
         return {"closed": [], "errors": []}
 
-    try:
-        state = _pj.loads(state_file.read_text())
-        positions = state.get("positions", {})
+    # ── Process live_state file ───────────────────────────────────────────────
+    if live_state_file.exists():
+        try:
+            state = _pj.loads(live_state_file.read_text())
 
-        if not positions:
-            logger.info("Rebalance | Poseidon has no open positions")
-            return {"closed": [], "errors": []}
+            # Format 1: momentum — open_positions is a list
+            momentum_positions = state.get("open_positions")
+            if isinstance(momentum_positions, list) and momentum_positions:
+                for pos in momentum_positions:
+                    try:
+                        sym = pos.get("symbol", "unknown")
+                        pnl_usd = float(pos.get("unrealised_pnl", pos.get("unrealised_pnl_usd", 0)))
+                        closed.append({
+                            "bot": "poseidon",
+                            "pair": sym,
+                            "pnl_usd": round(pnl_usd, 2),
+                            "note": "momentum_live_state",
+                        })
+                        logger.info(
+                            f"Rebalance | Poseidon (momentum) closing {sym} | "
+                            f"unrealised P&L: ${pnl_usd:+,.2f}"
+                        )
+                    except Exception as exc:
+                        errors.append({"bot": "poseidon", "pair": pos.get("symbol", "?"), "error": str(exc)})
 
-        for pair_key, pos in list(positions.items()):
-            try:
-                pnl_usd = float(pos.get("unrealised_pnl_usd", 0))
-                closed.append({
-                    "bot": "poseidon",
-                    "pair": pair_key,
-                    "pnl_usd": round(pnl_usd, 2),
-                    "note": "marked_via_state_file",
-                })
-                logger.info(
-                    f"Rebalance | Poseidon closing pair {pair_key} | "
-                    f"unrealised P&L: ${pnl_usd:+,.2f}"
-                )
-            except Exception as exc:
-                errors.append({"bot": "poseidon", "pair": pair_key, "error": str(exc)})
+            # Format 2: pairs — positions is a dict
+            pairs_positions = state.get("positions", {})
+            if isinstance(pairs_positions, dict) and pairs_positions:
+                for pair_key, pos in list(pairs_positions.items()):
+                    try:
+                        pnl_usd = float(pos.get("unrealised_pnl_usd", pos.get("unrealised_pnl", 0)))
+                        closed.append({
+                            "bot": "poseidon",
+                            "pair": pair_key,
+                            "pnl_usd": round(pnl_usd, 2),
+                            "note": "pairs_live_state",
+                        })
+                        logger.info(
+                            f"Rebalance | Poseidon (pairs) closing {pair_key} | "
+                            f"unrealised P&L: ${pnl_usd:+,.2f}"
+                        )
+                    except Exception as exc:
+                        errors.append({"bot": "poseidon", "pair": pair_key, "error": str(exc)})
 
-        # Clear positions in state file
-        state["positions"] = {}
-        state["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
-        state_file.write_text(_pj.dumps(state, indent=2, default=str))
-        logger.info(f"Rebalance | Poseidon state file cleared — {len(closed)} pair(s) closed")
+            if not momentum_positions and not pairs_positions:
+                logger.info("Rebalance | Poseidon live_state has no open positions")
 
-    except Exception as exc:
-        logger.error(f"Rebalance | Poseidon liquidation failed: {exc}")
-        errors.append({"bot": "poseidon", "error": str(exc)})
+            # Clear both position keys
+            state["open_positions"] = []
+            state["positions"] = {}
+            state["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
+            live_state_file.write_text(_pj.dumps(state, indent=2, default=str))
+            logger.info(f"Rebalance | Poseidon live_state cleared — {len(closed)} position(s) marked closed")
+
+        except Exception as exc:
+            logger.error(f"Rebalance | Poseidon live_state liquidation failed: {exc}")
+            errors.append({"bot": "poseidon", "error": str(exc)})
+
+    # ── Also clear paper_portfolio file ──────────────────────────────────────
+    if paper_port_file.exists():
+        try:
+            port = _pj.loads(paper_port_file.read_text())
+            port_positions = port.get("positions", {})
+            # Only add to closed list if not already captured from live_state
+            live_syms = {c["pair"] for c in closed}
+            for sym, pos in (port_positions or {}).items():
+                if sym not in live_syms:
+                    pnl_usd = float(pos.get("unrealised_pnl", 0))
+                    closed.append({
+                        "bot": "poseidon",
+                        "pair": sym,
+                        "pnl_usd": round(pnl_usd, 2),
+                        "note": "paper_portfolio_only",
+                    })
+                    logger.info(f"Rebalance | Poseidon (paper_port only) closing {sym} | P&L: ${pnl_usd:+,.2f}")
+            port["positions"] = {}
+            port["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
+            paper_port_file.write_text(_pj.dumps(port, indent=2, default=str))
+            logger.info("Rebalance | Poseidon paper_portfolio cleared")
+        except Exception as exc:
+            logger.warning(f"Rebalance | Could not clear Poseidon paper_portfolio: {exc}")
+            errors.append({"bot": "poseidon_paper_portfolio", "error": str(exc)})
 
     return {"closed": closed, "errors": errors}
 

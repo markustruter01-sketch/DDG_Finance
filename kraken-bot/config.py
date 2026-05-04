@@ -173,7 +173,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
     "bot4_sector": {
         "display_name":      "Sector Rotation",

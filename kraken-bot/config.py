@@ -18,6 +18,12 @@ PAPER_TRADING = True
 PAPER_STARTING_BALANCE = 100_000.0
 PAPER_FEE_PCT = 0.0026
 
+# ── EMERGENCY STOP ─────────────────────────────────────────────────────────────
+# Set to True to prevent dev bots from writing to the shared production database.
+# MUST remain True while a live deployment is running to avoid DB collisions.
+# Only flip to False after dev/live DB separation is implemented.
+GLOBAL_EMERGENCY_STOP = True
+
 BOT_PROFILES = {
     "davy-jones": {
         "display_name": "Davy Jones' Portfolio",

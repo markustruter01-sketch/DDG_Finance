@@ -1297,6 +1297,15 @@ def run_cycle() -> None:
     global latest_signals, thinking_text, latest_microstructure
     global last_equity_refresh
 
+    # ── GLOBAL EMERGENCY STOP — dev/live DB collision prevention ──────────────
+    # When GLOBAL_EMERGENCY_STOP=True in config.py, no dev bot may write to the
+    # shared production database. Remove only after dev/live DB separation exists.
+    from config import GLOBAL_EMERGENCY_STOP as _GES
+    if _GES:
+        logger.warning("EMERGENCY STOP ACTIVE — dev bot blocked from writing to shared DB. "
+                       "Set GLOBAL_EMERGENCY_STOP=False in config.py only after DB separation.")
+        return
+
     # ── Fleet halt check — cross-process emergency stop ───────────────────────
     try:
         import sys as _sys_fh

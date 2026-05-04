@@ -426,6 +426,17 @@ def main():
         cycle_start = datetime.now(timezone.utc)
         logger.info(f"KrakenCurrent | === Cycle #{_cycle} at {cycle_start.isoformat()[:19]} UTC ===")
 
+        # ── GLOBAL EMERGENCY STOP — dev/live DB collision prevention ──────────────
+        try:
+            import importlib as _il
+            _kc_cfg = _il.import_module("config")
+            if getattr(_kc_cfg, "GLOBAL_EMERGENCY_STOP", False):
+                logger.warning("EMERGENCY STOP ACTIVE — dev KC bot blocked from writing to shared DB.")
+                time.sleep(60)
+                continue
+        except Exception:
+            pass
+
         # ── Fleet halt check — cross-process emergency stop ───────────────────────
         try:
             import sys as _sys_fh

@@ -69,10 +69,11 @@ def _fetch_fleet_equity() -> dict:
 
     # ── Kraken 4-bot family: Davy Jones, Blackbeard, Calypso, Apex ───────────
     KRAKEN_BOTS = [
-        ("davy_jones",      "davy-jones",    1),
-        ("blackbeard",      "blackbeard",    2),
-        ("calypso",         "calypso",       3),
-        ("apex_predator",   "apex-predator", 4),
+        ("bot2_spy_qqq",    "bot2_spy_qqq",   1),
+        ("blackbeard",      "blackbeard",      2),
+        ("bot4_sector",     "bot4_sector",     3),
+        ("bot5_defensive",  "bot5_defensive",  4),
+        ("bot7_macro_bond", "bot7_macro_bond", 7),
     ]
     conn = None
     try:
@@ -83,12 +84,18 @@ def _fetch_fleet_equity() -> dict:
         # Open position counts from kraken_portfolio.positions JSON.
         # kraken_trades only stores CLOSED trades; open positions live in portfolio JSON.
         import json as _json_fe
-        _DB_ID_TO_KEY = {1: "davy_jones", 2: "blackbeard", 3: "calypso", 4: "apex_predator"}
+        _DB_ID_TO_KEY = {
+            1: "bot2_spy_qqq",
+            2: "blackbeard",
+            3: "bot4_sector",
+            4: "bot5_defensive",
+            7: "bot7_macro_bond",
+        }
         open_pos_map: dict[str, int] = {}
         with conn.cursor(cursor_factory=_RealDictCursor) as cur:
             cur.execute(
                 "SELECT id, positions FROM kraken_portfolio WHERE id = ANY(%s)",
-                ([1, 2, 3, 4],)
+                ([1, 2, 3, 4, 7],)
             )
             for row in cur.fetchall():
                 pos_raw = row["positions"] or {}

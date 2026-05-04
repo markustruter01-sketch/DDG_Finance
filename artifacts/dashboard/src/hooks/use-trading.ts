@@ -774,6 +774,8 @@ export interface BotEquity {
   starting: number;
   positions: number;
   source: string;
+  stale?: boolean;
+  heartbeat_mins_ago?: number;
 }
 
 export interface FleetEquityData {

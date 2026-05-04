@@ -39,6 +39,8 @@ interface BotCardData {
   glow: string;
   equity: number | null;
   paused: boolean;
+  stale?: boolean;
+  heartbeatMinsAgo?: number;
   winCount: number;
   lossCount: number;
   openPositions: number;
@@ -132,27 +134,34 @@ function StreamBotCard({ bot }: StreamBotCardProps) {
         </div>
 
         {/* Status badge */}
-        <div
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0"
-          style={{
-            background: bot.paused ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)",
-            border: `1px solid ${bot.paused ? "rgba(245,158,11,0.3)" : "rgba(34,197,94,0.3)"}`,
-          }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{
-              background: bot.paused ? "#f59e0b" : "#22c55e",
-              boxShadow: bot.paused ? "0 0 6px #f59e0b" : `0 0 6px #22c55e`,
-            }}
-          />
-          <span
-            className="text-[9px] font-black uppercase tracking-wider"
-            style={{ color: bot.paused ? "#f59e0b" : "#22c55e" }}
-          >
-            {bot.paused ? "PAUSED" : "LIVE"}
-          </span>
-        </div>
+        {(() => {
+          const isStale = bot.stale === true && !bot.paused;
+          const badgeBg   = bot.paused ? "rgba(245,158,11,0.12)" : isStale ? "rgba(100,116,139,0.12)" : "rgba(34,197,94,0.12)";
+          const badgeBdr  = bot.paused ? "rgba(245,158,11,0.3)"  : isStale ? "rgba(100,116,139,0.3)"  : "rgba(34,197,94,0.3)";
+          const dotColor  = bot.paused ? "#f59e0b"               : isStale ? "#64748b"                : "#22c55e";
+          const dotShadow = bot.paused ? "0 0 6px #f59e0b"       : isStale ? "none"                   : "0 0 6px #22c55e";
+          const label     = bot.paused ? "PAUSED"                : isStale
+            ? (bot.heartbeatMinsAgo != null ? `STALE ${Math.round(bot.heartbeatMinsAgo)}m` : "STALE")
+            : "LIVE";
+          const textColor = bot.paused ? "#f59e0b"               : isStale ? "#64748b"                : "#22c55e";
+          return (
+            <div
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0"
+              style={{ background: badgeBg, border: `1px solid ${badgeBdr}` }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: dotColor, boxShadow: dotShadow }}
+              />
+              <span
+                className="text-[9px] font-black uppercase tracking-wider"
+                style={{ color: textColor }}
+              >
+                {label}
+              </span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Equity */}
@@ -531,6 +540,8 @@ export default function StreamingBotsScreen() {
       glow: "#f59e0b",
       equity: davyEquity,
       paused: davyStatus?.bot_paused ?? false,
+      stale: fleetEq?.davy_jones?.stale ?? false,
+      heartbeatMinsAgo: fleetEq?.davy_jones?.heartbeat_mins_ago,
       winCount: davyPerf?.win_count ?? 0,
       lossCount: davyPerf?.loss_count ?? 0,
       openPositions: davyStatus?.open_positions?.length ?? 0,
@@ -547,6 +558,8 @@ export default function StreamingBotsScreen() {
       glow: "#ef4444",
       equity: bbEquity,
       paused: bbStatus?.bot_paused ?? false,
+      stale: fleetEq?.blackbeard?.stale ?? false,
+      heartbeatMinsAgo: fleetEq?.blackbeard?.heartbeat_mins_ago,
       winCount: bbPerf?.win_count ?? 0,
       lossCount: bbPerf?.loss_count ?? 0,
       openPositions: bbStatus?.open_positions?.length ?? 0,
@@ -563,6 +576,8 @@ export default function StreamingBotsScreen() {
       glow: "#8b5cf6",
       equity: caEquity,
       paused: caStatus?.bot_paused ?? false,
+      stale: fleetEq?.calypso?.stale ?? false,
+      heartbeatMinsAgo: fleetEq?.calypso?.heartbeat_mins_ago,
       winCount: caPerf?.win_count ?? 0,
       lossCount: caPerf?.loss_count ?? 0,
       openPositions: caStatus?.open_positions?.length ?? 0,
@@ -579,6 +594,8 @@ export default function StreamingBotsScreen() {
       glow: "#f97316",
       equity: apexKrakenEquity,
       paused: apexKrakenStatus?.bot_paused ?? false,
+      stale: fleetEq?.apex_predator?.stale ?? false,
+      heartbeatMinsAgo: fleetEq?.apex_predator?.heartbeat_mins_ago,
       winCount: apexKrakenPerf?.win_count ?? 0,
       lossCount: apexKrakenPerf?.loss_count ?? 0,
       openPositions: apexKrakenStatus?.open_positions?.length ?? 0,
@@ -653,6 +670,8 @@ export default function StreamingBotsScreen() {
       glow: "#06b6d4",
       equity: kcEquity,
       paused: kcState?.paused ?? false,
+      stale: fleetEq?.kraken_current?.stale ?? false,
+      heartbeatMinsAgo: fleetEq?.kraken_current?.heartbeat_mins_ago,
       winCount: kcState?.total_wins ?? 0,
       lossCount: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0),
       openPositions: kcOpenList.length,

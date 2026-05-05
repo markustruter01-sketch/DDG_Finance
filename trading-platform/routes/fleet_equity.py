@@ -35,7 +35,7 @@ def _empty_bot(source: str = "unavailable") -> dict:
 
 
 def _pg_connect():
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not db_url or psycopg2 is None:
         return None
     return psycopg2.connect(db_url)

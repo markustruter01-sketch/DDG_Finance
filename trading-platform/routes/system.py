@@ -214,7 +214,7 @@ async def system_health_architecture() -> dict:
     try:
         from datetime import datetime as _dt, timezone as _tz
         import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
-        _kdburl = _kos.environ.get("DATABASE_URL")
+        _kdburl = _kos.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         _ARCH_BOTS = [
             (1, "davy-jones",     "Davy Jones"),
             (2, "blackbeard",     "Blackbeard"),

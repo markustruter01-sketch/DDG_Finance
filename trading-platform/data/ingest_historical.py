@@ -92,7 +92,7 @@ def _get_dsn() -> str:
     Mirrors the logic in db/postgres.py so both the live server and this
     standalone script connect to the same Replit Managed PostgreSQL instance.
     """
-    url = os.environ.get("DATABASE_URL")
+    url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if url:
         return url
     host = os.environ.get("PGHOST")
@@ -846,7 +846,7 @@ def _print_env_check() -> None:
     """Print a pre-flight summary of which API keys are configured."""
     checks = {
         "DATABASE_URL / PGHOST": bool(
-            os.environ.get("DATABASE_URL") or os.environ.get("PGHOST")
+            os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL") or os.environ.get("PGHOST")
         ),
         "ALPACA_API_KEY":    bool(os.environ.get("ALPACA_API_KEY")),
         "ALPACA_SECRET_KEY": bool(os.environ.get("ALPACA_SECRET_KEY")),

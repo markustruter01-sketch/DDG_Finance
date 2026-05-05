@@ -68,7 +68,7 @@ def _limit_step(current: float, target: float, param_name: str) -> float:
 def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
     try:
         import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             return None
         conn = psycopg2.connect(db_url)
@@ -93,7 +93,7 @@ def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
 def _write_kraken_params(db_id: int, bot_id_str: str, params: dict, reasoning: str) -> bool:
     try:
         import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             return False
         conn = psycopg2.connect(db_url)

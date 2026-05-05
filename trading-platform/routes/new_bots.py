@@ -200,7 +200,7 @@ async def _enrich_stale_pairs_kraken(pairs_dict: dict[str, Any]) -> bool:
 def _pg_query(sql: str, params: tuple = ()):
     try:
         import psycopg2, psycopg2.extras
-        db_url = os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             return []
         conn = psycopg2.connect(db_url)

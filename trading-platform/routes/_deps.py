@@ -224,7 +224,7 @@ def _save_kraken_imported(keys: set[str]) -> None:
 def _load_kraken_journal_trades() -> list[dict]:
     try:
         import psycopg2 as _pg2j, psycopg2.extras as _pg2xj
-        _dburlj = os.environ.get("DATABASE_URL")
+        _dburlj = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not _dburlj:
             return []
         _jconn = _pg2j.connect(_dburlj)

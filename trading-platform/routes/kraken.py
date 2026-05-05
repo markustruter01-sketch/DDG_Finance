@@ -167,7 +167,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
         "recent_trades": [], "paper_summary": None, **_live_telemetry,
     }
 
-    _dburl = os.environ.get("DATABASE_URL")
+    _dburl = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not _dburl:
         return _not_started
 
@@ -297,7 +297,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
 async def kraken_fleet_summary() -> dict:
     import psycopg2 as _pg2fs, psycopg2.extras as _pg2fsx
 
-    _dburlfs = os.environ.get("DATABASE_URL")
+    _dburlfs = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not _dburlfs:
         return {"total_equity_usd": 0, "total_cash_usd": 0, "total_starting_usd": 0,
                 "total_trades": 0, "total_wins": 0, "total_pnl_usd": 0, "bot_count": 0, "bots": []}
@@ -543,7 +543,7 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
     kdata: dict = {}
     recent_trades: list[dict] = []
 
-    _dburl = os.environ.get("DATABASE_URL")
+    _dburl = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if _dburl:
         try:
             _kcpgconn = _pg2c.connect(_dburl)
@@ -858,7 +858,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
     cycle_count    = 0
     bot_status     = "not_started"
 
-    _dburl = os.environ.get("DATABASE_URL")
+    _dburl = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if _dburl:
         try:
             _pgconn = _pg2.connect(_dburl)

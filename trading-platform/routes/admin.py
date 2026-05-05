@@ -276,7 +276,7 @@ async def get_math_audit_recent(limit: int = 50, status_filter: str = "ALL") -> 
     from datetime import datetime, timezone, timedelta
 
     def _query():
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        conn = psycopg2.connect(os.environ.get("DEV_DATABASE_URL") or os.environ["DATABASE_URL"])
         try:
             with conn.cursor() as cur:
                 params: list = []

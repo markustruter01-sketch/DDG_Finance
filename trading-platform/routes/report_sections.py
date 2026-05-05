@@ -16,7 +16,7 @@ from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor
 
 logger = logging.getLogger("report_sections")
 
-_DB_URL = os.environ.get("DATABASE_URL")
+_DB_URL = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
 W = "\u2550" * 80
 
 
@@ -1554,7 +1554,7 @@ _METRIC_WEIGHT_PCT = {
 def _fetch_health_snapshot(bot_id: str) -> dict | None:
     """Return latest health snapshot row for bot_id from DB."""
     import psycopg2, psycopg2.extras
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not db_url:
         return None
     try:
@@ -1581,7 +1581,7 @@ def _fetch_health_snapshot(bot_id: str) -> dict | None:
 def _fetch_health_trend(bot_id: str, limit: int = 7) -> list[dict]:
     """Return last `limit` daily health scores for trend sparkline."""
     import psycopg2, psycopg2.extras
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not db_url:
         return []
     try:
@@ -1712,7 +1712,7 @@ _CONF_ICON = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}
 
 def _fetch_wfo_result(bot_id: str) -> dict | None:
     import psycopg2, psycopg2.extras
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not db_url:
         return None
     try:
@@ -1892,7 +1892,7 @@ _VERDICT_ICON = {"BETTER": "✅", "WORSE": "❌", "NEUTRAL": "➖"}
 
 def _fetch_backtest_result(bot_id: str) -> dict | None:
     import psycopg2, psycopg2.extras
-    db_url = os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not db_url:
         return None
     try:

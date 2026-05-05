@@ -38,7 +38,7 @@ def check_bot_drawdown(bot_id: str, current_equity: float) -> dict:
 
     try:
         import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             return _ok(current_equity, _STARTING)
 
@@ -159,7 +159,7 @@ def get_all_drawdown_states() -> list[dict]:
     """Return all bot drawdown states — used by the weekly review endpoint."""
     try:
         import psycopg2, psycopg2.extras
-        db_url = os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
         if not db_url:
             return []
         conn = psycopg2.connect(db_url)

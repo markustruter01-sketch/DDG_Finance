@@ -1769,7 +1769,7 @@ async def export_diagnostic_report():
     # ── Load live Apex Predator Kraken data ─────────────────────────────────────
     import psycopg2 as _pg2_ap
     import psycopg2.extras as _pg2x_ap
-    _DB_URL_AP = os.environ.get("DATABASE_URL")
+    _DB_URL_AP = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
     _ap_trades: list = []
     _ap_equity = 100_000.0
     _ap_cash   = 0.0

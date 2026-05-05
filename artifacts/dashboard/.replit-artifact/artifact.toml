@@ -169,19 +169,3 @@ args = ["bash", "-c", "python3 poseidon/main.py"]
 
 [services.env]
 PORT = "8091"
-
-[[services]]
-name = "navigator-bot"
-paths = [ "/navigator-bot" ]
-localPort = 8092
-
-[services.development]
-run = "cd /home/runner/workspace && python3 forex-engine/main.py"
-
-[services.production]
-
-[services.production.run]
-args = ["bash", "-c", "python3 forex-engine/main.py"]
-
-[services.env]
-PORT = "8092"

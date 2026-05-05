@@ -1,5 +1,5 @@
 {
-  "bot_paused": true,
-  "pause_reason": "Phase 1 platform restructure \u2014 pending strategy review",
-  "paused_at": "2026-04-29T21:34:50.419585+00:00"
+  "bot_paused": false,
+  "pause_reason": "",
+  "paused_at": null
 }

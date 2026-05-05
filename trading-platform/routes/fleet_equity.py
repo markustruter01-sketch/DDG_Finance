@@ -261,10 +261,11 @@ def _fetch_fleet_equity() -> dict:
     # ── Fleet total ───────────────────────────────────────────────────────────
     all_bots = [
         result["oracle"],
-        result["davy_jones"],
+        result["bot2_spy_qqq"],
         result["blackbeard"],
-        result["calypso"],
-        result["apex_predator"],
+        result["bot4_sector"],
+        result["bot5_defensive"],
+        result["bot7_macro_bond"],
         result["navigator"],
         result["poseidon"],
         result["kraken_current"],
@@ -300,17 +301,18 @@ async def fleet_equity():
     except Exception as exc:
         logger.error(f"[fleet/equity] Unexpected error: {exc}")
         data = {
-            "oracle": _empty_bot("error"),
-            "davy_jones": _empty_bot("error"),
-            "blackbeard": _empty_bot("error"),
-            "calypso": _empty_bot("error"),
-            "apex_predator": _empty_bot("error"),
-            "navigator": _empty_bot("error"),
-            "poseidon": _empty_bot("error"),
-            "kraken_current": _empty_bot("error"),
-            "fleet_total": _empty_bot("error"),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "errors": [str(exc)],
+            "oracle":          _empty_bot("error"),
+            "bot2_spy_qqq":    _empty_bot("error"),
+            "blackbeard":      _empty_bot("error"),
+            "bot4_sector":     _empty_bot("error"),
+            "bot5_defensive":  _empty_bot("error"),
+            "bot7_macro_bond": _empty_bot("error"),
+            "navigator":       _empty_bot("error"),
+            "poseidon":        _empty_bot("error"),
+            "kraken_current":  _empty_bot("error"),
+            "fleet_total":     _empty_bot("error"),
+            "generated_at":    datetime.now(timezone.utc).isoformat(),
+            "errors":          [str(exc)],
         }
 
     _cache["data"] = data

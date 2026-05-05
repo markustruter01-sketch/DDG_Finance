@@ -26,7 +26,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL", "")
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 _ROOT = Path(__file__).parent.parent  # workspace root
 
 # ─────────────────────────────────────────────────────────────────────────────

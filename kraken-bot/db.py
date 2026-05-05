@@ -234,7 +234,7 @@ CREATE INDEX IF NOT EXISTS idx_kraken_pair_perf_bot ON kraken_pair_performance (
 
 
 def _get_dsn() -> str | None:
-    return os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    return os.environ.get("DATABASE_URL")
 
 
 def _is_available() -> bool:

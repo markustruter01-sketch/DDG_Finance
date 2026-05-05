@@ -414,7 +414,7 @@ def get_last_fleet_audit() -> dict[str, Any]:
 
 def _record_intervention(result: FleetCommanderResponse, generated_at: datetime) -> None:
     import psycopg2
-    db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         return
     conn = psycopg2.connect(db_url)

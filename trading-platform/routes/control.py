@@ -497,7 +497,7 @@ async def manual_postmortem() -> dict:
             _k_equity = 0.0
             try:
                 import psycopg2 as _pg2pm
-                _dburlpm = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+                _dburlpm = os.environ.get("DATABASE_URL")
                 if _dburlpm:
                     _pmconn = _pg2pm.connect(_dburlpm)
                     try:

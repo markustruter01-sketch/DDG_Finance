@@ -82,13 +82,13 @@ def _use_pg() -> bool:
     except ImportError:
         return False
     return bool(
-        os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL") or os.environ.get("PGHOST")
+        os.environ.get("DATABASE_URL") or os.environ.get("PGHOST")
     )
 
 
 def _build_dsn() -> str:
     """Construct a psycopg2 DSN from environment variables."""
-    url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    url = os.environ.get("DATABASE_URL")
     if url:
         return url
     return (

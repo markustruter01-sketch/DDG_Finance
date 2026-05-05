@@ -36,7 +36,7 @@ def _pg_save(payload: dict) -> None:
     try:
         from config import BOT_DB_ID, BOT_ID
         import psycopg2
-        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return
         conn = psycopg2.connect(db_url)
@@ -76,7 +76,7 @@ def _pg_load() -> dict | None:
     try:
         from config import BOT_DB_ID
         import psycopg2
-        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return None
         conn = psycopg2.connect(db_url)
@@ -118,7 +118,7 @@ def migrate_adaptive_from_json(params_file: "str | Path") -> None:
     from config import BOT_DB_ID
     try:
         import psycopg2
-        db_url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+        db_url = os.environ.get("DATABASE_URL")
         if not db_url:
             return
         conn = psycopg2.connect(db_url)

@@ -14,7 +14,7 @@ ai_impact_router = APIRouter(prefix="/ai-impact", tags=["AI Impact"])
 
 def _get_conn():
     import psycopg2
-    return psycopg2.connect(os.environ.get("DEV_DATABASE_URL") or os.environ["DATABASE_URL"])
+    return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
 @ai_impact_router.get("/timeline")

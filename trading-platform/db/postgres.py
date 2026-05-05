@@ -45,7 +45,7 @@ _pg_ok: bool = False
 
 
 def _get_dsn() -> str | None:
-    url = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    url = os.environ.get("DATABASE_URL")
     if url:
         return url
     host = os.environ.get("PGHOST")

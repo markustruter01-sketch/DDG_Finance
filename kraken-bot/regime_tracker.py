@@ -33,7 +33,7 @@ from typing import Any
 
 logger = logging.getLogger("regime_tracker")
 
-_DB_URL = os.environ.get("DEV_DATABASE_URL") or os.environ.get("DATABASE_URL")
+_DB_URL = os.environ.get("DATABASE_URL")
 _CRYPTO_REGIME_FILE = Path(__file__).parent.parent / "trading-platform" / "data" / "crypto_regime.json"
 _MARKET_REGIME_FILE = Path(__file__).parent.parent / "trading-platform" / "data" / "market_regime.json"
 

@@ -52,8 +52,8 @@ PLATFORM OVERVIEW
 - Navigator (Forex):   {_fmt(eq[2])}
 - Poseidon:            {_fmt(eq[3])}
 - Kraken Current:      {_fmt(eq[4])}
-- TOTAL:               {_fmt(eq[5])} (started $800,000)
-- P&L:                 ${total-800000:>+10,.2f} ({(total-800000)/800000*100:+.2f}%)
+- TOTAL:               {_fmt(eq[5])} (started $900,000)
+- P&L:                 ${total-900000:>+10,.2f} ({(total-900000)/900000*100:+.2f}%)
 """)
 
                 # Bot status

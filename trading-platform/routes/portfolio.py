@@ -1048,7 +1048,7 @@ async def export_diagnostic_report():
     lines.append("  FLEET:   #1 Oracle (Alpaca), #2 Davy Jones, #3 Blackbeard, #4 Calypso,")
     lines.append("           #5 Apex Predator (Crypto Momentum, Kraken), #6 Navigator (Forex),")
     lines.append("           #7 Poseidon (Pairs Trading), #8 Kraken Current (Trend Following)")
-    lines.append("  CAPITAL: $800,000 total across 3 capital pools")
+    lines.append("  CAPITAL: $900,000 total across 3 capital pools")
     lines.append(W)
 
     # ── Math Audit FAIL banner — shown at very top if any critical errors ───
@@ -1994,7 +1994,7 @@ async def export_diagnostic_report():
     except Exception:
         pass
 
-    grand_start = 800_000.0
+    grand_start = 900_000.0
     grand_now   = equity + _all_kraken_equity + _fx_equity + _poseidon_equity + _kc_equity
     grand_pnl   = grand_now - grand_start
     grand_pct   = (grand_pnl / grand_start) * 100 if grand_start else 0

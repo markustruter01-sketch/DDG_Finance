@@ -1364,9 +1364,9 @@ async def fleet_weekly_review():
         "navigator_equity": nav_eq,
         "kraken_equity":    kraken_eq,
         "total_equity":     total_eq,
-        "starting_capital": 800_000,
-        "pnl_usd":  round(total_eq - 800_000, 2),
-        "pnl_pct":  round((total_eq - 800_000) / 800_000 * 100, 2),
+        "starting_capital": 900_000,
+        "pnl_usd":  round(total_eq - 900_000, 2),
+        "pnl_pct":  round((total_eq - 900_000) / 900_000 * 100, 2),
         "bots_paused": sum(1 for b in result["fleet_heartbeat"] if b["paused"]),
         "bots_stale":  sum(1 for b in result["fleet_heartbeat"] if b["stale"]),
     }

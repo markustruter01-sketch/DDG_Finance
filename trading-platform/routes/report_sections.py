@@ -91,7 +91,8 @@ def section_fleet_risk_dashboard(
     lines: list[str] = []
     _h1(lines, "SECTION 1A: FLEET SUMMARY RISK DASHBOARD")
 
-    grand_start = 900_000.0
+    from core.fleet_capital import fleet_starting_capital as _fsc_rs
+    grand_start = _fsc_rs()
     grand_now = equity + kraken_equity + opts_equity + fx_equity + poseidon_equity + kraken_current_equity
     grand_peak = grand_now
     peak_rows = _pg_query(
@@ -3492,9 +3493,11 @@ def section_fleet_health_scorecard() -> list[str]:
 
     lines.append("")
     total_pnl_7d = sum(b["pnl_7d"] for b in bots)
-    fleet_pnl = total_equity - 900_000
+    from core.fleet_capital import fleet_starting_capital as _fsc_ss
+    _ss = _fsc_ss()
+    fleet_pnl = total_equity - _ss
     lines.append(f"  Fleet status:       {live_count}/8 bots live")
-    lines.append(f"  Total fleet equity: {_c(total_equity)} | vs $900,000 baseline | {_c(fleet_pnl)} ({_pct(fleet_pnl/9000)})")
+    lines.append(f"  Total fleet equity: {_c(total_equity)} | vs ${_ss:,.0f} baseline | {_c(fleet_pnl)} ({_pct(fleet_pnl/(_ss/100))})")
     lines.append(f"  7-day fleet P&L:    {_c(total_pnl_7d)}")
 
     if attention_needed:

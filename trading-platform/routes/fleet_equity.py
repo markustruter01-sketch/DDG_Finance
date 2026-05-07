@@ -272,6 +272,9 @@ def _fetch_fleet_equity() -> dict:
     ]
     fleet_equity = sum(b["equity"] for b in all_bots)
     fleet_starting = sum(b["starting"] for b in all_bots)
+    if not fleet_starting:
+        from core.fleet_capital import fleet_starting_capital as _fsc_fe
+        fleet_starting = _fsc_fe()
     fleet_pnl = fleet_equity - fleet_starting
     fleet_positions = sum(b["positions"] for b in all_bots)
 

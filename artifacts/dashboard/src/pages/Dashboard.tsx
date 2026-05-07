@@ -426,8 +426,7 @@ function FleetKPISummary() {
   const activeBotCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
   ).length + 1;
-  // Fixed fleet size: 8 bots total
-  const totalBotCount = 8;
+  const totalBotCount = fleetBotCount;
 
   const regime = summary?.groq?.regime ?? null;
   const tradingMode = summary?.trading_mode;
@@ -436,7 +435,7 @@ function FleetKPISummary() {
     {
       label: "Fleet Equity",
       value: anyLoading ? "—" : formatCurrency(grandTotal),
-      sub: `8 bots · 3 capital pools`,
+      sub: `${fleetBotCount} bots · 3 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
       valueColor: anyLoading ? "text-slate-500" : "text-white",
@@ -608,7 +607,7 @@ function LiveEquityCurveSection() {
         <CardTitle className="flex items-center gap-2 fluid-heading">
           <TrendingUp className="h-4 w-4 text-primary" />
           <span>Fleet Equity Curve</span>
-          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">8 Bots · 3 Pools</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">{getFleetBotCount(fleetEqCurve)} Bots · 3 Pools</span>
         </CardTitle>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-800/60 rounded-md p-0.5 gap-0.5">

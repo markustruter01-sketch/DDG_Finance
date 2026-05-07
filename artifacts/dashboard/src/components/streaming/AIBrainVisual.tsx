@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 
 const W = 1000;
 const H = 570;
@@ -41,7 +42,7 @@ const STATUS_MESSAGES = [
   "SIGNAL VALIDATION IN PROGRESS…",
   "DRAWDOWN PROTECTION: ACTIVE…",
   "LEARNING MODEL — EPOCH 247…",
-  "8 BOTS ACTIVE — ALL SYSTEMS NOMINAL…",
+  `${getFleetBotCount(undefined)} BOTS ACTIVE — ALL SYSTEMS NOMINAL…`,
   "ORACLE: BULL REGIME EQUITY SCAN…",
   "CRYPTO REGIME: BEAR — SHORTS ENABLED…",
 ];

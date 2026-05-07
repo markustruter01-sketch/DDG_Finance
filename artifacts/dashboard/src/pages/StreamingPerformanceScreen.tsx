@@ -121,7 +121,7 @@ export default function StreamingPerformanceScreen() {
   /* Kraken 6-bot P&L from fleet-summary bot rows (for per-bot matrix display) */
   const fleetBots = fl?.bots ?? [];
 
-  /* Full 8-bot fleet totals from single source of truth */
+  /* Full fleet totals from single source of truth */
   const fleetEquity = fleetEq?.fleet_total?.equity ?? 0;
   const fleetPnL    = fleetEq?.fleet_total?.pnl ?? 0;
   const fleetTrades = fl?.total_trades ?? fleetBots.reduce((s, b) => s + b.trades, 0);

@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
 import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 
 const STARTING_BALANCE = 100_000;
 
@@ -715,7 +716,7 @@ export default function StreamingBotsScreen() {
           <div className="flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5" style={{ color: "#22d3ee" }} />
             <span className="text-xs font-black uppercase tracking-widest text-white">Bot Fleet</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>8 BOTS</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>{getFleetBotCount(fleetEq)} BOTS</span>
           </div>
         </div>
 

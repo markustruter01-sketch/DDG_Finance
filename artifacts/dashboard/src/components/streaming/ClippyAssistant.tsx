@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from "react";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 
 type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g";
 
 const MESSAGES: Record<SubPage, string> = {
   a: "Our robots are making live trades right now! Watch the green numbers — that means we're winning! 🤖",
-  b: "All 8 trading robots in one view! Each one is a market specialist working 24 hours a day! 💪",
+  b: `All ${getFleetBotCount(undefined)} trading robots in one view! Each one is a market specialist working 24 hours a day! 💪`,
   c: "Here are each robot's current open trades and strategy settings — like peeking at their game plan! 📋",
   d: "Mission control! Every green node means that system is running perfectly. Red means trouble! 🟢",
   e: "The ultimate command center! Every bot's P&L, all open trades, live news, and our AI brain — all in one place! 🚀",
-  f: "The Orb is alive! Every glow, pulse and tendril represents live trading activity. Each coloured ring orbiting the core is one of your 8 bots — their colour, speed and brightness reflect live market activity. Watch the flares when trades close! ✨",
+  f: `The Orb is alive! Every glow, pulse and tendril represents live trading activity. Each coloured ring orbiting the core is one of your ${getFleetBotCount(undefined)} bots — their colour, speed and brightness reflect live market activity. Watch the flares when trades close! ✨`,
   g: "Raw performance baby! Sharpe ratio, Sortino, max drawdown, Calmar — every number that tells you if the system is ACTUALLY working. Green ratios mean the math is on our side! 📊",
 };
 

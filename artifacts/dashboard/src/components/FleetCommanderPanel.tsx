@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useFleetCommanderStatus, useFleetCommanderHistory, useTriggerFleetCommander, useClaudeAuditStages, useClaudeStageResult, useTriggerClaudeStage, type AuditStageInfo } from "@/hooks/use-trading";
+import { useFleetCommanderStatus, useFleetCommanderHistory, useTriggerFleetCommander, useClaudeAuditStages, useClaudeStageResult, useTriggerClaudeStage, useFleetEquity, type AuditStageInfo } from "@/hooks/use-trading";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 import { Shield, Play, Clock, AlertTriangle, CheckCircle2, XCircle, Zap, Bot, ChevronDown, ChevronUp, Brain, Cpu, FileText, ListChecks, AlertCircle, TrendingUp } from "lucide-react";
 import { BotParameterSliders } from "./BotParameterSliders";
 
@@ -571,6 +572,7 @@ export function FleetCommanderPanel() {
   const { data: status, isLoading } = useFleetCommanderStatus();
   const { data: historyData } = useFleetCommanderHistory();
   const triggerMutation = useTriggerFleetCommander();
+  const { data: fleetEq } = useFleetEquity();
   const [showHistory, setShowHistory] = useState(false);
   const [showSchedule, setShowSchedule] = useState(false);
 
@@ -604,7 +606,7 @@ export function FleetCommanderPanel() {
             </div>
             <div>
               <h3 className="font-semibold text-white">Fleet Commander</h3>
-              <p className="text-xs text-muted-foreground">Gemini AI audits all 8 bots, 6x daily</p>
+              <p className="text-xs text-muted-foreground">{`Gemini AI audits all ${getFleetBotCount(fleetEq)} bots, 6x daily`}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

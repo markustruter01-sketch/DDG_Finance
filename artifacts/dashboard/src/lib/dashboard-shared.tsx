@@ -481,7 +481,7 @@ export function tradingModeColor(mode: string | undefined): string {
 export const EXPECTED_JOBS = 14;
 
 /**
- * Canonical 8-bot fleet equity formula.
+ * Canonical fleet equity formula.
  *
  * Bot layout:
  *   alpacaEquity      — Oracle (Bot #1, Alpaca paper account)

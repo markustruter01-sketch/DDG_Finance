@@ -13,6 +13,7 @@ import {
   type ForexPosition,
 } from "@/hooks/use-trading";
 import { BotCard } from "@/components/BotCard";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 import { Loader2, Bot, TrendingUp, TrendingDown } from "lucide-react";
 
 const STARTING_BALANCE = 100_000;
@@ -401,9 +402,9 @@ export default function BotsPage() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-white leading-none">Bots</h1>
-            <p className="text-[10px] text-slate-500">8-bot automated fleet</p>
+            <p className="text-[10px] text-slate-500">{`${getFleetBotCount(fleetEq)}-bot automated fleet`}</p>
           </div>
-          <span className="ml-auto text-[11px] text-slate-500">8 bots</span>
+          <span className="ml-auto text-[11px] text-slate-500">{getFleetBotCount(fleetEq)} bots</span>
         </div>
       </header>
 

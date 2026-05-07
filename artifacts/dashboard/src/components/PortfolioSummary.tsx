@@ -4,6 +4,7 @@ import {
   useExportReport, useForexState, useFleetEquity,
 } from "@/hooks/use-trading";
 import { AnimatedCurrency, RollingCurrency } from "@/lib/dashboard-shared";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui";
 import {
@@ -118,7 +119,7 @@ export function CombinedPortfolioSummary() {
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Total Portfolio</span>
           <span className="text-[9px] font-mono text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded">
-            8 bots · 3 capital pools
+            {getFleetBotCount(fleetEq)} bots · 3 capital pools
           </span>
         </div>
         <div className="flex items-center gap-2">

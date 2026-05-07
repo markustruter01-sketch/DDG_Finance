@@ -19,6 +19,7 @@ import {
   useKrakenCurrentState,
   useFleetEquity,
 } from "@/hooks/use-trading";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 
 function checkWebGL(): boolean {
@@ -73,6 +74,7 @@ interface OrbData {
   openPositions: number;
   fleetEquityChange: number;
   activeBots: number;
+  totalBots: number;
   lastAiTs: number;
   tradePulse: { active: boolean; isWin: boolean; botName: string } | null;
   aiRipple: boolean;
@@ -464,7 +466,7 @@ function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
   useEffect(() => { if (orbData.tradePulse?.active) pulseRef.current = 1.0; }, [orbData.tradePulse]);
   useEffect(() => { if (orbData.aiRipple) pulseRef.current = Math.max(pulseRef.current, 0.7); }, [orbData.aiRipple]);
 
-  const heatIntensity = clamp01(orbData.openPositions / 8);
+  const heatIntensity = clamp01(orbData.openPositions / Math.max(1, orbData.totalBots));
 
   useFrame((_, delta) => {
     timeRef.current += delta;
@@ -791,11 +793,11 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
         ctx!.fill();
       }
 
-      const activeBotCount = Math.max(1, Math.min(8, orbData.activeBots));
+      const activeBotCount = Math.max(1, Math.min(orbData.totalBots, orbData.activeBots));
       BOT_KEYS.slice(0, activeBotCount).forEach((key, i) => {
         const color    = BOT_COLORS_CSS[key];
         const arcRadius= 110 + i * 11;
-        const tilt     = (i / 8) * 0.7;
+        const tilt     = (i / Math.max(1, orbData.totalBots)) * 0.7;
         const rotSpeed = (0.12 + i * 0.05) * (i % 2 === 0 ? 1 : -1);
         const startAngle = t * rotSpeed;
         ctx!.save();
@@ -1133,6 +1135,7 @@ export function OrbVisualiser() {
     openPositions,
     fleetEquityChange,
     activeBots,
+    totalBots: getFleetBotCount(fleetEqOrb),
     lastAiTs,
     tradePulse: tradePulse ? { active: tradePulse.active, isWin: tradePulse.isWin, botName: tradePulse.botName } : null,
     aiRipple,
@@ -1211,7 +1214,7 @@ export function OrbVisualiser() {
           <div>
             <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
             <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {activeBots} / 8
+              {activeBots} / {getFleetBotCount(fleetEqOrb)}
             </div>
           </div>
 

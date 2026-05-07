@@ -19,8 +19,8 @@ import { EmergencyHeaderButtons } from "@/components/EmergencyControls";
 import { TradeWorkflowBar } from "@/components/TradeWorkflowBar";
 import {
   EXPECTED_JOBS, tradingModeLabel, tradingModeColor,
-  FLEET_STARTING_CAPITAL,
 } from "@/lib/dashboard-shared";
+import { getFleetStartingCapital, getFleetBotCount, formatCapitalShort } from "@/lib/fleet-capital";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
@@ -404,6 +404,8 @@ function FleetKPISummary() {
   const grandTotal = fleetEquity?.fleet_total?.equity ?? 0;
   const anyLoading = fleetEquity == null;
   const totalPnl: number | null = fleetEquity != null ? (fleetEquity.fleet_total?.pnl ?? null) : null;
+  const fleetBaseline = getFleetStartingCapital(fleetEquity);
+  const fleetBotCount = getFleetBotCount(fleetEquity);
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -444,7 +446,7 @@ function FleetKPISummary() {
       value: totalPnl != null
         ? `${totalPnl >= 0 ? "+" : ""}${formatCurrency(totalPnl)}`
         : "—",
-      sub: "all 8 bots · vs $800k capital",
+      sub: `all ${fleetBotCount} bots · vs ${formatCapitalShort(fleetBaseline)} capital`,
       icon: <BarChart2 className="h-4 w-4 text-emerald-400" />,
       accent: totalPnl == null
         ? "border-slate-500/20 bg-slate-500/5"
@@ -547,11 +549,12 @@ function EquityTooltip({ active, payload, label }: ChartTooltipProps) {
   );
 }
 
-const FLEET_BASELINE = 800_000;
 type EquityRange = "24h" | "7d" | "30d" | "all";
 
 function LiveEquityCurveSection() {
   const { data, isLoading } = useEquityCurve(2000);
+  const { data: fleetEqCurve } = useFleetEquity();
+  const fleetBaseline = getFleetStartingCapital(fleetEqCurve);
   const allSnapshots = data?.snapshots ?? [];
   const [range, setRange] = useState<EquityRange>("all");
 
@@ -667,7 +670,7 @@ function LiveEquityCurveSection() {
                 width={48}
               />
               <Tooltip content={<EquityTooltip />} />
-              <ReferenceLine y={FLEET_BASELINE} stroke="#64748b" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: "$800k baseline", position: "insideBottomRight", fill: "#64748b", fontSize: 9 }} />
+              <ReferenceLine y={fleetBaseline} stroke="#64748b" strokeDasharray="6 4" strokeOpacity={0.4} label={{ value: `${formatCapitalShort(fleetBaseline)} baseline`, position: "insideBottomRight", fill: "#64748b", fontSize: 9 }} />
               {peak > 0 && (
                 <ReferenceLine y={peak} stroke="#3b82f6" strokeDasharray="4 3" strokeOpacity={0.5} label={{ value: `HWM $${(peak / 1000).toFixed(0)}k`, position: "insideTopRight", fill: "#3b82f6", fontSize: 9 }} />
               )}

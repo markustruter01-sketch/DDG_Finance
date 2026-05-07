@@ -2,7 +2,7 @@ import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState, us
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
+import { getFleetStartingCapital, formatCapitalFull } from "@/lib/fleet-capital";
 
 function fmt(v: number | null | undefined, prefix = "$") {
   if (v == null) return "—";
@@ -33,7 +33,7 @@ export function WeeklyReviewPanel() {
 
   const liveTotal = fleetEq?.fleet_total?.equity ?? 0;
   const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? 0;
-  const liveTotalPnlPct = (liveTotalPnl / FLEET_STARTING_CAPITAL) * 100;
+  const liveTotalPnlPct = (liveTotalPnl / getFleetStartingCapital(fleetEq)) * 100;
   const equityReady = liveTotal > 0;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
@@ -124,7 +124,7 @@ export function WeeklyReviewPanel() {
                   : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                of $800,000 starting
+                of {formatCapitalFull(getFleetStartingCapital(fleetEq))} starting
               </div>
             </div>
             <div className={cn(

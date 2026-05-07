@@ -9,6 +9,7 @@ import {
   useVaultHistory,
   useFleetEquity,
 } from "@/hooks/use-trading";
+import { getFleetBotCount, getFleetStartingCapital, formatCapitalShort } from "@/lib/fleet-capital";
 import { DDGBadge } from "@/components/DDGBadge";
 import {
   AreaChart,
@@ -187,7 +188,7 @@ export default function StreamingPerformanceScreen() {
             ◈ RAW PERFORMANCE
           </span>
           <span style={{ fontSize: 10, fontFamily: "monospace", color: C.dim, letterSpacing: "0.1em" }}>
-            FLEET · 8 BOTS · $800K CAPITAL
+            {`FLEET · ${getFleetBotCount(fleetEq)} BOTS · ${formatCapitalShort(getFleetStartingCapital(fleetEq))} CAPITAL`}
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>

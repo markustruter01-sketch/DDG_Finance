@@ -422,6 +422,16 @@ def main():
     refresh_universe(force=True)
 
     while True:
+        # ── Manual pause check ────────────────────────────────────────────────
+        try:
+            _ctrl = Path(os.path.join(_DIR, "kc_control.json"))
+            if _ctrl.exists() and json.loads(_ctrl.read_text()).get("bot_paused", False):
+                logger.info("KrakenCurrent | Bot is paused via control file — skipping cycle")
+                time.sleep(60)
+                continue
+        except Exception as _cp_exc:
+            logger.debug(f"KrakenCurrent | Control file check failed (non-fatal): {_cp_exc}")
+
         _cycle += 1
         cycle_start = datetime.now(timezone.utc)
         logger.info(f"KrakenCurrent | === Cycle #{_cycle} at {cycle_start.isoformat()[:19]} UTC ===")

@@ -185,7 +185,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check; rebalance only Mondays
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
     "bot5_defensive": {
         "display_name":      "Defensive Guardian",
@@ -197,7 +197,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check; regime detection each cycle
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
     "bot7_macro_bond": {
         "display_name":      "Macro Bond Trader",
@@ -219,7 +219,7 @@ BOT_PROFILES = {
         "MIN_CONVICTION":    0.65,
         "POSITION_SIZE_MIN": 0.10,
         "POSITION_SIZE_MAX": 0.30,
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
 }
 

@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from fastapi import APIRouter
 from loguru import logger
+from core.bot_registry import all_bots as _registry_all_bots
 
 try:
     import psycopg2
@@ -67,14 +68,9 @@ def _fetch_fleet_equity() -> dict:
         errors.append(f"oracle: {exc}")
         result["oracle"] = _empty_bot("alpaca_error")
 
-    # ── Kraken 4-bot family: Davy Jones, Blackbeard, Calypso, Apex ───────────
-    KRAKEN_BOTS = [
-        ("bot2_spy_qqq",    "bot2_spy_qqq",   1),
-        ("blackbeard",      "blackbeard",      2),
-        ("bot4_sector",     "bot4_sector",     3),
-        ("bot5_defensive",  "bot5_defensive",  4),
-        ("bot7_macro_bond", "bot7_macro_bond", 7),
-    ]
+    # ── Alpaca ETF bots: driven by bot_registry (exchange==alpaca, not stocks) ─
+    _alpaca_etf = [b for b in _registry_all_bots() if b.exchange == "alpaca" and b.asset_class != "stocks"]
+    KRAKEN_BOTS = [(b.id, b.id, b.db_id) for b in _alpaca_etf if b.db_id is not None]
     conn = None
     try:
         conn = _pg_connect()
@@ -84,18 +80,13 @@ def _fetch_fleet_equity() -> dict:
         # Open position counts from kraken_portfolio.positions JSON.
         # kraken_trades only stores CLOSED trades; open positions live in portfolio JSON.
         import json as _json_fe
-        _DB_ID_TO_KEY = {
-            1: "bot2_spy_qqq",
-            2: "blackbeard",
-            3: "bot4_sector",
-            4: "bot5_defensive",
-            7: "bot7_macro_bond",
-        }
+        _DB_ID_TO_KEY = {b.db_id: b.id for b in _alpaca_etf if b.db_id is not None}
+        _db_ids = list(_DB_ID_TO_KEY.keys())
         open_pos_map: dict[str, int] = {}
         with conn.cursor(cursor_factory=_RealDictCursor) as cur:
             cur.execute(
                 "SELECT id, positions FROM kraken_portfolio WHERE id = ANY(%s)",
-                ([1, 2, 3, 4, 7],)
+                (_db_ids,)
             )
             for row in cur.fetchall():
                 pos_raw = row["positions"] or {}
@@ -259,24 +250,15 @@ def _fetch_fleet_equity() -> dict:
         result["navigator"] = _empty_bot("forex_error")
 
     # ── Fleet total ───────────────────────────────────────────────────────────
-    all_bots = [
-        result["oracle"],
-        result["bot2_spy_qqq"],
-        result["blackbeard"],
-        result["bot4_sector"],
-        result["bot5_defensive"],
-        result["bot7_macro_bond"],
-        result["navigator"],
-        result["poseidon"],
-        result["kraken_current"],
-    ]
-    fleet_equity = sum(b["equity"] for b in all_bots)
-    fleet_starting = sum(b["starting"] for b in all_bots)
+    _meta_keys = {"fleet_total", "generated_at", "errors"}
+    _bot_vals = [v for k, v in result.items() if k not in _meta_keys]
+    fleet_equity = sum(b["equity"] for b in _bot_vals)
+    fleet_starting = sum(b["starting"] for b in _bot_vals)
     if not fleet_starting:
         from core.fleet_capital import fleet_starting_capital as _fsc_fe
         fleet_starting = _fsc_fe()
     fleet_pnl = fleet_equity - fleet_starting
-    fleet_positions = sum(b["positions"] for b in all_bots)
+    fleet_positions = sum(b["positions"] for b in _bot_vals)
 
     result["fleet_total"] = {
         "equity": round(fleet_equity, 2),
@@ -303,20 +285,10 @@ async def fleet_equity():
         data = _fetch_fleet_equity()
     except Exception as exc:
         logger.error(f"[fleet/equity] Unexpected error: {exc}")
-        data = {
-            "oracle":          _empty_bot("error"),
-            "bot2_spy_qqq":    _empty_bot("error"),
-            "blackbeard":      _empty_bot("error"),
-            "bot4_sector":     _empty_bot("error"),
-            "bot5_defensive":  _empty_bot("error"),
-            "bot7_macro_bond": _empty_bot("error"),
-            "navigator":       _empty_bot("error"),
-            "poseidon":        _empty_bot("error"),
-            "kraken_current":  _empty_bot("error"),
-            "fleet_total":     _empty_bot("error"),
-            "generated_at":    datetime.now(timezone.utc).isoformat(),
-            "errors":          [str(exc)],
-        }
+        data = {b.id: _empty_bot("error") for b in _registry_all_bots()}
+        data["fleet_total"] = _empty_bot("error")
+        data["generated_at"] = datetime.now(timezone.utc).isoformat()
+        data["errors"] = [str(exc)]
 
     _cache["data"] = data
     _cache["ts"] = now

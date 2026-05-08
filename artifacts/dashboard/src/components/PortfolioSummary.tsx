@@ -1,7 +1,7 @@
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   usePortfolio, useLivePositions, useVault, useKrakenStatus, useKrakenFleetSummary,
-  useExportReport, useForexState, useFleetEquity,
+  useExportReport, useForexState, useFleetEquity, useBotRegistry,
 } from "@/hooks/use-trading";
 import { AnimatedCurrency, RollingCurrency } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
@@ -22,6 +22,7 @@ export function CombinedPortfolioSummary() {
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: fxState }   = useForexState();
   const { data: fleetEq }   = useFleetEquity();
+  const { data: registry }       = useBotRegistry();
   const exportReport        = useExportReport();
   const { toast }           = useToast();
 
@@ -119,7 +120,7 @@ export function CombinedPortfolioSummary() {
         <div className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Total Portfolio</span>
           <span className="text-[9px] font-mono text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded">
-            {getFleetBotCount(fleetEq)} bots · 3 capital pools
+            {getFleetBotCount(registry, fleetEq)} bots · 3 capital pools
           </span>
         </div>
         <div className="flex items-center gap-2">

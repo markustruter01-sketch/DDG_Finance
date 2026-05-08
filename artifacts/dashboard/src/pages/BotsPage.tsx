@@ -9,6 +9,7 @@ import {
   usePoseidonState,
   useKrakenCurrentState,
   useFleetEquity,
+  useBotRegistry,
   type AIIntervention,
   type ForexPosition,
 } from "@/hooks/use-trading";
@@ -280,6 +281,7 @@ export default function BotsPage() {
   const { data: poseidonState, isLoading: poseidonLoading } = usePoseidonState();
   const { data: kcState, isLoading: kcLoading } = useKrakenCurrentState();
   const { data: fleetEq } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
 
   const previousParams = useMemo(
     () => derivePreviousParams(aiTimeline?.interventions),
@@ -402,9 +404,9 @@ export default function BotsPage() {
           </div>
           <div>
             <h1 className="text-sm font-bold text-white leading-none">Bots</h1>
-            <p className="text-[10px] text-slate-500">{`${getFleetBotCount(fleetEq)}-bot automated fleet`}</p>
+            <p className="text-[10px] text-slate-500">{`${getFleetBotCount(registry, fleetEq)}-bot automated fleet`}</p>
           </div>
-          <span className="ml-auto text-[11px] text-slate-500">{getFleetBotCount(fleetEq)} bots</span>
+          <span className="ml-auto text-[11px] text-slate-500">{getFleetBotCount(registry, fleetEq)} bots</span>
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, useFleetEquity, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useFleetParams, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, useFleetEquity, useBotRegistry, type ForexPosition, type BotParamBounds } from "@/hooks/use-trading";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
@@ -442,6 +442,7 @@ export default function StreamingBotsScreen() {
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
   const { data: fleetEq } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
 
@@ -716,7 +717,7 @@ export default function StreamingBotsScreen() {
           <div className="flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5" style={{ color: "#22d3ee" }} />
             <span className="text-xs font-black uppercase tracking-widest text-white">Bot Fleet</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>{getFleetBotCount(fleetEq)} BOTS</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: "rgba(34,211,238,0.1)", color: "#22d3ee", border: "1px solid rgba(34,211,238,0.2)" }}>{getFleetBotCount(registry, fleetEq)} BOTS</span>
           </div>
         </div>
 

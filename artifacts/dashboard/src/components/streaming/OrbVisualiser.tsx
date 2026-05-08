@@ -18,6 +18,7 @@ import {
   usePoseidonState,
   useKrakenCurrentState,
   useFleetEquity,
+  useBotRegistry,
 } from "@/hooks/use-trading";
 import { getFleetBotCount } from "@/lib/fleet-capital";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
@@ -1033,6 +1034,7 @@ export function OrbVisualiser() {
   const { data: auditor       } = useAuditorReport();
   const { data: snapshot      } = useAdminLearningSnapshot();
   const { data: fleetEqOrb    } = useFleetEquity();
+  const { data: registry          } = useBotRegistry();
   const { trades: closedTradesFeed, openPositions: openTradesFeed } = useRealFeed(12);
 
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
@@ -1135,7 +1137,7 @@ export function OrbVisualiser() {
     openPositions,
     fleetEquityChange,
     activeBots,
-    totalBots: getFleetBotCount(fleetEqOrb),
+    totalBots: getFleetBotCount(registry, fleetEqOrb),
     lastAiTs,
     tradePulse: tradePulse ? { active: tradePulse.active, isWin: tradePulse.isWin, botName: tradePulse.botName } : null,
     aiRipple,
@@ -1214,7 +1216,7 @@ export function OrbVisualiser() {
           <div>
             <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
             <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {activeBots} / {getFleetBotCount(fleetEqOrb)}
+              {activeBots} / {getFleetBotCount(registry, fleetEqOrb)}
             </div>
           </div>
 

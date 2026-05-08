@@ -1,4 +1,4 @@
-import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState, useFleetEquity } from "@/hooks/use-trading";
+import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState, useFleetEquity, useBotRegistry } from "@/hooks/use-trading";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -30,10 +30,11 @@ export function WeeklyReviewPanel() {
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: forexState } = useForexState();
   const { data: fleetEq } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
 
   const liveTotal = fleetEq?.fleet_total?.equity ?? 0;
   const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? 0;
-  const liveTotalPnlPct = (liveTotalPnl / getFleetStartingCapital(fleetEq)) * 100;
+  const liveTotalPnlPct = (liveTotalPnl / getFleetStartingCapital(registry, fleetEq)) * 100;
   const equityReady = liveTotal > 0;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
@@ -124,7 +125,7 @@ export function WeeklyReviewPanel() {
                   : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                of {formatCapitalFull(getFleetStartingCapital(fleetEq))} starting
+                of {formatCapitalFull(getFleetStartingCapital(registry, fleetEq))} starting
               </div>
             </div>
             <div className={cn(

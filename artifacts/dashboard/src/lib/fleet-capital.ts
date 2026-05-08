@@ -1,17 +1,26 @@
-import type { FleetEquityData } from "@/hooks/use-trading";
+import type { FleetEquityData, BotRegistryResponse } from "@/hooks/use-trading";
 
 const META_KEYS = new Set(["fleet_total", "generated_at", "errors"]);
 
 const DEFAULT_STARTING = 900_000;
 const DEFAULT_BOT_COUNT = 9;
 
-export function getFleetStartingCapital(data: FleetEquityData | undefined): number {
-  return data?.fleet_total?.starting ?? DEFAULT_STARTING;
+export function getFleetStartingCapital(
+  registry?: BotRegistryResponse,
+  fleetEq?: FleetEquityData
+): number {
+  if (registry) return registry.fleet_starting_capital;
+  if (fleetEq?.fleet_total?.starting) return fleetEq.fleet_total.starting;
+  return DEFAULT_STARTING;
 }
 
-export function getFleetBotCount(data: FleetEquityData | undefined): number {
-  if (!data) return DEFAULT_BOT_COUNT;
-  return Object.keys(data).filter(k => !META_KEYS.has(k)).length;
+export function getFleetBotCount(
+  registry?: BotRegistryResponse,
+  fleetEq?: FleetEquityData
+): number {
+  if (registry) return registry.fleet_bot_count;
+  if (fleetEq) return Object.keys(fleetEq).filter(k => !META_KEYS.has(k)).length;
+  return DEFAULT_BOT_COUNT;
 }
 
 export function formatCapitalShort(amount: number): string {

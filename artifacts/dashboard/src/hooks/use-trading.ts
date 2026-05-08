@@ -2266,3 +2266,37 @@ export function useReviewFlags() {
     refetchInterval: 10 * 60 * 1000,
   });
 }
+
+export interface BotRegistryEntry {
+  id: string;
+  display_name: string;
+  short_name: string;
+  icon: string;
+  strategy_label: string;
+  asset_class: string;
+  exchange: string;
+  starting_capital: number;
+  db_id: number | null;
+  status: "active" | "paused" | "retired";
+  display_order: number;
+  legacy_aliases: string[];
+  trading_hours: string;
+  cycle_minutes: number;
+}
+
+export interface BotRegistryResponse {
+  bots: BotRegistryEntry[];
+  fleet_starting_capital: number;
+  fleet_bot_count: number;
+}
+
+export function useBotRegistry() {
+  return useQuery<BotRegistryResponse>({
+    queryKey: ["bot-registry"],
+    queryFn: async () => {
+      const res = await api.get("/bot-registry");
+      return res.data;
+    },
+    staleTime: 60_000,
+  });
+}

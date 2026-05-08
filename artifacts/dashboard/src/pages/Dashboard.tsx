@@ -7,6 +7,7 @@ import {
   usePortfolio, useJournal, useEquityCurve,
   useMathAuditSummary, useMathAuditRecent, useWeeklyReview, useReviewFlags,
   useFleetEquity,
+  useBotRegistry,
   type LivePosition,
 } from "@/hooks/use-trading";
 import { WeeklyReviewPanel } from "@/components/WeeklyReviewPanel";
@@ -400,12 +401,13 @@ function FleetKPISummary() {
   const { data: forexState } = useForexState();
   const { data: journal } = useJournal();
   const { data: fleetEquity } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
 
   const grandTotal = fleetEquity?.fleet_total?.equity ?? 0;
   const anyLoading = fleetEquity == null;
   const totalPnl: number | null = fleetEquity != null ? (fleetEquity.fleet_total?.pnl ?? null) : null;
-  const fleetBaseline = getFleetStartingCapital(fleetEquity);
-  const fleetBotCount = getFleetBotCount(fleetEquity);
+  const fleetBaseline = getFleetStartingCapital(registry, fleetEquity);
+  const fleetBotCount = getFleetBotCount(registry, fleetEquity);
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
@@ -553,7 +555,8 @@ type EquityRange = "24h" | "7d" | "30d" | "all";
 function LiveEquityCurveSection() {
   const { data, isLoading } = useEquityCurve(2000);
   const { data: fleetEqCurve } = useFleetEquity();
-  const fleetBaseline = getFleetStartingCapital(fleetEqCurve);
+  const { data: registry } = useBotRegistry();
+  const fleetBaseline = getFleetStartingCapital(registry, fleetEqCurve);
   const allSnapshots = data?.snapshots ?? [];
   const [range, setRange] = useState<EquityRange>("all");
 
@@ -607,7 +610,7 @@ function LiveEquityCurveSection() {
         <CardTitle className="flex items-center gap-2 fluid-heading">
           <TrendingUp className="h-4 w-4 text-primary" />
           <span>Fleet Equity Curve</span>
-          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">{getFleetBotCount(fleetEqCurve)} Bots · 3 Pools</span>
+          <span className="ml-1 text-[9px] font-normal text-cyan-400/60 border border-cyan-400/20 bg-cyan-400/5 px-1.5 py-0.5 rounded-full uppercase tracking-wider">{getFleetBotCount(registry, fleetEqCurve)} Bots · 3 Pools</span>
         </CardTitle>
         <div className="flex items-center gap-3">
           <div className="flex items-center bg-slate-800/60 rounded-md p-0.5 gap-0.5">

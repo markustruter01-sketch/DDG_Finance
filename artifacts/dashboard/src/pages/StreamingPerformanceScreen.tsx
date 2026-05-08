@@ -8,6 +8,7 @@ import {
   useVault,
   useVaultHistory,
   useFleetEquity,
+  useBotRegistry,
 } from "@/hooks/use-trading";
 import { getFleetBotCount, getFleetStartingCapital, formatCapitalShort } from "@/lib/fleet-capital";
 import { DDGBadge } from "@/components/DDGBadge";
@@ -113,6 +114,7 @@ export default function StreamingPerformanceScreen() {
   const st  = status.data;
   const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;
   const { data: fleetEq } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
 
   const cryptoFG = sg?.crypto_fear_greed?.value;
   const marketFG = sg?.market_fear_greed?.value;
@@ -188,7 +190,7 @@ export default function StreamingPerformanceScreen() {
             ◈ RAW PERFORMANCE
           </span>
           <span style={{ fontSize: 10, fontFamily: "monospace", color: C.dim, letterSpacing: "0.1em" }}>
-            {`FLEET · ${getFleetBotCount(fleetEq)} BOTS · ${formatCapitalShort(getFleetStartingCapital(fleetEq))} CAPITAL`}
+            {`FLEET · ${getFleetBotCount(registry, fleetEq)} BOTS · ${formatCapitalShort(getFleetStartingCapital(registry, fleetEq))} CAPITAL`}
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>

@@ -134,6 +134,17 @@ def _check_force_resume() -> bool:
     return False
 
 
+def _is_bot_paused() -> bool:
+    """Read bot_paused from poseidon_control.json."""
+    try:
+        if not _POSEIDON_CONTROL_FILE.exists():
+            return False
+        data = json.loads(_POSEIDON_CONTROL_FILE.read_text())
+        return bool(data.get("bot_paused", False))
+    except Exception:
+        return False
+
+
 def is_circuit_breaker_active() -> bool:
     global _circuit_breaker_until
     if _circuit_breaker_until is None:
@@ -383,6 +394,11 @@ def main():
 
         # Force-resume: clear circuit breaker on operator override
         _check_force_resume()
+
+        if _is_bot_paused():
+            logger.info("Poseidon | Bot is paused via control file — skipping cycle")
+            time.sleep(60)
+            continue
 
         try:
             # Fetch current prices for all symbols

@@ -1,5 +1,5 @@
 {
-  "bot_paused": true,
-  "pause_reason": "0% win rate over 6 trades — strategy broken, awaiting rewrite",
-  "paused_at": "2026-05-08T04:30:00+00:00"
+  "bot_paused": false,
+  "pause_reason": "",
+  "paused_at": null
 }

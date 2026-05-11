@@ -625,3 +625,51 @@ for sub_router in ALL_ROUTERS:
 app.include_router(router)
 app.include_router(bot_registry_router, prefix="/trading-api", tags=["bot-registry"])
 
+
+@app.post("/trading-api/__admin_wipe_retired_bots")
+def admin_wipe_retired_bots(token: str = ""):
+    """One-shot wipe of retired bot data. Remove after use."""
+    import psycopg2
+    expected = os.environ.get("ADMIN_WIPE_TOKEN", "")
+    if not expected or token != expected:
+        return {"error": "invalid_or_missing_token"}
+    retired_ids = ['davy-jones', 'calypso', 'apex-predator', 'blackbeard']
+    tables = [
+        "kraken_trades",
+        "kraken_pair_params",
+        "kraken_pair_performance",
+        "kraken_adaptive_params",
+        "kraken_health_snapshots",
+        "kraken_wfo_results",
+        "vpin_rejections",
+        "math_audit_log",
+        "capital_injections",
+    ]
+    conn = None
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        pre = {}
+        for t in tables:
+            cur.execute(f"SELECT COUNT(*) FROM {t} WHERE bot_id = ANY(%s)", (retired_ids,))
+            pre[t] = cur.fetchone()[0]
+        for t in tables:
+            cur.execute(f"DELETE FROM {t} WHERE bot_id = ANY(%s)", (retired_ids,))
+        post = {}
+        for t in tables:
+            cur.execute(f"SELECT COUNT(*) FROM {t} WHERE bot_id = ANY(%s)", (retired_ids,))
+            post[t] = cur.fetchone()[0]
+        sanity = {}
+        for t in ["forex_trades", "oracle_scan_log", "poseidon_momentum_trades", "kraken_current_trades"]:
+            cur.execute(f"SELECT COUNT(*) FROM {t}")
+            sanity[t] = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+        return {"status": "ok", "pre": pre, "post": post, "sanity_untouched": sanity}
+    except Exception as e:
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
+        return {"error": str(e)}

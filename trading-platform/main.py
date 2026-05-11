@@ -625,3 +625,28 @@ for sub_router in ALL_ROUTERS:
 app.include_router(router)
 app.include_router(bot_registry_router, prefix="/trading-api", tags=["bot-registry"])
 
+
+@app.get("/trading-api/__debug_db_target")
+def debug_db_target():
+    import re
+    import psycopg2
+    url = os.environ.get("DATABASE_URL", "NOT SET")
+    masked = url[:30] + "..." + url[-30:] if len(url) > 60 else url
+    masked = re.sub(r':([^:@]+)@', ':***@', masked)
+    try:
+        conn = psycopg2.connect(url)
+        cur = conn.cursor()
+        cur.execute("SELECT current_database(), inet_server_addr(), version()")
+        row = cur.fetchone()
+        cur.execute("SELECT COUNT(*) FROM kraken_trades")
+        kt = cur.fetchone()[0]
+        conn.close()
+        return {
+            "database_url_masked": masked,
+            "current_database": row[0],
+            "server_addr": str(row[1]),
+            "kraken_trades_count": kt,
+        }
+    except Exception as e:
+        return {"error": str(e), "database_url_masked": masked}
+

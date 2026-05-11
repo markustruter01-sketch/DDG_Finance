@@ -111,6 +111,18 @@ def fetch_symbol_data(symbol: str) -> dict | None:
 _POSEIDON_CONTROL_FILE = Path(_DIR) / "poseidon_control.json"
 
 
+def _is_bot_paused() -> bool:
+    """Check if poseidon_control.json has bot_paused=true."""
+    try:
+        if not _POSEIDON_CONTROL_FILE.exists():
+            return False
+        import json as _json
+        data = _json.loads(_POSEIDON_CONTROL_FILE.read_text())
+        return bool(data.get("bot_paused", False))
+    except Exception:
+        return False
+
+
 def _check_force_resume() -> bool:
     """Check if the dashboard has set force_resume=true in poseidon_control.json.
     If found, clear the in-memory circuit breaker and reset consecutive losses."""
@@ -376,6 +388,13 @@ def main():
                 continue
         except Exception as _fh_exc:
             logger.debug(f"Bot | Fleet halt check failed (non-fatal, continuing): {_fh_exc}")
+
+        # ── Manual pause check ────────────────────────────────────────
+        if _is_bot_paused():
+            logger.info("Poseidon | Bot is paused via control file — skipping cycle")
+            import time as _t
+            _t.sleep(60)
+            continue
 
         # Force-refresh flag: acknowledge and clear (no pair discovery for momentum)
         if check_and_clear_force_refresh():

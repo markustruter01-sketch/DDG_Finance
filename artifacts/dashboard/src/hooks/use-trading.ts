@@ -2272,6 +2272,7 @@ export interface BotRegistryEntry {
   display_name: string;
   short_name: string;
   icon: string;
+  color: string;
   strategy_label: string;
   asset_class: string;
   exchange: string;

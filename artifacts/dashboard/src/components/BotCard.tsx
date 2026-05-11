@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useKrakenStatus, useKrakenPerformance, useFleetParams, useForceResume, type BotParamBounds } from "@/hooks/use-trading";
 import { ParameterScale } from "./ParameterScale";
 import { TrendingUp, TrendingDown, Anchor, Loader2, Zap } from "lucide-react";
+import { getBotColors } from "@/lib/bot-colors";
 
 const PARAM_ORDER = ["ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"];
 
@@ -13,35 +14,14 @@ const PARAM_LABELS: Record<string, { label: string; format: (v: number) => strin
   MIN_NET_PROFIT_PCT: { label: "Min Profit", format: (v) => `${(v * 100).toFixed(2)}%` },
 };
 
-const BOT_META: Record<string, { color: string; icon: string; strategy: string }> = {
-  davy_jones: {
-    color: "#f59e0b",
-    icon: "⚓",
-    strategy: "Mean-reversion z-score scalper",
-  },
-  blackbeard: {
-    color: "#ef4444",
-    icon: "🏴‍☠️",
-    strategy: "LLM Commodity Macro — Groq ETF investor",
-  },
-  calypso: {
-    color: "#8b5cf6",
-    icon: "🌊",
-    strategy: "Conservative trend follower",
-  },
-  apex_predator: {
-    color: "#f97316",
-    icon: "🦅",
-    strategy: "Dual-TF Momentum Scalper",
-  },
-};
-
 const STARTING_BALANCE = 100_000;
 
 interface BotCardProps {
   botId: string;
   displayName: string;
-  strategyLabel?: string;
+  icon: string;
+  colorName: string;
+  strategy: string;
   previousParams?: Record<string, number>;
   equity?: number | null;
 }
@@ -52,15 +32,15 @@ function fmtPnl(v: number) {
   return v >= 0 ? `+$${abs.toFixed(2)}` : `-$${abs.toFixed(2)}`;
 }
 
-export function BotCard({ botId, displayName, strategyLabel, previousParams, equity }: BotCardProps) {
+export function BotCard({ botId, displayName, icon, colorName, strategy, previousParams, equity }: BotCardProps) {
   const { data: status, isLoading: statusLoading } = useKrakenStatus(botId);
   const { data: perf, isLoading: perfLoading } = useKrakenPerformance(botId);
   const { data: fleetParams } = useFleetParams();
   const forceResume = useForceResume(botId);
   const [resumedAt, setResumedAt] = useState<number | null>(null);
 
+  const colors = getBotColors(colorName);
   const botKey = botId.replace(/-/g, "_");
-  const meta = BOT_META[botKey] ?? { color: "#6b7280", icon: "🤖", strategy: strategyLabel ?? "Automated trading bot" };
   const botParams = fleetParams?.bots?.[botKey] ?? fleetParams?.bots?.[botId];
   const current = botParams?.current ?? {};
   const bounds = botParams?.bounds ?? {};
@@ -89,17 +69,17 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
   return (
     <div
       className="rounded-2xl border bg-slate-900/60 backdrop-blur-sm overflow-hidden flex flex-col"
-      style={{ borderColor: `${meta.color}20` }}
+      style={{ borderColor: `${colors.hex}20` }}
     >
       <div
         className="px-4 py-3 flex items-center gap-3 border-b"
-        style={{ borderColor: `${meta.color}15`, background: `linear-gradient(135deg, ${meta.color}10, transparent)` }}
+        style={{ borderColor: `${colors.hex}15`, background: `linear-gradient(135deg, ${colors.hex}10, transparent)` }}
       >
         <div
           className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-          style={{ background: `${meta.color}18`, border: `1px solid ${meta.color}30` }}
+          style={{ background: `${colors.hex}18`, border: `1px solid ${colors.hex}30` }}
         >
-          {meta.icon}
+          {icon}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -117,7 +97,7 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
               </span>
             )}
           </div>
-          <p className="text-[10px] text-slate-500 mt-0.5 truncate">{meta.strategy}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5 truncate">{strategy}</p>
         </div>
         {currentEquity != null && currentEquity > 0 && (
           <div className="text-right flex-shrink-0">
@@ -206,7 +186,7 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
                       current={val}
                       previous={prev}
                       format={cfg?.format}
-                      color={meta.color}
+                      color={colors.hex}
                     />
                   );
                 })}
@@ -225,7 +205,7 @@ export function BotCard({ botId, displayName, strategyLabel, previousParams, equ
                   return (
                     <div key={pos.symbol} className="flex items-center justify-between gap-2 text-[11px]">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <Anchor className="w-2.5 h-2.5 flex-shrink-0" style={{ color: meta.color }} />
+                        <Anchor className="w-2.5 h-2.5 flex-shrink-0" style={{ color: colors.hex }} />
                         <span className="font-mono font-bold text-white">{pos.symbol}</span>
                         <span className="text-slate-500 text-[10px]">@{pos.entry_price.toFixed(4)}</span>
                       </div>

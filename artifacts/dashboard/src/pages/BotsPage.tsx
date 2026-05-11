@@ -437,12 +437,15 @@ export default function BotsPage() {
             krakenBots?.map((bot) => {
               const botKey = bot.bot_id.replace(/-/g, "_") as keyof typeof fleetEq;
               const botEquity = fleetEq?.[botKey] as { equity?: number } | undefined;
+              const regEntry = registry?.bots?.find((b) => b.id === bot.bot_id);
               return (
                 <BotCard
                   key={bot.bot_id}
                   botId={bot.bot_id}
                   displayName={bot.display_name}
-                  strategyLabel={bot.strategy_label}
+                  icon={regEntry?.icon ?? "🤖"}
+                  colorName={regEntry?.color ?? "slate"}
+                  strategy={bot.strategy_label ?? regEntry?.strategy_label ?? ""}
                   previousParams={previousParams[bot.bot_id.replace(/-/g, "_")]}
                   equity={botEquity?.equity ?? null}
                 />

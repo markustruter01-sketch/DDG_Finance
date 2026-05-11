@@ -4,6 +4,21 @@ import { ParameterScale } from "@/components/ParameterScale";
 import { DDGBadge } from "@/components/DDGBadge";
 import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
+import { getBotColors } from "@/lib/bot-colors";
+
+function getExchangeLabel(exchange: string, assetClass: string): string {
+  if (exchange === "oanda") return "Oanda · Forex";
+  if (exchange === "kraken") return "Kraken · Crypto";
+  const acLabel: Record<string, string> = {
+    stocks: "Stocks",
+    equity_etf: "ETFs",
+    sector_etf: "Sector ETFs",
+    defensive_etf: "Defensive ETFs",
+    bond_etf: "Bond ETFs",
+    commodity_etf: "Commodity ETFs",
+  };
+  return `Alpaca · ${acLabel[assetClass] ?? "Markets"}`;
+}
 
 const STARTING_BALANCE = 100_000;
 
@@ -511,14 +526,9 @@ export default function StreamingBotsScreen() {
 
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
 
-  const bots: BotCardData[] = [
-    {
-      id: "oracle",
-      name: "Oracle",
-      icon: "🔮",
-      exchange: "Alpaca · Stocks",
-      color: "#22d3ee",
-      glow: "#22d3ee",
+  // ── Per-bot runtime data keyed by canonical registry ID ───────────────
+  const botDataByRegistryId: Record<string, Partial<BotCardData>> = {
+    oracle: {
       equity: oracleEquity,
       paused: false,
       winCount: 0,
@@ -527,19 +537,13 @@ export default function StreamingBotsScreen() {
       topPair: oracleTopPair,
       openPositionsList: oracleOpenList,
       strategyConfig: [
-        { label: "Conviction", value: "≥0.65", color: "#22d3ee" },
+        { label: "Conviction", value: "≥0.65", color: "#a855f7" },
         { label: "Slots", value: "8 max", color: "#94a3b8" },
         { label: "Kill Switch", value: "−12%", color: "#f87171" },
         { label: "Stop", value: "ATR 2.0×", color: "#94a3b8" },
       ],
     },
-    {
-      id: "davy-jones",
-      name: "Davy Jones",
-      icon: "⚓",
-      exchange: "Kraken · Crypto",
-      color: "#f59e0b",
-      glow: "#f59e0b",
+    spy_qqq_trend: {
       equity: davyEquity,
       paused: davyStatus?.bot_paused ?? false,
       stale: fleetEq?.davy_jones?.stale ?? false,
@@ -551,13 +555,7 @@ export default function StreamingBotsScreen() {
       krakenBotKey: "davy_jones",
       openPositionsList: davyStatus?.open_positions,
     },
-    {
-      id: "blackbeard",
-      name: "Jerome",
-      icon: "🏴‍☠️",
-      exchange: "Kraken · Commodities",
-      color: "#ef4444",
-      glow: "#ef4444",
+    jerome_macro: {
       equity: bbEquity,
       paused: bbStatus?.bot_paused ?? false,
       stale: fleetEq?.blackbeard?.stale ?? false,
@@ -569,13 +567,7 @@ export default function StreamingBotsScreen() {
       krakenBotKey: "blackbeard",
       openPositionsList: bbStatus?.open_positions,
     },
-    {
-      id: "calypso",
-      name: "Calypso's Tide",
-      icon: "🌊",
-      exchange: "Kraken · Crypto",
-      color: "#8b5cf6",
-      glow: "#8b5cf6",
+    sector_rotation: {
       equity: caEquity,
       paused: caStatus?.bot_paused ?? false,
       stale: fleetEq?.calypso?.stale ?? false,
@@ -587,13 +579,7 @@ export default function StreamingBotsScreen() {
       krakenBotKey: "calypso",
       openPositionsList: caStatus?.open_positions,
     },
-    {
-      id: "apex-predator",
-      name: "Apex Predator",
-      icon: "🦅",
-      exchange: "Kraken · Momentum",
-      color: "#f97316",
-      glow: "#f97316",
+    defensive_guardian: {
       equity: apexKrakenEquity,
       paused: apexKrakenStatus?.bot_paused ?? false,
       stale: fleetEq?.apex_predator?.stale ?? false,
@@ -605,13 +591,7 @@ export default function StreamingBotsScreen() {
       krakenBotKey: "apex_predator",
       openPositionsList: apexKrakenStatus?.open_positions,
     },
-    {
-      id: "navigator",
-      name: "Forex Gump",
-      icon: "🧭",
-      exchange: "Oanda · Forex",
-      color: "#10b981",
-      glow: "#10b981",
+    forex_gump: {
       equity: navEquity,
       paused: forexState?.paused ?? false,
       winCount: forexState?.total_wins ?? 0,
@@ -620,35 +600,13 @@ export default function StreamingBotsScreen() {
       topPair: navTopPair,
       openPositionsList: navOpenList,
       strategyConfig: [
-        {
-          label: "USD Bias",
-          value: usdBias,
-          color: usdBias === "LONG" ? "#10b981" : usdBias === "SHORT" ? "#f87171" : "#94a3b8",
-        },
-        {
-          label: "News Blkout",
-          value: forexState?.news_blackout ? "ACTIVE" : "OFF",
-          color: forexState?.news_blackout ? "#fbbf24" : "#10b981",
-        },
-        {
-          label: "Circuit Brk",
-          value: forexState?.circuit_breaker_active ? "ACTIVE" : "OFF",
-          color: forexState?.circuit_breaker_active ? "#f87171" : "#10b981",
-        },
-        {
-          label: "HWM",
-          value: `$${(forexState?.hwm_usd ?? 100000).toLocaleString()}`,
-          color: "#94a3b8",
-        },
+        { label: "USD Bias", value: usdBias, color: usdBias === "LONG" ? "#10b981" : usdBias === "SHORT" ? "#f87171" : "#94a3b8" },
+        { label: "News Blkout", value: forexState?.news_blackout ? "ACTIVE" : "OFF", color: forexState?.news_blackout ? "#fbbf24" : "#3b82f6" },
+        { label: "Circuit Brk", value: forexState?.circuit_breaker_active ? "ACTIVE" : "OFF", color: forexState?.circuit_breaker_active ? "#f87171" : "#3b82f6" },
+        { label: "HWM", value: `$${(forexState?.hwm_usd ?? 100000).toLocaleString()}`, color: "#94a3b8" },
       ],
     },
-    {
-      id: "poseidon",
-      name: "FOMO Fred",
-      icon: "🔱",
-      exchange: "Kraken · Pairs",
-      color: "#8b5cf6",
-      glow: "#8b5cf6",
+    poseidon_momentum: {
       equity: poseidonEquity,
       paused: poseidonState?.paused ?? false,
       winCount: poseidonState?.total_wins ?? 0,
@@ -657,19 +615,13 @@ export default function StreamingBotsScreen() {
       topPair: poseidonTopPair,
       openPositionsList: poseidonOpenList,
       strategyConfig: [
-        { label: "Entry Z", value: `|Z| > ${poseidonState?.zscore_entry ?? 2.0}`, color: "#8b5cf6" },
-        { label: "Exit Z", value: `|Z| < ${poseidonState?.zscore_exit ?? 0.3}`, color: "#a78bfa" },
+        { label: "Entry Z", value: `|Z| > ${poseidonState?.zscore_entry ?? 2.0}`, color: "#14b8a6" },
+        { label: "Exit Z", value: `|Z| < ${poseidonState?.zscore_exit ?? 0.3}`, color: "#2dd4bf" },
         { label: "Max Pairs", value: `${poseidonState?.max_pairs ?? 3} open`, color: "#cbd5e1" },
         { label: "Cycle", value: `${poseidonState?.cycle_minutes ?? 15} min`, color: "#94a3b8" },
       ],
     },
-    {
-      id: "kraken-current",
-      name: "Kraken Current",
-      icon: "🌊",
-      exchange: "Kraken · Trend",
-      color: "#06b6d4",
-      glow: "#06b6d4",
+    kraken_trend: {
       equity: kcEquity,
       paused: kcState?.paused ?? false,
       stale: fleetEq?.kraken_current?.stale ?? false,
@@ -680,13 +632,32 @@ export default function StreamingBotsScreen() {
       topPair: kcTopPair,
       openPositionsList: kcOpenList,
       strategyConfig: [
-        { label: "EMA", value: `${kcState?.ema_fast ?? 20}/${kcState?.ema_slow ?? 100}`, color: "#06b6d4" },
-        { label: "ADX Filter", value: `> ${kcState?.adx_threshold ?? 25}`, color: "#22d3ee" },
+        { label: "EMA", value: `${kcState?.ema_fast ?? 20}/${kcState?.ema_slow ?? 100}`, color: "#64748b" },
+        { label: "ADX Filter", value: `> ${kcState?.adx_threshold ?? 25}`, color: "#94a3b8" },
         { label: "Max Pos", value: `${kcState?.max_positions ?? 5}`, color: "#cbd5e1" },
         { label: "Universe", value: `${kcState?.universe_size ?? 156} coins`, color: "#94a3b8" },
       ],
     },
-  ];
+  };
+
+  const bots: BotCardData[] = (registry?.bots ?? []).map((bot) => {
+    const colors = getBotColors(bot.color);
+    const data = botDataByRegistryId[bot.id] ?? {};
+    return {
+      id: bot.id,
+      name: bot.display_name,
+      icon: bot.icon,
+      exchange: getExchangeLabel(bot.exchange, bot.asset_class),
+      color: colors.hex,
+      glow: colors.hex,
+      equity: null,
+      paused: bot.status !== "active",
+      winCount: 0,
+      lossCount: 0,
+      openPositions: 0,
+      ...data,
+    };
+  });
 
   const bestBotId = bots.reduce<string | null>((best, bot) => {
     if (bot.equity == null) return best;

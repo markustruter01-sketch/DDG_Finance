@@ -45,6 +45,9 @@ class BotEntry:
     trading_hours: str = "24_7"      # "nyse_only" | "24_7" | "forex_session" | "macro_cycle"
     cycle_minutes: int = 60
 
+    # UI color (Tailwind color name, e.g. "purple", "amber", "cyan")
+    color: str = ""
+
 
 # ───────────────────────────────────────────────────────────────────────
 # THE REGISTRY — edit ONLY this dict to add/remove/rename bots
@@ -66,6 +69,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=(),
         trading_hours="nyse_only",
         cycle_minutes=15,
+        color="purple",
     ),
     "spy_qqq_trend": BotEntry(
         id="spy_qqq_trend",
@@ -82,6 +86,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("davy-jones", "davy_jones", "Davy Jones", "bot2_spy_qqq"),
         trading_hours="nyse_only",
         cycle_minutes=60,
+        color="amber",
     ),
     "jerome_macro": BotEntry(
         id="jerome_macro",
@@ -98,6 +103,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("blackbeard", "Blackbeard"),
         trading_hours="macro_cycle",
         cycle_minutes=240,
+        color="red",
     ),
     "sector_rotation": BotEntry(
         id="sector_rotation",
@@ -114,6 +120,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("calypso", "Calypso", "bot4_sector", "calypso's tide"),
         trading_hours="nyse_only",
         cycle_minutes=240,
+        color="cyan",
     ),
     "defensive_guardian": BotEntry(
         id="defensive_guardian",
@@ -130,6 +137,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("apex-predator", "apex_predator", "Apex Predator", "bot5_defensive"),
         trading_hours="nyse_only",
         cycle_minutes=240,
+        color="green",
     ),
     "macro_bond": BotEntry(
         id="macro_bond",
@@ -146,6 +154,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("bot7_macro_bond", "fomo_fred", "FOMO Fred"),
         trading_hours="macro_cycle",
         cycle_minutes=240,
+        color="indigo",
     ),
     "forex_gump": BotEntry(
         id="forex_gump",
@@ -162,6 +171,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("navigator", "Navigator"),
         trading_hours="forex_session",
         cycle_minutes=720,
+        color="blue",
     ),
     "poseidon_momentum": BotEntry(
         id="poseidon_momentum",
@@ -178,6 +188,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("poseidon", "Poseidon"),
         trading_hours="24_7",
         cycle_minutes=15,
+        color="teal",
     ),
     "kraken_trend": BotEntry(
         id="kraken_trend",
@@ -194,6 +205,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         legacy_aliases=("kraken-current", "kraken_current", "Kraken Current"),
         trading_hours="24_7",
         cycle_minutes=240,
+        color="slate",
     ),
 }
 

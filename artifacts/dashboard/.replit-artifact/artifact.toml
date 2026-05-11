@@ -156,8 +156,7 @@ PORT = "8090"
 
 [[services]]
 name = "poseidon-momentum"
-paths = [ "/poseidon-momentum" ]
-localPort = 8091
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && python3 poseidon/main.py"
@@ -166,6 +165,3 @@ run = "cd /home/runner/workspace && python3 poseidon/main.py"
 
 [services.production.run]
 args = ["bash", "-c", "python3 poseidon/main.py"]
-
-[services.env]
-PORT = "8091"

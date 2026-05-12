@@ -461,6 +461,26 @@ CREATE TABLE IF NOT EXISTS review_flags (
     resolved_note TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_review_flags_status ON review_flags (status, due_date);
+
+-- ── Unified Bot State Table ────────────────────────────────────────────────
+-- Single source of truth for pause state, heartbeat, and status across all bots.
+-- Replaces: poseidon_control.json, kc_control.json, navigator_control.json,
+--           BOT_PAUSED in config.py, per-bot rows in kraken_heartbeat.
+-- Legacy tables are kept during migration; bots dual-write to both.
+CREATE TABLE IF NOT EXISTS bots_state (
+  bot_id         TEXT PRIMARY KEY,
+  paused         BOOLEAN NOT NULL DEFAULT FALSE,
+  pause_reason   TEXT DEFAULT '',
+  paused_at      TIMESTAMPTZ,
+  status         TEXT NOT NULL DEFAULT 'idle',
+  equity_usd     DOUBLE PRECISION DEFAULT 0,
+  cash_usd       DOUBLE PRECISION DEFAULT 0,
+  open_positions INTEGER DEFAULT 0,
+  last_heartbeat TIMESTAMPTZ,
+  last_trade_at  TIMESTAMPTZ,
+  error_message  TEXT DEFAULT '',
+  metadata       JSONB DEFAULT '{}'::jsonb
+);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -526,6 +546,28 @@ def ensure_schema() -> None:
             logger.info(f"DB | Backfilled exit_reason for {updated} historical Oracle trade(s)")
     except Exception as exc:
         logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
+
+    # Seed bots_state with canonical bot IDs and known pause states (idempotent)
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO bots_state (bot_id, paused, pause_reason, equity_usd, last_heartbeat)
+                    VALUES
+                      ('oracle',              FALSE, '', 0, NULL),
+                      ('spy_qqq_trend',       FALSE, '', 0, NULL),
+                      ('jerome_macro',        FALSE, '', 0, NULL),
+                      ('sector_rotation',     FALSE, '', 0, NULL),
+                      ('defensive_guardian',  FALSE, '', 0, NULL),
+                      ('macro_bond',          FALSE, '', 0, NULL),
+                      ('forex_gump',          TRUE,  'Exit logic broken — 43 stuck open positions', 0, NULL),
+                      ('poseidon_momentum',   TRUE,  '0% win rate over 6 trades — strategy broken', 0, NULL),
+                      ('kraken_trend',        TRUE,  'Strategy broken — -$4,200 net, 34% WR over 32 trades', 0, NULL)
+                    ON CONFLICT (bot_id) DO NOTHING;
+                """)
+        logger.info("DB | bots_state seed complete")
+    except Exception as exc:
+        logger.warning(f"DB | bots_state seed failed (non-fatal): {exc}")
 
     try:
         with get_conn() as conn:

@@ -703,6 +703,19 @@ def write_status(error: str | None = None) -> None:
         error=error,
     )
 
+    # ── Dual-write to bots_state (migration Phase 1) ──────────────────────────
+    try:
+        from core.bot_state import write_heartbeat as _bs_write, LEGACY_TO_CANONICAL as _bs_map
+        _bs_write(
+            _bs_map.get(BOT_ID, BOT_ID),
+            round(total_equity, 2),
+            positions=len(open_positions),
+            status=status_str,
+            error=error or "",
+        )
+    except Exception as _bse:
+        logger.debug(f"Status | bots_state dual-write failed (non-fatal): {_bse}")
+
     # status.json is no longer written in the primary path.
     # PostgreSQL kraken_heartbeat is the sole persistent store for the heartbeat.
     # The _atomic_json_write + STATUS_FILE infrastructure is retained for the

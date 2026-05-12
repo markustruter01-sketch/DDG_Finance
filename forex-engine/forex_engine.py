@@ -106,6 +106,15 @@ _GROQ_CYCLE_WINDOW_MINUTES = 15
 
 
 def is_bot_paused() -> bool:
+    # Prefer bots_state table; fall back to navigator_control.json
+    try:
+        _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trading-platform")
+        if _tp not in sys.path:
+            sys.path.append(_tp)
+        from core.bot_state import is_paused as _bs_is_paused
+        return _bs_is_paused("forex_gump")
+    except Exception:
+        pass
     import pathlib
     ctrl = pathlib.Path(CONTROL_FILE)
     if not ctrl.exists():
@@ -1115,6 +1124,18 @@ def _write_heartbeat():
         error=_state.get("error"),
     )
     _write_navigator_heartbeat()
+
+    # ── Dual-write to bots_state (migration Phase 1) ──────────────────────────
+    try:
+        _tp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trading-platform")
+        if _tp not in sys.path:
+            sys.path.append(_tp)
+        from core.bot_state import write_heartbeat as _bs_hb
+        _fx_eq = get_paper_equity(current_prices=_latest_prices)
+        _fx_pos = get_paper_positions()
+        _bs_hb("forex_gump", _fx_eq, positions=len(_fx_pos))
+    except Exception as _bse:
+        logger.debug(f"Navigator | bots_state dual-write failed (non-fatal): {_bse}")
 
 
 def _write_live_state():

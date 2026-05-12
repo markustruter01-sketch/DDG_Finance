@@ -35,6 +35,24 @@ def _empty_bot(source: str = "unavailable") -> dict:
     }
 
 
+def _bots_state_mins_ago(conn, canonical_id: str) -> "float | None":
+    """Return heartbeat age in minutes from bots_state, or None if unavailable."""
+    try:
+        with conn.cursor(cursor_factory=_RealDictCursor) as cur:
+            cur.execute(
+                """SELECT EXTRACT(EPOCH FROM (NOW() - last_heartbeat))/60 AS mins_ago
+                     FROM bots_state
+                    WHERE bot_id = %s AND last_heartbeat IS NOT NULL""",
+                (canonical_id,),
+            )
+            row = cur.fetchone()
+            if row and row.get("mins_ago") is not None:
+                return float(row["mins_ago"])
+    except Exception:
+        pass
+    return None
+
+
 def _pg_connect():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url or psycopg2 is None:
@@ -109,9 +127,9 @@ def _fetch_fleet_equity() -> dict:
                     pr = cur.fetchone()
                     starting = float(pr["starting_balance_usd"] or _STARTING) if pr else _STARTING
 
-                    # Audit fix H5: skip stale heartbeat reads (>5 min old).
-                    # If the bot died, fall back to starting balance and flag stale=True
-                    # so the dashboard can render an "UNRELIABLE" badge.
+                    # H5 + bots_state: prefer bots_state.last_heartbeat freshness;
+                    # fall back to kraken_heartbeat if bots_state row has no timestamp.
+                    _bs_mins = _bots_state_mins_ago(conn, key)
                     cur.execute(
                         """
                         SELECT equity_usd,
@@ -121,7 +139,9 @@ def _fetch_fleet_equity() -> dict:
                         (db_id,)
                     )
                     hr = cur.fetchone()
-                    _mins = float(hr["mins_ago"]) if hr and hr.get("mins_ago") is not None else 9999.0
+                    _mins = _bs_mins if _bs_mins is not None else (
+                        float(hr["mins_ago"]) if hr and hr.get("mins_ago") is not None else 9999.0
+                    )
                     _is_stale = _mins > 5.0
                     eq = float(hr["equity_usd"] or 0) if (hr and not _is_stale) else 0.0
                     if eq <= 0:
@@ -177,6 +197,8 @@ def _fetch_fleet_equity() -> dict:
                 kcpr = cur.fetchone()
                 # H5: include heartbeat freshness so a dead bot doesn't show last-known
                 # data as if it were live.
+                # Prefer bots_state freshness for kraken_trend
+                _kc_bs_mins = _bots_state_mins_ago(conn, "kraken_trend")
                 cur.execute(
                     """
                     SELECT position_count,
@@ -185,7 +207,9 @@ def _fetch_fleet_equity() -> dict:
                     """
                 )
                 kchb = cur.fetchone()
-            _kc_mins = float(kchb["mins_ago"]) if kchb and kchb.get("mins_ago") is not None else 9999.0
+            _kc_mins = _kc_bs_mins if _kc_bs_mins is not None else (
+                float(kchb["mins_ago"]) if kchb and kchb.get("mins_ago") is not None else 9999.0
+            )
             _kc_stale = _kc_mins > 5.0
             # H5: when heartbeat is stale, fall back to starting balance for equity AND
             # zero positions — kraken_current_portfolio cache is updated by the bot, so

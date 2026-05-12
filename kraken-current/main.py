@@ -422,11 +422,20 @@ def main():
     refresh_universe(force=True)
 
     while True:
-        # ── Manual pause check ────────────────────────────────────────────────
+        # ── Manual pause check: prefer bots_state, fall back to kc_control.json ─
         try:
-            _ctrl = Path(os.path.join(_DIR, "kc_control.json"))
-            if _ctrl.exists() and json.loads(_ctrl.read_text()).get("bot_paused", False):
-                logger.info("KrakenCurrent | Bot is paused via control file — skipping cycle")
+            _kc_paused = False
+            try:
+                from core.bot_state import is_paused as _bs_is_paused
+                _kc_paused = _bs_is_paused("kraken_trend")
+            except Exception:
+                pass
+            if not _kc_paused:
+                _ctrl = Path(os.path.join(_DIR, "kc_control.json"))
+                if _ctrl.exists() and json.loads(_ctrl.read_text()).get("bot_paused", False):
+                    _kc_paused = True
+            if _kc_paused:
+                logger.info("KrakenCurrent | Bot is paused — skipping cycle")
                 time.sleep(60)
                 continue
         except Exception as _cp_exc:
@@ -490,6 +499,11 @@ def main():
 
             # Write to DB
             write_heartbeat(equity, len(portfolio.positions), _cycle)
+            try:
+                from core.bot_state import write_heartbeat as _bs_hb
+                _bs_hb("kraken_trend", equity, positions=len(portfolio.positions))
+            except Exception as _bse:
+                logger.debug(f"KrakenCurrent | bots_state dual-write failed (non-fatal): {_bse}")
             write_portfolio(equity, portfolio.cash, len(portfolio.positions))
             upsert_positions(portfolio.positions, current_prices, regime)
             if scan_results:
@@ -506,7 +520,13 @@ def main():
         except Exception as e:
             logger.error(f"KrakenCurrent | Cycle #{_cycle} error: {e}")
             try:
-                write_heartbeat(portfolio.equity({}), len(portfolio.positions), _cycle, status="error", error=str(e))
+                _err_eq = portfolio.equity({})
+                write_heartbeat(_err_eq, len(portfolio.positions), _cycle, status="error", error=str(e))
+                try:
+                    from core.bot_state import write_heartbeat as _bs_hb
+                    _bs_hb("kraken_trend", _err_eq, positions=len(portfolio.positions), status="error", error=str(e))
+                except Exception:
+                    pass
             except Exception:
                 pass
 

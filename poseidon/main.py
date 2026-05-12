@@ -389,9 +389,17 @@ def main():
         except Exception as _fh_exc:
             logger.debug(f"Bot | Fleet halt check failed (non-fatal, continuing): {_fh_exc}")
 
-        # ── Manual pause check ────────────────────────────────────────
-        if _is_bot_paused():
-            logger.info("Poseidon | Bot is paused via control file — skipping cycle")
+        # ── Manual pause check: prefer bots_state, fall back to poseidon_control.json ──
+        _poseidon_paused = False
+        try:
+            from core.bot_state import is_paused as _bs_is_paused
+            _poseidon_paused = _bs_is_paused("poseidon_momentum")
+        except Exception:
+            pass
+        if not _poseidon_paused:
+            _poseidon_paused = _is_bot_paused()
+        if _poseidon_paused:
+            logger.info("Poseidon | Bot is paused — skipping cycle")
             import time as _t
             _t.sleep(60)
             continue
@@ -446,6 +454,11 @@ def main():
 
             # DB writes (signatures preserved from original)
             write_heartbeat(equity, len(portfolio.positions), _cycle)
+            try:
+                from core.bot_state import write_heartbeat as _bs_hb
+                _bs_hb("poseidon_momentum", equity, positions=len(portfolio.positions))
+            except Exception as _bse:
+                logger.debug(f"Poseidon | bots_state dual-write failed (non-fatal): {_bse}")
             write_portfolio(equity, portfolio.cash, len(portfolio.positions))
             write_live_state(current_prices, equity)
 
@@ -459,13 +472,13 @@ def main():
         except Exception as e:
             logger.error(f"Poseidon | Cycle #{_cycle} error: {e}")
             try:
-                write_heartbeat(
-                    portfolio.equity({}),
-                    len(portfolio.positions),
-                    _cycle,
-                    status="error",
-                    error=str(e),
-                )
+                _err_eq = portfolio.equity({})
+                write_heartbeat(_err_eq, len(portfolio.positions), _cycle, status="error", error=str(e))
+                try:
+                    from core.bot_state import write_heartbeat as _bs_hb
+                    _bs_hb("poseidon_momentum", _err_eq, positions=len(portfolio.positions), status="error", error=str(e))
+                except Exception:
+                    pass
             except Exception:
                 pass
 

@@ -151,3 +151,136 @@ def get_all_states() -> list[dict]:
     except Exception as exc:
         logger.debug(f"BotState | get_all_states failed (non-fatal): {exc}")
         return []
+
+
+# ── Portfolio helpers (Stage 2) ────────────────────────────────────────────
+
+def get_portfolio(bot_id: str) -> dict:
+    """Read portfolio for a bot. Returns dict with keys:
+    bot_id, starting_usd, cash_usd, equity_usd, positions, updated_at, metadata.
+    Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
+    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM bot_portfolio WHERE bot_id = %s",
+                    (canonical,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return {}
+                cols = [desc[0] for desc in cur.description]
+                d = dict(zip(cols, row))
+                for k, v in d.items():
+                    if hasattr(v, "isoformat"):
+                        d[k] = v.isoformat()
+                return d
+    except Exception as exc:
+        logger.debug(f"BotState | get_portfolio({bot_id}) failed (non-fatal): {exc}")
+        return {}
+
+
+def write_portfolio(
+    bot_id: str,
+    cash: float,
+    equity: float,
+    positions: list,
+    metadata: dict = None,
+) -> None:
+    """UPSERT portfolio state. Called by bot at end of every cycle.
+    Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
+    import json as _json
+    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bot_portfolio
+                        (bot_id, cash_usd, equity_usd, positions, updated_at, metadata)
+                    VALUES (%s, %s, %s, %s::jsonb, NOW(), %s::jsonb)
+                    ON CONFLICT (bot_id) DO UPDATE SET
+                        cash_usd   = EXCLUDED.cash_usd,
+                        equity_usd = EXCLUDED.equity_usd,
+                        positions  = EXCLUDED.positions,
+                        updated_at = NOW(),
+                        metadata   = CASE
+                            WHEN EXCLUDED.metadata = '{}'::jsonb THEN bot_portfolio.metadata
+                            ELSE EXCLUDED.metadata
+                        END
+                    """,
+                    (
+                        canonical,
+                        round(cash, 2),
+                        round(equity, 2),
+                        _json.dumps(positions),
+                        _json.dumps(metadata or {}),
+                    ),
+                )
+    except Exception as exc:
+        logger.debug(f"BotState | write_portfolio({bot_id}) failed (non-fatal): {exc}")
+
+
+def add_position(bot_id: str, position: dict) -> None:
+    """Append a position to bot's positions array (atomic jsonb append).
+    Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
+    import json as _json
+    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bot_portfolio
+                       SET positions = positions || %s::jsonb
+                     WHERE bot_id = %s
+                    """,
+                    (_json.dumps([position]), canonical),
+                )
+    except Exception as exc:
+        logger.debug(f"BotState | add_position({bot_id}) failed (non-fatal): {exc}")
+
+
+def remove_position(bot_id: str, symbol: str) -> None:
+    """Remove a position by symbol from bot's positions array (atomic filter).
+    Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
+    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bot_portfolio
+                       SET positions = (
+                           SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+                             FROM jsonb_array_elements(positions) elem
+                            WHERE elem->>'symbol' != %s
+                       )
+                     WHERE bot_id = %s
+                    """,
+                    (symbol, canonical),
+                )
+    except Exception as exc:
+        logger.debug(f"BotState | remove_position({bot_id}, {symbol}) failed (non-fatal): {exc}")
+
+
+def get_all_portfolios() -> list[dict]:
+    """Return all bot portfolios ordered by bot_id (for fleet equity calculation)."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM bot_portfolio ORDER BY bot_id")
+                cols = [desc[0] for desc in cur.description]
+                rows = cur.fetchall()
+                result = []
+                for row in rows:
+                    d = dict(zip(cols, row))
+                    for k, v in d.items():
+                        if hasattr(v, "isoformat"):
+                            d[k] = v.isoformat()
+                    result.append(d)
+                return result
+    except Exception as exc:
+        logger.debug(f"BotState | get_all_portfolios failed (non-fatal): {exc}")
+        return []

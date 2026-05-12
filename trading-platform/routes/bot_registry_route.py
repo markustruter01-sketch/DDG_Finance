@@ -3,7 +3,7 @@ Read-only API endpoint exposing the bot registry to frontend.
 """
 from fastapi import APIRouter, HTTPException
 from core.bot_registry import to_dict_list, fleet_starting_capital, fleet_bot_count
-from core.bot_state import get_all_states, get_bot_state
+from core.bot_state import get_all_states, get_bot_state, get_portfolio, get_all_portfolios
 
 router = APIRouter()
 
@@ -30,3 +30,18 @@ def get_single_bot_state(bot_id: str):
     if not state:
         raise HTTPException(status_code=404, detail=f"Bot '{bot_id}' not found in bots_state")
     return state
+
+
+@router.get("/bots/portfolios")
+def get_all_portfolios_route():
+    """Return bot_portfolio rows for all bots (fleet equity calculation)."""
+    return {"portfolios": get_all_portfolios()}
+
+
+@router.get("/bots/{bot_id}/portfolio")
+def get_bot_portfolio_route(bot_id: str):
+    """Return bot_portfolio row for one bot by canonical or legacy ID."""
+    p = get_portfolio(bot_id)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"No portfolio for {bot_id}")
+    return p

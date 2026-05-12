@@ -481,6 +481,33 @@ CREATE TABLE IF NOT EXISTS bots_state (
   error_message  TEXT DEFAULT '',
   metadata       JSONB DEFAULT '{}'::jsonb
 );
+
+-- ── Bot Portfolio Table ────────────────────────────────────────────────────
+-- Canonical per-bot portfolio state: cash, equity, open positions.
+-- Replaces scattered JSON state files and kraken_portfolio rows as source of truth.
+-- bot_id uses canonical registry IDs (spy_qqq_trend, jerome_macro, etc.)
+CREATE TABLE IF NOT EXISTS bot_portfolio (
+  bot_id        TEXT PRIMARY KEY,
+  starting_usd  DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  cash_usd      DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  equity_usd    DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  positions     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata      JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, metadata)
+VALUES
+  ('oracle',             100000, 100000, 100000, '[]'::jsonb, '{"source": "alpaca", "needs_seed": true}'::jsonb),
+  ('spy_qqq_trend',      100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_1"}'::jsonb),
+  ('jerome_macro',       100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_2"}'::jsonb),
+  ('sector_rotation',    100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_3"}'::jsonb),
+  ('defensive_guardian', 100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_4"}'::jsonb),
+  ('macro_bond',         100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_7"}'::jsonb),
+  ('forex_gump',         100000, 100000, 100000, '[]'::jsonb, '{"source": "forex_engine"}'::jsonb),
+  ('poseidon_momentum',  100000, 100000, 100000, '[]'::jsonb, '{"source": "poseidon_paper_portfolio"}'::jsonb),
+  ('kraken_trend',       100000, 100127.55, 100127.55, '[]'::jsonb, '{"source": "kraken_current_portfolio_id_8"}'::jsonb)
+ON CONFLICT (bot_id) DO NOTHING;
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

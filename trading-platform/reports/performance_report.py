@@ -452,6 +452,16 @@ def section_4_math_audit_summary() -> list[str]:
     lines.append(f"Data as of: {_now_utc_str()}")
     lines.append("")
 
+    # Resolve legacy audit bot IDs (apex-predator, davy-jones, etc.) to display names
+    from core.bot_state import LEGACY_TO_CANONICAL
+    def _resolve_audit_bot(audit_bot_id: str) -> str:
+        canonical = LEGACY_TO_CANONICAL.get(audit_bot_id, audit_bot_id)
+        for bot in _registry_all_bots():
+            if bot.id == canonical:
+                return bot.display_name
+        return audit_bot_id
+
+    # Query 1 — 24h overall
     overall = _query("""
         SELECT
             COUNT(*) AS total,
@@ -459,7 +469,7 @@ def section_4_math_audit_summary() -> list[str]:
             COUNT(*) FILTER (WHERE status = 'WARN') AS warn,
             COUNT(*) FILTER (WHERE status = 'FAIL') AS fail
         FROM math_audit_log
-        WHERE ts >= NOW() - INTERVAL '24 hours';
+        WHERE audit_timestamp >= NOW() - INTERVAL '24 hours';
     """)
 
     if overall and overall[0].get("total"):
@@ -479,15 +489,16 @@ def section_4_math_audit_summary() -> list[str]:
         lines.append("No math audit data in last 24 hours.")
         lines.append("")
 
+    # Query 2 — 7-day trend
     daily = _query("""
         SELECT
-            DATE_TRUNC('day', ts) AS day,
+            DATE_TRUNC('day', audit_timestamp) AS day,
             COUNT(*) AS total,
             COUNT(*) FILTER (WHERE status = 'FAIL') AS fail,
             ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'PASS') / NULLIF(COUNT(*), 0), 1) AS pass_pct
         FROM math_audit_log
-        WHERE ts >= NOW() - INTERVAL '7 days'
-        GROUP BY DATE_TRUNC('day', ts)
+        WHERE audit_timestamp >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE_TRUNC('day', audit_timestamp)
         ORDER BY day DESC;
     """)
     if daily:
@@ -500,6 +511,7 @@ def section_4_math_audit_summary() -> list[str]:
             lines.append(f"  {day_str:<12} {d['total']:>8,} {d['fail']:>6,} {pass_pct_str:>7}")
         lines.append("")
 
+    # Query 3 — per-bot fail rate
     by_bot = _query("""
         SELECT
             bot_id,
@@ -507,22 +519,24 @@ def section_4_math_audit_summary() -> list[str]:
             COUNT(*) FILTER (WHERE status = 'FAIL') AS fail,
             ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'FAIL') / NULLIF(COUNT(*), 0), 1) AS fail_pct
         FROM math_audit_log
-        WHERE ts >= NOW() - INTERVAL '24 hours'
+        WHERE audit_timestamp >= NOW() - INTERVAL '24 hours'
         GROUP BY bot_id
         ORDER BY fail_pct DESC NULLS LAST;
     """)
     if by_bot:
         lines.append("PER-BOT FAIL RATE (24h):")
         for b in by_bot:
+            display = _resolve_audit_bot(b["bot_id"])
             fail_pct_str = (str(b["fail_pct"]) + "%") if b.get("fail_pct") is not None else "n/a"
-            lines.append(f"  {b['bot_id']:<22} {b['total']:>6,} checks, {b['fail']:>4,} fails ({fail_pct_str:>6})")
+            lines.append(f"  {display:<22} {b['total']:>6,} checks, {b['fail']:>4,} fails ({fail_pct_str:>6})")
         lines.append("")
 
+    # Query 4 — top failing formulas
     top_fails = _query("""
-        SELECT formula, COUNT(*) AS fails
+        SELECT formula_name AS formula, COUNT(*) AS fails
         FROM math_audit_log
-        WHERE status = 'FAIL' AND ts >= NOW() - INTERVAL '24 hours'
-        GROUP BY formula
+        WHERE status = 'FAIL' AND audit_timestamp >= NOW() - INTERVAL '24 hours'
+        GROUP BY formula_name
         ORDER BY fails DESC
         LIMIT 5;
     """)
@@ -532,19 +546,21 @@ def section_4_math_audit_summary() -> list[str]:
             lines.append(f"  {f['formula']:<40} {f['fails']:>4,} fails")
         lines.append("")
 
+    # Query 5 — recent fail examples
     fail_examples = _query("""
-        SELECT bot_id, formula, status, notes, ts
+        SELECT bot_id, formula_name AS formula, status, notes, audit_timestamp AS ts
         FROM math_audit_log
-        WHERE status = 'FAIL' AND ts >= NOW() - INTERVAL '24 hours'
-        ORDER BY ts DESC
+        WHERE status = 'FAIL' AND audit_timestamp >= NOW() - INTERVAL '24 hours'
+        ORDER BY audit_timestamp DESC
         LIMIT 5;
     """)
     if fail_examples:
         lines.append("RECENT FAILURE EXAMPLES:")
         for ex in fail_examples:
+            display = _resolve_audit_bot(ex["bot_id"])
             note = (ex.get("notes") or "")[:100]
             ts_str = ex["ts"].strftime("%H:%M:%S") if ex.get("ts") else "?"
-            lines.append(f"  [{ts_str}] {ex['bot_id']:<20} {ex['formula']:<30} {note}")
+            lines.append(f"  [{ts_str}] {display:<20} {ex['formula']:<30} {note}")
         lines.append("")
 
     return lines
@@ -579,7 +595,9 @@ def section_5_trade_quality() -> list[str]:
         src = TRADE_SOURCES.get(bot.id)
         if not src:
             continue
-        reason_col = "reason" if bot.id in ("poseidon_momentum", "kraken_trend") else "exit_reason"
+        # kraken_trades, poseidon_momentum_trades, kraken_current_trades all use "reason"
+        # only the alpaca "trades" table (oracle) uses "exit_reason"
+        reason_col = "exit_reason" if bot.id == "oracle" else "reason"
 
         where_parts = [f"{src['time_col']} IS NOT NULL"]
         params: list[Any] = []

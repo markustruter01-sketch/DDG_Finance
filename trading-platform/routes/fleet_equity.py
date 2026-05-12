@@ -1,4 +1,4 @@
-"""Single source of truth: GET /fleet/equity aggregates equity & P&L for all 8 bots."""
+"""Single source of truth: GET /fleet/equity aggregates equity & P&L for all 9 bots."""
 from __future__ import annotations
 
 import os
@@ -61,6 +61,85 @@ def _pg_connect():
 
 
 def _fetch_fleet_equity() -> dict:
+    """
+    Primary path: read all bot portfolios from bot_portfolio in a single query.
+    Falls back to _legacy_fleet_equity() if anything goes wrong.
+    """
+    try:
+        from core.bot_state import get_all_portfolios
+        portfolios = get_all_portfolios()  # 9 rows in one query
+
+        if not portfolios:
+            raise RuntimeError("bot_portfolio returned empty — falling back")
+
+        result: dict = {}
+        for p in portfolios:
+            bot_id = p["bot_id"]
+            eq      = float(p["equity_usd"] or _STARTING)
+            start   = float(p["starting_usd"] or _STARTING)
+            cash    = float(p["cash_usd"] or 0.0)
+            pos_raw = p.get("positions") or []
+            pos_count = len(pos_raw) if isinstance(pos_raw, list) else 0
+            pnl     = eq - start
+            pnl_pct = round((pnl / start) * 100, 4) if start else 0.0
+            upd     = p.get("updated_at")
+
+            result[bot_id] = {
+                "equity":    round(eq, 2),
+                "starting":  round(start, 2),
+                "cash":      round(cash, 2),
+                "pnl":       round(pnl, 2),
+                "pnl_pct":   pnl_pct,
+                "positions": pos_count,
+                "source":    "bot_portfolio",
+                "updated_at": upd if isinstance(upd, str) else (upd.isoformat() if upd else None),
+            }
+
+        # Backwards-compat aliases so existing frontend keys still resolve
+        # while canonical IDs are the primary keys.
+        _ALIAS = {
+            "poseidon_momentum": "poseidon",
+            "kraken_trend":      "kraken_current",
+            "forex_gump":        "navigator",
+        }
+        for canonical, legacy_key in _ALIAS.items():
+            if canonical in result and legacy_key not in result:
+                result[legacy_key] = dict(result[canonical])
+
+        # Fleet totals (exclude meta keys and alias duplicates)
+        _meta_keys = {"fleet_total", "generated_at", "errors"} | set(_ALIAS.values())
+        _bot_vals  = [v for k, v in result.items() if k not in _meta_keys]
+
+        fleet_eq      = sum(b["equity"]    for b in _bot_vals)
+        fleet_start   = sum(b["starting"]  for b in _bot_vals)
+        fleet_pnl     = sum(b["pnl"]       for b in _bot_vals)
+        fleet_pos     = sum(b["positions"] for b in _bot_vals)
+        fleet_pnl_pct = round((fleet_pnl / fleet_start) * 100, 4) if fleet_start else 0.0
+
+        result["fleet_total"] = {
+            "equity":    round(fleet_eq, 2),
+            "starting":  round(fleet_start, 2),
+            "cash":      round(sum(b.get("cash", 0) for b in _bot_vals), 2),
+            "pnl":       round(fleet_pnl, 2),
+            "pnl_pct":   fleet_pnl_pct,
+            "positions": fleet_pos,
+            "source":    "computed",
+        }
+        result["generated_at"] = datetime.now(timezone.utc).isoformat()
+        result["errors"] = []
+        return result
+
+    except Exception as exc:
+        logger.error(f"fleet_equity unified path failed, falling back: {exc}")
+        return _legacy_fleet_equity()
+
+
+def _legacy_fleet_equity() -> dict:
+    """
+    Legacy per-bot fallback. Reads from kraken_heartbeat, kraken_portfolio,
+    poseidon_portfolio, kraken_current_portfolio, and the forex engine in-process state.
+    Kept intact — called only when the bot_portfolio unified path fails.
+    """
     errors: list[str] = []
     result: dict = {}
 
@@ -276,16 +355,16 @@ def _fetch_fleet_equity() -> dict:
     # ── Fleet total ───────────────────────────────────────────────────────────
     _meta_keys = {"fleet_total", "generated_at", "errors"}
     _bot_vals = [v for k, v in result.items() if k not in _meta_keys]
-    fleet_equity = sum(b["equity"] for b in _bot_vals)
+    fleet_equity_val = sum(b["equity"] for b in _bot_vals)
     fleet_starting = sum(b["starting"] for b in _bot_vals)
     if not fleet_starting:
         from core.fleet_capital import fleet_starting_capital as _fsc_fe
         fleet_starting = _fsc_fe()
-    fleet_pnl = fleet_equity - fleet_starting
+    fleet_pnl = fleet_equity_val - fleet_starting
     fleet_positions = sum(b["positions"] for b in _bot_vals)
 
     result["fleet_total"] = {
-        "equity": round(fleet_equity, 2),
+        "equity": round(fleet_equity_val, 2),
         "pnl": round(fleet_pnl, 2),
         "pnl_pct": round((fleet_pnl / fleet_starting) * 100, 4) if fleet_starting > 0 else 0.0,
         "starting": fleet_starting,
@@ -300,7 +379,7 @@ def _fetch_fleet_equity() -> dict:
 
 @fleet_equity_router.get("/fleet/equity")
 async def fleet_equity():
-    """Return consistent equity & P&L for all 8 bots. 30-second server-side cache."""
+    """Return consistent equity & P&L for all 9 bots. 30-second server-side cache."""
     now = time.time()
     if _cache["data"] is not None and (now - _cache["ts"]) < _CACHE_TTL:
         return _cache["data"]

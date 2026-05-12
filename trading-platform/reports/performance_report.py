@@ -353,21 +353,424 @@ def section_3_per_bot_deep_dive() -> list[str]:
         else:
             wr = m_all.get("win_rate") or 0
             pf = m_all.get("profit_factor") or 0
-            if wr < 30 and pf < 1.0:
-                lines.append("  ⚠ LOW WIN RATE + LOW PROFIT FACTOR — strategy may be unsuited to current conditions.")
-            elif wr < 30 and pf >= 1.5:
-                lines.append("  ✓ Low win rate but high profit factor — consistent with trend-following design.")
-            elif wr >= 50 and pf < 1.0:
-                lines.append("  ⚠ High win rate but losing money — losses larger than wins. Check stop placement.")
+            if pf and pf < 1.0:
+                severity = "🔴" if pf < 0.7 else "⚠"
+                lines.append(f"  {severity} LOSING — profit factor {pf:.2f} below 1.0. Losses outpacing wins.")
+            elif pf and pf < 1.2 and wr < 40:
+                lines.append(f"  ⚠ MARGINAL — profit factor {pf:.2f} barely positive. Watch closely.")
+            elif wr < 30 and pf and pf >= 1.5:
+                lines.append(f"  ✓ Low WR ({wr:.1f}%) high PF ({pf:.2f}) — typical trend-follower signature.")
+            elif wr >= 50 and pf and pf >= 1.5:
+                lines.append(f"  ✓ Strong — WR {wr:.1f}%, PF {pf:.2f}. Wins consistent and meaningful.")
             else:
-                lines.append(f"  ✓ Win rate {wr:.1f}% / profit factor {pf:.2f} — within expected ranges.")
+                lines.append(f"  ✓ Profitable — WR {wr:.1f}%, PF {pf:.2f}. Above breakeven.")
         lines.append("")
 
     return lines
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Master generator (sections 1-3 only for now; 4-9 in subsequent prompts)
+# Section 3.5 — Bot Comparison Matrix
+# ──────────────────────────────────────────────────────────────────────
+
+def section_3_5_bot_comparison() -> list[str]:
+    lines = _h1("SECTION 3.5 — BOT COMPARISON MATRIX")
+    lines.append("Normalized metrics for cross-bot strategy ranking.")
+    lines.append(f"Data as of: {_now_utc_str()}")
+    lines.append("")
+
+    portfolios = {p["bot_id"]: p for p in get_all_portfolios()}
+    states = {s["bot_id"]: s for s in get_all_states()}
+
+    rows = []
+    for bot in _registry_all_bots():
+        p = portfolios.get(bot.id, {})
+        m = _trade_metrics(bot.id)
+        equity = float(p.get("equity_usd") or 0)
+        starting = float(p.get("starting_usd") or 100000)
+        pct_return = ((equity - starting) / starting * 100) if starting else 0
+
+        rows.append({
+            "name": bot.display_name,
+            "id": bot.id,
+            "status": "PAUSED" if states.get(bot.id, {}).get("paused") else "ACTIVE",
+            "trades": m.get("trades", 0),
+            "wr": m.get("win_rate"),
+            "pf": m.get("profit_factor"),
+            "expectancy": m.get("expectancy"),
+            "pct_return": pct_return,
+            "avg_win": m.get("avg_win"),
+            "avg_loss": m.get("avg_loss"),
+        })
+
+    h = (f"{'BOT':<22} {'STATUS':<7} {'%RET':>7} {'TRADES':>7} {'WR':>7} "
+         f"{'PF':>6} {'EXPECT':>9} {'AVG_W':>8} {'AVG_L':>8}")
+    lines.append(h)
+    lines.append("-" * len(h))
+    for r in rows:
+        pf_str = f"{r['pf']:.2f}" if r["pf"] else "n/a"
+        lines.append(
+            f"{r['name']:<22} {r['status']:<7} "
+            f"{_fmt_pct(r['pct_return'], 2):>7} "
+            f"{r['trades']:>7,} "
+            f"{_fmt_pct(r['wr']):>7} "
+            f"{pf_str:>6} "
+            f"{_fmt_money(r['expectancy']):>9} "
+            f"{_fmt_money(r['avg_win']):>8} "
+            f"{_fmt_money(r['avg_loss']):>8}"
+        )
+    lines.append("")
+
+    profitable = [r for r in rows if r["expectancy"] and r["expectancy"] > 0]
+    profitable.sort(key=lambda r: r["expectancy"], reverse=True)
+    losing = [r for r in rows if r["expectancy"] and r["expectancy"] <= 0]
+    losing.sort(key=lambda r: r["expectancy"])
+
+    if profitable:
+        lines.append("RANKED BY EXPECTANCY (best to worst, profitable only):")
+        for i, r in enumerate(profitable, 1):
+            lines.append(f"  {i}. {r['name']:<22} expectancy/trade {_fmt_money(r['expectancy'])}")
+        lines.append("")
+    if losing:
+        lines.append("LOSING BOTS (worst to least bad):")
+        for r in losing:
+            lines.append(f"  • {r['name']:<22} expectancy/trade {_fmt_money(r['expectancy'])}")
+        lines.append("")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section 4 — Math Audit Summary
+# ──────────────────────────────────────────────────────────────────────
+
+def section_4_math_audit_summary() -> list[str]:
+    lines = _h1("SECTION 4 — MATH AUDIT SUMMARY")
+    lines.append(f"Data as of: {_now_utc_str()}")
+    lines.append("")
+
+    overall = _query("""
+        SELECT
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'PASS') AS pass,
+            COUNT(*) FILTER (WHERE status = 'WARN') AS warn,
+            COUNT(*) FILTER (WHERE status = 'FAIL') AS fail
+        FROM math_audit_log
+        WHERE ts >= NOW() - INTERVAL '24 hours';
+    """)
+
+    if overall and overall[0].get("total"):
+        r = overall[0]
+        total = r["total"] or 0
+        passed = r["pass"] or 0
+        warned = r["warn"] or 0
+        failed = r["fail"] or 0
+        pass_rate = (100.0 * passed / total) if total else 0
+        lines.append("LAST 24 HOURS:")
+        lines.append(f"  Total checks:    {total:,}")
+        lines.append(f"  PASS:            {passed:,}  ({pass_rate:.1f}%)")
+        lines.append(f"  WARN:            {warned:,}")
+        lines.append(f"  FAIL:            {failed:,}")
+        lines.append("")
+    else:
+        lines.append("No math audit data in last 24 hours.")
+        lines.append("")
+
+    daily = _query("""
+        SELECT
+            DATE_TRUNC('day', ts) AS day,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'FAIL') AS fail,
+            ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'PASS') / NULLIF(COUNT(*), 0), 1) AS pass_pct
+        FROM math_audit_log
+        WHERE ts >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE_TRUNC('day', ts)
+        ORDER BY day DESC;
+    """)
+    if daily:
+        lines.append("7-DAY TREND:")
+        h = f"  {'DAY':<12} {'TOTAL':>8} {'FAIL':>6} {'PASS%':>7}"
+        lines.append(h)
+        for d in daily:
+            day_str = d["day"].strftime("%Y-%m-%d") if d.get("day") else "?"
+            pass_pct_str = (str(d["pass_pct"]) + "%") if d.get("pass_pct") is not None else "n/a"
+            lines.append(f"  {day_str:<12} {d['total']:>8,} {d['fail']:>6,} {pass_pct_str:>7}")
+        lines.append("")
+
+    by_bot = _query("""
+        SELECT
+            bot_id,
+            COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE status = 'FAIL') AS fail,
+            ROUND(100.0 * COUNT(*) FILTER (WHERE status = 'FAIL') / NULLIF(COUNT(*), 0), 1) AS fail_pct
+        FROM math_audit_log
+        WHERE ts >= NOW() - INTERVAL '24 hours'
+        GROUP BY bot_id
+        ORDER BY fail_pct DESC NULLS LAST;
+    """)
+    if by_bot:
+        lines.append("PER-BOT FAIL RATE (24h):")
+        for b in by_bot:
+            fail_pct_str = (str(b["fail_pct"]) + "%") if b.get("fail_pct") is not None else "n/a"
+            lines.append(f"  {b['bot_id']:<22} {b['total']:>6,} checks, {b['fail']:>4,} fails ({fail_pct_str:>6})")
+        lines.append("")
+
+    top_fails = _query("""
+        SELECT formula, COUNT(*) AS fails
+        FROM math_audit_log
+        WHERE status = 'FAIL' AND ts >= NOW() - INTERVAL '24 hours'
+        GROUP BY formula
+        ORDER BY fails DESC
+        LIMIT 5;
+    """)
+    if top_fails:
+        lines.append("TOP FAILING FORMULAS (24h):")
+        for f in top_fails:
+            lines.append(f"  {f['formula']:<40} {f['fails']:>4,} fails")
+        lines.append("")
+
+    fail_examples = _query("""
+        SELECT bot_id, formula, status, notes, ts
+        FROM math_audit_log
+        WHERE status = 'FAIL' AND ts >= NOW() - INTERVAL '24 hours'
+        ORDER BY ts DESC
+        LIMIT 5;
+    """)
+    if fail_examples:
+        lines.append("RECENT FAILURE EXAMPLES:")
+        for ex in fail_examples:
+            note = (ex.get("notes") or "")[:100]
+            ts_str = ex["ts"].strftime("%H:%M:%S") if ex.get("ts") else "?"
+            lines.append(f"  [{ts_str}] {ex['bot_id']:<20} {ex['formula']:<30} {note}")
+        lines.append("")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section 5 — Trade Quality + Regime Fitness
+# ──────────────────────────────────────────────────────────────────────
+
+def section_5_trade_quality() -> list[str]:
+    lines = _h1("SECTION 5 — TRADE QUALITY + REGIME FITNESS")
+    lines.append(f"Data as of: {_now_utc_str()}")
+    lines.append("")
+
+    lines.append("SLIPPAGE CHECK (last 7d, trades > 1% slippage):")
+    high_slip = _query("""
+        SELECT trade_id, ticker, slippage_pct, realized_pnl, date
+        FROM trades
+        WHERE slippage_pct IS NOT NULL AND ABS(slippage_pct) > 1.0
+          AND date >= CURRENT_DATE - INTERVAL '7 days'
+        ORDER BY ABS(slippage_pct) DESC LIMIT 10;
+    """)
+    if high_slip:
+        for t in high_slip:
+            lines.append(f"  {t['ticker']:<8} slip={t['slippage_pct']:>5.2f}%  pnl={_fmt_money(t['realized_pnl'])}  ({t['date']})")
+    else:
+        lines.append("  No high-slippage trades found.")
+    lines.append("")
+
+    lines.append("EXIT REASON DISTRIBUTION (last 30d):")
+    for bot in _registry_all_bots():
+        src = TRADE_SOURCES.get(bot.id)
+        if not src:
+            continue
+        reason_col = "reason" if bot.id in ("poseidon_momentum", "kraken_trend") else "exit_reason"
+
+        where_parts = [f"{src['time_col']} IS NOT NULL"]
+        params: list[Any] = []
+        if src.get("bot_filter"):
+            where_parts.append("bot_id = %s")
+            params.append(src["bot_filter"])
+        if src.get("extra_where"):
+            where_parts.append(src["extra_where"])
+        where_parts.append(f"{src['time_col']} >= NOW() - INTERVAL '30 days'")
+        where = " WHERE " + " AND ".join(where_parts)
+
+        try:
+            sql = (f"SELECT {reason_col} AS reason, COUNT(*) AS n "
+                   f"FROM {src['table']}{where} "
+                   f"GROUP BY {reason_col} ORDER BY n DESC;")
+            results = _query(sql, tuple(params))
+            if results:
+                lines.append(f"  {bot.display_name}:")
+                for r in results[:5]:
+                    lines.append(f"    {(r['reason'] or 'unspecified'):<30} {r['n']:>4,} trades")
+        except Exception:
+            pass
+    lines.append("")
+
+    lines.append("PAUSED-STATE TRADE CHECK:")
+    states = {s["bot_id"]: s for s in get_all_states()}
+    paused_with_recent_trades = []
+    for bot in _registry_all_bots():
+        s = states.get(bot.id, {})
+        if not s.get("paused"):
+            continue
+        m = _trade_metrics(bot.id, days=1)
+        if m.get("trades", 0) > 0:
+            paused_with_recent_trades.append((bot.display_name, m["trades"]))
+    if paused_with_recent_trades:
+        lines.append("  ⚠ Paused bots with trades in last 24h:")
+        for name, count in paused_with_recent_trades:
+            lines.append(f"    {name}: {count} trades — pause may not be enforcing")
+    else:
+        lines.append("  ✓ No paused bots have traded recently.")
+    lines.append("")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section 6 — Infrastructure Health
+# ──────────────────────────────────────────────────────────────────────
+
+def section_6_infrastructure() -> list[str]:
+    lines = _h1("SECTION 6 — INFRASTRUCTURE HEALTH")
+    lines.append(f"Data as of: {_now_utc_str()}")
+    lines.append("")
+
+    lines.append("BOT HEARTBEATS:")
+    states = get_all_states()
+    for s in states:
+        hb = s.get("last_heartbeat")
+        if hb:
+            try:
+                if isinstance(hb, str):
+                    hb_dt = datetime.fromisoformat(hb.replace("Z", "+00:00"))
+                else:
+                    hb_dt = hb
+                if hb_dt.tzinfo is None:
+                    hb_dt = hb_dt.replace(tzinfo=timezone.utc)
+                mins = (_now_utc() - hb_dt).total_seconds() / 60
+                flag = "✓" if mins < 5 else ("⚠" if mins < 60 else "🔴")
+                lines.append(f"  {flag} {s['bot_id']:<22} {mins:>6.1f} min ago")
+            except Exception:
+                lines.append(f"  ? {s['bot_id']:<22} (unparseable heartbeat)")
+        else:
+            lines.append(f"  ⚠ {s['bot_id']:<22} no heartbeat recorded")
+    lines.append("")
+
+    lines.append("DEGRADATION EVENTS (last 24h):")
+    try:
+        degs = _query("""
+            SELECT component, severity, COUNT(*) AS n, MAX(occurred_at) AS last_seen
+            FROM degradation_events
+            WHERE occurred_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY component, severity
+            ORDER BY n DESC LIMIT 10;
+        """)
+        if degs:
+            for d in degs:
+                lines.append(f"  {d['severity']:<8} {d['component']:<30} {d['n']:>4,} events (last: {d['last_seen']})")
+        else:
+            lines.append("  ✓ No degradation events in last 24h.")
+    except Exception as exc:
+        lines.append(f"  (degradation_events table not available: {exc})")
+    lines.append("")
+
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section 7 — Parameter Drift (conditional)
+# ──────────────────────────────────────────────────────────────────────
+
+def section_7_param_drift() -> list[str]:
+    """Only renders if any bot has adaptive param changes in last 24h."""
+    drift_data = _query("""
+        SELECT bot_id, param_name, old_value, new_value, reason, changed_at
+        FROM kraken_adaptive_params
+        WHERE changed_at >= NOW() - INTERVAL '24 hours'
+        ORDER BY changed_at DESC LIMIT 20;
+    """)
+    if not drift_data:
+        return []
+
+    lines = _h1("SECTION 7 — PARAMETER DRIFT (24h)")
+    for d in drift_data:
+        ts = d["changed_at"].strftime("%Y-%m-%d %H:%M:%S") if d.get("changed_at") else "?"
+        lines.append(
+            f"  [{ts}] {d['bot_id']:<20} {d['param_name']:<20} "
+            f"{d['old_value']} → {d['new_value']}  ({d.get('reason', '')})"
+        )
+    lines.append("")
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section 8 — Anomalies Detected
+# ──────────────────────────────────────────────────────────────────────
+
+def section_8_anomalies() -> list[str]:
+    lines = _h1("SECTION 8 — ANOMALIES DETECTED")
+    lines.append("Automatically flagged data patterns worth investigating.")
+    lines.append("")
+
+    anomalies = []
+    portfolios = {p["bot_id"]: p for p in get_all_portfolios()}
+    states = {s["bot_id"]: s for s in get_all_states()}
+
+    for bot in _registry_all_bots():
+        m = _trade_metrics(bot.id)
+        p = portfolios.get(bot.id, {})
+        s = states.get(bot.id, {})
+
+        trades = m.get("trades", 0)
+        if trades == 0:
+            continue
+
+        wr = m.get("win_rate") or 0
+        if wr == 0 and trades >= 3:
+            anomalies.append(
+                f"🔴 {bot.display_name}: 0% win rate over {trades} trades. "
+                "Strategy fundamentally broken."
+            )
+
+        best = m.get("best") or 0
+        worst = abs(m.get("worst") or 0)
+        if worst > 0 and best > 5 * worst:
+            anomalies.append(
+                f"⚠ {bot.display_name}: Best trade ${best:.0f} is {best/worst:.1f}x larger "
+                "than worst loss. Single big winner skewing equity?"
+            )
+
+        pf = m.get("profit_factor")
+        if pf and pf < 0.5:
+            anomalies.append(
+                f"🔴 {bot.display_name}: Profit factor {pf:.2f} — "
+                "losing $2+ for every $1 won."
+            )
+
+        equity_pnl = float(p.get("equity_usd") or 0) - float(p.get("starting_usd") or 100000)
+        last_trade = m.get("last_trade")
+        if abs(equity_pnl) > 100 and last_trade:
+            try:
+                lt = (datetime.fromisoformat(last_trade.replace("Z", "+00:00"))
+                      if isinstance(last_trade, str) else last_trade)
+                if lt.tzinfo is None:
+                    lt = lt.replace(tzinfo=timezone.utc)
+                days_since = (_now_utc() - lt).days
+                if days_since > 7 and not s.get("paused"):
+                    anomalies.append(
+                        f"⚠ {bot.display_name}: Equity is ${equity_pnl:+.0f} but no trade "
+                        f"in {days_since} days while marked active."
+                    )
+            except Exception:
+                pass
+
+    if anomalies:
+        for a in anomalies:
+            lines.append(f"  {a}")
+    else:
+        lines.append("  ✓ No anomalies detected.")
+    lines.append("")
+    return lines
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Master generator — sections 1-8
 # ──────────────────────────────────────────────────────────────────────
 
 def generate_performance_report() -> str:
@@ -392,9 +795,39 @@ def generate_performance_report() -> str:
     except Exception as exc:
         lines.extend(["", "[Section 3 failed]", f"Error: {exc}", ""])
 
+    try:
+        lines.extend(section_3_5_bot_comparison())
+    except Exception as exc:
+        lines.extend(["", "[Section 3.5 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_4_math_audit_summary())
+    except Exception as exc:
+        lines.extend(["", "[Section 4 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_5_trade_quality())
+    except Exception as exc:
+        lines.extend(["", "[Section 5 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_6_infrastructure())
+    except Exception as exc:
+        lines.extend(["", "[Section 6 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_7_param_drift())
+    except Exception as exc:
+        lines.extend(["", "[Section 7 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_8_anomalies())
+    except Exception as exc:
+        lines.extend(["", "[Section 8 failed]", f"Error: {exc}", ""])
+
     lines.append("")
     lines.append("=" * 78)
-    lines.append("END OF REPORT (sections 1-3 of 9 — sections 4-9 pending build)")
+    lines.append("END OF REPORT  (sections 1-8 of 9 — section 9 pending build)")
     lines.append("=" * 78)
 
     return "\n".join(lines)

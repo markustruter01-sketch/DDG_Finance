@@ -106,21 +106,21 @@ const COMPONENT_LABELS: Record<string, string> = {
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
-  options_bot: "Apex Predator",
+  options_bot: "Defensive Guardian",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
-  kraken_davy_jones: "Davy Jones",
+  kraken_davy_jones: "SPY/QQQ Trend",
   kraken_blackbeard: "Jerome",
-  kraken_calypso: "Calypso",
-  kraken_poseidon: "FOMO Fred",
+  kraken_calypso: "Sector Rotation",
+  kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
 };
 
 const BOT_DISPLAY: Record<string, string> = {
-  kraken_davy_jones: "Davy Jones",
+  kraken_davy_jones: "SPY/QQQ Trend",
   kraken_blackbeard: "Jerome",
-  kraken_calypso: "Calypso",
-  kraken_poseidon: "FOMO Fred",
+  kraken_calypso: "Sector Rotation",
+  kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
 };
 

@@ -294,9 +294,9 @@ function ParamsPanel() {
   if (!data?.bots) return null;
 
   const botLabels: Record<string, { name: string; color: string }> = {
-    davy_jones: { name: "Davy Jones", color: "#f59e0b" },
+    davy_jones: { name: "SPY/QQQ Trend", color: "#f59e0b" },
     blackbeard: { name: "Jerome", color: "#ef4444" },
-    calypso: { name: "Calypso", color: "#8b5cf6" },
+    calypso: { name: "Sector Rotation", color: "#8b5cf6" },
   };
 
   return (

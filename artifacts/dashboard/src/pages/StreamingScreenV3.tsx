@@ -31,14 +31,14 @@ const BOT_COLORS: Record<string, string> = {
 
 const BOT_ICONS: Record<string, string> = {
   "davy-jones": "⚓",
-  blackbeard: "🏴‍☠️",
-  calypso: "🌊",
+  blackbeard: "🏛️",
+  calypso: "🔄",
 };
 
 const BOT_NAMES: Record<string, string> = {
-  "davy-jones": "Davy Jones",
+  "davy-jones": "SPY/QQQ Trend",
   blackbeard: "Jerome",
-  calypso: "Calypso",
+  calypso: "Sector Rotation",
 };
 
 function fmtPnl(v: number, short = false) {

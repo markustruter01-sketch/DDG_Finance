@@ -255,7 +255,7 @@ export function CombinedPortfolioSummary() {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <BoltIcon className="h-3 w-3 text-orange-400/60" />
-            <span className="text-[9px] uppercase tracking-widest text-orange-400/60 font-semibold">Apex Predator · Crypto Momentum</span>
+            <span className="text-[9px] uppercase tracking-widest text-orange-400/60 font-semibold">Defensive Guardian · Crypto Momentum</span>
             <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide">Paper</span>
             <div className="h-px flex-1 bg-orange-500/10" />
           </div>

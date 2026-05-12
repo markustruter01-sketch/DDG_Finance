@@ -96,8 +96,8 @@ export function TradeWorkflowBar() {
         toast({
           title: pausing ? "Kraken Bot Paused" : "Kraken Bot Resumed",
           description: pausing
-            ? "Davy Jones' Portfolio will skip signal processing each cycle. The workflow stays running."
-            : "Davy Jones' Portfolio is active and will evaluate signals each cycle.",
+            ? "SPY/QQQ Trend will skip signal processing each cycle. The workflow stays running."
+            : "SPY/QQQ Trend is active and will evaluate signals each cycle.",
         });
       }
     } catch (err: any) {
@@ -119,13 +119,13 @@ export function TradeWorkflowBar() {
       danger: true,
     },
     "kraken-pause": {
-      title: "Pause Davy Jones' Portfolio?",
+      title: "Pause SPY/QQQ Trend Bot?",
       body: "The Kraken bot workflow stays running but will skip signal processing each cycle. Open positions remain open and are still tracked. Resume at any time.",
       btnLabel: "Yes, Pause",
       danger: true,
     },
     "kraken-resume": {
-      title: "Resume Davy Jones' Portfolio?",
+      title: "Resume SPY/QQQ Trend Bot?",
       body: "The Kraken bot will resume evaluating mean-reversion + RSI signals every cycle. It will trade according to its configured strategy.",
       btnLabel: "Yes, Resume",
       danger: false,

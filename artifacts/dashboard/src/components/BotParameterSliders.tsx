@@ -38,9 +38,9 @@ const PARAM_LABELS: Record<string, { label: string; short: string; format: (v: n
 const PARAM_ORDER = ["ZSCORE_ENTRY", "ZSCORE_EXIT", "STOP_LOSS_PCT", "TRAIL_PCT", "MIN_NET_PROFIT_PCT"];
 
 const BOT_LABELS: Record<string, { name: string; color: string }> = {
-  davy_jones: { name: "Davy Jones", color: "#f59e0b" },
+  davy_jones: { name: "SPY/QQQ Trend", color: "#f59e0b" },
   blackbeard: { name: "Jerome", color: "#ef4444" },
-  calypso: { name: "Calypso", color: "#8b5cf6" },
+  calypso: { name: "Sector Rotation", color: "#8b5cf6" },
 };
 
 function getAggressivenessColor(value: number, bounds: BotParamBounds, aggressive: "high" | "low"): string {

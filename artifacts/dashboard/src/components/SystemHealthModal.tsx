@@ -117,13 +117,13 @@ const COMPONENT_LABELS: Record<string, string> = {
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
-  options_bot: "Apex Predator",
+  options_bot: "Defensive Guardian",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
-  kraken_davy_jones: "Davy Jones",
+  kraken_davy_jones: "SPY/QQQ Trend",
   kraken_blackbeard: "Jerome",
-  kraken_calypso: "Calypso",
-  kraken_poseidon: "FOMO Fred",
+  kraken_calypso: "Sector Rotation",
+  kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
 };
 
@@ -160,7 +160,7 @@ function buildExplanation(key: string, node: NodeHealth): string {
   }
 
   if (key === "kraken_api") {
-    if (detail.includes("Bot not started")) return "The Kraken bot process hasn't written a status file yet. Start the 'Davy Jones' Portfolio' workflow to resolve.";
+    if (detail.includes("Bot not started")) return "The Kraken bot process hasn't written a status file yet. Start the 'SPY/QQQ Trend' bot workflow to resolve.";
     if (detail.includes("paused")) return "The Kraken bot is paused — either manually via the dashboard toggle or by the circuit breaker (>3% drop / 30min). Resume from the toolbar.";
     if (detail.includes("503") || detail.includes("timeout")) return "The Kraken exchange API returned a server error. This is usually transient — the bot will retry on the next cycle.";
     if (data_age_s != null && data_age_s > 1800) return `Kraken status file is ${data_age_s.toFixed(0)}s old (threshold 1800s / 30 min). The Replit workflow may have been paused — check if the bot is still running.`;
@@ -180,7 +180,7 @@ function buildExplanation(key: string, node: NodeHealth): string {
   }
 
   if (key === "options_bot") {
-    if (level === "yellow") return "The Apex Predator options engine is in standby or encountered an initialization issue. It scans for volatility squeezes daily at 3:30 PM ET — no action needed outside that window.";
+    if (level === "yellow") return "The Defensive Guardian options engine is in standby or encountered an initialization issue. It scans for volatility squeezes daily at 3:30 PM ET — no action needed outside that window.";
   }
 
   if (key === "forex_bot") {
@@ -974,10 +974,10 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 );
                 if (perBotNodes.length === 0) return null;
                 const BOT_DISPLAY: Record<string, string> = {
-                  kraken_davy_jones: "Davy Jones",
+                  kraken_davy_jones: "SPY/QQQ Trend",
                   kraken_blackbeard: "Jerome",
-                  kraken_calypso: "Calypso",
-                  kraken_poseidon: "FOMO Fred",
+                  kraken_calypso: "Sector Rotation",
+                  kraken_poseidon: "Poseidon",
                   kraken_kraken_current: "Kraken Current",
                 };
                 return (

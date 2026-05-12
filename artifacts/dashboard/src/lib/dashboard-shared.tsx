@@ -28,7 +28,7 @@ export function computeXP(wins: number, total: number): number {
 }
 
 export const KRAKEN_RANKS = [
-  { xp: 10000, label: "Davy Jones Himself", icon: "💀", tw: "text-cyan-300" },
+  { xp: 10000, label: "SPY/QQQ Trend Veteran", icon: "💀", tw: "text-cyan-300" },
   { xp: 5000,  label: "Captain",            icon: "⚓", tw: "text-cyan-400" },
   { xp: 2500,  label: "Quartermaster",      icon: "🗺️", tw: "text-cyan-500" },
   { xp: 1000,  label: "First Mate",         icon: "🏴‍☠️", tw: "text-teal-400" },
@@ -46,7 +46,7 @@ export const ORACLE_RANKS = [
 ];
 
 export const OPTIONS_RANKS = [
-  { xp: 10000, label: "The Apex Predator", icon: "🎯", tw: "text-red-300" },
+  { xp: 10000, label: "The Defensive Guardian", icon: "🎯", tw: "text-red-300" },
   { xp: 5000,  label: "Options Guru",      icon: "📊", tw: "text-red-400" },
   { xp: 2500,  label: "Vol Hunter",        icon: "🔥", tw: "text-orange-400" },
   { xp: 1000,  label: "Straddle Master",   icon: "⚡", tw: "text-amber-400" },

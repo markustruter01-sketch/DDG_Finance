@@ -506,6 +506,25 @@ def main():
                 logger.debug(f"KrakenCurrent | bots_state dual-write failed (non-fatal): {_bse}")
             write_portfolio(equity, portfolio.cash, len(portfolio.positions))
             upsert_positions(portfolio.positions, current_prices, regime)
+            # ── Dual-write to bot_portfolio (Stage 2) ─────────────────────────
+            try:
+                from core.bot_state import write_portfolio as _bs_write_pf
+                _bs_write_pf(
+                    "kraken_trend",
+                    cash=round(portfolio.cash, 2),
+                    equity=round(equity, 2),
+                    positions=[
+                        {"symbol": _sym,
+                         "side": _pos.direction,
+                         "size": round(_pos.position_value, 2),
+                         "entry": _pos.entry_price,
+                         "value_usd": round(_pos.position_value, 2)}
+                        for _sym, _pos in portfolio.positions.items()
+                    ],
+                    metadata={"source": "kraken_current", "bot_id_legacy": "kraken-current"}
+                )
+            except Exception as _pf_exc:
+                logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")
             if scan_results:
                 record_signal_scan(scan_results)
             write_live_state(current_prices, equity, scan_results, regime)

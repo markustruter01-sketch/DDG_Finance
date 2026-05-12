@@ -1137,6 +1137,33 @@ def _write_heartbeat():
     except Exception as _bse:
         logger.debug(f"Navigator | bots_state dual-write failed (non-fatal): {_bse}")
 
+    # ── Dual-write to bot_portfolio (Stage 2) ─────────────────────────────────
+    try:
+        _tp2 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trading-platform")
+        if _tp2 not in sys.path:
+            sys.path.append(_tp2)
+        from core.bot_state import write_portfolio as _bs_write_pf
+        _fx_eq2   = get_paper_equity(current_prices=_latest_prices)
+        _fx_pos2  = get_paper_positions()
+        _fx_summ  = get_paper_portfolio_summary()
+        _fx_cash  = _fx_summ.get("cash_usd", _fx_eq2)
+        _bs_write_pf(
+            "forex_gump",
+            cash=round(_fx_cash, 2),
+            equity=round(_fx_eq2, 2),
+            positions=[
+                {"symbol": PAIR_LABELS.get(_pair, _pair),
+                 "side": _fp["direction"],
+                 "size": round(_fp.get("size_usd", 0), 2),
+                 "entry": _fp["entry_price"],
+                 "value_usd": round(_fp.get("size_usd", 0), 2)}
+                for _pair, _fp in _fx_pos2.items()
+            ],
+            metadata={"source": "forex_engine", "bot_id_legacy": "navigator"}
+        )
+    except Exception as _pf_exc:
+        logger.debug(f"Navigator | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")
+
 
 def _write_live_state():
     equity = get_paper_equity(current_prices=_latest_prices)

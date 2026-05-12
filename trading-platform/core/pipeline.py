@@ -1230,6 +1230,27 @@ async def _run_pipeline_inner(
     except Exception as _snap_exc:
         logger.warning(f"Pipeline | Equity snapshot write failed (non-fatal): {_snap_exc}")
 
+    # ── Oracle: dual-write to bot_portfolio (Stage 2) ─────────────────────────
+    try:
+        from core.bot_state import write_portfolio as _bs_write_pf
+        _oracle_equity = float(exec_result.get("equity", 0.0) or 0.0)
+        _oracle_cash   = 0.0
+        try:
+            from execution.broker import get_account as _get_acct
+            _acct = _get_acct()
+            _oracle_cash = float(_acct.get("cash", 0.0) or 0.0)
+        except Exception:
+            _oracle_cash = _oracle_equity
+        _bs_write_pf(
+            "oracle",
+            cash=round(_oracle_cash, 2),
+            equity=round(_oracle_equity, 2),
+            positions=[],
+            metadata={"source": "alpaca", "pipeline_mode": "oracle"}
+        )
+    except Exception as _pf_exc:
+        logger.debug(f"Pipeline | Oracle bot_portfolio dual-write failed (non-fatal): {_pf_exc}")
+
     elapsed = (datetime.now(timezone.utc) - started).total_seconds()
     logger.info(f"PIPELINE COMPLETE in {elapsed:.1f}s | status={result['status']} mode={mode_label}")
     return result

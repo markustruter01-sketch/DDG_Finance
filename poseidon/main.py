@@ -461,6 +461,25 @@ def main():
                 logger.debug(f"Poseidon | bots_state dual-write failed (non-fatal): {_bse}")
             write_portfolio(equity, portfolio.cash, len(portfolio.positions))
             write_live_state(current_prices, equity)
+            # ── Dual-write to bot_portfolio (Stage 2) ─────────────────────────
+            try:
+                from core.bot_state import write_portfolio as _bs_write_pf
+                _bs_write_pf(
+                    "poseidon_momentum",
+                    cash=round(portfolio.cash, 2),
+                    equity=round(equity, 2),
+                    positions=[
+                        {"symbol": _sym,
+                         "side": _p["direction"],
+                         "size": round(_p.get("position_usd", _p.get("units", 0) * _p.get("entry_price", 0)), 2),
+                         "entry": _p["entry_price"],
+                         "value_usd": round(_p.get("position_usd", 0), 2)}
+                        for _sym, _p in portfolio.positions.items()
+                    ],
+                    metadata={"source": "poseidon", "bot_id_legacy": "poseidon"}
+                )
+            except Exception as _pf_exc:
+                logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")
 
             logger.info(
                 f"Poseidon | Cycle #{_cycle} complete | "

@@ -716,6 +716,25 @@ def write_status(error: str | None = None) -> None:
     except Exception as _bse:
         logger.debug(f"Status | bots_state dual-write failed (non-fatal): {_bse}")
 
+    # ── Dual-write to bot_portfolio (Stage 2) ─────────────────────────────────
+    try:
+        from core.bot_state import write_portfolio as _bs_write_pf, LEGACY_TO_CANONICAL as _bs_map
+        _pf_summary = get_paper_portfolio_summary()
+        _pf_cash = _pf_summary.get("cash_usd", total_equity)
+        _bs_write_pf(
+            _bs_map.get(BOT_ID, BOT_ID),
+            cash=round(_pf_cash, 2),
+            equity=round(total_equity, 2),
+            positions=[
+                {"symbol": _sym, "side": _p["side"], "size": _p["size_usd"],
+                 "entry": _p["entry_price"], "value_usd": _p.get("value_usd", _p["size_usd"])}
+                for _sym, _p in open_positions.items()
+            ],
+            metadata={"source": "kraken_bot", "bot_id_legacy": BOT_ID}
+        )
+    except Exception as _pf_exc:
+        logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")
+
     # status.json is no longer written in the primary path.
     # PostgreSQL kraken_heartbeat is the sole persistent store for the heartbeat.
     # The _atomic_json_write + STATUS_FILE infrastructure is retained for the

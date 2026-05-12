@@ -65,7 +65,7 @@ def _query(sql: str, params: tuple = ()) -> list[dict]:
 
 # Map canonical bot_id → which trade table to query
 TRADE_SOURCES = {
-    "oracle":             {"table": "trades",                     "pnl_col": "realized_pnl",  "time_col": "closed_at", "bot_filter": None,
+    "oracle":             {"table": "trades",                     "pnl_col": "realized_pnl",  "time_col": "date",      "bot_filter": None,
                           "extra_where": "status IN ('Closed_Win','Closed_Loss') AND realized_pnl IS NOT NULL"},
     "spy_qqq_trend":      {"table": "kraken_trades",              "pnl_col": "pnl_usd",       "time_col": "closed_at", "bot_filter": "davy-jones"},
     "jerome_macro":       {"table": "kraken_trades",              "pnl_col": "pnl_usd",       "time_col": "closed_at", "bot_filter": "blackbeard"},

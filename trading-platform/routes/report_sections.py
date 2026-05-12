@@ -5,6 +5,19 @@ Each function returns list[str] lines to be appended to the main report.
 Data is reconstructed from historical records where possible.
 """
 
+# ════════════════════════════════════════════════════════════════════
+# DEPRECATED — 2026-05-12
+# ════════════════════════════════════════════════════════════════════
+# This module is replaced by trading-platform/reports/performance_report.py
+# which uses the unified bot_registry + bot_portfolio data sources.
+# This file is kept temporarily for backwards-compatibility of:
+#   - /export/report (legacy endpoint, still active for now)
+#   - /export/report-parts (legacy endpoint, still active for now)
+# Both endpoints will be removed after 7 days of clean operation of the
+# new /trading-api/reports/performance endpoints.
+# DO NOT add new sections here — extend performance_report.py instead.
+# ════════════════════════════════════════════════════════════════════
+
 from __future__ import annotations
 
 import json

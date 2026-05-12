@@ -985,6 +985,16 @@ async def data_snapshot() -> dict:
     }
 
 
+# ════════════════════════════════════════════════════════════════════
+# DEPRECATED — 2026-05-12
+# ════════════════════════════════════════════════════════════════════
+# export_diagnostic_report and export_report_parts are replaced by:
+#   GET /trading-api/reports/performance       (full report, plain text)
+#   GET /trading-api/reports/performance-parts (split parts, JSON)
+# These legacy endpoints remain active during the 7-day verification window.
+# DO NOT extend these functions — use reports/performance_report.py instead.
+# ════════════════════════════════════════════════════════════════════
+
 @portfolio_router.get("/export/report", tags=["Export"])
 async def export_diagnostic_report():
     from starlette.responses import PlainTextResponse

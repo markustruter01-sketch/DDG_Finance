@@ -348,22 +348,25 @@ def section_3_per_bot_deep_dive() -> list[str]:
 
         # Behavior check
         lines.append("BEHAVIOR CHECK:")
-        if m_all.get("trades", 0) == 0:
+        trades = m_all.get("trades", 0)
+        wr = m_all.get("win_rate") or 0
+        pf = m_all.get("profit_factor")
+        if trades == 0:
             lines.append("  No closed trades yet — nothing to verify.")
+        elif pf is None:
+            lines.append(f"  🔴 NO WINNERS — {trades} trades, {wr:.1f}% win rate. Strategy producing zero profitable trades.")
+        elif pf < 0.7:
+            lines.append(f"  🔴 SEVERELY LOSING — profit factor {pf:.2f}. Losing $1.40+ for every $1 won.")
+        elif pf < 1.0:
+            lines.append(f"  ⚠ LOSING — profit factor {pf:.2f} below 1.0. Losses outpacing wins.")
+        elif pf < 1.2 and wr < 40:
+            lines.append(f"  ⚠ MARGINAL — profit factor {pf:.2f} barely positive. Watch closely.")
+        elif wr < 30 and pf >= 1.5:
+            lines.append(f"  ✓ Low WR ({wr:.1f}%) high PF ({pf:.2f}) — typical trend-follower signature.")
+        elif wr >= 50 and pf >= 1.5:
+            lines.append(f"  ✓ Strong — WR {wr:.1f}%, PF {pf:.2f}. Wins consistent and meaningful.")
         else:
-            wr = m_all.get("win_rate") or 0
-            pf = m_all.get("profit_factor") or 0
-            if pf and pf < 1.0:
-                severity = "🔴" if pf < 0.7 else "⚠"
-                lines.append(f"  {severity} LOSING — profit factor {pf:.2f} below 1.0. Losses outpacing wins.")
-            elif pf and pf < 1.2 and wr < 40:
-                lines.append(f"  ⚠ MARGINAL — profit factor {pf:.2f} barely positive. Watch closely.")
-            elif wr < 30 and pf and pf >= 1.5:
-                lines.append(f"  ✓ Low WR ({wr:.1f}%) high PF ({pf:.2f}) — typical trend-follower signature.")
-            elif wr >= 50 and pf and pf >= 1.5:
-                lines.append(f"  ✓ Strong — WR {wr:.1f}%, PF {pf:.2f}. Wins consistent and meaningful.")
-            else:
-                lines.append(f"  ✓ Profitable — WR {wr:.1f}%, PF {pf:.2f}. Above breakeven.")
+            lines.append(f"  ✓ Profitable — WR {wr:.1f}%, PF {pf:.2f}. Above breakeven.")
         lines.append("")
 
     return lines

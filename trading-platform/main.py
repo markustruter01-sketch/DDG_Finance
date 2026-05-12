@@ -36,6 +36,7 @@ from routes._deps import (
 from routes.system import _auto_heal_check
 from routes import ALL_ROUTERS
 from routes.bot_registry_route import router as bot_registry_router
+from routes.reports import router as reports_router
 
 
 @asynccontextmanager
@@ -624,3 +625,4 @@ for sub_router in ALL_ROUTERS:
 
 app.include_router(router)
 app.include_router(bot_registry_router, prefix="/trading-api", tags=["bot-registry"])
+app.include_router(reports_router)

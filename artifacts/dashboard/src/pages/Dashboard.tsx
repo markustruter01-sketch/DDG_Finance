@@ -705,12 +705,11 @@ function ExportReportButton() {
     setLoading(true);
     try {
       const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/export/report-parts`);
+      const res = await fetch(`${base}/reports/performance-parts`);
       if (!res.ok) throw new Error("Export failed");
       const data = await res.json();
 
-      for (const key of ["p1", "p2", "p3", "p4"]) {
-        const part = data[key];
+      for (const part of Object.values(data.parts || {}) as Array<{ text: string; filename: string }>) {
         if (!part) continue;
         const blob = new Blob([part.text], { type: "text/plain;charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -749,22 +748,16 @@ function EmailReportButton() {
     setLoading(true);
     try {
       const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/export/report-parts`);
+      const res = await fetch(`${base}/reports/performance-parts`);
       if (!res.ok) throw new Error("Export failed");
       const data = await res.json();
 
-      const labels: Record<string, string> = {
-        p1: "PART 1 — System Status + Oracle/Alpaca",
-        p2: "PART 2 — Kraken Fleet + Correlation Matrix",
-        p3: `PART 3 — ${getBotIdentity("apex-predator").displayName} + ${getBotIdentity("navigator").displayName} + Execution Quality`,
-        p4: "PART 4 — Fleet Risk + Combined Summary + Journal + Strategy",
-      };
-
       let body = "";
-      for (const key of ["p1", "p2", "p3", "p4"] as const) {
-        const part = data[key];
+      let partIdx = 0;
+      for (const part of Object.values(data.parts || {}) as Array<{ text: string; lines: number }>) {
         if (!part) continue;
-        body += `\n===== ${labels[key]} (${part.lines} lines) =====\n\n`;
+        partIdx++;
+        body += `\n===== SECTION ${partIdx} (${part.lines} lines) =====\n\n`;
         body += part.text;
         body += "\n\n";
       }

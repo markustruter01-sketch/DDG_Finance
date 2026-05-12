@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { getBotIdentity } from "@/lib/bot-identity";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useForexState,
@@ -77,13 +78,13 @@ export function FleetPerformanceHero() {
 
     const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
     const apexPnl = apexBot?.pnl_usd ?? 0;
-    results.push({ name: "Apex Predator", icon: "🦅", dailyPnl: apexPnl });
+    results.push({ name: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, dailyPnl: apexPnl });
 
     const forexPnlToday = fxState?.total_pnl ?? 0;
     results.push({ name: "Forex Gump", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
     const poseidonPnl = poseidonState?.total_pnl ?? 0;
-    results.push({ name: "FOMO Fred", icon: "🔱", dailyPnl: poseidonPnl });
+    results.push({ name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, dailyPnl: poseidonPnl });
 
     const kcPnl = kcState?.total_pnl ?? 0;
     results.push({ name: "Kraken Current", icon: "🌊", dailyPnl: kcPnl });
@@ -122,7 +123,7 @@ export function FleetPerformanceHero() {
     const psPnl = poseidonState?.total_pnl ?? 0;
     const psEq = poseidonState?.total_equity ?? 100_000;
     const psPct = psEq > 0 ? (psPnl / psEq) * 100 : 0;
-    krakenLines.push({ id: "poseidon", name: "FOMO Fred", icon: "🔱", accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
+    krakenLines.push({ id: "poseidon", name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
 
     const kcPnlVal = kcState?.total_pnl ?? 0;
     const kcEqVal = kcState?.total_equity ?? 100_000;

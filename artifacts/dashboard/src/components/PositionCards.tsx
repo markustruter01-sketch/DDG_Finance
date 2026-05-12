@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn, formatCurrency, formatCryptoPrice } from "@/lib/utils";
+import { getBotIdentity } from "@/lib/bot-identity";
 import { MarketStatusBadge, isAssetCrypto, HEALTH_COLOR_MAP, RollingPnl } from "@/lib/dashboard-shared";
 import type { LivePosition } from "@/hooks/use-trading";
 import { useStatusSummary } from "@/hooks/use-trading";
@@ -101,7 +102,7 @@ export function KrakenPositionCard({
                   </div>
                 ))}
               </div>
-              <div className="mt-2 text-[9px] text-cyan-400/40 italic">Mean-reversion · auto-managed by Davy Jones</div>
+              <div className="mt-2 text-[9px] text-cyan-400/40 italic">Mean-reversion · auto-managed by {getBotIdentity("davy-jones").displayName}</div>
             </div>
           </motion.div>
         )}
@@ -131,7 +132,7 @@ export function KrakenPositionsPanel({
         onClick={() => setOpen(v => !v)}
         className="w-full px-4 py-2 flex items-center gap-2 text-left hover:bg-cyan-500/[0.04] transition-colors"
       >
-        <span className="text-[9px] uppercase font-semibold tracking-wider text-cyan-400/60">⚓ Davy Jones</span>
+        <span className="text-[9px] uppercase font-semibold tracking-wider text-cyan-400/60">{getBotIdentity("davy-jones").icon} {getBotIdentity("davy-jones").displayName}</span>
         <Badge variant="outline" className="text-[8px] px-1 py-0 border-cyan-500/20 text-cyan-400/50">{positions.length}</Badge>
         {isPaper && <Badge variant="outline" className="text-[8px] px-1 py-0 border-amber-500/20 text-amber-400/50">PAPER</Badge>}
         <span className="text-[9px] text-muted-foreground/30 ml-1">crypto positions</span>

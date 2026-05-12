@@ -36,20 +36,24 @@ const MAX_OPEN = 6;
 
 const BOT_COLORS: Record<string, string> = {
   "Oracle": "#8b5cf6",
-  "Davy Jones": "#22d3ee",
+  "SPY/QQQ Trend": "#22d3ee",
   "Jerome": "#ef4444",
-  "Calypso": "#3b82f6",
-  "Apex Predator": "#f59e0b",
+  "Sector Rotation": "#3b82f6",
+  "Defensive Guardian": "#f59e0b",
   "Forex Gump": "#a78bfa",
+  "Poseidon": "#8b5cf6",
+  "Kraken Current": "#06b6d4",
 };
 
 function getBotAbbrev(name: string): string {
-  if (name === "Davy Jones") return "DJ";
+  if (name === "SPY/QQQ Trend") return "SPY";
   if (name === "Jerome") return "JRM";
-  if (name === "Calypso") return "CAL";
-  if (name === "Apex Predator") return "APEX";
+  if (name === "Sector Rotation") return "ROT";
+  if (name === "Defensive Guardian") return "DEF";
   if (name === "Forex Gump") return "FGP";
   if (name === "Oracle") return "ORC";
+  if (name === "Poseidon") return "POS";
+  if (name === "Kraken Current") return "KC";
   return name.slice(0, 3).toUpperCase();
 }
 

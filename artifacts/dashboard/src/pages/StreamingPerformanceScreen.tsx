@@ -11,6 +11,7 @@ import {
   useBotRegistry,
 } from "@/hooks/use-trading";
 import { getFleetBotCount, getFleetStartingCapital, formatCapitalShort } from "@/lib/fleet-capital";
+import { getBotIdentity } from "@/lib/bot-identity";
 import { DDGBadge } from "@/components/DDGBadge";
 import {
   AreaChart,
@@ -69,11 +70,11 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 
 /* ── bot config ──────────────────────────────────────────── */
 const BOT_META: Record<string, { icon: string; color: string; startCap: number; label: string }> = {
-  "davy-jones":     { icon: "⚓", color: C.cyan,   startCap: 100_000, label: "Davy Jones" },
-  "blackbeard":     { icon: "☠️", color: C.red,    startCap: 100_000, label: "Jerome" },
-  "calypso":        { icon: "🌊", color: C.violet, startCap: 100_000, label: "Calypso" },
-  "apex-predator":  { icon: "🦅", color: C.orange, startCap: 100_000, label: "Apex Predator" },
-  "poseidon":       { icon: "🔱", color: C.blue,   startCap: 100_000, label: "FOMO Fred" },
+  "davy-jones":     { icon: getBotIdentity("davy-jones").icon,    color: C.cyan,   startCap: 100_000, label: getBotIdentity("davy-jones").displayName },
+  "blackbeard":     { icon: getBotIdentity("blackbeard").icon,    color: C.red,    startCap: 100_000, label: getBotIdentity("blackbeard").displayName },
+  "calypso":        { icon: getBotIdentity("calypso").icon,       color: C.violet, startCap: 100_000, label: getBotIdentity("calypso").displayName },
+  "apex-predator":  { icon: getBotIdentity("apex-predator").icon, color: C.orange, startCap: 100_000, label: getBotIdentity("apex-predator").displayName },
+  "poseidon":       { icon: getBotIdentity("poseidon").icon,      color: C.blue,   startCap: 100_000, label: getBotIdentity("poseidon").displayName },
   "kraken-current": { icon: "🐙", color: C.green,  startCap: 100_000, label: "Kraken Current" },
 };
 

@@ -3,7 +3,7 @@ export function WhitepaperContent() {
     <div className="max-w-4xl mx-auto px-8 py-10 text-slate-200 leading-relaxed">
       <header className="mb-12 text-center">
         <h1 className="text-3xl font-bold text-white mb-4 leading-tight">
-          AlgoEdge &amp; Davy Jones — Complete Technical Reference
+          AlgoEdge &amp; SPY/QQQ Trend — Complete Technical Reference
         </h1>
         <div className="h-px w-32 mx-auto bg-indigo-500/50 my-6" />
         <p className="text-sm text-slate-400 italic max-w-2xl mx-auto">
@@ -20,10 +20,10 @@ export function WhitepaperContent() {
         <SimpleBox>
           <p>Think of this like a six-robot fleet with a shared toolbox, a control room, and a notification system that texts you when they make money:</p>
           <AsciiDiagram>{`
-  🤖 BOT 1 (Alpaca)           🤖 BOT 2 (Davy Jones)    🤖 BOT 3 (Blackbeard)
+  🤖 BOT 1 (Alpaca)           🤖 BOT 2 (SPY/QQQ Trend)    🤖 BOT 3 (Jerome)
   Stocks + Crypto 9-4 PM      24/7 Crypto Kraken        24/7 Crypto Kraken
 
-  🤖 BOT 4 (Calypso)          🤖 BOT 5 (Apex Predator)  🤖 BOT 6 (Navigator)
+  🤖 BOT 4 (Sector Rotation)          🤖 BOT 5 (Defensive Guardian)  🤖 BOT 6 (Forex Gump)
   24/7 Crypto Kraken           Options 3:30 PM Daily     Forex H4 Swing Trading
 
   All share ──▶  🔧 Shared Safety + Alert System  ◀── (circuit breakers, risk)
@@ -40,11 +40,11 @@ export function WhitepaperContent() {
           headers={["Component", "Purpose", "Technology"]}
           rows={[
             ["Alpaca AI Platform (Bot #1)", "Equities + crypto, LLM-driven regime allocation", "Python / FastAPI / Groq Llama 3.3 70B"],
-            ["Davy Jones (Bot #2)", "24/7 crypto mean-reversion with microstructure alpha", "Python / ccxt / Kraken Pro"],
-            ["Blackbeard (Bot #3)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
-            ["Calypso (Bot #4)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
-            ["Apex Predator (Bot #5)", "Options volatility squeeze — pure quant, zero LLM", "Python / Alpaca Options API"],
-            ["The Navigator (Bot #6)", "Forex H4 swing trading — 5 major pairs", "Python / yfinance / OANDA-ready"],
+            ["SPY/QQQ Trend (Bot #2)", "24/7 crypto mean-reversion with microstructure alpha", "Python / ccxt / Kraken Pro"],
+            ["Jerome (Bot #3)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
+            ["Sector Rotation (Bot #4)", "24/7 crypto — independent Kraken instance", "Python / ccxt / Kraken Pro"],
+            ["Defensive Guardian (Bot #5)", "Options volatility squeeze — pure quant, zero LLM", "Python / Alpaca Options API"],
+            ["Forex Gump (Bot #6)", "Forex H4 swing trading — 5 major pairs", "Python / yfinance / OANDA-ready"],
             ["Shared Core Library", "RiskProfile, ExitBracket, CircuitBreaker, VaR — used by all bots", "Pure Python (shared/)"],
             ["PostgreSQL + SQLite", "Trade journals, vault ledgers, ratchet stops, degradation log", "psycopg2 + sqlite3"],
             ["React Dashboard", "Real-time monitoring, HITL controls, 6-tab multi-bot UI", "React 19 / Vite / TanStack Query"],
@@ -434,8 +434,8 @@ export function WhitepaperContent() {
         </SubSection>
       </Section>
 
-      {/* Section 8 — Davy Jones */}
-      <Section title="Davy Jones' Portfolio: Kraken Crypto Bot">
+      {/* Section 8 — SPY/QQQ Trend */}
+      <Section title="SPY/QQQ Trend: Kraken Crypto Bot">
         <SimpleBox>
           <p>A second, fully independent robot trades cryptocurrency on Kraken 24/7. Its strategy is simple: when a coin drops sharply below its normal price AND looks "oversold," buy it expecting a bounce. When it bounces back, sell it. It also checks the market's "order book" for suspicious activity before entering.</p>
           <AsciiDiagram>{`
@@ -573,8 +573,8 @@ export function WhitepaperContent() {
         </SubSection>
       </Section>
 
-      {/* Section 11 — Bot #5: Apex Predator Options */}
-      <Section title="Bot #5: Apex Predator — Pure Quant Options Engine">
+      {/* Section 11 — Bot #5: Defensive Guardian Options */}
+      <Section title="Bot #5: Defensive Guardian — Pure Quant Options Engine">
         <SimpleBox>
           <p>A 100% math-driven options bot with zero AI involvement. It watches four highly liquid stocks (SPY, QQQ, NVDA, TSLA) and waits for a rare moment when volatility is compressed AND prices are coiling in a tight range. When both conditions align, it buys a "straddle" — betting that a big move is coming, without needing to know the direction.</p>
           <AsciiDiagram>{`
@@ -626,8 +626,8 @@ export function WhitepaperContent() {
         </SubSection>
       </Section>
 
-      {/* Section 12 — Bot #6: The Navigator Forex */}
-      <Section title="Bot #6: The Navigator — Forex Swing-Trading Engine">
+      {/* Section 12 — Bot #6: Forex Gump Forex */}
+      <Section title="Bot #6: Forex Gump — Forex Swing-Trading Engine">
         <SimpleBox>
           <p>A Groq-assisted forex swing trader that holds positions for hours to days across five major currency pairs. It uses RSI and ATR indicators on 4-hour candles, combined with an AI "Compass" that reads macro news to determine directional bias. The vault system automatically sweeps 20% of profits above the high-water mark into a separate reserve.</p>
           <AsciiDiagram>{`
@@ -849,8 +849,8 @@ export function WhitepaperContent() {
               ["Auto-heal monitor", "Every 2min, always active", "Self-healing for degraded components"],
               ["Learning snapshot", "Every 6 hours", "Export learning data for cross-restart seeding"],
               ["Equity heartbeat", "Every 1 hour", "Combined equity snapshot (Alpaca + Kraken + Forex)"],
-              ["Apex Predator scan", "3:30 PM ET daily", "Options volatility squeeze scan → long straddle"],
-              ["Forex Navigator cycle", "Every 4 hours (immediate first)", "Forex pair scan → RSI + Groq → entry/exit"],
+              ["Defensive Guardian scan", "3:30 PM ET daily", "Options volatility squeeze scan → long straddle"],
+              ["Forex Gump cycle", "Every 4 hours (immediate first)", "Forex pair scan → RSI + Groq → entry/exit"],
               ["Kraken WFO", "Sunday 02:00 AM UTC", "Walk-forward parameter optimisation for all 3 Kraken bots"],
               ["Kraken Backtester", "Sunday 02:30 AM UTC", "Full OHLCV price-based backtest on historical candles"],
               ["Regime health snapshot", "Every 30min", "Kraken health snapshots & regime-multiplier evaluation"],
@@ -989,12 +989,12 @@ export function WhitepaperContent() {
           <Table
             headers={["Bot", "Win Rate", "Profit Factor", "Net Return", "Trades"]}
             rows={[
-              ["Davy Jones", "43.3%", "0.98", "−2.1%", "~60"],
-              ["Blackbeard", "42.0%", "1.15", "+79.0%", "~71"],
-              ["Calypso", "44.3%", "1.02", "+4.3%", "~68"],
+              ["SPY/QQQ Trend", "43.3%", "0.98", "−2.1%", "~60"],
+              ["Jerome", "42.0%", "1.15", "+79.0%", "~71"],
+              ["Sector Rotation", "44.3%", "1.02", "+4.3%", "~68"],
             ]}
           />
-          <p>Results persist in PostgreSQL and are displayed live on the Analytics tab of the dashboard. The backtester ingested 7,200 OHLCV candles (2,400 per pair × 3 pairs) and ran bar-by-bar across the 30-day lookback window. Blackbeard's outsized net return reflects a concentrated winning streak on ETH/USD during high-volatility periods.</p>
+          <p>Results persist in PostgreSQL and are displayed live on the Analytics tab of the dashboard. The backtester ingested 7,200 OHLCV candles (2,400 per pair × 3 pairs) and ran bar-by-bar across the 30-day lookback window. Jerome's outsized net return reflects a concentrated winning streak on ETH/USD during high-volatility periods.</p>
         </SubSection>
 
         <SubSection title="Why OHLCV Matters">
@@ -1038,7 +1038,7 @@ export function WhitepaperContent() {
 
         <div className="mt-4 p-4 bg-indigo-950/40 border border-indigo-500/20 rounded-lg text-xs text-slate-400">
           <span className="text-indigo-300 font-semibold">System Status: </span>
-          Hybrid Agentic Architecture Stages 0–6 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Walk-Forward Optimizer runs every Sunday 02:00 AM UTC across all 3 Kraken bots. OHLCV price-based backtester confirmed working — 7,200 candles ingested, results persisted (Davy Jones WR=43.3%, Blackbeard PF=1.15/+79% net, Calypso WR=44.3%). Telegram/Discord alert system active with configurable frequency. $600k total paper capital deployed across the fleet.
+          Hybrid Agentic Architecture Stages 0–6 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Walk-Forward Optimizer runs every Sunday 02:00 AM UTC across all 3 Kraken bots. OHLCV price-based backtester confirmed working — 7,200 candles ingested, results persisted (SPY/QQQ Trend WR=43.3%, Jerome PF=1.15/+79% net, Sector Rotation WR=44.3%). Telegram/Discord alert system active with configurable frequency. $600k total paper capital deployed across the fleet.
         </div>
       </Section>
 

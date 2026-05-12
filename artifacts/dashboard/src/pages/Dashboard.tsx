@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState, Fragment, type ReactNode } from "react";
+import { getBotIdentity } from "@/lib/bot-identity";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
@@ -378,12 +379,12 @@ function PositionChangeNotifier() {
     }
     for (const sym of curKraken) {
       if (!prevKrakenRef.current.has(sym)) {
-        toast({ title: `📈 Position opened: ${sym}`, description: "Davy Jones crypto", duration: 5000 });
+        toast({ title: `📈 Position opened: ${sym}`, description: `${getBotIdentity("davy-jones").displayName} crypto`, duration: 5000 });
       }
     }
     for (const sym of prevKrakenRef.current) {
       if (!curKraken.has(sym)) {
-        toast({ title: `📉 Position closed: ${sym}`, description: "Davy Jones crypto", duration: 5000 });
+        toast({ title: `📉 Position closed: ${sym}`, description: `${getBotIdentity("davy-jones").displayName} crypto`, duration: 5000 });
       }
     }
 
@@ -755,7 +756,7 @@ function EmailReportButton() {
       const labels: Record<string, string> = {
         p1: "PART 1 — System Status + Oracle/Alpaca",
         p2: "PART 2 — Kraken Fleet + Correlation Matrix",
-        p3: "PART 3 — Apex Predator + Navigator + Execution Quality",
+        p3: `PART 3 — ${getBotIdentity("apex-predator").displayName} + ${getBotIdentity("navigator").displayName} + Execution Quality`,
         p4: "PART 4 — Fleet Risk + Combined Summary + Journal + Strategy",
       };
 
@@ -1487,9 +1488,9 @@ function AllClosedTradesSection() {
 
     // Kraken bots — each returns up to 50 recent trades
     const krakenBots: { status: typeof davyStatus; name: string; color: string }[] = [
-      { status: davyStatus, name: "Davy Jones #2", color: "text-emerald-400" },
-      { status: bbStatus,   name: "Jerome #3",      color: "text-amber-400"   },
-      { status: caStatus,   name: "Calypso #4",    color: "text-violet-400"  },
+      { status: davyStatus, name: `${getBotIdentity("davy-jones").displayName} #2`, color: "text-emerald-400" },
+      { status: bbStatus,   name: `${getBotIdentity("blackbeard").displayName} #3`,  color: "text-amber-400"   },
+      { status: caStatus,   name: `${getBotIdentity("calypso").displayName} #4`,    color: "text-violet-400"  },
     ];
     for (const { status, name, color } of krakenBots) {
       if (!status?.recent_trades) continue;

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { getBotIdentity } from "@/lib/bot-identity";
 import {
   useKrakenBots,
   useAIImpactTimeline,
@@ -470,8 +471,8 @@ export default function BotsPage() {
           />
 
           <GenericBotCard
-            name="FOMO Fred"
-            icon="🔱"
+            name={getBotIdentity("poseidon").displayName}
+            icon={getBotIdentity("poseidon").icon}
             color="#8b5cf6"
             strategy="Crypto pairs trading — statistical arbitrage (Z-score)"
             equity={poseidonEquity}

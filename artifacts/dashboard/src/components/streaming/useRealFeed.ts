@@ -5,6 +5,7 @@ import {
   usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
+import { getBotIdentity } from "@/lib/bot-identity";
 
 export type RealTrade = {
   id: string;
@@ -67,22 +68,23 @@ export function useRealFeed(maxTrades = 20) {
         const isForex = t.asset_class === "forex" || t.source === "forex";
         const isOptions = t.asset_class === "options" || t.source === "options";
 
-        let bot = "Oracle";
-        let icon = "🔮";
+        let _id = getBotIdentity("oracle");
         if (isKraken) {
           const thesis = (t.original_thesis || "").toLowerCase();
           if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) {
-            bot = "Jerome"; icon = "🏴‍☠️";
+            _id = getBotIdentity("blackbeard");
           } else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) {
-            bot = "Calypso"; icon = "🌊";
+            _id = getBotIdentity("calypso");
           } else {
-            bot = "Davy Jones"; icon = "⚓";
+            _id = getBotIdentity("davy-jones");
           }
         } else if (isForex) {
-          bot = "Forex Gump"; icon = "🧭";
+          _id = getBotIdentity("forex_gump");
         } else if (isOptions) {
-          bot = "Apex Predator"; icon = "🎯";
+          _id = getBotIdentity("apex-predator");
         }
+        const bot = _id.displayName;
+        const icon = _id.icon;
 
         const cleaned = (t.ticker || "").replace("=X", "");
         const sym = /USD$/.test(cleaned) && !cleaned.includes("/")
@@ -109,11 +111,15 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
+    const _dj = getBotIdentity("davy-jones");
+    const _bb = getBotIdentity("blackbeard");
+    const _ca = getBotIdentity("calypso");
+    const _ap = getBotIdentity("apex-predator");
     const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
-      { data: bbStatus.data,   bot: "Jerome",    icon: "🏴‍☠️" },
-      { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
-      { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
+      { data: djStatus.data,   bot: _dj.displayName, icon: _dj.icon },
+      { data: bbStatus.data,   bot: _bb.displayName, icon: _bb.icon },
+      { data: caStatus.data,   bot: _ca.displayName, icon: _ca.icon },
+      { data: apexStatus.data, bot: _ap.displayName, icon: _ap.icon },
     ];
     const journalIds = new Set(all.map(t => t.id));
     for (const { data, bot, icon } of krakenRecent) {
@@ -136,6 +142,7 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     if (fxTrades?.trades) {
+      const _fxId = getBotIdentity("forex_gump");
       const existingSymbols = new Set(all.map(t => `${t.bot}-${t.symbol}-${t.date}`));
       for (const ft of fxTrades.trades) {
         if (ft.status !== "closed" && ft.status !== "Closed_Win" && ft.status !== "Closed_Loss") continue;
@@ -147,8 +154,8 @@ export function useRealFeed(maxTrades = 20) {
           : 0;
         all.push({
           id: `fx-${ft.id}`,
-          bot: "Forex Gump",
-          icon: "🧭",
+          bot: _fxId.displayName,
+          icon: _fxId.icon,
           symbol: ft.pair.replace("_", "/"),
           side: ft.direction || "",
           pnlPct,
@@ -190,10 +197,17 @@ export function useRealFeed(maxTrades = 20) {
   const botStats: BotStats[] = useMemo(() => {
     const stats: BotStats[] = [];
 
+    const _oracle = getBotIdentity("oracle");
+    const _dj = getBotIdentity("davy-jones");
+    const _bb = getBotIdentity("blackbeard");
+    const _ca = getBotIdentity("calypso");
+    const _ap = getBotIdentity("apex-predator");
+    const _fx = getBotIdentity("forex_gump");
+
     const jSummary = journal?.summary;
     if (jSummary) {
       stats.push({
-        name: "Oracle", icon: "🔮",
+        name: _oracle.displayName, icon: _oracle.icon,
         totalPnl: 0,
         totalPnlPct: (jSummary.avg_pnl ?? 0) * (jSummary.total ?? 0),
         wins: jSummary.wins ?? 0,
@@ -204,7 +218,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (djPerf.data?.has_data) {
       stats.push({
-        name: "Davy Jones", icon: "⚓",
+        name: _dj.displayName, icon: _dj.icon,
         totalPnl: djPerf.data.total_pnl_usd ?? 0,
         totalPnlPct: djPerf.data.total_pnl_pct ?? 0,
         wins: djPerf.data.win_count, losses: djPerf.data.loss_count,
@@ -214,7 +228,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (bbPerf.data?.has_data) {
       stats.push({
-        name: "Jerome", icon: "🏴‍☠️",
+        name: _bb.displayName, icon: _bb.icon,
         totalPnl: bbPerf.data.total_pnl_usd ?? 0,
         totalPnlPct: bbPerf.data.total_pnl_pct ?? 0,
         wins: bbPerf.data.win_count, losses: bbPerf.data.loss_count,
@@ -224,7 +238,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (caPerf.data?.has_data) {
       stats.push({
-        name: "Calypso", icon: "🌊",
+        name: _ca.displayName, icon: _ca.icon,
         totalPnl: caPerf.data.total_pnl_usd ?? 0,
         totalPnlPct: caPerf.data.total_pnl_pct ?? 0,
         wins: caPerf.data.win_count, losses: caPerf.data.loss_count,
@@ -234,7 +248,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (optState) {
       stats.push({
-        name: "Apex Predator", icon: "🎯",
+        name: _ap.displayName, icon: _ap.icon,
         totalPnl: 0,
         totalPnlPct: 0,
         wins: optState.total_wins ?? 0,
@@ -245,7 +259,7 @@ export function useRealFeed(maxTrades = 20) {
 
     if (fxState) {
       stats.push({
-        name: "Forex Gump", icon: "🧭",
+        name: _fx.displayName, icon: _fx.icon,
         totalPnl: 0,
         totalPnlPct: 0,
         wins: fxState.total_wins ?? 0,
@@ -278,11 +292,20 @@ export function useRealFeed(maxTrades = 20) {
   const openPositions: OpenPosition[] = useMemo(() => {
     const all: OpenPosition[] = [];
 
+    const _dj = getBotIdentity("davy-jones");
+    const _bb = getBotIdentity("blackbeard");
+    const _ca = getBotIdentity("calypso");
+    const _ap = getBotIdentity("apex-predator");
+    const _oracle = getBotIdentity("oracle");
+    const _fx = getBotIdentity("forex_gump");
+    const _pos = getBotIdentity("poseidon");
+    const _kc = getBotIdentity("kraken-current");
+
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data,   bot: "Davy Jones",    icon: "⚓" },
-      { data: bbStatus.data,   bot: "Jerome",    icon: "🏴‍☠️" },
-      { data: caStatus.data,   bot: "Calypso",       icon: "🌊" },
-      { data: apexStatus.data, bot: "Apex Predator", icon: "🦈" },
+      { data: djStatus.data,   bot: _dj.displayName, icon: _dj.icon },
+      { data: bbStatus.data,   bot: _bb.displayName, icon: _bb.icon },
+      { data: caStatus.data,   bot: _ca.displayName, icon: _ca.icon },
+      { data: apexStatus.data, bot: _ap.displayName, icon: _ap.icon },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -311,7 +334,7 @@ export function useRealFeed(maxTrades = 20) {
       for (const p of livePositions.positions) {
         all.push({
           id: `oracle-${p.symbol}`,
-          bot: "Oracle", icon: "🔮",
+          bot: _oracle.displayName, icon: _oracle.icon,
           symbol: p.symbol,
           side: p.side,
           pnlPct: (p.unrealized_plpc ?? 0) * 100,
@@ -326,7 +349,7 @@ export function useRealFeed(maxTrades = 20) {
         const pnlPct = p.size_usd > 0 ? (p.unrealized_pnl_usd / p.size_usd) * 100 : 0;
         all.push({
           id: `nav-${p.pair}`,
-          bot: "Forex Gump", icon: "🧭",
+          bot: _fx.displayName, icon: _fx.icon,
           symbol: p.pair.replace("_", "/"),
           side: p.direction,
           pnlPct,
@@ -341,7 +364,7 @@ export function useRealFeed(maxTrades = 20) {
         const symbol = `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`;
         all.push({
           id: `poseidon-${t.pair_set_id}`,
-          bot: "FOMO Fred", icon: "🔱",
+          bot: _pos.displayName, icon: _pos.icon,
           symbol,
           side: t.direction,
           pnlPct: t.position_value > 0 ? (t.total_pnl / t.position_value) * 100 : 0,
@@ -355,7 +378,7 @@ export function useRealFeed(maxTrades = 20) {
       for (const p of kcState.open_positions_list) {
         all.push({
           id: `kc-${p.symbol}`,
-          bot: "Kraken Current", icon: "⚡",
+          bot: _kc.displayName, icon: _kc.icon,
           symbol: p.symbol,
           side: p.direction,
           pnlPct: p.position_value > 0 ? (p.unrealised_pnl / p.position_value) * 100 : 0,

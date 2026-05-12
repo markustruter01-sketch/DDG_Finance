@@ -4,6 +4,7 @@ import {
   useLivePositions, useForexPositions, useOptionsState, useForexState,
 } from "@/hooks/use-trading";
 import { playTradeWin, playExplosion } from "./sounds";
+import { getBotIdentity } from "@/lib/bot-identity";
 
 export type CelebrationTrade = {
   id: number;
@@ -126,6 +127,13 @@ export function useRealCelebrations() {
     const wins: RealTradeEntry[] = [];
     const losses: RealTradeEntry[] = [];
 
+    const _oracle = getBotIdentity("oracle");
+    const _dj = getBotIdentity("davy-jones");
+    const _bb = getBotIdentity("blackbeard");
+    const _ca = getBotIdentity("calypso");
+    const _ap = getBotIdentity("apex-predator");
+    const _fx = getBotIdentity("forex_gump");
+
     if (journal?.trades) {
       for (const t of journal.trades) {
         const isWin = t.status === "Closed_Win";
@@ -135,25 +143,25 @@ export function useRealCelebrations() {
         const isKraken = t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-");
         const isForex = t.asset_class === "forex" || t.source === "forex";
         const isOptions = t.asset_class === "options" || t.source === "options";
-        let bot = "Oracle", icon = "🔮";
+        let _id = _oracle;
         if (isKraken) {
           const thesis = (t.original_thesis || "").toLowerCase();
-          if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) { bot = "Jerome"; icon = "🏴‍☠️"; }
-          else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) { bot = "Calypso"; icon = "🌊"; }
-          else { bot = "Davy Jones"; icon = "⚓"; }
-        } else if (isForex) { bot = "Forex Gump"; icon = "🧭"; }
-        else if (isOptions) { bot = "Apex Predator"; icon = "🎯"; }
+          if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) { _id = _bb; }
+          else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) { _id = _ca; }
+          else { _id = _dj; }
+        } else if (isForex) { _id = _fx; }
+        else if (isOptions) { _id = _ap; }
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
-        const entry: RealTradeEntry = { bot, icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
+        const entry: RealTradeEntry = { bot: _id.displayName, icon: _id.icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
         if (isWin) wins.push(entry);
         else losses.push(entry);
       }
     }
 
     const krakenBots = [
-      { data: djStatus.data, perf: djPerf.data, bot: "Davy Jones", icon: "⚓" },
-      { data: bbStatus.data, perf: bbPerf.data, bot: "Jerome", icon: "🏴‍☠️" },
-      { data: caStatus.data, perf: caPerf.data, bot: "Calypso", icon: "🌊" },
+      { data: djStatus.data, perf: djPerf.data, bot: _dj.displayName, icon: _dj.icon },
+      { data: bbStatus.data, perf: bbPerf.data, bot: _bb.displayName, icon: _bb.icon },
+      { data: caStatus.data, perf: caPerf.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -175,7 +183,7 @@ export function useRealCelebrations() {
         const pnlUsd = Math.abs(p.unrealized_pl ?? 0);
         if (pnlUsd < 0.01) continue;
         const arr = isWin ? wins : losses;
-        arr.push({ bot: "Oracle", icon: "🔮", symbol: p.symbol, pnlUsd, isWin, source: "alpaca-open" });
+        arr.push({ bot: _oracle.displayName, icon: _oracle.icon, symbol: p.symbol, pnlUsd, isWin, source: "alpaca-open" });
       }
     }
 
@@ -185,26 +193,32 @@ export function useRealCelebrations() {
         const pnlUsd = Math.abs(p.unrealized_pnl_usd);
         if (pnlUsd < 0.01) continue;
         const arr = isWin ? wins : losses;
-        arr.push({ bot: "Forex Gump", icon: "🧭", symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
+        arr.push({ bot: _fx.displayName, icon: _fx.icon, symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
       }
     }
 
+    const _pos = getBotIdentity("poseidon");
+    const _kc = getBotIdentity("kraken-current");
+
     if (wins.length === 0) {
       wins.push(
-        { bot: "Oracle", icon: "🔮", symbol: "SPY", pnlUsd: 12.50, isWin: true, source: "placeholder" },
-        { bot: "Davy Jones", icon: "⚓", symbol: "BTC/USD", pnlUsd: 24.80, isWin: true, source: "placeholder" },
-        { bot: "Forex Gump", icon: "🧭", symbol: "EUR/USD", pnlUsd: 8.30, isWin: true, source: "placeholder" },
-        { bot: "Jerome", icon: "🏴‍☠️", symbol: "SOL/USD", pnlUsd: 15.60, isWin: true, source: "placeholder" },
-        { bot: "Calypso", icon: "🌊", symbol: "ETH/USD", pnlUsd: 18.20, isWin: true, source: "placeholder" },
-        { bot: "Apex Predator", icon: "🎯", symbol: "SPY 450C", pnlUsd: 32.00, isWin: true, source: "placeholder" },
+        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "SPY",       pnlUsd: 12.50, isWin: true, source: "placeholder" },
+        { bot: _dj.displayName,     icon: _dj.icon,     symbol: "BTC/USD",   pnlUsd: 24.80, isWin: true, source: "placeholder" },
+        { bot: _fx.displayName,     icon: _fx.icon,     symbol: "EUR/USD",   pnlUsd: 8.30,  isWin: true, source: "placeholder" },
+        { bot: _bb.displayName,     icon: _bb.icon,     symbol: "SOL/USD",   pnlUsd: 15.60, isWin: true, source: "placeholder" },
+        { bot: _ca.displayName,     icon: _ca.icon,     symbol: "ETH/USD",   pnlUsd: 18.20, isWin: true, source: "placeholder" },
+        { bot: _ap.displayName,     icon: _ap.icon,     symbol: "SPY 450C",  pnlUsd: 32.00, isWin: true, source: "placeholder" },
       );
     }
     if (losses.length === 0) {
       losses.push(
-        { bot: "Forex Gump", icon: "🧭", symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
-        { bot: "Davy Jones", icon: "⚓", symbol: "ADA/USD", pnlUsd: 4.20, isWin: false, source: "placeholder" },
+        { bot: _fx.displayName,  icon: _fx.icon,  symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
+        { bot: _dj.displayName,  icon: _dj.icon,  symbol: "ADA/USD", pnlUsd: 4.20, isWin: false, source: "placeholder" },
       );
     }
+
+    // suppress unused-variable warnings for _pos/_kc (available for future use)
+    void _pos; void _kc;
 
     const shuffle = (arr: RealTradeEntry[]) => {
       for (let i = arr.length - 1; i > 0; i--) {

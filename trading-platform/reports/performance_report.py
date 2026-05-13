@@ -91,61 +91,69 @@ BENCHMARKS = {
 }
 
 
-def _trade_metrics(canonical_id: str, days: int | None = None) -> dict:
-    """Aggregate trade metrics for a bot. days=None → all-time."""
-    src = TRADE_SOURCES.get(canonical_id)
-    if not src: return {}
-
-    where_parts = []
-    params = []
-    if src["bot_filter"]:
-        where_parts.append("bot_id = %s")
-        params.append(src["bot_filter"])
-    where_parts.append(f"{src['time_col']} IS NOT NULL")
-    if src.get("extra_where"):
-        where_parts.append(src["extra_where"])
+def _trade_metrics(bot_id: str, days: int | None = None) -> dict:
+    """Aggregate trade metrics for a canonical bot_id from the bot_trades view.
+    days=None → all-time. Replaces per-table TRADE_SOURCES dispatch (R5).
+    """
+    where_parts = ["bot_id = %s"]
+    params: list = [bot_id]
     if days is not None:
-        where_parts.append(f"{src['time_col']} >= NOW() - INTERVAL %s")
+        where_parts.append("closed_at >= NOW() - INTERVAL %s")
         params.append(f"{days} days")
-    where = " WHERE " + " AND ".join(where_parts) if where_parts else ""
+    where_clause = " WHERE " + " AND ".join(where_parts)
 
     sql = f"""
         SELECT
-            COUNT(*) AS trades,
-            COUNT(*) FILTER (WHERE {src['pnl_col']} > 0) AS wins,
-            COUNT(*) FILTER (WHERE {src['pnl_col']} <= 0) AS losses,
-            SUM({src['pnl_col']}) AS total_pnl,
-            AVG({src['pnl_col']}) AS avg_pnl,
-            AVG({src['pnl_col']}) FILTER (WHERE {src['pnl_col']} > 0) AS avg_win,
-            AVG({src['pnl_col']}) FILTER (WHERE {src['pnl_col']} <= 0) AS avg_loss,
-            MAX({src['pnl_col']}) AS best,
-            MIN({src['pnl_col']}) AS worst,
-            MAX({src['time_col']}) AS last_trade
-        FROM {src['table']}{where};
+            COUNT(*)                                                 AS trades,
+            COUNT(*) FILTER (WHERE pnl_usd > 0)                     AS wins,
+            COUNT(*) FILTER (WHERE pnl_usd < 0)                     AS losses,
+            COALESCE(SUM(pnl_usd), 0)                               AS total_pnl,
+            AVG(pnl_usd) FILTER (WHERE pnl_usd > 0)                 AS avg_win,
+            AVG(pnl_usd) FILTER (WHERE pnl_usd < 0)                 AS avg_loss,
+            MAX(pnl_usd)                                             AS best,
+            MIN(pnl_usd)                                             AS worst,
+            AVG(pnl_usd)                                             AS expectancy,
+            SUM(pnl_usd) FILTER (WHERE pnl_usd > 0)                 AS gross_win,
+            ABS(SUM(pnl_usd) FILTER (WHERE pnl_usd < 0))            AS gross_loss,
+            MAX(closed_at)                                           AS last_trade
+        FROM bot_trades
+        {where_clause};
     """
     rows = _query(sql, tuple(params))
-    if not rows: return {}
+    if not rows:
+        return {"trades": 0, "wins": 0, "losses": 0, "win_rate": None,
+                "total_pnl": 0.0, "avg_win": None, "avg_loss": None,
+                "best": None, "worst": None, "expectancy": None,
+                "profit_factor": None, "last_trade": None}
     r = rows[0]
     trades = r.get("trades") or 0
     wins = r.get("wins") or 0
+    losses = r.get("losses") or 0
+    gross_win = r.get("gross_win") or 0
+    gross_loss = r.get("gross_loss") or 0
+
+    win_rate = (100.0 * wins / trades) if trades > 0 else None
+    profit_factor = (
+        (gross_win / gross_loss) if gross_loss > 0
+        else (None if gross_win == 0 else float("inf"))
+    )
+    last_trade = r.get("last_trade")
+    if last_trade and not isinstance(last_trade, str):
+        last_trade = last_trade.isoformat()
+
     return {
         "trades": trades,
         "wins": wins,
-        "losses": r.get("losses") or 0,
-        "win_rate": (100.0 * wins / trades) if trades > 0 else None,
+        "losses": losses,
+        "win_rate": win_rate,
         "total_pnl": float(r.get("total_pnl") or 0),
-        "avg_pnl": float(r.get("avg_pnl")) if r.get("avg_pnl") is not None else None,
-        "avg_win": float(r.get("avg_win")) if r.get("avg_win") is not None else None,
-        "avg_loss": float(r.get("avg_loss")) if r.get("avg_loss") is not None else None,
-        "best": float(r.get("best")) if r.get("best") is not None else None,
-        "worst": float(r.get("worst")) if r.get("worst") is not None else None,
-        "expectancy": (float(r.get("avg_pnl")) if r.get("avg_pnl") is not None else None),
-        "profit_factor": (
-            abs(float(r["avg_win"]) * wins) / abs(float(r["avg_loss"]) * r["losses"])
-            if r.get("avg_win") and r.get("avg_loss") and r.get("losses") and float(r["avg_loss"]) < 0
-            else None
-        ),
-        "last_trade": r.get("last_trade").isoformat() if r.get("last_trade") else None,
+        "avg_win": float(r["avg_win"]) if r.get("avg_win") is not None else None,
+        "avg_loss": float(r["avg_loss"]) if r.get("avg_loss") is not None else None,
+        "best": float(r["best"]) if r.get("best") is not None else None,
+        "worst": float(r["worst"]) if r.get("worst") is not None else None,
+        "expectancy": float(r["expectancy"]) if r.get("expectancy") is not None else None,
+        "profit_factor": profit_factor,
+        "last_trade": last_trade,
     }
 
 

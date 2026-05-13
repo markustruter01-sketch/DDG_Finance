@@ -1091,7 +1091,6 @@ export function OrbVisualiser() {
     n += djStatus?.position_count ?? 0;
     n += bbStatus?.position_count ?? 0;
     n += caStatus?.position_count ?? 0;
-    n += fleetEqOrb?.apex_predator?.positions ?? 0;
     n += optState?.positions_count ?? 0;
     n += fxState?.position_count ?? 0;
     n += poseidonState?.open_positions ?? 0;

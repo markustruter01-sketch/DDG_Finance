@@ -783,7 +783,6 @@ export interface FleetEquityData {
   davy_jones: BotEquity;
   blackbeard: BotEquity;
   calypso: BotEquity;
-  apex_predator: BotEquity;
   navigator: BotEquity;
   poseidon: BotEquity;
   kraken_current: BotEquity;

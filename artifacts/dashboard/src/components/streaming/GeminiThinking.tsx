@@ -16,10 +16,6 @@ const GEMINI_THOUGHTS = [
     body: "Cross-asset correlation matrix shows ρ=0.87 between BTC and ETH positions held by SPY/QQQ Trend and Sector Rotation simultaneously. Flagging concentration risk — if crypto sells off, both bots take correlated losses which amplifies portfolio drawdown. Recommending Sector Rotation rotate into lower-correlation alts like ATOM/USD (ρ=0.34) and ARB/USD (ρ=0.28) next cycle. This diversification should reduce fleet-wide crypto sector beta from 1.4 to approximately 0.9 while maintaining similar expected return profiles based on backtested Sharpe ratios.",
   },
   {
-    title: "Options Capital Fence Report",
-    body: "Defensive Guardian's capital fence is at 3.2% of the 5% max allocation. IVR readings across the options watchlist are still elevated above 20, so no new straddle entries are warranted. Holding current iron condor positions on SPY (45 DTE, 16-delta wings) and letting theta decay work in our favor. Portfolio Greeks summary: Delta = -12.4, Theta = +$47.20/day, Vega = -$182.00. P50 probability on all open positions is above 62%. Will initiate new positions only when IVR drops below 15 or a high-probability earnings catalyst appears in the scan.",
-  },
-  {
     title: "Regime Model Update",
     body: "Oracle's regime model has shifted from BULL to SIDEWAYS based on declining SPY momentum and flattening yield curve data. The 10Y-2Y spread compressed to 18bps, down from 34bps last week. Reducing equity allocation by 40% and rotating freed capital into TLT and GLD as defensive hedges. The Macro Compass sentiment indicator also dropped to 42 (Fear zone), which historically precedes 2-4 weeks of range-bound price action. Adjusting all bot confidence multipliers down by 20% until regime clarity improves. Expected portfolio beta reduction: 0.85 → 0.52.",
   },

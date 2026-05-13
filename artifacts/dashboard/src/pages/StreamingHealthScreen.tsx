@@ -106,7 +106,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
-  options_bot: "Defensive Guardian",
+  options_bot: "Options Engine",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
   kraken_davy_jones: "SPY/QQQ Trend",

@@ -117,7 +117,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   rag_engine: "RAG Learning Engine",
-  options_bot: "Defensive Guardian",
+  options_bot: "Options Engine",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
   kraken_davy_jones: "SPY/QQQ Trend",
@@ -177,10 +177,6 @@ function buildExplanation(key: string, node: NodeHealth): string {
   if (key === "rag_engine") {
     if (level === "red") return `The RAG learning engine cannot reach the PostgreSQL database. Phase 3 contextual retrieval and Phase 4 rule injection are disabled — the LLM is running without historical memory. Check DATABASE_URL and DB connectivity. Detail: ${detail}`;
     if (level === "yellow") return "The RAG engine is online but no post-mortem lessons exist yet (fresh database). This is expected on first run. Lessons accumulate after the first losing trade is closed and the evening post-mortem cycle runs.";
-  }
-
-  if (key === "options_bot") {
-    if (level === "yellow") return "The Defensive Guardian options engine is in standby or encountered an initialization issue. It scans for volatility squeezes daily at 3:30 PM ET — no action needed outside that window.";
   }
 
   if (key === "forex_bot") {

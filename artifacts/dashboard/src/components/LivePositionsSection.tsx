@@ -216,7 +216,7 @@ export function LivePositionsSection() {
         <div className="border-t border-white/[0.04] bg-red-950/[0.03]">
           <div className="px-4 py-2 flex items-center gap-2">
             <Crosshair className="h-3 w-3 text-red-400/60" />
-            <span className="text-[9px] uppercase font-semibold tracking-wider text-red-400/60">🛡️ Defensive Guardian</span>
+            <span className="text-[9px] uppercase font-semibold tracking-wider text-red-400/60">Options Positions</span>
             <Badge variant="outline" className="text-[8px] px-1 py-0 border-red-500/20 text-red-400/50">{optionsPositionsList.length}</Badge>
             <span className="text-[9px] text-muted-foreground/30 ml-1">straddle positions</span>
             <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums",

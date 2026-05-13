@@ -46,7 +46,6 @@ export const ORACLE_RANKS = [
 ];
 
 export const OPTIONS_RANKS = [
-  { xp: 10000, label: "The Defensive Guardian", icon: "🎯", tw: "text-red-300" },
   { xp: 5000,  label: "Options Guru",      icon: "📊", tw: "text-red-400" },
   { xp: 2500,  label: "Vol Hunter",        icon: "🔥", tw: "text-orange-400" },
   { xp: 1000,  label: "Straddle Master",   icon: "⚡", tw: "text-amber-400" },

@@ -48,6 +48,17 @@ _cfg_mod = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg_mod)
 BOT_PROFILES = _cfg_mod.BOT_PROFILES
 
+# Heartbeat helpers — loaded after sys.path is configured so core.bot_state resolves clean.
+# touch_heartbeat updates ONLY last_heartbeat/status/error — never zeroes equity_usd.
+try:
+    from core.bot_state import touch_heartbeat as _bs_touch, LEGACY_TO_CANONICAL as _bs_canonical
+    _heartbeat_ok = True
+except Exception as _hb_exc:
+    logger.warning(f"Runner | Could not import heartbeat helpers: {_hb_exc}")
+    _heartbeat_ok = False
+    _bs_canonical: dict = {}
+    _bs_touch = lambda *a, **k: None  # noqa: E731
+
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
     ("blackbeard",       "jerome_strategy",  "run_jerome_cycle"),
@@ -116,12 +127,23 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                            error=None)
             consecutive_errors = 0
 
+            if _heartbeat_ok:
+                try:
+                    _bs_touch(_bs_canonical.get(bot_id, bot_id), status="running", error="")
+                except Exception as _hb_e:
+                    logger.debug(f"[{bot_id}] heartbeat write failed (non-fatal): {_hb_e}")
+
         except Exception as exc:
             consecutive_errors += 1
             tb = traceback.format_exc()
             logger.error(f"[{bot_id}] Cycle {cycle_count} failed (consecutive={consecutive_errors}): {exc}\n{tb}")
             _update_status(bot_id, status="error", error=str(exc),
                            consecutive_errors=consecutive_errors)
+            if _heartbeat_ok:
+                try:
+                    _bs_touch(_bs_canonical.get(bot_id, bot_id), status="error", error=str(exc)[:200])
+                except Exception:
+                    pass
 
         # Exponential backoff on repeated errors (capped at 8x sleep)
         backoff_multiplier = min(2 ** min(consecutive_errors, 3), 8) if consecutive_errors else 1

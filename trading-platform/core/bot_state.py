@@ -77,6 +77,26 @@ def write_heartbeat(
         logger.debug(f"BotState | write_heartbeat({bot_id}) failed (non-fatal): {exc}")
 
 
+def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> None:
+    """Update only last_heartbeat, status, and error_message — never touches equity_usd.
+    Used by runner.py which has no access to equity (leaf cycle fns return None)."""
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE bots_state
+                       SET last_heartbeat = NOW(),
+                           status         = %s,
+                           error_message  = %s
+                     WHERE bot_id = %s
+                    """,
+                    (status, error or "", bot_id),
+                )
+    except Exception as exc:
+        logger.debug(f"BotState | touch_heartbeat({bot_id}) failed (non-fatal): {exc}")
+
+
 def is_paused(bot_id: str) -> bool:
     """Check if a bot is paused. Falls back to False if row missing or DB unavailable."""
     try:

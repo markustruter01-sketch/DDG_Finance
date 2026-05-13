@@ -54,84 +54,19 @@ PORT = "8000"
 API_PREFIX = "/trading-api"
 
 [[services]]
-name = "kraken-bot"
-localPort = 0
+name = "kraken-bot-runner"
+localPort = 8085
 
 [services.development]
-run = "cd /home/runner/workspace && BOT_ID=bot2_spy_qqq python3 kraken-bot/main.py"
+run = "cd /home/runner/workspace/kraken-bot && python3 runner.py"
 
 [services.production]
 
 [services.production.run]
-args = ["bash", "-c", "BOT_ID=bot2_spy_qqq python3 kraken-bot/main.py"]
+args = ["bash", "-c", "cd kraken-bot && python3 runner.py"]
 
 [services.env]
 PORT = "8085"
-BOT_ID = "bot2_spy_qqq"
-
-[[services]]
-name = "blackbeard-bot"
-localPort = 0
-
-[services.development]
-run = "cd /home/runner/workspace && BOT_ID=blackbeard python3 kraken-bot/main.py"
-
-[services.production]
-
-[services.production.run]
-args = ["bash", "-c", "BOT_ID=blackbeard python3 kraken-bot/main.py"]
-
-[services.env]
-PORT = "8086"
-BOT_ID = "blackbeard"
-
-[[services]]
-name = "calypso-bot"
-localPort = 0
-
-[services.development]
-run = "cd /home/runner/workspace && BOT_ID=bot4_sector python3 kraken-bot/main.py"
-
-[services.production]
-
-[services.production.run]
-args = ["bash", "-c", "BOT_ID=bot4_sector python3 kraken-bot/main.py"]
-
-[services.env]
-PORT = "8087"
-BOT_ID = "bot4_sector"
-
-[[services]]
-name = "apex-predator-bot"
-localPort = 0
-
-[services.development]
-run = "cd /home/runner/workspace && BOT_ID=bot5_defensive python3 kraken-bot/main.py"
-
-[services.production]
-
-[services.production.run]
-args = ["bash", "-c", "BOT_ID=bot5_defensive python3 kraken-bot/main.py"]
-
-[services.env]
-PORT = "8088"
-BOT_ID = "bot5_defensive"
-
-[[services]]
-name = "poseidon-bot"
-localPort = 0
-
-[services.development]
-run = "cd /home/runner/workspace && BOT_ID=bot7_macro_bond python3 kraken-bot/main.py"
-
-[services.production]
-
-[services.production.run]
-args = ["bash", "-c", "BOT_ID=bot7_macro_bond python3 kraken-bot/main.py"]
-
-[services.env]
-PORT = "8089"
-BOT_ID = "bot7_macro_bond"
 
 [[services]]
 name = "kraken-current-bot"

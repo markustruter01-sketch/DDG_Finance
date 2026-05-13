@@ -37,6 +37,17 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform")) # trading-platf
 
 from loguru import logger
 
+# Load kraken-bot's local config.py by absolute path.
+# Cannot use `from config import ...` because trading-platform/ comes first
+# in sys.path (required for db.postgres resolution), and trading-platform/
+# has its own config/ package without BOT_PROFILES.
+import importlib.util as _ilu
+_KRAKEN_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.py")
+_cfg_spec = _ilu.spec_from_file_location("_kraken_local_config", _KRAKEN_CONFIG_PATH)
+_cfg_mod = _ilu.module_from_spec(_cfg_spec)
+_cfg_spec.loader.exec_module(_cfg_mod)
+BOT_PROFILES = _cfg_mod.BOT_PROFILES
+
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
     ("blackbeard",       "jerome_strategy",  "run_jerome_cycle"),
@@ -64,16 +75,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
     """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
     logger.info(f"[{bot_id}] Thread starting...")
 
-    # Lazy load the bot profile
-    try:
-        # IMPORTANT: import BOT_PROFILES at module-level scope of runner
-        # so we don't trigger config.py's BOT_ID env logic
-        from config import BOT_PROFILES
-    except Exception as exc:
-        logger.error(f"[{bot_id}] Could not import BOT_PROFILES: {exc}")
-        _update_status(bot_id, status="error", error=str(exc))
-        return
-
+    # Lazy load the bot profile — BOT_PROFILES loaded at module level via importlib
     profile = BOT_PROFILES.get(bot_id)
     if not profile:
         logger.error(f"[{bot_id}] Profile not found in BOT_PROFILES")

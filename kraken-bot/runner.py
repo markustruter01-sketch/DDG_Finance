@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""
+runner.py — Multiplexed runner for kraken-bot ETF/macro strategies.
+Replaces 5 separate processes (bot2_spy_qqq, blackbeard, bot4_sector,
+bot5_defensive, bot7_macro_bond) with one process running 5 threads.
+
+Each thread runs its leaf strategy's cycle function on its own LOOP_SLEEP
+interval. Health server reports all 5 bots' status on a single port.
+
+Architecture:
+  - Imports BOT_PROFILES from config.py (read-only dict)
+  - Spawns 1 thread per bot via importlib.import_module()
+  - Health server on $PORT returns JSON with all 5 bot statuses
+  - Per-thread error handling with exponential backoff on failure
+  - Graceful shutdown via SIGTERM
+"""
+from __future__ import annotations
+import os
+import sys
+import time
+import json
+import signal
+import threading
+import importlib
+import traceback
+from datetime import datetime, timezone
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from typing import Any
+
+# Path surgery — match main.py's pattern
+_REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from loguru import logger
+
+# Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
+BOTS = [
+    ("blackbeard",       "jerome_strategy",  "run_jerome_cycle"),
+    ("bot2_spy_qqq",     "bot2_spy_qqq",     "run_bot2_cycle"),
+    ("bot4_sector",      "bot4_sector",      "run_bot4_cycle"),
+    ("bot5_defensive",   "bot5_defensive",   "run_bot5_cycle"),
+    ("bot7_macro_bond",  "bot7_strategy",    "run_bot7_cycle"),
+]
+
+# Per-bot status tracker for health endpoint
+_bot_status: dict[str, dict] = {}
+_status_lock = threading.Lock()
+_shutdown_event = threading.Event()
+
+
+def _update_status(bot_id: str, **fields):
+    with _status_lock:
+        if bot_id not in _bot_status:
+            _bot_status[bot_id] = {}
+        _bot_status[bot_id].update(fields)
+        _bot_status[bot_id]["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+
+def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
+    """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
+    logger.info(f"[{bot_id}] Thread starting...")
+
+    # Lazy load the bot profile
+    try:
+        # IMPORTANT: import BOT_PROFILES at module-level scope of runner
+        # so we don't trigger config.py's BOT_ID env logic
+        from config import BOT_PROFILES
+    except Exception as exc:
+        logger.error(f"[{bot_id}] Could not import BOT_PROFILES: {exc}")
+        _update_status(bot_id, status="error", error=str(exc))
+        return
+
+    profile = BOT_PROFILES.get(bot_id)
+    if not profile:
+        logger.error(f"[{bot_id}] Profile not found in BOT_PROFILES")
+        _update_status(bot_id, status="error", error="profile_not_found")
+        return
+
+    sleep_seconds = profile.get("LOOP_SLEEP_SECONDS", 900)
+    db_id = profile.get("db_id")
+
+    # Lazy import the leaf module
+    try:
+        mod = importlib.import_module(module_name)
+        cycle_fn = getattr(mod, fn_name)
+    except Exception as exc:
+        logger.error(f"[{bot_id}] Could not load {module_name}.{fn_name}: {exc}")
+        _update_status(bot_id, status="error", error=f"import_failed: {exc}")
+        return
+
+    logger.info(f"[{bot_id}] Ready. Cycle interval: {sleep_seconds}s")
+    _update_status(bot_id, status="running", cycle_count=0, sleep_seconds=sleep_seconds)
+
+    cycle_count = 0
+    consecutive_errors = 0
+
+    while not _shutdown_event.is_set():
+        try:
+            cycle_count += 1
+            cycle_start = time.time()
+            _update_status(bot_id, status="running", cycle_count=cycle_count,
+                           last_cycle_start=datetime.now(timezone.utc).isoformat())
+
+            cycle_fn(profile=profile, db_id=db_id)
+
+            cycle_duration = time.time() - cycle_start
+            _update_status(bot_id, status="running",
+                           last_cycle_duration_seconds=round(cycle_duration, 2),
+                           last_cycle_end=datetime.now(timezone.utc).isoformat(),
+                           error=None)
+            consecutive_errors = 0
+
+        except Exception as exc:
+            consecutive_errors += 1
+            tb = traceback.format_exc()
+            logger.error(f"[{bot_id}] Cycle {cycle_count} failed (consecutive={consecutive_errors}): {exc}\n{tb}")
+            _update_status(bot_id, status="error", error=str(exc),
+                           consecutive_errors=consecutive_errors)
+
+        # Exponential backoff on repeated errors (capped at 8x sleep)
+        backoff_multiplier = min(2 ** min(consecutive_errors, 3), 8) if consecutive_errors else 1
+        sleep_for = sleep_seconds * backoff_multiplier
+
+        # Sleep in small intervals so shutdown is responsive
+        end_time = time.time() + sleep_for
+        while time.time() < end_time and not _shutdown_event.is_set():
+            time.sleep(min(5.0, end_time - time.time()))
+
+    logger.info(f"[{bot_id}] Thread exiting (shutdown event set).")
+    _update_status(bot_id, status="stopped")
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        with _status_lock:
+            payload = {
+                "service": "kraken-bot-runner",
+                "uptime_seconds": int(time.time() - _start_time),
+                "bots": dict(_bot_status),
+                "bot_count": len(_bot_status),
+            }
+        body = json.dumps(payload, default=str).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        pass  # suppress access logs
+
+
+_start_time = time.time()
+
+
+def _start_health_server():
+    port = int(os.environ.get("PORT", "8085"))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    logger.info(f"Runner | Health server listening on :{port}")
+    thread = threading.Thread(target=server.serve_forever, daemon=True, name="health-server")
+    thread.start()
+    return server
+
+
+def _shutdown_handler(signum, frame):
+    logger.info(f"Runner | Received signal {signum}, initiating shutdown...")
+    _shutdown_event.set()
+
+
+def main():
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+    signal.signal(signal.SIGINT, _shutdown_handler)
+
+    logger.info("=" * 60)
+    logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
+    logger.info(f"Bots: {', '.join(b[0] for b in BOTS)}")
+    logger.info("=" * 60)
+
+    # Start health server BEFORE bot threads so port binds fast
+    _start_health_server()
+
+    # Spawn one thread per bot
+    threads = []
+    for bot_id, module_name, fn_name in BOTS:
+        t = threading.Thread(
+            target=_run_bot_loop,
+            args=(bot_id, module_name, fn_name),
+            daemon=False,
+            name=f"bot-{bot_id}"
+        )
+        t.start()
+        threads.append(t)
+        _update_status(bot_id, status="starting")
+        time.sleep(0.5)  # small stagger to avoid thundering herd on imports
+
+    logger.info(f"Runner | {len(threads)} bot threads started")
+
+    # Main thread waits for shutdown
+    try:
+        while not _shutdown_event.is_set():
+            time.sleep(5)
+    except KeyboardInterrupt:
+        _shutdown_event.set()
+
+    logger.info("Runner | Shutting down all bot threads...")
+    for t in threads:
+        t.join(timeout=10)
+    logger.info("Runner | All threads stopped. Goodbye.")
+
+
+if __name__ == "__main__":
+    main()

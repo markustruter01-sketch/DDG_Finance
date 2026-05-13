@@ -55,8 +55,7 @@ API_PREFIX = "/trading-api"
 
 [[services]]
 name = "kraken-bot"
-paths = [ "/kraken-bot" ]
-localPort = 8085
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && BOT_ID=bot2_spy_qqq python3 kraken-bot/main.py"
@@ -72,8 +71,7 @@ BOT_ID = "bot2_spy_qqq"
 
 [[services]]
 name = "blackbeard-bot"
-paths = [ "/blackbeard-bot" ]
-localPort = 8086
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && BOT_ID=blackbeard python3 kraken-bot/main.py"
@@ -89,8 +87,7 @@ BOT_ID = "blackbeard"
 
 [[services]]
 name = "calypso-bot"
-paths = [ "/calypso-bot" ]
-localPort = 8087
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && BOT_ID=bot4_sector python3 kraken-bot/main.py"
@@ -106,8 +103,7 @@ BOT_ID = "bot4_sector"
 
 [[services]]
 name = "apex-predator-bot"
-paths = [ "/apex-predator-bot" ]
-localPort = 8088
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && BOT_ID=bot5_defensive python3 kraken-bot/main.py"
@@ -123,8 +119,7 @@ BOT_ID = "bot5_defensive"
 
 [[services]]
 name = "poseidon-bot"
-paths = [ "/poseidon-bot" ]
-localPort = 8089
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && BOT_ID=bot7_macro_bond python3 kraken-bot/main.py"
@@ -140,8 +135,7 @@ BOT_ID = "bot7_macro_bond"
 
 [[services]]
 name = "kraken-current-bot"
-paths = [ "/kraken-current-bot" ]
-localPort = 8090
+localPort = 0
 
 [services.development]
 run = "cd /home/runner/workspace && python3 kraken-current/main.py"

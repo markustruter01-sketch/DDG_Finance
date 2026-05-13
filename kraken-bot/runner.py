@@ -64,8 +64,6 @@ BOTS = [
     ("blackbeard",       "jerome_strategy",  "run_jerome_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",     "run_bot2_cycle"),
     ("bot4_sector",      "bot4_sector",      "run_bot4_cycle"),
-    ("bot5_defensive",   "bot5_defensive",   "run_bot5_cycle"),
-    ("bot7_macro_bond",  "bot7_strategy",    "run_bot7_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint

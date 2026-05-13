@@ -187,40 +187,6 @@ BOT_PROFILES = {
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check; rebalance only Mondays
         "BOT_PAUSED":        False,
     },
-    "bot5_defensive": {
-        "display_name":      "Defensive Guardian",
-        "db_id":             4,              # replaces Apex Predator (id=4)
-        "strategy_type":     "etf_defensive",
-        "strategy_label":    "Risk-Off Defensive Allocation",
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
-        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "STARTING_CAPITAL":  100_000,
-        "LOOP_SLEEP_SECONDS": 3600,          # hourly check; regime detection each cycle
-        "BOT_PAUSED":        False,
-    },
-    "bot7_macro_bond": {
-        "display_name":      "Macro Bond Trader",
-        "db_id":             7,              # replaces FOMO Fred/Poseidon (id=7)
-        "strategy_type":     "llm_bonds",
-        "strategy_label":    "Groq Fixed Income Macro",
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
-        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "STARTING_CAPITAL":  100_000,
-        "BOND_UNIVERSE":     ["TLT", "IEF", "SHY", "TIP", "HYG", "LQD", "EMB"],
-        "CYCLE_HOURS_UTC":   [13, 22],       # 9AM ET + 6PM ET
-        "LOOP_SLEEP_SECONDS": 900,           # 15-min polling (exits every cycle)
-        "MAX_POSITIONS":     3,
-        "STOP_LOSS_PCT":     0.04,
-        "TAKE_PROFIT_PCT":   0.08,
-        "MAX_HOLD_DAYS":     60,
-        "MIN_HOLD_DAYS":     14,
-        "MIN_CONVICTION":    0.65,
-        "POSITION_SIZE_MIN": 0.10,
-        "POSITION_SIZE_MAX": 0.30,
-        "BOT_PAUSED":        False,
-    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "davy-jones")

@@ -163,9 +163,18 @@ def section_1_executive_summary() -> list[str]:
     active = [s for s in states if not s.get("paused", False)]
     paused = [s for s in states if s.get("paused", False)]
 
-    total_equity = sum(float(p.get("equity_usd") or 0) for p in portfolios)
-    total_starting = sum(float(p.get("starting_usd") or 0) for p in portfolios)
-    total_pnl = total_equity - total_starting
+    paused_ids = {s["bot_id"] for s in states if s.get("paused")}
+    active_ids = {s["bot_id"] for s in states if not s.get("paused")}
+
+    active_equity   = sum(float(p.get("equity_usd")  or 0) for p in portfolios if p["bot_id"] in active_ids)
+    active_starting = sum(float(p.get("starting_usd") or 0) for p in portfolios if p["bot_id"] in active_ids)
+    paused_equity   = sum(float(p.get("equity_usd")  or 0) for p in portfolios if p["bot_id"] in paused_ids)
+    paused_starting = sum(float(p.get("starting_usd") or 0) for p in portfolios if p["bot_id"] in paused_ids)
+    total_equity   = active_equity  + paused_equity
+    total_starting = active_starting + paused_starting
+
+    active_pnl = active_equity - active_starting
+    paused_pnl = paused_equity - paused_starting
 
     # Fleet win rate over all-time
     fleet_trades = 0
@@ -180,9 +189,21 @@ def section_1_executive_summary() -> list[str]:
     lines.append(f"Active bots:       {len(active)} / {len(states)}")
     lines.append(f"Paused bots:       {len(paused)}")
     lines.append("")
-    lines.append(f"Fleet equity:      {_fmt_money(total_equity)}")
-    lines.append(f"Starting capital:  {_fmt_money(total_starting)}")
-    lines.append(f"Total P&L:         {_fmt_money(total_pnl)}  ({_fmt_pct((total_pnl/total_starting)*100 if total_starting else 0, 2)})")
+    lines.append("FLEET EQUITY:")
+    lines.append(f"  Total equity:           {_fmt_money(total_equity)}")
+    lines.append(f"  Total starting:         {_fmt_money(total_starting)}")
+    lines.append(f"  Total P&L:              {_fmt_money(total_equity - total_starting)}  ({_fmt_pct(((total_equity - total_starting) / total_starting) * 100 if total_starting else 0, 2)})")
+    lines.append("")
+    lines.append("ACTIVE BOTS (where current trading happens):")
+    lines.append(f"  Equity:                 {_fmt_money(active_equity)}")
+    lines.append(f"  Starting:               {_fmt_money(active_starting)}")
+    lines.append(f"  Current P&L:            {_fmt_money(active_pnl)}  ({_fmt_pct((active_pnl / active_starting) * 100 if active_starting else 0, 2)})")
+    lines.append("")
+    lines.append("PAUSED BOTS (legacy P&L, not current):")
+    lines.append(f"  Equity:                 {_fmt_money(paused_equity)}")
+    lines.append(f"  Starting:               {_fmt_money(paused_starting)}")
+    lines.append(f"  Legacy P&L:             {_fmt_money(paused_pnl)}  ({_fmt_pct((paused_pnl / paused_starting) * 100 if paused_starting else 0, 2)})")
+    lines.append("")
     lines.append(f"Fleet win rate:    {_fmt_pct(fleet_wr) if fleet_wr is not None else 'n/a'}  ({fleet_wins:,}W / {fleet_trades - fleet_wins:,}L)")
     lines.append("")
 
@@ -294,6 +315,23 @@ def section_3_per_bot_deep_dive() -> list[str]:
         lines.append(f"  Cash:              {_fmt_money(cash)}")
         lines.append(f"  Total P&L:         {_fmt_money(pnl)}  ({_fmt_pct((pnl/starting)*100 if starting else 0, 2)})")
         lines.append("")
+
+        # Reconciliation: does bot_portfolio equity match sum of closed P&L?
+        trade_pnl_sum = m_all.get("total_pnl", 0) or 0
+        portfolio_pnl = equity - starting
+        reconciliation_delta = portfolio_pnl - trade_pnl_sum
+
+        if abs(reconciliation_delta) > 50 and m_all.get("trades", 0) > 0:
+            lines.append("RECONCILIATION:")
+            lines.append(f"  Portfolio P&L:     {_fmt_money(portfolio_pnl)}")
+            lines.append(f"  Sum of trade P&L:  {_fmt_money(trade_pnl_sum)}")
+            lines.append(f"  Δ Discrepancy:     {_fmt_money(reconciliation_delta)}")
+            if abs(reconciliation_delta) > 500:
+                lines.append(f"  🔴 LARGE DISCREPANCY — portfolio and trade history disagree by ${abs(reconciliation_delta):.0f}")
+                lines.append(f"      → portfolio likely not being updated, OR closed P&L not flowing to portfolio")
+            else:
+                lines.append(f"  ⚠ Minor discrepancy — open position unrealised P&L can explain small gaps")
+            lines.append("")
 
         # Performance metrics
         lines.append("PERFORMANCE (all-time):")
@@ -721,6 +759,42 @@ def section_7_param_drift() -> list[str]:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Section 5B — Open Position Audit
+# ──────────────────────────────────────────────────────────────────────
+
+def section_5b_open_position_audit() -> list[str]:
+    """Cross-check open positions in bot_portfolio against legacy trade tables.
+    Surfaces bots with orphaned open trades that the portfolio doesn't know about."""
+    lines: list[str] = []
+    portfolios = {p["bot_id"]: p for p in get_all_portfolios()}
+
+    # Forex Gump: check forex_trades for status='open' vs bot_portfolio positions
+    fx_open = _query("""
+        SELECT COUNT(*) AS open_count,
+               MIN(entry_time) AS oldest_entry
+        FROM forex_trades
+        WHERE status = 'open';
+    """)
+    if fx_open and fx_open[0]["open_count"]:
+        n = fx_open[0]["open_count"]
+        portfolio_positions = len(portfolios.get("forex_gump", {}).get("positions", []) or [])
+        oldest = fx_open[0]["oldest_entry"]
+        if n != portfolio_positions:
+            if not lines:
+                lines = _h1("SECTION 5B — OPEN POSITION AUDIT")
+                lines.append("Checks for orphaned open trades not reflected in bot_portfolio.")
+                lines.append("")
+            lines.append("🔴 Forex Gump:")
+            lines.append(f"  forex_trades rows with status='open':  {n}")
+            lines.append(f"  bot_portfolio.positions count:          {portfolio_positions}")
+            lines.append(f"  Discrepancy:                            {abs(n - portfolio_positions)} stuck rows")
+            lines.append(f"  Oldest stuck position opened:           {oldest}")
+            lines.append("")
+
+    return lines  # returns [] if no discrepancies — section auto-skipped
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Section 8 — Anomalies Detected
 # ──────────────────────────────────────────────────────────────────────
 
@@ -740,46 +814,79 @@ def section_8_anomalies() -> list[str]:
 
         trades = m.get("trades", 0)
         if trades == 0:
+            # Anomaly: active bot with zero trades all-time
+            if not s.get("paused"):
+                anomalies.append(
+                    f"⚠ {bot.display_name}: 0 trades all-time but marked ACTIVE. "
+                    "Either new bot still warming up, or strategy not firing."
+                )
             continue
 
         wr = m.get("win_rate") or 0
+        pf = m.get("profit_factor")
+        expectancy = m.get("expectancy") or 0
+        last_trade_str = m.get("last_trade")
+
+        # Anomaly: WR = 0 with multiple trades
         if wr == 0 and trades >= 3:
             anomalies.append(
                 f"🔴 {bot.display_name}: 0% win rate over {trades} trades. "
                 "Strategy fundamentally broken."
             )
 
+        # Anomaly: profit factor < 1.0 (losing money)
+        if pf is not None and pf < 1.0 and trades >= 10:
+            severity = "🔴" if pf < 0.7 else "⚠"
+            anomalies.append(
+                f"{severity} {bot.display_name}: Profit factor {pf:.2f} over {trades} trades "
+                "— strategy not profitable."
+            )
+
+        # Anomaly: marginal profitability (PF 1.0–1.2)
+        if pf is not None and 1.0 <= pf < 1.2 and trades >= 10:
+            anomalies.append(
+                f"⚠ {bot.display_name}: Profit factor {pf:.2f} — barely above breakeven. "
+                "Within noise range."
+            )
+
+        # Anomaly: single big winner skewing equity
         best = m.get("best") or 0
         worst = abs(m.get("worst") or 0)
-        if worst > 0 and best > 5 * worst:
+        if worst > 0 and best > 5 * worst and trades >= 10:
             anomalies.append(
-                f"⚠ {bot.display_name}: Best trade ${best:.0f} is {best/worst:.1f}x larger "
-                "than worst loss. Single big winner skewing equity?"
+                f"⚠ {bot.display_name}: Best trade ${best:.0f} is {best/worst:.1f}x worst loss. "
+                "Equity heavily dependent on single winner."
             )
 
-        pf = m.get("profit_factor")
-        if pf and pf < 0.5:
-            anomalies.append(
-                f"🔴 {bot.display_name}: Profit factor {pf:.2f} — "
-                "losing $2+ for every $1 won."
-            )
-
-        equity_pnl = float(p.get("equity_usd") or 0) - float(p.get("starting_usd") or 100000)
-        last_trade = m.get("last_trade")
-        if abs(equity_pnl) > 100 and last_trade:
+        # Anomaly: active bot with stale last trade
+        if not s.get("paused") and last_trade_str:
             try:
-                lt = (datetime.fromisoformat(last_trade.replace("Z", "+00:00"))
-                      if isinstance(last_trade, str) else last_trade)
+                lt = (datetime.fromisoformat(last_trade_str.replace("Z", "+00:00"))
+                      if isinstance(last_trade_str, str) else last_trade_str)
                 if lt.tzinfo is None:
                     lt = lt.replace(tzinfo=timezone.utc)
                 days_since = (_now_utc() - lt).days
-                if days_since > 7 and not s.get("paused"):
+                if days_since > 7:
                     anomalies.append(
-                        f"⚠ {bot.display_name}: Equity is ${equity_pnl:+.0f} but no trade "
-                        f"in {days_since} days while marked active."
+                        f"🔴 {bot.display_name}: Last trade was {days_since} days ago, "
+                        "but bot is marked ACTIVE. Either dormant or broken."
+                    )
+                elif days_since > 2:
+                    anomalies.append(
+                        f"⚠ {bot.display_name}: No trades in {days_since} days while active."
                     )
             except Exception:
                 pass
+
+        # Anomaly: portfolio P&L vs trade-history P&L mismatch
+        equity_pnl = float(p.get("equity_usd") or 0) - float(p.get("starting_usd") or 100000)
+        trade_pnl = m.get("total_pnl") or 0
+        delta = abs(equity_pnl - trade_pnl)
+        if delta > 500 and trades > 0:
+            anomalies.append(
+                f"🔴 {bot.display_name}: Portfolio P&L ${equity_pnl:+.0f} disagrees with "
+                f"trade history ${trade_pnl:+.0f} by ${delta:.0f}. Data integrity issue."
+            )
 
     if anomalies:
         for a in anomalies:
@@ -830,6 +937,11 @@ def generate_performance_report() -> str:
         lines.extend(section_5_trade_quality())
     except Exception as exc:
         lines.extend(["", "[Section 5 failed]", f"Error: {exc}", ""])
+
+    try:
+        lines.extend(section_5b_open_position_audit())
+    except Exception as exc:
+        lines.extend(["", "[Section 5B failed]", f"Error: {exc}", ""])
 
     try:
         lines.extend(section_6_infrastructure())

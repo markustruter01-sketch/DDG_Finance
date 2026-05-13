@@ -502,8 +502,6 @@ VALUES
   ('spy_qqq_trend',      100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_1"}'::jsonb),
   ('jerome_macro',       100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_2"}'::jsonb),
   ('sector_rotation',    100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_3"}'::jsonb),
-  ('defensive_guardian', 100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_4"}'::jsonb),
-  ('macro_bond',         100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_7"}'::jsonb),
   ('forex_gump',         100000, 100000, 100000, '[]'::jsonb, '{"source": "forex_engine"}'::jsonb),
   ('poseidon_momentum',  100000, 100000, 100000, '[]'::jsonb, '{"source": "poseidon_paper_portfolio"}'::jsonb),
   ('kraken_trend',       100000, 100127.55, 100127.55, '[]'::jsonb, '{"source": "kraken_current_portfolio_id_8"}'::jsonb)
@@ -585,8 +583,6 @@ def ensure_schema() -> None:
                       ('spy_qqq_trend',       FALSE, '', 0, NULL),
                       ('jerome_macro',        FALSE, '', 0, NULL),
                       ('sector_rotation',     FALSE, '', 0, NULL),
-                      ('defensive_guardian',  FALSE, '', 0, NULL),
-                      ('macro_bond',          FALSE, '', 0, NULL),
                       ('forex_gump',          TRUE,  'Exit logic broken — 43 stuck open positions', 0, NULL),
                       ('poseidon_momentum',   TRUE,  '0% win rate over 6 trades — strategy broken', 0, NULL),
                       ('kraken_trend',        TRUE,  'Strategy broken — -$4,200 net, 34% WR over 32 trades', 0, NULL)

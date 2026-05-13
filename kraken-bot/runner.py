@@ -29,9 +29,11 @@ from typing import Any
 
 # Path surgery — match main.py's pattern
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform"))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Order matters: trading-platform must precede kraken-bot/ so that
+# `db.postgres` imports resolve to the package, not the flat db.py shim.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # kraken-bot/ (last priority)
+sys.path.insert(0, _REPO_ROOT)                                    # repo root
+sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform")) # trading-platform (winning priority)
 
 from loguru import logger
 

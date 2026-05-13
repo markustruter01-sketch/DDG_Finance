@@ -423,8 +423,8 @@ function FleetKPISummary() {
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const botStatuses = summary?.bot_statuses ?? {};
-  // bot_statuses now contains: davy-jones, blackbeard, calypso, apex-predator,
-  // navigator, poseidon, kraken-current (7 bots). Oracle is the trading-api itself
+  // bot_statuses now contains: davy-jones, blackbeard, calypso,
+  // navigator, poseidon, kraken-current (6 bots). Oracle is the trading-api itself
   // and has no heartbeat row — add +1 for it.
   const activeBotCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
@@ -1668,7 +1668,6 @@ const BOT_COLORS: Record<string, string> = {
   "davy-jones":    "text-blue-400",
   "blackbeard":    "text-amber-400",
   "calypso":       "text-purple-400",
-  "apex-predator": "text-orange-400",
   "poseidon":      "text-cyan-400",
   "kraken-current":"text-teal-400",
   "navigator":     "text-green-400",

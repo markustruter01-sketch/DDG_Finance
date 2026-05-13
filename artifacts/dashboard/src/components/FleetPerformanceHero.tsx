@@ -76,10 +76,6 @@ export function FleetPerformanceHero() {
     const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + (t.pnl_percentage ?? 0), 0);
     results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
 
-    const apexBot = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-    const apexPnl = apexBot?.pnl_usd ?? 0;
-    results.push({ name: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, dailyPnl: apexPnl });
-
     const forexPnlToday = fxState?.total_pnl ?? 0;
     results.push({ name: "Forex Gump", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
@@ -109,11 +105,6 @@ export function FleetPerformanceHero() {
       ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
       : [0];
     krakenLines.unshift({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
-    const apexBotSpk = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-    const apexPnlSpk = apexBotSpk?.pnl_usd ?? 0;
-    const apexEqSpk = apexBotSpk?.equity_usd ?? 100_000;
-    const apexPctSpk = apexEqSpk > 0 ? (apexPnlSpk / apexEqSpk) * 100 : 0;
-    krakenLines.push({ id: "apex", name: "Apex", icon: "🦅", accent: "#f97316", curve: apexPctSpk !== 0 ? [0, apexPctSpk * 0.3, apexPctSpk * 0.6, apexPctSpk * 0.8, apexPctSpk] : [0] });
 
     const fxPnl = fxState?.total_pnl ?? 0;
     const fxEquity = fxState?.total_equity ?? 100_000;

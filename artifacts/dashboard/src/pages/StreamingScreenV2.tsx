@@ -29,7 +29,6 @@ const BOT_META: Record<string, { icon: string; color: string; label: string }> =
   "davy-jones":     { icon: getBotIdentity("davy-jones").icon,     color: "#22d3ee", label: `${getBotIdentity("davy-jones").displayName} #2` },
   blackbeard:       { icon: getBotIdentity("blackbeard").icon,     color: "#f97316", label: `${getBotIdentity("blackbeard").displayName} #3` },
   calypso:          { icon: getBotIdentity("calypso").icon,        color: "#a855f7", label: `${getBotIdentity("calypso").displayName} #4` },
-  apex:             { icon: getBotIdentity("apex-predator").icon,  color: "#f59e0b", label: `${getBotIdentity("apex-predator").displayName} #5` },
   navigator:        { icon: getBotIdentity("navigator").icon,      color: "#10b981", label: `${getBotIdentity("navigator").displayName} #6` },
   poseidon:         { icon: getBotIdentity("poseidon").icon,       color: "#8b5cf6", label: `${getBotIdentity("poseidon").displayName} #7` },
   "kraken-current": { icon: "🌊", color: "#06b6d4", label: "Kraken Current #8" },
@@ -258,8 +257,6 @@ function BotTilesRow() {
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: apexStatus } = useKrakenStatus("apex-predator");
-  const { data: apexPerf } = useKrakenPerformance("apex-predator");
   const { data: djPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: caPerf } = useKrakenPerformance("calypso");
@@ -284,7 +281,7 @@ function BotTilesRow() {
     const recent = new Set<string>();
     for (const t of recentTrades) {
       if (new Date(t.date).getTime() >= cutoff) {
-        const botKey = t.bot === getBotIdentity("davy-jones").displayName ? "davy-jones" : t.bot === getBotIdentity("apex-predator").displayName ? "apex" : t.bot.toLowerCase();
+        const botKey = t.bot === getBotIdentity("davy-jones").displayName ? "davy-jones" : t.bot.toLowerCase();
         recent.add(botKey);
       }
     }
@@ -356,21 +353,6 @@ function BotTilesRow() {
       winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
       color: BOT_META.calypso.color,
       currentTicker: caSig.ticker, lastSignal: caSig.signal, signalStrength: caSig.strength,
-    },
-    {
-      key: "apex",
-      equity: fleetEq?.apex_predator?.equity ?? 0,
-      pnl: fleetEq?.apex_predator?.pnl ?? 0,
-      status: apexStatus?.status ?? "offline",
-      thinkingText: apexStatus?.thinking_text ?? "",
-      posCount: apexStatus?.position_count ?? 0,
-      cycleCount: apexStatus?.cycle_count ?? 0,
-      winCount: apexPerf?.win_count ?? 0,
-      lossCount: apexPerf?.loss_count ?? 0,
-      color: BOT_META.apex.color,
-      currentTicker: apexStatus?.open_positions?.[0]?.symbol,
-      lastSignal: undefined as string | undefined,
-      signalStrength: undefined as string | undefined,
     },
     {
       key: "navigator", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0,
@@ -553,7 +535,7 @@ function NeuralFeed() {
         parts.push(`→ ${decision}`);
         newLines.push({
           id: `opt-scan-${scan.symbol}-${scan.is_squeeze}-${optState.cycle_count}`,
-          ts: now, bot: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, color: "#f59e0b",
+          ts: now, bot: "Oracle", icon: "🔮", color: "#8b5cf6",
           text: parts.join(" | "),
           type: scan.is_squeeze ? "signal" : "thinking",
           highConviction: scan.is_squeeze,
@@ -561,7 +543,7 @@ function NeuralFeed() {
       }
       if (optState.circuit_breaker_active) {
         newLines.push({
-          id: `opt-circuit-${optState.cycle_count}`, ts: now, bot: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, color: "#f59e0b",
+          id: `opt-circuit-${optState.cycle_count}`, ts: now, bot: "Oracle", icon: "🔮", color: "#8b5cf6",
           text: "CIRCUIT BREAKER ACTIVE — Position sizing reduced → HOLD",
           type: "system",
         });
@@ -750,7 +732,6 @@ function EquitySidebar() {
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
   const { data: caStatus } = useKrakenStatus("calypso");
-  const { data: apexKrakenStatus } = useKrakenStatus("apex-predator");
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
   const { data: fleetEq } = useFleetEquity();
@@ -836,7 +817,6 @@ function EquitySidebar() {
     rows.push({ name: getBotIdentity("davy-jones").displayName, icon: getBotIdentity("davy-jones").icon, equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0, color: "#22d3ee" });
     rows.push({ name: getBotIdentity("blackbeard").displayName, icon: getBotIdentity("blackbeard").icon, equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
     rows.push({ name: getBotIdentity("calypso").displayName, icon: getBotIdentity("calypso").icon, equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0, color: "#a855f7" });
-    rows.push({ name: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, equity: fleetEq?.apex_predator?.equity ?? 0, pnl: fleetEq?.apex_predator?.pnl ?? 0, color: "#f97316" });
     rows.push({ name: getBotIdentity("navigator").displayName, icon: getBotIdentity("navigator").icon, equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
     rows.push({ name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
     rows.push({ name: "Kraken Current", icon: "🌊", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0, color: "#06b6d4" });
@@ -849,7 +829,6 @@ function EquitySidebar() {
       fleetEq?.davy_jones?.equity ?? 0,
       fleetEq?.blackbeard?.equity ?? 0,
       fleetEq?.calypso?.equity ?? 0,
-      fleetEq?.apex_predator?.equity ?? 0,
       fleetEq?.poseidon?.equity ?? 0,
       fleetEq?.kraken_current?.equity ?? 0,
     ].reduce((a, b) => a + b, 0);

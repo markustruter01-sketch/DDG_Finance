@@ -193,9 +193,6 @@ export default function StreamingBotsScreen() {
   const { data: registry } = useBotRegistry();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
-  const { data: apexKrakenPerf } = useKrakenPerformance("apex-predator");
-  const { data: apexKrakenStatus } = useKrakenStatus("apex-predator");
-
   // ── Equity derivations ────────────────────────────────────────────────
   // Oracle: prefer fleet equity system (reflects any manual resets) over raw Alpaca portfolio
   const oracleEquity = fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null;
@@ -212,7 +209,6 @@ export default function StreamingBotsScreen() {
   const bbEquity = bbPerf?.current_equity ?? bbStatus?.total_equity_usd ?? fleetEq?.blackbeard?.equity ?? null;
   // Paused bots: Kraken API returns null — fall back to fleet equity tracking
   const caEquity = caPerf?.current_equity ?? caStatus?.total_equity_usd ?? fleetEq?.calypso?.equity ?? null;
-  const apexKrakenEquity = apexKrakenPerf?.current_equity ?? apexKrakenStatus?.total_equity_usd ?? fleetEq?.apex_predator?.equity ?? null;
 
   const navEquity = fleetEq?.navigator?.equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
@@ -249,7 +245,7 @@ export default function StreamingBotsScreen() {
   // ── Fleet totals ──────────────────────────────────────────────────────
   // Prefer fleet equity system's pre-computed total (reflects resets, all 9 bots).
   // Fall back to dynamic sum only if fleet equity hasn't loaded yet.
-  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexKrakenEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
+  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
   const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
   // Baseline: use the fleet equity system's starting capital ($900k) when available
@@ -297,16 +293,6 @@ export default function StreamingBotsScreen() {
       openPositions: caStatus?.open_positions?.length ?? 0,
       openPositionsList: caStatus?.open_positions,
     },
-    defensive_guardian: {
-      equity: apexKrakenEquity,
-      // paused intentionally omitted — registry status: "paused" is authoritative
-      stale: fleetEq?.apex_predator?.stale ?? false,
-      heartbeatMinsAgo: fleetEq?.apex_predator?.heartbeat_mins_ago,
-      winCount: apexKrakenPerf?.win_count ?? 0,
-      lossCount: apexKrakenPerf?.loss_count ?? 0,
-      openPositions: apexKrakenStatus?.open_positions?.length ?? 0,
-      openPositionsList: apexKrakenStatus?.open_positions,
-    },
     forex_gump: {
       equity: navEquity,
       paused: forexState?.paused ?? false,
@@ -332,13 +318,6 @@ export default function StreamingBotsScreen() {
       lossCount: (kcState?.total_trades ?? 0) - (kcState?.total_wins ?? 0),
       openPositions: kcOpenList.length,
       openPositionsList: kcOpenList,
-    },
-    macro_bond: {
-      equity: null,
-      // paused intentionally omitted — registry status: "paused" is authoritative
-      winCount: 0,
-      lossCount: 0,
-      openPositions: 0,
     },
   };
 

@@ -49,7 +49,6 @@ export function useRealFeed(maxTrades = 20) {
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
   const caStatus = useKrakenStatus("calypso");
-  const apexStatus = useKrakenStatus("apex-predator");
   const { data: livePositions } = useLivePositions();
   const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
@@ -80,8 +79,6 @@ export function useRealFeed(maxTrades = 20) {
           }
         } else if (isForex) {
           _id = getBotIdentity("forex_gump");
-        } else if (isOptions) {
-          _id = getBotIdentity("apex-predator");
         }
         const bot = _id.displayName;
         const icon = _id.icon;
@@ -114,12 +111,10 @@ export function useRealFeed(maxTrades = 20) {
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
     const _ca = getBotIdentity("calypso");
-    const _ap = getBotIdentity("apex-predator");
     const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data,   bot: _dj.displayName, icon: _dj.icon },
-      { data: bbStatus.data,   bot: _bb.displayName, icon: _bb.icon },
-      { data: caStatus.data,   bot: _ca.displayName, icon: _ca.icon },
-      { data: apexStatus.data, bot: _ap.displayName, icon: _ap.icon },
+      { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
+      { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
+      { data: caStatus.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     const journalIds = new Set(all.map(t => t.id));
     for (const { data, bot, icon } of krakenRecent) {
@@ -168,7 +163,7 @@ export function useRealFeed(maxTrades = 20) {
 
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, apexStatus.data, fxTrades]);
+  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, fxTrades]);
 
   const krakenWins = useMemo(() =>
     [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),
@@ -201,7 +196,6 @@ export function useRealFeed(maxTrades = 20) {
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
     const _ca = getBotIdentity("calypso");
-    const _ap = getBotIdentity("apex-predator");
     const _fx = getBotIdentity("forex_gump");
 
     const jSummary = journal?.summary;
@@ -246,17 +240,6 @@ export function useRealFeed(maxTrades = 20) {
       });
     }
 
-    if (optState) {
-      stats.push({
-        name: _ap.displayName, icon: _ap.icon,
-        totalPnl: 0,
-        totalPnlPct: 0,
-        wins: optState.total_wins ?? 0,
-        losses: (optState.total_trades ?? 0) - (optState.total_wins ?? 0),
-        trades: optState.total_trades ?? 0,
-      });
-    }
-
     if (fxState) {
       stats.push({
         name: _fx.displayName, icon: _fx.icon,
@@ -295,17 +278,15 @@ export function useRealFeed(maxTrades = 20) {
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
     const _ca = getBotIdentity("calypso");
-    const _ap = getBotIdentity("apex-predator");
     const _oracle = getBotIdentity("oracle");
     const _fx = getBotIdentity("forex_gump");
     const _pos = getBotIdentity("poseidon");
     const _kc = getBotIdentity("kraken-current");
 
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data,   bot: _dj.displayName, icon: _dj.icon },
-      { data: bbStatus.data,   bot: _bb.displayName, icon: _bb.icon },
-      { data: caStatus.data,   bot: _ca.displayName, icon: _ca.icon },
-      { data: apexStatus.data, bot: _ap.displayName, icon: _ap.icon },
+      { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
+      { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
+      { data: caStatus.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -389,7 +370,7 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [djStatus.data, bbStatus.data, caStatus.data, apexStatus.data, livePositions, fxPositions, poseidonState, kcState]);
+  }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions, poseidonState, kcState]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());
   const initialized = useRef(false);

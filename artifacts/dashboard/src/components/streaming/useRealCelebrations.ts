@@ -131,7 +131,6 @@ export function useRealCelebrations() {
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
     const _ca = getBotIdentity("calypso");
-    const _ap = getBotIdentity("apex-predator");
     const _fx = getBotIdentity("forex_gump");
 
     if (journal?.trades) {
@@ -150,7 +149,6 @@ export function useRealCelebrations() {
           else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) { _id = _ca; }
           else { _id = _dj; }
         } else if (isForex) { _id = _fx; }
-        else if (isOptions) { _id = _ap; }
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
         const entry: RealTradeEntry = { bot: _id.displayName, icon: _id.icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
         if (isWin) wins.push(entry);
@@ -207,7 +205,6 @@ export function useRealCelebrations() {
         { bot: _fx.displayName,     icon: _fx.icon,     symbol: "EUR/USD",   pnlUsd: 8.30,  isWin: true, source: "placeholder" },
         { bot: _bb.displayName,     icon: _bb.icon,     symbol: "SOL/USD",   pnlUsd: 15.60, isWin: true, source: "placeholder" },
         { bot: _ca.displayName,     icon: _ca.icon,     symbol: "ETH/USD",   pnlUsd: 18.20, isWin: true, source: "placeholder" },
-        { bot: _ap.displayName,     icon: _ap.icon,     symbol: "SPY 450C",  pnlUsd: 32.00, isWin: true, source: "placeholder" },
       );
     }
     if (losses.length === 0) {

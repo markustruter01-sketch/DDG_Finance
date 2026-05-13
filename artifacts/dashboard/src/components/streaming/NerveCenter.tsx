@@ -13,7 +13,6 @@ const BOTS = [
   { id: "davy-jones", name: getBotIdentity("davy-jones").displayName, subtitle: "Crypto Bot #1", icon: getBotIdentity("davy-jones").icon, angle: 330, color: "#22d3ee" },
   { id: "blackbeard", name: getBotIdentity("blackbeard").displayName, subtitle: "Crypto Bot #2", icon: getBotIdentity("blackbeard").icon, angle: 30, color: "#f97316" },
   { id: "calypso", name: getBotIdentity("calypso").displayName, subtitle: "Crypto Bot #3", icon: getBotIdentity("calypso").icon, angle: 90, color: "#a78bfa" },
-  { id: "apex", name: getBotIdentity("apex-predator").displayName, subtitle: "Options Bot", icon: getBotIdentity("apex-predator").icon, angle: 150, color: "#ef4444" },
   { id: "navigator", name: getBotIdentity("navigator").displayName, subtitle: "Forex Bot", icon: getBotIdentity("navigator").icon, angle: 210, color: "#14b8a6" },
 ];
 
@@ -363,7 +362,6 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused),
     blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused),
     calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused),
-    apex: !!(optState && !optState.paused),
     navigator: !!(fxState && !fxState.paused),
   };
 
@@ -400,17 +398,6 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
       }
     }
 
-    for (const p of optPositions?.positions ?? []) {
-      const reasons = TRADE_REASONS.apex;
-      insights.push({
-        bot: getBotIdentity("apex-predator").displayName, icon: getBotIdentity("apex-predator").icon, color: "#ef4444",
-        symbol: `${p.symbol} ${p.strategy}`, side: "long",
-        pnlUsd: p.unrealized_pnl,
-        reason: reasons[Math.abs(p.symbol.charCodeAt(0)) % reasons.length],
-        entryTime: p.opened_at ?? p.scanned_at,
-      });
-    }
-
     for (const p of fxPositions?.positions ?? []) {
       const reasons = TRADE_REASONS.navigator;
       insights.push({
@@ -423,7 +410,7 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     }
 
     return insights.filter((t) => t.pnlUsd > 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
-  }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, optPositions, fxPositions]);
+  }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, fxPositions]);
 
   /* DEACTIVATED: SVG overlay variables — reactivate with original nerve center graphics */
   const algoPopups = useAlgoPopups();

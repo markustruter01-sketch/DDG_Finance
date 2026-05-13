@@ -343,11 +343,6 @@ export default function BotsPage() {
   const { data: bbSt }      = useKrakenStatus("blackbeard");
   const { data: caPerf }    = useKrakenPerformance("calypso");
   const { data: caSt }      = useKrakenStatus("calypso");
-  const { data: apexPerf }  = useKrakenPerformance("apex-predator");
-  const { data: apexSt }    = useKrakenStatus("apex-predator");
-  const { data: macroPerf } = useKrakenPerformance("bot7_macro_bond");
-  const { data: macroSt }   = useKrakenStatus("bot7_macro_bond");
-
   // Specialist bots
   const { data: forexState }   = useForexState();
   const { data: forexPosRaw }  = useForexPositions();
@@ -437,36 +432,6 @@ export default function BotsPage() {
       losses: caPerf?.loss_count ?? 0,
       openCount: caSt?.open_positions?.length ?? 0,
       openSymbols: krakenOpenSymbols(caSt),
-    },
-    {
-      id: "defensive_guardian",
-      name: "Defensive Guardian",
-      icon: "🛡️",
-      exchange: "Alpaca · Defensive ETFs",
-      accentColor: "#10b981",
-      equity: fleetEq?.apex_predator?.equity ?? null,
-      paused: apexSt?.bot_paused ?? false,
-      stale: fleetEq?.apex_predator?.stale ?? false,
-      heartbeatMins: fleetEq?.apex_predator?.heartbeat_mins_ago ?? null,
-      wins: apexPerf?.win_count ?? 0,
-      losses: apexPerf?.loss_count ?? 0,
-      openCount: apexSt?.open_positions?.length ?? 0,
-      openSymbols: krakenOpenSymbols(apexSt),
-    },
-    {
-      id: "macro_bond",
-      name: "Macro Bond",
-      icon: "📊",
-      exchange: "Alpaca · Bond ETFs",
-      accentColor: "#eab308",
-      equity: macroSt?.total_equity_usd ?? null,
-      paused: macroSt?.bot_paused ?? false,
-      stale: false,
-      heartbeatMins: null,
-      wins: macroPerf?.win_count ?? 0,
-      losses: macroPerf?.loss_count ?? 0,
-      openCount: macroSt?.open_positions?.length ?? 0,
-      openSymbols: krakenOpenSymbols(macroSt),
     },
     {
       id: "forex_gump",

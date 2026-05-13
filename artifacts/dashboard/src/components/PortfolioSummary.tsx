@@ -72,7 +72,6 @@ export function CombinedPortfolioSummary() {
     fleetEq?.davy_jones?.equity ?? 0,
     fleetEq?.blackbeard?.equity ?? 0,
     fleetEq?.calypso?.equity ?? 0,
-    fleetEq?.apex_predator?.equity ?? 0,
     fleetEq?.poseidon?.equity ?? 0,
     fleetEq?.kraken_current?.equity ?? 0,
   ].reduce((a, b) => a + b, 0);
@@ -82,7 +81,6 @@ export function CombinedPortfolioSummary() {
     fleetEq?.davy_jones?.pnl ?? 0,
     fleetEq?.blackbeard?.pnl ?? 0,
     fleetEq?.calypso?.pnl ?? 0,
-    fleetEq?.apex_predator?.pnl ?? 0,
     fleetEq?.poseidon?.pnl ?? 0,
     fleetEq?.kraken_current?.pnl ?? 0,
   ].reduce((a, b) => a + b, 0);
@@ -92,13 +90,6 @@ export function CombinedPortfolioSummary() {
   const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
-  const apexBot       = fleetSummary?.bots?.find(b => b.bot_id === "apex-predator");
-  const apexEquity    = fleetEq?.apex_predator?.equity ?? 0;
-  const apexPnl       = fleetEq?.apex_predator?.pnl ?? 0;
-  const apexTrades    = apexBot?.trades ?? 0;
-  const apexWins      = apexBot?.wins ?? 0;
-  const apexStart     = apexBot?.starting_balance_usd ?? 100_000;
-  const apexPnlPct    = apexStart > 0 ? (apexPnl / apexStart) * 100 : 0;
 
   const forexEquity   = fleetEq?.navigator?.equity ?? 0;
   const forexPnl      = fleetEq?.navigator?.pnl ?? 0;
@@ -252,42 +243,6 @@ export function CombinedPortfolioSummary() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <BoltIcon className="h-3 w-3 text-orange-400/60" />
-            <span className="text-[9px] uppercase tracking-widest text-orange-400/60 font-semibold">Defensive Guardian · Crypto Momentum</span>
-            <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide">Paper</span>
-            <div className="h-px flex-1 bg-orange-500/10" />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-orange-500/20 transition-all duration-500 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-orange-500/30 to-transparent" />
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Equity</div>
-                <AnimatedCurrency value={apexEquity} className={cn("fluid-metric font-mono font-bold tracking-tight", apexPnl >= 0 ? "text-orange-400" : "text-orange-400/60")} />
-                <div className={cn("text-xs mt-1.5 flex items-center gap-1 font-medium", apexPnl >= 0 ? "text-green-400/70" : "text-red-400/70")}>
-                  {apexPnl >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {apexPnl >= 0 ? "+" : ""}{formatCurrency(apexPnl)}
-                  {apexPnlPct !== 0 && <span className={cn("text-[9px] font-mono px-1 py-0.5 rounded", apexPnl >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400")}>{apexPnlPct >= 0 ? "+" : ""}{apexPnlPct.toFixed(2)}%</span>}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-orange-500/15 transition-all duration-500">
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Trades</div>
-                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{apexTrades}</div>
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5">15 pairs · 1h/4h</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-orange-500/15 transition-all duration-500">
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Win Rate</div>
-                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{apexTrades > 0 ? `${(apexWins / apexTrades * 100).toFixed(0)}%` : "—"}</div>
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5">{apexWins}W · {apexTrades - apexWins}L</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
 
         <div className="space-y-2">
           <div className="flex items-center gap-2">

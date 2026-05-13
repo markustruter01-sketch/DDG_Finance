@@ -197,7 +197,8 @@ export default function StreamingBotsScreen() {
   const { data: apexKrakenStatus } = useKrakenStatus("apex-predator");
 
   // ── Equity derivations ────────────────────────────────────────────────
-  const oracleEquity = portfolio?.account?.equity ?? null;
+  // Oracle: prefer fleet equity system (reflects any manual resets) over raw Alpaca portfolio
+  const oracleEquity = fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null;
   const oraclePositions = (portfolio?.positions ?? []).filter((p) => (p.market_value ?? 0) > 10);
   const oracleOpenList: OpenPosSummary[] = oraclePositions.map((p) => ({
     symbol: p.symbol,
@@ -207,10 +208,11 @@ export default function StreamingBotsScreen() {
     size_usd: p.market_value ?? 0,
   }));
 
-  const davyEquity = davyPerf?.current_equity ?? davyStatus?.total_equity_usd ?? null;
-  const bbEquity = bbPerf?.current_equity ?? bbStatus?.total_equity_usd ?? null;
-  const caEquity = caPerf?.current_equity ?? caStatus?.total_equity_usd ?? null;
-  const apexKrakenEquity = apexKrakenPerf?.current_equity ?? apexKrakenStatus?.total_equity_usd ?? null;
+  const davyEquity = davyPerf?.current_equity ?? davyStatus?.total_equity_usd ?? fleetEq?.davy_jones?.equity ?? null;
+  const bbEquity = bbPerf?.current_equity ?? bbStatus?.total_equity_usd ?? fleetEq?.blackbeard?.equity ?? null;
+  // Paused bots: Kraken API returns null — fall back to fleet equity tracking
+  const caEquity = caPerf?.current_equity ?? caStatus?.total_equity_usd ?? fleetEq?.calypso?.equity ?? null;
+  const apexKrakenEquity = apexKrakenPerf?.current_equity ?? apexKrakenStatus?.total_equity_usd ?? fleetEq?.apex_predator?.equity ?? null;
 
   const navEquity = fleetEq?.navigator?.equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
@@ -245,9 +247,14 @@ export default function StreamingBotsScreen() {
   const usdBias = forexState?.usd_bias ?? "NEUTRAL";
 
   // ── Fleet totals ──────────────────────────────────────────────────────
+  // Prefer fleet equity system's pre-computed total (reflects resets, all 9 bots).
+  // Fall back to dynamic sum only if fleet equity hasn't loaded yet.
   const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, apexKrakenEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
-  const fleetTotal = allEquities.length === 8 ? allEquities.reduce((s, e) => s + e, 0) : null;
-  const fleetPnl = fleetTotal != null ? fleetTotal - FLEET_STARTING_CAPITAL : null;
+  const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
+  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
+  // Baseline: use the fleet equity system's starting capital ($900k) when available
+  const fleetStartingCapital = fleetEq?.fleet_total?.starting ?? (allEquities.length * STARTING_BALANCE);
+  const fleetPnl = fleetTotal != null ? fleetTotal - fleetStartingCapital : null;
   const fleetPnlColor = fleetPnl == null ? "#94a3b8" : fleetPnl >= 0 ? "#34d399" : "#f87171";
 
   // ── Per-bot runtime data keyed by canonical registry ID ───────────────
@@ -282,7 +289,7 @@ export default function StreamingBotsScreen() {
     },
     sector_rotation: {
       equity: caEquity,
-      paused: caStatus?.bot_paused ?? false,
+      // paused intentionally omitted — registry status: "paused" is authoritative
       stale: fleetEq?.calypso?.stale ?? false,
       heartbeatMinsAgo: fleetEq?.calypso?.heartbeat_mins_ago,
       winCount: caPerf?.win_count ?? 0,
@@ -292,7 +299,7 @@ export default function StreamingBotsScreen() {
     },
     defensive_guardian: {
       equity: apexKrakenEquity,
-      paused: apexKrakenStatus?.bot_paused ?? false,
+      // paused intentionally omitted — registry status: "paused" is authoritative
       stale: fleetEq?.apex_predator?.stale ?? false,
       heartbeatMinsAgo: fleetEq?.apex_predator?.heartbeat_mins_ago,
       winCount: apexKrakenPerf?.win_count ?? 0,
@@ -328,7 +335,7 @@ export default function StreamingBotsScreen() {
     },
     macro_bond: {
       equity: null,
-      paused: false,
+      // paused intentionally omitted — registry status: "paused" is authoritative
       winCount: 0,
       lossCount: 0,
       openPositions: 0,

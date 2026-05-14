@@ -124,8 +124,9 @@ export function FleetPerformanceHero() {
     return krakenLines;
   }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
 
-  // fleet-summary has 5 bots (DJ+BB+Cal+Poseidon+KC) + 3 external (Oracle, Apex, Navigator)
-  const botCount = (fleetSummary?.bot_count ?? 5) + 3;
+  // fleet-summary Kraken bots + 2 external (Oracle, Navigator/Forex Gump)
+  // Apex Predator (Bot #5) retired — removed from external count
+  const botCount = (fleetSummary?.bot_count ?? 5) + 2;
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 3 capital pools` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },

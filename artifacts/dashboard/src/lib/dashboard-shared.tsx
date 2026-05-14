@@ -484,13 +484,11 @@ export const EXPECTED_JOBS = 14;
  *
  * Bot layout:
  *   alpacaEquity      — Oracle (Bot #1, Alpaca paper account)
- *   krakenFleetEquity — 6-bot Kraken fleet total (from /kraken/fleet-summary):
+ *   krakenFleetEquity — Kraken fleet total (from /kraken/fleet-summary):
  *                       Davy Jones (#2) + Blackbeard (#3) + Calypso (#4) +
- *                       Apex Predator (#5, crypto momentum) +
  *                       Poseidon (#7) + Kraken Current (#8)
- *   _optionsEquity    — DEPRECATED: Apex Predator (Bot #5) is now a Kraken
- *                       crypto momentum scalper — its equity is already inside
- *                       krakenFleetEquity. Pass 0 or omit.
+ *                       [Bot #5 defensive_guardian and Bot #7 macro_bond retired]
+ *   _optionsEquity    — DEPRECATED: pass 0 or omit.
  *   forexEquity       — Navigator (Bot #6, forex paper account)
  *
  * @deprecated Use the `useFleetEquity()` hook instead, which reads from the
@@ -506,5 +504,5 @@ export function computeFleetEquity(
   return alpacaEquity + krakenFleetEquity + forexEquity;
 }
 
-/** Starting capital across all 9 bots ($100k each). */
-export const FLEET_STARTING_CAPITAL = 900_000;
+/** Starting capital across all 7 bots ($100k each). */
+export const FLEET_STARTING_CAPITAL = 700_000;

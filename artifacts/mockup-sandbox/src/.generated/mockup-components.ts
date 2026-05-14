@@ -5,5 +5,11 @@ export const modules: ModuleMap = {
   "./components/mockups/bot-concepts/HexHeatMap.tsx": () => import("../components/mockups/bot-concepts/HexHeatMap.tsx"),
   "./components/mockups/bot-concepts/Leaderboard.tsx": () => import("../components/mockups/bot-concepts/Leaderboard.tsx"),
   "./components/mockups/bot-concepts/MissionControl.tsx": () => import("../components/mockups/bot-concepts/MissionControl.tsx"),
-  "./components/mockups/bot-concepts/TerminalTable.tsx": () => import("../components/mockups/bot-concepts/TerminalTable.tsx")
+  "./components/mockups/bot-concepts/TerminalTable.tsx": () => import("../components/mockups/bot-concepts/TerminalTable.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept1ReactorControl.tsx": () => import("../components/mockups/math-auditor-concepts/Concept1ReactorControl.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept1ReactorOrbital.tsx": () => import("../components/mockups/math-auditor-concepts/Concept1ReactorOrbital.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept2NeuralMatrix.tsx": () => import("../components/mockups/math-auditor-concepts/Concept2NeuralMatrix.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept2NeuralSynaptic.tsx": () => import("../components/mockups/math-auditor-concepts/Concept2NeuralSynaptic.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept5FormulaBeautiful.tsx": () => import("../components/mockups/math-auditor-concepts/Concept5FormulaBeautiful.tsx"),
+  "./components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx": () => import("../components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx")
 };

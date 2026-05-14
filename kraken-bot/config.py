@@ -175,18 +175,6 @@ BOT_PROFILES = {
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
         "BOT_PAUSED":        False,
     },
-    "bot4_sector": {
-        "display_name":      "Sector Rotation",
-        "db_id":             3,              # replaces Calypso (id=3)
-        "strategy_type":     "etf_rotation",
-        "strategy_label":    "SPDR Sector Momentum",
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
-        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "STARTING_CAPITAL":  100_000,
-        "LOOP_SLEEP_SECONDS": 3600,          # hourly check; rebalance only Mondays
-        "BOT_PAUSED":        False,
-    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "davy-jones")

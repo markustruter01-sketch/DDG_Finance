@@ -28,8 +28,7 @@ LEGACY_TO_CANONICAL: dict[str, str] = {
     "bot2_spy_qqq":    "spy_qqq_trend",
     "blackbeard":      "jerome_macro",
     "bot3_blackbeard": "jerome_macro",
-    "calypso":         "sector_rotation",
-    "bot4_sector":     "sector_rotation",
+
     "navigator":       "forex_gump",
     "kraken-current":  "kraken_trend",
     "poseidon":        "poseidon_momentum",

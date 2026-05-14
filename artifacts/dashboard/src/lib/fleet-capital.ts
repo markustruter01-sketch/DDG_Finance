@@ -2,8 +2,8 @@ import type { FleetEquityData, BotRegistryResponse } from "@/hooks/use-trading";
 
 const META_KEYS = new Set(["fleet_total", "generated_at", "errors"]);
 
-const DEFAULT_STARTING = 700_000;
-const DEFAULT_BOT_COUNT = 7;
+const DEFAULT_STARTING = 600_000;
+const DEFAULT_BOT_COUNT = 6;
 
 export function getFleetStartingCapital(
   registry?: BotRegistryResponse,

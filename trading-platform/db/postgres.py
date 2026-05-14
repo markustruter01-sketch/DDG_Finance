@@ -501,7 +501,7 @@ VALUES
   ('oracle',             100000, 100000, 100000, '[]'::jsonb, '{"source": "alpaca", "needs_seed": true}'::jsonb),
   ('spy_qqq_trend',      100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_1"}'::jsonb),
   ('jerome_macro',       100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_2"}'::jsonb),
-  ('sector_rotation',    100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_3"}'::jsonb),
+
   ('forex_gump',         100000, 100000, 100000, '[]'::jsonb, '{"source": "forex_engine"}'::jsonb),
   ('poseidon_momentum',  100000, 100000, 100000, '[]'::jsonb, '{"source": "poseidon_paper_portfolio"}'::jsonb),
   ('kraken_trend',       100000, 100127.55, 100127.55, '[]'::jsonb, '{"source": "kraken_current_portfolio_id_8"}'::jsonb)
@@ -582,7 +582,7 @@ def ensure_schema() -> None:
                       ('oracle',              FALSE, '', 0, NULL),
                       ('spy_qqq_trend',       FALSE, '', 0, NULL),
                       ('jerome_macro',        FALSE, '', 0, NULL),
-                      ('sector_rotation',     FALSE, '', 0, NULL),
+
                       ('forex_gump',          TRUE,  'Exit logic broken — 43 stuck open positions', 0, NULL),
                       ('poseidon_momentum',   TRUE,  '0% win rate over 6 trades — strategy broken', 0, NULL),
                       ('kraken_trend',        TRUE,  'Strategy broken — -$4,200 net, 34% WR over 32 trades', 0, NULL)
@@ -591,6 +591,21 @@ def ensure_schema() -> None:
         logger.info("DB | bots_state seed complete")
     except Exception as exc:
         logger.warning(f"DB | bots_state seed failed (non-fatal): {exc}")
+
+    # One-time cleanup — sector_rotation retired 2026-05-15.
+    # Will be removed in publish #2 after this DELETE runs once on prod.
+    try:
+        _RETIRED_SECTOR = ('sector_rotation', 'calypso', 'bot4_sector')
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bot_portfolio WHERE bot_id IN %s", (_RETIRED_SECTOR,))
+                _del_bp = cur.rowcount
+                cur.execute("DELETE FROM bots_state WHERE bot_id IN %s", (_RETIRED_SECTOR,))
+                _del_bs = cur.rowcount
+        if _del_bp or _del_bs:
+            logger.info(f"DB | sector_rotation purge — bot_portfolio: {_del_bp}, bots_state: {_del_bs}")
+    except Exception as exc:
+        logger.warning(f"DB | sector_rotation purge failed (non-fatal): {exc}")
 
     try:
         with get_conn() as conn:

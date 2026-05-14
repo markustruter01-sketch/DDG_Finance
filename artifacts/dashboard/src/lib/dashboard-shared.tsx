@@ -505,4 +505,4 @@ export function computeFleetEquity(
 }
 
 /** Starting capital across all 7 bots ($100k each). */
-export const FLEET_STARTING_CAPITAL = 700_000;
+export const FLEET_STARTING_CAPITAL = 600_000;

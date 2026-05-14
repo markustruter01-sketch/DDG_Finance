@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import StreamingScreen from "@/pages/StreamingScreen";
-import StreamingScreenV2 from "@/pages/StreamingScreenV2";
+import SynapticAuditScreen from "@/pages/SynapticAuditScreen";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import StreamingScreenV3 from "@/pages/StreamingScreenV3";
@@ -333,7 +333,7 @@ export default function StreamPage() {
           <StreamingScreen />
         </div>
         <div style={{ display: active === "b" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingScreenV2 />
+          <SynapticAuditScreen />
         </div>
         <div style={{ display: active === "c" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingBotsScreen />

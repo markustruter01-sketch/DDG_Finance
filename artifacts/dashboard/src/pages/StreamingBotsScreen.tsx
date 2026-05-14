@@ -184,8 +184,6 @@ export default function StreamingBotsScreen() {
   const { data: davyStatus } = useKrakenStatus("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caPerf } = useKrakenPerformance("calypso");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: vault } = useVault();
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
@@ -208,8 +206,6 @@ export default function StreamingBotsScreen() {
   const davyEquity = davyPerf?.current_equity ?? davyStatus?.total_equity_usd ?? fleetEq?.davy_jones?.equity ?? null;
   const bbEquity = bbPerf?.current_equity ?? bbStatus?.total_equity_usd ?? fleetEq?.blackbeard?.equity ?? null;
   // Paused bots: Kraken API returns null — fall back to fleet equity tracking
-  const caEquity = caPerf?.current_equity ?? caStatus?.total_equity_usd ?? fleetEq?.calypso?.equity ?? null;
-
   const navEquity = fleetEq?.navigator?.equity ?? null;
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
     ? (forexPosRaw as ForexPosition[])
@@ -245,7 +241,7 @@ export default function StreamingBotsScreen() {
   // ── Fleet totals ──────────────────────────────────────────────────────
   // Prefer fleet equity system's pre-computed total (reflects resets, all 9 bots).
   // Fall back to dynamic sum only if fleet equity hasn't loaded yet.
-  const allEquities = [oracleEquity, davyEquity, bbEquity, caEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
+  const allEquities = [oracleEquity, davyEquity, bbEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
   const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
   // Baseline: use the fleet equity system's starting capital ($900k) when available
@@ -282,16 +278,6 @@ export default function StreamingBotsScreen() {
       lossCount: bbPerf?.loss_count ?? 0,
       openPositions: bbStatus?.open_positions?.length ?? 0,
       openPositionsList: bbStatus?.open_positions,
-    },
-    sector_rotation: {
-      equity: caEquity,
-      // paused intentionally omitted — registry status: "paused" is authoritative
-      stale: fleetEq?.calypso?.stale ?? false,
-      heartbeatMinsAgo: fleetEq?.calypso?.heartbeat_mins_ago,
-      winCount: caPerf?.win_count ?? 0,
-      lossCount: caPerf?.loss_count ?? 0,
-      openPositions: caStatus?.open_positions?.length ?? 0,
-      openPositionsList: caStatus?.open_positions,
     },
     forex_gump: {
       equity: navEquity,

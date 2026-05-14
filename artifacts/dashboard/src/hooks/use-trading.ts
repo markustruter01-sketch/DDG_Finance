@@ -782,7 +782,6 @@ export interface FleetEquityData {
   oracle: BotEquity;
   davy_jones: BotEquity;
   blackbeard: BotEquity;
-  calypso: BotEquity;
   navigator: BotEquity;
   poseidon: BotEquity;
   kraken_current: BotEquity;
@@ -994,7 +993,7 @@ export interface SystemRestartResult {
   message: string;
 }
 
-// ── Kraken Bot (Multi-bot: Davy Jones, Blackbeard, Calypso) ──────────────────
+// ── Kraken Bot (Multi-bot: Davy Jones, Blackbeard) ───────────────────────────
 
 export interface KrakenBotProfile {
   bot_id: string;

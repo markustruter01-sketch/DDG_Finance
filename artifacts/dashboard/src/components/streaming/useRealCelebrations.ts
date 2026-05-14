@@ -107,10 +107,8 @@ export function useRealCelebrations() {
   const journal = journalQuery.data;
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
-  const caPerf = useKrakenPerformance("calypso");
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
-  const caStatus = useKrakenStatus("calypso");
   const { data: livePositions } = useLivePositions();
   const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
@@ -130,7 +128,6 @@ export function useRealCelebrations() {
     const _oracle = getBotIdentity("oracle");
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
-    const _ca = getBotIdentity("calypso");
     const _fx = getBotIdentity("forex_gump");
 
     if (journal?.trades) {
@@ -146,7 +143,6 @@ export function useRealCelebrations() {
         if (isKraken) {
           const thesis = (t.original_thesis || "").toLowerCase();
           if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) { _id = _bb; }
-          else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) { _id = _ca; }
           else { _id = _dj; }
         } else if (isForex) { _id = _fx; }
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
@@ -159,7 +155,6 @@ export function useRealCelebrations() {
     const krakenBots = [
       { data: djStatus.data, perf: djPerf.data, bot: _dj.displayName, icon: _dj.icon },
       { data: bbStatus.data, perf: bbPerf.data, bot: _bb.displayName, icon: _bb.icon },
-      { data: caStatus.data, perf: caPerf.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -204,7 +199,6 @@ export function useRealCelebrations() {
         { bot: _dj.displayName,     icon: _dj.icon,     symbol: "BTC/USD",   pnlUsd: 24.80, isWin: true, source: "placeholder" },
         { bot: _fx.displayName,     icon: _fx.icon,     symbol: "EUR/USD",   pnlUsd: 8.30,  isWin: true, source: "placeholder" },
         { bot: _bb.displayName,     icon: _bb.icon,     symbol: "SOL/USD",   pnlUsd: 15.60, isWin: true, source: "placeholder" },
-        { bot: _ca.displayName,     icon: _ca.icon,     symbol: "ETH/USD",   pnlUsd: 18.20, isWin: true, source: "placeholder" },
       );
     }
     if (losses.length === 0) {
@@ -243,27 +237,27 @@ export function useRealCelebrations() {
     while (li < losses.length) combined.push(losses[li++]);
 
     return combined;
-  }, [journal, djStatus.data, bbStatus.data, caStatus.data, djPerf.data, bbPerf.data, caPerf.data, livePositions, fxPositions]);
+  }, [journal, djStatus.data, bbStatus.data, djPerf.data, bbPerf.data, livePositions, fxPositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
     const alpacaWins = journal?.summary?.wins ?? 0;
     const alpacaTotal = journal?.summary?.total ?? 0;
-    const krakenWins = [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0);
-    const krakenTotal = [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.total_trades ?? 0), 0);
+    const krakenWins = [djPerf, bbPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0);
+    const krakenTotal = [djPerf, bbPerf].reduce((s, p) => s + (p.data?.total_trades ?? 0), 0);
     const optWins = optState?.total_wins ?? 0;
     const optTotal = optState?.total_trades ?? 0;
     const fxWins = fxState?.total_wins ?? 0;
     const fxTotal = fxState?.total_trades ?? 0;
     const totalWins = alpacaWins + krakenWins + optWins + fxWins;
     const totalTrades = alpacaTotal + krakenTotal + optTotal + fxTotal;
-    const krakenPnl = [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.total_pnl_usd ?? 0), 0);
+    const krakenPnl = [djPerf, bbPerf].reduce((s, p) => s + (p.data?.total_pnl_usd ?? 0), 0);
     return {
       totalPnl: krakenPnl,
       totalTrades,
       totalWins,
       winRate: totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0,
     };
-  }, [journal, djPerf.data, bbPerf.data, caPerf.data, optState, fxState]);
+  }, [journal, djPerf.data, bbPerf.data, optState, fxState]);
 
   const triggerExplosion = useCallback((entry: RealTradeEntry) => {
     const trade: CelebrationTrade = {

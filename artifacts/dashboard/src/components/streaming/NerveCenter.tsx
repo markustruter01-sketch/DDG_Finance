@@ -12,7 +12,6 @@ const BOTS = [
   { id: "oracle", name: "Oracle", subtitle: "Stocks Bot", icon: "🔮", angle: 270, color: "#facc15" },
   { id: "davy-jones", name: getBotIdentity("davy-jones").displayName, subtitle: "Crypto Bot #1", icon: getBotIdentity("davy-jones").icon, angle: 330, color: "#22d3ee" },
   { id: "blackbeard", name: getBotIdentity("blackbeard").displayName, subtitle: "Crypto Bot #2", icon: getBotIdentity("blackbeard").icon, angle: 30, color: "#f97316" },
-  { id: "calypso", name: getBotIdentity("calypso").displayName, subtitle: "Crypto Bot #3", icon: getBotIdentity("calypso").icon, angle: 90, color: "#a78bfa" },
   { id: "navigator", name: getBotIdentity("navigator").displayName, subtitle: "Forex Bot", icon: getBotIdentity("navigator").icon, angle: 210, color: "#14b8a6" },
 ];
 
@@ -82,10 +81,6 @@ const TRADE_REASONS: Record<string, string[]> = {
   blackbeard: [
     "Aggressive momentum entry triggered by Z-score breakout above +2.1σ. Higher risk tolerance profile allows larger position sizing. ATR stop at 1.5× standard deviation.",
     "Crypto market microstructure shows strong bid-side absorption. VPIN signal bullish with order flow momentum. Entered at key support level with tight risk management.",
-  ],
-  calypso: [
-    "Conservative mean-reversion entry at 2σ Bollinger Band touch. Low correlation to existing portfolio positions. Position sized conservatively per defensive risk profile.",
-    "Entropy-based signal detected regime shift opportunity. Sortino ratio optimization favors asymmetric risk/reward. Deployed at minimum viable position size.",
   ],
   apex: [
     "IVR below 20 threshold detected Bollinger squeeze on underlying. ATM Long Straddle constructed at 35 DTE. Premium paid within 5% capital fence. Volatility expansion expected.",
@@ -351,7 +346,6 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
   const { data: summary } = useStatusSummary();
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
-  const caStatus = useKrakenStatus("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: livePositions } = useLivePositions();
@@ -361,7 +355,6 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     oracle: !!(summary?.market_open),
     "davy-jones": !!(djStatus.data && djStatus.data.status !== "not_started" && !djStatus.data.bot_paused),
     blackbeard: !!(bbStatus.data && bbStatus.data.status !== "not_started" && !bbStatus.data.bot_paused),
-    calypso: !!(caStatus.data && caStatus.data.status !== "not_started" && !caStatus.data.bot_paused),
     navigator: !!(fxState && !fxState.paused),
   };
 
@@ -382,7 +375,6 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     const krakenBots: Array<{ data: typeof djStatus.data; botKey: string; bot: string; icon: string; color: string }> = [
       { data: djStatus.data, botKey: "davy-jones", bot: getBotIdentity("davy-jones").displayName, icon: getBotIdentity("davy-jones").icon, color: "#22d3ee" },
       { data: bbStatus.data, botKey: "blackbeard", bot: getBotIdentity("blackbeard").displayName, icon: getBotIdentity("blackbeard").icon, color: "#f97316" },
-      { data: caStatus.data, botKey: "calypso", bot: getBotIdentity("calypso").displayName, icon: getBotIdentity("calypso").icon, color: "#a78bfa" },
     ];
     for (const { data, botKey, bot, icon, color } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -410,7 +402,7 @@ export function NerveCenter({ wins24h = 0, losses24h = 0 }: NerveCenterProps) {
     }
 
     return insights.filter((t) => t.pnlUsd > 0).sort((a, b) => b.pnlUsd - a.pnlUsd);
-  }, [livePositions, djStatus.data, bbStatus.data, caStatus.data, fxPositions]);
+  }, [livePositions, djStatus.data, bbStatus.data, fxPositions]);
 
   /* DEACTIVATED: SVG overlay variables — reactivate with original nerve center graphics */
   const algoPopups = useAlgoPopups();

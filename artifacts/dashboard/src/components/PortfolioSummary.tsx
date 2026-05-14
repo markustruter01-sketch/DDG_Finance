@@ -71,7 +71,6 @@ export function CombinedPortfolioSummary() {
   const krakenFleetEquity = [
     fleetEq?.davy_jones?.equity ?? 0,
     fleetEq?.blackbeard?.equity ?? 0,
-    fleetEq?.calypso?.equity ?? 0,
     fleetEq?.poseidon?.equity ?? 0,
     fleetEq?.kraken_current?.equity ?? 0,
   ].reduce((a, b) => a + b, 0);
@@ -80,7 +79,6 @@ export function CombinedPortfolioSummary() {
   const krakenPnl         = [
     fleetEq?.davy_jones?.pnl ?? 0,
     fleetEq?.blackbeard?.pnl ?? 0,
-    fleetEq?.calypso?.pnl ?? 0,
     fleetEq?.poseidon?.pnl ?? 0,
     fleetEq?.kraken_current?.pnl ?? 0,
   ].reduce((a, b) => a + b, 0);

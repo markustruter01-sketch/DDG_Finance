@@ -26,19 +26,16 @@ const C = {
 const BOT_COLORS: Record<string, string> = {
   "davy-jones": "#22d3ee",
   blackbeard: "#f97316",
-  calypso: "#a855f7",
 };
 
 const BOT_ICONS: Record<string, string> = {
   "davy-jones": "⚓",
   blackbeard: "🏛️",
-  calypso: "🔄",
 };
 
 const BOT_NAMES: Record<string, string> = {
   "davy-jones": "SPY/QQQ Trend",
   blackbeard: "Jerome",
-  calypso: "Sector Rotation",
 };
 
 function fmtPnl(v: number, short = false) {

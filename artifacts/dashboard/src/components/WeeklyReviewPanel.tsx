@@ -42,11 +42,10 @@ export function WeeklyReviewPanel() {
   const krakenEquity = ([
     fleetEq?.davy_jones?.equity,
     fleetEq?.blackbeard?.equity,
-    fleetEq?.calypso?.equity,
     fleetEq?.poseidon?.equity,
     fleetEq?.kraken_current?.equity,
   ].every(v => v != null)
-    ? [fleetEq?.davy_jones?.equity ?? 0, fleetEq?.blackbeard?.equity ?? 0, fleetEq?.calypso?.equity ?? 0, fleetEq?.poseidon?.equity ?? 0, fleetEq?.kraken_current?.equity ?? 0].reduce((a, b) => a + b, 0)
+    ? [fleetEq?.davy_jones?.equity ?? 0, fleetEq?.blackbeard?.equity ?? 0, fleetEq?.poseidon?.equity ?? 0, fleetEq?.kraken_current?.equity ?? 0].reduce((a, b) => a + b, 0)
     : null);
 
   if (isLoading) {

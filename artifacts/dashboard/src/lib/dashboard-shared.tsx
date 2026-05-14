@@ -290,7 +290,6 @@ export const HEALTH_COLOR_MAP: Record<string, string> = {
 export const BOT_THEMES: Record<string, { accent: string; accentTw: string; icon: string; glowRgb: string; borderTw: string; bgGradient: string }> = {
   "davy-jones": { accent: "#22d3ee", accentTw: "cyan", icon: "⚓", glowRgb: "6,182,212", borderTw: "border-cyan-500/20", bgGradient: "from-slate-950/90 to-cyan-950/10" },
   "blackbeard": { accent: "#f97316", accentTw: "orange", icon: "🏴‍☠️", glowRgb: "249,115,22", borderTw: "border-orange-500/20", bgGradient: "from-slate-950/90 to-orange-950/10" },
-  "calypso":    { accent: "#a855f7", accentTw: "purple", icon: "🌊", glowRgb: "168,85,247", borderTw: "border-purple-500/20", bgGradient: "from-slate-950/90 to-purple-950/10" },
 };
 
 export function useMarketCountdown(nextOpenIso: string | null | undefined): string | null {
@@ -485,9 +484,9 @@ export const EXPECTED_JOBS = 14;
  * Bot layout:
  *   alpacaEquity      — Oracle (Bot #1, Alpaca paper account)
  *   krakenFleetEquity — Kraken fleet total (from /kraken/fleet-summary):
- *                       Davy Jones (#2) + Blackbeard (#3) + Calypso (#4) +
+ *                       Davy Jones (#2) + Blackbeard (#3) +
  *                       Poseidon (#7) + Kraken Current (#8)
- *                       [Bot #5 defensive_guardian and Bot #7 macro_bond retired]
+ *                       [Bot #4 sector_rotation, #5 defensive_guardian and #7 macro_bond retired]
  *   _optionsEquity    — DEPRECATED: pass 0 or omit.
  *   forexEquity       — Navigator (Bot #6, forex paper account)
  *

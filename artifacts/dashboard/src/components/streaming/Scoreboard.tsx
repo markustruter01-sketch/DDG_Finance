@@ -38,7 +38,6 @@ const BOT_COLORS: Record<string, string> = {
   "Oracle": "#8b5cf6",
   "SPY/QQQ Trend": "#22d3ee",
   "Jerome": "#ef4444",
-  "Sector Rotation": "#3b82f6",
   "Forex Gump": "#a78bfa",
   "Poseidon": "#8b5cf6",
   "Kraken Current": "#06b6d4",
@@ -47,7 +46,6 @@ const BOT_COLORS: Record<string, string> = {
 function getBotAbbrev(name: string): string {
   if (name === "SPY/QQQ Trend") return "SPY";
   if (name === "Jerome") return "JRM";
-  if (name === "Sector Rotation") return "ROT";
   if (name === "Forex Gump") return "FGP";
   if (name === "Oracle") return "ORC";
   if (name === "Poseidon") return "POS";

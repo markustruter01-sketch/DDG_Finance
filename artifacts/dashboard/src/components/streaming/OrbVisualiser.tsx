@@ -37,7 +37,6 @@ const BOT_COLORS_CSS: Record<string, string> = {
   oracle:            "#8b5cf6",
   "davy-jones":      "#22d3ee",
   blackbeard:        "#f97316",
-  calypso:           "#a855f7",
   apex:              "#f59e0b",
   navigator:         "#10b981",
   poseidon:          "#6366f1",
@@ -48,7 +47,6 @@ const BOT_COLORS_HEX: Record<string, THREE.ColorRepresentation> = {
   oracle:            0x8b5cf6,
   "davy-jones":      0x22d3ee,
   blackbeard:        0xf97316,
-  calypso:           0xa855f7,
   apex:              0xf59e0b,
   navigator:         0x10b981,
   poseidon:          0x6366f1,
@@ -62,7 +60,6 @@ const BOT_DISPLAY_NAMES: Record<string, string> = {
   oracle:            "ORACLE",
   "davy-jones":      "DAVY JONES",
   blackbeard:        "BLACKBEARD",
-  calypso:           "CALYPSO",
   apex:              "APEX",
   navigator:         "NAVIGATOR",
   poseidon:          "POSEIDON",
@@ -1025,7 +1022,6 @@ export function OrbVisualiser() {
   const { data: journal       } = useLearningJournal(undefined, undefined, 5);
   const { data: djStatus      } = useKrakenStatus("davy-jones");
   const { data: bbStatus      } = useKrakenStatus("blackbeard");
-  const { data: caStatus      } = useKrakenStatus("calypso");
   const { data: optState      } = useOptionsState();
   const { data: fxState       } = useForexState();
   const { data: poseidonState } = usePoseidonState();
@@ -1090,13 +1086,12 @@ export function OrbVisualiser() {
     let n = livePos?.count ?? 0;
     n += djStatus?.position_count ?? 0;
     n += bbStatus?.position_count ?? 0;
-    n += caStatus?.position_count ?? 0;
     n += optState?.positions_count ?? 0;
     n += fxState?.position_count ?? 0;
     n += poseidonState?.open_positions ?? 0;
     n += kcState?.open_positions ?? 0;
     return n;
-  }, [livePos, djStatus, bbStatus, caStatus, fleetEqOrb, optState, fxState, poseidonState, kcState]);
+  }, [livePos, djStatus, bbStatus, fleetEqOrb, optState, fxState, poseidonState, kcState]);
 
   // Count a bot active if it has ANY non-error status string
   const activeBots = useMemo(() => {
@@ -1106,13 +1101,12 @@ export function OrbVisualiser() {
     if (check(summary?.system_health?.system_status)) n++;
     if (check(djStatus?.status)) n++;
     if (check(bbStatus?.status)) n++;
-    if (check(caStatus?.status)) n++;
     if (check(optState?.status)) n++;
     if (check(fxState?.status))  n++;
     if (check(poseidonState?.status)) n++;
     if (check(kcState?.status)) n++;
     return n;
-  }, [summary, djStatus, bbStatus, caStatus, optState, fxState, poseidonState, kcState]);
+  }, [summary, djStatus, bbStatus, optState, fxState, poseidonState, kcState]);
 
   const fleetEquityChange = useMemo(() => {
     const snaps = curve?.snapshots;

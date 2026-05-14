@@ -122,7 +122,6 @@ const COMPONENT_LABELS: Record<string, string> = {
   alert_system: "Alert System",
   kraken_davy_jones: "SPY/QQQ Trend",
   kraken_blackbeard: "Jerome",
-  kraken_calypso: "Sector Rotation",
   kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
 };
@@ -972,7 +971,6 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 const BOT_DISPLAY: Record<string, string> = {
                   kraken_davy_jones: "SPY/QQQ Trend",
                   kraken_blackbeard: "Jerome",
-                  kraken_calypso: "Sector Rotation",
                   kraken_poseidon: "Poseidon",
                   kraken_kraken_current: "Kraken Current",
                 };

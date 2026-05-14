@@ -341,8 +341,6 @@ export default function BotsPage() {
   const { data: davySt }    = useKrakenStatus("davy-jones");
   const { data: bbPerf }    = useKrakenPerformance("blackbeard");
   const { data: bbSt }      = useKrakenStatus("blackbeard");
-  const { data: caPerf }    = useKrakenPerformance("calypso");
-  const { data: caSt }      = useKrakenStatus("calypso");
   // Specialist bots
   const { data: forexState }   = useForexState();
   const { data: forexPosRaw }  = useForexPositions();
@@ -417,21 +415,6 @@ export default function BotsPage() {
       losses: bbPerf?.loss_count ?? 0,
       openCount: bbSt?.open_positions?.length ?? 0,
       openSymbols: krakenOpenSymbols(bbSt),
-    },
-    {
-      id: "sector_rotation",
-      name: "Sector Rotation",
-      icon: "🔄",
-      exchange: "Alpaca · Sector ETFs",
-      accentColor: "#a855f7",
-      equity: fleetEq?.calypso?.equity ?? null,
-      paused: caSt?.bot_paused ?? false,
-      stale: fleetEq?.calypso?.stale ?? false,
-      heartbeatMins: fleetEq?.calypso?.heartbeat_mins_ago ?? null,
-      wins: caPerf?.win_count ?? 0,
-      losses: caPerf?.loss_count ?? 0,
-      openCount: caSt?.open_positions?.length ?? 0,
-      openSymbols: krakenOpenSymbols(caSt),
     },
     {
       id: "forex_gump",

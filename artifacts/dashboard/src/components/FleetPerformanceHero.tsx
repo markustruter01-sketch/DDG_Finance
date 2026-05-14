@@ -21,10 +21,8 @@ export function FleetPerformanceHero() {
   const { data: kcState } = useKrakenCurrentState();
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
-  const caPerf = useKrakenPerformance("calypso");
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
-  const caStatus = useKrakenStatus("calypso");
 
   const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
 
@@ -34,7 +32,6 @@ export function FleetPerformanceHero() {
   const botPerfList = [
     { id: "davy-jones", perf: djPerf.data, status: djStatus.data },
     { id: "blackbeard", perf: bbPerf.data, status: bbStatus.data },
-    { id: "calypso", perf: caPerf.data, status: caStatus.data },
   ];
   const allPerfs = botPerfList.map(b => b.perf).filter(Boolean);
   // Use fleet-summary totals for the full Kraken family (includes Poseidon #7 and
@@ -91,7 +88,7 @@ export function FleetPerformanceHero() {
     const best = sorted[0] ?? null;
     const worst = sorted[sorted.length - 1] ?? null;
     return { best, worst };
-  }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, journal, todayStr, fxState]);
+  }, [djPerf.data, bbPerf.data, fleetSummary, journal, todayStr, fxState]);
 
   const botSparklines = useMemo(() => {
     const krakenLines = botPerfList.map((b) => {
@@ -124,7 +121,7 @@ export function FleetPerformanceHero() {
     krakenLines.push({ id: "kraken-current", name: "KC", icon: "🌊", accent: "#06b6d4", curve: kcPct !== 0 ? [0, kcPct * 0.25, kcPct * 0.5, kcPct * 0.75, kcPct] : [0] });
 
     return krakenLines;
-  }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
+  }, [djPerf.data, bbPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
 
   const botCount = getFleetBotCount(registry, fleetEq);
   const stats = [

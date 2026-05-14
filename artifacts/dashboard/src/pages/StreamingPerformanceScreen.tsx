@@ -72,7 +72,6 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 const BOT_META: Record<string, { icon: string; color: string; startCap: number; label: string }> = {
   "davy-jones":     { icon: getBotIdentity("davy-jones").icon,    color: C.cyan,   startCap: 100_000, label: getBotIdentity("davy-jones").displayName },
   "blackbeard":     { icon: getBotIdentity("blackbeard").icon,    color: C.red,    startCap: 100_000, label: getBotIdentity("blackbeard").displayName },
-  "calypso":        { icon: getBotIdentity("calypso").icon,       color: C.violet, startCap: 100_000, label: getBotIdentity("calypso").displayName },
   "poseidon":       { icon: getBotIdentity("poseidon").icon,      color: C.blue,   startCap: 100_000, label: getBotIdentity("poseidon").displayName },
   "kraken-current": { icon: "🐙", color: C.green,  startCap: 100_000, label: "Kraken Current" },
 };
@@ -303,7 +302,6 @@ export default function StreamingPerformanceScreen() {
                 const m: Record<string, typeof fleetEq.davy_jones> = {
                   "davy-jones":      fleetEq.davy_jones,
                   "blackbeard":      fleetEq.blackbeard,
-                  "calypso":         fleetEq.calypso,
                   "poseidon":        fleetEq.poseidon,
                   "kraken-current":  fleetEq.kraken_current,
                 };

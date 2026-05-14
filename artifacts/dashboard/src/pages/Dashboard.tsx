@@ -412,8 +412,8 @@ function FleetKPISummary() {
 
   const alpacaWins = journal?.summary?.wins ?? 0;
   const alpacaTotal = journal?.summary?.total ?? 0;
-  // Use fleet-summary totals for the Kraken family — this includes all 5 bots:
-  // Davy Jones, Blackbeard, Calypso, Poseidon (#7), and Kraken Current (#8).
+  // Use fleet-summary totals for the Kraken family — this includes all 4 bots:
+  // Davy Jones, Blackbeard, Poseidon (#7), and Kraken Current (#8).
   const krakenWins = fleetSummary?.total_wins ?? 0;
   const krakenTotal = fleetSummary?.total_trades ?? 0;
   const forexWins = forexState?.total_wins ?? 0;
@@ -423,8 +423,8 @@ function FleetKPISummary() {
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
   const botStatuses = summary?.bot_statuses ?? {};
-  // bot_statuses now contains: davy-jones, blackbeard, calypso,
-  // navigator, poseidon, kraken-current (6 bots). Oracle is the trading-api itself
+  // bot_statuses now contains: davy-jones, blackbeard,
+  // navigator, poseidon, kraken-current (5 bots). Oracle is the trading-api itself
   // and has no heartbeat row — add +1 for it.
   const activeBotCount = Object.values(botStatuses).filter(
     (b) => b.status === "running" || b.status === "idle"
@@ -1446,7 +1446,6 @@ function AllClosedTradesSection() {
   const { data: journal } = useJournal();
   const { data: davyStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus }   = useKrakenStatus("blackbeard");
-  const { data: caStatus }   = useKrakenStatus("calypso");
   const [page, setPage] = useState(1);
   const PER_PAGE  = 25;
   const MAX_TRADES = 100;
@@ -1483,7 +1482,6 @@ function AllClosedTradesSection() {
     const krakenBots: { status: typeof davyStatus; name: string; color: string }[] = [
       { status: davyStatus, name: `${getBotIdentity("davy-jones").displayName} #2`, color: "text-emerald-400" },
       { status: bbStatus,   name: `${getBotIdentity("blackbeard").displayName} #3`,  color: "text-amber-400"   },
-      { status: caStatus,   name: `${getBotIdentity("calypso").displayName} #4`,    color: "text-violet-400"  },
     ];
     for (const { status, name, color } of krakenBots) {
       if (!status?.recent_trades) continue;
@@ -1506,7 +1504,7 @@ function AllClosedTradesSection() {
     // Sort newest-first, cap at MAX_TRADES
     trades.sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime());
     return trades.slice(0, MAX_TRADES);
-  }, [journal, davyStatus, bbStatus, caStatus]);
+  }, [journal, davyStatus, bbStatus]);
 
   const totalPages = Math.max(1, Math.ceil(allTrades.length / PER_PAGE));
   const safePage   = Math.min(page, totalPages);
@@ -1667,7 +1665,6 @@ type AuditStatusFilter = "ALL" | "FAIL" | "WARN" | "PASS";
 const BOT_COLORS: Record<string, string> = {
   "davy-jones":    "text-blue-400",
   "blackbeard":    "text-amber-400",
-  "calypso":       "text-purple-400",
   "poseidon":      "text-cyan-400",
   "kraken-current":"text-teal-400",
   "navigator":     "text-green-400",

@@ -28,7 +28,6 @@ const BOT_META: Record<string, { icon: string; color: string; label: string }> =
   oracle:           { icon: "🔮", color: "#8b5cf6", label: "Oracle #1" },
   "davy-jones":     { icon: getBotIdentity("davy-jones").icon,     color: "#22d3ee", label: `${getBotIdentity("davy-jones").displayName} #2` },
   blackbeard:       { icon: getBotIdentity("blackbeard").icon,     color: "#f97316", label: `${getBotIdentity("blackbeard").displayName} #3` },
-  calypso:          { icon: getBotIdentity("calypso").icon,        color: "#a855f7", label: `${getBotIdentity("calypso").displayName} #4` },
   navigator:        { icon: getBotIdentity("navigator").icon,      color: "#10b981", label: `${getBotIdentity("navigator").displayName} #6` },
   poseidon:         { icon: getBotIdentity("poseidon").icon,       color: "#8b5cf6", label: `${getBotIdentity("poseidon").displayName} #7` },
   "kraken-current": { icon: "🌊", color: "#06b6d4", label: "Kraken Current #8" },
@@ -256,10 +255,8 @@ function BotTilesRow() {
   const { data: summary } = useStatusSummary();
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: djPerf } = useKrakenPerformance("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
-  const { data: caPerf } = useKrakenPerformance("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: livePos } = useLivePositions();
@@ -288,7 +285,6 @@ function BotTilesRow() {
     const krakenBots = [
       { data: djStatus, key: "davy-jones" },
       { data: bbStatus, key: "blackbeard" },
-      { data: caStatus, key: "calypso" },
     ];
     for (const { data, key } of krakenBots) {
       if (data?.recent_trades?.length) {
@@ -299,7 +295,7 @@ function BotTilesRow() {
       }
     }
     return recent;
-  }, [recentTrades, djStatus, bbStatus, caStatus]);
+  }, [recentTrades, djStatus, bbStatus]);
 
   function getKrakenTopSignal(status: typeof djStatus) {
     if (!status?.signals?.length) return { ticker: undefined, signal: undefined, strength: undefined };
@@ -314,7 +310,6 @@ function BotTilesRow() {
 
   const djSig = getKrakenTopSignal(djStatus);
   const bbSig = getKrakenTopSignal(bbStatus);
-  const caSig = getKrakenTopSignal(caStatus);
 
   const optTopScan = optState?.last_scan_results?.[0];
   const fxTopScan = fxState?.last_scan_results?.[0];
@@ -345,14 +340,6 @@ function BotTilesRow() {
       winCount: bbPerf?.win_count ?? 0, lossCount: bbPerf?.loss_count ?? 0,
       color: BOT_META.blackbeard.color,
       currentTicker: bbSig.ticker, lastSignal: bbSig.signal, signalStrength: bbSig.strength,
-    },
-    {
-      key: "calypso", equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0,
-      status: caStatus?.status ?? "offline", thinkingText: caStatus?.thinking_text ?? "",
-      posCount: caStatus?.position_count ?? 0, cycleCount: caStatus?.cycle_count ?? 0,
-      winCount: caPerf?.win_count ?? 0, lossCount: caPerf?.loss_count ?? 0,
-      color: BOT_META.calypso.color,
-      currentTicker: caSig.ticker, lastSignal: caSig.signal, signalStrength: caSig.strength,
     },
     {
       key: "navigator", equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0,
@@ -435,7 +422,6 @@ interface NeuralLine {
 function NeuralFeed() {
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: summary } = useStatusSummary();
@@ -453,7 +439,6 @@ function NeuralFeed() {
     const krakenBots = [
       { data: djStatus, key: "davy-jones", bot: getBotIdentity("davy-jones").displayName, icon: getBotIdentity("davy-jones").icon, color: "#22d3ee" },
       { data: bbStatus, key: "blackbeard", bot: getBotIdentity("blackbeard").displayName, icon: getBotIdentity("blackbeard").icon, color: "#f97316" },
-      { data: caStatus, key: "calypso", bot: getBotIdentity("calypso").displayName, icon: getBotIdentity("calypso").icon, color: "#a855f7" },
     ];
 
     for (const { data, key, bot, icon, color } of krakenBots) {
@@ -628,7 +613,7 @@ function NeuralFeed() {
         return [...filtered, ...prev].slice(0, 50);
       });
     }
-  }, [djStatus, bbStatus, caStatus, optState, fxState, summary, poseidonState, kcState]);
+  }, [djStatus, bbStatus, optState, fxState, summary, poseidonState, kcState]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -731,7 +716,6 @@ function EquitySidebar() {
   const { data: fxPos } = useForexPositions();
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
   const { data: fleetEq } = useFleetEquity();
@@ -758,9 +742,8 @@ function EquitySidebar() {
     return {
       dj: buildCurve(djStatus, djStatus?.paper_summary?.starting_balance_usd ?? (djStatus?.total_equity_usd ?? 0)),
       bb: buildCurve(bbStatus, bbStatus?.paper_summary?.starting_balance_usd ?? (bbStatus?.total_equity_usd ?? 0)),
-      ca: buildCurve(caStatus, caStatus?.paper_summary?.starting_balance_usd ?? (caStatus?.total_equity_usd ?? 0)),
     };
-  }, [djStatus, bbStatus, caStatus]);
+  }, [djStatus, bbStatus]);
 
   const perBotSparklines = useMemo(() => {
     const result: Array<{ name: string; icon: string; color: string; data: number[] }> = [];
@@ -770,7 +753,6 @@ function EquitySidebar() {
     }
     result.push({ name: getBotIdentity("davy-jones").displayName, icon: getBotIdentity("davy-jones").icon, color: "#22d3ee", data: krakenBotCurves.dj });
     result.push({ name: getBotIdentity("blackbeard").displayName, icon: getBotIdentity("blackbeard").icon, color: "#f97316", data: krakenBotCurves.bb });
-    result.push({ name: getBotIdentity("calypso").displayName, icon: getBotIdentity("calypso").icon, color: "#a855f7", data: krakenBotCurves.ca });
     if (curve?.snapshots?.length) {
       const snaps = curve.snapshots;
       result.push({ name: "Apex", icon: "🎯", color: "#f59e0b", data: snaps.map(s => s.options_equity) });
@@ -787,7 +769,6 @@ function EquitySidebar() {
     const krakenBots = [
       { data: djStatus, bot: "DJ", icon: "⚓", color: "#22d3ee" },
       { data: bbStatus, bot: "BB", icon: "🏴‍☠️", color: "#f97316" },
-      { data: caStatus, bot: "CAL", icon: "🌊", color: "#a855f7" },
     ];
     for (const { data, bot, icon, color } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -809,14 +790,13 @@ function EquitySidebar() {
     }
 
     return pos.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd)).slice(0, 12);
-  }, [djStatus, bbStatus, caStatus, livePos, fxPos]);
+  }, [djStatus, bbStatus, livePos, fxPos]);
 
   const botEquityRows = useMemo(() => {
     const rows: Array<{ name: string; icon: string; equity: number; pnl: number; color: string; vaultUsd?: number }> = [];
     rows.push({ name: "Oracle", icon: "🔮", equity: fleetEq?.oracle?.equity ?? 0, pnl: fleetEq?.oracle?.pnl ?? 0, color: "#8b5cf6" });
     rows.push({ name: getBotIdentity("davy-jones").displayName, icon: getBotIdentity("davy-jones").icon, equity: fleetEq?.davy_jones?.equity ?? 0, pnl: fleetEq?.davy_jones?.pnl ?? 0, color: "#22d3ee" });
     rows.push({ name: getBotIdentity("blackbeard").displayName, icon: getBotIdentity("blackbeard").icon, equity: fleetEq?.blackbeard?.equity ?? 0, pnl: fleetEq?.blackbeard?.pnl ?? 0, color: "#f97316" });
-    rows.push({ name: getBotIdentity("calypso").displayName, icon: getBotIdentity("calypso").icon, equity: fleetEq?.calypso?.equity ?? 0, pnl: fleetEq?.calypso?.pnl ?? 0, color: "#a855f7" });
     rows.push({ name: getBotIdentity("navigator").displayName, icon: getBotIdentity("navigator").icon, equity: fleetEq?.navigator?.equity ?? 0, pnl: fleetEq?.navigator?.pnl ?? 0, color: "#10b981", vaultUsd: fxState?.vault_total_usd });
     rows.push({ name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, equity: fleetEq?.poseidon?.equity ?? 0, pnl: fleetEq?.poseidon?.pnl ?? 0, color: "#6366f1" });
     rows.push({ name: "Kraken Current", icon: "🌊", equity: fleetEq?.kraken_current?.equity ?? 0, pnl: fleetEq?.kraken_current?.pnl ?? 0, color: "#06b6d4" });
@@ -828,7 +808,6 @@ function EquitySidebar() {
     const krakenEq = [
       fleetEq?.davy_jones?.equity ?? 0,
       fleetEq?.blackbeard?.equity ?? 0,
-      fleetEq?.calypso?.equity ?? 0,
       fleetEq?.poseidon?.equity ?? 0,
       fleetEq?.kraken_current?.equity ?? 0,
     ].reduce((a, b) => a + b, 0);
@@ -993,7 +972,6 @@ function DecisionPipelineBar() {
   const { data: summary } = useStatusSummary();
   const { data: djStatus } = useKrakenStatus("davy-jones");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: caStatus } = useKrakenStatus("calypso");
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
 
@@ -1003,14 +981,13 @@ function DecisionPipelineBar() {
   const killSwitch = summary?.kill_switch_tripped ? "TRIPPED" : "SAFE";
   const groqPct = summary?.groq?.pct_used?.toFixed(0) ?? "0";
 
-  const totalCycles = (djStatus?.cycle_count ?? 0) + (bbStatus?.cycle_count ?? 0) + (caStatus?.cycle_count ?? 0)
+  const totalCycles = (djStatus?.cycle_count ?? 0) + (bbStatus?.cycle_count ?? 0)
     + (optState?.cycle_count ?? 0) + (fxState?.cycle_count ?? 0) + (summary?.system_health?.run_count ?? 0);
 
   const allBotEntries = useMemo(() => [
     { data: djStatus, name: "DJ", icon: "⚓" },
     { data: bbStatus, name: "BB", icon: "🏴‍☠️" },
-    { data: caStatus, name: "CAL", icon: "🌊" },
-  ], [djStatus, bbStatus, caStatus]);
+  ], [djStatus, bbStatus]);
 
   const { activeStage, activeBot } = useMemo(() => {
     let maxStage = 0;

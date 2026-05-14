@@ -45,10 +45,8 @@ export function useRealFeed(maxTrades = 20) {
   const journal = journalQuery.data;
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
-  const caPerf = useKrakenPerformance("calypso");
   const djStatus = useKrakenStatus("davy-jones");
   const bbStatus = useKrakenStatus("blackbeard");
-  const caStatus = useKrakenStatus("calypso");
   const { data: livePositions } = useLivePositions();
   const { data: fxPositions } = useForexPositions();
   const { data: optState } = useOptionsState();
@@ -72,8 +70,6 @@ export function useRealFeed(maxTrades = 20) {
           const thesis = (t.original_thesis || "").toLowerCase();
           if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) {
             _id = getBotIdentity("blackbeard");
-          } else if (thesis.includes("calypso") || t.trade_id?.includes("calypso")) {
-            _id = getBotIdentity("calypso");
           } else {
             _id = getBotIdentity("davy-jones");
           }
@@ -110,11 +106,9 @@ export function useRealFeed(maxTrades = 20) {
 
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
-    const _ca = getBotIdentity("calypso");
     const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
       { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
       { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
-      { data: caStatus.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     const journalIds = new Set(all.map(t => t.id));
     for (const { data, bot, icon } of krakenRecent) {
@@ -163,16 +157,16 @@ export function useRealFeed(maxTrades = 20) {
 
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, djStatus.data, bbStatus.data, caStatus.data, fxTrades]);
+  }, [journal, maxTrades, djStatus.data, bbStatus.data, fxTrades]);
 
   const krakenWins = useMemo(() =>
-    [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),
-    [djPerf.data, bbPerf.data, caPerf.data]
+    [djPerf, bbPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),
+    [djPerf.data, bbPerf.data]
   );
 
   const krakenLosses = useMemo(() =>
-    [djPerf, bbPerf, caPerf].reduce((s, p) => s + (p.data?.loss_count ?? 0), 0),
-    [djPerf.data, bbPerf.data, caPerf.data]
+    [djPerf, bbPerf].reduce((s, p) => s + (p.data?.loss_count ?? 0), 0),
+    [djPerf.data, bbPerf.data]
   );
 
   const wins = useMemo(() => {
@@ -195,7 +189,6 @@ export function useRealFeed(maxTrades = 20) {
     const _oracle = getBotIdentity("oracle");
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
-    const _ca = getBotIdentity("calypso");
     const _fx = getBotIdentity("forex_gump");
 
     const jSummary = journal?.summary;
@@ -230,16 +223,6 @@ export function useRealFeed(maxTrades = 20) {
       });
     }
 
-    if (caPerf.data?.has_data) {
-      stats.push({
-        name: _ca.displayName, icon: _ca.icon,
-        totalPnl: caPerf.data.total_pnl_usd ?? 0,
-        totalPnlPct: caPerf.data.total_pnl_pct ?? 0,
-        wins: caPerf.data.win_count, losses: caPerf.data.loss_count,
-        trades: caPerf.data.total_trades,
-      });
-    }
-
     if (fxState) {
       stats.push({
         name: _fx.displayName, icon: _fx.icon,
@@ -252,7 +235,7 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     return stats.sort((a, b) => b.totalPnl - a.totalPnl || b.totalPnlPct - a.totalPnlPct);
-  }, [journal, djPerf.data, bbPerf.data, caPerf.data, optState, fxState]);
+  }, [journal, djPerf.data, bbPerf.data, optState, fxState]);
 
   const totalTrades = wins + losses;
 
@@ -265,19 +248,18 @@ export function useRealFeed(maxTrades = 20) {
         count++;
       }
     }
-    const krakenBotData = [djPerf.data, bbPerf.data, caPerf.data];
+    const krakenBotData = [djPerf.data, bbPerf.data];
     for (const p of krakenBotData) {
       if (p?.has_data && p.trades_today) count += p.trades_today;
     }
     return count;
-  }, [journal, djPerf.data, bbPerf.data, caPerf.data]);
+  }, [journal, djPerf.data, bbPerf.data]);
 
   const openPositions: OpenPosition[] = useMemo(() => {
     const all: OpenPosition[] = [];
 
     const _dj = getBotIdentity("davy-jones");
     const _bb = getBotIdentity("blackbeard");
-    const _ca = getBotIdentity("calypso");
     const _oracle = getBotIdentity("oracle");
     const _fx = getBotIdentity("forex_gump");
     const _pos = getBotIdentity("poseidon");
@@ -286,7 +268,6 @@ export function useRealFeed(maxTrades = 20) {
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
       { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
       { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
-      { data: caStatus.data, bot: _ca.displayName, icon: _ca.icon },
     ];
     for (const { data, bot, icon } of krakenBots) {
       if (!data?.open_positions) continue;
@@ -370,7 +351,7 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [djStatus.data, bbStatus.data, caStatus.data, livePositions, fxPositions, poseidonState, kcState]);
+  }, [djStatus.data, bbStatus.data, livePositions, fxPositions, poseidonState, kcState]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());
   const initialized = useRef(false);

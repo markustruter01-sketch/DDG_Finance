@@ -572,6 +572,23 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
 
+    # Permanently retire ghost bot rows — runs on every startup, idempotent.
+    # bot5_defensive (defensive_guardian) and bot7_macro_bond (macro_bond) were
+    # removed from the fleet in Task A. Delete any rows left over from old seed SQL
+    # or old deployments so they never surface in /fleet/equity again.
+    try:
+        _RETIRED_IDS = ('defensive_guardian', 'macro_bond', 'bot5_defensive', 'bot7_macro_bond', 'apex-predator')
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM bot_portfolio WHERE bot_id IN %s", (_RETIRED_IDS,))
+                _del_bp = cur.rowcount
+                cur.execute("DELETE FROM bots_state WHERE bot_id IN %s", (_RETIRED_IDS,))
+                _del_bs = cur.rowcount
+        if _del_bp or _del_bs:
+            logger.info(f"DB | Retired ghost bots purged — bot_portfolio: {_del_bp}, bots_state: {_del_bs}")
+    except Exception as exc:
+        logger.warning(f"DB | Retired bot purge failed (non-fatal): {exc}")
+
     # Seed bots_state with canonical bot IDs and known pause states (idempotent)
     try:
         with get_conn() as conn:

@@ -592,21 +592,6 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | bots_state seed failed (non-fatal): {exc}")
 
-    # One-time cleanup — orphan kraken_heartbeat rows for retired bots.
-    # Will be removed in publish #3 after this DELETE runs once on prod.
-    try:
-        _ORPHAN_KH_IDS = ('bot4_sector', 'bot5_defensive', 'bot7_macro_bond')
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM kraken_heartbeat WHERE bot_id IN %s", (_ORPHAN_KH_IDS,))
-                _del = cur.rowcount
-                cur.execute("DELETE FROM kraken_portfolio WHERE bot_id IN %s", (_ORPHAN_KH_IDS,))
-                _del2 = cur.rowcount
-        if _del or _del2:
-            logger.info(f"DB | kraken_heartbeat orphan purge — heartbeat: {_del}, portfolio: {_del2}")
-    except Exception as exc:
-        logger.warning(f"DB | kraken_heartbeat purge failed (non-fatal): {exc}")
-
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:

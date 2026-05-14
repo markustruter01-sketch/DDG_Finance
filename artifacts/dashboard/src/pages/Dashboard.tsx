@@ -422,13 +422,9 @@ function FleetKPISummary() {
   const totalTrades = alpacaTotal + krakenTotal + forexTotal;
   const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
 
-  const botStatuses = summary?.bot_statuses ?? {};
-  // bot_statuses now contains: davy-jones, blackbeard,
-  // navigator, poseidon, kraken-current (5 bots). Oracle is the trading-api itself
-  // and has no heartbeat row — add +1 for it.
-  const activeBotCount = Object.values(botStatuses).filter(
-    (b) => b.status === "running" || b.status === "idle"
-  ).length + 1;
+  // Derive active count from the same registry/fleet-equity source as the denominator
+  // so numerator and denominator are always consistent and can never diverge.
+  const activeBotCount = fleetBotCount;
   const totalBotCount = fleetBotCount;
 
   const regime = summary?.groq?.regime ?? null;

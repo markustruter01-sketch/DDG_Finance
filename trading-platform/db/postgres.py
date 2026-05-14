@@ -592,20 +592,20 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | bots_state seed failed (non-fatal): {exc}")
 
-    # One-time cleanup — sector_rotation retired 2026-05-15.
-    # Will be removed in publish #2 after this DELETE runs once on prod.
+    # One-time cleanup — orphan kraken_heartbeat rows for retired bots.
+    # Will be removed in publish #3 after this DELETE runs once on prod.
     try:
-        _RETIRED_SECTOR = ('sector_rotation', 'calypso', 'bot4_sector')
+        _ORPHAN_KH_IDS = ('bot4_sector', 'bot5_defensive', 'bot7_macro_bond')
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("DELETE FROM bot_portfolio WHERE bot_id IN %s", (_RETIRED_SECTOR,))
-                _del_bp = cur.rowcount
-                cur.execute("DELETE FROM bots_state WHERE bot_id IN %s", (_RETIRED_SECTOR,))
-                _del_bs = cur.rowcount
-        if _del_bp or _del_bs:
-            logger.info(f"DB | sector_rotation purge — bot_portfolio: {_del_bp}, bots_state: {_del_bs}")
+                cur.execute("DELETE FROM kraken_heartbeat WHERE bot_id IN %s", (_ORPHAN_KH_IDS,))
+                _del = cur.rowcount
+                cur.execute("DELETE FROM kraken_portfolio WHERE bot_id IN %s", (_ORPHAN_KH_IDS,))
+                _del2 = cur.rowcount
+        if _del or _del2:
+            logger.info(f"DB | kraken_heartbeat orphan purge — heartbeat: {_del}, portfolio: {_del2}")
     except Exception as exc:
-        logger.warning(f"DB | sector_rotation purge failed (non-fatal): {exc}")
+        logger.warning(f"DB | kraken_heartbeat purge failed (non-fatal): {exc}")
 
     try:
         with get_conn() as conn:

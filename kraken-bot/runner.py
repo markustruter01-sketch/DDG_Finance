@@ -59,6 +59,13 @@ except Exception as _hb_exc:
     _bs_canonical: dict = {}
     _bs_touch = lambda *a, **k: None  # noqa: E731
 
+try:
+    from core.bot_state import write_portfolio as _bs_write_portfolio
+    _portfolio_write_ok = True
+except ImportError:
+    _bs_write_portfolio = lambda *a, **k: None  # noqa: E731
+    _portfolio_write_ok = False
+
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
     ("blackbeard",       "jerome_strategy",  "run_jerome_cycle"),
@@ -78,6 +85,58 @@ def _update_status(bot_id: str, **fields):
             _bot_status[bot_id] = {}
         _bot_status[bot_id].update(fields)
         _bot_status[bot_id]["last_updated"] = datetime.now(timezone.utc).isoformat()
+
+
+def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
+    """Fetch live Alpaca account state and write to bot_portfolio.
+    Called by _run_bot_loop after each successful leaf cycle.
+    Returns True if write succeeded, False if any step failed.
+    All exceptions are caught — never propagates.
+    """
+    if not _portfolio_write_ok or not _heartbeat_ok:
+        return False
+    try:
+        import alpaca_trade_api as tradeapi
+
+        api_key = profile.get("ALPACA_API_KEY", "")
+        secret_key = profile.get("ALPACA_SECRET_KEY", "")
+        base_url = profile.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
+
+        if not api_key or not secret_key:
+            logger.debug(f"[{bot_id}] portfolio write skipped — no Alpaca credentials")
+            return False
+
+        api = tradeapi.REST(api_key, secret_key, base_url=base_url)
+        acct = api.get_account()
+        posns = api.list_positions()
+
+        canonical = _bs_canonical.get(bot_id, bot_id)
+
+        positions_list = [
+            {
+                "symbol": p.symbol,
+                "side": p.side,
+                "size": float(p.market_value or 0),
+                "entry": float(p.avg_entry_price or 0),
+                "value_usd": float(p.market_value or 0),
+                "unrealized_pl": float(p.unrealized_pl or 0),
+                "qty": float(p.qty or 0),
+            }
+            for p in posns
+        ]
+
+        _bs_write_portfolio(
+            canonical,
+            cash=float(acct.cash or 0),
+            equity=float(acct.equity or 0),
+            positions=positions_list,
+            metadata={"source": "runner", "bot_id_legacy": bot_id}
+        )
+        logger.debug(f"[{bot_id}] bot_portfolio write OK — equity={acct.equity}")
+        return True
+    except Exception as exc:
+        logger.debug(f"[{bot_id}] portfolio write failed (non-fatal): {exc}")
+        return False
 
 
 def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
@@ -130,6 +189,9 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     _bs_touch(_bs_canonical.get(bot_id, bot_id), status="running", error="")
                 except Exception as _hb_e:
                     logger.debug(f"[{bot_id}] heartbeat write failed (non-fatal): {_hb_e}")
+
+            # Write live Alpaca state to bot_portfolio (Stage 2 unification)
+            _write_portfolio_from_alpaca(bot_id, profile)
 
         except Exception as exc:
             consecutive_errors += 1

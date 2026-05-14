@@ -340,20 +340,20 @@ export function Concept2NeuralSynapticV2() {
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-cyan-600/80">
-                <span className="text-cyan-500/70">{f.icon}</span>
+              <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-cyan-400">
+                <span className="text-cyan-400">{f.icon}</span>
                 {f.label}
               </div>
-              <span className={`text-[9px] font-medium ${activeFormula === i ? "text-cyan-300" : "text-cyan-700"}`}>
+              <span className={`text-[9px] font-semibold ${activeFormula === i ? "text-cyan-300" : "text-cyan-600"}`}>
                 {activeFormula === i ? "● COMPUTING" : "● VERIFIED"}
               </span>
             </div>
-            <div className={`text-[11px] font-mono tracking-wide ${activeFormula === i ? "text-cyan-200" : "text-cyan-400/80"}`}>
+            <div className={`text-[12px] font-mono font-semibold tracking-wide ${activeFormula === i ? "text-white" : "text-slate-100"}`}>
               {f.equation}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] text-slate-500 font-mono">{f.vars}</span>
-              <span className={`text-[10px] font-bold font-mono ${activeFormula === i ? "text-cyan-200" : "text-cyan-500"}`}>
+              <span className="text-[9px] text-slate-400 font-mono font-medium">{f.vars}</span>
+              <span className={`text-[10px] font-bold font-mono ${activeFormula === i ? "text-cyan-200" : "text-cyan-300"}`}>
                 {f.result}
               </span>
             </div>
@@ -364,13 +364,13 @@ export function Concept2NeuralSynapticV2() {
       {/* ── Floating stat cards ── */}
       <div className="absolute inset-0 z-20 pointer-events-none" style={{ top: 160 }}>
         <div className="relative w-full h-full">
-          <div className="absolute" style={{ top: "28%", left: "0px" }}>
+          <div className="absolute" style={{ top: "28%", left: "20px" }}>
             <MiniStat label="Checks Run" value="1,847" icon={<ActivitySquare className="w-3.5 h-3.5 text-cyan-400" />} />
           </div>
-          <div className="absolute" style={{ top: "28%", right: "0px" }}>
+          <div className="absolute" style={{ top: "28%", right: "20px" }}>
             <MiniStat label="Active Pathways" value="312" icon={<Activity className="w-3.5 h-3.5 text-cyan-400" />} />
           </div>
-          <div className="absolute" style={{ bottom: "22%", right: "0px" }}>
+          <div className="absolute" style={{ bottom: "22%", right: "20px" }}>
             <MiniStat label="Errors Caught" value="15" error={hasError} icon={<AlertTriangle className={`w-3.5 h-3.5 ${hasError ? "text-red-400" : "text-cyan-400"}`} />} />
           </div>
         </div>

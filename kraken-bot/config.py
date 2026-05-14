@@ -47,8 +47,8 @@ BOT_PROFILES = {
         "strategy_type":     "llm_commodity",
         "strategy_label":    "LLM Commodity Macro",
         # ── Alpaca account (Jerome's dedicated paper account) ──────────────────
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         # ── Groq / cycle settings ──────────────────────────────────────────────
         "GROQ_CYCLE_HOURS":  [9, 21],   # UTC hours to fire Groq analysis

@@ -4,14 +4,16 @@ import { getBotIdentity } from "@/lib/bot-identity";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useForexState,
-  usePoseidonState, useKrakenCurrentState, useFleetEquity,
+  usePoseidonState, useKrakenCurrentState, useFleetEquity, useBotRegistry,
 } from "@/hooks/use-trading";
 import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
+import { getFleetBotCount } from "@/lib/fleet-capital";
 
 export function FleetPerformanceHero() {
   const { data: summary } = useStatusSummary();
   const { data: fleetSummary } = useKrakenFleetSummary();
   const { data: fleetEq } = useFleetEquity();
+  const { data: registry } = useBotRegistry();
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
   const { data: fxState } = useForexState();
@@ -124,9 +126,7 @@ export function FleetPerformanceHero() {
     return krakenLines;
   }, [djPerf.data, bbPerf.data, caPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
 
-  // fleet-summary Kraken bots + 2 external (Oracle, Navigator/Forex Gump)
-  // Apex Predator (Bot #5) retired — removed from external count
-  const botCount = (fleetSummary?.bot_count ?? 5) + 2;
+  const botCount = getFleetBotCount(registry, fleetEq);
   const stats = [
     { label: "Fleet Equity", value: formatCurrency(grandTotal), color: "text-white", sub: `${botCount} bots · 3 capital pools` },
     { label: "Total Trades", value: String(totalTrades), color: "text-white", sub: `${totalWins}W / ${totalTrades - totalWins}L` },

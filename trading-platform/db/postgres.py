@@ -258,7 +258,7 @@ CREATE TABLE IF NOT EXISTS kraken_heartbeat (
     last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Per-bot portfolio state (id=1 davy-jones, id=2 blackbeard, id=3 calypso).
+-- Per-bot portfolio state, keyed by canonical bot_id.
 CREATE TABLE IF NOT EXISTS kraken_portfolio (
     id                   INTEGER PRIMARY KEY,
     starting_balance_usd DOUBLE PRECISION NOT NULL DEFAULT 100000,

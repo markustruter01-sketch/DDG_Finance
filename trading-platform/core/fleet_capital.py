@@ -9,7 +9,6 @@ FLEET_BOT_STARTING_CAPITAL = {
     "oracle":          100_000,
     "bot2_spy_qqq":    100_000,
     "blackbeard":      100_000,
-    "bot4_sector":     100_000,
     "navigator":       100_000,
     "poseidon":        100_000,
     "kraken_current":  100_000,

@@ -53,10 +53,10 @@ const METRICS = [
   {
     id: "trades",
     label: "TRADES",
-    value: "34W / 16L",
-    sub: "50 total",
+    value: "",
+    sub: "",
     positive: null,
-    width: "w-[120px]",
+    width: "w-[110px]",
   },
   {
     id: "mathaudit",
@@ -64,7 +64,7 @@ const METRICS = [
     value: "99.2%",
     sub: "1,040 checks",
     positive: true,
-    width: "w-[140px]",
+    width: "w-[170px]",
   },
 ];
 
@@ -141,13 +141,12 @@ export function StreamHeaderConcept() {
                 >
                   {m.label}
                 </span>
-                <div className="flex items-baseline gap-1.5">
+                <div className="flex items-baseline gap-1 whitespace-nowrap">
                   {m.id === "trades" ? (
                     <>
                       <span className="text-[14px] font-bold leading-none" style={{ color: "#4ade80" }}>34W</span>
                       <span className="text-[11px] font-bold leading-none" style={{ color: "rgba(100,116,139,0.4)" }}>/</span>
                       <span className="text-[14px] font-bold leading-none" style={{ color: "#f87171" }}>16L</span>
-                      <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>50 ttl</span>
                     </>
                   ) : (
                     <>

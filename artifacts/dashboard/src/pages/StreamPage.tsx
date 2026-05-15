@@ -3,7 +3,7 @@ import StreamingScreen from "@/pages/StreamingScreen";
 import SynapticAuditScreen from "@/pages/SynapticAuditScreen";
 import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
-import StreamingScreenV3 from "@/pages/StreamingScreenV3";
+import StreamingLearningScreen from "@/pages/StreamingLearningScreen";
 import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
 import { useFleetParams } from "@/hooks/use-trading";
@@ -344,7 +344,7 @@ export default function StreamPage() {
           <StreamingHealthScreen />
         </div>
         <div style={{ display: active === "e" ? "block" : "none", position: "absolute", inset: 0 }}>
-          <StreamingScreenV3 />
+          <StreamingLearningScreen />
         </div>
         {active === "f" && (
           <div style={{ position: "absolute", inset: 0 }}>

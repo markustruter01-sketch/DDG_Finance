@@ -303,6 +303,8 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
 
   const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
   const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
+  const hiddenCount = Math.max(0, alerts.length - 3);
+  const visibleAlerts = alerts.slice(0, 3);
 
   if (alerts.length === 0) {
     return (
@@ -329,7 +331,7 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
         <span className="ml-auto text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>READ-ONLY · STREAMING VIEW</span>
       </div>
       <div className="divide-y" style={{ divideColor: "rgba(255,255,255,0.03)" } as React.CSSProperties}>
-        {alerts.map(([key, node]) => {
+        {visibleAlerts.map(([key, node]) => {
           const colors = LEVEL_COLORS[node.level];
           const Icon = node.level === "red" ? XCircle : AlertTriangle;
           return (
@@ -357,6 +359,14 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
             </div>
           );
         })}
+        {hiddenCount > 0 && (
+          <div className="flex items-center gap-2 px-5 py-1.5">
+            <AlertTriangle className="h-2.5 w-2.5 text-yellow-500/60 shrink-0" />
+            <span className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.4)" }}>
+              +{hiddenCount} more alert{hiddenCount !== 1 ? "s" : ""} — check remediate log for details
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

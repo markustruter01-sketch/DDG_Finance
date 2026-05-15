@@ -372,6 +372,93 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
   );
 }
 
+/* ── Full Alert Panel (right column) ─────────────────────────────────────── */
+function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
+  const alerts = useMemo(() => {
+    return Object.entries(nodes)
+      .filter(([, n]) => n.level !== "green")
+      .sort(([, a], [, b]) => {
+        const rank = (l: Level) => l === "red" ? 0 : l === "yellow" ? 1 : 2;
+        return rank(a.level) - rank(b.level);
+      });
+  }, [nodes]);
+
+  const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
+  const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
+
+  return (
+    <div className="flex flex-col flex-1">
+      {/* Panel header */}
+      <div className="flex items-center gap-2 px-4 py-2.5 shrink-0"
+        style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(2,6,23,0.8)" }}>
+        <AlertTriangle className="h-3.5 w-3.5 text-yellow-400 shrink-0" />
+        <span className="text-[9px] font-mono uppercase tracking-widest font-semibold"
+          style={{ color: "rgba(148,163,184,0.7)" }}>Active Alerts</span>
+        <span className="ml-1 text-[9px] font-mono">
+          {criticalCount > 0 && <span className="text-red-400">{criticalCount} critical</span>}
+          {criticalCount > 0 && degradedCount > 0 && <span style={{ color: "rgba(148,163,184,0.4)" }}> · </span>}
+          {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
+          {alerts.length === 0 && <span className="text-green-400">none</span>}
+        </span>
+        <span className="ml-auto text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>
+          {alerts.length} total
+        </span>
+      </div>
+
+      {alerts.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center gap-2.5 px-5 py-6"
+          style={{ background: "rgba(34,197,94,0.04)" }}>
+          <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+          <span className="text-[11px] font-mono text-green-400">All systems nominal</span>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          {alerts.map(([key, node]) => {
+            const colors = LEVEL_COLORS[node.level];
+            const Icon = node.level === "red" ? XCircle : AlertTriangle;
+            return (
+              <div key={key} className="flex flex-col gap-1 px-4 py-3"
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: node.level === "red" ? "rgba(239,68,68,0.04)" : "transparent" }}>
+                {/* Top row: icon + label + badge */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${colors.text} ${node.level === "red" ? "animate-pulse" : ""}`} />
+                  <span className={`text-[11px] font-semibold font-mono ${colors.text}`}>
+                    {node.label.split("(")[0].trim()}
+                  </span>
+                  <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${colors.bg} ${colors.text} ${colors.border}`}>
+                    {node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                  </span>
+                  {node.kick_pending && (
+                    <span className="text-[7px] font-mono px-1.5 py-0.5 rounded border"
+                      style={{ color: "#fb923c", borderColor: "rgba(251,146,60,0.3)", background: "rgba(251,146,60,0.1)" }}>
+                      KICK PENDING
+                    </span>
+                  )}
+                  {node.latency_ms != null && (
+                    <span className="text-[8px] font-mono ml-auto shrink-0" style={{ color: "rgba(148,163,184,0.5)" }}>
+                      {node.latency_ms}ms
+                    </span>
+                  )}
+                  {node.data_age_s != null && node.latency_ms == null && (
+                    <span className="text-[8px] font-mono ml-auto shrink-0" style={{ color: "rgba(148,163,184,0.5)" }}>
+                      {node.data_age_s.toFixed(0)}s old
+                    </span>
+                  )}
+                </div>
+                {/* Detail row */}
+                <div className="text-[9px] font-mono pl-6 leading-relaxed"
+                  style={{ color: "rgba(148,163,184,0.5)" }}>
+                  {node.detail}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Heal Log ─────────────────────────────────────────────────────────────── */
 function StreamingHealLog({ log }: { log: HealEntry[] }) {
   if (log.length === 0) return null;
@@ -501,73 +588,78 @@ export default function StreamingHealthScreen() {
           </div>
       </div>
 
-      {/* SVG Diagram */}
-      <div className="flex-1 relative overflow-hidden min-h-0">
-        {isLoading || !nodes ? (
-          <div className="flex items-center justify-center h-full gap-3">
-            <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-            <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-            <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-            <span className="text-xs font-mono ml-1" style={{ color: "rgba(148,163,184,0.5)" }}>Scanning subsystems…</span>
+      {/* ── 50/50 body ── */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+
+        {/* LEFT — diagram + fleet strip */}
+        <div className="flex flex-col w-1/2 min-h-0 border-r" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+          <div className="flex-1 relative overflow-hidden min-h-0">
+            {isLoading || !nodes ? (
+              <div className="flex items-center justify-center h-full gap-3">
+                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                <div className="h-2 w-2 rounded-full bg-green-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                <span className="text-xs font-mono ml-1" style={{ color: "rgba(148,163,184,0.5)" }}>Scanning subsystems…</span>
+              </div>
+            ) : (
+              <svg viewBox="0 0 800 620" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <pattern id="hs-dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+                    <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.05)" />
+                  </pattern>
+                  <radialGradient id="hs-gridFade" cx="50%" cy="50%" r="55%">
+                    <stop offset="0%" stopColor="white" stopOpacity="1" />
+                    <stop offset="100%" stopColor="white" stopOpacity="0" />
+                  </radialGradient>
+                  <mask id="hs-gridMask">
+                    <rect width="800" height="620" fill="url(#hs-gridFade)" />
+                  </mask>
+                </defs>
+
+                <rect width="800" height="620" fill="url(#hs-dots)" mask="url(#hs-gridMask)" />
+
+                <line x1="0" y1="0" x2="800" y2="0" stroke={overallColors.wire} strokeWidth="1.5" opacity="0.12">
+                  <animate attributeName="y1" values="0;620;0" dur="5s" repeatCount="indefinite" />
+                  <animate attributeName="y2" values="0;620;0" dur="5s" repeatCount="indefinite" />
+                </line>
+
+                {WIRES.map((wire, i) => {
+                  const fromPos = NODE_POSITIONS[wire.from];
+                  const toPos = NODE_POSITIONS[wire.to];
+                  const fromNode = nodes[wire.from];
+                  const toNode = nodes[wire.to];
+                  if (!fromPos || !toPos) return null;
+                  const fromLevel = fromNode?.level ?? "green";
+                  const toLevel = toNode?.level ?? "green";
+                  const worstLevel: Level =
+                    fromLevel === "red" || toLevel === "red" ? "red"
+                    : fromLevel === "yellow" || toLevel === "yellow" ? "yellow"
+                    : "green";
+                  return (
+                    <GlowingWire key={i}
+                      x1={fromPos.x} y1={fromPos.y}
+                      x2={toPos.x}   y2={toPos.y}
+                      bend={wire.bend ?? "v-first"}
+                      level={worstLevel} id={`hs-wire-${i}`} />
+                  );
+                })}
+
+                {Object.entries(nodes).map(([key, health]) => (
+                  <ArchitectureNode key={key} nodeKey={key} health={health} />
+                ))}
+              </svg>
+            )}
           </div>
-        ) : (
-          <svg viewBox="0 0 800 620" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <pattern id="hs-dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
-                <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.05)" />
-              </pattern>
-              <radialGradient id="hs-gridFade" cx="50%" cy="50%" r="55%">
-                <stop offset="0%" stopColor="white" stopOpacity="1" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </radialGradient>
-              <mask id="hs-gridMask">
-                <rect width="800" height="620" fill="url(#hs-gridFade)" />
-              </mask>
-            </defs>
+          {nodes && <PerBotFleetStrip nodes={nodes} />}
+        </div>
 
-            <rect width="800" height="620" fill="url(#hs-dots)" mask="url(#hs-gridMask)" />
+        {/* RIGHT — full alert list + heal log */}
+        <div className="flex flex-col w-1/2 min-h-0 overflow-y-auto" style={{ background: "rgba(2,6,23,0.6)" }}>
+          {nodes && <AlertPanel nodes={nodes} />}
+          <StreamingHealLog log={healLog} />
+        </div>
 
-            <line x1="0" y1="0" x2="800" y2="0" stroke={overallColors.wire} strokeWidth="1.5" opacity="0.12">
-              <animate attributeName="y1" values="0;620;0" dur="5s" repeatCount="indefinite" />
-              <animate attributeName="y2" values="0;620;0" dur="5s" repeatCount="indefinite" />
-            </line>
-
-            {WIRES.map((wire, i) => {
-              const fromPos = NODE_POSITIONS[wire.from];
-              const toPos = NODE_POSITIONS[wire.to];
-              const fromNode = nodes[wire.from];
-              const toNode = nodes[wire.to];
-              if (!fromPos || !toPos) return null;
-              const fromLevel = fromNode?.level ?? "green";
-              const toLevel = toNode?.level ?? "green";
-              const worstLevel: Level =
-                fromLevel === "red" || toLevel === "red" ? "red"
-                : fromLevel === "yellow" || toLevel === "yellow" ? "yellow"
-                : "green";
-              return (
-                <GlowingWire key={i}
-                  x1={fromPos.x} y1={fromPos.y}
-                  x2={toPos.x}   y2={toPos.y}
-                  bend={wire.bend ?? "v-first"}
-                  level={worstLevel} id={`hs-wire-${i}`} />
-              );
-            })}
-
-            {Object.entries(nodes).map(([key, health]) => (
-              <ArchitectureNode key={key} nodeKey={key} health={health} />
-            ))}
-          </svg>
-        )}
       </div>
-
-      {/* Per-bot fleet strip */}
-      {nodes && <PerBotFleetStrip nodes={nodes} />}
-
-      {/* Alert digest */}
-      {nodes && <StreamingAlertDigest nodes={nodes} />}
-
-      {/* Heal log */}
-      <StreamingHealLog log={healLog} />
     </div>
   );
 }

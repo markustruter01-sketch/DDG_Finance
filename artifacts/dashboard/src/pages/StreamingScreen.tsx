@@ -1,4 +1,3 @@
-import { GlobalHUD } from "@/components/streaming/GlobalHUD";
 import { AIBrainVisual } from "@/components/streaming/AIBrainVisual";
 import { DDGBadge } from "@/components/DDGBadge";
 
@@ -15,7 +14,6 @@ export default function StreamingScreen() {
         position: "relative",
       }}
     >
-      <GlobalHUD />
       <div style={{ flex: 1, minHeight: 0 }}>
         <AIBrainVisual />
       </div>

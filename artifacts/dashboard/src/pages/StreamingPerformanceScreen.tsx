@@ -182,35 +182,6 @@ export default function StreamingPerformanceScreen() {
       position: "relative",
     }}>
 
-      {/* ══ HEADER ═══════════════════════════════════════════════ */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 900, letterSpacing: "0.22em", textTransform: "uppercase", color: C.cyan }}>
-            ◈ RAW PERFORMANCE
-          </span>
-          <span style={{ fontSize: 10, fontFamily: "monospace", color: C.dim, letterSpacing: "0.1em" }}>
-            {`FLEET · ${getFleetBotCount(registry, fleetEq)} BOTS · ${formatCapitalShort(getFleetStartingCapital(registry, fleetEq))} CAPITAL`}
-          </span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <span style={{ fontSize: 11, fontFamily: "monospace" }}>
-            REGIME:{" "}
-            <span style={{ color: regime === "Bull" ? C.green : regime === "Bear" ? C.red : C.amber, fontWeight: 900 }}>
-              {regime.toUpperCase()}
-            </span>
-          </span>
-          <span style={{ fontSize: 14, fontFamily: "monospace", fontWeight: 900, color: pnlColor(fleetPnL) }}>
-            FLEET P&L: {fmtMoney(fleetPnL)}
-          </span>
-          <span style={{ fontSize: 11, fontFamily: "monospace", color: "rgba(251,191,36,0.8)" }}>
-            VAULT:{" "}
-            <span style={{ fontWeight: 900, color: "#fbbf24" }}>
-              {totalVaulted != null ? `$${Math.round(totalVaulted).toLocaleString()}` : "—"}
-            </span>
-          </span>
-        </div>
-      </div>
-
       {/* ══ ROW 1: RISK RATIO CARDS ══════════════════════════════ */}
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <RiskCard

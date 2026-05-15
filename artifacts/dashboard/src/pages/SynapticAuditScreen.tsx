@@ -295,18 +295,13 @@ export default function SynapticAuditScreen() {
       </svg>
 
       {/* Header */}
-      <header className="absolute top-0 left-0 right-0 h-[60px] px-6 z-30 flex items-center justify-between border-b border-cyan-900/30 bg-[#020617]/70 backdrop-blur-md">
+      <header className="absolute top-0 left-0 right-0 h-[60px] px-6 z-30 flex items-center border-b border-cyan-900/30 bg-[#020617]/70 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500" />
           </div>
-          <h1 className="text-xs font-semibold tracking-[0.22em] text-cyan-50">SYNAPTIC AUDIT ENGINE v4.1</h1>
-        </div>
-        <div className="flex items-center gap-6 text-[10px] text-cyan-600/70 uppercase tracking-widest">
-          <span>Neural Net: Online</span>
-          <span>Latency: {summary ? "12ms" : "—"}</span>
-          <span className="text-cyan-500/80">Formula Inputs: 4 Active</span>
+          <h1 className="text-xs font-semibold tracking-[0.22em] text-cyan-50">Synaptic Math Audit Engine v4.1</h1>
         </div>
       </header>
 

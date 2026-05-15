@@ -445,35 +445,33 @@ export default function StreamingHealthScreen() {
       style={{ background: "radial-gradient(ellipse at 30% 0%, rgba(8,18,38,1) 0%, rgba(2,6,18,1) 100%)" }}
     >
       <DDGBadge style={{ position: "absolute", bottom: 10, left: 10, zIndex: 50 }} />
-      {/* Header */}
+      {/* Health status strip */}
       <div
-        className="shrink-0 flex items-center justify-between px-5 py-2.5"
+        className="shrink-0 flex items-center justify-between px-5 py-2"
         style={{
           borderBottom: `1px solid ${overallColors.stroke}30`,
           background: `${overallColors.wire}06`,
-          minHeight: 48,
+          minHeight: 36,
         }}
       >
         <div className="flex items-center gap-3">
-          <div className="relative h-8 w-8 flex items-center justify-center shrink-0">
+          <div className="relative h-6 w-6 flex items-center justify-center shrink-0">
             <div className="absolute inset-0 rounded-full animate-ping opacity-20" style={{ background: overallColors.wire }} />
-            <Activity className={`h-4 w-4 relative z-10 ${overallColors.text}`} />
+            <Activity className={`h-3.5 w-3.5 relative z-10 ${overallColors.text}`} />
           </div>
-          <div>
-            <div className="text-[11px] font-mono uppercase tracking-[0.25em]"
-              style={{ color: overallColors.wire, textShadow: `0 0 10px ${overallColors.wire}` }}>
-              SYS / HEALTH / ARCHITECTURE
-            </div>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${
-                overallLevel === "green" ? "bg-green-400" :
-                overallLevel === "yellow" ? "bg-yellow-400 animate-pulse" :
-                "bg-red-400 animate-pulse"
-              }`} />
-              <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.5)" }}>
-                {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — self-heal active" : "Critical — auto-remediating"}
-              </span>
-            </div>
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              overallLevel === "green" ? "bg-green-400" :
+              overallLevel === "yellow" ? "bg-yellow-400 animate-pulse" :
+              "bg-red-400 animate-pulse"
+            }`} />
+            <span className="text-[10px] font-mono uppercase tracking-[0.22em]"
+              style={{ color: overallColors.wire, textShadow: `0 0 8px ${overallColors.wire}` }}>
+              SYS / HEALTH
+            </span>
+            <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>
+              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · self-heal active" : "Critical · auto-remediating"}
+            </span>
           </div>
           {overallLevel !== "green" && (
             <span className="text-[8px] font-mono px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-widest"
@@ -483,24 +481,7 @@ export default function StreamingHealthScreen() {
             </span>
           )}
         </div>
-
-        {/* Legend + timestamp */}
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4">
-            {(["green", "yellow", "red"] as Level[]).map((lvl) => (
-              <div key={lvl} className="flex items-center gap-1.5">
-                <span
-                  className={`h-2 w-2 rounded-full ${lvl === "green" ? "bg-green-400" : lvl === "yellow" ? "bg-yellow-400" : "bg-red-400"}`}
-                  style={{ boxShadow: `0 0 6px ${LEVEL_COLORS[lvl].wire}` }}
-                />
-                <span className="text-[8px] font-mono uppercase tracking-widest"
-                  style={{ color: LEVEL_COLORS[lvl].wire, opacity: 0.7 }}>
-                  {lvl === "green" ? "Optimal" : lvl === "yellow" ? "Degraded" : "Critical"}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="text-right">
+        <div className="text-right">
             <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.3)" }}>
               {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
             </div>
@@ -508,7 +489,6 @@ export default function StreamingHealthScreen() {
               <div className="text-[8px] font-mono text-yellow-400">{alertCount} alert{alertCount !== 1 ? "s" : ""}</div>
             )}
           </div>
-        </div>
       </div>
 
       {/* SVG Diagram */}

@@ -351,59 +351,6 @@ export default function StreamingBotsScreen() {
       className="h-full w-full flex flex-col relative overflow-hidden"
       style={{ background: "#020617", color: "#e2e8f0" }}
     >
-      {/* ── HEADER ─────────────────────────────────────────────────────── */}
-      <div
-        className="shrink-0 flex items-center justify-between px-6 py-4"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(2,6,23,0.97)" }}
-      >
-        <div>
-          <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
-            🏁 <span>BOT FLEET LEADERBOARD</span>
-          </h1>
-          <p className="text-[11px] text-slate-500 mt-0.5 uppercase tracking-widest font-semibold">
-            Ranked by all-time P&amp;L · {getFleetBotCount(registry, fleetEq)} bots active
-          </p>
-        </div>
-
-        <div className="flex items-center gap-8">
-          <div className="text-center">
-            <div className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-0.5">Fleet Equity</div>
-            <div className="text-base font-black font-mono text-white">
-              {fleetTotal != null ? `$${Math.round(fleetTotal).toLocaleString()}` : "—"}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-0.5">Fleet P&amp;L</div>
-            <div className="text-2xl font-black font-mono" style={{ color: fleetPnlColor }}>
-              {fleetPnl != null ? fmtPnl(fleetPnl) : "—"}
-            </div>
-          </div>
-          {fleetWinRate != null && (
-            <div className="text-center">
-              <div className="text-[9px] uppercase tracking-widest font-bold text-slate-500 mb-0.5">Win Rate</div>
-              <div className="text-base font-black font-mono" style={{ color: fleetWinRate >= 50 ? "#34d399" : fleetWinRate >= 40 ? "#fbbf24" : "#f87171" }}>
-                {fleetWinRate.toFixed(1)}%
-              </div>
-            </div>
-          )}
-          {vault?.total_vaulted_usd != null && (
-            <div className="text-center">
-              <div className="text-[9px] uppercase tracking-widest font-bold mb-0.5" style={{ color: "rgba(251,191,36,0.5)" }}>Vault</div>
-              <div className="text-base font-black font-mono" style={{ color: "#fbbf24" }}>
-                ${Math.round(vault.total_vaulted_usd).toLocaleString()}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
-          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: "#22c55e" }}>
-            ALL SYSTEMS LIVE
-          </span>
-        </div>
-      </div>
-
       {/* ── LEADERBOARD LIST ───────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 px-5 py-3 overflow-y-auto flex flex-col gap-1.5">
         {sortedBots.map((bot, idx) => {

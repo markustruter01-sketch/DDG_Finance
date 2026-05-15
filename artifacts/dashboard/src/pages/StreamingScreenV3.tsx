@@ -631,27 +631,7 @@ export default function StreamingScreenV3() {
         className="px-5 pt-5 pb-4 shrink-0"
         style={{ borderBottom: `1px solid ${C.border}`, background: "rgba(15,23,42,0.98)" }}
       >
-        {/* Giant title */}
-        <div className="flex items-start gap-3 mb-3">
-          <span style={{ fontSize: 30, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>🧠</span>
-          <div className="flex-1">
-            <h1
-              className="font-black uppercase tracking-widest leading-none"
-              style={{
-                fontSize: 22,
-                color: "white",
-                letterSpacing: "0.15em",
-                textShadow: "0 0 30px rgba(139,92,246,0.4)",
-              }}
-            >
-              Python Learning Journal
-            </h1>
-            <p className="text-[10px] mt-1" style={{ color: C.dim }}>
-              Rule-based pair intelligence · Hurst exponent · ADF cointegration · Win rates · Auto-pause · Parameter adaptation
-            </p>
-          </div>
-
-          {/* Stats */}
+        {/* Stats */}
           {data && (
             <div className="flex items-center gap-5 shrink-0">
               <div className="text-center">
@@ -699,7 +679,6 @@ export default function StreamingScreenV3() {
               </button>
             ))}
           </div>
-        </div>
 
         {/* Hurst legend */}
         <div

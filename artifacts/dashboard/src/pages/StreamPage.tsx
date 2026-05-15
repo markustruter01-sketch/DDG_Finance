@@ -8,6 +8,7 @@ import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
 import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
+import { StreamHeaderBar } from "@/components/streaming/StreamHeaderBar";
 
 type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g";
 
@@ -178,7 +179,7 @@ export default function StreamPage() {
     },
     {
       id: "b",
-      label: "Fleet",
+      label: "Math",
       activeGrad: "linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.15))",
       activeColor: "#67e8f9",
       activeBorder: "rgba(34,211,238,0.3)",
@@ -236,6 +237,7 @@ export default function StreamPage() {
 
   return (
     <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <StreamHeaderBar />
       <div
         className="flex items-center shrink-0 z-20 relative"
         style={{

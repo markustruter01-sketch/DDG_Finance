@@ -558,11 +558,21 @@ function LiveEquityCurveSection() {
   const [range, setRange] = useState<EquityRange>("all");
 
   const snapshots = useMemo(() => {
-    if (range === "all" || !allSnapshots.length) return allSnapshots;
-    const now = Date.now();
-    const cutoff = range === "24h" ? now - 86_400_000 : range === "7d" ? now - 7 * 86_400_000 : now - 30 * 86_400_000;
-    const filtered = allSnapshots.filter((s) => new Date(s.ts).getTime() >= cutoff);
-    return filtered.length >= 2 ? filtered : allSnapshots.slice(-2);
+    // First apply time-range filter
+    let base = allSnapshots;
+    if (range !== "all" && allSnapshots.length) {
+      const now = Date.now();
+      const cutoff = range === "24h" ? now - 86_400_000 : range === "7d" ? now - 7 * 86_400_000 : now - 30 * 86_400_000;
+      const tf = allSnapshots.filter((s) => new Date(s.ts).getTime() >= cutoff);
+      base = tf.length >= 2 ? tf : allSnapshots.slice(-2);
+    }
+    if (base.length < 2) return base;
+    // Remove bogus near-zero reads (bot restarts log equity as 0 or near-0)
+    const maxEq = Math.max(...base.map(s => s.total_equity ?? 0));
+    const threshold = maxEq * 0.15;
+    const deglitched = base.filter(s => (s.total_equity ?? 0) > threshold);
+    if (deglitched.length < 2) return base; // fallback: don't over-filter
+    return deglitched;
   }, [allSnapshots, range]);
 
   const { peak, drawdownPct } = useMemo(() => {
@@ -676,10 +686,10 @@ function LiveEquityCurveSection() {
               {drawdownPct < -0.01 && (
                 <Area type="monotone" dataKey="ddBand" stroke="none" fill="url(#drawdownFill)" fillOpacity={1} isAnimationActive={false} />
               )}
-              <Line type="monotone" dataKey="total" name="Total Fleet" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
-              <Line type="monotone" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
-              <Line type="monotone" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
-              <Line type="monotone" dataKey="forex" name="Forex" stroke="#14b8a6" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="basis" dataKey="total" name="Total Fleet" stroke="#3b82f6" strokeWidth={2.5} dot={false} activeDot={{ r: 3, fill: "#3b82f6" }} />
+              <Line type="basis" dataKey="alpaca" name="Alpaca" stroke="#22c55e" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="basis" dataKey="kraken" name="Kraken" stroke="#f59e0b" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
+              <Line type="basis" dataKey="forex" name="Forex" stroke="#14b8a6" strokeWidth={1.2} dot={false} strokeDasharray="5 3" />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -1667,6 +1677,32 @@ const BOT_COLORS: Record<string, string> = {
   "oracle":        "text-rose-400",
 };
 
+function MathAuditorSection() {
+  const { data: summary } = useMathAuditSummary(24);
+  const total = (summary?.pass ?? 0) + (summary?.warn ?? 0) + (summary?.fail ?? 0);
+  const health = (summary?.fail ?? 0) > 0 ? "FAIL" : (summary?.warn ?? 0) > 0 ? "WARN" : "PASS";
+  const badgeColor = health === "FAIL"
+    ? "text-red-400 border-red-500/30 bg-red-500/5"
+    : health === "WARN"
+    ? "text-amber-400 border-amber-500/30 bg-amber-500/5"
+    : "text-emerald-400 border-emerald-500/30 bg-emerald-500/5";
+  const badge = total > 0 ? (
+    <span className={cn("text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider", badgeColor)}>
+      {health}
+    </span>
+  ) : undefined;
+  return (
+    <CollapsableSection
+      title="Math Auditor"
+      defaultOpen={true}
+      icon={<ShieldCheck className="h-4 w-4 text-violet-400/70" />}
+      badge={badge}
+    >
+      <MathAuditorPanel />
+    </CollapsableSection>
+  );
+}
+
 function MathAuditorPanel() {
   const [filter, setFilter] = useState<AuditStatusFilter>("ALL");
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -1945,10 +1981,10 @@ export default function Dashboard() {
           </SafeSection>
         </motion.div>
 
-        {/* Math Auditor — always visible, prominent */}
+        {/* Math Auditor — collapsable */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.11 }}>
           <SafeSection label="Math Auditor">
-            <MathAuditorPanel />
+            <MathAuditorSection />
           </SafeSection>
         </motion.div>
 

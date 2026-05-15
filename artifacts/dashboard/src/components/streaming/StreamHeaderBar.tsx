@@ -82,17 +82,18 @@ export function StreamHeaderBar() {
     retry: false,
   });
 
-  const fleetPnl    = fleet?.fleet_total?.pnl     ?? null;
-  const fleetPnlPct = fleet?.fleet_total?.pnl_pct ?? null;
+  const fleetPnl      = fleet?.fleet_total?.pnl     ?? null;
+  const fleetPnlPct   = fleet?.fleet_total?.pnl_pct ?? null;
+  const fleetEquity   = fleet?.fleet_total?.equity   ?? null;
   const vaultAmt    = vault?.total_vaulted_usd     ?? null;
   const wins        = journal?.summary?.wins       ?? null;
   const losses      = journal?.summary?.losses     ?? null;
   const winRate     = wins != null && losses != null && wins + losses > 0
     ? (wins / (wins + losses)) * 100 : null;
 
-  const trades    = recent?.trades ?? [];
-  const bestTrade  = trades.length > 0 ? trades.reduce((a, b) => b.pnl_pct > a.pnl_pct ? b : a) : null;
-  const worstTrade = trades.length > 0 ? trades.reduce((a, b) => b.pnl_pct < a.pnl_pct ? b : a) : null;
+  const trades = (recent?.trades ?? []).filter(t => t.pnl_usd != null);
+  const bestTrade  = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? -Infinity) > (a.pnl_usd ?? -Infinity) ? b : a) : null;
+  const worstTrade = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? Infinity) < (a.pnl_usd ?? Infinity) ? b : a) : null;
 
   const auditPassRate = audit && audit.total_logged > 0
     ? ((audit.pass / audit.total_logged) * 100).toFixed(1) : null;
@@ -165,7 +166,7 @@ export function StreamHeaderBar() {
         <span style={LABEL_STYLE}>BEST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[14px] font-bold leading-none" style={{ color: "#4ade80" }}>
-            {bestTrade ? `+${bestTrade.pnl_pct.toFixed(1)}%` : "—"}
+            {bestTrade?.pnl_usd != null ? `+$${Math.round(bestTrade.pnl_usd).toLocaleString()}` : "—"}
           </span>
           <span className="text-[10px] font-medium" style={{ color: "rgba(74,222,128,0.7)" }}>
             {bestTrade?.symbol ?? ""}
@@ -178,7 +179,7 @@ export function StreamHeaderBar() {
         <span style={LABEL_STYLE}>WORST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[14px] font-bold leading-none" style={{ color: "#f87171" }}>
-            {worstTrade ? `${worstTrade.pnl_pct.toFixed(1)}%` : "—"}
+            {worstTrade?.pnl_usd != null ? `${worstTrade.pnl_usd >= 0 ? "+" : "-"}$${Math.round(Math.abs(worstTrade.pnl_usd)).toLocaleString()}` : "—"}
           </span>
           <span className="text-[10px] font-medium" style={{ color: "rgba(248,113,113,0.7)" }}>
             {worstTrade?.symbol ?? ""}
@@ -226,8 +227,21 @@ export function StreamHeaderBar() {
         </div>
       </div>
 
+      {/* ── PLATFORM EQUITY ── */}
+      <div className={CELL} style={{ ...DIV_STYLE, width: 168, marginLeft: "auto" }}>
+        <span style={LABEL_STYLE}>PLATFORM EQUITY</span>
+        <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+          <span className="text-[14px] font-bold leading-none" style={{ color: "#fbbf24" }}>
+            {fleetEquity != null ? `$${Math.round(fleetEquity).toLocaleString()}` : "—"}
+          </span>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(251,191,36,0.6)" }}>
+            {fleetPnlPct != null ? fmtPct(fleetPnlPct) : ""}
+          </span>
+        </div>
+      </div>
+
       {/* ── ACTIVE BOTS ── */}
-      <div className="flex items-center gap-3 px-4 shrink-0 ml-auto" style={{ borderLeft: "1px solid rgba(255,255,255,0.05)" }}>
+      <div className="flex items-center gap-3 px-4 shrink-0" style={{ borderLeft: "1px solid rgba(255,255,255,0.05)" }}>
         <div className="flex flex-col items-start">
           <span style={{ ...LABEL_STYLE, marginBottom: 4 }}>ACTIVE BOTS</span>
           <div className="flex items-center gap-1.5 whitespace-nowrap">

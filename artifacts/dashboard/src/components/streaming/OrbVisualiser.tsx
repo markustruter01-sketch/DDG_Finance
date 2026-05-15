@@ -685,12 +685,14 @@ function OrbScene({ orbData }: { orbData: OrbData }) {
       <pointLight position={[3, 3, 3]}   intensity={1.5} color={0xff8800} />
       <pointLight position={[-3, -2, 2]} intensity={0.8} color={0x6644ff} />
       <Stars radius={50} depth={20} count={2000} factor={3} fade speed={0.5} />
-      <GlowAtmosphere orbData={orbData} />
-      <MoltenCore     orbData={orbData} />
-      <ParticleField  orbData={orbData} />
-      <BotArcs        orbData={orbData} />
-      <TradePulseFlare orbData={orbData} />
-      <TendrilSystem  trigger={orbData.tendrilTrigger} />
+      <group scale={0.85}>
+        <GlowAtmosphere orbData={orbData} />
+        <MoltenCore     orbData={orbData} />
+        <ParticleField  orbData={orbData} />
+        <BotArcs        orbData={orbData} />
+        <TradePulseFlare orbData={orbData} />
+        <TendrilSystem  trigger={orbData.tendrilTrigger} />
+      </group>
     </>
   );
 }
@@ -744,7 +746,7 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
     const particles: { x: number; y: number; r: number; speed: number; phase: number; angle: number; dist: number }[] = [];
     for (let i = 0; i < 280; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist  = 90 + Math.random() * 130;
+      const dist  = (90 + Math.random() * 130) * 0.85;
       particles.push({ x: 0, y: 0, r: 0.8 + Math.random() * 1.4, speed: 0.3 + Math.random() * 0.7, phase: Math.random() * Math.PI * 2, angle, dist });
     }
 
@@ -766,7 +768,7 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
 
       const equityMult = orbData.fleetEquityChange > 0 ? 1.35 : orbData.fleetEquityChange < 0 ? 0.7 : 1.0;
       const heatFrac   = clamp01(orbData.openPositions / 10);
-      const baseRadius = 70 + heatFrac * 20;
+      const baseRadius = (70 + heatFrac * 20) * 0.85;
       const pulse      = pulseRef.current;
 
       const outerGlow = ctx!.createRadialGradient(cx, cy, baseRadius * 0.5, cx, cy, baseRadius * 3.5 * equityMult);
@@ -794,7 +796,7 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
       const activeBotCount = Math.max(1, Math.min(orbData.totalBots, orbData.activeBots));
       BOT_KEYS.slice(0, activeBotCount).forEach((key, i) => {
         const color    = BOT_COLORS_CSS[key];
-        const arcRadius= 110 + i * 11;
+        const arcRadius= (110 + i * 11) * 0.85;
         const tilt     = (i / Math.max(1, orbData.totalBots)) * 0.7;
         const rotSpeed = (0.12 + i * 0.05) * (i % 2 === 0 ? 1 : -1);
         const startAngle = t * rotSpeed;

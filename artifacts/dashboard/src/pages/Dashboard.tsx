@@ -584,18 +584,30 @@ function LiveEquityCurveSection() {
     return { peak: pk, drawdownPct: dd };
   }, [snapshots]);
 
-  const chartData = useMemo(() => snapshots.map((s) => {
-    const total = s.total_equity;
-    return {
-      ts: new Date(s.ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-      total,
-      alpaca: s.alpaca_equity,
-      kraken: s.kraken_equity,
-      forex: s.forex_equity ?? 0,
-      ddBand: total < peak ? [total, peak] as [number, number] : [total, total] as [number, number],
-      regime: s.regime,
-    };
-  }), [snapshots, peak]);
+  const chartData = useMemo(() => {
+    // Apply a centred rolling-mean (window=5) to smooth out sparse-data jaggedness
+    const vals = snapshots.map(s => s.total_equity);
+    const half = 2; // window of 5
+    const smooth = vals.map((_, i) => {
+      const s = Math.max(0, i - half);
+      const e = Math.min(vals.length - 1, i + half);
+      const slice = vals.slice(s, e + 1);
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    });
+    return snapshots.map((s, i) => {
+      const total = smooth[i];
+      return {
+        ts: new Date(s.ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+        total,
+        raw: s.total_equity,   // kept for tooltip accuracy
+        alpaca: s.alpaca_equity,
+        kraken: s.kraken_equity,
+        forex: s.forex_equity ?? 0,
+        ddBand: total < peak ? [total, peak] as [number, number] : [total, total] as [number, number],
+        regime: s.regime,
+      };
+    });
+  }, [snapshots, peak]);
 
   const last = snapshots[snapshots.length - 1];
   const first = snapshots[0];

@@ -122,6 +122,8 @@ def _migrate_price_columns_sqlite(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE trades ADD COLUMN slippage_pct REAL")
     if "closed_at" not in existing:
         conn.execute("ALTER TABLE trades ADD COLUMN closed_at TEXT")
+    if "qty" not in existing:
+        conn.execute("ALTER TABLE trades ADD COLUMN qty REAL")
 
 
 def init_db() -> None:
@@ -149,6 +151,7 @@ def log_trade(
     trade_date: str | None = None,
     intended_price: float | None = None,
     regime_at_entry: str | None = None,
+    qty: float | None = None,
 ) -> None:
     """
     Record a new trade entry.  `regime_at_entry` is stored for contextual
@@ -165,27 +168,28 @@ def log_trade(
                     INSERT INTO trades
                         (trade_id, date, ticker, asset_class, conviction_score,
                          original_thesis, pnl_percentage, status, intended_price,
-                         regime_at_entry)
-                    VALUES (%s, %s, %s, %s, %s, %s, NULL, 'Active', %s, %s)
+                         regime_at_entry, qty)
+                    VALUES (%s, %s, %s, %s, %s, %s, NULL, 'Active', %s, %s, %s)
                     ON CONFLICT (trade_id) DO NOTHING
                 """, (trade_id, entry_date, ticker, asset_class,
                       conviction_score, original_thesis, intended_price,
-                      regime_at_entry))
+                      regime_at_entry, qty))
     else:
         with _sqlite_conn() as conn:
             conn.execute("""
                 INSERT OR IGNORE INTO trades
                     (trade_id, date, ticker, asset_class, conviction_score,
                      original_thesis, pnl_percentage, status, intended_price,
-                     regime_at_entry)
-                VALUES (?, ?, ?, ?, ?, ?, NULL, 'Active', ?, ?)
+                     regime_at_entry, qty)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, 'Active', ?, ?, ?)
             """, (trade_id, entry_date, ticker, asset_class,
                   conviction_score, original_thesis, intended_price,
-                  regime_at_entry))
+                  regime_at_entry, qty))
 
     price_info = f" intended=${intended_price:.4f}" if intended_price else ""
     regime_info = f" regime={regime_at_entry}" if regime_at_entry else ""
-    logger.debug(f"Trade journal | Logged {ticker} [{asset_class}] conv={conviction_score:.2f}{price_info}{regime_info}")
+    qty_info = f" qty={qty}" if qty else ""
+    logger.debug(f"Trade journal | Logged {ticker} [{asset_class}] conv={conviction_score:.2f}{price_info}{regime_info}{qty_info}")
 
 
 # ── update_trade_fill_price ────────────────────────────────────────────────
@@ -210,6 +214,33 @@ def update_trade_fill_price(trade_id: str, actual_fill_price: float) -> None:
             )
             if cursor.rowcount > 0:
                 logger.debug(f"Trade journal | Fill price updated: {trade_id} fill=${actual_fill_price:.4f}")
+
+
+# ── update_trade_qty ───────────────────────────────────────────────────────
+
+def update_trade_qty(trade_id: str, qty: float) -> None:
+    """Update the qty field once the Alpaca order fill is confirmed."""
+    if not qty:
+        return
+    if _use_pg():
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE trades SET qty = %s WHERE trade_id = %s AND qty IS NULL",
+                    (qty, trade_id),
+                )
+                updated = cur.rowcount
+        if updated > 0:
+            logger.debug(f"Trade journal | qty updated: {trade_id} qty={qty}")
+    else:
+        with _sqlite_conn() as conn:
+            cursor = conn.execute(
+                "UPDATE trades SET qty = ? WHERE trade_id = ? AND qty IS NULL",
+                (qty, trade_id),
+            )
+            if cursor.rowcount > 0:
+                logger.debug(f"Trade journal | qty updated: {trade_id} qty={qty}")
 
 
 # ── update_trade_outcome ───────────────────────────────────────────────────
@@ -616,7 +647,7 @@ def _query_trades(status: str, limit: int) -> list[dict]:
 
 def get_all_active_trades() -> list[dict]:
     cols = ("trade_id", "date", "ticker", "asset_class", "conviction_score",
-            "original_thesis", "intended_price", "actual_fill_price")
+            "original_thesis", "intended_price", "actual_fill_price", "qty")
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -631,7 +662,7 @@ def get_all_active_trades() -> list[dict]:
         with _sqlite_conn() as conn:
             rows = conn.execute("""
                 SELECT trade_id, date, ticker, asset_class, conviction_score,
-                       original_thesis, intended_price, actual_fill_price
+                       original_thesis, intended_price, actual_fill_price, qty
                 FROM trades WHERE status = 'Active' ORDER BY date DESC
             """).fetchall()
         return [dict(r) for r in rows]

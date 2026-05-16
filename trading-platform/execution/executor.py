@@ -63,7 +63,7 @@ from analysis.schemas import (
     is_crypto_pair,
     LEVERAGED_RISK_TICKERS,
 )
-from analysis.trade_journal import log_trade, update_trade_fill_price, close_trade
+from analysis.trade_journal import log_trade, update_trade_fill_price, update_trade_qty, close_trade
 from execution.broker import (
     close_position,
     get_account,
@@ -775,6 +775,10 @@ def _execute_slot(
     try:
         order = place_order(ticker=ticker, notional_usd=notional_usd)
         order_id = order["id"]
+        # Prefer filled_qty if already available; fall back to requested qty.
+        # For notional orders qty may be None/0 at placement — _poll_fill_price
+        # will update it once the fill confirms.
+        _order_qty = order.get("filled_qty") or order.get("qty") or None
 
         log_trade(
             trade_id=order_id,
@@ -784,6 +788,7 @@ def _execute_slot(
             original_thesis=slot.thesis,
             intended_price=intended_price,
             regime_at_entry=regime_at_entry,
+            qty=_order_qty,
         )
         logger.info(f"  → Logged to journal: trade_id={order_id}")
 
@@ -960,6 +965,9 @@ def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float
             fill_price = order_data.get("filled_avg_price")
             if fill_price is not None:
                 update_trade_fill_price(order_id, fill_price)
+                _filled_qty = order_data.get("filled_qty")
+                if _filled_qty:
+                    update_trade_qty(order_id, float(_filled_qty))
                 return fill_price
             if order_data.get("status") in ("canceled", "expired", "rejected"):
                 logger.warning(f"Order {order_id} ({ticker}) ended with status={order_data['status']}")

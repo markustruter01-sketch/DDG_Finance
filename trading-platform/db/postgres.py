@@ -606,6 +606,16 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
+    # One-time migration — add qty column to trades for realized_pnl recording.
+    # Will be removed in publish #2 after this runs once on prod.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("ALTER TABLE trades ADD COLUMN IF NOT EXISTS qty DOUBLE PRECISION")
+        logger.info("DB | trades.qty column ensured")
+    except Exception as exc:
+        logger.warning(f"DB | trades.qty column ensure failed (non-fatal): {exc}")
+
 
 def insert_post_mortem(
     ticker: str,

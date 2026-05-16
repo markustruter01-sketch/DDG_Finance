@@ -187,6 +187,11 @@ async def _intraday_cycle() -> None:
         logger.info(f"Scheduler | intraday_cycle complete: status={result['status']}")
     except Exception as exc:
         logger.error(f"Scheduler | intraday_cycle CRASHED: {exc}")
+        try:
+            from core.bot_state import touch_heartbeat as _bs_touch
+            _bs_touch("oracle", status="error", error=str(exc)[:200])
+        except Exception as _hb_exc:
+            logger.debug(f"Pipeline | Oracle error heartbeat failed: {_hb_exc}")
 
     await _run_micro_audit()
 

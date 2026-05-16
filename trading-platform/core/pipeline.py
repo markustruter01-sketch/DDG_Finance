@@ -1313,3 +1313,15 @@ def _update_state(
             _get_tracker().record_outcome(cycle_outcome)
         except Exception as _cse:
             logger.debug(f"Pipeline | CycleStateTracker update failed (non-fatal): {_cse}")
+
+    # Write heartbeat to bots_state so dashboard reflects Oracle activity
+    _hb_status = (
+        "error"
+        if result["status"] in ("kill_switch_tripped", "analysis_failed", "execution_failed", "stf_error")
+        else "running"
+    )
+    try:
+        from core.bot_state import touch_heartbeat as _bs_touch
+        _bs_touch("oracle", status=_hb_status, error="")
+    except Exception as _hb_exc:
+        logger.debug(f"Pipeline | Oracle heartbeat write failed (non-fatal): {_hb_exc}")

@@ -606,6 +606,91 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
+    # One-time orphan purge — close 43 stuck navigator forex_trades rows.
+    # Will be removed in publish #2 after this runs once on prod.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE forex_trades
+                    SET status='closed',
+                        exit_time=NOW(),
+                        exit_reason='orphan_purge',
+                        exit_price=entry_price,
+                        pnl_usd=0
+                    WHERE status='open' AND bot_id='navigator'
+                """)
+                _n_purged = cur.rowcount
+        if _n_purged:
+            logger.info(f"DB | forex_trades orphan purge: {_n_purged} rows")
+    except Exception as exc:
+        logger.warning(f"DB | forex_trades orphan purge failed (non-fatal): {exc}")
+
+    # One-time view update — exclude orphan_purge from bot_trades.
+    # Will be removed in publish #2.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DROP VIEW IF EXISTS bot_trades")
+                cur.execute("""
+                    CREATE VIEW bot_trades AS
+                    SELECT 'oracle'::text AS bot_id, 'trades'::text AS source_table,
+                        trade_id::text AS source_id, ticker AS symbol, NULL::text AS direction,
+                        NULL::double precision AS entry_price, actual_fill_price AS exit_price,
+                        NULL::double precision AS units, realized_pnl AS pnl_usd,
+                        pnl_percentage AS pnl_pct, exit_reason AS reason,
+                        regime_at_entry AS regime, NULL::double precision AS holding_hours,
+                        COALESCE(closed_at, date::timestamptz) AS closed_at,
+                        status AS raw_status, asset_class AS asset_class
+                    FROM trades
+                    WHERE status IN ('Closed_Win','Closed_Loss') AND realized_pnl IS NOT NULL
+
+                    UNION ALL
+                    SELECT
+                        CASE bot_id
+                            WHEN 'davy-jones' THEN 'spy_qqq_trend'
+                            WHEN 'blackbeard' THEN 'jerome_macro'
+                            ELSE bot_id
+                        END AS bot_id,
+                        'kraken_trades'::text, id::text, symbol, side, entry_price, exit_price,
+                        NULL::double precision, pnl_usd, pnl_pct, reason, regime_at_entry,
+                        NULL::double precision, closed_at, 'closed'::text, 'crypto'::text
+                    FROM kraken_trades
+                    WHERE closed_at IS NOT NULL AND pnl_usd IS NOT NULL
+                      AND bot_id NOT IN ('apex-predator','bot7_macro_bond','calypso','bot4_sector')
+
+                    UNION ALL
+                    SELECT
+                        'kraken_trend'::text, 'kraken_current_trades'::text, id::text, symbol,
+                        direction, entry_price, exit_price, units, pnl, NULL::double precision,
+                        reason, NULL::text, holding_days * 24, closed_at,
+                        'closed'::text, 'crypto'::text
+                    FROM kraken_current_trades
+                    WHERE closed_at IS NOT NULL AND pnl IS NOT NULL
+
+                    UNION ALL
+                    SELECT
+                        'poseidon_momentum'::text, 'poseidon_momentum_trades'::text, id::text, symbol,
+                        direction, entry_price, exit_price, units, net_pnl, NULL::double precision,
+                        reason, NULL::text, holding_hours, closed_at,
+                        'closed'::text, 'crypto'::text
+                    FROM poseidon_momentum_trades
+                    WHERE closed_at IS NOT NULL AND net_pnl IS NOT NULL
+
+                    UNION ALL
+                    SELECT
+                        CASE bot_id WHEN 'navigator' THEN 'forex_gump' ELSE bot_id END AS bot_id,
+                        'forex_trades'::text, id::text, pair, direction, entry_price, exit_price,
+                        units, pnl_usd, NULL::double precision, NULL::text, NULL::text,
+                        EXTRACT(EPOCH FROM (exit_time - entry_time)) / 3600.0,
+                        exit_time, status, 'forex'::text
+                    FROM forex_trades
+                    WHERE status = 'closed' AND exit_time IS NOT NULL AND pnl_usd IS NOT NULL
+                      AND COALESCE(exit_reason, '') != 'orphan_purge'
+                """)
+        logger.info("DB | bot_trades view updated (orphan_purge filter)")
+    except Exception as exc:
+        logger.warning(f"DB | bot_trades view update failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

@@ -175,12 +175,21 @@ async def run_post_mortem() -> dict[str, Any]:
             slippage_count += 1
 
         # ── Determine exit reason from Alpaca order type ───────────────────
-        if order_type == "stop":
-            exit_reason = "ratchet_stop"
-        elif order_type in ("trailing_stop",):
-            exit_reason = "ratchet_stop"
-        else:
-            exit_reason = "unknown"
+        # Prefer exit_reason already stored by upstream caller (oracle_exit_manager etc.)
+        # Only fall through to order_type inference if no upstream tag present.
+        exit_reason = journal_entry.get("exit_reason") or None
+        if not exit_reason:
+            if order_type == "stop":
+                exit_reason = "ratchet_stop"
+            elif order_type in ("trailing_stop",):
+                exit_reason = "ratchet_stop"
+            elif order_type == "market":
+                # Market-sell at EOD/postmortem time = algo_cover (force-flatten)
+                exit_reason = "algo_cover"
+            elif order_type == "limit":
+                exit_reason = "limit_exit"
+            else:
+                exit_reason = f"unknown_{order_type}" if order_type else "unknown"
 
         # ── Compute time in trade ──────────────────────────────────────────
         entry_ts_iso     = entry_times.get(ticker)

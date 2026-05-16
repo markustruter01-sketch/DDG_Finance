@@ -235,7 +235,7 @@ export function StreamHeaderBar() {
           <span className="text-[14px] font-bold leading-none" style={{ color: "#fbbf24" }}>
             {fleetEquity != null ? `$${Math.round(fleetEquity).toLocaleString()}` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(251,191,36,0.6)" }}>
+          <span className="text-[10px] font-medium" style={{ color: fleetPnlPct != null && fleetPnlPct < 0 ? "rgba(248,113,113,0.8)" : "rgba(74,222,128,0.8)" }}>
             {fleetPnlPct != null ? fmtPct(fleetPnlPct) : ""}
           </span>
         </div>

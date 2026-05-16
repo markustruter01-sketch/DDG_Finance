@@ -6,13 +6,14 @@ import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import StreamingLearningScreen from "@/pages/StreamingLearningScreen";
 import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
+import StreamingArchitectureScreen from "@/pages/StreamingArchitectureScreen";
 import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 import { StreamHeaderBar } from "@/components/streaming/StreamHeaderBar";
 
-type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g";
+type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f", "g"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -44,7 +45,7 @@ function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number 
     }
 
     let subPage: SubPage | null = null;
-    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e" || subParam === "f" || subParam === "g") subPage = subParam;
+    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "e" || subParam === "f" || subParam === "g" || subParam === "h") subPage = subParam;
     else if (subParam === "a") subPage = "a";
 
     return { autoCycle, intervalSeconds, subPage };
@@ -231,6 +232,15 @@ export default function StreamPage() {
       progressGrad: "linear-gradient(90deg, #f97316, #facc15)",
       progressGlow: "rgba(251,146,60,0.65)",
     },
+    {
+      id: "h",
+      label: "Architecture",
+      activeGrad: "linear-gradient(135deg, rgba(99,102,241,0.28), rgba(34,211,238,0.15))",
+      activeColor: "#a5b4fc",
+      activeBorder: "rgba(99,102,241,0.4)",
+      progressGrad: "linear-gradient(90deg, #6366f1, #22d3ee)",
+      progressGlow: "rgba(99,102,241,0.6)",
+    },
   ];
 
   const activeTab = tabs.find((t) => t.id === active)!;
@@ -353,6 +363,9 @@ export default function StreamPage() {
         )}
         <div style={{ display: active === "g" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingPerformanceScreen />
+        </div>
+        <div style={{ display: active === "h" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingArchitectureScreen />
         </div>
       </div>
 

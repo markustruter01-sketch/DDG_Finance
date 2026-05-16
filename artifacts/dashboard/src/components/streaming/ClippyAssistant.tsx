@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g";
+type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 
 interface PageConfig {
   message: string;
@@ -81,6 +81,14 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     floatDur: "3.2s",
     wobbleDur: "4.8s",
     eyeColor: "#ffedd5",
+  },
+  h: {
+    message: "System Architecture map! Every component, database table, and external service laid out visually. Click a Flow on the right to highlight exactly how data moves through the platform. 🗺️",
+    color: "#a5b4fc",
+    glowColor: "rgba(99,102,241,0.5)",
+    floatDur: "4s",
+    wobbleDur: "6s",
+    eyeColor: "#e0e7ff",
     pupilColor: "#7c2d12",
     blinkDur: "4.2s",
   },

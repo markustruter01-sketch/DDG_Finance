@@ -606,27 +606,30 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
-    # One-time orphan purge — close 43 stuck navigator forex_trades rows.
+    # One-time orphan purge — mark 43 stuck navigator forex_trades rows as
+    # 'orphan_purged' (not 'closed') so they are naturally excluded from
+    # all view/metric queries that filter WHERE status = 'closed'.
     # Will be removed in publish #2 after this runs once on prod.
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
                     UPDATE forex_trades
-                    SET status='closed',
+                    SET status='orphan_purged',
                         exit_time=NOW(),
-                        exit_reason='orphan_purge',
                         exit_price=entry_price,
                         pnl_usd=0
                     WHERE status='open' AND bot_id='navigator'
                 """)
                 _n_purged = cur.rowcount
         if _n_purged:
-            logger.info(f"DB | forex_trades orphan purge: {_n_purged} rows")
+            logger.info(f"DB | forex_trades orphan purge: {_n_purged} rows marked orphan_purged")
     except Exception as exc:
         logger.warning(f"DB | forex_trades orphan purge failed (non-fatal): {exc}")
 
-    # One-time view update — exclude orphan_purge from bot_trades.
+    # One-time view update — rebuild bot_trades view.
+    # Forex branch already excludes status != 'closed', so orphan_purged
+    # rows are filtered naturally. No exit_reason column exists on forex_trades.
     # Will be removed in publish #2.
     try:
         with get_conn() as conn:
@@ -686,11 +689,10 @@ def ensure_schema() -> None:
                         exit_time, status, 'forex'::text
                     FROM forex_trades
                     WHERE status = 'closed' AND exit_time IS NOT NULL AND pnl_usd IS NOT NULL
-                      AND COALESCE(exit_reason, '') != 'orphan_purge'
                 """)
-        logger.info("DB | bot_trades view updated (orphan_purge filter)")
+        logger.info("DB | bot_trades view rebuilt")
     except Exception as exc:
-        logger.warning(f"DB | bot_trades view update failed (non-fatal): {exc}")
+        logger.warning(f"DB | bot_trades view rebuild failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

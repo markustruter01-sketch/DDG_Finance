@@ -84,12 +84,13 @@ export function useRealFeed(maxTrades = 20) {
           ? cleaned.replace(/USD$/, "/USD")
           : cleaned;
 
-        const hasExplicitPnl = t.pnl_usd != null;
-        // Skip Kraken journal entries with no pnl_usd — they're covered by the
+        const rawPnlUsd = t.pnl_usd ?? (t as Record<string, unknown>).realized_pnl as number | undefined ?? null;
+        const hasExplicitPnl = rawPnlUsd != null;
+        // Skip Kraken journal entries with no pnl — they're covered by the
         // Kraken status recent_trades path which always carries a proper dollar amount.
         if (isKraken && !hasExplicitPnl) continue;
 
-        const pnlUsd = t.pnl_usd ?? 0;
+        const pnlUsd = rawPnlUsd ?? 0;
         all.push({
           id: t.trade_id,
           bot,

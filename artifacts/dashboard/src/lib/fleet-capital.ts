@@ -16,10 +16,9 @@ export function getFleetStartingCapital(
 
 export function getFleetBotCount(
   registry?: BotRegistryResponse,
-  fleetEq?: FleetEquityData
+  _fleetEq?: FleetEquityData
 ): number {
   if (registry) return registry.fleet_bot_count;
-  if (fleetEq) return Object.keys(fleetEq).filter(k => !META_KEYS.has(k)).length;
   return DEFAULT_BOT_COUNT;
 }
 

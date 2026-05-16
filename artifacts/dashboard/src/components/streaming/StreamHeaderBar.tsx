@@ -95,9 +95,10 @@ export function StreamHeaderBar() {
   const bestTrade  = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? -Infinity) > (a.pnl_usd ?? -Infinity) ? b : a) : null;
   const worstTrade = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? Infinity) < (a.pnl_usd ?? Infinity) ? b : a) : null;
 
-  const auditPassRate = audit && audit.total_logged > 0
-    ? ((audit.pass / audit.total_logged) * 100).toFixed(1) : null;
-  const auditTotal = audit?.total_logged ?? null;
+  const auditChecked = audit != null ? (audit.pass ?? 0) + (audit.warn ?? 0) + (audit.fail ?? 0) : null;
+  const auditPassRate = auditChecked != null && auditChecked > 0
+    ? (((audit!.pass ?? 0) / auditChecked) * 100).toFixed(1) : null;
+  const auditTotal = auditChecked;
 
   const botStatuses = BOT_KEYS.map(k => {
     const b = fleet ? (fleet as Record<string, unknown>)[k] as { equity?: number; stale?: boolean } | undefined : undefined;

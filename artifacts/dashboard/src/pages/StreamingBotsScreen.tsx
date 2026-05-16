@@ -1,4 +1,4 @@
-import { usePortfolio, useKrakenPerformance, useKrakenStatus, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, useFleetEquity, useBotRegistry, type ForexPosition } from "@/hooks/use-trading";
+import { usePortfolio, useKrakenPerformance, useKrakenStatus, useForexState, useForexPositions, usePoseidonState, useKrakenCurrentState, useVault, useFleetEquity, useBotRegistry, useJournal, type ForexPosition } from "@/hooks/use-trading";
 import { FLEET_STARTING_CAPITAL } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
 import { getBotColors } from "@/lib/bot-colors";
@@ -191,6 +191,7 @@ export default function StreamingBotsScreen() {
   const { data: registry } = useBotRegistry();
   const { data: poseidonState } = usePoseidonState();
   const { data: kcState } = useKrakenCurrentState();
+  const { data: journal } = useJournal();
   // ── Equity derivations ────────────────────────────────────────────────
   // Oracle: prefer fleet equity system (reflects any manual resets) over raw Alpaca portfolio
   const oracleEquity = fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null;
@@ -254,8 +255,8 @@ export default function StreamingBotsScreen() {
     oracle: {
       equity: oracleEquity,
       paused: false,
-      winCount: 0,
-      lossCount: 0,
+      winCount: journal?.summary?.wins ?? 0,
+      lossCount: journal?.summary?.losses ?? 0,
       openPositions: oraclePositions.length,
       openPositionsList: oracleOpenList,
     },
@@ -345,6 +346,16 @@ export default function StreamingBotsScreen() {
   // First live bot with highest pnl
   const leaderBot = liveBots[0] ?? null;
   const firstPausedIdx = sortedBots.findIndex((b) => b.paused);
+
+  if (!registry) {
+    return (
+      <div className="h-full w-full flex items-center justify-center" style={{ background: "#020617" }}>
+        <div style={{ color: "rgba(148,163,184,0.5)", fontFamily: "monospace", fontSize: 13, letterSpacing: "0.15em" }}>
+          LOADING BOT FLEET…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -28,7 +28,7 @@ export const COLUMN_LABELS: Record<number, string> = {
   0: "BOTS",
   1: "API LAYER",
   2: "DATABASE",
-  3: "EXTERNAL",
+  3: "EXTERNAL SERVICES",
   4: "LLMs",
 };
 

@@ -81,6 +81,8 @@ const PAGE_CONFIG: Record<SubPage, PageConfig> = {
     floatDur: "3.2s",
     wobbleDur: "4.8s",
     eyeColor: "#ffedd5",
+    pupilColor: "#431407",
+    blinkDur: "5s",
   },
   h: {
     message: "System Architecture map! Every component, database table, and external service laid out visually. Click a Flow on the right to highlight exactly how data moves through the platform. 🗺️",

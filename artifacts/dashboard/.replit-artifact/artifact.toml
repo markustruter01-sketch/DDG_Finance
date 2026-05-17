@@ -109,4 +109,18 @@ kind = "web"
 
   [services.env]
   PORT = "8095"
-  
+
+  [[services]]
+  name = "depeg-hunter"
+  localPort = 0
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 depeg-hunter/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 depeg-hunter/main.py"]
+
+  [services.env]
+  PORT = "8096"

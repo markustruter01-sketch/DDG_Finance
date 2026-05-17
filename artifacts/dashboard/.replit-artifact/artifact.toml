@@ -124,3 +124,18 @@ kind = "web"
 
   [services.env]
   PORT = "8096"
+
+  [[services]]
+  name = "event-trader"
+  localPort = 0
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 event-trader/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 event-trader/main.py"]
+
+  [services.env]
+  PORT = "8097"

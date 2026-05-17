@@ -298,11 +298,14 @@ def check_mean_reversion_exit(
     entry_price:      float,
     current_price:    float,
     bb_mid:           float,
-    atr:              float,
-    hours_held:       float,
-    stop_distance:    float,
+    bb_lower:         Optional[float] = None,
+    bb_upper:         Optional[float] = None,
+    atr:              float = 0.0,
+    hours_held:       float = 0.0,
+    stop_distance:    float = 0.0,
     take_profit_pct:  float = 0.05,
     max_hold_hours:   int   = 48,
+    exit_target:      str   = "mid_band",
 ) -> Tuple[bool, str]:
     """
     Evaluate whether an open mean-reversion position should be closed.
@@ -311,23 +314,31 @@ def check_mean_reversion_exit(
     Exit conditions (in priority order):
       1. Hard stop loss  — price moved against entry by stop_distance
       2. Take profit     — price gained >= take_profit_pct from entry
-      3. Mid-band target — price reverted to BB 20-period SMA
+      3. Band target     — configurable: mid_band | opposite_band | half_to_opposite
       4. Time stop       — held >= max_hold_hours
     """
     if direction == "long":
-        if current_price <= entry_price - stop_distance:
+        if stop_distance > 0 and current_price <= entry_price - stop_distance:
             return True, "stop_loss"
         if current_price >= entry_price * (1.0 + take_profit_pct):
             return True, "take_profit"
-        if current_price >= bb_mid:
+        if exit_target == "mid_band" and current_price >= bb_mid:
             return True, "mid_band_reversion"
+        if exit_target == "opposite_band" and bb_upper is not None and current_price >= bb_upper:
+            return True, "opposite_band_reversion"
+        if exit_target == "half_to_opposite" and bb_upper is not None and current_price >= (bb_mid + bb_upper) / 2:
+            return True, "half_band_reversion"
     else:  # short
-        if current_price >= entry_price + stop_distance:
+        if stop_distance > 0 and current_price >= entry_price + stop_distance:
             return True, "stop_loss"
         if current_price <= entry_price * (1.0 - take_profit_pct):
             return True, "take_profit"
-        if current_price <= bb_mid:
+        if exit_target == "mid_band" and current_price <= bb_mid:
             return True, "mid_band_reversion"
+        if exit_target == "opposite_band" and bb_lower is not None and current_price <= bb_lower:
+            return True, "opposite_band_reversion"
+        if exit_target == "half_to_opposite" and bb_lower is not None and current_price <= (bb_mid + bb_lower) / 2:
+            return True, "half_band_reversion"
 
     if hours_held >= max_hold_hours:
         return True, "max_hold_timeout"

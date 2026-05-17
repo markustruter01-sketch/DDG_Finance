@@ -50,6 +50,10 @@ EXIT_AT_MID_BAND = True    # exit when price returns to BB middle band
 MAX_HOLD_HOURS = 48        # force exit if no resolution after 2 days
 MAX_HOLD_DAYS = 2          # 48h max hold (days form for compat)
 
+# Exit target — controls how far price must revert before closing
+# Options: "mid_band" | "opposite_band" | "half_to_opposite"
+EXIT_TARGET = "opposite_band"
+
 # ── Backwards compat — kept for main.py imports ───────────────────────────────
 EMA_FAST = 20              # unused by strategy
 EMA_SLOW = 100             # unused by strategy

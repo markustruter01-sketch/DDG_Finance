@@ -36,7 +36,7 @@ from config import (
     HURST_MIN, MOMENTUM_DAYS, VPIN_ENTRY_BLOCK, VPIN_EXTREME_EXIT,
     RISK_PER_TRADE, ATR_STOP_MULTIPLIER, ATR_TRAIL_TRIGGER,
     MAX_POSITION_FRACTION, MAX_POSITIONS, MAX_HOLD_DAYS,
-    BB_PERIOD, TAKE_PROFIT_PCT, MAX_HOLD_HOURS,
+    BB_PERIOD, BB_STD_DEV, TAKE_PROFIT_PCT, MAX_HOLD_HOURS, EXIT_TARGET,
     ADX_SCALE_WEAK, ADX_SCALE_STRONG, ADX_SCALE_VERY_STRONG,
     REGIME_BEAR_SHORT_MULT, REGIME_BULL_LONG_MULT, REGIME_SIDEWAYS_MULT,
     CB_DRAWDOWN_PCT, CB_WINDOW_DAYS, CB_PAUSE_HOURS,
@@ -199,12 +199,16 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
         closes, highs, lows, _, _vol = ohlcv_data.get(sym, ([], [], [], [], []))
         atr = calculate_atr(highs, lows, closes) if closes else pos.stop_distance / ATR_STOP_MULTIPLIER
 
-        # BB mid band for mean reversion target
-        bb_mid = (
-            sum(closes[-BB_PERIOD:]) / BB_PERIOD
-            if len(closes) >= BB_PERIOD
-            else (closes[-1] if closes else price)
-        )
+        # Bollinger Bands (all 3 levels) for mean reversion exit
+        if len(closes) >= BB_PERIOD:
+            _bb_vals = closes[-BB_PERIOD:]
+            bb_mid   = sum(_bb_vals) / BB_PERIOD
+            _bb_std  = (sum((v - bb_mid) ** 2 for v in _bb_vals) / BB_PERIOD) ** 0.5
+            bb_lower = bb_mid - BB_STD_DEV * _bb_std
+            bb_upper = bb_mid + BB_STD_DEV * _bb_std
+        else:
+            bb_mid = bb_lower = bb_upper = closes[-1] if closes else price
+
         hours_held = pos.holding_days() * 24
 
         reason = None
@@ -213,18 +217,21 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
         if pos.is_stop_hit(price):
             reason = "stop_loss"
 
-        # Mean reversion exits: mid-band target, take profit, 48h timeout
+        # Mean reversion exits: band target, take profit, 48h timeout
         if not reason:
             should_exit, mr_reason = check_mean_reversion_exit(
                 direction=pos.direction,
                 entry_price=pos.entry_price,
                 current_price=price,
                 bb_mid=bb_mid,
+                bb_lower=bb_lower,
+                bb_upper=bb_upper,
                 atr=atr,
                 hours_held=hours_held,
                 stop_distance=pos.stop_distance,
                 take_profit_pct=TAKE_PROFIT_PCT,
                 max_hold_hours=MAX_HOLD_HOURS,
+                exit_target=EXIT_TARGET,
             )
             if should_exit:
                 reason = mr_reason

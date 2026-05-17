@@ -1,96 +1,112 @@
 kind = "web"
-previewPath = "/"
-title = "Trading Platform Dashboard"
-version = "1.0.0"
-id = "artifacts/dashboard"
-router = "path"
+  previewPath = "/"
+  title = "Trading Platform Dashboard"
+  version = "1.0.0"
+  id = "artifacts/dashboard"
+  router = "path"
 
-[[integratedSkills]]
-name = "react-vite"
-version = "1.0.0"
+  [[integratedSkills]]
+  name = "react-vite"
+  version = "1.0.0"
 
-[[services]]
-name = "web"
-paths = [ "/" ]
-localPort = 23183
+  [[services]]
+  name = "web"
+  paths = [ "/" ]
+  localPort = 23183
 
-[services.development]
-run = "pnpm --filter @workspace/dashboard run dev"
+  [services.development]
+  run = "pnpm --filter @workspace/dashboard run dev"
 
-[services.production]
-build = [ "pnpm", "--filter", "@workspace/dashboard", "run", "build" ]
-publicDir = "artifacts/dashboard/dist/public"
-serve = "static"
+  [services.production]
+  build = [ "pnpm", "--filter", "@workspace/dashboard", "run", "build" ]
+  publicDir = "artifacts/dashboard/dist/public"
+  serve = "static"
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+  [[services.production.rewrites]]
+  from = "/*"
+  to = "/index.html"
 
-[services.env]
-PORT = "23183"
-BASE_PATH = "/"
+  [services.env]
+  PORT = "23183"
+  BASE_PATH = "/"
 
-[[services]]
-name = "trading-api"
-paths = [ "/trading-api" ]
-localPort = 8000
+  [[services]]
+  name = "trading-api"
+  paths = [ "/trading-api" ]
+  localPort = 8000
 
-[services.development]
-run = "cd /home/runner/workspace/trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+  [services.development]
+  run = "cd /home/runner/workspace/trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
-[services.production]
+  [services.production]
 
-[services.production.run]
-args = ["bash", "-c", "cd trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1"]
+  [services.production.run]
+  args = ["bash", "-c", "cd trading-platform && python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1"]
 
-[services.production.run.env]
-API_PREFIX = "/trading-api"
+  [services.production.run.env]
+  API_PREFIX = "/trading-api"
 
-[services.production.health.startup]
-path = "/trading-api/health"
+  [services.production.health.startup]
+  path = "/trading-api/health"
 
-[services.env]
-PORT = "8000"
-API_PREFIX = "/trading-api"
+  [services.env]
+  PORT = "8000"
+  API_PREFIX = "/trading-api"
 
-[[services]]
-name = "kraken-bot-runner"
-localPort = 8085
+  [[services]]
+  name = "kraken-bot-runner"
+  localPort = 8085
 
-[services.development]
-run = "cd /home/runner/workspace/kraken-bot && python3 runner.py"
+  [services.development]
+  run = "cd /home/runner/workspace/kraken-bot && python3 runner.py"
 
-[services.production]
+  [services.production]
 
-[services.production.run]
-args = ["bash", "-c", "cd kraken-bot && python3 runner.py"]
+  [services.production.run]
+  args = ["bash", "-c", "cd kraken-bot && python3 runner.py"]
 
-[services.env]
-PORT = "8085"
+  [services.env]
+  PORT = "8085"
 
-[[services]]
-name = "kraken-current-bot"
-localPort = 0
+  [[services]]
+  name = "kraken-current-bot"
+  localPort = 0
 
-[services.development]
-run = "cd /home/runner/workspace && python3 kraken-current/main.py"
+  [services.development]
+  run = "cd /home/runner/workspace && python3 kraken-current/main.py"
 
-[services.production]
+  [services.production]
 
-[services.production.run]
-args = ["bash", "-c", "python3 kraken-current/main.py"]
+  [services.production.run]
+  args = ["bash", "-c", "python3 kraken-current/main.py"]
 
-[services.env]
-PORT = "8090"
+  [services.env]
+  PORT = "8090"
 
-[[services]]
-name = "poseidon-momentum"
-localPort = 0
+  [[services]]
+  name = "poseidon-momentum"
+  localPort = 0
 
-[services.development]
-run = "cd /home/runner/workspace && python3 poseidon/main.py"
+  [services.development]
+  run = "cd /home/runner/workspace && python3 poseidon/main.py"
 
-[services.production]
+  [services.production]
 
-[services.production.run]
-args = ["bash", "-c", "python3 poseidon/main.py"]
+  [services.production.run]
+  args = ["bash", "-c", "python3 poseidon/main.py"]
+
+  [[services]]
+  name = "crypto-signals"
+  localPort = 0
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 crypto-signals/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 crypto-signals/main.py"]
+
+  [services.env]
+  PORT = "8095"
+  

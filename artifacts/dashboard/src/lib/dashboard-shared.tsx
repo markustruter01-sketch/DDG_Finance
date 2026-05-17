@@ -503,5 +503,5 @@ export function computeFleetEquity(
   return alpacaEquity + krakenFleetEquity + forexEquity;
 }
 
-/** Starting capital across all 7 bots ($100k each). */
-export const FLEET_STARTING_CAPITAL = 600_000;
+/** Starting capital across all 8 bots ($100k each). */
+export const FLEET_STARTING_CAPITAL = 800_000;

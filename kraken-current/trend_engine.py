@@ -121,7 +121,7 @@ def evaluate_trend_signal(
     closes: List[float],
     highs:  List[float],
     lows:   List[float],
-    ema_fast_period: int   = 20,    # repurposed as bb_period
+    ema_fast_period: int   = 20,    # unused (legacy compat)
     ema_slow_period: int   = 100,   # unused
     adx_period:      int   = 14,    # unused
     adx_min:         float = 0.0,   # unused
@@ -129,25 +129,27 @@ def evaluate_trend_signal(
     momentum_days:   int   = 10,    # unused
     vpin:            float = 0.0,   # unused
     vpin_block:      float = 999.0, # unused
-    # Mean reversion extras (passed as kwargs by updated main.py paths)
+    # BB Breakout params
     bb_period:        int   = 20,
     bb_std:           float = 2.0,
     rsi_period:       int   = 14,
-    rsi_long_max:     float = 30.0,
-    rsi_short_min:    float = 70.0,
+    rsi_long_min:     float = 50.0,   # long: RSI in momentum zone
+    rsi_long_max:     float = 75.0,   # long: not exhausted
+    rsi_short_min:    float = 25.0,   # short: bear-momentum zone
+    rsi_short_max:    float = 50.0,   # short: not oversold
     volumes:          Optional[List[float]] = None,
     volume_ma_period: int   = 20,
-    volume_min_mult:  float = 1.2,
+    volume_min_mult:  float = 1.5,
 ) -> Dict:
     """
-    Evaluate mean reversion entry signal.
+    Evaluate BB breakout entry signal.
 
-    Returns a dict with the same top-level keys as the legacy trend signal so
-    that all existing main.py logging/branching keeps working:
-        direction, passed, block_reason, ema_fast, ema_slow, adx, hurst,
-        momentum, atr
-    Plus new diagnostics:
-        bb_lower, bb_mid, bb_upper, rsi, current_price, volume_ok
+    Long  when price closes ABOVE upper BB band AND RSI in momentum zone
+          (50–75) AND volume >= 1.5x avg.
+    Short when price closes BELOW lower BB band AND RSI in bear-momentum
+          zone (25–50) AND volume >= 1.5x avg.
+
+    Returns same dict shape as legacy trend signal for main.py compat.
     """
     _empty = {
         "direction": None, "passed": False,
@@ -176,8 +178,9 @@ def evaluate_trend_signal(
     direction    = None
     block_reason = None
 
-    if current_price <= bb_low:
-        if rsi < rsi_long_max:
+    # LONG BREAKOUT: price closes above upper band, RSI in momentum zone
+    if current_price > bb_up:
+        if rsi_long_min <= rsi <= rsi_long_max:
             if vol_ok:
                 direction = "long"
             else:
@@ -186,9 +189,13 @@ def evaluate_trend_signal(
                     f" need>={vol_avg * volume_min_mult:.0f})"
                 )
         else:
-            block_reason = f"rsi_too_high_for_long (rsi={rsi:.1f} need<{rsi_long_max})"
-    elif current_price >= bb_up:
-        if rsi > rsi_short_min:
+            block_reason = (
+                f"rsi_out_of_long_zone (rsi={rsi:.1f}"
+                f" need {rsi_long_min:.0f}-{rsi_long_max:.0f})"
+            )
+    # SHORT BREAKOUT: price closes below lower band, RSI in bear-momentum zone
+    elif current_price < bb_low:
+        if rsi_short_min <= rsi <= rsi_short_max:
             if vol_ok:
                 direction = "short"
             else:
@@ -197,7 +204,10 @@ def evaluate_trend_signal(
                     f" need>={vol_avg * volume_min_mult:.0f})"
                 )
         else:
-            block_reason = f"rsi_too_low_for_short (rsi={rsi:.1f} need>{rsi_short_min})"
+            block_reason = (
+                f"rsi_out_of_short_zone (rsi={rsi:.1f}"
+                f" need {rsi_short_min:.0f}-{rsi_short_max:.0f})"
+            )
     else:
         block_reason = (
             f"price_within_bands ("
@@ -208,14 +218,12 @@ def evaluate_trend_signal(
         "direction":     direction,
         "passed":        direction is not None,
         "block_reason":  block_reason,
-        # Legacy fields (main.py logs these)
         "ema_fast":      0.0,
         "ema_slow":      0.0,
         "adx":           0.0,
         "hurst":         0.5,
         "momentum":      0.0,
         "atr":           atr,
-        # New diagnostics
         "bb_lower":      bb_low,
         "bb_mid":        bb_mid,
         "bb_upper":      bb_up,
@@ -270,24 +278,54 @@ def calculate_position_size(
 # ── Trailing stop (no-op for mean reversion) ───────────────────────────────────
 
 def update_trailing_stop(
-    current_price:          float,
-    best_price:             float,
-    entry_price:            float,
-    stop_distance:          float,
-    direction:              str,
-    trail_trigger_multiplier: float = 1.5,
-    atr:                    float = 0.0,
-    trail_immediate:        bool  = False,
+    current_price:            float,
+    best_price:               float,
+    entry_price:              float,
+    stop_distance:            float,
+    direction:                str,
+    trail_trigger_multiplier: float = 1.0,
+    atr:                      float = 0.0,
+    trail_immediate:          bool  = False,
+    trail_atr_mult:           float = 1.5,
 ) -> Dict:
-    """Mean reversion does NOT trail. Returns fixed stop at entry ± stop_distance."""
+    """Trail the stop once price moves favorably by trail_trigger_multiplier * ATR.
+
+    Breakout strategy: trail winners by trail_atr_mult * ATR from peak.
+    Before trigger: hold hard stop at entry ± stop_distance.
+    """
+    if not best_price:
+        best_price = entry_price
+
+    # Track best price
     if direction == "long":
-        stop_level = entry_price - stop_distance
+        best_price     = max(best_price, current_price)
+        favorable_move = best_price - entry_price
     else:
-        stop_level = entry_price + stop_distance
+        best_price     = min(best_price, current_price)
+        favorable_move = entry_price - best_price
+
+    # Activate trailing once favorable move >= trigger * ATR
+    trail_active = trail_immediate or (
+        atr > 0 and favorable_move >= atr * trail_trigger_multiplier
+    )
+
+    if trail_active and atr > 0:
+        trail_dist = atr * trail_atr_mult
+        if direction == "long":
+            stop_level = best_price - trail_dist
+        else:
+            stop_level = best_price + trail_dist
+    else:
+        # Hard stop — no trailing yet
+        if direction == "long":
+            stop_level = entry_price - stop_distance
+        else:
+            stop_level = entry_price + stop_distance
+
     return {
-        "best_price":      best_price if best_price else current_price,
+        "best_price":      best_price,
         "stop_level":      stop_level,
-        "trailing_active": False,
+        "trailing_active": trail_active,
     }
 
 
@@ -305,40 +343,37 @@ def check_mean_reversion_exit(
     stop_distance:    float = 0.0,
     take_profit_pct:  float = 0.05,
     max_hold_hours:   int   = 48,
-    exit_target:      str   = "mid_band",
+    exit_target:      str   = "counter_band",
 ) -> Tuple[bool, str]:
     """
-    Evaluate whether an open mean-reversion position should be closed.
+    Breakout strategy exit logic.
     Returns (should_exit: bool, reason: str).
 
     Exit conditions (in priority order):
-      1. Hard stop loss  — price moved against entry by stop_distance
-      2. Take profit     — price gained >= take_profit_pct from entry
-      3. Band target     — configurable: mid_band | opposite_band | half_to_opposite
-      4. Time stop       — held >= max_hold_hours
+      1. Hard/trailing stop — checked externally via update_trailing_stop;
+         stop_distance guard here is a safety fallback only.
+      2. Take profit        — price gained >= take_profit_pct from entry.
+      3. Counter-band touch — trend exhaustion: long exits at lower band,
+                              short exits at upper band.
+      4. Time stop          — held >= max_hold_hours.
     """
     if direction == "long":
+        # Safety stop fallback (trailing stop is managed in check_exits)
         if stop_distance > 0 and current_price <= entry_price - stop_distance:
             return True, "stop_loss"
         if current_price >= entry_price * (1.0 + take_profit_pct):
             return True, "take_profit"
-        if exit_target == "mid_band" and current_price >= bb_mid:
-            return True, "mid_band_reversion"
-        if exit_target == "opposite_band" and bb_upper is not None and current_price >= bb_upper:
-            return True, "opposite_band_reversion"
-        if exit_target == "half_to_opposite" and bb_upper is not None and current_price >= (bb_mid + bb_upper) / 2:
-            return True, "half_band_reversion"
+        # Counter-band: long entered on upper breakout → exit at lower band
+        if bb_lower is not None and current_price <= bb_lower:
+            return True, "counter_band_reversal"
     else:  # short
         if stop_distance > 0 and current_price >= entry_price + stop_distance:
             return True, "stop_loss"
         if current_price <= entry_price * (1.0 - take_profit_pct):
             return True, "take_profit"
-        if exit_target == "mid_band" and current_price <= bb_mid:
-            return True, "mid_band_reversion"
-        if exit_target == "opposite_band" and bb_lower is not None and current_price <= bb_lower:
-            return True, "opposite_band_reversion"
-        if exit_target == "half_to_opposite" and bb_lower is not None and current_price <= (bb_mid + bb_lower) / 2:
-            return True, "half_band_reversion"
+        # Counter-band: short entered on lower breakout → exit at upper band
+        if bb_upper is not None and current_price >= bb_upper:
+            return True, "counter_band_reversal"
 
     if hours_held >= max_hold_hours:
         return True, "max_hold_timeout"

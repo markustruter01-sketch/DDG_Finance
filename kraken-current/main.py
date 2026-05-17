@@ -37,6 +37,8 @@ from config import (
     RISK_PER_TRADE, ATR_STOP_MULTIPLIER, ATR_TRAIL_TRIGGER,
     MAX_POSITION_FRACTION, MAX_POSITIONS, MAX_HOLD_DAYS,
     BB_PERIOD, BB_STD_DEV, TAKE_PROFIT_PCT, MAX_HOLD_HOURS, EXIT_TARGET,
+    RSI_PERIOD, RSI_LONG_MIN, RSI_LONG_MAX, RSI_SHORT_MIN, RSI_SHORT_MAX,
+    VOLUME_MA_PERIOD, VOLUME_MIN_MULT, ATR_TRAIL_MULT,
     ADX_SCALE_WEAK, ADX_SCALE_STRONG, ADX_SCALE_VERY_STRONG,
     REGIME_BEAR_SHORT_MULT, REGIME_BULL_LONG_MULT, REGIME_SIDEWAYS_MULT,
     CB_DRAWDOWN_PCT, CB_WINDOW_DAYS, CB_PAUSE_HOURS,
@@ -213,13 +215,29 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
 
         reason = None
 
-        # Hard stop (fixed at entry ± stop_distance — no trailing for mean reversion)
-        if pos.is_stop_hit(price):
-            reason = "stop_loss"
+        # Update trailing stop — breakout strategy trails winners
+        trail = update_trailing_stop(
+            current_price=price,
+            best_price=pos.best_price,
+            entry_price=pos.entry_price,
+            stop_distance=pos.stop_distance,
+            direction=pos.direction,
+            trail_trigger_multiplier=ATR_TRAIL_TRIGGER,
+            atr=atr,
+            trail_atr_mult=ATR_TRAIL_MULT,
+        )
+        pos.best_price = trail["best_price"]
+        pos.stop_level = trail["stop_level"]
 
-        # Mean reversion exits: band target, take profit, 48h timeout
+        # Trailing / hard stop hit
+        if pos.direction == "long" and price <= trail["stop_level"]:
+            reason = "trailing_stop" if trail["trailing_active"] else "stop_loss"
+        elif pos.direction == "short" and price >= trail["stop_level"]:
+            reason = "trailing_stop" if trail["trailing_active"] else "stop_loss"
+
+        # Breakout exits: counter-band, take profit, 48h timeout
         if not reason:
-            should_exit, mr_reason = check_mean_reversion_exit(
+            should_exit, br_reason = check_mean_reversion_exit(
                 direction=pos.direction,
                 entry_price=pos.entry_price,
                 current_price=price,
@@ -234,7 +252,7 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
                 exit_target=EXIT_TARGET,
             )
             if should_exit:
-                reason = mr_reason
+                reason = br_reason
 
         if reason:
             trade = portfolio.close_position(sym, price, reason)
@@ -272,6 +290,16 @@ def scan_for_entries(current_prices: dict[str, float], ohlcv_data: dict[str, tup
             momentum_days=MOMENTUM_DAYS,
             vpin=vpin,
             vpin_block=VPIN_ENTRY_BLOCK,
+            bb_period=BB_PERIOD,
+            bb_std=BB_STD_DEV,
+            rsi_period=RSI_PERIOD,
+            rsi_long_min=RSI_LONG_MIN,
+            rsi_long_max=RSI_LONG_MAX,
+            rsi_short_min=RSI_SHORT_MIN,
+            rsi_short_max=RSI_SHORT_MAX,
+            volumes=list(volumes) if volumes else None,
+            volume_ma_period=VOLUME_MA_PERIOD,
+            volume_min_mult=VOLUME_MIN_MULT,
         )
         result["vpin"] = round(vpin, 4)
         result["symbol"] = sym

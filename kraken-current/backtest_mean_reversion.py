@@ -26,6 +26,7 @@ from trend_engine import (
     calculate_position_size,
     calculate_atr,
     check_mean_reversion_exit,
+    update_trailing_stop,
 )
 
 # =========================================================================
@@ -40,7 +41,7 @@ SYMBOLS              = cfg.SYMBOLS                              # Kraken names (
 BACKTEST_SYMBOLS     = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]    # OKX equivalents
 EXCHANGE_NAME        = "okx"
 MIN_BARS_NEEDED      = 50
-EXIT_TARGETS_TO_TEST = ["mid_band", "half_to_opposite", "opposite_band"]
+EXIT_TARGETS_TO_TEST = ["counter_band"]   # breakout: exit at opposite band
 
 # =========================================================================
 # DATA FETCH  — OKX (reachable from Replit, 300 bars/request, 1y+ history)
@@ -96,6 +97,7 @@ class BacktestPosition:
         self.stop_distance = stop_distance
         self.entry_idx     = entry_idx
         self.atr           = atr
+        self.best_price    = entry_price    # tracks peak for trailing stop
 
 # =========================================================================
 # INNER SIMULATION  (histories pre-fetched, exit_target configurable)
@@ -139,20 +141,42 @@ def run_backtest_inner(
 
             hours_held = i - pos.entry_idx
 
-            should_exit, reason = check_mean_reversion_exit(
-                direction=pos.direction,
-                entry_price=pos.entry_price,
+            # Update trailing stop — breakout strategy trails winners
+            trail = update_trailing_stop(
                 current_price=current_price,
-                bb_mid=bb_mid,
-                bb_lower=bb_lower,
-                bb_upper=bb_upper,
-                atr=pos.atr,
-                hours_held=hours_held,
+                best_price=pos.best_price,
+                entry_price=pos.entry_price,
                 stop_distance=pos.stop_distance,
-                take_profit_pct=cfg.TAKE_PROFIT_PCT,
-                max_hold_hours=cfg.MAX_HOLD_HOURS,
-                exit_target=exit_target,
+                direction=pos.direction,
+                trail_trigger_multiplier=cfg.ATR_TRAIL_TRIGGER,
+                atr=pos.atr,
+                trail_atr_mult=cfg.ATR_TRAIL_MULT,
             )
+            pos.best_price = trail["best_price"]
+
+            # Check trailing/hard stop hit first
+            stop_hit = (
+                (pos.direction == "long"  and current_price <= trail["stop_level"]) or
+                (pos.direction == "short" and current_price >= trail["stop_level"])
+            )
+            if stop_hit:
+                should_exit = True
+                reason = "trailing_stop" if trail["trailing_active"] else "stop_loss"
+            else:
+                should_exit, reason = check_mean_reversion_exit(
+                    direction=pos.direction,
+                    entry_price=pos.entry_price,
+                    current_price=current_price,
+                    bb_mid=bb_mid,
+                    bb_lower=bb_lower,
+                    bb_upper=bb_upper,
+                    atr=pos.atr,
+                    hours_held=hours_held,
+                    stop_distance=pos.stop_distance,
+                    take_profit_pct=cfg.TAKE_PROFIT_PCT,
+                    max_hold_hours=cfg.MAX_HOLD_HOURS,
+                    exit_target=exit_target,
+                )
 
             if should_exit:
                 if pos.direction == "long":

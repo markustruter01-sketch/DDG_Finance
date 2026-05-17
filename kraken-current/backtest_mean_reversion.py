@@ -1,12 +1,15 @@
-"""Backtest the mean reversion strategy on historical Kraken data.
+"""Backtest the mean reversion strategy on historical data.
 
 Usage: python3 backtest_mean_reversion.py
 
-Fetches ~6 months of 1h candles for BTC/USD, ETH/USD, SOL/USD,
-simulates the strategy bar-by-bar across 3 exit target variants,
-and reports win rate, profit factor, expectancy, max drawdown,
-per-symbol breakdown, and a final comparison table.
+Fetches ~6 months of 1h candles from Binance (BTC/USDT, ETH/USDT, SOL/USDT)
+which supports proper multi-batch pagination unlike Kraken's 720-bar cap.
+Simulates the strategy bar-by-bar across 3 exit target variants and reports
+win rate, profit factor, expectancy, max drawdown, per-symbol breakdown, and
+a final comparison table.
 
+Historical data source: Binance public spot API (no key required).
+Live bot data source:   Kraken (unchanged).
 Bot stays paused — this is paper-paper validation, no live writes.
 """
 
@@ -33,17 +36,23 @@ TIMEFRAME            = "1h"
 STARTING_EQUITY      = 100_000.0
 FEE_PCT              = 0.0026
 SLIPPAGE_PCT         = 0.001
-SYMBOLS              = cfg.SYMBOLS
+SYMBOLS              = cfg.SYMBOLS                              # Kraken names (live bot)
+BACKTEST_SYMBOLS     = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]    # OKX equivalents
+EXCHANGE_NAME        = "okx"
 MIN_BARS_NEEDED      = 50
 EXIT_TARGETS_TO_TEST = ["mid_band", "half_to_opposite", "opposite_band"]
 
 # =========================================================================
-# DATA FETCH  (fixed pagination)
+# DATA FETCH  — OKX (reachable from Replit, 300 bars/request, 1y+ history)
 # =========================================================================
 
 def fetch_historical(symbol: str, timeframe: str, days: int) -> List[List]:
-    """Fetch historical OHLCV from Kraken with proper pagination."""
-    exchange = ccxt.kraken({"enableRateLimit": True})
+    """Fetch historical OHLCV from OKX with proper pagination.
+
+    OKX returns up to 300 bars per request and supports arbitrary since=
+    timestamps. 180 days × 24h = 4320 bars ≈ 15 requests.
+    """
+    exchange = ccxt.okx({"enableRateLimit": True})
     ms_per_candle = exchange.parse_timeframe(timeframe) * 1000
     end_ms   = exchange.milliseconds()
     start_ms = end_ms - (days * 24 * 60 * 60 * 1000)
@@ -54,11 +63,11 @@ def fetch_historical(symbol: str, timeframe: str, days: int) -> List[List]:
 
     while since < end_ms:
         safety += 1
-        if safety > 100:
+        if safety > 200:
             print(f"    safety break at {len(all_bars)} bars")
             break
         try:
-            batch = exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=720)
+            batch = exchange.fetch_ohlcv(symbol, timeframe, since=since, limit=300)
         except Exception as e:
             print(f"    fetch error: {e}; retrying in 2s")
             time.sleep(2)
@@ -66,13 +75,10 @@ def fetch_historical(symbol: str, timeframe: str, days: int) -> List[List]:
         if not batch:
             break
         all_bars.extend(batch)
-        print(f"    fetched {len(batch)} bars, total {len(all_bars)}, "
-              f"latest={batch[-1][0]}", flush=True)
-        since = batch[-1][0] + ms_per_candle
-        time.sleep(0.5)
-        # Stop when last bar timestamp is at or past end
-        if batch[-1][0] >= end_ms - ms_per_candle:
+        new_since = batch[-1][0] + ms_per_candle
+        if new_since <= since:
             break
+        since = new_since
 
     return all_bars
 
@@ -323,14 +329,15 @@ def run_all_variants() -> None:
           f"Fee: {FEE_PCT*100:.2f}% | Slippage: {SLIPPAGE_PCT*100:.2f}%")
     print()
 
-    # Fetch once, reuse across all variants
-    print("Fetching historical data (this may take 1-3 min)...")
+    # Fetch once from Binance, store under Kraken symbol names so simulation
+    # code works unchanged (it never sees the Binance symbol strings).
+    print(f"Fetching {LOOKBACK_DAYS} days of historical data from {EXCHANGE_NAME}...")
     histories: Dict[str, List[List]] = {}
-    for sym in SYMBOLS:
-        print(f"  {sym}...")
-        bars = fetch_historical(sym, TIMEFRAME, LOOKBACK_DAYS)
-        histories[sym] = bars
-        print(f"  → {len(bars)} bars total")
+    for b_sym, k_sym in zip(BACKTEST_SYMBOLS, SYMBOLS):
+        print(f"  {b_sym} (live: {k_sym})...", end=" ", flush=True)
+        bars = fetch_historical(b_sym, TIMEFRAME, LOOKBACK_DAYS)
+        histories[k_sym] = bars
+        print(f"{len(bars)} bars")
     print()
 
     min_len = min(len(b) for b in histories.values())

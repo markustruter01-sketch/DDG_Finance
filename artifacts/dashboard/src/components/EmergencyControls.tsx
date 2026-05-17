@@ -182,6 +182,15 @@ function useEmergencyActions() {
 
 // ── Compact Header Buttons (always visible in sticky nav) ─────────────────────
 
+// Shared base class — every header button uses this
+const BTN = [
+  "inline-flex items-center gap-1.5",
+  "h-7 px-2.5 rounded-lg",
+  "text-[11px] font-semibold border",
+  "transition-all duration-150",
+  "disabled:opacity-40 disabled:cursor-not-allowed",
+].join(" ");
+
 function ClaudeBriefButton() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -215,10 +224,10 @@ function ClaudeBriefButton() {
       onClick={handleDownload}
       disabled={loading}
       title="Download Claude briefing — paste at the start of a new Claude session"
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
+      className={cn(BTN, "bg-indigo-500/10 border-indigo-500/25 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500/40")}
     >
       {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-      {loading ? "Generating..." : "Claude Brief"}
+      {loading ? "Generating…" : "Claude Brief"}
     </button>
   );
 }
@@ -318,19 +327,21 @@ export function EmergencyHeaderButtons() {
           <button
             onClick={handleFleetResume}
             disabled={fleetResume.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-green-500/20 border border-green-500/40 text-green-400 hover:bg-green-500/30 transition animate-pulse"
+            title="Resume all bots"
+            className={cn(BTN, "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-500/50 animate-pulse")}
           >
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            RESUME FLEET
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Resume Fleet
           </button>
         ) : (
           <button
             onClick={handleFleetHalt}
             disabled={fleetHalt.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition"
+            title="Halt all bots immediately"
+            className={cn(BTN, "bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20 hover:border-red-500/40")}
           >
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            HALT FLEET
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+            Halt Fleet
           </button>
         )}
 
@@ -338,65 +349,40 @@ export function EmergencyHeaderButtons() {
           onClick={() => setShowRebalanceModal(true)}
           disabled={isRebalancing}
           title="Force Rebalance — close all positions and re-run pipeline"
-          className={cn(
-            "flex items-center justify-center gap-1.5 rounded-md",
-            "text-[10px] font-semibold tracking-wide",
-            "bg-orange-950/40 border border-orange-800/40 text-orange-400",
-            "hover:bg-orange-600 hover:border-orange-500 hover:text-white",
-            "transition-all duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
-          )}
+          className={cn(BTN, "bg-orange-500/10 border-orange-500/25 text-orange-400 hover:bg-orange-500/20 hover:border-orange-500/40")}
         >
           {isRebalancing
-            ? <RefreshCw className="h-3.5 w-3.5 sm:h-3 sm:w-3 animate-spin" />
-            : <RotateCcw className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+            ? <RefreshCw className="h-3 w-3 animate-spin" />
+            : <RotateCcw className="h-3 w-3" />
           }
-          <span className="hidden md:inline">Rebalance</span>
+          Rebalance
         </button>
 
         <button
           onClick={() => setShowLiquidateModal(true)}
           disabled={liquidate.isPending}
           title="Emergency Liquidate All"
-          className={cn(
-            "group flex items-center justify-center gap-1.5 rounded-md",
-            "text-[10px] font-bold tracking-widest uppercase",
-            "bg-red-950/60 border border-red-800/60 text-red-400",
-            "hover:bg-red-600 hover:border-red-500 hover:text-white",
-            "transition-all duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            "ring-0 hover:ring-1 hover:ring-red-400/40",
-            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
-          )}
+          className={cn(BTN, "bg-red-950/50 border-red-700/50 text-red-400 hover:bg-red-600 hover:border-red-500 hover:text-white")}
         >
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-70" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
           </span>
-          <ShieldOff className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
-          <span className="hidden md:inline">Liquidate All</span>
+          <ShieldOff className="h-3 w-3" />
+          Liquidate All
         </button>
 
         <button
           onClick={() => setShowRestartModal(true)}
           disabled={restart.isPending}
           title="Restart System"
-          className={cn(
-            "flex items-center justify-center gap-1.5 rounded-md",
-            "text-[10px] font-semibold tracking-wide",
-            "bg-zinc-800/80 border border-zinc-700/60 text-zinc-400",
-            "hover:bg-amber-900/40 hover:border-amber-600/50 hover:text-amber-300",
-            "transition-all duration-150",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            "min-h-[44px] min-w-[44px] px-2.5 py-1.5 sm:px-2.5"
-          )}
+          className={cn(BTN, "bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:bg-amber-900/30 hover:border-amber-700/50 hover:text-amber-300")}
         >
           {restart.isPending
-            ? <RefreshCw className="h-3.5 w-3.5 sm:h-3 sm:w-3 animate-spin" />
-            : <Zap className="h-3.5 w-3.5 sm:h-3 sm:w-3" />
+            ? <RefreshCw className="h-3 w-3 animate-spin" />
+            : <Zap className="h-3 w-3" />
           }
-          <span className="hidden md:inline">Restart</span>
+          Restart
         </button>
       </div>
     </>

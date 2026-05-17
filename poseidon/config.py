@@ -17,7 +17,7 @@ PAPER_FEE_PCT          = 0.0026     # Kraken taker fee per leg
 LOOP_SLEEP_SECONDS = 900   # 15-minute cycle
 
 # ── Universe ──────────────────────────────────────────────────────────────────
-SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
+SYMBOLS = ["BTC/USD", "ETH/USD"]   # was 3 — SOL removed (drag in 6mo backtest)
 
 # ── Data fetch ────────────────────────────────────────────────────────────────
 OHLCV_TIMEFRAME    = "4h"
@@ -53,7 +53,7 @@ MEANREV_BB_STD         = 2.0
 MEANREV_RSI_LONG_MAX   = 30    # was 25 — slightly wider long entry zone
 MEANREV_RSI_SHORT_MIN  = 70    # was 75 — slightly wider short entry zone
 MEANREV_VOLUME_MULT    = 1.2
-MEANREV_ATR_STOP_MULT  = 2.0
+MEANREV_ATR_STOP_MULT  = 1.5   # was 2.0 — tighter stop improves breakeven math
 MEANREV_TP_PCT         = 0.04  # 4% take profit
 MEANREV_MAX_HOLD_HOURS = 72    # 3 days
 

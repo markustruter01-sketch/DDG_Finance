@@ -27,7 +27,7 @@ from strategy import (
 # =========================================================================
 # CONSTANTS
 # =========================================================================
-LOOKBACK_DAYS    = 180
+LOOKBACK_DAYS    = 730   # was 180 — 2yr for regime coverage
 TIMEFRAME        = "4h"                        # 4h candles
 BARS_PER_DAY     = 6                           # 4h bars per day
 STARTING_EQUITY  = cfg.PAPER_STARTING_BALANCE

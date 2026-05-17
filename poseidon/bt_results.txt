@@ -1,0 +1,43 @@
+=== BACKTEST: Poseidon Regime-Adaptive Strategy ===
+Universe: ['BTC/USD', 'ETH/USD']
+Lookback: 730 days | timeframe: 4h
+Starting equity: $95,175.84 | Fee: 0.26% | Slippage: 0.10%
+
+Fetching 730 days of 4h data from okx...
+  BTC/USDT (live: BTC/USD)... 4380 bars
+  ETH/USDT (live: ETH/USD)... 4380 bars
+
+Aligned series: 4380 bars (~730 days, ~24.3 months)
+
+============================================================
+
+Total trades:     57
+Final equity:     $83,485.46
+Total P&L:        $-11,690.38  (-12.28%)
+Max drawdown:     14.55%
+Period:           ~730 days (~24.3 months)
+Win rate:         50.9%  (29W / 28L)
+Profit factor:    0.61
+Avg win:          $453.51
+Avg loss:         $-773.28
+Expectancy/trade: $-205.09
+Best trade:       $924.44
+Worst trade:      $-1,438.83
+Avg hold (hrs):   32.1
+
+  --- Per-symbol ---
+    BTC/USD: 27 trades, 12/27 wins (44%), P&L $-5,031.98
+    ETH/USD: 30 trades, 17/30 wins (56%), P&L $-3,468.05
+
+  --- By regime mode ---
+    breakout: no trades
+    meanrev: 57 trades  WR=50.9%  PF=0.61  P&L=$-8,500.03
+
+  --- Exit reasons ---
+    stop_loss                     :  26 trades, avg $-813.12
+    mid_band_reversion            :  24 trades, avg $340.92
+    take_profit                   :   6 trades, avg $827.63
+    time_stop                     :   1 trades, avg $-506.88
+============================================================
+
+poseidon_control.json status: bot_paused=True ✓

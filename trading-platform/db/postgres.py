@@ -606,6 +606,20 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
+    # One-time seed — bot_portfolio rows for 4 wild crypto bots at $100k each.
+    # Strip in publish #2 after this runs once.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for bot_id in ("listing_pump", "event_trader", "depeg_hunter", "memecoin_velocity"):
+                    cur.execute("""
+                        INSERT INTO bot_portfolio (bot_id, equity_usd, cash_usd, positions, updated_at)
+                        VALUES (%s, 100000.0, 100000.0, '[]'::jsonb, NOW())
+                        ON CONFLICT (bot_id) DO NOTHING
+                    """, (bot_id,))
+        logger.info("DB | wild bot bot_portfolio rows seeded ($100k each)")
+    except Exception as exc:
+        logger.warning(f"DB | wild bot portfolio seed failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

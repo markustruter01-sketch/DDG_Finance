@@ -606,53 +606,6 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
-    # One-time migration — create crypto_signals + crypto_price_cache tables.
-    # Strip in publish #2 after this runs once.
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS crypto_signals (
-                      id          SERIAL PRIMARY KEY,
-                      signal_type TEXT NOT NULL,
-                      asset       TEXT NOT NULL,
-                      severity    TEXT DEFAULT 'medium',
-                      detected_at TIMESTAMPTZ DEFAULT NOW(),
-                      payload     JSONB,
-                      processed   BOOLEAN DEFAULT FALSE,
-                      processed_at TIMESTAMPTZ
-                    )
-                """)
-                cur.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_crypto_signals_unprocessed
-                    ON crypto_signals (signal_type, processed, detected_at)
-                    WHERE processed = FALSE
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS crypto_price_cache (
-                      symbol    TEXT PRIMARY KEY,
-                      price_usd DOUBLE PRECISION NOT NULL,
-                      updated_at TIMESTAMPTZ DEFAULT NOW()
-                    )
-                """)
-        logger.info("DB | crypto signals tables ensured")
-    except Exception as exc:
-        logger.warning(f"DB | crypto signals tables failed (non-fatal): {exc}")
-
-    # One-time seed — bots_state rows for 4 new wild bots.
-    # Strip in publish #2.
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                for bot_id in ("listing_pump", "event_trader", "depeg_hunter", "memecoin_velocity"):
-                    cur.execute("""
-                        INSERT INTO bots_state (bot_id, status, last_heartbeat, error_message)
-                        VALUES (%s, 'paused', NULL, '')
-                        ON CONFLICT (bot_id) DO NOTHING
-                    """, (bot_id,))
-        logger.info("DB | wild bot bots_state rows seeded")
-    except Exception as exc:
-        logger.warning(f"DB | wild bot seed failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

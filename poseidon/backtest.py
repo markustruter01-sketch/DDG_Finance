@@ -106,12 +106,40 @@ class BtPosition:
         }
 
 # =========================================================================
+# HELPERS
+# =========================================================================
+
+def _precompute_atr_series(bars: List[List], period: int) -> List[float]:
+    """Incremental Wilder's ATR — O(n) total, avoids per-bar recompute."""
+    n = len(bars)
+    atrs = [0.0] * n
+    if n < period + 1:
+        return atrs
+    trs = []
+    for j in range(1, n):
+        h, lo, pc = bars[j][2], bars[j][3], bars[j - 1][4]
+        trs.append(max(h - lo, abs(h - pc), abs(lo - pc)))
+    atr_val = sum(trs[:period]) / period
+    atrs[period] = atr_val
+    for j in range(period, len(trs)):
+        atr_val = (atr_val * (period - 1) + trs[j]) / period
+        atrs[j + 1] = atr_val
+    return atrs
+
+
+# =========================================================================
 # INNER SIMULATION
 # =========================================================================
 
 def run_backtest(histories: Dict[str, List[List]]) -> Tuple[float, List[dict], float, int]:
     min_len = min(len(b) for b in histories.values())
     aligned = {sym: bars[-min_len:] for sym, bars in histories.items()}
+
+    # Pre-compute ATR series once per symbol — O(n) each
+    atr_precomputed = {
+        sym: _precompute_atr_series(bars, cfg.ADX_PERIOD)
+        for sym, bars in aligned.items()
+    }
 
     equity      = STARTING_EQUITY
     peak_equity = STARTING_EQUITY
@@ -183,17 +211,9 @@ def run_backtest(histories: Dict[str, List[List]]) -> Tuple[float, List[dict], f
             lows_4h    = [b[3] for b in window]
             volumes_4h = [b[5] for b in window]
 
-            # Build ATR history for regime classifier percentile
-            atr_start = max(0, i - ATR_HISTORY_BARS)
-            atr_window = bars[atr_start: i + 1]
-            atr_history: List[float] = []
-            for j in range(cfg.ADX_PERIOD + 1, len(atr_window)):
-                c  = [b[4] for b in atr_window[:j + 1]]
-                h  = [b[2] for b in atr_window[:j + 1]]
-                lo = [b[3] for b in atr_window[:j + 1]]
-                a  = calculate_atr(h, lo, c, cfg.ADX_PERIOD)
-                if a > 0:
-                    atr_history.append(a)
+            # ATR history — slice from pre-computed series (O(k), not O(n²))
+            hist_start  = max(0, i - ATR_HISTORY_BARS)
+            atr_history = [a for a in atr_precomputed[live_sym][hist_start:i] if a > 0]
 
             signal = evaluate_entry(
                 live_sym, closes_4h, highs_4h, lows_4h, volumes_4h,

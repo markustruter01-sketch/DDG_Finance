@@ -27,10 +27,10 @@ OHLCV_LIMIT_1H     = 540   # ~22 days of 1h candles
 
 # ── REGIME CLASSIFIER (ADX + ATR percentile) ──────────────────────────────────
 ADX_PERIOD          = 14
-ADX_TRENDING_MIN    = 25   # ADX > 25 → trending regime
-ADX_RANGING_MAX     = 20   # ADX < 20 → ranging regime
-ATR_PERCENTILE_HIGH = 40   # ATR > 40th percentile → elevated vol
-ATR_PERCENTILE_LOW  = 60   # ATR < 60th percentile → compressed vol
+ADX_TRENDING_MIN    = 999  # effectively disabled — never enter TRENDING
+ADX_RANGING_MAX     = 25   # was 20 — accepts moderate-ADX as ranging
+ATR_PERCENTILE_HIGH = 40   # ATR > 40th percentile → elevated vol (unused now)
+ATR_PERCENTILE_LOW  = 70   # was 60 — allows slightly elevated vol as ranging
 ATR_BASELINE_WINDOW = 90   # days of history for ATR percentile baseline
 
 # ── BREAKOUT MODE (trending regime) ──────────────────────────────────────────
@@ -50,8 +50,8 @@ BREAKOUT_MAX_HOLD_HOURS    = 120    # 5 days
 # ── MEAN REVERSION MODE (ranging regime) ──────────────────────────────────────
 MEANREV_BB_PERIOD      = 20
 MEANREV_BB_STD         = 2.0
-MEANREV_RSI_LONG_MAX   = 25    # tight RSI extreme for entries
-MEANREV_RSI_SHORT_MIN  = 75
+MEANREV_RSI_LONG_MAX   = 30    # was 25 — slightly wider long entry zone
+MEANREV_RSI_SHORT_MIN  = 70    # was 75 — slightly wider short entry zone
 MEANREV_VOLUME_MULT    = 1.2
 MEANREV_ATR_STOP_MULT  = 2.0
 MEANREV_TP_PCT         = 0.04  # 4% take profit

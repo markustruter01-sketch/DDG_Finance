@@ -187,10 +187,11 @@ def simulate_event(event: dict, equity: float) -> dict:
     for ts_ms, price in prices:
         ts = datetime.fromtimestamp(ts_ms / 1000)
 
-        if not in_position and price < cfg.REPEG_THRESHOLD - 0.001:
-            if price < 0.98:
+        DEPEG_ENTRY_THRESHOLD = 0.985
+        if not in_position and price < DEPEG_ENTRY_THRESHOLD:
+            if price < 0.95:
                 severity = "extreme"
-            elif price < 0.99:
+            elif price < 0.97:
                 severity = "high"
             else:
                 severity = "medium"
@@ -248,7 +249,7 @@ def main():
     print(f"=== Depeg Hunter Historical Backtest ===")
     print(f"Starting equity: ${STARTING_EQUITY:,.2f}")
     print(f"Fee: {FEE_PCT*100:.2f}%  |  Slippage: {SLIPPAGE_PCT*100:.2f}%")
-    print(f"Entry threshold: price < ${cfg.REPEG_THRESHOLD - 0.001:.3f}")
+    print(f"Entry threshold: price < $0.985")
 
     equity  = STARTING_EQUITY
     results = []

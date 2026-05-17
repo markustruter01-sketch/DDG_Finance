@@ -13,9 +13,12 @@ import sys
 from datetime import datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _HERE)
-sys.path.insert(0, os.path.join(_HERE, '..', 'crypto-signals'))
+# Insert in reverse priority order so highest-priority (_HERE) ends up at index 0.
+# This prevents crypto-signals/db_utils.py or trading-platform/config/__init__.py
+# from shadowing event-trader's own modules.
 sys.path.insert(0, os.path.join(_HERE, '..', 'trading-platform'))
+sys.path.insert(0, os.path.join(_HERE, '..', 'crypto-signals'))
+sys.path.insert(0, _HERE)
 
 import config as cfg
 import strategy

@@ -8,12 +8,18 @@ import os
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, '..', 'crypto-signals'))
+_CS_PATH = os.path.normpath(os.path.join(_HERE, '..', 'crypto-signals'))
+if _CS_PATH not in sys.path:
+    sys.path.append(_CS_PATH)  # append, not insert(0), to avoid shadowing event-trader modules
 
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict
 from http_client import RateLimitedClient
-from config import COINGECKO_BASE, COINGECKO_MAX_RPM
+
+# Constants from crypto-signals/config.py — inlined to avoid sys.path collision
+# with trading-platform/config/__init__.py when both are on sys.path.
+COINGECKO_BASE    = "https://api.coingecko.com/api/v3"
+COINGECKO_MAX_RPM = 25
 
 _http = RateLimitedClient()
 

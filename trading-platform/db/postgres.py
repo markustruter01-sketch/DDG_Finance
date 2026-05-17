@@ -621,6 +621,23 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | wild bot portfolio seed failed (non-fatal): {exc}")
 
+    # One-time cleanup — remove poseidon_momentum + kraken_trend from bot tables.
+    # Will be stripped in publish #2 after this runs once.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM bot_portfolio
+                    WHERE bot_id IN ('poseidon_momentum', 'kraken_trend')
+                """)
+                cur.execute("""
+                    DELETE FROM bots_state
+                    WHERE bot_id IN ('poseidon_momentum', 'kraken_trend')
+                """)
+        logger.info("DB | retired poseidon_momentum + kraken_trend from bot tables")
+    except Exception as exc:
+        logger.warning(f"DB | retirement cleanup failed (non-fatal): {exc}")
+
 
 def insert_post_mortem(
     ticker: str,

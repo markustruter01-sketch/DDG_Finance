@@ -1,7 +1,7 @@
 """
 config.py — Kraken Current Bot Configuration
-Bot #8: Trend Following / Time-Series Momentum on Kraken
-$100,000 paper capital | 4-hour cycle
+Bot #8: Mean Reversion — BB(20,2σ) + RSI confirmation
+$100,000 paper capital | 15-minute cycle
 """
 from __future__ import annotations
 import os
@@ -9,65 +9,73 @@ import os
 BOT_ID = "kraken-current"
 DISPLAY_NAME = "Kraken Current"
 DB_ID = 8
-STRATEGY_TYPE = "trend_following"
-STRATEGY_LABEL = "Trend Following"
+STRATEGY_TYPE = "mean_reversion"
+STRATEGY_LABEL = "Mean Reversion"
 PAPER_STARTING_BALANCE = 100_000.0
 PAPER_FEE_PCT = 0.0026
-LOOP_SLEEP_SECONDS = 14400  # 4 hours
+LOOP_SLEEP_SECONDS = 900   # 15-minute cycle (was 14400)
 
 # ── Asset universe ────────────────────────────────────────────────────────────
-SYMBOLS = [
-    "BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD",
-    "ADA/USD", "AVAX/USD", "DOT/USD", "LINK/USD", "LTC/USD",
-]
+SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD"]
 
-# ── EMA crossover parameters ──────────────────────────────────────────────────
-EMA_FAST = 20     # ~3.3 days on 4h candles
-EMA_SLOW = 100    # ~16.7 days on 4h candles
-OHLCV_TIMEFRAME = "4h"
-OHLCV_LIMIT = 200  # enough for EMA_SLOW + buffer
+# ── Data fetch ────────────────────────────────────────────────────────────────
+OHLCV_TIMEFRAME = "1h"     # was "4h"
+OHLCV_LIMIT = 200          # ~8 days of 1h candles for BB calc
 
-# ── ADX trend strength ────────────────────────────────────────────────────────
-ADX_PERIOD = 20
-ADX_ENTRY_MIN = 25      # minimum ADX to enter
-ADX_EXIT_MIN = 20       # exit if ADX drops below this
-ADX_STRONG = 35         # full position size above this
-ADX_VERY_STRONG = 50    # trail stop immediately above this
+# ── Bollinger Band parameters ─────────────────────────────────────────────────
+BB_PERIOD = 20             # SMA window for middle band
+BB_STD_DEV = 2.0           # standard deviation multiplier
 
-# ── Hurst exponent ────────────────────────────────────────────────────────────
-HURST_MIN = 0.5   # must be > 0.5 (trending) — opposite of mean reversion bots
+# ── RSI confirmation ──────────────────────────────────────────────────────────
+RSI_PERIOD = 14
+RSI_LONG_MAX = 30          # only go long if RSI < 30 (oversold)
+RSI_SHORT_MIN = 70         # only short if RSI > 70 (overbought)
 
-# ── Momentum confirmation ─────────────────────────────────────────────────────
-MOMENTUM_DAYS = 10  # 10-day return for direction confirmation
+# ── Volume filter ─────────────────────────────────────────────────────────────
+VOLUME_MA_PERIOD = 20
+VOLUME_MIN_MULT = 1.2      # entry volume must be >= 1.2x rolling avg
 
-# ── VPIN ─────────────────────────────────────────────────────────────────────
-VPIN_ENTRY_BLOCK = 0.88     # block entry if VPIN above this
-VPIN_EXTREME_EXIT = 0.95    # emergency exit if VPIN spikes above this
+# ── Risk + sizing ─────────────────────────────────────────────────────────────
+RISK_PER_TRADE = 0.02      # 2% of equity per trade
+ATR_PERIOD = 14
+ATR_STOP_MULTIPLIER = 2.0  # stop loss = entry ± 2 * ATR
+MAX_POSITION_FRACTION = 0.20
+MAX_POSITIONS = 3          # one per symbol max
 
-# ── Position sizing ───────────────────────────────────────────────────────────
-RISK_PER_TRADE = 0.02       # 2% of equity per trade
-ATR_STOP_MULTIPLIER = 2.0   # stop placed 2x ATR from entry
-ATR_TRAIL_TRIGGER = 1.5     # trail triggers at 1.5x ATR profit
-MAX_POSITION_FRACTION = 0.20  # cap at 20% of equity per position
-MAX_POSITIONS = 5            # maximum simultaneous positions
+# ── Take profit ───────────────────────────────────────────────────────────────
+TAKE_PROFIT_PCT = 0.05     # 5% — mean revert target
 
-# ── ADX-based position scaling ────────────────────────────────────────────────
-ADX_SCALE_WEAK = 0.70    # ADX 25-35: 70% of calculated size
-ADX_SCALE_STRONG = 1.00  # ADX 35-50: 100%
-ADX_SCALE_VERY_STRONG = 1.00  # ADX 50+: 100% but trail from entry
+# ── Exit thresholds ───────────────────────────────────────────────────────────
+EXIT_AT_MID_BAND = True    # exit when price returns to BB middle band
+MAX_HOLD_HOURS = 48        # force exit if no resolution after 2 days
+MAX_HOLD_DAYS = 2          # 48h max hold (days form for compat)
 
-# ── Exit conditions ───────────────────────────────────────────────────────────
-MAX_HOLD_DAYS = 21  # maximum position age
+# ── Backwards compat — kept for main.py imports ───────────────────────────────
+EMA_FAST = 20              # unused by strategy
+EMA_SLOW = 100             # unused by strategy
+ADX_PERIOD = 14            # unused
+ADX_ENTRY_MIN = 0          # disabled (was 25)
+ADX_EXIT_MIN = 0           # disabled (was 20)
+ADX_STRONG = 999           # disabled
+ADX_VERY_STRONG = 999      # disabled
+ADX_SCALE_WEAK = 1.0       # disabled (flat scaling)
+ADX_SCALE_STRONG = 1.0     # disabled
+ADX_SCALE_VERY_STRONG = 1.0
+HURST_MIN = 0              # disabled
+MOMENTUM_DAYS = 10         # unused
+VPIN_ENTRY_BLOCK = 999     # disabled
+VPIN_EXTREME_EXIT = 999    # disabled
+ATR_TRAIL_TRIGGER = 999    # disabled — mean reversion doesn't trail
 
-# ── Regime multipliers ────────────────────────────────────────────────────────
-REGIME_BEAR_SHORT_MULT = 1.2   # scale up shorts in bear
-REGIME_BULL_LONG_MULT = 1.2    # scale up longs in bull
-REGIME_SIDEWAYS_MULT = 0.7     # scale down in sideways/crypto regimes
+# ── Regime multipliers (kept for compat) ──────────────────────────────────────
+REGIME_BEAR_SHORT_MULT = 1.0
+REGIME_BULL_LONG_MULT = 1.0
+REGIME_SIDEWAYS_MULT = 1.0
 
 # ── Circuit breaker ───────────────────────────────────────────────────────────
-CB_DRAWDOWN_PCT = 0.08      # 8% drawdown from starting capital
-CB_WINDOW_DAYS = 7          # within any 7-day window
-CB_PAUSE_HOURS = 48         # pause duration
+CB_DRAWDOWN_PCT = 0.08
+CB_WINDOW_DAYS = 7
+CB_PAUSE_HOURS = 48
 
 # ── Kraken exchange ───────────────────────────────────────────────────────────
 KRAKEN_API_KEY = os.environ.get("KRAKEN_API_KEY", "")

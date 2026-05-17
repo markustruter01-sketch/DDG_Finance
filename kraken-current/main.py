@@ -36,6 +36,7 @@ from config import (
     HURST_MIN, MOMENTUM_DAYS, VPIN_ENTRY_BLOCK, VPIN_EXTREME_EXIT,
     RISK_PER_TRADE, ATR_STOP_MULTIPLIER, ATR_TRAIL_TRIGGER,
     MAX_POSITION_FRACTION, MAX_POSITIONS, MAX_HOLD_DAYS,
+    BB_PERIOD, TAKE_PROFIT_PCT, MAX_HOLD_HOURS,
     ADX_SCALE_WEAK, ADX_SCALE_STRONG, ADX_SCALE_VERY_STRONG,
     REGIME_BEAR_SHORT_MULT, REGIME_BULL_LONG_MULT, REGIME_SIDEWAYS_MULT,
     CB_DRAWDOWN_PCT, CB_WINDOW_DAYS, CB_PAUSE_HOURS,
@@ -46,6 +47,7 @@ from trend_engine import (
     calculate_ema, calculate_atr, calculate_adx, hurst_exponent,
     momentum_return, calculate_position_size, evaluate_trend_signal,
     update_trailing_stop, calculate_vpin,
+    check_mean_reversion_exit,
 )
 from paper_portfolio import TrendPosition, PaperPortfolio
 from db_utils import (
@@ -188,7 +190,7 @@ def fetch_current_price(symbol: str) -> float | None:
 # ── Position exit management ──────────────────────────────────────────────────
 
 def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
-    """Check all open positions for exit conditions."""
+    """Check all open positions for mean reversion exit conditions."""
     for sym, pos in list(portfolio.positions.items()):
         price = current_prices.get(sym)
         if not price:
@@ -196,36 +198,36 @@ def check_exits(current_prices: dict[str, float], ohlcv_data: dict[str, tuple]):
 
         closes, highs, lows, _, _vol = ohlcv_data.get(sym, ([], [], [], [], []))
         atr = calculate_atr(highs, lows, closes) if closes else pos.stop_distance / ATR_STOP_MULTIPLIER
-        adx = calculate_adx(highs, lows, closes) if closes else 0
 
-        # Update trailing stop
-        pos.update_stop(price, atr, ATR_TRAIL_TRIGGER)
+        # BB mid band for mean reversion target
+        bb_mid = (
+            sum(closes[-BB_PERIOD:]) / BB_PERIOD
+            if len(closes) >= BB_PERIOD
+            else (closes[-1] if closes else price)
+        )
+        hours_held = pos.holding_days() * 24
 
         reason = None
 
-        # Stop hit
+        # Hard stop (fixed at entry ± stop_distance — no trailing for mean reversion)
         if pos.is_stop_hit(price):
-            reason = "trailing_stop"
+            reason = "stop_loss"
 
-        # EMA crossover reversed
-        if closes and len(closes) >= EMA_SLOW:
-            ema_f = calculate_ema(closes, EMA_FAST)
-            ema_s = calculate_ema(closes, EMA_SLOW)
-            if pos.direction == "long" and ema_f < ema_s:
-                reason = "ema_reversal"
-            elif pos.direction == "short" and ema_f > ema_s:
-                reason = "ema_reversal"
-
-        # ADX weakening
-        if adx > 0 and adx < ADX_EXIT_MIN:
-            reason = "adx_weak"
-
-        # Maximum hold
-        if pos.holding_days() >= MAX_HOLD_DAYS:
-            reason = "timeout_21d"
-
-        # VPIN extreme (use a proxy — we don't have VPIN in this standalone bot)
-        # This would be connected to the VPIN infrastructure in a full integration
+        # Mean reversion exits: mid-band target, take profit, 48h timeout
+        if not reason:
+            should_exit, mr_reason = check_mean_reversion_exit(
+                direction=pos.direction,
+                entry_price=pos.entry_price,
+                current_price=price,
+                bb_mid=bb_mid,
+                atr=atr,
+                hours_held=hours_held,
+                stop_distance=pos.stop_distance,
+                take_profit_pct=TAKE_PROFIT_PCT,
+                max_hold_hours=MAX_HOLD_HOURS,
+            )
+            if should_exit:
+                reason = mr_reason
 
         if reason:
             trade = portfolio.close_position(sym, price, reason)

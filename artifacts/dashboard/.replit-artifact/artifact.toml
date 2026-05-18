@@ -139,3 +139,18 @@ kind = "web"
 
   [services.env]
   PORT = "8097"
+
+  [[services]]
+  name = "listing-pump"
+  localPort = 0
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 listing-pump/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 listing-pump/main.py"]
+
+  [services.env]
+  PORT = "8098"

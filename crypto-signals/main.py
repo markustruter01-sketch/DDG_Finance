@@ -6,6 +6,7 @@ from config import (
     LISTING_POLL_INTERVAL, DEPEG_POLL_INTERVAL, MEMECOIN_POLL_INTERVAL,
     EVENT_POLL_INTERVAL, PRICE_CACHE_INTERVAL, LOOP_SLEEP_SECONDS, SERVICE_NAME,
     COINGECKO_BASE, COINGECKO_MAX_RPM,
+    COINBASE_LISTINGS, BINANCE_LISTINGS,
 )
 from http_client import RateLimitedClient
 from price_cache import update_price as _cache_update, get_price
@@ -31,9 +32,119 @@ SEVERITY_HIGH    = 0.97
 SEVERITY_EXTREME = 0.95
 
 
+import re
+from bs4 import BeautifulSoup
+
+_seen_listings: set = set()
+_listings_initialized = False
+
+LISTING_KEYWORDS = ["listing", "listed", "launches", "announcing support", "now trading"]
+_ASSET_PATTERN = re.compile(r'\b([A-Z]{2,8})\b')
+_STRIP_WORDS = re.compile(
+    r"\b(USD|USDT|USDC|BTC|ETH|THE|FOR|ARE|WAS|AND|NOW|ON|TO|WILL|IS)\b",
+    re.I,
+)
+
+
+def _extract_assets_from_title(title: str) -> list:
+    """Extract candidate token tickers from announcement title."""
+    title = _STRIP_WORDS.sub("", title)
+    matches = _ASSET_PATTERN.findall(title)
+    return [m for m in matches if 2 <= len(m) <= 8 and m not in ("THE", "FOR", "ARE", "WAS")]
+
+
+def _scrape_coinbase_listings() -> list:
+    """Scrape coinbase.com/blog/category/listing for recent announcements."""
+    try:
+        resp = _http.get("coinbase", COINBASE_LISTINGS, max_rpm=10)
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.text, "html.parser")
+        listings = []
+        for article in soup.find_all(["article", "a"], limit=20):
+            title_el = article.find(["h2", "h3", "h4"])
+            if not title_el:
+                continue
+            title = title_el.get_text(strip=True)
+            if not any(kw in title.lower() for kw in LISTING_KEYWORDS):
+                continue
+            assets = _extract_assets_from_title(title)
+            if not assets:
+                continue
+            listings.append({
+                "exchange": "coinbase",
+                "title": title,
+                "assets": assets,
+                "url": COINBASE_LISTINGS,
+            })
+        return listings
+    except Exception as e:
+        logger.error(f"coinbase scrape error: {e}")
+        return []
+
+
+def _scrape_binance_listings() -> list:
+    """Scrape binance.com/en/support/announcement/c-48 for recent listings."""
+    try:
+        resp = _http.get("binance", BINANCE_LISTINGS, max_rpm=10)
+        if resp.status_code != 200:
+            return []
+        soup = BeautifulSoup(resp.text, "html.parser")
+        listings = []
+        for link in soup.find_all("a", limit=30):
+            title = link.get_text(strip=True)
+            if not title or len(title) < 10:
+                continue
+            if not any(kw in title.lower() for kw in LISTING_KEYWORDS):
+                continue
+            assets = _extract_assets_from_title(title)
+            if not assets:
+                continue
+            listings.append({
+                "exchange": "binance",
+                "title": title,
+                "assets": assets,
+                "url": BINANCE_LISTINGS,
+            })
+        return listings
+    except Exception as e:
+        logger.error(f"binance scrape error: {e}")
+        return []
+
+
 def detect_listings():
-    """Stub — implemented in Session 4."""
-    pass
+    """Scan exchange announcement pages for new listings, emit signals."""
+    global _listings_initialized
+    coinbase = _scrape_coinbase_listings()
+    binance  = _scrape_binance_listings()
+    all_listings = coinbase + binance
+
+    if not _listings_initialized:
+        for listing in all_listings:
+            for asset in listing["assets"]:
+                _seen_listings.add(f"{listing['exchange']}:{asset}")
+        _listings_initialized = True
+        logger.info(f"listings initialized: {len(_seen_listings)} pre-existing seen")
+        return
+
+    for listing in all_listings:
+        for asset in listing["assets"]:
+            key = f"{listing['exchange']}:{asset}"
+            if key in _seen_listings:
+                continue
+            _seen_listings.add(key)
+            write_signal(
+                signal_type="listing_announced",
+                asset=asset,
+                severity="high",
+                payload={
+                    "exchange": listing["exchange"],
+                    "title": listing["title"],
+                    "tier": "tier1",
+                    "url": listing["url"],
+                },
+            )
+            logger.warning(f"NEW LISTING: {listing['exchange']} {asset} — {listing['title'][:60]}")
 
 
 def detect_depegs():

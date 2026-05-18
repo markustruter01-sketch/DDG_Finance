@@ -1,5 +1,5 @@
 {
-  "cash_usd": 92000.0,
+  "cash_usd": 76000.0,
   "positions": {
     "spacex4200": {
       "units": 1354788.6699023535,
@@ -9,6 +9,24 @@
       "exchange": "coingecko",
       "listing_title": "CoinGecko listed: SPACEX4200 (SPCX)",
       "entry_time": "2026-05-18T06:27:10.759675"
+    },
+    "jurassic-finance": {
+      "units": 308313.08422920766,
+      "entry_price": 0.02594765,
+      "current_price": 0.02594765,
+      "peak_price": 0.02594765,
+      "exchange": "coingecko",
+      "listing_title": "CoinGecko listed: Jurassic Finance (RAWR)",
+      "entry_time": "2026-05-18T07:26:11.907263"
+    },
+    "manifesting": {
+      "units": 1345372.1719856516,
+      "entry_price": 0.00594631,
+      "current_price": 0.00594631,
+      "peak_price": 0.00594631,
+      "exchange": "coingecko",
+      "listing_title": "CoinGecko listed: Manifesting (MANIFEST)",
+      "entry_time": "2026-05-18T07:56:12.838509"
     }
   },
   "trade_history": []

@@ -154,3 +154,18 @@ kind = "web"
 
   [services.env]
   PORT = "8098"
+
+  [[services]]
+  name = "memecoin-velocity"
+  localPort = 0
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 memecoin-velocity/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 memecoin-velocity/main.py"]
+
+  [services.env]
+  PORT = "8099"

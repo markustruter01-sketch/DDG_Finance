@@ -5,7 +5,7 @@ import requests
 from config import (
     LISTING_POLL_INTERVAL, DEPEG_POLL_INTERVAL, MEMECOIN_POLL_INTERVAL,
     EVENT_POLL_INTERVAL, PRICE_CACHE_INTERVAL, LOOP_SLEEP_SECONDS, SERVICE_NAME,
-    COINGECKO_BASE, COINGECKO_MAX_RPM,
+    COINGECKO_BASE, COINGECKO_MAX_RPM, REDDIT_MAX_RPM,
     COINBASE_PRODUCTS_API, BINANCE_EXCHANGE_INFO, COINGECKO_COINS_LIST,
 )
 from http_client import RateLimitedClient
@@ -204,9 +204,159 @@ def detect_depegs():
         logger.warning(f"DEPEG DETECTED: {stable} at ${price:.4f} (severity={severity})")
 
 
+MEMECOIN_UNIVERSE = [
+    "DOGE", "SHIB", "PEPE", "WIF", "BONK", "FLOKI", "MEME", "BRETT",
+    "POPCAT", "MEW", "TURBO", "DOGS", "NEIRO", "MOG", "PNUT", "GOAT",
+    "FARTCOIN", "ACT", "MOODENG", "BABYDOGE",
+]
+
+_trending_history: list = []
+TRENDING_CONSECUTIVE_REQUIRED = 2
+
+_reddit_mentions_history: dict = {}
+_last_signal_time: dict = {}
+COOLDOWN_HOURS = 24
+
+
+def _fetch_trending_coins() -> set:
+    """Fetch current top trending from CoinGecko, return set of symbols."""
+    try:
+        url = f"{COINGECKO_BASE}/search/trending"
+        resp = _http.get("coingecko", url, COINGECKO_MAX_RPM)
+        if resp.status_code != 200:
+            return set()
+        data = resp.json()
+        coins = data.get("coins", [])
+        return {c.get("item", {}).get("symbol", "").upper() for c in coins[:7]}
+    except Exception as e:
+        logger.error(f"trending fetch error: {e}")
+        return set()
+
+
+def _fetch_reddit_mention_count(symbol: str) -> int:
+    """Count occurrences of $symbol or symbol token in recent r/cryptocurrency posts."""
+    try:
+        url = "https://www.reddit.com/r/cryptocurrency/new.json?limit=100"
+        resp = _http.get("reddit", url, REDDIT_MAX_RPM,
+                         headers={"User-Agent": "crypto-signals/1.0"})
+        if resp.status_code != 200:
+            return 0
+        data = resp.json()
+        posts = data.get("data", {}).get("children", [])
+        count = 0
+        sym_upper = symbol.upper()
+        sym_dollar = f"${sym_upper}"
+        for post in posts:
+            text = (post["data"].get("title", "") + " " +
+                    post["data"].get("selftext", "")).upper()
+            if sym_dollar in text or f" {sym_upper} " in f" {text} ":
+                count += 1
+        return count
+    except Exception as e:
+        logger.error(f"reddit fetch error for {symbol}: {e}")
+        return 0
+
+
+def _check_price_volume_breakout(symbol: str) -> dict:
+    """Check if coin has new 30d high + volume 2x avg via Binance ccxt."""
+    try:
+        import ccxt
+        exchange = ccxt.binance({"enableRateLimit": True})
+        pair_attempts = [f"{symbol}/USDT", f"{symbol}/USD", f"1000{symbol}/USDT"]
+        bars = None
+        used_pair = None
+        for pair in pair_attempts:
+            try:
+                bars = exchange.fetch_ohlcv(pair, "1d", limit=35)
+                used_pair = pair
+                if bars:
+                    break
+            except Exception:
+                continue
+        if not bars or len(bars) < 30:
+            return {"valid": False, "reason": "no_data"}
+        closes  = [b[4] for b in bars]
+        volumes = [b[5] for b in bars]
+        current_price   = closes[-1]
+        prior_30d_high  = max(closes[:-1])
+        current_volume  = volumes[-1]
+        avg_volume      = sum(volumes[-8:-1]) / 7 if len(volumes) >= 8 else 1
+        return {
+            "valid": True,
+            "is_new_high": current_price > prior_30d_high,
+            "volume_ratio": current_volume / avg_volume if avg_volume > 0 else 0,
+            "current_price": current_price,
+            "pair": used_pair,
+        }
+    except Exception as e:
+        return {"valid": False, "reason": str(e)}
+
+
 def detect_memecoin_velocity():
-    """Stub — implemented in Session 5."""
-    pass
+    """Triple-gated memecoin breakout detection."""
+    import time as _t
+
+    # === Gate 1: CoinGecko trending ===
+    current_trending = _fetch_trending_coins()
+    _trending_history.append(current_trending)
+    if len(_trending_history) > 5:
+        _trending_history.pop(0)
+
+    if len(_trending_history) < TRENDING_CONSECUTIVE_REQUIRED:
+        return
+
+    recent_trending = _trending_history[-TRENDING_CONSECUTIVE_REQUIRED:]
+    consistently_trending = set.intersection(*recent_trending)
+    candidates = consistently_trending & set(MEMECOIN_UNIVERSE)
+    if not candidates:
+        return
+
+    logger.info(f"trending candidates: {candidates}")
+
+    for symbol in candidates:
+        last_signal = _last_signal_time.get(symbol, 0)
+        if _t.time() - last_signal < COOLDOWN_HOURS * 3600:
+            continue
+
+        # === Gate 2: Reddit mention velocity ===
+        mention_count = _fetch_reddit_mention_count(symbol)
+        history = _reddit_mentions_history.setdefault(symbol, [])
+        history.append((_t.time(), mention_count))
+        cutoff = _t.time() - 86400
+        history[:] = [(t, c) for t, c in history if t >= cutoff]
+        if len(history) < 3:
+            logger.info(f"{symbol}: insufficient reddit history ({len(history)} samples)")
+            continue
+        prior_counts = [c for t, c in history[:-1]]
+        avg_mentions = sum(prior_counts) / len(prior_counts) if prior_counts else 0
+        if mention_count < avg_mentions * 2 or mention_count < 3:
+            logger.info(f"{symbol}: reddit velocity too low (curr={mention_count} avg={avg_mentions:.1f})")
+            continue
+
+        # === Gate 3: Price/volume breakout ===
+        breakout = _check_price_volume_breakout(symbol)
+        if not breakout["valid"]:
+            logger.info(f"{symbol}: price/volume check failed ({breakout.get('reason')})")
+            continue
+        if not breakout["is_new_high"] or breakout["volume_ratio"] < 2.0:
+            logger.info(f"{symbol}: not breakout (new_high={breakout['is_new_high']}, vol={breakout['volume_ratio']:.2f}x)")
+            continue
+
+        # ALL THREE GATES PASSED — emit signal
+        _last_signal_time[symbol] = _t.time()
+        write_signal(
+            signal_type="memecoin_breakout",
+            asset=symbol,
+            severity="high",
+            payload={
+                "current_price": breakout["current_price"],
+                "pair": breakout["pair"],
+                "volume_ratio": breakout["volume_ratio"],
+                "reddit_mentions": mention_count,
+                "reddit_avg": avg_mentions,
+            },
+        )
+        logger.warning(f"MEMECOIN BREAKOUT: {symbol} @ ${breakout['current_price']:.6f} vol={breakout['volume_ratio']:.1f}x reddit={mention_count}")
 
 
 def refresh_event_calendar():

@@ -606,6 +606,34 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
+    # One-time migration — memecoin_velocity_trades table.
+    # Strip in publish #4 after this runs once.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS memecoin_velocity_trades (
+                      id              SERIAL PRIMARY KEY,
+                      bot_id          TEXT NOT NULL DEFAULT 'memecoin_velocity',
+                      asset           TEXT NOT NULL,
+                      pair            TEXT,
+                      entry_price     DOUBLE PRECISION NOT NULL,
+                      exit_price      DOUBLE PRECISION NOT NULL,
+                      units           DOUBLE PRECISION NOT NULL,
+                      pnl_usd         DOUBLE PRECISION,
+                      reason          TEXT,
+                      volume_ratio    DOUBLE PRECISION,
+                      reddit_mentions INTEGER,
+                      entry_time      TIMESTAMPTZ NOT NULL,
+                      exit_time       TIMESTAMPTZ NOT NULL,
+                      created_at      TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+        logger.info("DB | memecoin_velocity_trades table ensured")
+    except Exception as exc:
+        logger.warning(f"DB | memecoin_velocity_trades table failed (non-fatal): {exc}")
+
+
 def insert_post_mortem(
     ticker: str,
     regime: str,

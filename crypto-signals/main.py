@@ -34,9 +34,21 @@ SEVERITY_EXTREME = 0.95
 
 
 import re
+import sys as _sys
+import os as _os
 
-_seen_listings: set = set()
-_listings_initialized = False
+# Ensure trading-platform db module is importable (signal_writer sets this up too,
+# but we reference it explicitly here for clarity).
+_REPO_ROOT = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")
+_TRADING_PLATFORM = _os.path.join(_REPO_ROOT, "trading-platform")
+if _TRADING_PLATFORM not in _sys.path:
+    _sys.path.insert(0, _TRADING_PLATFORM)
+
+# DB-backed dedup — loaded once from listing_dedup table at first detect_listings() call.
+# CoinGecko-source keys are added to the in-memory set only (no DB write — they're
+# always rejected by the exchange filter so no need to persist them).
+_listing_dedup_cache: set = set()
+_listing_dedup_loaded: bool = False
 
 LISTING_KEYWORDS = ["listing", "listed", "launches", "announcing support", "now trading"]
 _ASSET_PATTERN = re.compile(r'\b([A-Z]{2,8})\b')
@@ -146,40 +158,115 @@ def _scrape_coingecko_new_coins() -> list:
         return []
 
 
+def _load_listing_dedup() -> None:
+    """Load all persisted dedup keys from DB into _listing_dedup_cache. Called once."""
+    global _listing_dedup_cache, _listing_dedup_loaded
+    if _listing_dedup_loaded:
+        return
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            logger.warning("listing_dedup load skipped — DB unavailable")
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT key FROM listing_dedup")
+                for (key,) in cur.fetchall():
+                    _listing_dedup_cache.add(key)
+        logger.info(f"listing_dedup loaded: {len(_listing_dedup_cache)} known keys")
+    except Exception as e:
+        logger.warning(f"listing_dedup load failed (non-fatal): {e}")
+    finally:
+        _listing_dedup_loaded = True
+
+
+def _persist_listing_key(key: str) -> None:
+    """Persist a new dedup key to listing_dedup. Silently ignores conflicts/failures."""
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO listing_dedup (key) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (key,),
+                )
+    except Exception as e:
+        logger.debug(f"listing_dedup persist failed (non-fatal): {e}")
+
+
+def _lookup_price(asset: str):
+    """Try CoinGecko simple/price for a listing candidate (by CG coin ID or symbol)."""
+    cached = get_price(asset)
+    if cached is not None:
+        return cached
+    try:
+        url = f"{COINGECKO_BASE}/simple/price?ids={asset.lower()}&vs_currencies=usd"
+        resp = _http.get("coingecko", url, COINGECKO_MAX_RPM)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        for v in data.values():
+            if "usd" in v:
+                return float(v["usd"])
+        return None
+    except Exception:
+        return None
+
+
 def detect_listings():
-    """Scan exchange announcement pages for new listings, emit signals."""
-    global _listings_initialized
+    """Scan exchange announcement pages for new listings, emit signals.
+
+    Filter order (upstream, before write_signal):
+      1. Dedup — skip if key already in DB-backed cache
+      2. Exchange — reject coingecko-source entirely (no tradeable exchange)
+      3. Price — reject if price found and below $0.001 threshold
+         (None price for Binance/Coinbase assets is allowed — CG ID ≠ ticker)
+    """
+    _load_listing_dedup()
     coinbase  = _scrape_coinbase_listings()
     binance   = _scrape_binance_listings()
     coingecko = _scrape_coingecko_new_coins()
     all_listings = coinbase + binance + coingecko
 
-    if not _listings_initialized:
-        for listing in all_listings:
-            for asset in listing["assets"]:
-                _seen_listings.add(f"{listing['exchange']}:{asset}")
-        _listings_initialized = True
-        logger.info(f"listings initialized: {len(_seen_listings)} pre-existing seen")
-        return
-
     for listing in all_listings:
+        exchange = listing["exchange"]
         for asset in listing["assets"]:
-            key = f"{listing['exchange']}:{asset}"
-            if key in _seen_listings:
+            key = f"{exchange}:{asset}"
+
+            if key in _listing_dedup_cache:
                 continue
-            _seen_listings.add(key)
+
+            # === Filter 1: reject CoinGecko-source (not tradeable on any real exchange) ===
+            if exchange.lower() == "coingecko":
+                logger.info(f"skipped coingecko-source: {asset}")
+                _listing_dedup_cache.add(key)  # in-memory only — no DB write for CG noise
+                continue
+
+            # === Filter 2: price check for Binance/Coinbase candidates ===
+            # None = price unknown (CG ID ≠ ticker for exchange-listed assets) → allow through.
+            # Only reject if we can confirm the price is sub-penny trash.
+            price = _lookup_price(asset)
+            if price is not None and price < 0.001:
+                logger.info(f"skipped sub-threshold: {asset} @ ${price:.8f}")
+                continue
+
+            # === All filters passed — persist dedup, emit signal ===
+            _listing_dedup_cache.add(key)
+            _persist_listing_key(key)
             write_signal(
                 signal_type="listing_announced",
                 asset=asset,
                 severity="high",
                 payload={
-                    "exchange": listing["exchange"],
+                    "exchange": exchange,
                     "title": listing["title"],
                     "tier": "tier1",
                     "url": listing["url"],
                 },
             )
-            logger.warning(f"NEW LISTING: {listing['exchange']} {asset} — {listing['title'][:60]}")
+            logger.warning(f"NEW LISTING: {exchange} {asset} — {listing['title'][:60]}")
 
 
 def detect_depegs():

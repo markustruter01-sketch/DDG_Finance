@@ -1,1 +1,5 @@
-{"bot_paused": true, "pause_reason": "awaiting initial validation", "paused_at": "2026-05-18T01:00:00+00:00"}
+{
+  "bot_paused": false,
+  "unpause_reason": "live deployment, watching for triple-gated memecoin breakouts",
+  "unpaused_at": "2026-05-18T05:10:00+00:00"
+}

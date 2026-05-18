@@ -622,6 +622,20 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | retired bot cleanup failed (non-fatal): {exc}")
 
+    # One-time cleanup — remove orphan kraken_heartbeat rows for retired bots.
+    # Strip in publish #2.
+    try:
+        with get_conn() as _kh_conn:
+            with _kh_conn.cursor() as _kh_cur:
+                _kh_cur.execute(
+                    "DELETE FROM kraken_heartbeat WHERE id IN (1, 2, 3, 7, 8)"
+                )
+                _kh_n = _kh_cur.rowcount
+        if _kh_n:
+            logger.info(f"DB | removed {_kh_n} orphan kraken_heartbeat rows")
+    except Exception as _kh_exc:
+        logger.warning(f"DB | kraken_heartbeat cleanup failed (non-fatal): {_kh_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

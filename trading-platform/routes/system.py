@@ -216,85 +216,69 @@ async def system_health_architecture() -> dict:
         import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
         _kdburl = _kos.environ.get("DATABASE_URL")
         _ARCH_BOTS = [
-            (1, "davy-jones",     "Davy Jones"),
-            (2, "blackbeard",     "Blackbeard"),
-            (3, "calypso",        "Calypso"),
-            (7, "poseidon",       "Poseidon"),
-            (8, "kraken-current", "Kraken Current"),
+            (5, "listing_pump",       "Listing Pump"),
+            (6, "event_trader",       "Event Trader"),
+            (7, "depeg_hunter",       "Depeg Hunter"),
+            (8, "memecoin_velocity",  "Memecoin Velocity"),
         ]
-        _ARCH_STALE_THRESHOLDS = {
-            "kraken-current": 18000,  # 4-hour cycle + 1h buffer
-            "poseidon":        2400,  # 15-min cycle + 25-min buffer
-        }
         _bot_levels: list[str] = []
         _bot_detail_parts: list[str] = []
-        _mkt_open_kr = False
-        try:
-            _mkt_open_kr = is_market_open()
-        except Exception:
-            pass
 
         if _kdburl:
             _kpgconn = _pg2.connect(_kdburl)
             try:
-                for _arch_db_id, _arch_bot_id, _arch_label in _ARCH_BOTS:
+                for _arch_idx, _arch_bot_id, _arch_label in _ARCH_BOTS:
                     try:
                         with _kpgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _kc:
                             _kc.execute(
-                                "SELECT status, cycle_count, last_updated, error, force_refresh "
-                                "FROM kraken_heartbeat WHERE id = %s",
-                                (_arch_db_id,)
+                                "SELECT status, last_heartbeat, paused, error_message "
+                                "FROM bots_state WHERE bot_id = %s",
+                                (_arch_bot_id,)
                             )
                             _kr = _kc.fetchone()
                         if _kr:
-                            _klast = _kr["last_updated"]
+                            _klast = _kr["last_heartbeat"]
                             _kage = (now - _klast.timestamp()) if _klast else None
                             _kstatus = _kr["status"] or "unknown"
-                            _kick_pending = bool(_kr.get("force_refresh", False))
-                            _stale_threshold = _ARCH_STALE_THRESHOLDS.get(_arch_bot_id, 1800)
-                            # Warn only when 75% of stale threshold is reached, not 33%.
-                            # Prevents false DEGRADED alerts for normal cycle gaps.
-                            _warn_threshold  = int(_stale_threshold * 0.75)
-                            if _kstatus == "error":
+                            _kpaused = bool(_kr.get("paused", False))
+                            if _kpaused:
+                                _blevel = "yellow"
+                            elif _kstatus == "error":
                                 _blevel = "red"
-                            elif _kage and _kage > _stale_threshold:
-                                _blevel = "red" if _mkt_open_kr else "yellow"
-                            elif _kstatus in ("paused_circuit_breaker", "paused_dashboard") or (_kage and _kage > _warn_threshold):
+                            elif _kage is None:
+                                _blevel = "yellow"
+                            elif _kage < 600:
+                                _blevel = "green"
+                            elif _kage < 1800:
                                 _blevel = "yellow"
                             else:
-                                _blevel = "green"
+                                _blevel = "red"
                             _bot_levels.append(_blevel)
-                            _age_str = f"{int(_kage)}s" if _kage else "?"
-                            _bot_detail_parts.append(
-                                f"{_arch_label}: {_kstatus} ({_age_str})"
-                                + (" [kick pending]" if _kick_pending else "")
-                            )
-                            nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
-                                "label": f"Kraken Bot: {_arch_label}",
+                            _age_str = f"{int(_kage)}s" if _kage else "no hb"
+                            _bot_detail_parts.append(f"{_arch_label}: {_kstatus} ({_age_str})")
+                            nodes[f"wild_{_arch_bot_id}"] = {
+                                "label": f"Wild Bot: {_arch_label}",
                                 "level": _blevel,
                                 "latency_ms": None,
                                 "data_age_s": round(_kage, 1) if _kage else None,
-                                "detail": f"Status: {_kstatus} · Cycle #{_kr['cycle_count']}"
-                                          + (" · kick pending" if _kick_pending else ""),
-                                "kick_pending": _kick_pending,
+                                "detail": f"Status: {_kstatus} · {_age_str} ago"
+                                          + (" · paused" if _kpaused else ""),
                             }
                         else:
                             _bot_levels.append("yellow")
                             _bot_detail_parts.append(f"{_arch_label}: not started")
-                            nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
-                                "label": f"Kraken Bot: {_arch_label}",
+                            nodes[f"wild_{_arch_bot_id}"] = {
+                                "label": f"Wild Bot: {_arch_label}",
                                 "level": "yellow", "latency_ms": None,
                                 "data_age_s": None, "detail": "Bot not started",
-                                "kick_pending": False,
                             }
                     except Exception as _bexc:
                         _bot_levels.append("red")
                         _bot_detail_parts.append(f"{_arch_label}: error")
-                        nodes[f"kraken_{_arch_bot_id.replace('-', '_')}"] = {
-                            "label": f"Kraken Bot: {_arch_label}",
+                        nodes[f"wild_{_arch_bot_id}"] = {
+                            "label": f"Wild Bot: {_arch_label}",
                             "level": "red", "latency_ms": None,
                             "data_age_s": None, "detail": str(_bexc)[:60],
-                            "kick_pending": False,
                         }
             finally:
                 _kpgconn.close()
@@ -305,8 +289,8 @@ async def system_health_architecture() -> dict:
         else:
             _summary_level = "red" if "red" in _bot_levels else ("yellow" if "yellow" in _bot_levels else "green")
         _n_ok = sum(1 for l in _bot_levels if l == "green")
-        nodes["kraken_api"] = {
-            "label": "Kraken Crypto Fleet (5 bots)",
+        nodes["wild_crypto_fleet"] = {
+            "label": "Wild Crypto Bots (4 bots)",
             "level": _summary_level,
             "latency_ms": None,
             "data_age_s": None,
@@ -316,7 +300,7 @@ async def system_health_architecture() -> dict:
             ),
         }
     except Exception as exc:
-        nodes["kraken_api"] = {"label": "Kraken Crypto Fleet (5 bots)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["wild_crypto_fleet"] = {"label": "Wild Crypto Bots (4 bots)", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         caches = get_cache_stats()
@@ -424,54 +408,44 @@ async def system_health_architecture() -> dict:
         }
 
     try:
-        import psycopg2 as _pg2_ap, os as _os_ap
-        _db_ap = _os_ap.environ.get("DATABASE_URL")
-        _ap_detail = "No heartbeat yet"
-        _ap_level = "yellow"
-        if _db_ap:
-            _ap_conn = _pg2_ap.connect(_db_ap)
+        import psycopg2 as _pg2_fx, os as _os_fx
+        _db_fx = _os_fx.environ.get("DATABASE_URL")
+        _fx_detail = "No heartbeat yet"
+        _fx_level = "yellow"
+        if _db_fx:
+            _fx_conn = _pg2_fx.connect(_db_fx)
             try:
-                with _ap_conn.cursor() as _apc:
-                    _apc.execute(
-                        "SELECT status, cycle_count, equity_usd FROM kraken_heartbeat WHERE id = 4"
+                with _fx_conn.cursor() as _fxc:
+                    _fxc.execute(
+                        "SELECT status, last_heartbeat, paused, equity_usd, open_positions "
+                        "FROM bots_state WHERE bot_id = 'forex_gump'"
                     )
-                    _ap_row = _apc.fetchone()
-                    if _ap_row:
-                        _ap_status, _ap_cycles, _ap_eq = _ap_row
-                        _ap_eq = float(_ap_eq or 0)
-                        _ap_level = "green" if str(_ap_status or "").lower() == "running" else "yellow"
-                        _ap_detail = f"{_ap_status} · ${_ap_eq:,.0f} · {_ap_cycles or 0} cycles"
+                    _fx_row = _fxc.fetchone()
+                    if _fx_row:
+                        _fx_status, _fx_hb, _fx_paused, _fx_eq, _fx_pos = _fx_row
+                        _fx_eq = float(_fx_eq or 0)
+                        _fx_pos = int(_fx_pos or 0)
+                        _fx_age = (now - _fx_hb.timestamp()) if _fx_hb else None
+                        if _fx_paused:
+                            _fx_level = "yellow"
+                            _fx_detail = f"Paused · ${_fx_eq:,.0f} · {_fx_pos} positions"
+                        elif _fx_age is not None and _fx_age < 600:
+                            _fx_level = "green"
+                            _fx_detail = f"{_fx_status} · ${_fx_eq:,.0f} · {_fx_pos} positions"
+                        else:
+                            _fx_level = "yellow"
+                            _fx_detail = f"{_fx_status} · ${_fx_eq:,.0f} · stale {int(_fx_age or 0)}s"
             finally:
-                _ap_conn.close()
-        nodes["options_bot"] = {
-            "label": "Apex Predator — Crypto Momentum (Bot #5)",
-            "level": _ap_level,
+                _fx_conn.close()
+        nodes["forex_bot"] = {
+            "label": "Forex Gump (Forex Bot)",
+            "level": _fx_level,
             "latency_ms": None,
             "data_age_s": None,
-            "detail": _ap_detail,
+            "detail": _fx_detail,
         }
     except Exception as exc:
-        nodes["options_bot"] = {"label": "Apex Predator — Crypto Momentum (Bot #5)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
-
-    try:
-        _fx_h = _get_forex_engine()
-        if _fx_h:
-            _fx_state = _fx_h.get_state()
-            _fx_equity = _fx_state.get("paper_equity", 0)
-            _fx_positions = _fx_state.get("position_count", 0)
-            _fx_paused = _fx_state.get("paused", False)
-            _fx_level = "yellow" if _fx_paused else "green"
-            nodes["forex_bot"] = {
-                "label": "The Navigator (Forex Bot #6)",
-                "level": _fx_level,
-                "latency_ms": None,
-                "data_age_s": None,
-                "detail": f"{'Paused' if _fx_paused else 'Active'} · ${_fx_equity:,.0f} · {_fx_positions} positions",
-            }
-        else:
-            nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": "Engine not loaded"}
-    except Exception as exc:
-        nodes["forex_bot"] = {"label": "The Navigator (Forex Bot #6)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["forex_bot"] = {"label": "Forex Gump (Forex Bot)", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         from notifications.telegram import is_configured as _tg_ok
@@ -538,50 +512,43 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                 steps.append(f"yfinance warning: {exc}")
             steps.append("Fresh data will load on next cycle")
 
-        elif component == "kraken_api":
+        elif component == "wild_crypto_fleet":
             try:
                 import psycopg2 as _pg2r, os as _osr
                 _dburlr = _osr.environ.get("DATABASE_URL")
-                _BOT_KICK_ROWS = [
-                    (1, "davy-jones"),
-                    (2, "blackbeard"),
-                    (3, "calypso"),
-                    (7, "poseidon"),
-                    (8, "kraken-current"),
+                _WILD_BOTS = [
+                    "listing_pump",
+                    "event_trader",
+                    "depeg_hunter",
+                    "memecoin_velocity",
                 ]
-                _BOT_KICK_STALE = {"kraken-current": 16200}
                 if _dburlr:
                     _rconn = _pg2r.connect(_dburlr)
                     try:
-                        _kicked = []
-                        for _bid, _bname in _BOT_KICK_ROWS:
+                        _stale = []
+                        for _bname in _WILD_BOTS:
                             with _rconn.cursor() as _rc:
                                 _rc.execute(
-                                    "SELECT status, cycle_count, last_updated FROM kraken_heartbeat WHERE id = %s",
-                                    (_bid,)
+                                    "SELECT status, last_heartbeat, error_message "
+                                    "FROM bots_state WHERE bot_id = %s",
+                                    (_bname,)
                                 )
                                 _rrow = _rc.fetchone()
                             if _rrow:
-                                _bstatus, _bcycle, _blast = _rrow
+                                _bstatus, _blast, _berr = _rrow
                                 _bage = (time.time() - _blast.timestamp()) if _blast else None
                                 steps.append(
-                                    f"{_bname}: status={_bstatus}, cycle #{_bcycle}"
-                                    + (f", age={_bage:.0f}s" if _bage else "")
+                                    f"{_bname}: status={_bstatus}"
+                                    + (f", age={_bage:.0f}s" if _bage else ", no heartbeat")
                                 )
-                                _bstale_thresh = _BOT_KICK_STALE.get(_bname, 1800)
-                                if _bstatus == "error" or (_bage and _bage > _bstale_thresh):
-                                    with _rconn.cursor() as _kc:
-                                        _kc.execute(
-                                            "UPDATE kraken_heartbeat SET force_refresh = TRUE WHERE id = %s",
-                                            (_bid,)
-                                        )
-                                    _kicked.append(_bname)
+                                if _bstatus == "error" or (_bage and _bage > 1800):
+                                    _stale.append(_bname)
                             else:
-                                steps.append(f"{_bname}: no heartbeat row yet")
+                                steps.append(f"{_bname}: no bots_state row yet")
                         _rconn.commit()
-                        if _kicked:
-                            steps.append(f"force_refresh=TRUE set for: {', '.join(_kicked)}")
-                            _state_changed = True
+                        if _stale:
+                            steps.append(f"Stale/errored bots: {', '.join(_stale)}")
+                        _state_changed = True
                     finally:
                         _rconn.close()
                 else:
@@ -591,7 +558,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                 steps.append(f"DB health check failed: {str(exc)[:120]}")
                 success = False
             _kraken_commentary_cache.update({"text": None, "generated_at": None, "ts": 0})
-            steps.append("Kraken commentary cache cleared")
+            steps.append("Wild crypto fleet commentary cache cleared")
 
         elif component == "alpaca_api":
             try:
@@ -756,7 +723,7 @@ async def _auto_heal_check() -> None:
                             mark_resolved(_per_bot_comp, "bot_stale")
                             mark_resolved(_per_bot_comp, "bot_error")
                 if _any_degraded:
-                    await _remediate_component("kraken_api", triggered_by="auto_heal")
+                    await _remediate_component("wild_crypto_fleet", triggered_by="auto_heal")
             finally:
                 _kconn.close()
     except Exception as exc:
@@ -765,7 +732,7 @@ async def _auto_heal_check() -> None:
 
 @system_router.post("/system/remediate/{component}")
 async def remediate_component(component: str) -> dict:
-    valid = {"platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"}
+    valid = {"platform_core", "data_pipeline", "wild_crypto_fleet", "alpaca_api", "equity_manager"}
     if component not in valid:
         raise HTTPException(status_code=400, detail=f"Unknown component. Valid: {', '.join(sorted(valid))}")
     return await _remediate_component(component, triggered_by="manual")
@@ -773,7 +740,7 @@ async def remediate_component(component: str) -> dict:
 
 @system_router.post("/system/remediate/all")
 async def remediate_all() -> dict:
-    components = ["platform_core", "data_pipeline", "kraken_api", "alpaca_api", "equity_manager"]
+    components = ["platform_core", "data_pipeline", "wild_crypto_fleet", "alpaca_api", "equity_manager"]
     results = []
     for comp in components:
         r = await _remediate_component(comp, triggered_by="heal_all")

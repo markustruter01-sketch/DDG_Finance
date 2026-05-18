@@ -95,19 +95,8 @@ def _fetch_fleet_equity() -> dict:
                 "updated_at": upd if isinstance(upd, str) else (upd.isoformat() if upd else None),
             }
 
-        # Backwards-compat aliases so existing frontend keys still resolve
-        # while canonical IDs are the primary keys.
-        _ALIAS = {
-            "poseidon_momentum": "poseidon",
-            "kraken_trend":      "kraken_current",
-            "forex_gump":        "navigator",
-        }
-        for canonical, legacy_key in _ALIAS.items():
-            if canonical in result and legacy_key not in result:
-                result[legacy_key] = dict(result[canonical])
-
-        # Fleet totals (exclude meta keys and alias duplicates)
-        _meta_keys = {"fleet_total", "generated_at", "errors"} | set(_ALIAS.values())
+        # Fleet totals
+        _meta_keys = {"fleet_total", "generated_at", "errors"}
         _bot_vals  = [v for k, v in result.items() if k not in _meta_keys]
 
         fleet_eq      = sum(b["equity"]    for b in _bot_vals)

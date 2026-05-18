@@ -1911,15 +1911,6 @@ export interface KrakenCurrentState {
   signal_scan?: object[];
 }
 
-export function useKrakenCurrentState() {
-  return useQuery<KrakenCurrentState>({
-    queryKey: ["/kraken-current/state"],
-    queryFn: async () => (await api.get("/kraken-current/state")).data,
-    refetchInterval: useVisibleInterval(30_000),
-    retry: false,
-    staleTime: 15_000,
-  });
-}
 
 export interface PairLearningSymbol {
   bot_id: string;

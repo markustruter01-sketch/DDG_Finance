@@ -1038,7 +1038,7 @@ export function WhitepaperContent() {
 
         <div className="mt-4 p-4 bg-indigo-950/40 border border-indigo-500/20 rounded-lg text-xs text-slate-400">
           <span className="text-indigo-300 font-semibold">System Status: </span>
-          Hybrid Agentic Architecture Stages 0–6 complete. 317 tests passing. Six bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Walk-Forward Optimizer runs every Sunday 02:00 AM UTC across all 3 Kraken bots. OHLCV price-based backtester confirmed working — 7,200 candles ingested, results persisted (SPY/QQQ Trend WR=43.3%, Jerome PF=1.15/+79% net, Sector Rotation WR=44.3%). Telegram/Discord alert system active with configurable frequency. $600k total paper capital deployed across the fleet.
+          Hybrid Agentic Architecture Stages 0–6 complete. 317 tests passing. Eight bots operational across equities, crypto, options, and forex. Gemini self-critic auditing daily at 04:15 AM ET. Microstructure alpha active on Kraken order-book primary path. VaR circuit breaker live in executor. Walk-Forward Optimizer runs every Sunday 02:00 AM UTC across all 3 Kraken bots. OHLCV price-based backtester confirmed working — 7,200 candles ingested, results persisted (SPY/QQQ Trend WR=43.3%, Jerome PF=1.15/+79% net, Sector Rotation WR=44.3%). Telegram/Discord alert system active with configurable frequency. $800k total paper capital deployed across the fleet.
         </div>
       </Section>
 

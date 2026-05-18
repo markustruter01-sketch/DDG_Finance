@@ -434,7 +434,7 @@ function FleetKPISummary() {
     {
       label: "Fleet Equity",
       value: anyLoading ? "—" : formatCurrency(grandTotal),
-      sub: `${fleetBotCount} bots · 3 capital pools`,
+      sub: `${fleetBotCount} bots · 4 capital pools`,
       icon: <DollarSign className="h-4 w-4 text-blue-400" />,
       accent: "border-blue-500/20 bg-blue-500/5",
       valueColor: anyLoading ? "text-slate-500" : "text-white",

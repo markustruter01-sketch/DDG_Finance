@@ -38,7 +38,7 @@ export function WeeklyReviewPanel() {
   const equityReady = liveTotal > 0;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
-  const forexEquity = fleetEq?.navigator?.equity ?? null;
+  const forexEquity = fleetEq?.forex_gump?.equity ?? null;
   const krakenEquity = ([
     fleetEq?.davy_jones?.equity,
     fleetEq?.blackbeard?.equity,

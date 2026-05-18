@@ -1,1 +1,1 @@
-{"bot_paused": true, "pause_reason": "awaiting initial validation", "paused_at": "2026-05-18T00:30:00+00:00"}
+{"bot_paused": false, "unpause_reason": "live deployment, watching for new exchange listings", "unpaused_at": "2026-05-18T00:50:00+00:00"}

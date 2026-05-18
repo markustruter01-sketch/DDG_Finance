@@ -629,40 +629,6 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | retired bot cleanup failed (non-fatal): {exc}")
 
-    # One-time cleanup — remove the 10k+ row coingecko-noise burst from 2026-05-18 23:00 UTC.
-    # Strip in publish #2.
-    try:
-        with get_conn() as _lc_conn:
-            with _lc_conn.cursor() as _lc_cur:
-                _lc_cur.execute(
-                    "DELETE FROM crypto_signals "
-                    "WHERE signal_type = 'listing_announced' "
-                    "AND processed = FALSE "
-                    "AND (payload->>'exchange') = 'coingecko'"
-                )
-                _lc_n = _lc_cur.rowcount
-                if _lc_n:
-                    logger.info(f"DB | removed {_lc_n} unprocessed coingecko listing_announced rows")
-    except Exception as _lc_exc:
-        logger.warning(f"DB | listing cleanup failed (non-fatal): {_lc_exc}")
-
-    # Seed listing_dedup with current state so we don't re-inject on next poll.
-    # Strip in publish #2.
-    try:
-        with get_conn() as _ld_conn:
-            with _ld_conn.cursor() as _ld_cur:
-                _ld_cur.execute(
-                    "INSERT INTO listing_dedup (key) "
-                    "SELECT DISTINCT (payload->>'exchange') || ':' || asset "
-                    "FROM crypto_signals "
-                    "WHERE signal_type = 'listing_announced' "
-                    "ON CONFLICT DO NOTHING"
-                )
-                _ld_n = _ld_cur.rowcount
-                if _ld_n:
-                    logger.info(f"DB | seeded {_ld_n} listing_dedup rows from existing signals")
-    except Exception as _ld_exc:
-        logger.warning(f"DB | listing_dedup seed failed (non-fatal): {_ld_exc}")
 
 
 def insert_post_mortem(

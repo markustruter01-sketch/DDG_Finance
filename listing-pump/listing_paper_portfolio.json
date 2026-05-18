@@ -1,0 +1,15 @@
+{
+  "cash_usd": 92000.0,
+  "positions": {
+    "spacex4200": {
+      "units": 1354788.6699023535,
+      "entry_price": 0.00590498,
+      "current_price": 0.00590498,
+      "peak_price": 0.00590498,
+      "exchange": "coingecko",
+      "listing_title": "CoinGecko listed: SPACEX4200 (SPCX)",
+      "entry_time": "2026-05-18T06:27:10.759675"
+    }
+  },
+  "trade_history": []
+}

@@ -9,10 +9,14 @@ import {
 } from "@/hooks/use-trading";
 
 const BOTS = [
-  { id: "oracle", name: "Oracle", subtitle: "Stocks Bot", icon: "🔮", angle: 270, color: "#facc15" },
-  { id: "davy-jones", name: getBotIdentity("davy-jones").displayName, subtitle: "Crypto Bot #1", icon: getBotIdentity("davy-jones").icon, angle: 330, color: "#22d3ee" },
-  { id: "blackbeard", name: getBotIdentity("blackbeard").displayName, subtitle: "Crypto Bot #2", icon: getBotIdentity("blackbeard").icon, angle: 30, color: "#f97316" },
-  { id: "navigator", name: getBotIdentity("navigator").displayName, subtitle: "Forex Bot", icon: getBotIdentity("navigator").icon, angle: 210, color: "#14b8a6" },
+  { id: "oracle",            name: "Oracle",            subtitle: "Stocks Bot",     icon: "🔮", angle: 270, color: "#facc15" },
+  { id: "spy_qqq_trend",     name: "SPY/QQQ Trend",     subtitle: "Equity ETF",     icon: "📈", angle: 330, color: "#22d3ee" },
+  { id: "jerome_macro",      name: "Jerome",            subtitle: "Macro ETF",      icon: "🏛️", angle: 30,  color: "#f97316" },
+  { id: "forex_gump",        name: "Forex Gump",        subtitle: "Forex Bot",      icon: "💱", angle: 210, color: "#14b8a6" },
+  { id: "listing_pump",      name: "Listing Pump",      subtitle: "Crypto Listing", icon: "🚀", angle: 90,  color: "#f97316" },
+  { id: "event_trader",      name: "Event Trader",      subtitle: "Crypto Events",  icon: "📅", angle: 150, color: "#a855f7" },
+  { id: "depeg_hunter",      name: "Depeg Hunter",      subtitle: "Stablecoin Arb", icon: "🎯", angle: 240, color: "#ec4899" },
+  { id: "memecoin_velocity", name: "Memecoin Velocity", subtitle: "Meme Momentum",  icon: "⚡", angle: 300, color: "#22d3ee" },
 ];
 
 const ALGO_SNIPPETS = [

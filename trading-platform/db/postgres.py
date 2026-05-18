@@ -606,6 +606,21 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
+    # One-time cleanup — remove retired bots from bot_portfolio.
+    # These got re-inserted at some point despite earlier removal.
+    # Strip in publish #2.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    DELETE FROM bot_portfolio
+                    WHERE bot_id IN ('poseidon_momentum', 'kraken_trend')
+                """)
+                _n = cur.rowcount
+        if _n:
+            logger.info(f"DB | removed {_n} retired bot_portfolio rows (re-cleanup)")
+    except Exception as exc:
+        logger.warning(f"DB | retired bot cleanup failed (non-fatal): {exc}")
 
 
 def insert_post_mortem(

@@ -242,10 +242,16 @@ export default function StreamingBotsScreen() {
   // ── Fleet totals ──────────────────────────────────────────────────────
   // Prefer fleet equity system's pre-computed total (reflects resets, all 9 bots).
   // Fall back to dynamic sum only if fleet equity hasn't loaded yet.
-  const allEquities = [oracleEquity, davyEquity, bbEquity, navEquity, poseidonEquity, kcEquity].filter((e): e is number => e != null);
+  const allEquities = [
+    oracleEquity, davyEquity, bbEquity, navEquity,
+    fleetEq?.listing_pump?.equity ?? 100000,
+    fleetEq?.event_trader?.equity ?? 100000,
+    fleetEq?.depeg_hunter?.equity ?? 100000,
+    fleetEq?.memecoin_velocity?.equity ?? 100000,
+  ].filter((e): e is number => e != null);
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
-  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
-  // Baseline: use the fleet equity system's starting capital ($900k) when available
+  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 8 ? allEquities.reduce((s, e) => s + e, 0) : null);
+  // Baseline: use the fleet equity system's starting capital ($800k) when available
   const fleetStartingCapital = fleetEq?.fleet_total?.starting ?? (allEquities.length * STARTING_BALANCE);
   const fleetPnl = fleetTotal != null ? fleetTotal - fleetStartingCapital : null;
   const fleetPnlColor = fleetPnl == null ? "#94a3b8" : fleetPnl >= 0 ? "#34d399" : "#f87171";

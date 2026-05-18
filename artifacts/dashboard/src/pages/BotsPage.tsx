@@ -12,7 +12,7 @@ import {
 import { Activity, TrendingUp, TrendingDown, Wifi, WifiOff } from "lucide-react";
 
 const STARTING = 100_000;
-const FLEET_STARTING = 900_000;
+const FLEET_STARTING = 800_000;
 
 function fmt$(v: number, decimals = 0) {
   return `$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;

@@ -1,5 +1,5 @@
 {
-  "cash_usd": 76000.0,
+  "cash_usd": 68000.0,
   "positions": {
     "spacex4200": {
       "units": 1354788.6699023535,
@@ -27,6 +27,15 @@
       "exchange": "coingecko",
       "listing_title": "CoinGecko listed: Manifesting (MANIFEST)",
       "entry_time": "2026-05-18T07:56:12.838509"
+    },
+    "agentbounty-token": {
+      "units": 7476635514.018692,
+      "entry_price": 1.07e-06,
+      "current_price": 1.07e-06,
+      "peak_price": 1.07e-06,
+      "exchange": "coingecko",
+      "listing_title": "CoinGecko listed: AgentBounty Token (BOUNTY)",
+      "entry_time": "2026-05-18T09:25:14.758705"
     }
   },
   "trade_history": []

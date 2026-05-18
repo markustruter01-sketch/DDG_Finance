@@ -1911,6 +1911,9 @@ export interface KrakenCurrentState {
   signal_scan?: object[];
 }
 
+export function useKrakenCurrentState() {
+  return { data: undefined as KrakenCurrentState | undefined, isLoading: false, error: null };
+}
 
 export interface PairLearningSymbol {
   bot_id: string;

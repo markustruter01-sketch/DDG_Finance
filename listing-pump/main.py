@@ -31,7 +31,67 @@ logger = logging.getLogger("listing-pump")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
 CONTROL_FILE = os.path.join(_HERE, "listing_control.json")
+_CLEANUP_FLAG = os.path.join(_HERE, ".cleanup_v1_done")
 _http = RateLimitedClient()
+
+
+def _sync_bot_portfolio() -> None:
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        state = pp._load()
+        equity = pp.get_equity()
+        cash = state["cash_usd"]
+        positions = list(state["positions"].values())
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bot_portfolio (bot_id, equity_usd, cash_usd, positions, updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON CONFLICT (bot_id) DO UPDATE SET
+                        equity_usd = EXCLUDED.equity_usd,
+                        cash_usd   = EXCLUDED.cash_usd,
+                        positions  = EXCLUDED.positions,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (cfg.BOT_ID, equity, cash, json.dumps(positions)),
+                )
+    except Exception as e:
+        logger.debug(f"bot_portfolio sync failed: {e}")
+
+
+def _is_tradeable_listing(asset: str, price: float, exchange) -> bool:
+    exchange = (exchange or "") if isinstance(exchange, str) else ""
+    if price < 0.001:
+        logger.info(f"{asset}: price ${price:.8f} below $0.001 threshold, skipping")
+        return False
+    if exchange.lower() == "coingecko":
+        logger.info(f"{asset}: CoinGecko-only listing, skipping")
+        return False
+    return True
+
+
+def _run_startup_cleanup() -> None:
+    if os.path.exists(_CLEANUP_FLAG):
+        return
+    state = pp._load()
+    positions = list(state["positions"].keys())
+    if positions:
+        logger.warning(f"universe_purge: closing {len(positions)} bogus position(s) at entry price")
+        for asset in positions:
+            pos = state["positions"].get(asset)
+            if pos is None:
+                continue
+            entry_price = pos["entry_price"]
+            trade = pp.close_position(asset, entry_price, "universe_purge")
+            if trade:
+                record_trade(trade)
+                logger.warning(f"universe_purge: closed {asset} @ ${entry_price:.8f} pnl=$0.00")
+    with open(_CLEANUP_FLAG, "w") as f:
+        f.write("done")
+    logger.info("universe_purge: cleanup complete, flag written")
 
 # Inlined from crypto-signals/config.py to avoid sys.path collision with
 # trading-platform/config/__init__.py when both are on sys.path.
@@ -71,9 +131,19 @@ def process_listing_signals():
         if pp.has_position(asset):
             mark_processed(sig["id"])
             continue
+        payload = sig.get("payload") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except Exception:
+                payload = {}
         price = get_price(asset) or _get_coingecko_price(asset)
         if price is None:
             logger.info(f"no price for {asset}, skipping listing")
+            mark_processed(sig["id"])
+            continue
+        exchange = payload.get("exchange", "")
+        if not _is_tradeable_listing(asset, price, exchange):
             mark_processed(sig["id"])
             continue
         cache_update_price(asset, price)
@@ -82,18 +152,12 @@ def process_listing_signals():
         if alloc > pp.get_cash() or units <= 0:
             mark_processed(sig["id"])
             continue
-        payload = sig.get("payload") or {}
-        if isinstance(payload, str):
-            try:
-                payload = json.loads(payload)
-            except Exception:
-                payload = {}
         pp.open_position(
             asset, units, price,
-            exchange=payload.get("exchange", ""),
+            exchange=exchange,
             listing_title=payload.get("title", ""),
         )
-        logger.warning(f"OPENED: {asset} from {payload.get('exchange')} units={units:.4f} @ ${price:.4f}")
+        logger.warning(f"OPENED: {asset} from {exchange} units={units:.4f} @ ${price:.4f}")
         mark_processed(sig["id"])
         if pp.position_count() >= cfg.MAX_POSITIONS:
             break
@@ -138,6 +202,10 @@ _ka_threading.Thread(target=_keep_alive_listener, daemon=True).start()
 
 def main():
     logger.info("listing-pump | starting up")
+    try:
+        _run_startup_cleanup()
+    except Exception as e:
+        logger.error(f"startup cleanup failed (continuing): {e}")
     while True:
         try:
             if is_paused():
@@ -145,6 +213,7 @@ def main():
             else:
                 process_listing_signals()
                 monitor_open_positions()
+                _sync_bot_portfolio()
                 touch_heartbeat(cfg.BOT_ID, status="running", error="")
         except Exception as e:
             logger.error(f"main loop error: {e}")

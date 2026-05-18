@@ -1095,20 +1095,10 @@ export function OrbVisualiser() {
     return n;
   }, [livePos, djStatus, bbStatus, fleetEqOrb, optState, fxState, poseidonState, kcState]);
 
-  // Count a bot active if it has ANY non-error status string
   const activeBots = useMemo(() => {
-    const INACTIVE = new Set(["error", "offline", "stopped", "critical", "crashed", "unknown"]);
-    const check = (s: string | undefined) => !!s && !INACTIVE.has(s.toLowerCase());
-    let n = 0;
-    if (check(summary?.system_health?.system_status)) n++;
-    if (check(djStatus?.status)) n++;
-    if (check(bbStatus?.status)) n++;
-    if (check(optState?.status)) n++;
-    if (check(fxState?.status))  n++;
-    if (check(poseidonState?.status)) n++;
-    if (check(kcState?.status)) n++;
-    return n;
-  }, [summary, djStatus, bbStatus, optState, fxState, poseidonState, kcState]);
+    const ACTIVE_STATUSES = new Set(["active", "running", "idle"]);
+    return (registry?.bots ?? []).filter(b => ACTIVE_STATUSES.has((b.status ?? "").toLowerCase())).length;
+  }, [registry]);
 
   const fleetEquityChange = useMemo(() => {
     const snaps = curve?.snapshots;

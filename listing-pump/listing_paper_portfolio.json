@@ -1,42 +1,54 @@
 {
-  "cash_usd": 68000.0,
-  "positions": {
-    "spacex4200": {
-      "units": 1354788.6699023535,
+  "cash_usd": 100000.0,
+  "positions": {},
+  "trade_history": [
+    {
+      "asset": "spacex4200",
+      "exchange": "coingecko",
       "entry_price": 0.00590498,
-      "current_price": 0.00590498,
-      "peak_price": 0.00590498,
-      "exchange": "coingecko",
+      "exit_price": 0.00590498,
+      "units": 1354788.6699023535,
+      "pnl_usd": 0.0,
+      "reason": "universe_purge",
       "listing_title": "CoinGecko listed: SPACEX4200 (SPCX)",
-      "entry_time": "2026-05-18T06:27:10.759675"
+      "entry_time": "2026-05-18T06:27:10.759675",
+      "exit_time": "2026-05-18T21:41:32.116089"
     },
-    "jurassic-finance": {
-      "units": 308313.08422920766,
+    {
+      "asset": "jurassic-finance",
+      "exchange": "coingecko",
       "entry_price": 0.02594765,
-      "current_price": 0.02594765,
-      "peak_price": 0.02594765,
-      "exchange": "coingecko",
+      "exit_price": 0.02594765,
+      "units": 308313.08422920766,
+      "pnl_usd": 0.0,
+      "reason": "universe_purge",
       "listing_title": "CoinGecko listed: Jurassic Finance (RAWR)",
-      "entry_time": "2026-05-18T07:26:11.907263"
+      "entry_time": "2026-05-18T07:26:11.907263",
+      "exit_time": "2026-05-18T21:41:32.169590"
     },
-    "manifesting": {
-      "units": 1345372.1719856516,
+    {
+      "asset": "manifesting",
+      "exchange": "coingecko",
       "entry_price": 0.00594631,
-      "current_price": 0.00594631,
-      "peak_price": 0.00594631,
-      "exchange": "coingecko",
+      "exit_price": 0.00594631,
+      "units": 1345372.1719856516,
+      "pnl_usd": 0.0,
+      "reason": "universe_purge",
       "listing_title": "CoinGecko listed: Manifesting (MANIFEST)",
-      "entry_time": "2026-05-18T07:56:12.838509"
+      "entry_time": "2026-05-18T07:56:12.838509",
+      "exit_time": "2026-05-18T21:41:32.187281"
     },
-    "agentbounty-token": {
-      "units": 7476635514.018692,
-      "entry_price": 1.07e-06,
-      "current_price": 1.07e-06,
-      "peak_price": 1.07e-06,
+    {
+      "asset": "agentbounty-token",
       "exchange": "coingecko",
+      "entry_price": 1.07e-06,
+      "exit_price": 1.07e-06,
+      "units": 7476635514.018692,
+      "pnl_usd": 0.0,
+      "reason": "universe_purge",
       "listing_title": "CoinGecko listed: AgentBounty Token (BOUNTY)",
-      "entry_time": "2026-05-18T09:25:14.758705"
+      "entry_time": "2026-05-18T09:25:14.758705",
+      "exit_time": "2026-05-18T21:41:32.194173"
     }
-  },
-  "trade_history": []
+  ]
 }

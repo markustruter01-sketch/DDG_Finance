@@ -36,6 +36,33 @@ CONTROL_FILE = os.path.join(_HERE, "event_control.json")
 _event_cache = {"events": [], "last_refresh": 0}
 
 
+def _sync_bot_portfolio() -> None:
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        state = pp._load()
+        equity = pp.get_equity()
+        cash = state["cash_usd"]
+        positions = list(state["positions"].values())
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO bot_portfolio (bot_id, equity_usd, cash_usd, positions, updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON CONFLICT (bot_id) DO UPDATE SET
+                        equity_usd = EXCLUDED.equity_usd,
+                        cash_usd   = EXCLUDED.cash_usd,
+                        positions  = EXCLUDED.positions,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (cfg.BOT_ID, equity, cash, json.dumps(positions)),
+                )
+    except Exception as e:
+        logger.debug(f"bot_portfolio sync failed: {e}")
+
+
 def is_paused() -> bool:
     if os.path.exists(CONTROL_FILE):
         with open(CONTROL_FILE) as f:
@@ -156,6 +183,7 @@ def main():
                 refresh_events()
                 process_entries()
                 monitor_positions()
+                _sync_bot_portfolio()
                 touch_heartbeat(cfg.BOT_ID, status="running", error="")
         except Exception as e:
             logger.error(f"main loop error: {e}")

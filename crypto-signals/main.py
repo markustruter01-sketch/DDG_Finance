@@ -261,7 +261,20 @@ def _check_price_volume_breakout(symbol: str) -> dict:
     """Check if coin has new 30d high + volume 2x avg via Binance ccxt."""
     try:
         import ccxt
-        exchange = ccxt.binance({"enableRateLimit": True})
+        exchange = ccxt.binance({
+            "enableRateLimit": True,
+            "options": {
+                "defaultType": "spot",
+                "fetchMarkets": ["spot"],
+            },
+            "urls": {
+                "api": {
+                    "public":  "https://data-api.binance.vision/api/v3",
+                    "private": "https://data-api.binance.vision/api/v3",
+                    "v1":      "https://data-api.binance.vision/api/v1",
+                }
+            }
+        })
         pair_attempts = [f"{symbol}/USDT", f"{symbol}/USD", f"1000{symbol}/USDT"]
         bars = None
         used_pair = None

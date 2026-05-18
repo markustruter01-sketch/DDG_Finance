@@ -13,8 +13,9 @@ CCXT_MAX_RPM      = 60
 # Endpoints
 COINGECKO_BASE    = "https://api.coingecko.com/api/v3"
 REDDIT_CRYPTO     = "https://www.reddit.com/r/cryptocurrency.json"
-COINBASE_LISTINGS = "https://www.coinbase.com/blog/category/listing"
-BINANCE_LISTINGS  = "https://www.binance.com/en/support/announcement/c-48"
+COINBASE_PRODUCTS_API = "https://api.exchange.coinbase.com/products"
+BINANCE_EXCHANGE_INFO = "https://data-api.binance.vision/api/v3/exchangeInfo"
+COINGECKO_COINS_LIST  = "https://api.coingecko.com/api/v3/coins/list"
 
 # Service identity
 SERVICE_NAME       = "crypto-signals"

@@ -6,7 +6,7 @@ from config import (
     LISTING_POLL_INTERVAL, DEPEG_POLL_INTERVAL, MEMECOIN_POLL_INTERVAL,
     EVENT_POLL_INTERVAL, PRICE_CACHE_INTERVAL, LOOP_SLEEP_SECONDS, SERVICE_NAME,
     COINGECKO_BASE, COINGECKO_MAX_RPM,
-    COINBASE_LISTINGS, BINANCE_LISTINGS,
+    COINBASE_PRODUCTS_API, BINANCE_EXCHANGE_INFO, COINGECKO_COINS_LIST,
 )
 from http_client import RateLimitedClient
 from price_cache import update_price as _cache_update, get_price
@@ -33,7 +33,6 @@ SEVERITY_EXTREME = 0.95
 
 
 import re
-from bs4 import BeautifulSoup
 
 _seen_listings: set = set()
 _listings_initialized = False
@@ -54,70 +53,105 @@ def _extract_assets_from_title(title: str) -> list:
 
 
 def _scrape_coinbase_listings() -> list:
-    """Scrape coinbase.com/blog/category/listing for recent announcements."""
+    """Poll Coinbase exchange products API — returns all online USD-quoted pairs.
+    detect_listings() diffs against _seen_listings to fire signals for new ones.
+    """
     try:
-        resp = _http.get("coinbase", COINBASE_LISTINGS, max_rpm=10)
+        resp = _http.get("coinbase", COINBASE_PRODUCTS_API, max_rpm=10)
         if resp.status_code != 200:
+            logger.warning(f"coinbase products API {resp.status_code}")
             return []
-        soup = BeautifulSoup(resp.text, "html.parser")
         listings = []
-        for article in soup.find_all(["article", "a"], limit=20):
-            title_el = article.find(["h2", "h3", "h4"])
-            if not title_el:
+        for p in resp.json():
+            if p.get("quote_currency") not in ("USD", "USDT", "USDC"):
                 continue
-            title = title_el.get_text(strip=True)
-            if not any(kw in title.lower() for kw in LISTING_KEYWORDS):
+            if p.get("status") != "online":
                 continue
-            assets = _extract_assets_from_title(title)
-            if not assets:
+            base = p.get("base_currency", "").upper()
+            if not base or len(base) > 10:
                 continue
             listings.append({
                 "exchange": "coinbase",
-                "title": title,
-                "assets": assets,
-                "url": COINBASE_LISTINGS,
+                "title": f"Coinbase listing: {base}/{p.get('quote_currency')}",
+                "assets": [base],
+                "url": f"https://www.coinbase.com/advanced-trade/spot/{p.get('id', '')}",
             })
         return listings
     except Exception as e:
-        logger.error(f"coinbase scrape error: {e}")
+        logger.error(f"coinbase products API error: {e}")
         return []
 
 
 def _scrape_binance_listings() -> list:
-    """Scrape binance.com/en/support/announcement/c-48 for recent listings."""
+    """Poll Binance Vision exchange info — returns all TRADING USDT/USDC pairs.
+    detect_listings() diffs against _seen_listings to fire signals for new ones.
+    """
     try:
-        resp = _http.get("binance", BINANCE_LISTINGS, max_rpm=10)
+        resp = _http.get("binance", BINANCE_EXCHANGE_INFO, max_rpm=5)
         if resp.status_code != 200:
+            logger.warning(f"binance exchangeInfo {resp.status_code}")
             return []
-        soup = BeautifulSoup(resp.text, "html.parser")
         listings = []
-        for link in soup.find_all("a", limit=30):
-            title = link.get_text(strip=True)
-            if not title or len(title) < 10:
+        for sym in resp.json().get("symbols", []):
+            if sym.get("quoteAsset") not in ("USDT", "USDC"):
                 continue
-            if not any(kw in title.lower() for kw in LISTING_KEYWORDS):
+            if sym.get("status") != "TRADING":
                 continue
-            assets = _extract_assets_from_title(title)
-            if not assets:
+            base = sym.get("baseAsset", "").upper()
+            if not base or len(base) > 10:
                 continue
+            quote = sym.get("quoteAsset", "USDT")
             listings.append({
                 "exchange": "binance",
-                "title": title,
-                "assets": assets,
-                "url": BINANCE_LISTINGS,
+                "title": f"Binance listing: {base}/{quote}",
+                "assets": [base],
+                "url": f"https://www.binance.com/en/trade/{base}_{quote}",
             })
         return listings
     except Exception as e:
-        logger.error(f"binance scrape error: {e}")
+        logger.error(f"binance exchangeInfo API error: {e}")
+        return []
+
+
+def _scrape_coingecko_new_coins() -> list:
+    """Poll CoinGecko /coins/list — full coin catalogue.
+    detect_listings() diffs coin IDs against _seen_listings to fire signals for new ones.
+    Uses coin ID as the unique asset key to avoid symbol collisions across forks.
+    """
+    try:
+        resp = _http.get("coingecko", COINGECKO_COINS_LIST, COINGECKO_MAX_RPM)
+        if resp.status_code != 200:
+            logger.warning(f"coingecko /coins/list {resp.status_code}")
+            return []
+        listings = []
+        for coin in resp.json():
+            coin_id = coin.get("id", "")
+            symbol  = coin.get("symbol", "").upper()
+            name    = coin.get("name", symbol)
+            if not coin_id or not symbol or len(symbol) > 10:
+                continue
+            listings.append({
+                "exchange": "coingecko",
+                "title": f"CoinGecko listed: {name} ({symbol})",
+                # Use coin_id as the dedup key so symbol clashes across forks don't cross-fire
+                "assets": [coin_id],
+                "url": f"https://www.coingecko.com/en/coins/{coin_id}",
+                # Stash the real ticker so listing-pump can use it for price lookups
+                "symbol": symbol,
+            })
+        return listings
+    except Exception as e:
+        logger.error(f"coingecko /coins/list error: {e}")
         return []
 
 
 def detect_listings():
     """Scan exchange announcement pages for new listings, emit signals."""
     global _listings_initialized
-    coinbase = _scrape_coinbase_listings()
-    binance  = _scrape_binance_listings()
-    all_listings = coinbase + binance
+    coinbase  = _scrape_coinbase_listings()
+    binance   = _scrape_binance_listings()
+    coingecko = _scrape_coingecko_new_coins()
+    all_listings = coinbase + binance + coingecko
 
     if not _listings_initialized:
         for listing in all_listings:

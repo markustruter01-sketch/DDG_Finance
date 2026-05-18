@@ -139,7 +139,7 @@ export function Concept1ReactorOrbital() {
         {/* Planets (Audit Layers) */}
         {/* Layer 1: Data Integrity */}
         <div 
-          className={\`planet \${glitchPlanet === 1 ? 'glitch' : ''}\`} 
+          className={`planet \${glitchPlanet === 1 ? 'glitch' : ''}`} 
           style={{ '--radius': '150px', '--duration': '8s', '--color': '#60a5fa' } as React.CSSProperties}
         >
           <div className="absolute -top-6 -left-10 w-32 text-center text-[10px] text-blue-200 uppercase tracking-wider opacity-80">
@@ -149,7 +149,7 @@ export function Concept1ReactorOrbital() {
 
         {/* Layer 2: PnL Verification */}
         <div 
-          className={\`planet \${glitchPlanet === 2 ? 'glitch' : ''}\`} 
+          className={`planet \${glitchPlanet === 2 ? 'glitch' : ''}`} 
           style={{ '--radius': '225px', '--duration': '14s', '--color': '#818cf8' } as React.CSSProperties}
         >
           <div className="absolute -bottom-6 -left-10 w-32 text-center text-[10px] text-indigo-300 uppercase tracking-wider opacity-80">
@@ -159,7 +159,7 @@ export function Concept1ReactorOrbital() {
 
         {/* Layer 3: Risk Bounds */}
         <div 
-          className={\`planet \${glitchPlanet === 3 ? 'glitch' : ''}\`} 
+          className={`planet \${glitchPlanet === 3 ? 'glitch' : ''}`} 
           style={{ '--radius': '325px', '--duration': '22s', '--color': '#c084fc' } as React.CSSProperties}
         >
           <div className="absolute -top-6 -left-10 w-32 text-center text-[10px] text-purple-300 uppercase tracking-wider opacity-80">
@@ -169,7 +169,7 @@ export function Concept1ReactorOrbital() {
 
         {/* Layer 4: Order Validation */}
         <div 
-          className={\`planet \${glitchPlanet === 4 ? 'glitch' : ''}\`} 
+          className={`planet \${glitchPlanet === 4 ? 'glitch' : ''}`} 
           style={{ '--radius': '425px', '--duration': '35s', '--color': '#e879f9' } as React.CSSProperties}
         >
           <div className="absolute -bottom-6 -left-10 w-32 text-center text-[10px] text-fuchsia-300 uppercase tracking-wider opacity-80">

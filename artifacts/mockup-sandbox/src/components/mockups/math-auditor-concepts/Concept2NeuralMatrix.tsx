@@ -30,7 +30,7 @@ export function Concept2NeuralMatrix() {
       const id = Math.floor(Math.random() * 999);
       const hex = Math.random().toString(16).substring(2, 10).toUpperCase();
       const status = Math.random() > 0.9 ? 'FAILED' : 'OK';
-      const newLog = \`[sys.\${id}] 0x\${hex} - AUDIT CHECK \${status}\`;
+      const newLog = `[sys.\${id}] 0x\${hex} - AUDIT CHECK \${status}`;
       setLogs((prev) => [...prev, newLog].slice(-20));
     }, 500);
     return () => clearInterval(interval);
@@ -38,7 +38,7 @@ export function Concept2NeuralMatrix() {
 
   return (
     <div className="relative w-full h-full min-h-screen bg-black overflow-hidden font-mono text-green-500 select-none">
-      <style dangerouslySetInnerHTML={{__html: \`
+      <style dangerouslySetInnerHTML={{__html: `
         .matrix-rain {
           position: absolute;
           top: 0;
@@ -158,7 +158,7 @@ export function Concept2NeuralMatrix() {
           95% { clip: rect(75px, 9999px, 26px, 0); }
           100% { clip: rect(11px, 9999px, 52px, 0); }
         }
-      \`}} />
+      `}} />
 
       {/* Background Rain */}
       <div className="matrix-rain">
@@ -167,9 +167,9 @@ export function Concept2NeuralMatrix() {
             key={col.id} 
             className="matrix-column" 
             style={{ 
-              left: \`\${col.left}%\`, 
-              animationDuration: \`\${col.duration}s\`, 
-              animationDelay: \`\${col.delay}s\` 
+              left: `\${col.left}%`, 
+              animationDuration: `\${col.duration}s`, 
+              animationDelay: `\${col.delay}s` 
             }}
           >
             {col.text}
@@ -290,7 +290,7 @@ export function Concept2NeuralMatrix() {
             {logs.map((log, i) => (
               <div 
                 key={i} 
-                className={\`text-xs md:text-sm \${log.includes('FAILED') ? 'text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.8)]' : 'text-green-500/70'}\`}
+                className={`text-xs md:text-sm \${log.includes('FAILED') ? 'text-red-500 drop-shadow-[0_0_3px_rgba(239,68,68,0.8)]' : 'text-green-500/70'}`}
               >
                 {log}
               </div>

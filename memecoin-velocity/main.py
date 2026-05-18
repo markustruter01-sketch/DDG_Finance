@@ -133,6 +133,26 @@ def monitor_open_positions():
                 logger.warning(f"CLOSED: {asset} pnl=${trade['pnl_usd']:.2f} reason={reason}")
 
 
+import socket as _ka_socket
+import threading as _ka_threading
+
+def _keep_alive_listener():
+    """Bind to $PORT to satisfy Replit's port-readiness check."""
+    try:
+        port = int(os.environ.get("PORT", "8099"))
+        s = _ka_socket.socket(_ka_socket.AF_INET, _ka_socket.SOCK_STREAM)
+        s.setsockopt(_ka_socket.SOL_SOCKET, _ka_socket.SO_REUSEADDR, 1)
+        s.bind(("0.0.0.0", port))
+        s.listen(5)
+        while True:
+            conn, _ = s.accept()
+            conn.close()
+    except Exception as _e:
+        pass
+
+_ka_threading.Thread(target=_keep_alive_listener, daemon=True).start()
+
+
 def main():
     logger.info("memecoin-velocity | starting up")
     while True:

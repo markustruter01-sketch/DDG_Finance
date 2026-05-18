@@ -97,7 +97,7 @@ kind = "web"
 
   [[services]]
   name = "crypto-signals"
-  localPort = 0
+  localPort = 8095
 
   [services.development]
   run = "cd /home/runner/workspace && python3 crypto-signals/main.py"
@@ -112,7 +112,7 @@ kind = "web"
 
   [[services]]
   name = "depeg-hunter"
-  localPort = 0
+  localPort = 8096
 
   [services.development]
   run = "cd /home/runner/workspace && python3 depeg-hunter/main.py"
@@ -127,7 +127,7 @@ kind = "web"
 
   [[services]]
   name = "event-trader"
-  localPort = 0
+  localPort = 8097
 
   [services.development]
   run = "cd /home/runner/workspace && python3 event-trader/main.py"
@@ -142,7 +142,7 @@ kind = "web"
 
   [[services]]
   name = "listing-pump"
-  localPort = 0
+  localPort = 8098
 
   [services.development]
   run = "cd /home/runner/workspace && python3 listing-pump/main.py"
@@ -157,7 +157,7 @@ kind = "web"
 
   [[services]]
   name = "memecoin-velocity"
-  localPort = 0
+  localPort = 8099
 
   [services.development]
   run = "cd /home/runner/workspace && python3 memecoin-velocity/main.py"

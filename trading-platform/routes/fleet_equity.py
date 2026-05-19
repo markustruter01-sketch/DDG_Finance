@@ -20,7 +20,7 @@ _cache: dict = {"data": None, "ts": 0.0}
 def _fetch_fleet_equity() -> dict:
     """
     Primary path: read all bot portfolios from bot_portfolio in a single query.
-    Falls back to _legacy_fleet_equity() if anything goes wrong.
+    Raises on failure — route handler converts to HTTP 503.
     """
     try:
         from core.bot_state import get_all_portfolios

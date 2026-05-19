@@ -10,8 +10,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import "./_group.css";
-
 const bots = [
   {
     id: "oracle",

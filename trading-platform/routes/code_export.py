@@ -84,8 +84,6 @@ _SOURCE_FILES: list[str] = [
     "trading-platform/notifications/alert_manager.py",
     "trading-platform/notifications/telegram.py",
     "trading-platform/notifications/discord.py",
-    # ── Options engine ─────────────────────────────────────────────────────
-    "trading-platform/options_engine.py",
     # ── API routes ─────────────────────────────────────────────────────────
     "trading-platform/routes/__init__.py",
     "trading-platform/routes/_deps.py",
@@ -102,7 +100,6 @@ _SOURCE_FILES: list[str] = [
     "trading-platform/routes/ai_impact.py",
     "trading-platform/routes/code_export.py",
     # ── Kraken crypto bot engines (#2 Davy Jones / #3 Blackbeard / #4 Calypso)
-    "kraken-bot/main.py",
     "kraken-bot/logic.py",
     "kraken-bot/microstructure.py",
     "kraken-bot/vpin_adaptive.py",

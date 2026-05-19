@@ -1,6 +1,6 @@
 """
 jerome_strategy.py — Main strategy loop for Jerome commodity bot.
-Called from kraken-bot/main.py when BOT_ID=blackbeard and
+Called from kraken-bot/runner.py when bot_id=blackbeard and
 strategy_type=llm_commodity.
 
 Cycle runs every LOOP_SLEEP_SECONDS (15 min default).

@@ -54,7 +54,7 @@ def run_bot7_cycle(profile: dict, db_id: int) -> None:
     Checks exits every cycle. Fires Groq entries at configured UTC hours only.
     """
     # Pause guard — always first
-    if profile.get("BOT_PAUSED", True):
+    if profile.get("BOT_PAUSED", False):
         logger.info("Bot7 | BOT_PAUSED=True — skipping cycle (not yet activated)")
         return
 

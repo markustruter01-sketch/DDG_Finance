@@ -63,10 +63,10 @@ def run_jerome_cycle(profile: dict, db_id: int) -> None:
 
     _check_exit_conditions(alpaca, open_positions, profile)
 
-    if not alpaca.is_market_open():
-        logger.debug("Jerome | Market closed — skipping entry check")
-        _update_heartbeat(db_id, equity, len(open_positions))
-        return
+    # NOTE: No is_market_open() gate. Alpaca queues market orders for next open.
+    # SPY/QQQ Trend uses the same pattern. Removing this gate was the fix for
+    # Jerome being unable to trade — GROQ_CYCLE_HOURS [9,21] UTC fall outside
+    # NYSE hours, making the compound gate mathematically impossible to pass.
 
     cycle_hours = profile.get("GROQ_CYCLE_HOURS", [9, 21])
     if should_run_groq_cycle(cycle_hours):

@@ -148,7 +148,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     Runs once after market close (cycle timing managed by main.py sleep).
     """
     # Pause guard — always first
-    if profile.get("BOT_PAUSED", True):
+    if profile.get("BOT_PAUSED", False):
         logger.info(f"Bot2 | BOT_PAUSED=True — skipping cycle (not yet activated)")
         return
 

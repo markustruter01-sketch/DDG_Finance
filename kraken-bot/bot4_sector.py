@@ -123,7 +123,7 @@ def run_bot4_cycle(profile: dict, db_id: int) -> None:
     Exit checks (trailing stop) run every cycle.
     """
     # Pause guard — always first
-    if profile.get("BOT_PAUSED", True):
+    if profile.get("BOT_PAUSED", False):
         logger.info("Bot4 | BOT_PAUSED=True — skipping cycle (not yet activated)")
         return
 

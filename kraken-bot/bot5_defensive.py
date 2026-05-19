@@ -146,7 +146,7 @@ def run_bot5_cycle(profile: dict, db_id: int) -> None:
     Safety: Enforces NEVER_TRADE blacklist at both the strategy and order level.
     """
     # Pause guard — always first
-    if profile.get("BOT_PAUSED", True):
+    if profile.get("BOT_PAUSED", False):
         logger.info("Bot5 | BOT_PAUSED=True — skipping cycle (not yet activated)")
         return
 

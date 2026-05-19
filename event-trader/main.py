@@ -27,7 +27,7 @@ import event_sources
 import event_classifier
 from db_utils import record_trade
 from price_cache import get_price
-from core.bot_state import touch_heartbeat
+from core.bot_state import touch_heartbeat, write_portfolio
 
 logger = logging.getLogger("event-trader")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -38,27 +38,14 @@ _event_cache = {"events": [], "last_refresh": 0}
 
 def _sync_bot_portfolio() -> None:
     try:
-        from db.postgres import get_conn, is_pg_available
-        if not is_pg_available():
-            return
         state = pp._load()
-        equity = pp.get_equity()
-        cash = state["cash_usd"]
-        positions = list(state["positions"].values())
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO bot_portfolio (bot_id, equity_usd, cash_usd, positions, updated_at)
-                    VALUES (%s, %s, %s, %s, NOW())
-                    ON CONFLICT (bot_id) DO UPDATE SET
-                        equity_usd = EXCLUDED.equity_usd,
-                        cash_usd   = EXCLUDED.cash_usd,
-                        positions  = EXCLUDED.positions,
-                        updated_at = EXCLUDED.updated_at
-                    """,
-                    (cfg.BOT_ID, equity, cash, json.dumps(positions)),
-                )
+        write_portfolio(
+            bot_id=cfg.BOT_ID,
+            cash=state["cash_usd"],
+            equity=pp.get_equity(),
+            positions=list(state["positions"].values()),
+            metadata={"source": cfg.BOT_ID, "via": "wild_bot_sync"},
+        )
     except Exception as e:
         logger.debug(f"bot_portfolio sync failed: {e}")
 

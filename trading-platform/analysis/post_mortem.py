@@ -65,21 +65,24 @@ async def _fetch_closed_orders() -> list[dict[str, Any]]:
         orders = client.get_orders(filter=request)
         result = []
         for order in orders:
-            if order.filled_avg_price is not None:
-                order_type = "unknown"
-                try:
-                    raw = order.type
-                    order_type = raw.value if hasattr(raw, "value") else str(raw)
-                except Exception:
-                    pass
-                result.append({
-                    "order_id":   str(order.id),
-                    "ticker":     order.symbol,
-                    "side":       order.side.value,
-                    "order_type": order_type,
-                    "exit_price": float(order.filled_avg_price),
-                    "filled_at":  str(order.filled_at),
-                })
+            if order.filled_avg_price is None:
+                continue
+            if order.side.value != "sell":
+                continue   # Phantom-close fix: only sell orders are exits
+            order_type = "unknown"
+            try:
+                raw = order.type
+                order_type = raw.value if hasattr(raw, "value") else str(raw)
+            except Exception:
+                pass
+            result.append({
+                "order_id":   str(order.id),
+                "ticker":     order.symbol,
+                "side":       order.side.value,
+                "order_type": order_type,
+                "exit_price": float(order.filled_avg_price),
+                "filled_at":  str(order.filled_at),
+            })
         return result
 
     loop = asyncio.get_event_loop()

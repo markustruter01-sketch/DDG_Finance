@@ -1,6 +1,16 @@
 {
-  "cash_usd": 100000.0,
-  "positions": {},
+  "cash_usd": 92000.0,
+  "positions": {
+    "USDT": {
+      "units": 8007.13435671183,
+      "entry_price": 0.999109,
+      "current_price": 0.999109,
+      "peak_price": 0.999109,
+      "exchange": "coinbase",
+      "listing_title": "Coinbase listing: USDT/USDC",
+      "entry_time": "2026-05-19T22:52:49.385072"
+    }
+  },
   "trade_history": [
     {
       "asset": "spacex4200",

@@ -487,28 +487,24 @@ CREATE TABLE IF NOT EXISTS bots_state (
 -- Replaces scattered JSON state files and kraken_portfolio rows as source of truth.
 -- bot_id uses canonical registry IDs (spy_qqq_trend, jerome_macro, etc.)
 CREATE TABLE IF NOT EXISTS bot_portfolio (
-  bot_id          TEXT        PRIMARY KEY,
-  starting_usd    FLOAT8      NOT NULL,
-  cash_usd        FLOAT8      NOT NULL,
-  positions       JSONB       NOT NULL DEFAULT '[]'::jsonb,
-  equity_usd      FLOAT8      NOT NULL,
-  last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  is_live_broker  BOOLEAN     NOT NULL DEFAULT FALSE,
-  data_source     TEXT        NOT NULL
+  bot_id        TEXT PRIMARY KEY,
+  starting_usd  DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  cash_usd      DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  equity_usd    DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  positions     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  metadata      JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
-INSERT INTO bot_portfolio
-    (bot_id, starting_usd, cash_usd, positions, equity_usd,
-     last_updated, is_live_broker, data_source)
+INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, metadata)
 VALUES
-  ('oracle',            100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-  ('spy_qqq_trend',     100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-  ('jerome_macro',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-  ('forex_gump',        100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-  ('depeg_hunter',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-  ('event_trader',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-  ('listing_pump',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-  ('memecoin_velocity', 100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim')
+  ('oracle',             100000, 100000, 100000, '[]'::jsonb, '{"source": "alpaca", "needs_seed": true}'::jsonb),
+  ('spy_qqq_trend',      100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_1"}'::jsonb),
+  ('jerome_macro',       100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_2"}'::jsonb),
+
+  ('forex_gump',         100000, 100000, 100000, '[]'::jsonb, '{"source": "forex_engine"}'::jsonb),
+  ('poseidon_momentum',  100000, 100000, 100000, '[]'::jsonb, '{"source": "poseidon_paper_portfolio"}'::jsonb),
+  ('kraken_trend',       100000, 100127.55, 100127.55, '[]'::jsonb, '{"source": "kraken_current_portfolio_id_8"}'::jsonb)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -633,44 +629,62 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | retired bot cleanup failed (non-fatal): {exc}")
 
-    # Phase A — Unified accounting layer rebuild (2026-05-19).
-    # Drop existing bot_portfolio (stale rows, mismatched schema) and rebuild.
-    # Strip in publish #2 alongside the retired-bot cleanup block above.
+    # Phase A — Unified accounting layer rebuild (2026-05-19), part 1: additive columns only.
+    # Adds new columns alongside existing schema. Phase D updates writers/readers.
+    # Phase E drops legacy columns (updated_at, metadata) and makes data_source NOT NULL.
+    # Strip THIS block in publish #2 alongside the retired-bot cleanup at L616-629.
     try:
         with get_conn() as _bp_conn:
             with _bp_conn.cursor() as _bp_cur:
-                _bp_cur.execute("DROP TABLE IF EXISTS bot_portfolio CASCADE")
-                logger.info("DB | Phase A: dropped old bot_portfolio")
-
                 _bp_cur.execute("""
-                    CREATE TABLE bot_portfolio (
-                        bot_id          TEXT        PRIMARY KEY,
-                        starting_usd    FLOAT8      NOT NULL,
-                        cash_usd        FLOAT8      NOT NULL,
-                        positions       JSONB       NOT NULL DEFAULT '[]'::jsonb,
-                        equity_usd      FLOAT8      NOT NULL,
-                        last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        is_live_broker  BOOLEAN     NOT NULL DEFAULT FALSE,
-                        data_source     TEXT        NOT NULL
-                    )
+                    ALTER TABLE bot_portfolio
+                    ADD COLUMN IF NOT EXISTS is_live_broker BOOLEAN NOT NULL DEFAULT FALSE
                 """)
-                logger.info("DB | Phase A: created new bot_portfolio")
+                _bp_cur.execute("""
+                    ALTER TABLE bot_portfolio
+                    ADD COLUMN IF NOT EXISTS data_source TEXT
+                """)
+                _bp_cur.execute("""
+                    ALTER TABLE bot_portfolio
+                    ADD COLUMN IF NOT EXISTS last_updated TIMESTAMPTZ
+                """)
+                logger.info("DB | Phase A: added is_live_broker + data_source + last_updated columns")
 
+                # Backfill data_source for the 8 bots based on Alpaca vs internal sim.
+                # Safe to run repeatedly — only updates rows where data_source is NULL.
+                _bp_cur.execute("""
+                    UPDATE bot_portfolio SET data_source = 'alpaca_api'
+                    WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                      AND data_source IS NULL
+                """)
+                _bp_cur.execute("""
+                    UPDATE bot_portfolio SET data_source = 'internal_sim'
+                    WHERE bot_id IN ('forex_gump', 'depeg_hunter', 'event_trader',
+                                     'listing_pump', 'memecoin_velocity')
+                      AND data_source IS NULL
+                """)
+
+                # Backfill last_updated from existing updated_at for any rows where it's NULL.
+                _bp_cur.execute("""
+                    UPDATE bot_portfolio SET last_updated = updated_at
+                    WHERE last_updated IS NULL
+                """)
+                logger.info("DB | Phase A: backfilled data_source + last_updated")
+
+                # Insert any missing wild bots that weren't in the original seed.
+                # ON CONFLICT DO NOTHING — never overwrites existing rows.
                 _bp_cur.execute("""
                     INSERT INTO bot_portfolio
-                        (bot_id, starting_usd, cash_usd, positions, equity_usd,
-                         last_updated, is_live_broker, data_source)
+                        (bot_id, starting_usd, cash_usd, positions, equity_usd, updated_at,
+                         metadata, last_updated, is_live_broker, data_source)
                     VALUES
-                        ('oracle',            100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-                        ('spy_qqq_trend',     100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-                        ('jerome_macro',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'alpaca_api'),
-                        ('forex_gump',        100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-                        ('depeg_hunter',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-                        ('event_trader',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-                        ('listing_pump',      100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim'),
-                        ('memecoin_velocity', 100000.0, 100000.0, '[]'::jsonb, 100000.0, NOW(), FALSE, 'internal_sim')
+                        ('depeg_hunter',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
+                        ('event_trader',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
+                        ('listing_pump',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
+                        ('memecoin_velocity', 100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim')
+                    ON CONFLICT (bot_id) DO NOTHING
                 """)
-                logger.info("DB | Phase A: seeded 8 bot_portfolio rows")
+                logger.info("DB | Phase A: ensured all 8 bots have rows")
     except Exception as _bp_exc:
         logger.error(f"DB | Phase A migration failed: {_bp_exc}")
         raise

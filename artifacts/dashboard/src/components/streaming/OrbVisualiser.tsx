@@ -77,6 +77,7 @@ interface OrbData {
   tradePulse: { active: boolean; isWin: boolean; botName: string } | null;
   aiRipple: boolean;
   tendrilTrigger: number;
+  idleOrbPulse: number;
 }
 
 // ─── Molten Core ────────────────────────────────────────────────────────────
@@ -205,6 +206,11 @@ function MoltenCore({ orbData }: { orbData: OrbData }) {
     if (!orbData.aiRipple) return;
     rippleRef.current = 1.0;
   }, [orbData.aiRipple]);
+
+  useEffect(() => {
+    if (!orbData.idleOrbPulse) return;
+    pulseRef.current = Math.max(pulseRef.current, 0.6);
+  }, [orbData.idleOrbPulse]);
 
   useFrame((_, delta) => {
     timeRef.current += delta;
@@ -463,6 +469,7 @@ function GlowAtmosphere({ orbData }: { orbData: OrbData }) {
 
   useEffect(() => { if (orbData.tradePulse?.active) pulseRef.current = 1.0; }, [orbData.tradePulse]);
   useEffect(() => { if (orbData.aiRipple) pulseRef.current = Math.max(pulseRef.current, 0.7); }, [orbData.aiRipple]);
+  useEffect(() => { if (orbData.idleOrbPulse) pulseRef.current = Math.max(pulseRef.current, 0.6); }, [orbData.idleOrbPulse]);
 
   const heatIntensity = clamp01(orbData.openPositions / Math.max(1, orbData.totalBots));
 
@@ -718,6 +725,7 @@ function CSSOrb({ orbData }: { orbData: OrbData }) {
 
   useEffect(() => { if (orbData.tradePulse?.active) pulseRef.current = 1.0; }, [orbData.tradePulse]);
   useEffect(() => { if (orbData.aiRipple) rippleRef.current = 1.0; },         [orbData.aiRipple]);
+  useEffect(() => { if (orbData.idleOrbPulse) pulseRef.current = Math.max(pulseRef.current, 0.6); }, [orbData.idleOrbPulse]);
 
   useEffect(() => {
     if (!orbData.tendrilTrigger) return;
@@ -1038,6 +1046,7 @@ export function OrbVisualiser() {
   const [tradePulse,     setTradePulse    ] = useState<TradePulseState | null>(null);
   const [aiRipple,       setAiRipple      ] = useState(false);
   const [tendrilTrigger, setTendrilTrigger] = useState(0);
+  const [idleOrbPulse,   setIdleOrbPulse  ] = useState(0);
   const [webglAvailable                  ] = useState<boolean>(() => checkWebGL());
   const lastJournalCount  = useRef<number | null>(null);
   const lastAuditorRunAt  = useRef<string | null>(null);
@@ -1069,14 +1078,27 @@ export function OrbVisualiser() {
     if (runAt !== null) lastAuditorRunAt.current = runAt;
   }, [auditor?.report?.run_at]);
 
-  // Random tendril timer — fires every 2–3.5 seconds regardless of trade events
+  // Random tendril timer — fires every 2–5 seconds regardless of trade events
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const schedule = () => {
       timer = setTimeout(() => {
         setTendrilTrigger(n => n + 1);
         schedule();
-      }, 2000 + Math.random() * 1500);
+      }, 2000 + Math.random() * 3000);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Idle orb pulse — fires every 2–5 seconds to keep the orb feeling alive
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        setIdleOrbPulse(n => n + 1);
+        schedule();
+      }, 2000 + Math.random() * 3000);
     };
     schedule();
     return () => clearTimeout(timer);
@@ -1127,6 +1149,7 @@ export function OrbVisualiser() {
     tradePulse: tradePulse ? { active: tradePulse.active, isWin: tradePulse.isWin, botName: tradePulse.botName } : null,
     aiRipple,
     tendrilTrigger,
+    idleOrbPulse,
   };
 
   function fmtPnl(v: number) {
@@ -1266,7 +1289,7 @@ export function OrbVisualiser() {
           textTransform: "uppercase",
           textShadow: "0 0 20px rgba(251,146,60,0.8), 0 0 40px rgba(251,146,60,0.4), 0 0 60px rgba(234,88,12,0.3)",
         }}>
-          ◈ ALGOEDGE ORB ◈
+          ◈ TRADING ENGINE ORB ◈
         </div>
         <div style={{
           color: "rgba(251,146,60,0.5)",

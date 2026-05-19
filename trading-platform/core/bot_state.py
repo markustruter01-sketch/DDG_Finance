@@ -217,14 +217,15 @@ def write_portfolio(
                 cur.execute(
                     """
                     INSERT INTO bot_portfolio
-                        (bot_id, cash_usd, equity_usd, positions, updated_at, metadata)
-                    VALUES (%s, %s, %s, %s::jsonb, NOW(), %s::jsonb)
+                        (bot_id, cash_usd, equity_usd, positions, updated_at, last_updated, metadata)
+                    VALUES (%s, %s, %s, %s::jsonb, NOW(), NOW(), %s::jsonb)
                     ON CONFLICT (bot_id) DO UPDATE SET
-                        cash_usd   = EXCLUDED.cash_usd,
-                        equity_usd = EXCLUDED.equity_usd,
-                        positions  = EXCLUDED.positions,
-                        updated_at = NOW(),
-                        metadata   = CASE
+                        cash_usd     = EXCLUDED.cash_usd,
+                        equity_usd   = EXCLUDED.equity_usd,
+                        positions    = EXCLUDED.positions,
+                        updated_at   = NOW(),
+                        last_updated = NOW(),
+                        metadata     = CASE
                             WHEN EXCLUDED.metadata = '{}'::jsonb THEN bot_portfolio.metadata
                             ELSE EXCLUDED.metadata
                         END

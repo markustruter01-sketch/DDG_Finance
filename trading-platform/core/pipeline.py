@@ -1246,7 +1246,6 @@ async def _run_pipeline_inner(
             cash=round(_oracle_cash, 2),
             equity=round(_oracle_equity, 2),
             positions=[],
-            metadata={"source": "alpaca", "pipeline_mode": "oracle"}
         )
     except Exception as _pf_exc:
         logger.debug(f"Pipeline | Oracle bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

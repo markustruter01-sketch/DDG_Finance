@@ -476,7 +476,6 @@ def main():
                          "value_usd": round(_p.get("position_usd", 0), 2)}
                         for _sym, _p in portfolio.positions.items()
                     ],
-                    metadata={"source": "poseidon", "bot_id_legacy": "poseidon"}
                 )
             except Exception as _pf_exc:
                 logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

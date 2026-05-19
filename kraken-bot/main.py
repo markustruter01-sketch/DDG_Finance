@@ -730,7 +730,6 @@ def write_status(error: str | None = None) -> None:
                  "entry": _p["entry_price"], "value_usd": _p.get("value_usd", _p["size_usd"])}
                 for _sym, _p in open_positions.items()
             ],
-            metadata={"source": "kraken_bot", "bot_id_legacy": BOT_ID}
         )
     except Exception as _pf_exc:
         logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

@@ -558,7 +558,6 @@ def main():
                          "value_usd": round(_pos.position_value, 2)}
                         for _sym, _pos in portfolio.positions.items()
                     ],
-                    metadata={"source": "kraken_current", "bot_id_legacy": "kraken-current"}
                 )
             except Exception as _pf_exc:
                 logger.debug(f"Portfolio | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

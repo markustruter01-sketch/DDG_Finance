@@ -205,7 +205,6 @@ def write_portfolio(
     cash: float,
     equity: float,
     positions: list,
-    metadata: dict = None,
 ) -> None:
     """UPSERT portfolio state. Called by bot at end of every cycle.
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
@@ -217,25 +216,19 @@ def write_portfolio(
                 cur.execute(
                     """
                     INSERT INTO bot_portfolio
-                        (bot_id, cash_usd, equity_usd, positions, updated_at, last_updated, metadata)
-                    VALUES (%s, %s, %s, %s::jsonb, NOW(), NOW(), %s::jsonb)
+                        (bot_id, cash_usd, equity_usd, positions, last_updated)
+                    VALUES (%s, %s, %s, %s::jsonb, NOW())
                     ON CONFLICT (bot_id) DO UPDATE SET
                         cash_usd     = EXCLUDED.cash_usd,
                         equity_usd   = EXCLUDED.equity_usd,
                         positions    = EXCLUDED.positions,
-                        updated_at   = NOW(),
-                        last_updated = NOW(),
-                        metadata     = CASE
-                            WHEN EXCLUDED.metadata = '{}'::jsonb THEN bot_portfolio.metadata
-                            ELSE EXCLUDED.metadata
-                        END
+                        last_updated = NOW()
                     """,
                     (
                         canonical,
                         round(cash, 2),
                         round(equity, 2),
                         _json.dumps(positions),
-                        _json.dumps(metadata or {}),
                     ),
                 )
     except Exception as exc:

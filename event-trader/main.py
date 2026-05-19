@@ -44,7 +44,6 @@ def _sync_bot_portfolio() -> None:
             cash=state["cash_usd"],
             equity=pp.get_equity(),
             positions=list(state["positions"].values()),
-            metadata={"source": cfg.BOT_ID, "via": "wild_bot_sync"},
         )
     except Exception as e:
         logger.debug(f"bot_portfolio sync failed: {e}")

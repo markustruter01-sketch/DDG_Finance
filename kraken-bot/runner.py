@@ -129,7 +129,6 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
             cash=float(acct.cash or 0),
             equity=float(acct.equity or 0),
             positions=positions_list,
-            metadata={"source": "runner", "bot_id_legacy": bot_id}
         )
         logger.debug(f"[{bot_id}] bot_portfolio write OK — equity={acct.equity}")
         return True

@@ -1159,7 +1159,6 @@ def _write_heartbeat():
                  "value_usd": round(_fp.get("size_usd", 0), 2)}
                 for _pair, _fp in _fx_pos2.items()
             ],
-            metadata={"source": "forex_engine", "bot_id_legacy": "navigator"}
         )
     except Exception as _pf_exc:
         logger.debug(f"Navigator | bot_portfolio dual-write failed (non-fatal): {_pf_exc}")

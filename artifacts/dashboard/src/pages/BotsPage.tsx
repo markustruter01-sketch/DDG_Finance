@@ -342,7 +342,7 @@ export default function BotsPage() {
   ].sort((a, b) => b.time.localeCompare(a.time)).slice(0, 12);
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0e1a] text-slate-300 overflow-hidden">
+    <div className="flex flex-col bg-[#0a0e1a] text-slate-300 overflow-hidden" style={{ height: "100dvh", paddingBottom: "88px" }}>
       {/* ── Header ── */}
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-slate-800/60 bg-[#0d1117] px-4">
         <div className="flex items-center gap-3">

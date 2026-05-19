@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
 import BotsPage from "@/pages/BotsPage";
+import StreamPage from "@/pages/StreamPage";
 import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
 
@@ -36,12 +37,12 @@ const CRITICAL_QUERY_KEYS = [
   ["/positions/live"],
 ];
 
-function CommanderLoader() {
+function StreamingLoader() {
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center">
       <div className="text-center">
         <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <div className="text-xs text-muted-foreground font-mono">Loading...</div>
+        <div className="text-xs text-muted-foreground font-mono">Loading Streaming View...</div>
       </div>
     </div>
   );
@@ -54,16 +55,20 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/bots" component={BotsPage} />
         <Route path="/stream">
-          <Redirect to="/bots" />
+          <ErrorBoundary label="Stream" autoRecoverMs={2000}>
+            <Suspense fallback={<StreamingLoader />}>
+              <StreamPage />
+            </Suspense>
+          </ErrorBoundary>
         </Route>
         <Route path="/streaming">
-          <Redirect to="/bots" />
+          <Redirect to="/stream?sub=a" />
         </Route>
         <Route path="/streaming-v2">
-          <Redirect to="/bots" />
+          <Redirect to="/stream?sub=b" />
         </Route>
         <Route path="/commander">
-          <Suspense fallback={<CommanderLoader />}>
+          <Suspense fallback={<StreamingLoader />}>
             <CommanderPage />
           </Suspense>
         </Route>

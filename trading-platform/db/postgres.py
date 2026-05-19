@@ -666,24 +666,19 @@ def ensure_schema() -> None:
                       AND data_source IS NULL
                 """)
 
-                # Backfill last_updated from existing updated_at for any rows where it's NULL.
-                _bp_cur.execute("""
-                    UPDATE bot_portfolio SET last_updated = updated_at
-                    WHERE last_updated IS NULL
-                """)
-                logger.info("DB | Phase A: backfilled data_source + last_updated")
+                logger.info("DB | Phase A: backfilled data_source")
 
                 # Insert any missing wild bots that weren't in the original seed.
                 # ON CONFLICT DO NOTHING — never overwrites existing rows.
                 _bp_cur.execute("""
                     INSERT INTO bot_portfolio
-                        (bot_id, starting_usd, cash_usd, positions, equity_usd, updated_at,
-                         metadata, last_updated, is_live_broker, data_source)
+                        (bot_id, starting_usd, cash_usd, positions, equity_usd,
+                         last_updated, is_live_broker, data_source)
                     VALUES
-                        ('depeg_hunter',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
-                        ('event_trader',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
-                        ('listing_pump',      100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim'),
-                        ('memecoin_velocity', 100000, 100000, '[]'::jsonb, 100000, NOW(), '{}'::jsonb, NOW(), FALSE, 'internal_sim')
+                        ('depeg_hunter',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
+                        ('event_trader',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
+                        ('listing_pump',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
+                        ('memecoin_velocity', 100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim')
                     ON CONFLICT (bot_id) DO NOTHING
                 """)
                 logger.info("DB | Phase A: ensured all 8 bots have rows")

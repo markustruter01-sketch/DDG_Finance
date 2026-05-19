@@ -1,5 +1,5 @@
 {
-  "cash_usd": 92000.0,
+  "cash_usd": 84000.0,
   "positions": {
     "USDT": {
       "units": 8007.13435671183,
@@ -9,6 +9,15 @@
       "exchange": "coinbase",
       "listing_title": "Coinbase listing: USDT/USDC",
       "entry_time": "2026-05-19T22:52:49.385072"
+    },
+    "MANTLE": {
+      "units": 12850.394105524223,
+      "entry_price": 0.622549,
+      "current_price": 0.622549,
+      "peak_price": 0.622549,
+      "exchange": "coinbase",
+      "listing_title": "Coinbase listing: MANTLE/USD",
+      "entry_time": "2026-05-19T22:53:50.630898"
     }
   },
   "trade_history": [

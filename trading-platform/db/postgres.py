@@ -487,24 +487,26 @@ CREATE TABLE IF NOT EXISTS bots_state (
 -- Replaces scattered JSON state files and kraken_portfolio rows as source of truth.
 -- bot_id uses canonical registry IDs (spy_qqq_trend, jerome_macro, etc.)
 CREATE TABLE IF NOT EXISTS bot_portfolio (
-  bot_id        TEXT PRIMARY KEY,
-  starting_usd  DOUBLE PRECISION NOT NULL DEFAULT 100000,
-  cash_usd      DOUBLE PRECISION NOT NULL DEFAULT 100000,
-  equity_usd    DOUBLE PRECISION NOT NULL DEFAULT 100000,
-  positions     JSONB NOT NULL DEFAULT '[]'::jsonb,
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  metadata      JSONB NOT NULL DEFAULT '{}'::jsonb
+  bot_id         TEXT PRIMARY KEY,
+  starting_usd   DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  cash_usd       DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  equity_usd     DOUBLE PRECISION NOT NULL DEFAULT 100000,
+  positions      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_updated   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  is_live_broker BOOLEAN NOT NULL DEFAULT FALSE,
+  data_source    TEXT NOT NULL DEFAULT 'unknown'
 );
 
-INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, metadata)
+INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, data_source, is_live_broker)
 VALUES
-  ('oracle',             100000, 100000, 100000, '[]'::jsonb, '{"source": "alpaca", "needs_seed": true}'::jsonb),
-  ('spy_qqq_trend',      100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_1"}'::jsonb),
-  ('jerome_macro',       100000, 100000, 100000, '[]'::jsonb, '{"source": "kraken_portfolio_id_2"}'::jsonb),
-
-  ('forex_gump',         100000, 100000, 100000, '[]'::jsonb, '{"source": "forex_engine"}'::jsonb),
-  ('poseidon_momentum',  100000, 100000, 100000, '[]'::jsonb, '{"source": "poseidon_paper_portfolio"}'::jsonb),
-  ('kraken_trend',       100000, 100127.55, 100127.55, '[]'::jsonb, '{"source": "kraken_current_portfolio_id_8"}'::jsonb)
+  ('oracle',            100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('spy_qqq_trend',     100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('jerome_macro',      100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('forex_gump',        100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('depeg_hunter',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('event_trader',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('listing_pump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('memecoin_velocity', 100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -689,6 +691,23 @@ def ensure_schema() -> None:
         logger.error(f"DB | Phase A migration failed: {_bp_exc}")
         raise
 
+    # Phase E2a — DROP COLUMN bot_portfolio.updated_at and bot_portfolio.metadata.
+    # Both columns are dead post-E1 (zero writers, zero readers verified).
+    # Strip THIS block in publish #2.
+    try:
+        with get_conn() as _e2_conn:
+            with _e2_conn.cursor() as _e2_cur:
+                _e2_cur.execute("ALTER TABLE bot_portfolio DROP COLUMN IF EXISTS updated_at")
+                logger.info("DB | Phase E2a: dropped bot_portfolio.updated_at")
+    except Exception as _e2_exc:
+        logger.error(f"DB | Phase E2a updated_at drop failed: {_e2_exc}")
+    try:
+        with get_conn() as _e2_conn:
+            with _e2_conn.cursor() as _e2_cur:
+                _e2_cur.execute("ALTER TABLE bot_portfolio DROP COLUMN IF EXISTS metadata")
+                logger.info("DB | Phase E2a: dropped bot_portfolio.metadata")
+    except Exception as _e2_exc:
+        logger.error(f"DB | Phase E2a metadata drop failed: {_e2_exc}")
 
 
 def insert_post_mortem(

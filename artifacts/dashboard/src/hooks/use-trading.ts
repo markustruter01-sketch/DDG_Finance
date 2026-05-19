@@ -772,19 +772,23 @@ export interface BotEquity {
   pnl: number;
   pnl_pct: number;
   starting: number;
+  cash?: number;
   positions: number;
   source: string;
+  last_updated?: string | null;
   stale?: boolean;
   heartbeat_mins_ago?: number;
 }
 
 export interface FleetEquityData {
   oracle: BotEquity;
-  davy_jones: BotEquity;
-  blackbeard: BotEquity;
-  navigator: BotEquity;
-  poseidon: BotEquity;
-  kraken_current: BotEquity;
+  spy_qqq_trend: BotEquity;
+  jerome_macro: BotEquity;
+  forex_gump: BotEquity;
+  depeg_hunter: BotEquity;
+  event_trader: BotEquity;
+  listing_pump: BotEquity;
+  memecoin_velocity: BotEquity;
   fleet_total: BotEquity;
   generated_at: string;
   errors: string[];

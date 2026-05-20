@@ -71,6 +71,9 @@ float diskDensity(vec3 p){
   float cs=cos(spin),ss=sin(spin);
   vec2 rotXZ=vec2(p.x*cs-p.z*ss,p.x*ss+p.z*cs);
   vec3 swirl=vec3(rotXZ.x,0.0,rotXZ.y)*0.18;
+  // Decoupled time term: noise pattern evolves independently of rotation winding
+  // so inner radii don't smear into concentric bands as spin accumulates
+  swirl+=vec3(uTime*0.05,0.0,uTime*0.05);
   float base=mix(0.3,1.3,fbm(swirl));
   vec3 plasma1=vec3(rotXZ.x,rotXZ.y,uTime*0.9)*0.28;
   float pTurb1=mix(0.2,1.6,fbm(plasma1));

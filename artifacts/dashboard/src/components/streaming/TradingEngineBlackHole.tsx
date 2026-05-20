@@ -261,10 +261,15 @@ export function TradingEngineBlackHole() {
     }, { passive: false });
 
     let rafId = 0;
+    let lastNow = 0;
 
     function frame(now: number) {
       rafId = requestAnimationFrame(frame);
-      if (document.hidden) return;
+      if (document.hidden) { lastNow = now; return; }
+      const dt = Math.min((now - lastNow) * 0.001, 0.05); // seconds, capped at 50ms
+      lastNow = now;
+      // Auto-orbit: full 360° in ~90s when user is not dragging
+      if (!drag) tTheta += dt * 0.07;
       const s = 0.08;
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;

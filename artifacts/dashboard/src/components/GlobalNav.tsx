@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, Radio, Bot, Terminal } from "lucide-react";
+import { LayoutDashboard, Radio, Terminal } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -8,14 +8,6 @@ const NAV_ITEMS = [
     path:  "/",
     icon:  LayoutDashboard,
     color: "#3b82f6",
-    pulse: false,
-  },
-  {
-    id:    "bots",
-    label: "Bots",
-    path:  "/bots",
-    icon:  Bot,
-    color: "#a855f7",
     pulse: false,
   },
   {

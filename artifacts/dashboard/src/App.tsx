@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
-import BotsPage from "@/pages/BotsPage";
 import StreamPage from "@/pages/StreamPage";
 import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
@@ -53,7 +52,6 @@ function Router() {
     <>
       <Switch>
         <Route path="/" component={Dashboard} />
-        <Route path="/bots" component={BotsPage} />
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
             <Suspense fallback={<StreamingLoader />}>

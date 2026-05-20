@@ -61,8 +61,8 @@ export function MiniSynapticWidget() {
     <div
       style={{
         position: "absolute",
-        bottom: 0,
-        left: 0,
+        bottom: 48,
+        left: 12,
         width: 310,
         pointerEvents: "none",
         zIndex: 20,

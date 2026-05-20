@@ -67,13 +67,13 @@ float diskDensity(vec3 p){
   float h=abs(p.y);
   float thickness=0.06+r*0.011;
   float vertical=exp(-(h*h)/(thickness*thickness));
-  float spin=SPIN*uTime*1.8/sqrt(max(r,1.5));
+  // mod-wrap spin so coords never wind past one full turn — eliminates concentric-ring artifact
+  float spin=mod(SPIN*uTime*1.8/sqrt(max(r,1.5)),TAU);
   float cs=cos(spin),ss=sin(spin);
   vec2 rotXZ=vec2(p.x*cs-p.z*ss,p.x*ss+p.z*cs);
   vec3 swirl=vec3(rotXZ.x,0.0,rotXZ.y)*0.18;
-  // Decoupled time term: noise pattern evolves independently of rotation winding
-  // so inner radii don't smear into concentric bands as spin accumulates
-  swirl+=vec3(uTime*0.05,0.0,uTime*0.05);
+  // Fast drift: noise lookup shifts 0.25 units/s so turbulence refreshes well before bands form
+  swirl+=vec3(uTime*0.25,0.0,uTime*0.25);
   float base=mix(0.3,1.3,fbm(swirl));
   vec3 plasma1=vec3(rotXZ.x,rotXZ.y,uTime*0.9)*0.28;
   float pTurb1=mix(0.2,1.6,fbm(plasma1));
@@ -94,7 +94,8 @@ vec3 diskEmission(vec3 p, float density){
   col*=max(0.3,1.0+dop*0.7);
   col=mix(col,col*vec3(0.6,0.8,1.5),max(0.0,dop)*0.3);
   col=mix(col,col*vec3(1.5,0.6,0.3),max(0.0,-dop)*0.3);
-  float spin=SPIN*uTime*1.8/sqrt(max(r,1.5));
+  // mod-wrap spin — same fix as diskDensity to prevent blob variation banding
+  float spin=mod(SPIN*uTime*1.8/sqrt(max(r,1.5)),TAU);
   float cs=cos(spin),ss=sin(spin);
   vec2 rotXZ=vec2(p.x*cs-p.z*ss,p.x*ss+p.z*cs);
   float blob=fbm(vec3(rotXZ.x,rotXZ.y,uTime*0.08)*0.18);

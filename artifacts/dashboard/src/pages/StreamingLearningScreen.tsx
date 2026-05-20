@@ -104,13 +104,13 @@ export default function StreamingLearningScreen() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      padding: "8px 48px 72px",
+      padding: "clamp(12px, 2.5vh, 40px) clamp(20px, 4vw, 60px) clamp(60px, 8vh, 84px)",
       boxSizing: "border-box",
       overflow: "hidden",
     }}>
       <div style={{
-        width: "100%", maxWidth: 960,
-        height: "100%", maxHeight: 590,
+        width: "100%",
+        height: "100%",
         position: "relative",
         filter: "drop-shadow(0 16px 48px rgba(0,0,0,.75))",
       }}>
@@ -143,7 +143,7 @@ export default function StreamingLearningScreen() {
             display: "flex", flexDirection: "column",
             alignItems: "center", paddingTop: 16, gap: 18, zIndex: 2,
           }}>
-            {Array.from({ length: 22 }).map((_, i) => (
+            {Array.from({ length: 32 }).map((_, i) => (
               <div key={i} style={{
                 width: 22, height: 12,
                 borderRadius: 7,

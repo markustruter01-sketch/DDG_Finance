@@ -472,7 +472,7 @@ export default function StreamingBotsScreen() {
             </span>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e", boxShadow: "0 0 5px #22c55e" }} />
           </div>
-          <div className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0">
+          <div className="flex-1 overflow-y-auto flex flex-col gap-2 min-h-0 pr-2">
             {liveFeedTrades.length === 0 ? (
               <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>No recent trades</div>
             ) : (
@@ -483,11 +483,11 @@ export default function StreamingBotsScreen() {
                     <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>
                       {fmtTime(t.closed_at)}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-mono font-bold text-slate-300">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[9px] font-mono font-bold text-slate-300 truncate">
                         {t.symbol}
                       </span>
-                      <span className="text-[9px] font-mono font-bold" style={{ color: pColor }}>
+                      <span className="text-[9px] font-mono font-bold shrink-0" style={{ color: pColor }}>
                         {(t.pnl_usd ?? 0) >= 0 ? "+" : ""}${Math.abs(t.pnl_usd ?? 0).toFixed(0)}
                       </span>
                     </div>

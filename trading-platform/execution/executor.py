@@ -803,7 +803,25 @@ def _execute_slot(
 
         remaining_cash -= notional_usd
 
-        actual_fill_price = _poll_fill_price(order_id, ticker)
+        actual_fill_price, poll_status = _poll_fill_price(order_id, ticker)
+
+        if poll_status in ("canceled", "rejected", "expired"):
+            try:
+                from analysis.trade_journal import delete_trade
+                delete_trade(order_id)
+                logger.warning(
+                    f"Executor | Order {order_id} {poll_status} by Alpaca for {ticker} — "
+                    f"DB row deleted to prevent phantom-Active drift"
+                )
+            except Exception as exc:
+                logger.error(f"Executor | Failed to rollback DB row for {order_id}: {exc}")
+        elif poll_status == "timeout":
+            logger.warning(
+                f"Executor | Fill poll timed out for {ticker} order {order_id} after 60s. "
+                f"Order may still fill — DB row left Active with NULL fill_price. "
+                f"Will need post-hoc reconciliation."
+            )
+
         slippage_info = ""
         if actual_fill_price and intended_price:
             slippage_pct = (actual_fill_price - intended_price) / intended_price * 100
@@ -955,7 +973,7 @@ def _run_vault_sweep(equity: float, results: dict, dry_run: bool) -> dict:
     return results
 
 
-def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float | None:
+def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 60.0) -> tuple[float | None, str]:
     start = time.time()
     poll_interval = 0.5
 
@@ -968,16 +986,17 @@ def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 5.0) -> float
                 _filled_qty = order_data.get("filled_qty")
                 if _filled_qty:
                     update_trade_qty(order_id, float(_filled_qty))
-                return fill_price
-            if order_data.get("status") in ("canceled", "expired", "rejected"):
-                logger.warning(f"Order {order_id} ({ticker}) ended with status={order_data['status']}")
-                return None
+                return (fill_price, "filled")
+            terminal_status = order_data.get("status")
+            if terminal_status in ("canceled", "expired", "rejected"):
+                logger.warning(f"Order {order_id} ({ticker}) ended with status={terminal_status}")
+                return (None, terminal_status)
         except Exception as exc:
             logger.warning(f"Poll fill price error for {ticker}: {exc}")
         time.sleep(poll_interval)
 
     logger.warning(f"Fill price not available within {max_wait}s for {ticker} (order_id={order_id})")
-    return None
+    return (None, "timeout")
 
 
 # ── Afterhours Capital Guard ───────────────────────────────────────────────

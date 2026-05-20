@@ -701,6 +701,29 @@ def find_active_trade_by_ticker(ticker: str) -> Optional[str]:
         return None
 
 
+def delete_trade(trade_id: str) -> bool:
+    """
+    Delete a trade row entirely. Used for rollback when Alpaca cancels/rejects
+    an order before fill, preventing phantom-Active rows from accumulating.
+    Returns True if a row was deleted, False otherwise.
+    """
+    try:
+        if _use_pg():
+            from db.postgres import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM trades WHERE trade_id = %s", (trade_id,))
+                    return cur.rowcount > 0
+        else:
+            with _sqlite_conn() as conn:
+                cur = conn.execute("DELETE FROM trades WHERE trade_id = ?", (trade_id,))
+                conn.commit()
+                return cur.rowcount > 0
+    except Exception as exc:
+        logger.error(f"delete_trade({trade_id}) failed: {exc}")
+        return False
+
+
 def get_all_trades(limit: int = 200) -> list[dict]:
     cols = ("trade_id", "date", "ticker", "asset_class", "conviction_score",
             "original_thesis", "pnl_percentage", "status",

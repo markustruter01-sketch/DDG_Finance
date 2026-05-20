@@ -423,6 +423,28 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
             pass
 
         # Record to trade journal
+        # ── Fallback: recover trade_id if it was missing (rapid re-entry race) ──
+        if not trade_id:
+            try:
+                from analysis.trade_journal import find_active_trade_by_ticker
+                fallback_trade_id = find_active_trade_by_ticker(symbol)
+                if fallback_trade_id:
+                    trade_id = fallback_trade_id
+                    logger.warning(
+                        f"ExitManager | trade_id was None for {symbol} — "
+                        f"recovered via ticker lookup: {trade_id}"
+                    )
+                else:
+                    logger.critical(
+                        f"ExitManager | PHANTOM-OPEN RISK: {symbol} sell fired in Alpaca "
+                        f"but no trade_id found and no Active row to fallback to. "
+                        f"DB will diverge from broker. Manual reconciliation required."
+                    )
+            except Exception as exc:
+                logger.critical(
+                    f"ExitManager | trade_id fallback failed for {symbol}: {exc}"
+                )
+
         if trade_id:
             try:
                 pos     = all_positions.get(symbol, {})
@@ -452,7 +474,10 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
                     except Exception:
                         pass
             except Exception as exc:
-                logger.warning(f"ExitManager | Journal write failed for {symbol}: {exc}")
+                logger.critical(
+                    f"ExitManager | Journal close_trade FAILED for {symbol} "
+                    f"trade_id={trade_id}: {exc} — Alpaca sold but DB still Active"
+                )
 
         result["closed"].append({
             "symbol":      symbol,

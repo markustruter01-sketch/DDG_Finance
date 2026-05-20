@@ -14,7 +14,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 from loguru import logger
 
@@ -666,6 +666,39 @@ def get_all_active_trades() -> list[dict]:
                 FROM trades WHERE status = 'Active' ORDER BY date DESC
             """).fetchall()
         return [dict(r) for r in rows]
+
+
+def find_active_trade_by_ticker(ticker: str) -> Optional[str]:
+    """
+    Fallback for execute_exits() when trade_id is missing.
+    Returns the trade_id of the most recently opened Active trade for this ticker.
+    Returns None if no Active trade exists for this ticker.
+    """
+    try:
+        if _use_pg():
+            from db.postgres import get_conn
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT trade_id FROM trades
+                        WHERE ticker = %s AND status = 'Active'
+                        ORDER BY date DESC, trade_id DESC
+                        LIMIT 1
+                    """, (ticker,))
+                    row = cur.fetchone()
+                    return row[0] if row else None
+        else:
+            with _sqlite_conn() as conn:
+                row = conn.execute("""
+                    SELECT trade_id FROM trades
+                    WHERE ticker = ? AND status = 'Active'
+                    ORDER BY date DESC, trade_id DESC
+                    LIMIT 1
+                """, (ticker,)).fetchone()
+                return row[0] if row else None
+    except Exception as exc:
+        logger.error(f"find_active_trade_by_ticker({ticker}) failed: {exc}")
+        return None
 
 
 def get_all_trades(limit: int = 200) -> list[dict]:

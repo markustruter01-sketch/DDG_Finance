@@ -4,7 +4,7 @@
     "USDT": {
       "units": 8007.13435671183,
       "entry_price": 0.999109,
-      "current_price": 0.998906,
+      "current_price": 0.998923,
       "peak_price": 0.999109,
       "exchange": "coinbase",
       "listing_title": "Coinbase listing: USDT/USDC",
@@ -22,8 +22,8 @@
     "TUSD": {
       "units": 8014.931817976891,
       "entry_price": 0.998137,
-      "current_price": 0.999188,
-      "peak_price": 0.99929,
+      "current_price": 0.998384,
+      "peak_price": 0.999381,
       "exchange": "binance",
       "listing_title": "Binance listing: TUSD/USDT",
       "entry_time": "2026-05-19T23:04:52.879262"
@@ -31,8 +31,8 @@
     "USDC": {
       "units": 8001.944472506819,
       "entry_price": 0.999757,
-      "current_price": 0.999655,
-      "peak_price": 0.999832,
+      "current_price": 0.999924,
+      "peak_price": 0.999924,
       "exchange": "binance",
       "listing_title": "Binance listing: USDC/USDT",
       "entry_time": "2026-05-19T23:05:51.977905"

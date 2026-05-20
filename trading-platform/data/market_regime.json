@@ -1,9 +1,9 @@
 {
   "regime": "Sideways",
-  "written_at": "2026-05-19T18:01:20.798765+00:00",
-  "cycle_number": 19,
+  "written_at": "2026-05-20T19:46:03.724015+00:00",
+  "cycle_number": 26,
   "using_fallback": false,
   "regime_override": false,
   "rationale": "Oracle STF v1.0: 5 new long(s), 2 short(s), 7 position(s) held \u2014 EMA20/EMA50 + ADX + ATR sizing",
-  "vix": 17.82
+  "vix": 18.06
 }

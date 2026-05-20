@@ -178,7 +178,10 @@ export function TradingEngineBlackHole() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext("webgl", { antialias: true });
+    const gl = (
+      canvas.getContext("webgl", { antialias: true }) ||
+      canvas.getContext("experimental-webgl", { antialias: true })
+    ) as WebGLRenderingContext | null;
     if (!gl) {
       setWebglFailed(true);
       return;

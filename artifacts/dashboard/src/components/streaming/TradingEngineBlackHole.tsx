@@ -170,6 +170,8 @@ void main(){
 }
 `;
 
+const RES_SCALE = 0.85;
+
 export function TradingEngineBlackHole() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [webglFailed, setWebglFailed] = useState(false);
@@ -187,19 +189,18 @@ export function TradingEngineBlackHole() {
       return;
     }
 
-    function compileShader(type: number, src: string): WebGLShader {
+    function shader(type: number, src: string): WebGLShader {
       const s = gl!.createShader(type)!;
       gl!.shaderSource(s, src);
       gl!.compileShader(s);
-      if (!gl!.getShaderParameter(s, gl!.COMPILE_STATUS)) {
-        console.error("Shader compile error:", gl!.getShaderInfoLog(s));
-      }
+      if (!gl!.getShaderParameter(s, gl!.COMPILE_STATUS))
+        console.error(gl!.getShaderInfoLog(s));
       return s;
     }
 
     const prog = gl.createProgram()!;
-    gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, VS));
-    gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, FS));
+    gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       console.error("Program link error:", gl.getProgramInfoLog(prog));
@@ -220,120 +221,67 @@ export function TradingEngineBlackHole() {
       (n) => (U[n] = gl.getUniformLocation(prog, n))
     );
 
-    let resScale = 0.85;
     let W = 0, H = 0;
 
     function resize() {
-      const pw = canvas.parentElement?.offsetWidth ?? canvas.offsetWidth;
-      const ph = canvas.parentElement?.offsetHeight ?? canvas.offsetHeight;
-      W = Math.max(1, Math.floor(pw * resScale));
-      H = Math.max(1, Math.floor(ph * resScale));
+      W = Math.floor(window.innerWidth * RES_SCALE);
+      H = Math.floor(window.innerHeight * RES_SCALE);
       canvas.width = W;
       canvas.height = H;
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
       gl.viewport(0, 0, W, H);
-      if (U.uRes) gl.uniform2f(U.uRes, W, H);
+      gl.uniform2f(U.uRes, W, H);
     }
-
-    const resizeObs = new ResizeObserver(resize);
-    resizeObs.observe(canvas.parentElement ?? canvas);
+    window.addEventListener("resize", resize);
     resize();
 
     let camTheta = 0.5, camPhi = 1.45, camRadius = 16.0;
     let tTheta = camTheta, tPhi = camPhi, tRadius = camRadius;
     let drag = false, lx = 0, ly = 0;
 
-    function onMouseDown(e: MouseEvent) { drag = true; lx = e.clientX; ly = e.clientY; }
-    function onMouseUp() { drag = false; }
-    function onMouseMove(e: MouseEvent) {
+    canvas.addEventListener("mousedown", (e) => { drag = true; lx = e.clientX; ly = e.clientY; });
+    window.addEventListener("mouseup", () => drag = false);
+    window.addEventListener("mousemove", (e) => {
       if (!drag) return;
       tTheta -= (e.clientX - lx) * 0.006;
       tPhi = Math.max(0.05, Math.min(Math.PI - 0.05, tPhi + (e.clientY - ly) * 0.006));
       lx = e.clientX; ly = e.clientY;
-    }
-    function onWheel(e: WheelEvent) {
+    });
+    canvas.addEventListener("wheel", (e) => {
       tRadius = Math.max(3.0, Math.min(50.0, tRadius + e.deltaY * 0.03));
       e.preventDefault();
-    }
-    function onTouchStart(e: TouchEvent) {
-      drag = true; lx = e.touches[0].clientX; ly = e.touches[0].clientY;
-    }
-    function onTouchEnd() { drag = false; }
-    function onTouchMove(e: TouchEvent) {
+    }, { passive: false });
+    canvas.addEventListener("touchstart", (e) => { drag = true; lx = e.touches[0].clientX; ly = e.touches[0].clientY; });
+    canvas.addEventListener("touchend", () => drag = false);
+    canvas.addEventListener("touchmove", (e) => {
       if (!drag) return;
       tTheta -= (e.touches[0].clientX - lx) * 0.006;
       tPhi = Math.max(0.05, Math.min(Math.PI - 0.05, tPhi + (e.touches[0].clientY - ly) * 0.006));
       lx = e.touches[0].clientX; ly = e.touches[0].clientY;
       e.preventDefault();
-    }
+    }, { passive: false });
 
-    canvas.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("touchstart", onTouchStart);
-    canvas.addEventListener("touchend", onTouchEnd);
-    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-
-    const fpsSamples: number[] = [];
-    let lastFrameTs = performance.now();
-    let adaptiveDropped = false;
-    let visiblePaused = document.hidden;
-    let intersectionPaused = false;
     let rafId = 0;
 
     function frame(now: number) {
       rafId = requestAnimationFrame(frame);
-      if (visiblePaused || intersectionPaused) return;
-
-      const delta = now - lastFrameTs;
-      lastFrameTs = now;
-      if (delta > 0) {
-        fpsSamples.push(1000 / delta);
-        if (fpsSamples.length > 60) fpsSamples.shift();
-        if (fpsSamples.length === 60 && !adaptiveDropped) {
-          const avg = fpsSamples.reduce((a, b) => a + b, 0) / 60;
-          if (avg < 30) {
-            adaptiveDropped = true;
-            resScale = 0.5;
-            resize();
-          }
-        }
-      }
-
+      if (document.hidden) return;
       const s = 0.08;
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;
       camRadius += (tRadius - camRadius) * s;
-
-      if (U.uTime)   gl.uniform1f(U.uTime,   now * 0.001);
-      if (U.uTheta)  gl.uniform1f(U.uTheta,  camTheta);
-      if (U.uPhi)    gl.uniform1f(U.uPhi,    camPhi);
-      if (U.uRadius) gl.uniform1f(U.uRadius, camRadius);
+      gl.uniform1f(U.uTime,   now * 0.001);
+      gl.uniform1f(U.uTheta,  camTheta);
+      gl.uniform1f(U.uPhi,    camPhi);
+      gl.uniform1f(U.uRadius, camRadius);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
     rafId = requestAnimationFrame(frame);
 
-    function onVisibilityChange() { visiblePaused = document.hidden; }
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    const io = new IntersectionObserver(
-      ([entry]) => { intersectionPaused = !entry.isIntersecting; },
-      { threshold: 0.01 }
-    );
-    io.observe(canvas);
-
     return () => {
       cancelAnimationFrame(rafId);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      canvas.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("mousemove", onMouseMove);
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchend", onTouchEnd);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      io.disconnect();
-      resizeObs.disconnect();
+      window.removeEventListener("resize", resize);
       gl.deleteProgram(prog);
       gl.deleteBuffer(buf);
     };
@@ -365,8 +313,6 @@ export function TradingEngineBlackHole() {
         position: "absolute",
         inset: 0,
         display: "block",
-        width: "100%",
-        height: "100%",
         cursor: "crosshair",
       }}
     />

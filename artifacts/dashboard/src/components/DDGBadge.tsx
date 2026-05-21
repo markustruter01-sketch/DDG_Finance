@@ -14,8 +14,8 @@ export function DDGBadge({ style, size = "md" }: DDGBadgeProps) {
         alignItems: "center",
         gap: isSm ? 4 : 6,
         background: "rgba(2,6,23,0.85)",
-        border: "1px solid rgba(255,255,255,1)",
-        borderLeft: "3px solid rgba(255,255,255,1)",
+        border: "1px solid rgba(251,146,60,0.2)",
+        borderLeft: `3px solid #f97316`,
         borderRadius: 7,
         padding: isSm ? "3px 8px 3px 6px" : "5px 12px 5px 8px",
         backdropFilter: "blur(12px)",
@@ -23,20 +23,20 @@ export function DDGBadge({ style, size = "md" }: DDGBadgeProps) {
         ...style,
       }}
     >
-      <span style={{ color: "#ffffff", fontSize: isSm ? 11 : 13, lineHeight: 1, flexShrink: 0 }}>⚡</span>
+      <span style={{ color: "#f97316", fontSize: isSm ? 11 : 13, lineHeight: 1, flexShrink: 0 }}>⚡</span>
       <span
         style={{
           fontFamily: "monospace",
           fontSize: isSm ? 8 : 10,
           letterSpacing: "0.08em",
-          color: "rgba(255,255,255,0.65)",
+          color: "rgba(148,163,184,0.65)",
           whiteSpace: "nowrap",
           lineHeight: 1,
         }}
       >
         POWERED BY{" "}
-        <span style={{ color: "#ffffff", fontWeight: 700 }}>DIGITAL DYNAMICS</span>{" "}
-        <span style={{ color: "#ffffff", fontWeight: 700 }}>GROUP</span>
+        <span style={{ color: "rgba(241,245,249,0.9)", fontWeight: 700 }}>DIGITAL DYNAMICS</span>{" "}
+        <span style={{ color: "#22d3ee", fontWeight: 700 }}>GROUP</span>
       </span>
       <img
         src="/ddg-logo.png"

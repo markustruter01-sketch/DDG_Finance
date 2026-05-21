@@ -9,6 +9,15 @@ const FORMULAS = [
 
 type Pt = { x: number; y: number };
 
+//
+// All x-coordinates scaled 1.6× around centre x=280 vs the previous layout.
+// viewBox "-130 30 840 740"  →  at container 346×280:
+//   scale = min(346/840, 280/740) = min(0.412, 0.378) = 0.378   (height-constrained)
+//   rendered width = 840×0.378 = 318 px  (92% of the 346px column)
+//   rendered height= 740×0.378 = 280 px  (fills top→bottom perfectly)
+//
+
+// f(x) = 280 + (x_old - 280)*1.6
 const INPUT_NODES: Pt[] = [
   { x: -56, y: 285 },
   { x:  168, y: 285 },
@@ -88,20 +97,20 @@ export function MiniSynapticWidget() {
           100% { stroke-dashoffset: 0; opacity: 0; }
         }
         @keyframes mini-glow-beat {
-          0%, 100% { filter: drop-shadow(0 0 2px rgba(255,255,255,0.5)); opacity: 0.75; }
-          50%       { filter: drop-shadow(0 0 6px rgba(255,255,255,1));   opacity: 1; }
+          0%, 100% { filter: drop-shadow(0 0 2px rgba(6,182,212,0.5)); opacity: 0.75; }
+          50%       { filter: drop-shadow(0 0 6px rgba(6,182,212,1));   opacity: 1; }
         }
         @keyframes mini-glow-slow {
-          0%, 100% { filter: drop-shadow(0 0 2px rgba(255,255,255,0.4)); opacity: 0.65; }
-          50%       { filter: drop-shadow(0 0 8px rgba(255,255,255,0.9)); opacity: 1; }
+          0%, 100% { filter: drop-shadow(0 0 2px rgba(6,182,212,0.4)); opacity: 0.65; }
+          50%       { filter: drop-shadow(0 0 8px rgba(34,211,238,0.9)); opacity: 1; }
         }
         @keyframes mini-formula-glow {
-          0%, 100% { filter: drop-shadow(0 0 3px rgba(255,255,255,0.2)); }
-          50%       { filter: drop-shadow(0 0 9px rgba(255,255,255,0.5)); }
+          0%, 100% { filter: drop-shadow(0 0 3px rgba(6,182,212,0.2)); }
+          50%       { filter: drop-shadow(0 0 9px rgba(6,182,212,0.5)); }
         }
         @keyframes mini-formula-active {
-          0%, 100% { filter: drop-shadow(0 0 10px rgba(255,255,255,0.7)); }
-          50%       { filter: drop-shadow(0 0 20px rgba(255,255,255,1)); }
+          0%, 100% { filter: drop-shadow(0 0 10px rgba(34,211,238,0.7)); }
+          50%       { filter: drop-shadow(0 0 20px rgba(34,211,238,1)); }
         }
         .mini-pulse       { stroke-dasharray: 8 600; animation: mini-pulse-travel linear infinite; }
         .mini-cable       { stroke-dasharray: 6 300; animation: mini-cable-pulse linear infinite; }
@@ -132,19 +141,19 @@ export function MiniSynapticWidget() {
           return (
             <g key={f.label} className={isActive ? "mini-box-active" : "mini-box-idle"}>
               <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} rx="5" ry="5"
-                fill="none"
-                stroke={isActive ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.4)"}
+                fill="rgba(0,0,0,0.6)"
+                stroke={isActive ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}
                 strokeWidth="1.5" />
-              <text x={cx} y={BOX_Y + 26} fill={isActive ? "#ffffff" : "rgba(255,255,255,0.65)"}
+              <text x={cx} y={BOX_Y + 26} fill={isActive ? "#67e8f9" : "#0891b2"}
                 fontSize="18" fontFamily="monospace" fontWeight="700"
                 textAnchor="middle" letterSpacing="1">
                 {f.label.toUpperCase()}
               </text>
-              <text x={cx} y={BOX_Y + 74} fill="#ffffff"
+              <text x={cx} y={BOX_Y + 74} fill={isActive ? "#ffffff" : "#e2e8f0"}
                 fontSize="24" fontFamily="monospace" fontWeight="600" textAnchor="middle">
                 {f.equation}
               </text>
-              <text x={cx} y={BOX_Y + 112} fill={isActive ? "#ffffff" : "rgba(255,255,255,0.7)"}
+              <text x={cx} y={BOX_Y + 112} fill={isActive ? "#22d3ee" : "#0891b2"}
                 fontSize="24" fontFamily="monospace" fontWeight="700" textAnchor="middle">
                 {f.result}
               </text>
@@ -156,19 +165,19 @@ export function MiniSynapticWidget() {
         {INPUT_NODES.map((n, i) => (
           <path key={`mc-s-${i}`}
             d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 40} ${n.x},${n.y - 40} ${n.x},${n.y}`}
-            stroke="rgba(255,255,255,0.3)" strokeWidth="1.2" fill="none" opacity="0.3" />
+            stroke="#0891b2" strokeWidth="1.2" fill="none" opacity="0.3" />
         ))}
         {INPUT_NODES.map((n, i) => (
           <path key={`mc-p-${i}`}
             d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 40} ${n.x},${n.y - 40} ${n.x},${n.y}`}
-            stroke="#ffffff"
+            stroke={activeFormula === i ? "#67e8f9" : "#22d3ee"}
             strokeWidth="2.5" fill="none" strokeLinecap="round"
             className="mini-cable"
             style={{ animationDuration: `${2 + i * 0.4}s`, animationDelay: `${-i * 0.6}s` }} />
         ))}
 
         {/* ── STATIC CONNECTIONS ── */}
-        <g stroke="rgba(255,255,255,0.3)" strokeWidth="0.9" fill="none" opacity="0.22">
+        <g stroke="#0891b2" strokeWidth="0.9" fill="none" opacity="0.22">
           {CONN_PAIRS.map(([a, b], i) => (
             <path key={`ms-${i}`} d={cubicPath(a, b)} />
           ))}
@@ -178,7 +187,7 @@ export function MiniSynapticWidget() {
         {CONN_PAIRS.map(([a, b], i) => (
           <path key={`mp-${i}`}
             d={cubicPath(a, b)}
-            stroke="#ffffff" strokeWidth="2" strokeLinecap="round" fill="none"
+            stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" fill="none"
             className="mini-pulse"
             style={{ animationDuration: `${PULSE_DUR[i % PULSE_DUR.length]}s`, animationDelay: `${-i * 0.38}s` }} />
         ))}
@@ -186,32 +195,32 @@ export function MiniSynapticWidget() {
         {/* ── INPUT NODES ── */}
         {INPUT_NODES.map((n, i) => (
           <circle key={`mi-${i}`} cx={n.x} cy={n.y} r="9"
-            fill="#ffffff"
+            fill={activeFormula === i ? "#67e8f9" : "#06b6d4"}
             className={activeFormula === i ? "mini-node-beat" : "mini-node-slow"} />
         ))}
 
         {/* ── HIDDEN LAYER 1 ── */}
         {HIDDEN1.map((n, i) => (
           <circle key={`mh1-${i}`} cx={n.x} cy={n.y} r="7"
-            fill="#ffffff" className="mini-node-beat" />
+            fill="#06b6d4" className="mini-node-beat" />
         ))}
 
         {/* ── HIDDEN LAYER 2 ── */}
         {HIDDEN2.map((n, i) => (
           <circle key={`mh2-${i}`} cx={n.x} cy={n.y} r="9"
-            fill="#ffffff" className="mini-node-slow" />
+            fill="#06b6d4" className="mini-node-slow" />
         ))}
 
         {/* ── PERIPHERAL NODES ── */}
         {PERIPHERAL.map((n, i) => (
           <circle key={`mper-${i}`} cx={n.x} cy={n.y} r="5"
-            fill="#ffffff" opacity="0.55" className="mini-node-slow" />
+            fill="#06b6d4" opacity="0.55" className="mini-node-slow" />
         ))}
 
         {/* ── OUTPUT NODE ── */}
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="16" fill="#ffffff" className="mini-node-beat" />
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="24" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.2" />
-        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="34" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="0.9" />
+        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="16" fill="#06b6d4" className="mini-node-beat" />
+        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="24" fill="none" stroke="#22d3ee40" strokeWidth="1.2" />
+        <circle cx={OUTPUT.x} cy={OUTPUT.y} r="34" fill="none" stroke="#22d3ee20" strokeWidth="0.9" />
         <text x={OUTPUT.x} y={OUTPUT.y + 5} fill="#020617" fontSize="12" fontFamily="monospace"
           textAnchor="middle" fontWeight="bold" opacity="0.9">
           100%

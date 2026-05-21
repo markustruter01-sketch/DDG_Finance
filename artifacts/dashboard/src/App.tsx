@@ -49,8 +49,7 @@ function Router() {
   return (
     <>
       <Switch>
-        <Route path="/"><Redirect to="/stream?sub=f" /></Route>
-        <Route path="/live" component={Dashboard} />
+        <Route path="/" component={Dashboard} />
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
             <Suspense fallback={<StreamingLoader />}>

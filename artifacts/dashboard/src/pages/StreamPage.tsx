@@ -59,7 +59,7 @@ function loadPrefs(): StreamPrefs {
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : false,
+        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : true,
         intervalSeconds:
           typeof parsed.intervalSeconds === "number" &&
           parsed.intervalSeconds >= 5 &&
@@ -69,7 +69,7 @@ function loadPrefs(): StreamPrefs {
       };
     }
   } catch {}
-  return { autoCycle: false, intervalSeconds: 15 };
+  return { autoCycle: true, intervalSeconds: 15 };
 }
 
 function savePrefs(prefs: StreamPrefs) {
@@ -84,7 +84,7 @@ export default function StreamPage() {
 
   function getInitialSubPage(): SubPage {
     if (urlParams.current.subPage) return urlParams.current.subPage;
-    return "f";
+    return "a";
   }
 
   const stored = useRef<StreamPrefs>(loadPrefs());

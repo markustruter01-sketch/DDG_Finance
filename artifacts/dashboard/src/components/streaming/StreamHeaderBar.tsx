@@ -106,7 +106,7 @@ export function StreamHeaderBar() {
   const activeCount = botStatuses.filter(b => b.active).length;
 
   const CELL = "flex flex-col items-start justify-center px-4 shrink-0 whitespace-nowrap";
-  const LABEL_STYLE: React.CSSProperties = { color: "rgba(255,255,255,0.7)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 2 };
+  const LABEL_STYLE: React.CSSProperties = { color: "rgba(100,116,139,0.8)", fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.18em", marginBottom: 2 };
   const DIV_STYLE: React.CSSProperties = { borderRight: "1px solid rgba(255,255,255,0.05)" };
 
   return (
@@ -115,7 +115,7 @@ export function StreamHeaderBar() {
       style={{
         height: 52,
         background: "#000000",
-        borderBottom: "1px solid rgba(255,255,255,0.8)",
+        borderBottom: "1px solid rgba(34,211,238,0.12)",
         zIndex: 30,
       }}
     >
@@ -152,10 +152,10 @@ export function StreamHeaderBar() {
       <div className={CELL} style={{ ...DIV_STYLE, width: 128 }}>
         <span style={LABEL_STYLE}>VAULT</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-          <span className="text-[14px] font-bold leading-none" style={{ color: "#ffffff" }}>
+          <span className="text-[14px] font-bold leading-none" style={{ color: "#a78bfa" }}>
             {vaultAmt != null ? `$${Math.round(vaultAmt).toLocaleString()}` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>secured</span>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>secured</span>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ export function StreamHeaderBar() {
           <span className="text-[14px] font-bold leading-none" style={{ color: "#4ade80" }}>
             {bestTrade?.pnl_usd != null ? `+$${Math.round(bestTrade.pnl_usd).toLocaleString()}` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(74,222,128,0.7)" }}>
             {bestTrade?.symbol ?? ""}
           </span>
         </div>
@@ -179,7 +179,7 @@ export function StreamHeaderBar() {
           <span className="text-[14px] font-bold leading-none" style={{ color: "#f87171" }}>
             {worstTrade?.pnl_usd != null ? `${worstTrade.pnl_usd >= 0 ? "+" : "-"}$${Math.round(Math.abs(worstTrade.pnl_usd)).toLocaleString()}` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(248,113,113,0.7)" }}>
             {worstTrade?.symbol ?? ""}
           </span>
         </div>
@@ -189,10 +189,10 @@ export function StreamHeaderBar() {
       <div className={CELL} style={{ ...DIV_STYLE, width: 118 }}>
         <span style={LABEL_STYLE}>WIN RATE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-          <span className="text-[14px] font-bold leading-none" style={{ color: "#ffffff" }}>
+          <span className="text-[14px] font-bold leading-none" style={{ color: "#22d3ee" }}>
             {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>
             {wins != null && losses != null ? `${wins}W/${losses}L` : ""}
           </span>
         </div>
@@ -205,7 +205,7 @@ export function StreamHeaderBar() {
           <span className="text-[14px] font-bold leading-none" style={{ color: "#4ade80" }}>
             {wins != null ? `${wins}W` : "—"}
           </span>
-          <span className="text-[11px] font-bold leading-none" style={{ color: "rgba(255,255,255,0.35)" }}>/</span>
+          <span className="text-[11px] font-bold leading-none" style={{ color: "rgba(100,116,139,0.4)" }}>/</span>
           <span className="text-[14px] font-bold leading-none" style={{ color: "#f87171" }}>
             {losses != null ? `${losses}L` : "—"}
           </span>
@@ -216,10 +216,10 @@ export function StreamHeaderBar() {
       <div className={CELL} style={{ ...DIV_STYLE, width: 168 }}>
         <span style={LABEL_STYLE}>MATH AUDIT</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-          <span className="text-[14px] font-bold leading-none" style={{ color: "#ffffff" }}>
+          <span className="text-[14px] font-bold leading-none" style={{ color: "#22d3ee" }}>
             {auditPassRate != null ? `${auditPassRate}%` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>
             {auditTotal != null ? `${auditTotal.toLocaleString()} checks` : ""}
           </span>
         </div>
@@ -229,7 +229,7 @@ export function StreamHeaderBar() {
       <div className={CELL} style={{ ...DIV_STYLE, width: 168, marginLeft: "auto" }}>
         <span style={LABEL_STYLE}>PLATFORM EQUITY</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-          <span className="text-[14px] font-bold leading-none" style={{ color: "#ffffff" }}>
+          <span className="text-[14px] font-bold leading-none" style={{ color: "#fbbf24" }}>
             {fleetEquity != null ? `$${Math.round(fleetEquity).toLocaleString()}` : "—"}
           </span>
           <span className="text-[10px] font-medium" style={{ color: fleetPnlPct != null && fleetPnlPct < 0 ? "rgba(248,113,113,0.8)" : "rgba(74,222,128,0.8)" }}>
@@ -257,7 +257,7 @@ export function StreamHeaderBar() {
                 }}
               />
             ))}
-            <span className="text-[11px] font-bold ml-1" style={{ color: "#ffffff" }}>
+            <span className="text-[11px] font-bold ml-1" style={{ color: "#22d3ee" }}>
               {activeCount}/{BOT_KEYS.length}
             </span>
           </div>
@@ -266,7 +266,7 @@ export function StreamHeaderBar() {
         {/* UTC Clock */}
         <div className="flex flex-col items-end" style={{ borderLeft: "1px solid rgba(255,255,255,0.05)", paddingLeft: 12 }}>
           <span style={{ ...LABEL_STYLE, marginBottom: 2 }}>UTC</span>
-          <span className="text-[12px] font-bold tabular-nums" style={{ color: "rgba(255,255,255,0.6)" }}>
+          <span className="text-[12px] font-bold tabular-nums" style={{ color: "rgba(148,163,184,0.6)" }}>
             {clock}
           </span>
         </div>

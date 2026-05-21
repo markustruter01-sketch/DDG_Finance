@@ -69,33 +69,6 @@ kind = "web"
   PORT = "8085"
 
   [[services]]
-  name = "kraken-current-bot"
-  localPort = 0
-
-  [services.development]
-  run = "cd /home/runner/workspace && python3 kraken-current/main.py"
-
-  [services.production]
-
-  [services.production.run]
-  args = ["bash", "-c", "python3 kraken-current/main.py"]
-
-  [services.env]
-  PORT = "8090"
-
-  [[services]]
-  name = "poseidon-momentum"
-  localPort = 0
-
-  [services.development]
-  run = "cd /home/runner/workspace && python3 poseidon/main.py"
-
-  [services.production]
-
-  [services.production.run]
-  args = ["bash", "-c", "python3 poseidon/main.py"]
-
-  [[services]]
   name = "crypto-signals"
   localPort = 8095
 

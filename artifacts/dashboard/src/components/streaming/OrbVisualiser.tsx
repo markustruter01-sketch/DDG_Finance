@@ -372,7 +372,7 @@ export function OrbVisualiser() {
             <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
               ◂ Closed Trades
             </div>
-            {closedTradesFeed.slice(0, 8).map((t, i) => {
+            {closedTradesFeed.slice(0, 10).map((t, i) => {
               const botColor = BOT_COLORS[t.bot] ?? "#94a3b8";
               const side = (t.side || "").toLowerCase();
               const isLong = side === "long" || side === "buy";
@@ -392,39 +392,40 @@ export function OrbVisualiser() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
+                    padding: "4px 8px",
                     marginBottom: 2,
-                    borderRadius: 7,
+                    borderRadius: 6,
                     background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
                     border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
                     backdropFilter: "blur(10px)",
                   }}
                 >
-                  {/* Bot colour dot */}
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 6px ${botColor}` }} />
-                  {/* Bot icon */}
-                  <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1 }}>{t.icon}</span>
-                  {/* Symbol */}
-                  <span style={{ fontFamily: "monospace", fontSize: 12, color: "rgba(241,245,249,0.95)", fontWeight: 700, flexShrink: 0 }}>
+                  {/* col 1 — bot dot */}
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 5px ${botColor}`, marginRight: 6 }} />
+                  {/* col 2 — bot icon */}
+                  <span style={{ width: 18, fontSize: 13, flexShrink: 0, lineHeight: 1, marginRight: 6 }}>{t.icon}</span>
+                  {/* col 3 — symbol (fixed 72px) */}
+                  <span style={{ width: 72, fontFamily: "monospace", fontSize: 12, color: "rgba(241,245,249,0.95)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, marginRight: 4 }}>
                     {t.symbol}
                   </span>
-                  {/* Side badge */}
-                  {sideLabel && (
-                    <span style={{ fontSize: 9, fontFamily: "monospace", fontWeight: 800, color: sideColor, background: sideBg, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>
-                      {sideLabel}
-                    </span>
-                  )}
-                  {/* Position size — fills the middle gap */}
-                  <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", flex: 1 }}>
+                  {/* col 4 — side badge (fixed 20px, always present) */}
+                  <span style={{ width: 20, flexShrink: 0, marginRight: 6 }}>
+                    {sideLabel && (
+                      <span style={{ fontSize: 8, fontFamily: "monospace", fontWeight: 800, color: sideColor, background: sideBg, borderRadius: 3, padding: "1px 4px" }}>
+                        {sideLabel}
+                      </span>
+                    )}
+                  </span>
+                  {/* col 5 — position size (flex, fills gap) */}
+                  <span style={{ flex: 1, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden" }}>
                     {notional != null ? fmtSize(notional) : ""}
                   </span>
-                  {/* P&L */}
-                  <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0 }}>
+                  {/* col 6 — P&L (fixed 52px, right-aligned) */}
+                  <span style={{ width: 52, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, textAlign: "right", marginRight: 4 }}>
                     {t.pnlUsd >= 0 ? "+" : ""}{fmtSize(t.pnlUsd)}
                   </span>
-                  {/* win/loss tick */}
-                  <span style={{ fontSize: 11, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace" }}>
+                  {/* col 7 — win/loss tick (fixed 12px) */}
+                  <span style={{ width: 12, fontSize: 11, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace", textAlign: "center" }}>
                     {t.isWin ? "✓" : "✗"}
                   </span>
                 </div>

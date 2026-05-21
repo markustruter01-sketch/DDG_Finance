@@ -248,7 +248,7 @@ export default function StreamPage() {
       <div
         className="flex items-center shrink-0 z-20 relative"
         style={{
-          background: "linear-gradient(90deg, rgba(2,6,23,0.97), rgba(15,23,42,0.95))",
+          background: "transparent",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
           minHeight: 44,
         }}
@@ -261,7 +261,7 @@ export default function StreamPage() {
               className="px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all"
               style={{
                 background: active === tab.id ? tab.activeGrad : "transparent",
-                color: active === tab.id ? tab.activeColor : "rgba(148,163,184,0.5)",
+                color: active === tab.id ? tab.activeColor : "rgba(255,255,255,0.8)",
                 border: active === tab.id ? `1px solid ${tab.activeBorder}` : "1px solid transparent",
               }}
             >

@@ -114,9 +114,8 @@ export function StreamHeaderBar() {
       className="w-full shrink-0 flex items-stretch font-mono"
       style={{
         height: 52,
-        background: "linear-gradient(90deg, rgba(2,6,23,0.98) 0%, rgba(8,16,40,0.98) 50%, rgba(2,6,23,0.98) 100%)",
+        background: "transparent",
         borderBottom: "1px solid rgba(34,211,238,0.12)",
-        boxShadow: "0 1px 0 rgba(0,0,0,0.6), 0 2px 16px rgba(6,182,212,0.04)",
         zIndex: 30,
       }}
     >

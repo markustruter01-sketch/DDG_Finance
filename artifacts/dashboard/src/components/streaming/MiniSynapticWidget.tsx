@@ -112,7 +112,7 @@ export function MiniSynapticWidget() {
         Scales proportionally (locked ratio) as available height changes.
       */}
       <svg
-        viewBox="0 10 800 750"
+        viewBox="52 59 696 652"
         style={{ display: "block", width: "100%", height: "100%" }}
         preserveAspectRatio="xMidYMid meet"
       >

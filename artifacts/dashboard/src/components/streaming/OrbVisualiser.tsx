@@ -405,10 +405,10 @@ export function OrbVisualiser() {
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 5px ${botColor}` }} />
                   {/* Bot icon */}
                   <span style={{ fontSize: 13, flexShrink: 0, lineHeight: 1 }}>{t.icon}</span>
-                  {/* Symbol + bot name + position size */}
+                  {/* Symbol + position size + bot name */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(241,245,249,0.92)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(241,245,249,0.92)", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {t.symbol}
                       </span>
                       {sideLabel && (
@@ -416,17 +416,27 @@ export function OrbVisualiser() {
                           {sideLabel}
                         </span>
                       )}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: botColor, opacity: 0.75, letterSpacing: "0.04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {t.bot}
-                      </span>
-                      {notional != null && (
-                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.55)", letterSpacing: "0.02em", flexShrink: 0 }}>
+                      {notional != null ? (
+                        <span style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(148,163,184,0.7)", letterSpacing: "0.02em", flexShrink: 0 }}>
                           {fmtSize(notional)}
                         </span>
-                      )}
+                      ) : t.date ? (
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.38)", letterSpacing: "0.04em", flexShrink: 0 }}>
+                          {(() => {
+                            const diff = Date.now() - new Date(t.date).getTime();
+                            const m = Math.floor(diff / 60_000);
+                            if (m < 1)   return "just now";
+                            if (m < 60)  return `${m}m ago`;
+                            const h = Math.floor(m / 60);
+                            if (h < 24)  return `${h}h ago`;
+                            return `${Math.floor(h / 24)}d ago`;
+                          })()}
+                        </span>
+                      ) : null}
                     </div>
+                    <span style={{ fontFamily: "monospace", fontSize: 8, color: botColor, opacity: 0.75, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
+                      {t.bot}
+                    </span>
                   </div>
                   {/* pnl% + $pnl */}
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, gap: 1 }}>

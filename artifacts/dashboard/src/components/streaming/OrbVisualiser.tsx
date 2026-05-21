@@ -354,6 +354,9 @@ export function OrbVisualiser() {
           Math.abs(v) >= 1_000_000 ? `$${(Math.abs(v)/1_000_000).toFixed(1)}M`
           : Math.abs(v) >= 1_000   ? `$${(Math.abs(v)/1_000).toFixed(1)}k`
           : `$${Math.abs(v).toFixed(0)}`;
+        // Full integer dollar amount for position size (no abbreviation, no cents)
+        const fmtFull = (v: number) =>
+          `$${Math.round(Math.abs(v)).toLocaleString()}`;
 
         return (
           <div
@@ -418,7 +421,7 @@ export function OrbVisualiser() {
                   </span>
                   {/* col 5 — position size (flex, fills gap) */}
                   <span style={{ flex: 1, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden" }}>
-                    {notional != null ? fmtSize(notional) : ""}
+                    {notional != null ? fmtFull(notional) : ""}
                   </span>
                   {/* col 6 — P&L (fixed 52px, right-aligned) */}
                   <span style={{ width: 52, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, textAlign: "right", marginRight: 4 }}>

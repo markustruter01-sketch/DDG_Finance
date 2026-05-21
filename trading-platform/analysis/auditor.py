@@ -54,11 +54,10 @@ from __future__ import annotations
 import json
 import os
 import re
-import textwrap
 import traceback
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import requests as http_requests
 from loguru import logger
@@ -66,9 +65,8 @@ from loguru import logger
 # ── Shared infrastructure ────────────────────────────────────────────────────
 from config.settings import settings
 from db.postgres import get_conn, is_pg_available
-from execution.compliance import SIMILARITY_MAP, get_similar_tickers
 from execution.kill_switch import get_state as ks_get_state
-from execution.ratchet_stop import ATR_MULTIPLIER, ATR_PERIOD, compute_atr
+from execution.ratchet_stop import ATR_MULTIPLIER, compute_atr
 from analysis.trade_journal import (
     get_all_trades,
     get_recent_losses,

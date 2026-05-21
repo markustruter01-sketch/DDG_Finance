@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from core.pipeline import get_last_run, reset_error_state
-from core.scheduler import get_job_status, get_scheduler
+from core.scheduler import get_job_status
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
 from data.economic_calendar import is_blackout_active

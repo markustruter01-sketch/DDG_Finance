@@ -952,27 +952,6 @@ def _reroute_to_sgov(
         results["errors"].append({"ticker": CASH_TICKER, "error": f"SGOV reroute failed: {exc}"})
 
 
-def _run_vault_sweep(equity: float, results: dict, dry_run: bool) -> dict:
-    """Run the profit sweep after all allocations are executed."""
-    try:
-        from execution.profit_sweep import run_profit_sweep
-        sweep = run_profit_sweep(current_equity=equity, dry_run=dry_run)
-        results["vault_sweep"] = sweep
-        if sweep.get("swept"):
-            logger.info(
-                f"Vault | Swept ${sweep['sweep_amount']:,.2f} → {sweep.get('vault_symbol', 'JEPQ')} "
-                f"(total vaulted: ${sweep.get('total_vaulted_usd', 0):,.2f})"
-            )
-        elif sweep.get("reason") == "first_run_hwm_initialised":
-            logger.info(f"Vault | High Water Mark initialised at ${sweep['hwm']:,.2f}")
-        else:
-            logger.debug(f"Vault | No sweep: {sweep.get('reason')}")
-    except Exception as exc:
-        logger.error(f"Vault | Sweep failed: {exc}")
-        results["vault_sweep"] = {"swept": False, "reason": f"error: {exc}"}
-    return results
-
-
 def _poll_fill_price(order_id: str, ticker: str, max_wait: float = 60.0) -> tuple[float | None, str]:
     start = time.time()
     poll_interval = 0.5

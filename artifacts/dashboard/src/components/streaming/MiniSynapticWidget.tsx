@@ -63,7 +63,7 @@ export function MiniSynapticWidget() {
         position: "absolute",
         bottom: 48,
         left: 12,
-        width: 310,
+        width: 341,
         pointerEvents: "none",
         zIndex: 20,
       }}
@@ -106,7 +106,7 @@ export function MiniSynapticWidget() {
       `}} />
 
       {/* Algorithm Checks title */}
-      <div style={{ fontSize: 11, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.12em", padding: "0 4px 5px 4px" }}>
+      <div style={{ fontSize: 22, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.12em", padding: "0 4px 6px 4px", whiteSpace: "nowrap" }}>
         Synaptic Math Audit Engine v4.1
       </div>
 
@@ -167,8 +167,8 @@ export function MiniSynapticWidget() {
       {/* Neural network SVG — viewBox crops to the network region */}
       <svg
         viewBox="90 140 1100 490"
-        width="310"
-        height="138"
+        width="341"
+        height="152"
         style={{ display: "block" }}
         preserveAspectRatio="xMidYMid meet"
       >

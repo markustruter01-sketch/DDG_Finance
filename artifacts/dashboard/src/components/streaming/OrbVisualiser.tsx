@@ -266,7 +266,7 @@ export function OrbVisualiser() {
           textTransform: "uppercase",
           textShadow: "0 0 12px rgba(255,255,255,0.3)",
         }}>
-          LIVE MARKET CONSCIOUSNESS
+          8 Automated Trading Bots 24/7
         </div>
       </div>
 

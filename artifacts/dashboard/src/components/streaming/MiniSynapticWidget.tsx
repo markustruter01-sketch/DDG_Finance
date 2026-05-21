@@ -61,7 +61,7 @@ const PULSE_DUR = [3, 3.5, 4, 4.5, 5, 3.8, 4.2, 5.5, 3.2, 4.8, 3.6, 5.2, 4.4, 3.
 
 const BOX_W = 210;
 const BOX_H = 132;
-const BOX_Y = 86;
+const BOX_Y = 100;
 const TITLE_X = 280;
 const TILE_BOTTOM = BOX_Y + BOX_H + 2;
 
@@ -121,7 +121,7 @@ export function MiniSynapticWidget() {
       `}} />
 
       <svg
-        viewBox="-176 30 912 740"
+        viewBox="-196 30 932 740"
         style={{ display: "block", width: "100%", height: "100%" }}
         preserveAspectRatio="xMidYMid meet"
       >
@@ -130,7 +130,7 @@ export function MiniSynapticWidget() {
           fill="rgba(255,255,255,0.9)" fontSize="44" fontFamily="monospace" fontWeight="600"
           textAnchor="middle" letterSpacing="1"
           style={{ textTransform: "uppercase" }}>
-          Synaptic Math Audit Engine v4.1
+          ◂ Synaptic Math Audit Engine v4.1
         </text>
 
         {/* ── FORMULA BOXES ── */}

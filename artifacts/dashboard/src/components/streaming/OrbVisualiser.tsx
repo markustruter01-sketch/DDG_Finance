@@ -417,11 +417,11 @@ export function OrbVisualiser() {
                         </span>
                       )}
                       {notional != null ? (
-                        <span style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(148,163,184,0.7)", letterSpacing: "0.02em", flexShrink: 0 }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.9)", flexShrink: 0 }}>
                           {fmtSize(notional)}
                         </span>
                       ) : t.date ? (
-                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.38)", letterSpacing: "0.04em", flexShrink: 0 }}>
+                        <span style={{ fontFamily: "monospace", fontSize: 9, color: "rgba(148,163,184,0.45)", letterSpacing: "0.04em", flexShrink: 0 }}>
                           {(() => {
                             const diff = Date.now() - new Date(t.date).getTime();
                             const m = Math.floor(diff / 60_000);

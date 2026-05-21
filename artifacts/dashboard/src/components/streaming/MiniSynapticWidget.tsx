@@ -42,8 +42,10 @@ const PULSE_DUR = [3, 3.5, 4, 4.5, 5, 3.8, 4.2, 5.5, 3.2, 4.8, 3.6, 5.2, 4.4, 3.
 const TILE_BOTTOM = 158;
 
 const SCALE_MIN = 0.45;
-const SCALE_MAX = 1.2;
+const SCALE_MAX = 1.0;
 const NATURAL_HEIGHT = 242;
+const NATURAL_WIDTH = 341;
+const CONTAINER_WIDTH = 216;
 
 function cubicPath(a: Pt, b: Pt) {
   const mid = (a.y + b.y) / 2;
@@ -52,7 +54,7 @@ function cubicPath(a: Pt, b: Pt) {
 
 export function MiniSynapticWidget() {
   const [activeFormula, setActiveFormula] = useState<number | null>(null);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(CONTAINER_WIDTH / NATURAL_WIDTH);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
 
@@ -73,7 +75,9 @@ export function MiniSynapticWidget() {
       rafRef.current = requestAnimationFrame(() => {
         const h = el.getBoundingClientRect().height;
         if (h > 0) {
-          const factor = Math.min(SCALE_MAX, Math.max(SCALE_MIN, h / NATURAL_HEIGHT));
+          const scaleH = h / NATURAL_HEIGHT;
+          const scaleW = CONTAINER_WIDTH / NATURAL_WIDTH;
+          const factor = Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.min(scaleH, scaleW)));
           setScale(factor);
         }
       });
@@ -137,7 +141,7 @@ export function MiniSynapticWidget() {
         style={{
           transform: `scale(${scale})`,
           transformOrigin: "top left",
-          width: 216,
+          width: NATURAL_WIDTH,
         }}
       >
         {/* Algorithm Checks title */}

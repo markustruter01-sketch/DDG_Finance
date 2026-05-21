@@ -237,6 +237,9 @@ export function TradingEngineBlackHole() {
     let camTheta = 0.5, camPhi = 1.45, camRadius = 16.0;
     let tTheta = camTheta, tPhi = camPhi, tRadius = camRadius;
     let drag = false, lx = 0, ly = 0;
+    let panTime = 0;
+    const PHI_CENTER = Math.PI / 2;   // equatorial — horizon flips as we cross this
+    const PHI_AMP    = 0.92;           // ±0.92 rad → ~0.65 (above) ↔ ~2.49 (below)
 
     canvas.addEventListener("mousedown", (e) => { drag = true; lx = e.clientX; ly = e.clientY; });
     window.addEventListener("mouseup", () => drag = false);
@@ -269,7 +272,12 @@ export function TradingEngineBlackHole() {
       const dt = Math.min((now - lastNow) * 0.001, 0.05); // seconds, capped at 50ms
       lastNow = now;
       // Auto-orbit: full 360° in ~18s when user is not dragging
-      if (!drag) tTheta += dt * 0.35;
+      if (!drag) {
+        tTheta += dt * 0.35;
+        // Slow vertical pan — 20s full period (10s up-peak → down-peak)
+        panTime += dt;
+        tPhi = PHI_CENTER + PHI_AMP * Math.sin(panTime * Math.PI / 10);
+      }
       const s = 0.08;
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;

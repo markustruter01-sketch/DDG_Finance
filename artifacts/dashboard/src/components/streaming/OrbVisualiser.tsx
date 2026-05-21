@@ -226,83 +226,6 @@ export function OrbVisualiser() {
     <div style={{ width: "100%", height: "100%", position: "relative", background: "#020617", overflow: "hidden" }}>
       <TradingEngineBlackHole />
 
-      {/* ── LIVE ORB HUD — 30% larger ── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 24,
-          right: 24,
-          background: "rgba(2,6,23,0.82)",
-          border: "1px solid rgba(255,255,255,1)",
-          borderRadius: 14,
-          padding: "18px 24px",
-          backdropFilter: "blur(14px)",
-          minWidth: 234,
-        }}
-      >
-        <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
-          Live Orb HUD
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
-          <div>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>P&amp;L</div>
-            <div style={{ color: combinedPnl >= 0 ? "#4ade80" : "#f87171", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {fmtPnl(combinedPnl)}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Positions</div>
-            <div style={{ color: "#ffffff", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {openPositions}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
-            <div style={{ color: "#ffffff", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {activeBots} / {getFleetBotCount(registry, fleetEqOrb)}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Last AI Event</div>
-            <div style={{ color: "#ffffff", fontSize: 15, fontFamily: "monospace", fontWeight: 700 }}>
-              {lastAiLabel}
-            </div>
-          </div>
-        </div>
-
-        {tradePulse?.active && (
-          <div style={{
-            marginTop: 12,
-            padding: "5px 10px",
-            borderRadius: 7,
-            background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-            border: "1px solid rgba(255,255,255,1)",
-            color: tradePulse.isWin ? "#4ade80" : "#f87171",
-            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
-          }}>
-            {tradePulse.isWin ? "✓ WIN" : "✗ LOSS"} — {tradePulse.botName}
-          </div>
-        )}
-
-        {aiRipple && (
-          <div style={{
-            marginTop: 8,
-            padding: "5px 10px",
-            borderRadius: 7,
-            background: "rgba(139,92,246,0.15)",
-            border: "1px solid rgba(255,255,255,1)",
-            color: "#ffffff",
-            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
-          }}>
-            ◉ AI Learning Event
-          </div>
-        )}
-      </div>
-
       {/* ── ALGO THOUGHT BUBBLES ── */}
       <AlgoThoughts />
 
@@ -403,7 +326,7 @@ export function OrbVisualiser() {
                     padding: "4px 8px",
                     marginBottom: 2,
                     borderRadius: 6,
-                    background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+                    background: "transparent",
                     border: "1px solid rgba(255,255,255,0.9)",
                     backdropFilter: "blur(10px)",
                   }}
@@ -507,7 +430,7 @@ export function OrbVisualiser() {
                     padding: "4px 8px",
                     marginBottom: 2,
                     borderRadius: 6,
-                    background: isPos ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+                    background: "transparent",
                     border: "1px solid rgba(255,255,255,0.9)",
                     backdropFilter: "blur(10px)",
                   }}

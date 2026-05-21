@@ -132,7 +132,7 @@ export function MiniSynapticWidget() {
           return (
             <g key={f.label} className={isActive ? "mini-box-active" : "mini-box-idle"}>
               <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} rx="5" ry="5"
-                fill="rgba(0,0,0,0.6)"
+                fill="none"
                 stroke={isActive ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.4)"}
                 strokeWidth="1.5" />
               <text x={cx} y={BOX_Y + 26} fill={isActive ? "#ffffff" : "rgba(255,255,255,0.65)"}

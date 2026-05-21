@@ -60,12 +60,9 @@ export function MiniSynapticWidget() {
   return (
     <div
       style={{
-        position: "absolute",
-        bottom: 48,
-        left: 12,
-        width: 341,
+        position: "relative",
+        width: 216,
         pointerEvents: "none",
-        zIndex: 20,
       }}
     >
       <style dangerouslySetInnerHTML={{ __html: `

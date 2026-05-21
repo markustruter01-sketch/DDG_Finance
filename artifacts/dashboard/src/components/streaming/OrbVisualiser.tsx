@@ -392,8 +392,8 @@ export function OrbVisualiser() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 7,
-                    padding: "4px 9px",
+                    gap: 8,
+                    padding: "6px 10px",
                     marginBottom: 2,
                     borderRadius: 7,
                     background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
@@ -402,55 +402,29 @@ export function OrbVisualiser() {
                   }}
                 >
                   {/* Bot colour dot */}
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 5px ${botColor}` }} />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 6px ${botColor}` }} />
                   {/* Bot icon */}
-                  <span style={{ fontSize: 13, flexShrink: 0, lineHeight: 1 }}>{t.icon}</span>
-                  {/* Symbol + position size + bot name */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(241,245,249,0.92)", fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {t.symbol}
-                      </span>
-                      {sideLabel && (
-                        <span style={{ fontSize: 8, fontFamily: "monospace", fontWeight: 800, color: sideColor, background: sideBg, borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
-                          {sideLabel}
-                        </span>
-                      )}
-                      {notional != null ? (
-                        <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.9)", flexShrink: 0 }}>
-                          {fmtSize(notional)}
-                        </span>
-                      ) : t.date ? (
-                        <span style={{ fontFamily: "monospace", fontSize: 9, color: "rgba(148,163,184,0.45)", letterSpacing: "0.04em", flexShrink: 0 }}>
-                          {(() => {
-                            const diff = Date.now() - new Date(t.date).getTime();
-                            const m = Math.floor(diff / 60_000);
-                            if (m < 1)   return "just now";
-                            if (m < 60)  return `${m}m ago`;
-                            const h = Math.floor(m / 60);
-                            if (h < 24)  return `${h}h ago`;
-                            return `${Math.floor(h / 24)}d ago`;
-                          })()}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span style={{ fontFamily: "monospace", fontSize: 8, color: botColor, opacity: 0.75, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
-                      {t.bot}
+                  <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1 }}>{t.icon}</span>
+                  {/* Symbol */}
+                  <span style={{ fontFamily: "monospace", fontSize: 12, color: "rgba(241,245,249,0.95)", fontWeight: 700, flexShrink: 0 }}>
+                    {t.symbol}
+                  </span>
+                  {/* Side badge */}
+                  {sideLabel && (
+                    <span style={{ fontSize: 9, fontFamily: "monospace", fontWeight: 800, color: sideColor, background: sideBg, borderRadius: 3, padding: "1px 5px", flexShrink: 0 }}>
+                      {sideLabel}
                     </span>
-                  </div>
-                  {/* pnl% + $pnl */}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, gap: 1 }}>
-                    <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171" }}>
-                      {t.pnlUsd >= 0 ? "+" : ""}{fmtSize(t.pnlUsd)}
-                    </span>
-                    {t.pnlPct != null && Math.abs(t.pnlPct) > 0.01 && (
-                      <span style={{ fontFamily: "monospace", fontSize: 8, color: t.isWin ? "rgba(74,222,128,0.65)" : "rgba(248,113,113,0.65)" }}>
-                        {t.pnlPct >= 0 ? "+" : ""}{t.pnlPct.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
+                  )}
+                  {/* Position size — fills the middle gap */}
+                  <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", flex: 1 }}>
+                    {notional != null ? fmtSize(notional) : ""}
+                  </span>
+                  {/* P&L */}
+                  <span style={{ fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0 }}>
+                    {t.pnlUsd >= 0 ? "+" : ""}{fmtSize(t.pnlUsd)}
+                  </span>
                   {/* win/loss tick */}
-                  <span style={{ fontSize: 10, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace", marginLeft: 2 }}>
+                  <span style={{ fontSize: 11, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace" }}>
                     {t.isWin ? "✓" : "✗"}
                   </span>
                 </div>

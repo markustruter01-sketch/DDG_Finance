@@ -16,6 +16,7 @@ export type RealTrade = {
   pnlUsd: number;
   isWin: boolean;
   date: string;
+  sizeUsd?: number;
 };
 
 export type OpenPosition = {
@@ -88,6 +89,13 @@ export function useRealFeed(maxTrades = 20) {
         if (isKraken && !hasExplicitPnl) continue;
 
         const pnlUsd = rawPnlUsd ?? 0;
+        const raw = t as Record<string, unknown>;
+        const sizeUsd: number | undefined =
+          (raw.market_value  as number | undefined) ??
+          (raw.cost_basis    as number | undefined) ??
+          (typeof raw.qty === "number" && typeof raw.avg_entry_price === "number"
+            ? Math.abs((raw.qty as number) * (raw.avg_entry_price as number))
+            : undefined);
         all.push({
           id: t.trade_id,
           bot,
@@ -98,6 +106,7 @@ export function useRealFeed(maxTrades = 20) {
           pnlUsd,
           isWin: hasExplicitPnl ? pnlUsd >= 0 : t.status === "Closed_Win",
           date: t.date,
+          sizeUsd,
         });
       }
     }
@@ -114,6 +123,10 @@ export function useRealFeed(maxTrades = 20) {
       for (const rt of data.recent_trades) {
         const id = `${bot}-${rt.symbol}-${rt.closed_at}`;
         if (journalIds.has(id)) continue;
+        // Derive notional from pnl_pct when available
+        const rtSize = Math.abs(rt.pnl_pct) > 0.01
+          ? Math.abs(rt.pnl_usd / (rt.pnl_pct / 100))
+          : undefined;
         all.push({
           id,
           bot,
@@ -124,6 +137,7 @@ export function useRealFeed(maxTrades = 20) {
           pnlUsd: rt.pnl_usd,
           isWin: rt.pnl_usd >= 0,
           date: rt.closed_at,
+          sizeUsd: rtSize,
         });
       }
     }
@@ -139,6 +153,10 @@ export function useRealFeed(maxTrades = 20) {
         const pnlPct = ft.entry_price > 0 && ft.exit_price
           ? ((ft.exit_price - ft.entry_price) / ft.entry_price) * 100 * (ft.direction === "short" ? -1 : 1)
           : 0;
+        // Notional size: units × entry price (forex pair units)
+        const fxSize = ft.units > 0 && ft.entry_price > 0
+          ? Math.abs(ft.units * ft.entry_price)
+          : undefined;
         all.push({
           id: `fx-${ft.id}`,
           bot: _fxId.displayName,
@@ -149,6 +167,7 @@ export function useRealFeed(maxTrades = 20) {
           pnlUsd: ft.pnl_usd ?? 0,
           isWin: (ft.pnl_usd ?? 0) >= 0,
           date: ft.exit_time,
+          sizeUsd: fxSize,
         });
       }
     }

@@ -372,7 +372,7 @@ export function OrbVisualiser() {
             <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
               ◂ Closed Trades
             </div>
-            {closedTradesFeed.slice(0, 9).map((t, i) => {
+            {closedTradesFeed.slice(0, 8).map((t, i) => {
               const botColor = BOT_COLORS[t.bot] ?? "#94a3b8";
               const side = (t.side || "").toLowerCase();
               const isLong = side === "long" || side === "buy";
@@ -380,6 +380,12 @@ export function OrbVisualiser() {
               const sideLabel = isLong ? "L" : isShort ? "S" : null;
               const sideBg    = isLong ? "rgba(34,197,94,0.18)"  : isShort ? "rgba(239,68,68,0.18)" : "transparent";
               const sideColor = isLong ? "#4ade80"               : isShort ? "#f87171"               : "rgba(148,163,184,0.5)";
+              // Use explicit sizeUsd from feed; fall back to pnlPct-derived notional when available
+              const notional = t.sizeUsd != null
+                ? t.sizeUsd
+                : (t.pnlPct != null && Math.abs(t.pnlPct) > 0.01
+                    ? Math.abs(t.pnlUsd / (t.pnlPct / 100))
+                    : null);
               return (
                 <div
                   key={i}
@@ -387,8 +393,8 @@ export function OrbVisualiser() {
                     display: "flex",
                     alignItems: "center",
                     gap: 7,
-                    padding: "5px 9px",
-                    marginBottom: 3,
+                    padding: "4px 9px",
+                    marginBottom: 2,
                     borderRadius: 7,
                     background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
                     border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
@@ -399,7 +405,7 @@ export function OrbVisualiser() {
                   <span style={{ width: 7, height: 7, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 5px ${botColor}` }} />
                   {/* Bot icon */}
                   <span style={{ fontSize: 13, flexShrink: 0, lineHeight: 1 }}>{t.icon}</span>
-                  {/* Symbol + bot name */}
+                  {/* Symbol + bot name + position size */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span style={{ fontFamily: "monospace", fontSize: 11, color: "rgba(241,245,249,0.92)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -411,8 +417,15 @@ export function OrbVisualiser() {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontFamily: "monospace", fontSize: 8, color: botColor, opacity: 0.75, letterSpacing: "0.04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {t.bot}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 8, color: botColor, opacity: 0.75, letterSpacing: "0.04em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {t.bot}
+                      </span>
+                      {notional != null && (
+                        <span style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.55)", letterSpacing: "0.02em", flexShrink: 0 }}>
+                          {fmtSize(notional)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {/* pnl% + $pnl */}
@@ -420,7 +433,7 @@ export function OrbVisualiser() {
                     <span style={{ fontFamily: "monospace", fontSize: 11, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171" }}>
                       {t.pnlUsd >= 0 ? "+" : ""}{fmtSize(t.pnlUsd)}
                     </span>
-                    {t.pnlPct != null && (
+                    {t.pnlPct != null && Math.abs(t.pnlPct) > 0.01 && (
                       <span style={{ fontFamily: "monospace", fontSize: 8, color: t.isWin ? "rgba(74,222,128,0.65)" : "rgba(248,113,113,0.65)" }}>
                         {t.pnlPct >= 0 ? "+" : ""}{t.pnlPct.toFixed(1)}%
                       </span>

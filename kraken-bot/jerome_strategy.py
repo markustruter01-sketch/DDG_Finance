@@ -63,10 +63,9 @@ def run_jerome_cycle(profile: dict, db_id: int) -> None:
 
     _check_exit_conditions(alpaca, open_positions, profile)
 
-    # NOTE: No is_market_open() gate. Alpaca queues market orders for next open.
-    # SPY/QQQ Trend uses the same pattern. Removing this gate was the fix for
-    # Jerome being unable to trade — GROQ_CYCLE_HOURS [9,21] UTC fall outside
-    # NYSE hours, making the compound gate mathematically impossible to pass.
+    # NOTE: No is_market_open() gate — jerome_alpaca.place_order() selects
+    # time_in_force dynamically ("day" when NYSE open, "opg" when closed) so
+    # off-hours orders queue for the next open instead of being rejected.
 
     cycle_hours = profile.get("GROQ_CYCLE_HOURS", [9, 21])
     if should_run_groq_cycle(cycle_hours):
@@ -129,7 +128,17 @@ def run_jerome_cycle(profile: dict, db_id: int) -> None:
                 )
                 open_positions = alpaca.get_open_positions()
 
-    _update_heartbeat(db_id, equity, len(open_positions))
+    try:
+        _add_trading_platform_to_path()
+        from core.bot_state import write_portfolio as _write_portfolio
+        _write_portfolio(
+            "jerome_macro",
+            cash=account["cash"],
+            equity=equity,
+            positions=open_positions,
+        )
+    except Exception as exc:
+        logger.debug(f"Jerome | write_portfolio failed (non-fatal): {exc}")
 
 
 def _check_exit_conditions(
@@ -241,27 +250,6 @@ def _record_trade_close(symbol: str, reason: str, db_id: int) -> None:
     except Exception as exc:
         logger.debug(f"Jerome | DB close record failed (non-fatal): {exc}")
 
-
-def _update_heartbeat(db_id: int, equity: float, position_count: int) -> None:
-    """Update kraken_heartbeat for Jerome."""
-    try:
-        _add_trading_platform_to_path()
-        from db.postgres import get_conn, is_pg_available
-        if not is_pg_available():
-            return
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE kraken_heartbeat
-                    SET equity_usd      = %s,
-                        position_count  = %s,
-                        status          = 'running',
-                        last_updated    = NOW()
-                    WHERE id = %s
-                """, (equity, position_count, db_id))
-            conn.commit()
-    except Exception as exc:
-        logger.debug(f"Jerome | Heartbeat update failed (non-fatal): {exc}")
 
 
 def _add_trading_platform_to_path() -> None:

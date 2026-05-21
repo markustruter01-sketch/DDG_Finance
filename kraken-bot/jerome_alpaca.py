@@ -4,10 +4,21 @@ Uses Jerome's dedicated paper trading account (separate from other bots).
 """
 from __future__ import annotations
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, time as dtime, timezone
 from typing import Optional
 
+import pytz
+
 logger = logging.getLogger("jerome.alpaca")
+
+
+def _nyse_is_open(now_utc: datetime | None = None) -> bool:
+    """Return True if NYSE regular session is currently open (9:30–16:00 ET, Mon–Fri)."""
+    now = now_utc or datetime.now(pytz.UTC)
+    et = now.astimezone(pytz.timezone("America/New_York"))
+    if et.weekday() >= 5:
+        return False
+    return dtime(9, 30) <= et.time() < dtime(16, 0)
 
 
 class JeromeAlpaca:
@@ -57,14 +68,19 @@ class JeromeAlpaca:
         side: str,
         notional: float,
     ) -> Optional[dict]:
-        """Place a fractional notional market order."""
+        """Place a fractional notional market order.
+        Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when closed
+        so off-hours orders queue for next open instead of being rejected.
+        """
+        tif = "day" if _nyse_is_open() else "opg"
+        logger.info(f"JeromeAlpaca | Submitting {side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
             order = self.api.submit_order(
                 symbol=symbol,
                 notional=round(notional, 2),
                 side=side,
                 type="market",
-                time_in_force="day",
+                time_in_force=tif,
             )
             logger.info(
                 f"JeromeAlpaca | ORDER PLACED: {side.upper()} {symbol} "

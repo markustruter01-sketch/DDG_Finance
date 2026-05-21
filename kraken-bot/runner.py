@@ -37,6 +37,22 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform")) # trading-platf
 
 from loguru import logger
 
+# Bridge stdlib logging → loguru so that jerome_strategy / jerome_alpaca /
+# jerome_investor logger.error() calls are visible in the workflow output.
+import logging as _stdlib_logging
+
+
+class _InterceptHandler(_stdlib_logging.Handler):
+    def emit(self, record: _stdlib_logging.LogRecord) -> None:
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        logger.opt(depth=6, exception=record.exc_info).log(level, record.getMessage())
+
+
+_stdlib_logging.basicConfig(handlers=[_InterceptHandler()], level=_stdlib_logging.INFO, force=True)
+
 # Load kraken-bot's local config.py by absolute path.
 # Cannot use `from config import ...` because trading-platform/ comes first
 # in sys.path (required for db.postgres resolution), and trading-platform/

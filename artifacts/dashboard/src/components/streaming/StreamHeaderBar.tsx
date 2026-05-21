@@ -31,7 +31,7 @@ function fmtPct(v: number | null): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
 }
 
-export function StreamHeaderBar({ isOrb = false }: { isOrb?: boolean }) {
+export function StreamHeaderBar() {
   const [clock, setClock] = useState(() =>
     new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
   );
@@ -114,8 +114,7 @@ export function StreamHeaderBar({ isOrb = false }: { isOrb?: boolean }) {
       className="w-full shrink-0 flex items-stretch font-mono"
       style={{
         height: 52,
-        background: isOrb ? "rgba(0,0,0,0.35)" : "#000000",
-        backdropFilter: isOrb ? "blur(12px)" : undefined,
+        background: "#000000",
         borderBottom: "1px solid rgba(255,255,255,0.8)",
         zIndex: 30,
       }}

@@ -321,11 +321,10 @@ export function TradingEngineBlackHole() {
     <canvas
       ref={canvasRef}
       style={{
-        position: "fixed",
+        position: "absolute",
         inset: 0,
         display: "block",
         cursor: "crosshair",
-        zIndex: 0,
       }}
     />
   );

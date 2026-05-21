@@ -585,7 +585,7 @@ def run_all_bots() -> dict[str, dict]:
         from config.settings import settings
     except Exception:
         pass
-    bot_ids = ["davy-jones", "blackbeard", "calypso", "poseidon", "kraken-current"]
+    bot_ids = ["davy-jones", "blackbeard", "calypso"]
     results = {}
     for bid in bot_ids:
         try:

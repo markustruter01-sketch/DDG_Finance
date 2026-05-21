@@ -76,8 +76,6 @@ _BOT_LABELS = {
     "calypso":         "#4 Calypso (Kraken RSI)",
     "apex-predator":   "#5 Apex Predator (Options)",
     "navigator":       "#6 Navigator (Forex)",
-    "poseidon":        "#7 Poseidon (Pairs Trading)",
-    "kraken-current":  "#8 Kraken Current (Trend)",
 }
 
 
@@ -100,8 +98,6 @@ def notify_daily_pnl_report() -> None:
       - Calypso (#4)        → kraken_trades closed P&L (24 h) per bot_id
       - Apex Predator (#5)  → options_equity delta from equity_snapshots
       - Navigator (#6)      → forex_equity delta from equity_snapshots
-      - Poseidon (#7)       → poseidon_equity delta from equity_snapshots
-      - Kraken Current (#8) → kraken_current_equity delta from equity_snapshots
     """
     if not _WEBHOOK_URL:
         logger.info("Discord | DISCORD_WEBHOOK_URL not set — skipping daily P&L report")
@@ -119,8 +115,7 @@ def notify_daily_pnl_report() -> None:
                 # ── Latest equity snapshot ──────────────────────────────────
                 cur.execute("""
                     SELECT alpaca_equity, kraken_equity, options_equity,
-                           forex_equity, poseidon_equity, kraken_current_equity,
-                           total_equity, ts
+                           forex_equity, total_equity, ts
                     FROM equity_snapshots
                     ORDER BY ts DESC
                     LIMIT 1
@@ -130,8 +125,7 @@ def notify_daily_pnl_report() -> None:
                 # ── Snapshot closest to 24 h ago ────────────────────────────
                 cur.execute("""
                     SELECT alpaca_equity, kraken_equity, options_equity,
-                           forex_equity, poseidon_equity, kraken_current_equity,
-                           total_equity, ts
+                           forex_equity, total_equity, ts
                     FROM equity_snapshots
                     WHERE ts <= NOW() - INTERVAL '23 hours 45 minutes'
                     ORDER BY ts DESC
@@ -161,16 +155,15 @@ def notify_daily_pnl_report() -> None:
         return
 
     (alpaca_now, kraken_now, opts_now, forex_now,
-     pos_now, kc_now, total_now, ts_now) = latest_row
+     total_now, ts_now) = latest_row
 
     if prev_row is not None:
         (alpaca_prev, kraken_prev, opts_prev, forex_prev,
-         pos_prev, kc_prev, total_prev, ts_prev) = prev_row
+         total_prev, ts_prev) = prev_row
     else:
         # First day — compare to starting capital split equally
-        share = FLEET_STARTING_CAPITAL / 8
+        share = FLEET_STARTING_CAPITAL / 6
         alpaca_prev = kraken_prev = opts_prev = forex_prev = share
-        pos_prev = kc_prev = share
         total_prev = FLEET_STARTING_CAPITAL
 
     # ── Compute deltas ──────────────────────────────────────────────────────
@@ -178,8 +171,6 @@ def notify_daily_pnl_report() -> None:
     d_kraken   = float(kraken_now)  - float(kraken_prev)   # DJ+BB+Cal aggregate
     d_options  = float(opts_now)    - float(opts_prev)
     d_forex    = float(forex_now)   - float(forex_prev)
-    d_poseidon = float(pos_now)     - float(pos_prev)
-    d_kc       = float(kc_now)      - float(kc_prev)
     d_total    = float(total_now)   - float(total_prev)
 
     # ── Kraken per-bot breakdown from realised trades ───────────────────────
@@ -195,8 +186,6 @@ def notify_daily_pnl_report() -> None:
         _pnl_line(_BOT_LABELS["calypso"],        d_cal),
         _pnl_line(_BOT_LABELS["apex-predator"],  d_options,  opts_prev),
         _pnl_line(_BOT_LABELS["navigator"],      d_forex,    forex_prev),
-        _pnl_line(_BOT_LABELS["poseidon"],       d_poseidon, pos_prev),
-        _pnl_line(_BOT_LABELS["kraken-current"], d_kc,       kc_prev),
     ]
     description = "\n".join(lines)
 

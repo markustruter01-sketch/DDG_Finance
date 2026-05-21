@@ -372,93 +372,6 @@ async def kraken_fleet_summary() -> dict:
                     "pnl_usd": round(pnl, 2),
                 })
 
-            # ── Bot #7 Poseidon ────────────────────────────────────────────────
-            try:
-                ps_eq = 100_000.0
-                ps_cash = 0.0
-                with _fsconn.cursor() as _psc:
-                    _psc.execute("SELECT equity_usd, cash_usd FROM poseidon_portfolio WHERE id = 7")
-                    _psr = _psc.fetchone()
-                    if _psr:
-                        ps_eq = float(_psr[0] or 100_000)
-                        ps_cash = float(_psr[1] or 0)
-                    _psc.execute(
-                        "SELECT COUNT(*), "
-                        "SUM(CASE WHEN net_pnl > %s THEN 1 ELSE 0 END) "
-                        "FROM poseidon_trades",
-                        (_WIN_THRESHOLD,)
-                    )
-                    _ptr = _psc.fetchone()
-                    ps_trades = int(_ptr[0] or 0) if _ptr else 0
-                    ps_wins   = int(_ptr[1] or 0) if _ptr else 0
-                    # Total PnL = equity - starting (includes unrealized from open positions)
-                    ps_pnl = ps_eq - 100_000.0
-                total_equity += ps_eq
-                total_cash   += ps_cash
-                total_starting += 100_000.0
-                total_trades += ps_trades
-                total_wins   += ps_wins
-                total_pnl_usd += ps_pnl
-                bots_out.append({
-                    "bot_id": "poseidon",
-                    "display_name": "Poseidon",
-                    "equity_usd": round(ps_eq, 2),
-                    "cash_usd": round(ps_cash, 2),
-                    "starting_balance_usd": 100_000.0,
-                    "trades": ps_trades,
-                    "wins": ps_wins,
-                    "pnl_usd": round(ps_pnl, 2),
-                })
-            except Exception as _ps_exc:
-                logger.warning(f"[fleet-summary] Poseidon read failed: {_ps_exc}")
-                total_starting += 100_000.0
-                bots_out.append({"bot_id": "poseidon", "display_name": "Poseidon",
-                                  "equity_usd": 100_000.0, "cash_usd": 0.0,
-                                  "starting_balance_usd": 100_000.0, "trades": 0, "wins": 0, "pnl_usd": 0.0})
-
-            # ── Bot #8 Kraken Current ──────────────────────────────────────────
-            try:
-                kc_eq = 100_000.0
-                kc_cash = 0.0
-                with _fsconn.cursor() as _kcc:
-                    _kcc.execute("SELECT equity_usd, cash_usd FROM kraken_current_portfolio WHERE id = 8")
-                    _kcr = _kcc.fetchone()
-                    if _kcr:
-                        kc_eq = float(_kcr[0] or 100_000)
-                        kc_cash = float(_kcr[1] or 0)
-                    _kcc.execute(
-                        "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl > %s THEN 1 ELSE 0 END) "
-                        "FROM kraken_current_trades",
-                        (_WIN_THRESHOLD,)
-                    )
-                    _ktr = _kcc.fetchone()
-                    kc_trades = int(_ktr[0] or 0) if _ktr else 0
-                    kc_wins   = int(_ktr[1] or 0) if _ktr else 0
-                    # Total PnL = equity - starting (includes unrealized from open positions)
-                    kc_pnl = kc_eq - 100_000.0
-                total_equity += kc_eq
-                total_cash   += kc_cash
-                total_starting += 100_000.0
-                total_trades += kc_trades
-                total_wins   += kc_wins
-                total_pnl_usd += kc_pnl
-                bots_out.append({
-                    "bot_id": "kraken-current",
-                    "display_name": "Kraken Current",
-                    "equity_usd": round(kc_eq, 2),
-                    "cash_usd": round(kc_cash, 2),
-                    "starting_balance_usd": 100_000.0,
-                    "trades": kc_trades,
-                    "wins": kc_wins,
-                    "pnl_usd": round(kc_pnl, 2),
-                })
-            except Exception as _kc_exc:
-                logger.warning(f"[fleet-summary] KrakenCurrent read failed: {_kc_exc}")
-                total_starting += 100_000.0
-                bots_out.append({"bot_id": "kraken-current", "display_name": "Kraken Current",
-                                  "equity_usd": 100_000.0, "cash_usd": 0.0,
-                                  "starting_balance_usd": 100_000.0, "trades": 0, "wins": 0, "pnl_usd": 0.0})
 
             fleet_win_rate = round(total_wins / total_trades * 100, 1) if total_trades > 0 else None
             return {
@@ -768,39 +681,19 @@ async def kraken_toggle_auto_trading(request: KrakenControlRequest, bot_id: str 
     return {"bot_id": bid, "bot_paused": request.bot_paused, "message": f"Kraken bot {bid} paused" if request.bot_paused else f"Kraken bot {bid} resumed"}
 
 
-_POSEIDON_CONTROL_FILE = _Path("../poseidon/poseidon_control.json")
-
-
 @kraken_router.post("/kraken/{bot_id}/force-resume", tags=["Kraken Bot"])
 async def kraken_force_resume(bot_id: str) -> dict:
     """Force-clear a bot's circuit breaker and self-pause state.
     The bot picks up the flag on its next cycle (within ~15–30 seconds).
-    Supports: davy-jones, blackbeard, calypso, apex-predator, poseidon."""
+    Supports: davy-jones, blackbeard, calypso, apex-predator."""
     bid = bot_id.lower().strip()
-
-    if bid in ("poseidon", "fomo-fred", "fomo_fred"):
-        ctrl = _POSEIDON_CONTROL_FILE
-        existing: dict = {}
-        if ctrl.exists():
-            try:
-                existing = _json.loads(ctrl.read_text())
-            except Exception:
-                pass
-        existing["force_resume"] = True
-        ctrl.write_text(_json.dumps(existing, indent=2))
-        logger.warning(f"FORCE RESUME requested for Poseidon (FOMO Fred)")
-        return {
-            "bot_id": "poseidon",
-            "status": "force_resume_set",
-            "message": "Force-resume flag set — Poseidon will clear its circuit breaker on next cycle (~15s)",
-        }
 
     valid_kraken_bots = {"davy-jones", "blackbeard", "calypso", "apex-predator"}
     if bid not in valid_kraken_bots:
         from fastapi import HTTPException
         raise HTTPException(
             status_code=404,
-            detail=f"Unknown bot '{bid}'. Valid: {sorted(valid_kraken_bots | {'poseidon'})}",
+            detail=f"Unknown bot '{bid}'. Valid: {sorted(valid_kraken_bots)}",
         )
 
     ctrl = _Path(f"../kraken-bot/{bid}_control.json")

@@ -194,41 +194,6 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         color="lime",
     ),
 
-    # ── Retired — backtests showed no edge; kept for alias resolution only ─────
-    "poseidon_momentum": BotEntry(
-        id="poseidon_momentum",
-        display_name="Poseidon",
-        short_name="Poseidon",
-        icon="🔱",
-        strategy_label="Dual-timeframe momentum (EMA21/55 4H + RSI 1H) — retired",
-        asset_class="crypto",
-        exchange="kraken",
-        starting_capital=100_000,
-        db_id=None,
-        status="retired",
-        display_order=98,
-        legacy_aliases=("poseidon", "Poseidon"),
-        trading_hours="24_7",
-        cycle_minutes=15,
-        color="teal",
-    ),
-    "kraken_trend": BotEntry(
-        id="kraken_trend",
-        display_name="Kraken Current",
-        short_name="Kraken",
-        icon="🌊",
-        strategy_label="Crypto trend follower — EMA+ADX+Hurst 4h — retired",
-        asset_class="crypto",
-        exchange="kraken",
-        starting_capital=100_000,
-        db_id=None,
-        status="retired",
-        display_order=99,
-        legacy_aliases=("kraken-current", "kraken_current", "Kraken Current"),
-        trading_hours="24_7",
-        cycle_minutes=240,
-        color="slate",
-    ),
 }
 
 

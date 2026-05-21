@@ -73,8 +73,6 @@ TRADE_SOURCES = {
     "defensive_guardian": {"table": "kraken_trades",              "pnl_col": "pnl_usd",       "time_col": "closed_at", "bot_filter": "apex-predator"},
     "macro_bond":         {"table": "kraken_trades",              "pnl_col": "pnl_usd",       "time_col": "closed_at", "bot_filter": "bot7_macro_bond"},
     "forex_gump":         {"table": "forex_trades",               "pnl_col": "pnl_usd",       "time_col": "exit_time", "bot_filter": "navigator"},
-    "poseidon_momentum":  {"table": "poseidon_momentum_trades",   "pnl_col": "net_pnl",       "time_col": "closed_at", "bot_filter": None},
-    "kraken_trend":       {"table": "kraken_current_trades",      "pnl_col": "pnl",           "time_col": "closed_at", "bot_filter": None},
 }
 
 # Benchmark mapping for return comparison
@@ -86,8 +84,6 @@ BENCHMARKS = {
     "defensive_guardian": "SPY",
     "macro_bond": "SPY",
     "forex_gump": "DXY",
-    "poseidon_momentum": "BTC",
-    "kraken_trend": "BTC",
 }
 
 

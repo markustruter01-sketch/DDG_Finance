@@ -685,10 +685,8 @@ async def _auto_heal_check() -> None:
             (1, "davy-jones"),
             (2, "blackbeard"),
             (3, "calypso"),
-            (7, "poseidon"),
-            (8, "kraken-current"),
         ]
-        _BOT_HEAL_STALE = {"kraken-current": 16200}
+        _BOT_HEAL_STALE = {}
         if _kdburl:
             _kconn = _pg2k.connect(_kdburl)
             try:
@@ -955,41 +953,6 @@ async def status_summary() -> dict:
     except Exception:
         bot_statuses["navigator"] = {"display_name": "Navigator", "status": "unknown"}
 
-    try:
-        import psycopg2 as _pg2_ps, os as _os_ps
-        _db_ps = _os_ps.environ.get("DATABASE_URL")
-        ps_status = "running"
-        if _db_ps:
-            _ps_conn = _pg2_ps.connect(_db_ps)
-            try:
-                with _ps_conn.cursor() as _psc:
-                    _psc.execute("SELECT status FROM kraken_heartbeat WHERE id = 7")
-                    _psr = _psc.fetchone()
-                    if _psr:
-                        ps_status = str(_psr[0] or "running").lower()
-            finally:
-                _ps_conn.close()
-        bot_statuses["poseidon"] = {"display_name": "Poseidon", "status": ps_status}
-    except Exception:
-        bot_statuses["poseidon"] = {"display_name": "Poseidon", "status": "unknown"}
-
-    try:
-        import psycopg2 as _pg2_kc, os as _os_kc
-        _db_kc = _os_kc.environ.get("DATABASE_URL")
-        kc_status = "running"
-        if _db_kc:
-            _kc_conn = _pg2_kc.connect(_db_kc)
-            try:
-                with _kc_conn.cursor() as _kcc:
-                    _kcc.execute("SELECT status FROM kraken_heartbeat WHERE id = 8")
-                    _kcr = _kcc.fetchone()
-                    if _kcr:
-                        kc_status = str(_kcr[0] or "running").lower()
-            finally:
-                _kc_conn.close()
-        bot_statuses["kraken-current"] = {"display_name": "Kraken Current", "status": kc_status}
-    except Exception:
-        bot_statuses["kraken-current"] = {"display_name": "Kraken Current", "status": "unknown"}
 
     alert_queue_size = 0
     try:

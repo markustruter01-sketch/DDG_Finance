@@ -143,29 +143,9 @@ async def lifespan(app: FastAPI):
                 forex_eq = float(fx_state.get("paper_equity", 0)) or 0.0
         except Exception:
             forex_eq = 0.0
-        poseidon_eq = 0.0
-        kc_eq = 0.0
-        try:
-            if _dburlq:
-                _ps_conn = _pg2eq.connect(_dburlq)
-                try:
-                    with _ps_conn.cursor() as _pscur:
-                        _pscur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 7")
-                        _ps_row = _pscur.fetchone()
-                        if _ps_row and _ps_row[0]:
-                            poseidon_eq = float(_ps_row[0])
-                        _pscur.execute("SELECT equity_usd FROM kraken_heartbeat WHERE id = 8")
-                        _kc_row = _pscur.fetchone()
-                        if _kc_row and _kc_row[0]:
-                            kc_eq = float(_kc_row[0])
-                finally:
-                    _ps_conn.close()
-        except Exception:
-            pass
         insert_equity_snapshot(
             alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat",
             options_equity=options_eq, forex_equity=forex_eq,
-            poseidon_equity=poseidon_eq, kraken_current_equity=kc_eq,
         )
 
     def _equity_heartbeat_sync():

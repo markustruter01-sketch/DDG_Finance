@@ -341,13 +341,6 @@ def _read_live_state(bot_id: str) -> dict:
     return {}
 
 
-def _read_poseidon_live_state() -> dict:
-    p = _ROOT / "poseidon/poseidon_live_state.json"
-    try:
-        return json.loads(p.read_text())
-    except Exception:
-        return {}
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Verified Reference Implementations
@@ -1274,94 +1267,6 @@ def audit_profit_factor(audit_mode: str = "full") -> int:
             )
             checks += 1
 
-    # ── kraken-current (uses kraken_current_trades, pnl_usd only) ────────────
-    kc_raw = _pg_query(
-        "SELECT pnl_usd FROM kraken_current_trades WHERE pnl_usd IS NOT NULL"
-    )
-    if not kc_raw:
-        for _metric in ("profit_factor", "win_rate"):
-            _log_result(
-                "kraken-current", _metric, {},
-                bot_output=None, auditor_output=None,
-                notes="kraken-current: 0 closed trades — insufficient_data for win_rate/profit_factor.",
-                audit_mode=audit_mode,
-            )
-            checks += 1
-    if kc_raw:
-        kc_wins = sum(1 for r in kc_raw if float(r["pnl_usd"]) > 0)
-        kc_n = len(kc_raw)
-        kc_wr = kc_wins / kc_n if kc_n > 0 else 0.0
-        kc_gross_profit = sum(float(r["pnl_usd"]) for r in kc_raw if float(r["pnl_usd"]) > 0)
-        kc_gross_loss = abs(sum(float(r["pnl_usd"]) for r in kc_raw if float(r["pnl_usd"]) < 0))
-        kc_pf = kc_gross_profit / kc_gross_loss if kc_gross_loss > 0 else (999.0 if kc_gross_profit > 0 else 0.0)
-        _log_result(
-            "kraken-current", "profit_factor",
-            {"n": kc_n, "gross_profit_usd": kc_gross_profit, "gross_loss_usd": kc_gross_loss},
-            bot_output=kc_pf, auditor_output=kc_pf,
-            notes=(
-                f"kraken-current: raw USD PF={kc_pf:.3f} from {kc_n} closed trades. "
-                f"gross_profit=${kc_gross_profit:,.2f} gross_loss=${kc_gross_loss:,.2f}. "
-                "No pair-params comparison available (USD-only table)."
-            ),
-            audit_mode=audit_mode,
-        )
-        checks += 1
-        _log_result(
-            "kraken-current", "win_rate",
-            {"n": kc_n, "wins": kc_wins},
-            bot_output=kc_wr, auditor_output=kc_wr,
-            notes=(
-                f"kraken-current: raw WR={kc_wr:.3f} ({kc_wins}/{kc_n} trades). "
-                "No pair-params comparison available — raw-only measurement."
-            ),
-            audit_mode=audit_mode,
-        )
-        checks += 1
-
-    # ── poseidon (uses poseidon_trades, net_pnl) ──────────────────────────────
-    ps_raw = _pg_query(
-        "SELECT net_pnl FROM poseidon_trades WHERE net_pnl IS NOT NULL"
-    )
-    if not ps_raw:
-        for _metric in ("profit_factor", "win_rate"):
-            _log_result(
-                "poseidon", _metric, {},
-                bot_output=None, auditor_output=None,
-                notes="poseidon: 0 closed trades — insufficient_data for win_rate/profit_factor.",
-                audit_mode=audit_mode,
-            )
-            checks += 1
-    if ps_raw:
-        ps_wins = sum(1 for r in ps_raw if float(r["net_pnl"]) > 0)
-        ps_n = len(ps_raw)
-        ps_wr = ps_wins / ps_n if ps_n > 0 else 0.0
-        ps_gross_profit = sum(float(r["net_pnl"]) for r in ps_raw if float(r["net_pnl"]) > 0)
-        ps_gross_loss = abs(sum(float(r["net_pnl"]) for r in ps_raw if float(r["net_pnl"]) < 0))
-        ps_pf = ps_gross_profit / ps_gross_loss if ps_gross_loss > 0 else (999.0 if ps_gross_profit > 0 else 0.0)
-        _log_result(
-            "poseidon", "profit_factor",
-            {"n": ps_n, "gross_profit_usd": ps_gross_profit, "gross_loss_usd": ps_gross_loss},
-            bot_output=ps_pf, auditor_output=ps_pf,
-            notes=(
-                f"poseidon: raw USD PF={ps_pf:.3f} from {ps_n} closed pair trades. "
-                f"gross_profit=${ps_gross_profit:,.2f} gross_loss=${ps_gross_loss:,.2f}. "
-                "Computed from poseidon_trades.net_pnl (combined leg P&L)."
-            ),
-            audit_mode=audit_mode,
-        )
-        checks += 1
-        _log_result(
-            "poseidon", "win_rate",
-            {"n": ps_n, "wins": ps_wins},
-            bot_output=ps_wr, auditor_output=ps_wr,
-            notes=(
-                f"poseidon: raw WR={ps_wr:.3f} ({ps_wins}/{ps_n} pair trades). "
-                "Win = net_pnl > 0 on combined long+short legs."
-            ),
-            audit_mode=audit_mode,
-        )
-        checks += 1
-
     return checks
 
 
@@ -1571,116 +1476,6 @@ def audit_btc_neutral_zscore(audit_mode: str = "full") -> int:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MODULE 10 — Poseidon Hedge Ratio & Dollar-Neutral Verification  [DEEP]
-# ─────────────────────────────────────────────────────────────────────────────
-
-def audit_poseidon_hedge_ratio(audit_mode: str = "deep") -> int:
-    """Module 10: Verify Poseidon OLS hedge ratios and dollar-neutral positions."""
-    checks = 0
-
-    pairs = _pg_query(
-        """
-        SELECT asset_a, asset_b, hedge_ratio, is_tradeable
-        FROM poseidon_pair_params
-        WHERE is_tradeable = TRUE
-        ORDER BY last_calculated DESC
-        LIMIT 8
-        """
-    )
-
-    for p in pairs:
-        a = str(p.get("asset_a") or "")
-        b = str(p.get("asset_b") or "")
-        stored_hr = float(p.get("hedge_ratio") or 0)
-
-        if not a or not b:
-            continue
-
-        a_candles = _fetch_kraken_ohlcv(a, "4h", limit=60)
-        b_candles = _fetch_kraken_ohlcv(b, "4h", limit=60)
-
-        if not a_candles or not b_candles or len(a_candles) < 30 or len(b_candles) < 30:
-            _log_result(
-                "poseidon", "hedge_ratio",
-                {"asset_a": a, "asset_b": b, "stored_hr": stored_hr},
-                bot_output=stored_hr, auditor_output=None,
-                notes=f"Insufficient OHLCV to verify {a}/{b} hedge ratio",
-                audit_mode=audit_mode,
-            )
-            checks += 1
-            continue
-
-        a_closes = np.array([float(c[4]) for c in a_candles], dtype=float)
-        b_closes = np.array([float(c[4]) for c in b_candles], dtype=float)
-        min_len = min(len(a_closes), len(b_closes))
-        a_closes = a_closes[-min_len:]
-        b_closes = b_closes[-min_len:]
-
-        # OLS: y = a, x = b  →  hedge_ratio = cov(a,b)/var(b)
-        try:
-            from numpy.linalg import lstsq as _lstsq
-            x = np.column_stack([np.ones(min_len), b_closes])
-            coeffs, _, _, _ = _lstsq(x, a_closes, rcond=None)
-            audit_hr = float(coeffs[1])
-        except Exception as exc:
-            _log_result(
-                "poseidon", "hedge_ratio",
-                {"asset_a": a, "asset_b": b},
-                bot_output=stored_hr, auditor_output=None,
-                notes=f"OLS regression failed for {a}/{b}: {exc}",
-                audit_mode=audit_mode,
-            )
-            checks += 1
-            continue
-
-        _log_result(
-            "poseidon", "hedge_ratio",
-            {"asset_a": a, "asset_b": b, "n_bars": min_len, "timeframe": "4h"},
-            bot_output=stored_hr, auditor_output=audit_hr,
-            notes=(
-                f"Hedge ratio for {a}/{b}: stored={stored_hr:.4f} auditor_OLS={audit_hr:.4f}. "
-                f"Using {min_len} bars of 4h OHLCV. "
-                f"Significant drift may indicate stale pair calculation or data mismatch."
-            ),
-            audit_mode=audit_mode,
-        )
-        checks += 1
-
-        # Dollar-neutral check on open positions
-        pos_ls = _read_poseidon_live_state()
-        positions = pos_ls.get("positions") or {}
-        pair_key = f"{a}/{b}"
-        if isinstance(positions, dict) and pair_key in positions:
-            pos = positions[pair_key]
-            size_a = float(pos.get("qty_a") or 0)
-            size_b = float(pos.get("qty_b") or 0)
-            price_a = a_closes[-1]
-            price_b = b_closes[-1]
-            if size_a > 0 and size_b > 0:
-                dollar_a = size_a * price_a
-                dollar_b = size_b * price_b * stored_hr
-                imbalance = abs(dollar_a - dollar_b) / dollar_a if dollar_a > 0 else 0
-                _log_result(
-                    "poseidon", "dollar_neutral",
-                    {"pair": pair_key, "dollar_a": dollar_a, "dollar_b": dollar_b,
-                     "imbalance_pct": imbalance * 100},
-                    bot_output=imbalance * 100,
-                    auditor_output=0.0,  # expected imbalance = 0
-                    notes=(
-                        f"Dollar-neutral check for {pair_key}: "
-                        f"leg_A=${dollar_a:,.2f} leg_B×HR=${dollar_b:,.2f} "
-                        f"imbalance={imbalance:.2%}. Threshold: 2%."
-                    ),
-                    audit_mode=audit_mode,
-                )
-                checks += 1
-
-        time.sleep(1.0)
-
-    return checks
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Public Audit Runners
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1739,7 +1534,6 @@ def run_deep_audit() -> dict:
 
     for name, fn in [
         ("hurst_kraken",         lambda: audit_hurst_kraken("deep")),
-        ("poseidon_hedge_ratio", lambda: audit_poseidon_hedge_ratio("deep")),
     ]:
         try:
             results.setdefault("checks", {})[name] = fn()

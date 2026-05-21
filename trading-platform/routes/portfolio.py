@@ -1948,51 +1948,15 @@ async def export_diagnostic_report():
         lines.append(f"  [ADD 1 Navigator params — error: {_e1n}]")
 
     lines.append("@@SEC6@@")
-    h1("SECTION 6: COMBINED FLEET PORTFOLIO \u2014 ALL 8 BOTS")
-
-    # Fetch Poseidon (#7) equity from DB
-    _poseidon_equity = 100_000.0
-    try:
-        import psycopg2 as _pg2ps, os as _osps
-        _dburlps = _osps.environ.get("DATABASE_URL")
-        if _dburlps:
-            _conn_ps = _pg2ps.connect(_dburlps)
-            try:
-                with _conn_ps.cursor() as _cur_ps:
-                    _cur_ps.execute("SELECT equity_usd FROM poseidon_portfolio WHERE id = 7")
-                    _row_ps = _cur_ps.fetchone()
-                    if _row_ps and _row_ps[0]:
-                        _poseidon_equity = float(_row_ps[0])
-            finally:
-                _conn_ps.close()
-    except Exception:
-        pass
-
-    # Fetch Kraken Current (#8) equity from DB
-    _kc_equity = 100_000.0
-    try:
-        import psycopg2 as _pg2kc, os as _oskc
-        _dburlkc = _oskc.environ.get("DATABASE_URL")
-        if _dburlkc:
-            _conn_kc = _pg2kc.connect(_dburlkc)
-            try:
-                with _conn_kc.cursor() as _cur_kc:
-                    _cur_kc.execute("SELECT equity_usd FROM kraken_current_portfolio WHERE id = 8")
-                    _row_kc = _cur_kc.fetchone()
-                    if _row_kc and _row_kc[0]:
-                        _kc_equity = float(_row_kc[0])
-            finally:
-                _conn_kc.close()
-    except Exception:
-        pass
+    h1("SECTION 6: COMBINED FLEET PORTFOLIO \u2014 ALL 6 BOTS")
 
     from core.fleet_capital import fleet_starting_capital as _fsc_gs
     grand_start = _fsc_gs()
-    grand_now   = equity + _all_kraken_equity + _fx_equity + _poseidon_equity + _kc_equity
+    grand_now   = equity + _all_kraken_equity + _fx_equity
     grand_pnl   = grand_now - grand_start
     grand_pct   = (grand_pnl / grand_start) * 100 if grand_start else 0
 
-    row("Total starting capital:", f"{_c(grand_start)} across 3 capital pools, 8 bots")
+    row("Total starting capital:", f"{_c(grand_start)} across 3 capital pools, 6 bots")
     lines.append("")
     row("Bot #1 Oracle (Alpaca):", f"{_c(equity)}  ({_pct((equity - 100_000) / 100_000 * 100)} from $100k)")
     _k_fleet_pnl_s = _all_kraken_equity - _all_kraken_starting
@@ -2003,8 +1967,6 @@ async def export_diagnostic_report():
         _kstrategy = _kprof2.get("strategy_label", "")
         row(f"  - {_kprof2['display_name']} (#{_kdbid2+1}) [{_kstrategy}]:", _c(_keq2))
     row("Bot #6 Navigator:", f"{_c(_fx_equity)}  ({_pct((_fx_pnl_from_start/_fx_start)*100)} from $100k)")
-    row("Bot #7 Poseidon:", f"{_c(_poseidon_equity)}  ({_pct((_poseidon_equity - 100_000) / 1000)} from $100k)")
-    row("Bot #8 Kraken Current:", f"{_c(_kc_equity)}  ({_pct((_kc_equity - 100_000) / 1000)} from $100k)")
     lines.append("")
     row("GRAND TOTAL EQUITY:", _c(grand_now))
     row("COMBINED P&L:", f"{_c(grand_pnl)} ({_pct(grand_pct)})")

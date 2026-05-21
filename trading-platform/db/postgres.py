@@ -593,7 +593,6 @@ def ensure_schema() -> None:
                       ('jerome_macro',        FALSE, '', 0, NULL),
 
                       ('forex_gump',          TRUE,  'Exit logic broken — 43 stuck open positions', 0, NULL),
-                      ('poseidon_momentum',   TRUE,  '0% win rate over 6 trades — strategy broken', 0, NULL),
                       ('kraken_trend',        TRUE,  'Strategy broken — -$4,200 net, 34% WR over 32 trades', 0, NULL)
                     ON CONFLICT (bot_id) DO NOTHING;
                 """)
@@ -913,8 +912,6 @@ def insert_equity_snapshot(
     source: str = "pipeline",
     options_equity: float = 0.0,
     forex_equity: float = 0.0,
-    poseidon_equity: float = 0.0,
-    kraken_current_equity: float = 0.0,
 ) -> bool:
     """
     Insert a portfolio equity snapshot for the equity curve chart.
@@ -922,7 +919,7 @@ def insert_equity_snapshot(
     """
     if not is_pg_available():
         return False
-    total = alpaca_equity + kraken_equity + options_equity + forex_equity + poseidon_equity + kraken_current_equity
+    total = alpaca_equity + kraken_equity + options_equity + forex_equity
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -930,16 +927,15 @@ def insert_equity_snapshot(
                     """
                     INSERT INTO equity_snapshots
                         (alpaca_equity, kraken_equity, options_equity, forex_equity,
-                         poseidon_equity, kraken_current_equity, total_equity, regime, source)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         total_equity, regime, source)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
                     (alpaca_equity, kraken_equity, options_equity, forex_equity,
-                     poseidon_equity, kraken_current_equity, total, regime, source),
+                     total, regime, source),
                 )
         logger.debug(
             f"DB | Equity snapshot: alpaca={alpaca_equity:.2f} kraken={kraken_equity:.2f} "
             f"options={options_equity:.2f} forex={forex_equity:.2f} "
-            f"poseidon={poseidon_equity:.2f} kc={kraken_current_equity:.2f} "
             f"total={total:.2f} regime={regime} source={source}"
         )
         return True

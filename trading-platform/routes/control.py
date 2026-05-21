@@ -41,8 +41,6 @@ _KRAKEN_BOTS = {
     "blackbeard":     2,
     "calypso":        3,
     "apex-predator":  4,
-    "poseidon":       7,
-    "kraken-current": 8,
 }
 
 
@@ -223,163 +221,6 @@ def _liquidate_kraken_positions() -> dict:
             logger.warning(f"Rebalance | Could not set force_reload for {bid}: {exc}")
 
     logger.info(f"Rebalance | Kraken: closed {len(closed)} positions, {len(errors)} errors")
-    return {"closed": closed, "errors": errors}
-
-
-def _liquidate_poseidon_positions() -> dict:
-    """Liquidate all Poseidon positions via its JSON state files.
-
-    Handles two formats:
-    - Momentum format: poseidon_live_state.json has open_positions = [{symbol, unrealised_pnl, ...}]
-    - Pairs format:    poseidon_live_state.json has positions = {pair_key: {...}}
-    Also clears poseidon_paper_portfolio.json which mirrors the portfolio cash/positions.
-    """
-    import json as _pj
-    from pathlib import Path as _PP
-
-    closed = []
-    errors = []
-
-    live_state_file  = _PP("../poseidon/poseidon_live_state.json")
-    paper_port_file  = _PP("../poseidon/poseidon_paper_portfolio.json")
-
-    if not live_state_file.exists() and not paper_port_file.exists():
-        logger.warning("Rebalance | Poseidon state files not found — nothing to liquidate")
-        return {"closed": [], "errors": []}
-
-    # ── Process live_state file ───────────────────────────────────────────────
-    if live_state_file.exists():
-        try:
-            state = _pj.loads(live_state_file.read_text())
-
-            # Format 1: momentum — open_positions is a list
-            momentum_positions = state.get("open_positions")
-            if isinstance(momentum_positions, list) and momentum_positions:
-                for pos in momentum_positions:
-                    try:
-                        sym = pos.get("symbol", "unknown")
-                        pnl_usd = float(pos.get("unrealised_pnl", pos.get("unrealised_pnl_usd", 0)))
-                        closed.append({
-                            "bot": "poseidon",
-                            "pair": sym,
-                            "pnl_usd": round(pnl_usd, 2),
-                            "note": "momentum_live_state",
-                        })
-                        logger.info(
-                            f"Rebalance | Poseidon (momentum) closing {sym} | "
-                            f"unrealised P&L: ${pnl_usd:+,.2f}"
-                        )
-                    except Exception as exc:
-                        errors.append({"bot": "poseidon", "pair": pos.get("symbol", "?"), "error": str(exc)})
-
-            # Format 2: pairs — positions is a dict
-            pairs_positions = state.get("positions", {})
-            if isinstance(pairs_positions, dict) and pairs_positions:
-                for pair_key, pos in list(pairs_positions.items()):
-                    try:
-                        pnl_usd = float(pos.get("unrealised_pnl_usd", pos.get("unrealised_pnl", 0)))
-                        closed.append({
-                            "bot": "poseidon",
-                            "pair": pair_key,
-                            "pnl_usd": round(pnl_usd, 2),
-                            "note": "pairs_live_state",
-                        })
-                        logger.info(
-                            f"Rebalance | Poseidon (pairs) closing {pair_key} | "
-                            f"unrealised P&L: ${pnl_usd:+,.2f}"
-                        )
-                    except Exception as exc:
-                        errors.append({"bot": "poseidon", "pair": pair_key, "error": str(exc)})
-
-            if not momentum_positions and not pairs_positions:
-                logger.info("Rebalance | Poseidon live_state has no open positions")
-
-            # Clear both position keys
-            state["open_positions"] = []
-            state["positions"] = {}
-            state["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
-            live_state_file.write_text(_pj.dumps(state, indent=2, default=str))
-            logger.info(f"Rebalance | Poseidon live_state cleared — {len(closed)} position(s) marked closed")
-
-        except Exception as exc:
-            logger.error(f"Rebalance | Poseidon live_state liquidation failed: {exc}")
-            errors.append({"bot": "poseidon", "error": str(exc)})
-
-    # ── Also clear paper_portfolio file ──────────────────────────────────────
-    if paper_port_file.exists():
-        try:
-            port = _pj.loads(paper_port_file.read_text())
-            port_positions = port.get("positions", {})
-            # Only add to closed list if not already captured from live_state
-            live_syms = {c["pair"] for c in closed}
-            for sym, pos in (port_positions or {}).items():
-                if sym not in live_syms:
-                    pnl_usd = float(pos.get("unrealised_pnl", 0))
-                    closed.append({
-                        "bot": "poseidon",
-                        "pair": sym,
-                        "pnl_usd": round(pnl_usd, 2),
-                        "note": "paper_portfolio_only",
-                    })
-                    logger.info(f"Rebalance | Poseidon (paper_port only) closing {sym} | P&L: ${pnl_usd:+,.2f}")
-            port["positions"] = {}
-            port["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
-            paper_port_file.write_text(_pj.dumps(port, indent=2, default=str))
-            logger.info("Rebalance | Poseidon paper_portfolio cleared")
-        except Exception as exc:
-            logger.warning(f"Rebalance | Could not clear Poseidon paper_portfolio: {exc}")
-            errors.append({"bot": "poseidon_paper_portfolio", "error": str(exc)})
-
-    return {"closed": closed, "errors": errors}
-
-
-def _liquidate_kraken_current_positions() -> dict:
-    """Liquidate all Kraken Current trend positions via its JSON state file."""
-    import json as _kcj
-    from pathlib import Path as _KCP
-
-    closed = []
-    errors = []
-
-    state_file = _KCP("../kraken-current/kc_live_state.json")
-    if not state_file.exists():
-        logger.warning("Rebalance | Kraken Current state file not found — nothing to liquidate")
-        return {"closed": [], "errors": []}
-
-    try:
-        state = _kcj.loads(state_file.read_text())
-        positions = state.get("positions", {})
-
-        if not positions:
-            logger.info("Rebalance | Kraken Current has no open positions")
-            return {"closed": [], "errors": []}
-
-        for symbol, pos in list(positions.items()):
-            try:
-                pnl_usd = float(pos.get("unrealised_pnl_usd", 0))
-                closed.append({
-                    "bot": "kraken-current",
-                    "symbol": symbol,
-                    "pnl_usd": round(pnl_usd, 2),
-                    "note": "marked_via_state_file",
-                })
-                logger.info(
-                    f"Rebalance | Kraken Current closing {symbol} | "
-                    f"unrealised P&L: ${pnl_usd:+,.2f}"
-                )
-            except Exception as exc:
-                errors.append({"bot": "kraken-current", "symbol": symbol, "error": str(exc)})
-
-        # Clear positions in state file
-        state["positions"] = {}
-        state["last_rebalance"] = datetime.now(tz=timezone.utc).isoformat()
-        state_file.write_text(_kcj.dumps(state, indent=2, default=str))
-        logger.info(f"Rebalance | Kraken Current state file cleared — {len(closed)} position(s) closed")
-
-    except Exception as exc:
-        logger.error(f"Rebalance | Kraken Current liquidation failed: {exc}")
-        errors.append({"bot": "kraken-current", "error": str(exc)})
-
     return {"closed": closed, "errors": errors}
 
 
@@ -585,9 +426,6 @@ async def force_rebalance() -> dict:
     kraken_closed = kraken_result.get("closed", [])
     kraken_errors = kraken_result.get("errors", [])
 
-    poseidon_result = _liquidate_poseidon_positions()
-    kc_result = _liquidate_kraken_current_positions()
-
     forex_result = _liquidate_forex_positions()
     forex_closed = forex_result.get("closed", [])
     forex_errors = forex_result.get("errors", [])
@@ -599,8 +437,6 @@ async def force_rebalance() -> dict:
     logger.info(
         f"Rebalance | Alpaca: closed {len(closed)}, held {len(held)}, errors {len(errors)} | "
         f"Kraken: closed {len(kraken_closed)}, errors {len(kraken_errors)} | "
-        f"Poseidon: closed {len(poseidon_result.get('closed', []))}, errors {len(poseidon_result.get('errors', []))} | "
-        f"KrakenCurrent: closed {len(kc_result.get('closed', []))}, errors {len(kc_result.get('errors', []))} | "
         f"Forex: closed {len(forex_closed)}, errors {len(forex_errors)} | "
         f"Options: closed {len(options_closed)}, errors {len(options_errors)}"
     )
@@ -615,8 +451,6 @@ async def force_rebalance() -> dict:
         "errors": errors,
         "kraken_closed": kraken_closed,
         "kraken_errors": kraken_errors,
-        "poseidon": poseidon_result,
-        "kraken_current": kc_result,
         "forex_closed": forex_closed,
         "forex_errors": forex_errors,
         "options_closed": options_closed,
@@ -628,24 +462,17 @@ async def force_rebalance() -> dict:
 
 @control_router.post("/rebalance/kraken-paper-only", tags=["Control"])
 async def liquidate_kraken_paper_only() -> dict:
-    """Close all Kraken paper positions (davy-jones/blackbeard/calypso/apex-predator/poseidon)
-    WITHOUT touching Oracle (Alpaca), kraken-current, forex, or triggering run_pipeline.
+    """Close all Kraken paper positions (davy-jones/blackbeard/calypso/apex-predator)
+    WITHOUT touching Oracle (Alpaca), forex, or triggering run_pipeline.
     Safe to call post-deploy to clear orphaned legacy positions before activating new bots."""
-    logger.warning("Rebalance | kraken-paper-only — closing Kraken paper + Poseidon positions only")
-    kraken_result  = _liquidate_kraken_positions()
-    poseidon_result = _liquidate_poseidon_positions()
+    logger.warning("Rebalance | kraken-paper-only — closing Kraken paper positions only")
+    kraken_result = _liquidate_kraken_positions()
     logger.info(
         f"Rebalance | kraken-paper-only complete — "
         f"Kraken closed {len(kraken_result.get('closed', []))}, "
-        f"errors {len(kraken_result.get('errors', []))} | "
-        f"Poseidon closed {len(poseidon_result.get('closed', []))}, "
-        f"errors {len(poseidon_result.get('errors', []))}"
+        f"errors {len(kraken_result.get('errors', []))}"
     )
-    return {
-        "status": "ok",
-        "kraken": kraken_result,
-        "poseidon": poseidon_result,
-    }
+    return {"status": "ok", "kraken": kraken_result}
 
 
 @control_router.post("/rebalance/{symbol}", tags=["Control"])

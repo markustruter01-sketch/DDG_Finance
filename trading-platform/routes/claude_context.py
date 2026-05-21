@@ -39,22 +39,20 @@ PLATFORM OVERVIEW
                 # Fleet equity
                 cur.execute("""
                     SELECT alpaca_equity, kraken_equity, forex_equity,
-                           poseidon_equity, kraken_current_equity, total_equity, ts
+                           total_equity, ts
                     FROM equity_snapshots ORDER BY ts DESC LIMIT 1
                 """)
                 eq = cur.fetchone()
                 if eq:
                     def _fmt(v): return f"${v:>10,.2f}" if v is not None else "       N/A"
-                    total = eq[5] or 0
+                    total = eq[3] or 0
                     from core.fleet_capital import fleet_starting_capital as _fsc_cc
                     _sc_cc = _fsc_cc()
-                    sections.append(f"""FLEET EQUITY (as of {str(eq[6])[:19]} UTC)
+                    sections.append(f"""FLEET EQUITY (as of {str(eq[4])[:19]} UTC)
 - Oracle (Alpaca):     {_fmt(eq[0])}
 - Kraken fleet:        {_fmt(eq[1])}
 - Navigator (Forex):   {_fmt(eq[2])}
-- Poseidon:            {_fmt(eq[3])}
-- Kraken Current:      {_fmt(eq[4])}
-- TOTAL:               {_fmt(eq[5])} (started ${_sc_cc:,.0f})
+- TOTAL:               {_fmt(eq[3])} (started ${_sc_cc:,.0f})
 - P&L:                 ${total-_sc_cc:>+10,.2f} ({(total-_sc_cc)/_sc_cc*100:+.2f}%)
 """)
 

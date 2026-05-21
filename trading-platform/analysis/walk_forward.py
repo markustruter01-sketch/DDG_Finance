@@ -529,7 +529,7 @@ def _persist(bot_id: str, result: dict) -> None:
 
 def run_all_bots() -> dict[str, dict]:
     """Run WFO for all Kraken-based bots. Called by Sunday scheduler."""
-    bot_ids = ["davy-jones", "blackbeard", "calypso", "poseidon", "kraken-current"]
+    bot_ids = ["davy-jones", "blackbeard", "calypso"]
     results = {}
     for bid in bot_ids:
         try:

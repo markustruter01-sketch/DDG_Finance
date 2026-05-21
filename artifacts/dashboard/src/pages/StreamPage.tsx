@@ -7,7 +7,6 @@ import StreamingLearningScreen from "@/pages/StreamingLearningScreen";
 import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
 import StreamingArchitectureScreen from "@/pages/StreamingArchitectureScreen";
-import { useFleetParams } from "@/hooks/use-trading";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 import { StreamHeaderBar } from "@/components/streaming/StreamHeaderBar";
 
@@ -99,8 +98,6 @@ export default function StreamPage() {
     if (urlParams.current.intervalSeconds !== null) return urlParams.current.intervalSeconds;
     return stored.current.intervalSeconds;
   }
-
-  useFleetParams();
 
   const [active, setActive] = useState<SubPage>(getInitialSubPage);
   const [autoCycle, setAutoCycle] = useState<boolean>(getInitialAutoCycle);

@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, Suspense } from "react";
 import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,8 +11,6 @@ import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
 
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
-
-const CommanderPage = lazy(() => import("@/pages/CommanderPage"));
 
 installVisibilityListener();
 
@@ -64,11 +62,6 @@ function Router() {
         </Route>
         <Route path="/streaming-v2">
           <Redirect to="/stream?sub=b" />
-        </Route>
-        <Route path="/commander">
-          <Suspense fallback={<StreamingLoader />}>
-            <CommanderPage />
-          </Suspense>
         </Route>
         <Route component={NotFound} />
       </Switch>

@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, Radio, Terminal } from "lucide-react";
+import { LayoutDashboard, Radio } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -16,14 +16,6 @@ const NAV_ITEMS = [
     path:  "/stream",
     icon:  Radio,
     color: "#f43f5e",
-    pulse: false,
-  },
-  {
-    id:    "commander",
-    label: "CMD",
-    path:  "/commander",
-    icon:  Terminal,
-    color: "#10b981",
     pulse: false,
   },
 ];

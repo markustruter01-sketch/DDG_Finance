@@ -350,7 +350,7 @@ export function OrbVisualiser() {
           left: 12,
           top: 10,
           bottom: 46,
-          width: 216,
+          width: 346,
           display: "flex",
           flexDirection: "column",
           gap: 10,

@@ -110,7 +110,7 @@ function AlgoThoughts() {
             color: t.color,
             textShadow: `0 0 10px ${t.color}88, 0 0 20px ${t.color}44`,
             background: "rgba(2,6,23,0.7)",
-            border: `1px solid ${t.color}44`,
+            border: "1px solid rgba(255,255,255,0.22)",
             borderRadius: 6,
             padding: "3px 8px",
             letterSpacing: "0.05em",
@@ -233,7 +233,7 @@ export function OrbVisualiser() {
           bottom: 24,
           right: 24,
           background: "rgba(2,6,23,0.82)",
-          border: "1px solid rgba(251,146,60,0.3)",
+          border: "1px solid rgba(255,255,255,0.22)",
           borderRadius: 14,
           padding: "18px 24px",
           backdropFilter: "blur(14px)",
@@ -280,7 +280,7 @@ export function OrbVisualiser() {
             padding: "5px 10px",
             borderRadius: 7,
             background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-            border: `1px solid ${tradePulse.isWin ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
+            border: "1px solid rgba(255,255,255,0.28)",
             color: tradePulse.isWin ? "#4ade80" : "#f87171",
             fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
           }}>
@@ -294,7 +294,7 @@ export function OrbVisualiser() {
             padding: "5px 10px",
             borderRadius: 7,
             background: "rgba(139,92,246,0.15)",
-            border: "1px solid rgba(139,92,246,0.4)",
+            border: "1px solid rgba(255,255,255,0.28)",
             color: "#a78bfa",
             fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
           }}>
@@ -404,7 +404,7 @@ export function OrbVisualiser() {
                     marginBottom: 2,
                     borderRadius: 6,
                     background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-                    border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
+                    border: "1px solid rgba(255,255,255,0.14)",
                     backdropFilter: "blur(10px)",
                   }}
                 >
@@ -508,7 +508,7 @@ export function OrbVisualiser() {
                     marginBottom: 2,
                     borderRadius: 6,
                     background: isPos ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-                    border: `1px solid ${isPos ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
+                    border: "1px solid rgba(255,255,255,0.14)",
                     backdropFilter: "blur(10px)",
                   }}
                 >

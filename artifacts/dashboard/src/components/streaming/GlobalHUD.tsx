@@ -12,7 +12,7 @@ export function GlobalHUD() {
         flexShrink: 0,
         gap: 24,
         background: "linear-gradient(90deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))",
-        borderBottom: "1px solid rgba(99,102,241,0.18)",
+        borderBottom: "1px solid rgba(255,255,255,0.18)",
       }}
     >
       {/* Welcome text */}
@@ -53,7 +53,7 @@ export function GlobalHUD() {
           gap: 8,
           padding: "8px 18px",
           borderRadius: 10,
-          border: "1px solid rgba(99,102,241,0.3)",
+          border: "1px solid rgba(255,255,255,0.28)",
           background: "linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.08))",
           whiteSpace: "nowrap",
         }}

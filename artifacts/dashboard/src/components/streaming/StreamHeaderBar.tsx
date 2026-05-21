@@ -115,7 +115,7 @@ export function StreamHeaderBar() {
       style={{
         height: 52,
         background: "#000000",
-        borderBottom: "1px solid rgba(34,211,238,0.12)",
+        borderBottom: "1px solid rgba(255,255,255,0.12)",
         zIndex: 30,
       }}
     >

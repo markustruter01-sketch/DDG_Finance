@@ -234,7 +234,7 @@ export function TradingEngineBlackHole() {
     window.addEventListener("resize", resize);
     resize();
 
-    let camTheta = 0.5, camPhi = 1.45, camRadius = 16.0;
+    let camTheta = 0.5, camPhi = 1.45, camRadius = 28.0;
     let tTheta = camTheta, tPhi = camPhi, tRadius = camRadius;
     let drag = false, lx = 0, ly = 0;
 
@@ -268,8 +268,8 @@ export function TradingEngineBlackHole() {
       if (document.hidden) { lastNow = now; return; }
       const dt = Math.min((now - lastNow) * 0.001, 0.05); // seconds, capped at 50ms
       lastNow = now;
-      // Auto-orbit: full 360° in ~18s when user is not dragging
-      if (!drag) tTheta += dt * 0.35;
+      // Auto-orbit: slowed 95% — stars drift very slowly, black hole disk animation unchanged
+      if (!drag) tTheta += dt * 0.0175;
       const s = 0.08;
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;

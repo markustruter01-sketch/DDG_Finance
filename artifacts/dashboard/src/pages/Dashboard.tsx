@@ -26,6 +26,7 @@ import { getFleetStartingCapital, getFleetBotCount, formatCapitalShort } from "@
 import { cn, formatCurrency } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
+import { Slider } from "@/components/ui/slider";
 import {
   Activity, ShieldAlert, TrendingUp,
   WifiOff, AlertTriangle, Brain,
@@ -1919,6 +1920,46 @@ function MathAuditorPanel() {
   );
 }
 
+function BlackHoleSpeedSlider() {
+  const [speed, setSpeed] = useState<number>(() => {
+    const v = parseFloat(localStorage.getItem("bh_spin_scale") ?? "");
+    return isNaN(v) ? 1 : Math.max(0.25, Math.min(5, v));
+  });
+
+  function handleChange(val: number[]) {
+    const next = val[0];
+    setSpeed(next);
+    localStorage.setItem("bh_spin_scale", String(next));
+    window.dispatchEvent(new StorageEvent("storage", { key: "bh_spin_scale", newValue: String(next) }));
+  }
+
+  return (
+    <div className="rounded-xl border border-white/5 bg-slate-900/50 px-5 py-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+          Black Hole Speed
+        </span>
+        <span className="text-xs font-mono text-orange-400 tabular-nums font-semibold">
+          {speed === 1 ? "1×" : `${speed}×`}
+        </span>
+      </div>
+      <Slider
+        min={0.25}
+        max={5}
+        step={0.25}
+        value={[speed]}
+        onValueChange={handleChange}
+        className="[&_[data-radix-slider-range]]:bg-orange-500 [&_[data-radix-slider-thumb]]:border-orange-500/60"
+      />
+      <div className="flex justify-between text-[9px] text-muted-foreground/40 font-mono">
+        <span>0.25×</span>
+        <span>slow ← → fast</span>
+        <span>5×</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background flex flex-col relative">
@@ -1953,6 +1994,12 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }}>
           <SafeSection label="Fleet KPIs">
             <FleetKPISummary />
+          </SafeSection>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <SafeSection label="Black Hole Speed">
+            <BlackHoleSpeedSlider />
           </SafeSection>
         </motion.div>
 

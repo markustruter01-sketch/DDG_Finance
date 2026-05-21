@@ -9,6 +9,7 @@ uniform float uTime;
 uniform float uTheta;
 uniform float uPhi;
 uniform float uRadius;
+uniform float uSpinScale;
 
 #define PI  3.14159265359
 #define TAU 6.28318530718
@@ -70,11 +71,12 @@ float diskDensity(vec3 p){
   // Sample noise in stationary world-space coords + independent time drifts per layer.
   // No rotation-winding in the sample coordinates → concentric-ring artifact impossible.
   // Visual disk rotation comes from Doppler shift + lensing, not from noise winding.
-  vec3 swirl=vec3(p.x,p.z,uTime*0.25)*0.22;
+  float st=uTime*uSpinScale;
+  vec3 swirl=vec3(p.x,p.z,st*0.25)*0.22;
   float base=mix(0.3,1.3,fbm(swirl));
-  vec3 plasma1=vec3(p.x+uTime*0.18,p.z-uTime*0.12,uTime*0.9)*0.28;
+  vec3 plasma1=vec3(p.x+st*0.18,p.z-st*0.12,st*0.9)*0.28;
   float pTurb1=mix(0.2,1.6,fbm(plasma1));
-  vec3 plasma2=vec3(p.x-uTime*0.07,p.z+uTime*0.09,-uTime*0.45)*0.13;
+  vec3 plasma2=vec3(p.x-st*0.07,p.z+st*0.09,-st*0.45)*0.13;
   float pTurb2=mix(0.4,1.4,fbm(plasma2));
   return radial*vertical*base*pTurb1*pTurb2*0.85;
 }
@@ -92,7 +94,8 @@ vec3 diskEmission(vec3 p, float density){
   col=mix(col,col*vec3(0.6,0.8,1.5),max(0.0,dop)*0.3);
   col=mix(col,col*vec3(1.5,0.6,0.3),max(0.0,-dop)*0.3);
   // Stationary world-space blob — no winding, no rings
-  float blob=fbm(vec3(p.x+uTime*0.05,p.z-uTime*0.03,uTime*0.08)*0.18);
+  float st2=uTime*uSpinScale;
+  float blob=fbm(vec3(p.x+st2*0.05,p.z-st2*0.03,st2*0.08)*0.18);
   float variation=mix(0.5,1.5,blob);
   float boost=6.0/(r*0.35+0.25);
   return col*density*boost*variation;
@@ -170,9 +173,25 @@ void main(){
 
 const RES_SCALE = 0.85;
 
+function readSpinScale(): number {
+  const v = parseFloat(localStorage.getItem("bh_spin_scale") ?? "");
+  return isNaN(v) ? 1.0 : Math.max(0.25, Math.min(5, v));
+}
+
 export function TradingEngineBlackHole() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [webglFailed, setWebglFailed] = useState(false);
+  const spinScaleRef = useRef<number>(readSpinScale());
+
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === "bh_spin_scale" || e.key === null) {
+        spinScaleRef.current = readSpinScale();
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -215,7 +234,7 @@ export function TradingEngineBlackHole() {
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
     const U: Record<string, WebGLUniformLocation | null> = {};
-    ["uRes", "uTime", "uTheta", "uPhi", "uRadius"].forEach(
+    ["uRes", "uTime", "uTheta", "uPhi", "uRadius", "uSpinScale"].forEach(
       (n) => (U[n] = gl.getUniformLocation(prog, n))
     );
 
@@ -274,10 +293,11 @@ export function TradingEngineBlackHole() {
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;
       camRadius += (tRadius - camRadius) * s;
-      gl.uniform1f(U.uTime,   now * 0.001);
-      gl.uniform1f(U.uTheta,  camTheta);
-      gl.uniform1f(U.uPhi,    camPhi);
-      gl.uniform1f(U.uRadius, camRadius);
+      gl.uniform1f(U.uTime,      now * 0.001);
+      gl.uniform1f(U.uTheta,     camTheta);
+      gl.uniform1f(U.uPhi,       camPhi);
+      gl.uniform1f(U.uRadius,    camRadius);
+      gl.uniform1f(U.uSpinScale, spinScaleRef.current);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
     rafId = requestAnimationFrame(frame);

@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   {
     id:    "home",
     label: "Home",
-    path:  "/",
+    path:  "/live",
     icon:  LayoutDashboard,
     color: "#3b82f6",
     pulse: false,
@@ -34,9 +34,7 @@ export function GlobalNav() {
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive =
-            item.path === "/"
-              ? location === "/" || location === ""
-              : location === item.path || location.startsWith(item.path + "/");
+            location === item.path || location.startsWith(item.path + "/");
 
           return (
             <button

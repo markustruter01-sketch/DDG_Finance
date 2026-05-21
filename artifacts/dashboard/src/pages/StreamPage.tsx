@@ -59,7 +59,7 @@ function loadPrefs(): StreamPrefs {
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : true,
+        autoCycle: typeof parsed.autoCycle === "boolean" ? parsed.autoCycle : false,
         intervalSeconds:
           typeof parsed.intervalSeconds === "number" &&
           parsed.intervalSeconds >= 5 &&
@@ -69,7 +69,7 @@ function loadPrefs(): StreamPrefs {
       };
     }
   } catch {}
-  return { autoCycle: true, intervalSeconds: 15 };
+  return { autoCycle: false, intervalSeconds: 15 };
 }
 
 function savePrefs(prefs: StreamPrefs) {

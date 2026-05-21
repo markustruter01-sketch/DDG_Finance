@@ -268,8 +268,8 @@ export function TradingEngineBlackHole() {
       if (document.hidden) { lastNow = now; return; }
       const dt = Math.min((now - lastNow) * 0.001, 0.05); // seconds, capped at 50ms
       lastNow = now;
-      // Auto-orbit: full 360° in ~90s when user is not dragging
-      if (!drag) tTheta += dt * 0.07;
+      // Auto-orbit: full 360° in ~18s when user is not dragging
+      if (!drag) tTheta += dt * 0.35;
       const s = 0.08;
       camTheta += (tTheta - camTheta) * s;
       camPhi   += (tPhi   - camPhi)   * s;

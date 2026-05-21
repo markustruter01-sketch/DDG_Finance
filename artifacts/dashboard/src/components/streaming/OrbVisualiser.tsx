@@ -343,68 +343,71 @@ export function OrbVisualiser() {
         </div>
       </div>
 
-      {/* ── LEFT COLUMN: CLOSED TRADES + MATH AUDIT WIDGET ── */}
+      {/* ── CLOSED TRADES (original 216px width) ── */}
+      {closedTradesFeed.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 12,
+            top: 10,
+            bottom: 336,
+            width: 216,
+            zIndex: 20,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+          }}
+        >
+          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
+            ◂ Closed Trades
+          </div>
+          {closedTradesFeed.slice(0, 10).map((t, i) => (
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "5px 8px",
+                marginBottom: 3,
+                borderRadius: 7,
+                background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+                border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
+                backdropFilter: "blur(10px)",
+              }}
+            >
+              <span style={{ fontSize: 10, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace" }}>
+                {t.isWin ? "✓" : "✗"}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.symbol}
+                </div>
+                <div style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.5)", letterSpacing: "0.05em" }}>
+                  {t.bot}
+                </div>
+              </div>
+              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0 }}>
+                {t.pnlUsd >= 0 ? "+" : ""}${Math.abs(t.pnlUsd) >= 1000 ? `${(Math.abs(t.pnlUsd) / 1000).toFixed(1)}k` : Math.abs(t.pnlUsd).toFixed(0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── MATH AUDIT WIDGET (346px wide, anchored to bottom) ── */}
       <div
         style={{
           position: "absolute",
           left: 12,
-          top: 10,
           bottom: 46,
           width: 346,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
+          height: 280,
           zIndex: 20,
+          overflow: "hidden",
         }}
       >
-        {closedTradesFeed.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              overflowY: "auto",
-              maxHeight: "60vh",
-            }}
-          >
-            <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
-              ◂ Closed Trades
-            </div>
-            {closedTradesFeed.slice(0, 10).map((t, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "5px 8px",
-                  marginBottom: 3,
-                  borderRadius: 7,
-                  background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-                  border: `1px solid ${t.isWin ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
-                  backdropFilter: "blur(10px)",
-                }}
-              >
-                <span style={{ fontSize: 10, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0, fontFamily: "monospace" }}>
-                  {t.isWin ? "✓" : "✗"}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t.symbol}
-                  </div>
-                  <div style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.5)", letterSpacing: "0.05em" }}>
-                    {t.bot}
-                  </div>
-                </div>
-                <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: t.isWin ? "#4ade80" : "#f87171", flexShrink: 0 }}>
-                  {t.pnlUsd >= 0 ? "+" : ""}${Math.abs(t.pnlUsd) >= 1000 ? `${(Math.abs(t.pnlUsd) / 1000).toFixed(1)}k` : Math.abs(t.pnlUsd).toFixed(0)}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-          <MiniSynapticWidget />
-        </div>
+        <MiniSynapticWidget />
       </div>
 
       {/* ── RIGHT PANEL: OPEN POSITIONS ── */}

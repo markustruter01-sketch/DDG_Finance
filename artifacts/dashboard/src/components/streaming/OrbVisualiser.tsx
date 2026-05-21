@@ -82,11 +82,11 @@ function AlgoThoughts() {
       setTimeout(() => setThoughts(prev => prev.map(t => t.id === id ? { ...t, opacity: 0 } : t)), 3200);
       setTimeout(() => setThoughts(prev => prev.filter(t => t.id !== id)), 4000);
 
-      const delay = 3500 + Math.random() * 3000;
+      const delay = 7000 + Math.random() * 6000;
       setTimeout(spawn, delay);
     };
 
-    const initial = setTimeout(spawn, 1200 + Math.random() * 1000);
+    const initial = setTimeout(spawn, 2400 + Math.random() * 2000);
     return () => clearTimeout(initial);
   }, []);
 

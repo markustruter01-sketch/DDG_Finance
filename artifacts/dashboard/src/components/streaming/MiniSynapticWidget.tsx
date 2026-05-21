@@ -108,10 +108,8 @@ export function MiniSynapticWidget() {
       */}
       <svg
         viewBox="0 20 800 640"
-        width="100%"
-        height="100%"
-        preserveAspectRatio="xMidYMin meet"
-        style={{ display: "block" }}
+        style={{ display: "block", width: "100%", height: "100%" }}
+        preserveAspectRatio="none"
       >
         {/* ── TITLE ── */}
         <text

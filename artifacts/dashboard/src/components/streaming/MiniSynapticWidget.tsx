@@ -107,7 +107,7 @@ export function MiniSynapticWidget() {
 
       {/* Algorithm Checks title */}
       <div style={{ fontSize: 11, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.12em", padding: "0 4px 5px 4px" }}>
-        Algorithm Checks
+        Synaptic Math Audit Engine v4.1
       </div>
 
       {/* Formula boxes row */}

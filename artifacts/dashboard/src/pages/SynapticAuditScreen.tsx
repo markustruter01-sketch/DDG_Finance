@@ -308,7 +308,7 @@ export default function SynapticAuditScreen() {
       {/* Formula Input Row */}
       <div className="absolute top-[60px] left-0 right-0 h-[120px] z-20 px-10 flex flex-col justify-center gap-2">
         <div>
-          <span className="text-[13px] font-semibold text-white tracking-wider">Algorithm Checks</span>
+          <span className="text-[13px] font-semibold text-white tracking-wider">Synaptic Math Audit Engine v4.1</span>
         </div>
         <div className="flex items-center gap-4">
         {FORMULAS.map((f, i) => (

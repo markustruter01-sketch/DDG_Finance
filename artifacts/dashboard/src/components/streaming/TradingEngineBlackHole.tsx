@@ -239,7 +239,7 @@ export function TradingEngineBlackHole() {
     let drag = false, lx = 0, ly = 0;
     let panTime = 0;
     const PHI_CENTER = Math.PI / 2;   // equatorial — horizon flips as we cross this
-    const PHI_AMP    = 0.92;           // ±0.92 rad → ~0.65 (above) ↔ ~2.49 (below)
+    const PHI_AMP    = 0.14;           // ±0.14 rad → subtle tilt, ~15% of original range
 
     canvas.addEventListener("mousedown", (e) => { drag = true; lx = e.clientX; ly = e.clientY; });
     window.addEventListener("mouseup", () => drag = false);

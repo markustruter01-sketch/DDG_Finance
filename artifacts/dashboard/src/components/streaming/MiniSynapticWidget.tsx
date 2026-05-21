@@ -106,7 +106,7 @@ export function MiniSynapticWidget() {
       `}} />
 
       {/* Algorithm Checks title */}
-      <div style={{ fontSize: 22, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.12em", padding: "0 4px 6px 4px", whiteSpace: "nowrap" }}>
+      <div style={{ fontSize: 17, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.08em", padding: "0 4px 6px 4px", whiteSpace: "nowrap" }}>
         Synaptic Math Audit Engine v4.1
       </div>
 

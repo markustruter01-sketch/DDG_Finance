@@ -1704,102 +1704,6 @@ export function useAIImpactTimeline() {
   });
 }
 
-export interface PoseidonOpenTrade {
-  pair_set_id: number;
-  asset_a: string;
-  asset_b: string;
-  direction: string;
-  leg_a_side: string;
-  leg_b_side: string;
-  entry_zscore: number;
-  position_value: number;
-  total_pnl: number;
-  leg_a_entry: number;
-  leg_b_entry: number;
-  current_price_a: number;
-  current_price_b: number;
-  opened_at: string;
-  fees_paid: number;
-}
-
-export interface PoseidonState {
-  total_equity: number;
-  paper_equity: number;
-  cash_usd: number;
-  open_positions: number;
-  total_pnl: number;
-  total_trades: number;
-  total_wins: number;
-  win_rate: number | null;
-  paused: boolean;
-  status: string;
-  strategy: string;
-  starting_capital: number;
-  cycle_minutes: number;
-  max_pairs: number;
-  zscore_entry: number;
-  zscore_exit: number;
-  zscore_stop: number;
-  hurst_threshold: number;
-  adf_pvalue_threshold: number;
-  pair_params?: object[];
-  open_trades?: PoseidonOpenTrade[];
-}
-
-export function usePoseidonState() {
-  return useQuery<PoseidonState>({
-    queryKey: ["/poseidon/state"],
-    queryFn: async () => (await api.get("/poseidon/state")).data,
-    refetchInterval: useVisibleInterval(30_000),
-    retry: false,
-    staleTime: 15_000,
-  });
-}
-
-export interface KrakenCurrentOpenPosition {
-  symbol: string;
-  direction: string;
-  entry_price: number;
-  current_price: number;
-  units: number;
-  position_value: number;
-  unrealised_pnl: number;
-  stop_level: number;
-  trailing_active: boolean;
-  opened_at: string;
-  fees_paid: number;
-}
-
-export interface KrakenCurrentState {
-  total_equity: number;
-  paper_equity: number;
-  cash_usd: number;
-  open_positions: number;
-  open_positions_list?: KrakenCurrentOpenPosition[];
-  total_pnl: number;
-  total_trades: number;
-  total_wins: number;
-  win_rate: number | null;
-  paused: boolean;
-  status: string;
-  strategy: string;
-  starting_capital: number;
-  cycle_hours: number;
-  universe_size: number;
-  ema_fast: number;
-  ema_slow: number;
-  adx_threshold: number;
-  hurst_threshold: number;
-  max_positions: number;
-  max_hold_days: number;
-  atr_stop_mult: number;
-  signal_scan?: object[];
-}
-
-export function useKrakenCurrentState() {
-  return { data: undefined as KrakenCurrentState | undefined, isLoading: false, error: null };
-}
-
 export interface PairLearningSymbol {
   bot_id: string;
   symbol: string;
@@ -1829,16 +1733,6 @@ export interface FleetSymbol {
   bot_count: number;
 }
 
-export interface PoseidonPairParam {
-  pair_set_id: number;
-  asset_a: string;
-  asset_b: string;
-  hedge_ratio: number;
-  hurst: number;
-  adf_pvalue: number;
-  is_tradeable: boolean;
-}
-
 export interface AdaptiveParam {
   bot_id: string;
   params: Record<string, number>;
@@ -1859,7 +1753,6 @@ export interface RecentTrade {
 export interface PairLearningData {
   symbols: PairLearningSymbol[];
   fleet_symbols: FleetSymbol[];
-  poseidon_pairs: PoseidonPairParam[];
   adaptive_params: AdaptiveParam[];
   recent_trades: RecentTrade[];
   total_symbols: number;

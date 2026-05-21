@@ -1,10 +1,9 @@
 import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { getBotIdentity } from "@/lib/bot-identity";
 import {
   useStatusSummary, useKrakenFleetSummary, useJournal, usePerformanceHistory,
   useKrakenPerformance, useKrakenStatus, useForexState,
-  usePoseidonState, useKrakenCurrentState, useFleetEquity, useBotRegistry,
+  useFleetEquity, useBotRegistry,
 } from "@/hooks/use-trading";
 import { BOT_THEMES, MiniSparkline, type KrakenTradeEntry } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
@@ -17,8 +16,6 @@ export function FleetPerformanceHero() {
   const { data: journal } = useJournal();
   const { data: perfHistory } = usePerformanceHistory();
   const { data: fxState } = useForexState();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
   const djPerf = useKrakenPerformance("davy-jones");
   const bbPerf = useKrakenPerformance("blackbeard");
   const djStatus = useKrakenStatus("davy-jones");
@@ -78,12 +75,6 @@ export function FleetPerformanceHero() {
     const forexPnlToday = fxState?.total_pnl ?? 0;
     results.push({ name: "Forex Gump", icon: "🧭", dailyPnl: forexPnlToday > 0 ? forexPnlToday : 0 });
 
-    const poseidonPnl = poseidonState?.total_pnl ?? 0;
-    results.push({ name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, dailyPnl: poseidonPnl });
-
-    const kcPnl = kcState?.total_pnl ?? 0;
-    results.push({ name: "Kraken Current", icon: "🌊", dailyPnl: kcPnl });
-
     const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
     const best = sorted[0] ?? null;
     const worst = sorted[sorted.length - 1] ?? null;
@@ -110,18 +101,8 @@ export function FleetPerformanceHero() {
     const fxPct = fxEquity > 0 ? (fxPnl / fxEquity) * 100 : 0;
     krakenLines.push({ id: "forex", name: "Forex Gump", icon: "🧭", accent: "#14b8a6", curve: fxPct !== 0 ? [0, fxPct * 0.25, fxPct * 0.5, fxPct * 0.75, fxPct] : [0] });
 
-    const psPnl = poseidonState?.total_pnl ?? 0;
-    const psEq = poseidonState?.total_equity ?? 100_000;
-    const psPct = psEq > 0 ? (psPnl / psEq) * 100 : 0;
-    krakenLines.push({ id: "poseidon", name: getBotIdentity("poseidon").displayName, icon: getBotIdentity("poseidon").icon, accent: "#8b5cf6", curve: psPct !== 0 ? [0, psPct * 0.25, psPct * 0.5, psPct * 0.75, psPct] : [0] });
-
-    const kcPnlVal = kcState?.total_pnl ?? 0;
-    const kcEqVal = kcState?.total_equity ?? 100_000;
-    const kcPct = kcEqVal > 0 ? (kcPnlVal / kcEqVal) * 100 : 0;
-    krakenLines.push({ id: "kraken-current", name: "KC", icon: "🌊", accent: "#06b6d4", curve: kcPct !== 0 ? [0, kcPct * 0.25, kcPct * 0.5, kcPct * 0.75, kcPct] : [0] });
-
     return krakenLines;
-  }, [djPerf.data, bbPerf.data, fleetSummary, perfHistory, fxState, poseidonState, kcState]);
+  }, [djPerf.data, bbPerf.data, fleetSummary, perfHistory, fxState]);
 
   const botCount = getFleetBotCount(registry, fleetEq);
   const stats = [

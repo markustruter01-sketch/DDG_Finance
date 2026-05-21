@@ -19,8 +19,6 @@ const BOT_COLORS: Record<string, string> = {
   davy_jones:     "#22d3ee",
   blackbeard:     "#f97316",
   navigator:      "#10b981",
-  poseidon:       "#3b82f6",
-  kraken_current: "#ec4899",
 };
 const BOT_KEYS = Object.keys(BOT_COLORS);
 

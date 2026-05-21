@@ -2,7 +2,6 @@ import { useMemo, useRef, useEffect } from "react";
 import {
   useJournal, useKrakenPerformance, useOptionsState, useForexState,
   useKrakenStatus, useLivePositions, useForexPositions, useForexTrades,
-  usePoseidonState, useKrakenCurrentState,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -52,8 +51,6 @@ export function useRealFeed(maxTrades = 20) {
   const { data: optState } = useOptionsState();
   const { data: fxState } = useForexState();
   const { data: fxTrades } = useForexTrades();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -263,8 +260,6 @@ export function useRealFeed(maxTrades = 20) {
     const _bb = getBotIdentity("blackbeard");
     const _oracle = getBotIdentity("oracle");
     const _fx = getBotIdentity("forex_gump");
-    const _pos = getBotIdentity("poseidon");
-    const _kc = getBotIdentity("kraken-current");
 
     const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
       { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
@@ -322,37 +317,8 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
-    if (poseidonState?.open_trades) {
-      for (const t of poseidonState.open_trades) {
-        const symbol = `${t.asset_a.replace("/USD", "")}/${t.asset_b.replace("/USD", "")}`;
-        all.push({
-          id: `poseidon-${t.pair_set_id}`,
-          bot: _pos.displayName, icon: _pos.icon,
-          symbol,
-          side: t.direction,
-          pnlPct: t.position_value > 0 ? (t.total_pnl / t.position_value) * 100 : 0,
-          pnlUsd: t.total_pnl,
-          sizeUsd: t.position_value,
-        });
-      }
-    }
-
-    if (kcState?.open_positions_list) {
-      for (const p of kcState.open_positions_list) {
-        all.push({
-          id: `kc-${p.symbol}`,
-          bot: _kc.displayName, icon: _kc.icon,
-          symbol: p.symbol,
-          side: p.direction,
-          pnlPct: p.position_value > 0 ? (p.unrealised_pnl / p.position_value) * 100 : 0,
-          pnlUsd: p.unrealised_pnl,
-          sizeUsd: p.position_value,
-        });
-      }
-    }
-
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [djStatus.data, bbStatus.data, livePositions, fxPositions, poseidonState, kcState]);
+  }, [djStatus.data, bbStatus.data, livePositions, fxPositions]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());
   const initialized = useRef(false);

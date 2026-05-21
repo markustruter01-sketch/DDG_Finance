@@ -4,8 +4,6 @@ import {
   useKrakenStatus,
   useForexState,
   useForexPositions,
-  usePoseidonState,
-  useKrakenCurrentState,
   useFleetEquity,
   useBotRegistry,
   useRecentTrades,
@@ -36,8 +34,6 @@ const PARAMS_TEXT: Record<string, string> = {
   event_trader: "Macro event volatility trades | 24/7 crypto",
   depeg_hunter: "Stablecoin depeg arbitrage | 24/7 crypto",
   memecoin_velocity: "Meme token velocity breakouts | 24/7 crypto",
-  poseidon_momentum: "Crypto pairs trading | Statistical arbitrage",
-  kraken_trend: "EMA crossover + ATR volatility | BTC/ETH pairs",
 };
 
 function fmtEq(v: number) {
@@ -250,8 +246,6 @@ export default function StreamingBotsScreen() {
   const { data: forexPosRaw } = useForexPositions();
   const { data: fleetEq } = useFleetEquity();
   const { data: registry } = useBotRegistry();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState } = useKrakenCurrentState();
   const { data: recentTrades } = useRecentTrades(15);
 
   const oracleEquity = fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null;
@@ -263,9 +257,6 @@ export default function StreamingBotsScreen() {
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
     ? (forexPosRaw as ForexPosition[])
     : ((forexPosRaw as { positions?: ForexPosition[] } | null)?.positions ?? []);
-
-  const poseidonEquity = poseidonState?.total_equity ?? null;
-  const kcEquity = kcState?.total_equity ?? null;
 
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
   const allEquities = [
@@ -347,20 +338,6 @@ export default function StreamingBotsScreen() {
       paused: fleetEq?.memecoin_velocity?.paused ?? false,
       openPositionCount: 0,
       openPositionSymbols: [],
-      recentTrades: [],
-    },
-    poseidon_momentum: {
-      equity: poseidonEquity,
-      paused: poseidonState?.paused ?? false,
-      openPositionCount: poseidonState?.open_trades?.length ?? 0,
-      openPositionSymbols: [],
-      recentTrades: [],
-    },
-    kraken_trend: {
-      equity: kcEquity,
-      paused: kcState?.paused ?? false,
-      openPositionCount: (kcState?.open_positions_list ?? []).length,
-      openPositionSymbols: (kcState?.open_positions_list ?? []).map((p) => p.symbol),
       recentTrades: [],
     },
   };

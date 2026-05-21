@@ -190,9 +190,6 @@ export function useRealCelebrations() {
       }
     }
 
-    const _pos = getBotIdentity("poseidon");
-    const _kc = getBotIdentity("kraken-current");
-
     if (wins.length === 0) {
       wins.push(
         { bot: _oracle.displayName, icon: _oracle.icon, symbol: "SPY",       pnlUsd: 12.50, isWin: true, source: "placeholder" },
@@ -207,9 +204,6 @@ export function useRealCelebrations() {
         { bot: _dj.displayName,  icon: _dj.icon,  symbol: "ADA/USD", pnlUsd: 4.20, isWin: false, source: "placeholder" },
       );
     }
-
-    // suppress unused-variable warnings for _pos/_kc (available for future use)
-    void _pos; void _kc;
 
     const shuffle = (arr: RealTradeEntry[]) => {
       for (let i = arr.length - 1; i > 0; i--) {

@@ -9,8 +9,6 @@ import {
   useForexState,
   useAuditorReport,
   useAdminLearningSnapshot,
-  usePoseidonState,
-  useKrakenCurrentState,
   useFleetEquity,
   useBotRegistry,
 } from "@/hooks/use-trading";
@@ -143,8 +141,6 @@ export function OrbVisualiser() {
   const { data: bbStatus      } = useKrakenStatus("blackbeard");
   const { data: optState      } = useOptionsState();
   const { data: fxState       } = useForexState();
-  const { data: poseidonState } = usePoseidonState();
-  const { data: kcState       } = useKrakenCurrentState();
   const { data: auditor       } = useAuditorReport();
   const { data: snapshot      } = useAdminLearningSnapshot();
   const { data: fleetEqOrb    } = useFleetEquity();
@@ -191,10 +187,8 @@ export function OrbVisualiser() {
     n += bbStatus?.position_count ?? 0;
     n += optState?.positions_count ?? 0;
     n += fxState?.position_count ?? 0;
-    n += poseidonState?.open_positions ?? 0;
-    n += kcState?.open_positions ?? 0;
     return n;
-  }, [livePos, djStatus, bbStatus, fleetEqOrb, optState, fxState, poseidonState, kcState]);
+  }, [livePos, djStatus, bbStatus, fleetEqOrb, optState, fxState]);
 
   const activeBots = useMemo(() => {
     const ACTIVE_STATUSES = new Set(["active", "running", "idle"]);

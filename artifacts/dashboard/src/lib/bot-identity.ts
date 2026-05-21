@@ -17,10 +17,7 @@ const IDENTITY_MAP: Record<string, BotIdentity> = {
   "blackbeard":          { canonicalId: "jerome_macro",       displayName: "Jerome",             icon: "🏛️" },
   "forex_gump":          { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
   "navigator":           { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
-  "poseidon_momentum":   { canonicalId: "poseidon_momentum",  displayName: "Poseidon",           icon: "🔱" },
-  "poseidon":            { canonicalId: "poseidon_momentum",  displayName: "Poseidon",           icon: "🔱" },
-  "kraken_trend":        { canonicalId: "kraken_trend",       displayName: "Kraken Current",     icon: "🌊" },
-  "kraken-current":      { canonicalId: "kraken_trend",       displayName: "Kraken Current",     icon: "🌊" },
+
 };
 
 export function getBotIdentity(legacyOrCanonicalId: string): BotIdentity {

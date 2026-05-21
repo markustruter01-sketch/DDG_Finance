@@ -107,10 +107,10 @@ function AlgoThoughts() {
             fontFamily: "monospace",
             fontSize: 11,
             fontWeight: 700,
-            color: t.color,
-            textShadow: `0 0 10px ${t.color}88, 0 0 20px ${t.color}44`,
+            color: "rgba(255,255,255,0.9)",
+            textShadow: `0 0 10px rgba(255,255,255,0.5), 0 0 20px rgba(255,255,255,0.25)`,
             background: "rgba(2,6,23,0.7)",
-            border: "1px solid rgba(255,255,255,0.6)",
+            border: "1px solid rgba(255,255,255,1)",
             borderRadius: 6,
             padding: "3px 8px",
             letterSpacing: "0.05em",
@@ -233,42 +233,42 @@ export function OrbVisualiser() {
           bottom: 24,
           right: 24,
           background: "rgba(2,6,23,0.82)",
-          border: "1px solid rgba(255,255,255,0.6)",
+          border: "1px solid rgba(255,255,255,1)",
           borderRadius: 14,
           padding: "18px 24px",
           backdropFilter: "blur(14px)",
           minWidth: 234,
         }}
       >
-        <div style={{ color: "rgba(148,163,184,0.55)", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
+        <div style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
           Live Orb HUD
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
           <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>P&amp;L</div>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>P&amp;L</div>
             <div style={{ color: combinedPnl >= 0 ? "#4ade80" : "#f87171", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {fmtPnl(combinedPnl)}
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Positions</div>
-            <div style={{ color: "#fbbf24", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Positions</div>
+            <div style={{ color: "#ffffff", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {openPositions}
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
-            <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
+            <div style={{ color: "#ffffff", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
               {activeBots} / {getFleetBotCount(registry, fleetEqOrb)}
             </div>
           </div>
 
           <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Last AI Event</div>
-            <div style={{ color: "#a78bfa", fontSize: 15, fontFamily: "monospace", fontWeight: 700 }}>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Last AI Event</div>
+            <div style={{ color: "#ffffff", fontSize: 15, fontFamily: "monospace", fontWeight: 700 }}>
               {lastAiLabel}
             </div>
           </div>
@@ -280,7 +280,7 @@ export function OrbVisualiser() {
             padding: "5px 10px",
             borderRadius: 7,
             background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-            border: "1px solid rgba(255,255,255,0.65)",
+            border: "1px solid rgba(255,255,255,1)",
             color: tradePulse.isWin ? "#4ade80" : "#f87171",
             fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
           }}>
@@ -294,8 +294,8 @@ export function OrbVisualiser() {
             padding: "5px 10px",
             borderRadius: 7,
             background: "rgba(139,92,246,0.15)",
-            border: "1px solid rgba(255,255,255,0.65)",
-            color: "#a78bfa",
+            border: "1px solid rgba(255,255,255,1)",
+            color: "#ffffff",
             fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
           }}>
             ◉ AI Learning Event
@@ -325,23 +325,23 @@ export function OrbVisualiser() {
         {/* DDG logo above title */}
         <DDGBadge style={{ position: "relative", pointerEvents: "none" }} />
         <div style={{
-          color: "rgba(251,146,60,0.95)",
+          color: "rgba(255,255,255,0.95)",
           fontSize: 27,
           fontFamily: "monospace",
           fontWeight: 700,
           letterSpacing: "0.35em",
           textTransform: "uppercase",
-          textShadow: "0 0 20px rgba(251,146,60,0.8), 0 0 40px rgba(251,146,60,0.4), 0 0 60px rgba(234,88,12,0.3)",
+          textShadow: "0 0 20px rgba(255,255,255,0.6), 0 0 40px rgba(255,255,255,0.3), 0 0 60px rgba(255,255,255,0.15)",
         }}>
           ◈ TRADING ENGINE ◈
         </div>
         <div style={{
-          color: "rgba(251,146,60,0.5)",
+          color: "rgba(255,255,255,0.5)",
           fontSize: 10,
           fontFamily: "monospace",
           letterSpacing: "0.25em",
           textTransform: "uppercase",
-          textShadow: "0 0 12px rgba(251,146,60,0.4)",
+          textShadow: "0 0 12px rgba(255,255,255,0.3)",
         }}>
           LIVE MARKET CONSCIOUSNESS
         </div>
@@ -404,7 +404,7 @@ export function OrbVisualiser() {
                     marginBottom: 2,
                     borderRadius: 6,
                     background: t.isWin ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-                    border: "1px solid rgba(255,255,255,0.45)",
+                    border: "1px solid rgba(255,255,255,0.9)",
                     backdropFilter: "blur(10px)",
                   }}
                 >
@@ -508,7 +508,7 @@ export function OrbVisualiser() {
                     marginBottom: 2,
                     borderRadius: 6,
                     background: isPos ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
-                    border: "1px solid rgba(255,255,255,0.45)",
+                    border: "1px solid rgba(255,255,255,0.9)",
                     backdropFilter: "blur(10px)",
                   }}
                 >

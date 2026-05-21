@@ -179,7 +179,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
           style={{
             maxWidth: 340,
             background: "linear-gradient(135deg, rgba(15,23,42,0.97), rgba(30,41,59,0.95))",
-            border: "1px solid rgba(255,255,255,0.65)",
+            border: "1px solid rgba(255,255,255,1)",
             borderRadius: 18,
             padding: "14px 20px",
             boxShadow: `0 5px 28px rgba(0,0,0,0.65), 0 0 18px ${cfg.glowColor}30`,
@@ -219,7 +219,7 @@ export function ClippyAssistant({ active }: ClippyAssistantProps) {
             height: 0,
             borderLeft: "7px solid transparent",
             borderRight: "13px solid transparent",
-            borderTop: "13px solid rgba(255,255,255,0.65)",
+            borderTop: "13px solid rgba(255,255,255,1)",
           }} />
           {/* Tail fill */}
           <div style={{

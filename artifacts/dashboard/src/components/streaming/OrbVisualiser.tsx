@@ -68,12 +68,11 @@ function AlgoThoughts() {
     const spawn = () => {
       const id = nextId.current++;
       const text = ALGO_THOUGHTS[Math.floor(Math.random() * ALGO_THOUGHTS.length)];
-      const side  = Math.random();
-      let x: number, y: number;
-      if (side < 0.25)       { x = 4 + Math.random() * 18; y = 8 + Math.random() * 80; }
-      else if (side < 0.5)   { x = 78 + Math.random() * 18; y = 8 + Math.random() * 80; }
-      else if (side < 0.75)  { x = 20 + Math.random() * 60; y = 4 + Math.random() * 12; }
-      else                   { x = 20 + Math.random() * 60; y = 82 + Math.random() * 12; }
+      // Constrain to the central black-hole zone only —
+      // avoids the left widget column (~0–29%), right HUD (~76–100%),
+      // top header (~0–18%) and bottom badge/nav (~78–100%).
+      const x = 30 + Math.random() * 44;   // 30 % → 74 %
+      const y = 18 + Math.random() * 58;   // 18 % → 76 %
 
       const color = colors[Math.floor(Math.random() * colors.length)];
       const thought: AlgoThought = { id, text, x, y, opacity: 0, fadeIn: true, color };

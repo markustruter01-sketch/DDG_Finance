@@ -244,11 +244,12 @@ export default function StreamPage() {
 
   return (
     <div style={{ height: "100vh", width: "100vw", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-      <StreamHeaderBar />
+      <StreamHeaderBar isOrb={active === "f"} />
       <div
         className="flex items-center shrink-0 z-20 relative"
         style={{
-          background: "#000000",
+          background: active === "f" ? "rgba(0,0,0,0.35)" : "#000000",
+          backdropFilter: active === "f" ? "blur(12px)" : undefined,
           borderBottom: "1px solid rgba(255,255,255,0.06)",
           minHeight: 44,
         }}

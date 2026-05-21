@@ -105,6 +105,11 @@ export function MiniSynapticWidget() {
         .mini-formula-active { animation: mini-formula-active 0.6s ease-in-out infinite; }
       `}} />
 
+      {/* Algorithm Checks title */}
+      <div style={{ fontSize: 11, color: "#ffffff", fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.12em", padding: "0 4px 5px 4px" }}>
+        Algorithm Checks
+      </div>
+
       {/* Formula boxes row */}
       <div style={{ display: "flex", gap: 4, padding: "0 4px 4px 4px" }}>
         {FORMULAS.map((f, i) => (

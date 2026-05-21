@@ -349,7 +349,7 @@ export function OrbVisualiser() {
           position: "absolute",
           left: 12,
           top: 10,
-          bottom: 60,
+          bottom: 46,
           width: 216,
           display: "flex",
           flexDirection: "column",

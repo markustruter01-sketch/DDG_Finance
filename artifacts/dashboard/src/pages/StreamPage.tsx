@@ -84,7 +84,7 @@ export default function StreamPage() {
 
   function getInitialSubPage(): SubPage {
     if (urlParams.current.subPage) return urlParams.current.subPage;
-    return "a";
+    return "f";
   }
 
   const stored = useRef<StreamPrefs>(loadPrefs());

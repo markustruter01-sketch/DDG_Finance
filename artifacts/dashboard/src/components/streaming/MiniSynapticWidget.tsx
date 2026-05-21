@@ -126,9 +126,10 @@ export function MiniSynapticWidget() {
         preserveAspectRatio="xMidYMid meet"
       >
         {/* ── TITLE ── */}
-        <text x={TITLE_X} y="68"
-          fill="#ffffff" fontSize="30" fontFamily="monospace" fontWeight="600"
-          textAnchor="middle" letterSpacing="1.5">
+        <text x={TITLE_X} y="70"
+          fill="rgba(255,255,255,0.9)" fontSize="44" fontFamily="monospace" fontWeight="600"
+          textAnchor="middle" letterSpacing="1"
+          style={{ textTransform: "uppercase" }}>
           Synaptic Math Audit Engine v4.1
         </text>
 

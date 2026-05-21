@@ -310,17 +310,23 @@ export function OrbVisualiser() {
       <div
         style={{
           position: "absolute",
-          top: 20,
+          top: 14,
           left: "50%",
           transform: "translateX(-50%)",
           textAlign: "center",
           pointerEvents: "none",
           userSelect: "none",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 4,
         }}
       >
+        {/* DDG logo above title */}
+        <DDGBadge style={{ position: "relative", pointerEvents: "none" }} />
         <div style={{
           color: "rgba(251,146,60,0.95)",
-          fontSize: 18,
+          fontSize: 27,
           fontFamily: "monospace",
           fontWeight: 700,
           letterSpacing: "0.35em",
@@ -335,7 +341,6 @@ export function OrbVisualiser() {
           fontFamily: "monospace",
           letterSpacing: "0.25em",
           textTransform: "uppercase",
-          marginTop: 4,
           textShadow: "0 0 12px rgba(251,146,60,0.4)",
         }}>
           LIVE MARKET CONSCIOUSNESS
@@ -443,7 +448,7 @@ export function OrbVisualiser() {
         style={{
           position: "absolute",
           left: 12,
-          bottom: 46,
+          bottom: 16,
           width: 346,
           height: 280,
           zIndex: 20,
@@ -454,57 +459,94 @@ export function OrbVisualiser() {
       </div>
 
       {/* ── RIGHT PANEL: OPEN POSITIONS ── */}
-      {openTradesFeed.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 10,
-            bottom: 240,
-            width: 216,
-            display: "flex",
-            flexDirection: "column",
-            overflowY: "auto",
-            zIndex: 20,
-          }}
-        >
-          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, textAlign: "right", paddingRight: 2, fontWeight: 600 }}>
-            Open Positions ▸
-          </div>
-          {openTradesFeed.slice(0, 10).map((p, i) => (
-            <div
-              key={i}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "5px 8px",
-                marginBottom: 3,
-                borderRadius: 7,
-                background: (p.pnlUsd ?? 0) >= 0 ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)",
-                border: `1px solid ${(p.pnlUsd ?? 0) >= 0 ? "rgba(52,211,153,0.18)" : "rgba(239,68,68,0.18)"}`,
-                backdropFilter: "blur(10px)",
-              }}
-            >
-              <span style={{ fontSize: 8, color: (p.pnlUsd ?? 0) >= 0 ? "#34d399" : "#f87171", flexShrink: 0 }}>⬤</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "monospace", fontSize: 10, color: "rgba(241,245,249,0.85)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {p.symbol}
-                </div>
-                <div style={{ fontFamily: "monospace", fontSize: 8, color: "rgba(148,163,184,0.5)", letterSpacing: "0.05em" }}>
-                  {p.bot}
-                </div>
-              </div>
-              <span style={{ fontFamily: "monospace", fontSize: 10, fontWeight: 700, color: (p.pnlUsd ?? 0) >= 0 ? "#34d399" : "#f87171", flexShrink: 0 }}>
-                {(p.pnlUsd ?? 0) >= 0 ? "+" : ""}${Math.abs(p.pnlUsd ?? 0) >= 1000 ? `${(Math.abs(p.pnlUsd ?? 0) / 1000).toFixed(1)}k` : Math.abs(p.pnlUsd ?? 0).toFixed(0)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      {openTradesFeed.length > 0 && (() => {
+        const OP_BOT_COLORS: Record<string, string> = {
+          "Oracle":        "#8b5cf6",
+          "SPY/QQQ Trend": "#22d3ee",
+          "Jerome":        "#f97316",
+          "Forex Gump":    "#10b981",
+        };
+        const fmtOpSize = (v: number) =>
+          Math.abs(v) >= 1_000_000 ? `$${(Math.abs(v)/1_000_000).toFixed(1)}M`
+          : Math.abs(v) >= 1_000   ? `$${(Math.abs(v)/1_000).toFixed(1)}k`
+          : `$${Math.abs(v).toFixed(0)}`;
+        const fmtOpFull = (v: number) => `$${Math.round(Math.abs(v)).toLocaleString()}`;
 
-      {/* ── DDG BADGE ── */}
-      <DDGBadge style={{ position: "absolute", bottom: 16, left: 16, zIndex: 30 }} />
+        return (
+          <div
+            style={{
+              position: "absolute",
+              right: 16,
+              top: 10,
+              bottom: 312,
+              width: 280,
+              display: "flex",
+              flexDirection: "column",
+              overflowY: "hidden",
+              zIndex: 20,
+            }}
+          >
+            <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, textAlign: "right", paddingRight: 2, fontWeight: 600 }}>
+              Open Positions ▸
+            </div>
+            {openTradesFeed.slice(0, 10).map((p, i) => {
+              const isPos = (p.pnlUsd ?? 0) >= 0;
+              const botColor = OP_BOT_COLORS[p.bot] ?? "#94a3b8";
+              const side = (p.side || "").toLowerCase();
+              const isLong  = side === "long"  || side === "buy";
+              const isShort = side === "short" || side === "sell";
+              const sideLabel = isLong ? "L" : isShort ? "S" : null;
+              const sideBg    = isLong ? "rgba(34,197,94,0.18)"  : isShort ? "rgba(239,68,68,0.18)" : "transparent";
+              const sideColor = isLong ? "#4ade80"               : isShort ? "#f87171"               : "rgba(148,163,184,0.5)";
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "4px 8px",
+                    marginBottom: 2,
+                    borderRadius: 6,
+                    background: isPos ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)",
+                    border: `1px solid ${isPos ? "rgba(34,197,94,0.18)" : "rgba(239,68,68,0.18)"}`,
+                    backdropFilter: "blur(10px)",
+                  }}
+                >
+                  {/* col 1 — bot dot */}
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: botColor, flexShrink: 0, boxShadow: `0 0 5px ${botColor}`, marginRight: 6 }} />
+                  {/* col 2 — bot icon */}
+                  <span style={{ width: 18, fontSize: 13, flexShrink: 0, lineHeight: 1, marginRight: 6 }}>{p.icon}</span>
+                  {/* col 3 — symbol (fixed 72px) */}
+                  <span style={{ width: 72, fontFamily: "monospace", fontSize: 12, color: "rgba(241,245,249,0.95)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexShrink: 0, marginRight: 4 }}>
+                    {p.symbol}
+                  </span>
+                  {/* col 4 — side badge (fixed 20px) */}
+                  <span style={{ width: 20, flexShrink: 0, marginRight: 6 }}>
+                    {sideLabel && (
+                      <span style={{ fontSize: 8, fontFamily: "monospace", fontWeight: 800, color: sideColor, background: sideBg, borderRadius: 3, padding: "1px 4px" }}>
+                        {sideLabel}
+                      </span>
+                    )}
+                  </span>
+                  {/* col 5 — position size (flex) */}
+                  <span style={{ flex: 1, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden" }}>
+                    {p.sizeUsd ? fmtOpFull(p.sizeUsd) : ""}
+                  </span>
+                  {/* col 6 — unrealised P&L (fixed 52px, right-aligned) */}
+                  <span style={{ width: 52, fontFamily: "monospace", fontSize: 12, fontWeight: 700, color: isPos ? "#4ade80" : "#f87171", flexShrink: 0, textAlign: "right", marginRight: 4 }}>
+                    {(p.pnlUsd ?? 0) >= 0 ? "+" : ""}{fmtOpSize(p.pnlUsd ?? 0)}
+                  </span>
+                  {/* col 7 — live indicator */}
+                  <span style={{ width: 12, fontSize: 9, color: isPos ? "#4ade80" : "#f87171", flexShrink: 0, textAlign: "center" }}>
+                    ●
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
     </div>
   );
 }

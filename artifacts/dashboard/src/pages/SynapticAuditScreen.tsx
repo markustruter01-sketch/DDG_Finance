@@ -62,7 +62,7 @@ export default function SynapticAuditScreen() {
 
   const events = recentData?.rows?.slice(0, 8) ?? [];
 
-  const TILE_BOTTOM = 158;
+  const TILE_BOTTOM = 178;
 
   const INPUT_NODES = [
     { x: 188, y: 230 },
@@ -306,11 +306,15 @@ export default function SynapticAuditScreen() {
       </header>
 
       {/* Formula Input Row */}
-      <div className="absolute top-[60px] left-0 right-0 h-[100px] z-20 px-10 flex items-center gap-4">
+      <div className="absolute top-[60px] left-0 right-0 h-[120px] z-20 px-10 flex flex-col justify-center gap-2">
+        <div>
+          <span className="text-[13px] font-semibold text-white tracking-wider">Algorithm Checks</span>
+        </div>
+        <div className="flex items-center gap-4">
         {FORMULAS.map((f, i) => (
           <div
             key={f.id}
-            className={`flex-1 h-[80px] rounded-lg border bg-black/50 backdrop-blur-sm px-3 py-2 flex flex-col justify-between transition-all duration-500 ${
+            className={`flex-1 h-[84px] rounded-lg border bg-black/50 backdrop-blur-sm px-3 py-2 flex flex-col justify-between transition-all duration-500 ${
               activeFormula === i ? "border-cyan-400/80 synapse-formula-active" : "border-cyan-500/15 synapse-formula-idle"
             }`}
           >
@@ -334,6 +338,7 @@ export default function SynapticAuditScreen() {
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       {/* Floating stat cards */}

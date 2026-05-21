@@ -363,7 +363,7 @@ export function OrbVisualiser() {
             zIndex: 20,
           }}
         >
-          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 9, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
+          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, paddingLeft: 2, fontWeight: 600 }}>
             ◂ Closed Trades
           </div>
           {closedTradesFeed.slice(0, 10).map((t, i) => (
@@ -415,7 +415,7 @@ export function OrbVisualiser() {
             zIndex: 20,
           }}
         >
-          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 9, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, textAlign: "right", paddingRight: 2, fontWeight: 600 }}>
+          <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontFamily: "monospace", letterSpacing: "0.18em", textTransform: "uppercase", marginBottom: 6, textAlign: "right", paddingRight: 2, fontWeight: 600 }}>
             Open Positions ▸
           </div>
           {openTradesFeed.slice(0, 10).map((p, i) => (

@@ -2826,36 +2826,6 @@ def section_filter_effectiveness() -> list[str]:
     else:
         lines.append("  No Oracle scan log data in last 7 days.")
 
-    # ── Poseidon ADF filter ───────────────────────────────────────────────────
-    _h2(lines, "POSEIDON — FILTER EFFECTIVENESS (current pair universe)")
-    pos_pairs = _pg_query(
-        "SELECT COUNT(*) as total, "
-        "SUM(CASE WHEN adf_pvalue < 0.20 THEN 1 ELSE 0 END) as pass_adf, "
-        "SUM(CASE WHEN is_tradeable THEN 1 ELSE 0 END) as tradeable "
-        "FROM poseidon_pair_params"
-    )
-    if pos_pairs and pos_pairs[0].get("total"):
-        r = pos_pairs[0]
-        total = int(r.get("total") or 0)
-        pass_adf = int(r.get("pass_adf") or 0)
-        tradeable = int(r.get("tradeable") or 0)
-        blocked_adf = total - pass_adf
-
-        lines.append(f"  {'Filter':<30} {'Pairs':>8} {'% of Total':>12}  Verdict")
-        lines.append("  " + "-" * 60)
-        lines.append(f"  {'Total pairs monitored':<30} {total:>8} {'100%':>12}")
-        lines.append(f"  {'Passing ADF (p < 0.20)':<30} {pass_adf:>8} {pass_adf/total*100:>11.1f}%  ✅ ACTIVE")
-        lines.append(f"  {'Blocked by ADF':<30} {blocked_adf:>8} {blocked_adf/total*100:>11.1f}%  ✅ HELPING")
-        lines.append(f"  {'Marked tradeable':<30} {tradeable:>8} {tradeable/total*100:>11.1f}%")
-        lines.append(f"  {'Note:':<30} Hurst gate DISABLED (info only — not blocking)")
-    else:
-        lines.append("  No Poseidon pair data available.")
-
-    lines.append("")
-    lines.append("  NOTE: Post-block price movement analysis requires additional logging.")
-    lines.append("  Currently showing block counts only. Price movement tracking can be added")
-    lines.append("  by storing price-at-block-time in vpin_rejections and querying 4h/24h later.")
-
     return lines
 
 
@@ -3047,59 +3017,6 @@ def section_fleet_health_scorecard() -> list[str]:
         bots.append({"num": "#6", "name": "Navigator", "status": "⚠️ ERR", "last_trade": "?",
                      "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
 
-    # Poseidon (#7)
-    try:
-        pos_ls = _read_poseidon_live_state()
-        pos_eq = float(pos_ls.get("equity", 100000) or 100000)
-        pos_rows_7d = _pg_query(
-            "SELECT COUNT(*) as n, SUM(net_pnl) as pnl FROM poseidon_trades "
-            "WHERE closed_at > NOW() - INTERVAL '7 days'"
-        )
-        last_pos = _pg_query("SELECT MAX(closed_at) as last FROM poseidon_trades")
-        pnl_7d = float(pos_rows_7d[0].get("pnl") or 0) if pos_rows_7d else 0
-        n_7d = int(pos_rows_7d[0].get("n") or 0) if pos_rows_7d else 0
-        last_t = str(last_pos[0].get("last") or "Never")[:10] if last_pos else "Never"
-
-        hb_pos = _pg_query("SELECT circuit_breaker FROM kraken_heartbeat WHERE id = 7")
-        cb_pos = hb_pos[0].get("circuit_breaker") if hb_pos else None
-        if isinstance(cb_pos, str):
-            cb_pos = _json_diag.loads(cb_pos)
-        cb_tripped = isinstance(cb_pos, dict) and cb_pos.get("tripped")
-        status = "🔴 CB" if cb_tripped else "🟢 LIVE"
-
-        health = _compute_health_score(None, None, n_7d > 0, 0, True, True)
-        issues = "Circuit breaker active" if cb_tripped else ("Clean" if n_7d > 0 else "No trades in 7d")
-        bots.append({
-            "num": "#7", "name": "Poseidon", "status": status, "last_trade": last_t,
-            "pnl_7d": pnl_7d, "health": health, "equity": pos_eq, "issues": issues
-        })
-    except Exception as e:
-        bots.append({"num": "#7", "name": "Poseidon", "status": "⚠️ ERR", "last_trade": "?",
-                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
-
-    # Kraken Current (#8)
-    try:
-        hb_kc = _pg_query("SELECT equity_usd, position_count, status FROM kraken_heartbeat WHERE id = 8")
-        kc_eq = float(hb_kc[0].get("equity_usd") or 100000) if hb_kc else 100000
-        kc_status_val = str(hb_kc[0].get("status") or "unknown") if hb_kc else "unknown"
-        kc_trades_7d = _pg_query(
-            "SELECT COUNT(*) as n, SUM(pnl_usd) as pnl_usd FROM kraken_current_trades "
-            "WHERE closed_at > NOW() - INTERVAL '7 days'"
-        )
-        last_kc = _pg_query("SELECT MAX(closed_at) as last FROM kraken_current_trades")
-        pnl_7d = float(kc_trades_7d[0].get("pnl_usd") or 0) if kc_trades_7d else 0
-        n_7d = int(kc_trades_7d[0].get("n") or 0) if kc_trades_7d else 0
-        last_t = str(last_kc[0].get("last") or "Never")[:10] if last_kc else "Never"
-        status = "🟢 LIVE" if kc_status_val not in ("unknown", "error") else "⚠️ UNKNOWN"
-        health = _compute_health_score(None, None, n_7d > 0, 0, True, True)
-        issues = "Clean" if n_7d > 0 else "No trades yet — awaiting trend signal"
-        bots.append({
-            "num": "#8", "name": "Kraken Current", "status": status, "last_trade": last_t,
-            "pnl_7d": pnl_7d, "health": health, "equity": kc_eq, "issues": issues
-        })
-    except Exception as e:
-        bots.append({"num": "#8", "name": "Kraken Current", "status": "⚠️ ERR", "last_trade": "?",
-                     "pnl_7d": 0, "health": 0, "equity": 0, "issues": str(e)[:40]})
 
     # Print scorecard table
     lines.append(f"  {'Bot':<22} {'Status':<12} {'Last Trade':<12} {'7d P&L':>10} {'Health':>8}  Issues")
@@ -3243,22 +3160,6 @@ def section_execution_quality_all_bots(alpaca_trades: list = None, kraken_trades
     _row(lines, "Net P&L (7d):", _c(fx_pnl))
     _row(lines, "News blackout active:", "YES" if news_blackout else "NO")
     _row(lines, "Spread cost model:", "0.1% per side (paper engine simulation)")
-
-    # Poseidon
-    _h2(lines, "POSEIDON #7 (Statistical Arbitrage)")
-    pos_7d = _pg_query(
-        "SELECT COUNT(*) as n, AVG(net_pnl) as avg_pnl, SUM(net_pnl) as total_pnl "
-        "FROM poseidon_trades WHERE closed_at > %s",
-        (cutoff_7d,)
-    )
-    pos_n = int(pos_7d[0].get("n") or 0) if pos_7d else 0
-    pos_pnl = float(pos_7d[0].get("total_pnl") or 0) if pos_7d else 0
-
-    _row(lines, "Pair positions opened (7d):", str(pos_n))
-    _row(lines, "Net P&L (7d):", _c(pos_pnl))
-    _row(lines, "Hedge ratio accuracy:", "Tracked via hedge_ratio_30d_avg vs hedge_ratio in DB")
-    _row(lines, "Leg synchronisation:", "Both legs submitted simultaneously (atomic simulation)")
-    _row(lines, "Slippage model:", "Kraken paper fills at market (0.26% fee per leg)")
 
     return lines
 

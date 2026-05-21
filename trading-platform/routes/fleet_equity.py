@@ -52,6 +52,17 @@ def _fetch_fleet_equity() -> dict:
                 "last_updated": upd if isinstance(upd, str) else (upd.isoformat() if upd else None),
             }
 
+        # Merge paused state from bots_state
+        try:
+            from core.bot_state import get_all_states
+            states = {s["bot_id"]: s for s in get_all_states()}
+            for bid, data in result.items():
+                data["paused"] = bool(states.get(bid, {}).get("paused", False))
+        except Exception as _exc:
+            logger.debug(f"fleet_equity | paused merge failed: {_exc}")
+            for data in result.values():
+                data.setdefault("paused", False)
+
         # Fleet totals
         _meta_keys = {"fleet_total", "generated_at", "errors"}
         _bot_vals  = [v for k, v in result.items() if k not in _meta_keys]

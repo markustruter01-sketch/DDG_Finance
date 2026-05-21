@@ -842,3 +842,25 @@ async def fleet_halt_status():
     """Return current fleet halt status."""
     from core.fleet_halt import get_status
     return get_status()
+
+
+@control_router.post("/bots/{bot_id}/pause")
+async def pause_bot_unified(bot_id: str, reason: str = ""):
+    """Pause any bot by bot_id — writes bots_state.paused = true."""
+    from core.bot_state import set_paused
+    try:
+        set_paused(bot_id, paused=True, reason=reason)
+        return {"bot_id": bot_id, "paused": True, "reason": reason}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"pause failed: {exc}")
+
+
+@control_router.post("/bots/{bot_id}/resume")
+async def resume_bot_unified(bot_id: str):
+    """Resume any bot by bot_id — writes bots_state.paused = false."""
+    from core.bot_state import set_paused
+    try:
+        set_paused(bot_id, paused=False, reason="")
+        return {"bot_id": bot_id, "paused": False}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"resume failed: {exc}")

@@ -28,7 +28,6 @@ from core.bot_state import touch_heartbeat, write_portfolio
 logger = logging.getLogger("memecoin-velocity")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
-CONTROL_FILE = os.path.join(_HERE, "memecoin_control.json")
 
 
 def _sync_bot_portfolio() -> None:
@@ -45,10 +44,8 @@ def _sync_bot_portfolio() -> None:
 
 
 def is_paused() -> bool:
-    if os.path.exists(CONTROL_FILE):
-        with open(CONTROL_FILE) as f:
-            return json.load(f).get("bot_paused", True)
-    return True
+    from core.bot_state import is_paused as _bs_is_paused
+    return _bs_is_paused(cfg.BOT_ID)
 
 
 def _get_ccxt_price(pair: str):

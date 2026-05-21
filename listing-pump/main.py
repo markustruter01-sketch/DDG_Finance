@@ -30,7 +30,6 @@ from core.bot_state import touch_heartbeat, write_portfolio
 logger = logging.getLogger("listing-pump")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 
-CONTROL_FILE = os.path.join(_HERE, "listing_control.json")
 _CLEANUP_FLAG = os.path.join(_HERE, ".cleanup_v1_done")
 _http = RateLimitedClient()
 
@@ -86,10 +85,8 @@ COINGECKO_MAX_RPM = 25
 
 
 def is_paused() -> bool:
-    if os.path.exists(CONTROL_FILE):
-        with open(CONTROL_FILE) as f:
-            return json.load(f).get("bot_paused", True)
-    return True
+    from core.bot_state import is_paused as _bs_is_paused
+    return _bs_is_paused(cfg.BOT_ID)
 
 
 def _get_coingecko_price(symbol: str):

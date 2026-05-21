@@ -1308,6 +1308,11 @@ def pause_bot():
     ctrl.write_text(json.dumps({"bot_paused": True}))
     _state["paused"] = True
     logger.info("Forex | Bot PAUSED via API")
+    try:
+        from core.bot_state import set_paused as _bs_set
+        _bs_set("forex_gump", True, reason="manual pause via /forex/pause")
+    except Exception:
+        pass
 
 
 def resume_bot():
@@ -1317,3 +1322,8 @@ def resume_bot():
     ctrl.write_text(json.dumps({"bot_paused": False}))
     _state["paused"] = False
     logger.info("Forex | Bot RESUMED via API")
+    try:
+        from core.bot_state import set_paused as _bs_set
+        _bs_set("forex_gump", False, reason="")
+    except Exception:
+        pass

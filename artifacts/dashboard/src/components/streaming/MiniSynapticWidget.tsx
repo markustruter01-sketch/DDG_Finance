@@ -10,37 +10,37 @@ const FORMULAS = [
 type Pt = { x: number; y: number };
 
 //
-// Layout: viewBox "-10 30 570 740"
-// viewH/viewW = 740/570 = 1.298 ≥ container portrait ratio (~280/216 = 1.296)
-// → height-constrained by "meet", content fills top↔bottom with locked ratio
-//
-// x: -10 → 560   (4 boxes at x=70,210,350,490, BOX_W=120, edges 10→550)
-// y:  30 → 770   (title y=68, output bottom y~710)
+// All x-coordinates scaled 1.6× around centre x=280 vs the previous layout.
+// viewBox "-130 30 840 740"  →  at container 346×280:
+//   scale = min(346/840, 280/740) = min(0.412, 0.378) = 0.378   (height-constrained)
+//   rendered width = 840×0.378 = 318 px  (92% of the 346px column)
+//   rendered height= 740×0.378 = 280 px  (fills top→bottom perfectly)
 //
 
+// f(x) = 280 + (x_old - 280)*1.6
 const INPUT_NODES: Pt[] = [
-  { x: 70,  y: 285 },
-  { x: 210, y: 285 },
-  { x: 350, y: 285 },
-  { x: 490, y: 285 },
+  { x: -56, y: 285 },
+  { x:  168, y: 285 },
+  { x:  392, y: 285 },
+  { x:  616, y: 285 },
 ];
 const HIDDEN1: Pt[] = [
-  { x: 115, y: 428 },
-  { x: 215, y: 418 },
-  { x: 345, y: 432 },
-  { x: 445, y: 422 },
+  { x:  16,  y: 428 },
+  { x: 176,  y: 418 },
+  { x: 384,  y: 432 },
+  { x: 544,  y: 422 },
 ];
 const HIDDEN2: Pt[] = [
-  { x: 165, y: 558 },
-  { x: 280, y: 548 },
-  { x: 395, y: 562 },
+  { x:  96,  y: 558 },
+  { x: 280,  y: 548 },
+  { x: 464,  y: 562 },
 ];
 const OUTPUT: Pt = { x: 280, y: 672 };
 const PERIPHERAL: Pt[] = [
-  { x: 30,  y: 508 },
-  { x: 530, y: 498 },
-  { x: 118, y: 614 },
-  { x: 460, y: 608 },
+  { x: -120, y: 508 },
+  { x:  680,  y: 498 },
+  { x:   21,  y: 614 },
+  { x:  568,  y: 608 },
 ];
 
 const CONN_PAIRS: [Pt, Pt][] = [
@@ -121,7 +121,7 @@ export function MiniSynapticWidget() {
       `}} />
 
       <svg
-        viewBox="-10 30 570 740"
+        viewBox="-130 30 840 740"
         style={{ display: "block", width: "100%", height: "100%" }}
         preserveAspectRatio="xMidYMid meet"
       >
@@ -224,12 +224,6 @@ export function MiniSynapticWidget() {
           textAnchor="middle" fontWeight="bold" opacity="0.9">
           100%
         </text>
-
-        {/* ── LAYER LABELS ── */}
-        <text x="-4" y="291" fill="#0891b2" fontSize="11" fontFamily="monospace" opacity="0.45" letterSpacing="0.3">IN</text>
-        <text x="-4" y="434" fill="#0891b2" fontSize="11" fontFamily="monospace" opacity="0.45" letterSpacing="0.3">H1</text>
-        <text x="-4" y="564" fill="#0891b2" fontSize="11" fontFamily="monospace" opacity="0.45" letterSpacing="0.3">H2</text>
-        <text x="-4" y="678" fill="#0891b2" fontSize="11" fontFamily="monospace" opacity="0.45" letterSpacing="0.3">OUT</text>
       </svg>
     </div>
   );

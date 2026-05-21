@@ -234,7 +234,7 @@ export function TradingEngineBlackHole() {
     window.addEventListener("resize", resize);
     resize();
 
-    let camTheta = 0.5, camPhi = 1.45, camRadius = 16.0;
+    let camTheta = 0.5, camPhi = 1.45, camRadius = 32.0;
     let tTheta = camTheta, tPhi = camPhi, tRadius = camRadius;
     let drag = false, lx = 0, ly = 0;
     let panTime = 0;

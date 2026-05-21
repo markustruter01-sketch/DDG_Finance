@@ -9,18 +9,23 @@ const FORMULAS = [
 
 type Pt = { x: number; y: number };
 
+// Spread content from y≈70 to y≈695 inside viewBox "0 10 800 750"
+// At container 216×190: scale = min(216/800, 190/750) = min(0.27, 0.253) = 0.253
+// → content renders 800×0.253=202px wide × 750×0.253=190px tall (height-constrained, fills top↔bottom)
+
 const INPUT_NODES: Pt[] = [
-  { x: 100, y: 270 }, { x: 300, y: 270 }, { x: 500, y: 270 }, { x: 700, y: 270 },
+  { x: 100, y: 285 }, { x: 300, y: 285 }, { x: 500, y: 285 }, { x: 700, y: 285 },
 ];
 const HIDDEN1: Pt[] = [
-  { x: 170, y: 390 }, { x: 310, y: 380 }, { x: 490, y: 395 }, { x: 630, y: 385 },
+  { x: 170, y: 428 }, { x: 310, y: 418 }, { x: 490, y: 432 }, { x: 630, y: 422 },
 ];
 const HIDDEN2: Pt[] = [
-  { x: 240, y: 490 }, { x: 400, y: 480 }, { x: 560, y: 493 },
+  { x: 240, y: 558 }, { x: 400, y: 548 }, { x: 560, y: 562 },
 ];
-const OUTPUT: Pt = { x: 400, y: 575 };
+const OUTPUT: Pt = { x: 400, y: 672 };
 const PERIPHERAL: Pt[] = [
-  { x: 52, y: 360 }, { x: 748, y: 350 }, { x: 140, y: 530 }, { x: 660, y: 525 },
+  { x: 52,  y: 508 }, { x: 748, y: 498 },
+  { x: 140, y: 614 }, { x: 660, y: 608 },
 ];
 
 const CONN_PAIRS: [Pt, Pt][] = [
@@ -40,8 +45,8 @@ const CONN_PAIRS: [Pt, Pt][] = [
 const PULSE_DUR = [3, 3.5, 4, 4.5, 5, 3.8, 4.2, 5.5, 3.2, 4.8, 3.6, 5.2, 4.4, 3.9, 5.1, 4.7, 3.3, 5.3, 4.1, 4.9, 3.7, 5.4, 4.6, 3.1, 5.0];
 
 const BOX_W = 158;
-const BOX_H = 88;
-const BOX_Y = 105;
+const BOX_H = 90;
+const BOX_Y = 95;
 const TILE_BOTTOM = BOX_Y + BOX_H + 2;
 
 function cubicPath(a: Pt, b: Pt) {
@@ -100,27 +105,21 @@ export function MiniSynapticWidget() {
       `}} />
 
       {/*
-        viewBox: x=0..800, y=20..660 → 800×640 content area
-        At 216px wide: scale = 216/800 = 0.27
-        Rendered size: 216px × (640×0.27)=172.8px
-        Title fontSize=38 → ~10px rendered
-        Box H=88 → ~24px rendered
+        viewBox "0 10 800 750":  content spans y≈70→693, viewBox y=10→760
+        At 216×190 container:   scale = min(216/800, 190/750) = min(0.270, 0.253) = 0.253
+        → rendered 202px wide × 190px tall — HEIGHT-CONSTRAINED, fills top↔bottom ✓
+        Side margins: (216-202)/2 = 7px — barely visible
+        Scales proportionally (locked ratio) as available height changes.
       */}
       <svg
-        viewBox="0 20 800 640"
+        viewBox="0 10 800 750"
         style={{ display: "block", width: "100%", height: "100%" }}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
       >
         {/* ── TITLE ── */}
-        <text
-          x="400" y="82"
-          fill="#ffffff"
-          fontSize="38"
-          fontFamily="monospace"
-          fontWeight="600"
-          textAnchor="middle"
-          letterSpacing="2"
-        >
+        <text x="400" y="68"
+          fill="#ffffff" fontSize="38" fontFamily="monospace" fontWeight="600"
+          textAnchor="middle" letterSpacing="2">
           Synaptic Math Audit Engine v4.1
         </text>
 
@@ -131,24 +130,20 @@ export function MiniSynapticWidget() {
           const isActive = activeFormula === i;
           return (
             <g key={f.label} className={isActive ? "mini-box-active" : "mini-box-idle"}>
-              <rect
-                x={bx} y={BOX_Y}
-                width={BOX_W} height={BOX_H}
-                rx="6" ry="6"
+              <rect x={bx} y={BOX_Y} width={BOX_W} height={BOX_H} rx="6" ry="6"
                 fill="rgba(0,0,0,0.6)"
                 stroke={isActive ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}
-                strokeWidth="1.5"
-              />
+                strokeWidth="1.5" />
               <text x={cx} y={BOX_Y + 22} fill={isActive ? "#67e8f9" : "#0891b2"}
                 fontSize="16" fontFamily="monospace" fontWeight="700"
                 textAnchor="middle" letterSpacing="1.5">
                 {f.label.toUpperCase()}
               </text>
-              <text x={cx} y={BOX_Y + 52} fill={isActive ? "#ffffff" : "#e2e8f0"}
+              <text x={cx} y={BOX_Y + 54} fill={isActive ? "#ffffff" : "#e2e8f0"}
                 fontSize="20" fontFamily="monospace" fontWeight="600" textAnchor="middle">
                 {f.equation}
               </text>
-              <text x={cx} y={BOX_Y + 78} fill={isActive ? "#22d3ee" : "#0891b2"}
+              <text x={cx} y={BOX_Y + 80} fill={isActive ? "#22d3ee" : "#0891b2"}
                 fontSize="20" fontFamily="monospace" fontWeight="700" textAnchor="middle">
                 {f.result}
               </text>
@@ -159,12 +154,12 @@ export function MiniSynapticWidget() {
         {/* ── CABLES: formula boxes → input nodes ── */}
         {INPUT_NODES.map((n, i) => (
           <path key={`mc-s-${i}`}
-            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 30} ${n.x},${n.y - 30} ${n.x},${n.y}`}
+            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 40} ${n.x},${n.y - 40} ${n.x},${n.y}`}
             stroke="#0891b2" strokeWidth="1.5" fill="none" opacity="0.3" />
         ))}
         {INPUT_NODES.map((n, i) => (
           <path key={`mc-p-${i}`}
-            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 30} ${n.x},${n.y - 30} ${n.x},${n.y}`}
+            d={`M ${n.x},${TILE_BOTTOM} C ${n.x},${TILE_BOTTOM + 40} ${n.x},${n.y - 40} ${n.x},${n.y}`}
             stroke={activeFormula === i ? "#67e8f9" : "#22d3ee"}
             strokeWidth="3" fill="none" strokeLinecap="round"
             className="mini-cable"
@@ -222,10 +217,10 @@ export function MiniSynapticWidget() {
         </text>
 
         {/* ── LAYER LABELS ── */}
-        <text x="6"  y="276" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">IN</text>
-        <text x="6"  y="396" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">H1</text>
-        <text x="6"  y="496" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">H2</text>
-        <text x="6"  y="581" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">OUT</text>
+        <text x="6" y="291" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">IN</text>
+        <text x="6" y="434" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">H1</text>
+        <text x="6" y="564" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">H2</text>
+        <text x="6" y="678" fill="#0891b2" fontSize="13" fontFamily="monospace" opacity="0.5" letterSpacing="0.5">OUT</text>
       </svg>
     </div>
   );

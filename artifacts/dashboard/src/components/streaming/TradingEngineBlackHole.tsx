@@ -273,7 +273,7 @@ export function TradingEngineBlackHole() {
       lastNow = now;
       // Auto-orbit: full 360° in ~18s when user is not dragging
       if (!drag) {
-        tTheta += dt * 0.07;
+        tTheta += dt * 0.028;
         // Slow vertical pan — 20s full period (10s up-peak → down-peak)
         panTime += dt;
         tPhi = PHI_CENTER + PHI_AMP * Math.sin(panTime * Math.PI / 10);

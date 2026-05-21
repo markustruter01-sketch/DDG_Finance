@@ -59,9 +59,9 @@ const CONN_PAIRS: [Pt, Pt][] = [
 
 const PULSE_DUR = [3, 3.5, 4, 4.5, 5, 3.8, 4.2, 5.5, 3.2, 4.8, 3.6, 5.2, 4.4, 3.9, 5.1, 4.7, 3.3, 5.3, 4.1, 4.9, 3.7, 5.4, 4.6, 3.1, 5.0];
 
-const BOX_W = 178;
-const BOX_H = 112;
-const BOX_Y = 90;
+const BOX_W = 210;
+const BOX_H = 132;
+const BOX_Y = 86;
 const TITLE_X = 280;
 const TILE_BOTTOM = BOX_Y + BOX_H + 2;
 
@@ -121,7 +121,7 @@ export function MiniSynapticWidget() {
       `}} />
 
       <svg
-        viewBox="-155 30 870 740"
+        viewBox="-176 30 912 740"
         style={{ display: "block", width: "100%", height: "100%" }}
         preserveAspectRatio="xMidYMid meet"
       >
@@ -143,17 +143,17 @@ export function MiniSynapticWidget() {
                 fill="rgba(0,0,0,0.6)"
                 stroke={isActive ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}
                 strokeWidth="1.5" />
-              <text x={cx} y={BOX_Y + 24} fill={isActive ? "#67e8f9" : "#0891b2"}
-                fontSize="16" fontFamily="monospace" fontWeight="700"
+              <text x={cx} y={BOX_Y + 26} fill={isActive ? "#67e8f9" : "#0891b2"}
+                fontSize="18" fontFamily="monospace" fontWeight="700"
                 textAnchor="middle" letterSpacing="1">
                 {f.label.toUpperCase()}
               </text>
-              <text x={cx} y={BOX_Y + 64} fill={isActive ? "#ffffff" : "#e2e8f0"}
-                fontSize="21" fontFamily="monospace" fontWeight="600" textAnchor="middle">
+              <text x={cx} y={BOX_Y + 74} fill={isActive ? "#ffffff" : "#e2e8f0"}
+                fontSize="24" fontFamily="monospace" fontWeight="600" textAnchor="middle">
                 {f.equation}
               </text>
-              <text x={cx} y={BOX_Y + 96} fill={isActive ? "#22d3ee" : "#0891b2"}
-                fontSize="21" fontFamily="monospace" fontWeight="700" textAnchor="middle">
+              <text x={cx} y={BOX_Y + 112} fill={isActive ? "#22d3ee" : "#0891b2"}
+                fontSize="24" fontFamily="monospace" fontWeight="700" textAnchor="middle">
                 {f.result}
               </text>
             </g>

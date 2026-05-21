@@ -1,8 +1,9 @@
 """
 High-Yield Growth Vault — Profit Sweep  (v3 — self-contained PostgreSQL)
 ------------------------------------------------------------------------
-Automatically sweeps 20 % of new realised profits into JEPQ to generate
-compounding dividend income.
+DISABLED (2026-05, Markus spec) — the 20% HWM sweep no longer fires.
+The 15% per-winning-exit mechanism in oracle_exit_manager.py is the
+only active vault path. Existing JEPQ holdings are preserved.
 
 Mathematics (Distribution-Adjusted HWM)
 ----------------------------------------
@@ -583,6 +584,20 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
     Returns a dict describing what happened (sweep fired or not, amounts,
     new HWM, etc.).  Never raises — failures are caught and returned.
     """
+    # ── 20% HWM sweep DISABLED per Markus spec (2026-05) ──────────────────
+    # The 15% per-winning-exit path in oracle_exit_manager.py is unchanged.
+    # Existing JEPQ holdings (~$5,235) are untouched — no liquidation.
+    logger.info(
+        "Vault | 20% HWM sweep DISABLED — "
+        "spec retains only 15% per-exit (oracle_exit_manager.py)"
+    )
+    return {
+        "status":       "disabled",
+        "swept":        False,
+        "sweep_amount": 0.0,
+        "reason":       "20pct_hwm_disabled_per_spec",
+    }
+
     from execution.broker import place_order
 
     try:

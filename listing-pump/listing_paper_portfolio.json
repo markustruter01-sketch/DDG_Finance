@@ -4,7 +4,7 @@
     "USDT": {
       "units": 8007.13435671183,
       "entry_price": 0.999109,
-      "current_price": 0.998954,
+      "current_price": 0.998983,
       "peak_price": 0.999249,
       "exchange": "coinbase",
       "listing_title": "Coinbase listing: USDT/USDC",
@@ -31,7 +31,7 @@
     "USDC": {
       "units": 8001.944472506819,
       "entry_price": 0.999757,
-      "current_price": 0.999595,
+      "current_price": 0.99964,
       "peak_price": 1.002,
       "exchange": "binance",
       "listing_title": "Binance listing: USDC/USDT",

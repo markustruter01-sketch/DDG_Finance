@@ -243,7 +243,7 @@ export default function StreamPage() {
   const activeTab = tabs.find((t) => t.id === active)!;
 
   return (
-    <div style={{ height: "100vh", width: "100vw", backgroundColor: "#020617", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100vh", width: "100vw", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <StreamHeaderBar />
       <div
         className="flex items-center shrink-0 z-20 relative"

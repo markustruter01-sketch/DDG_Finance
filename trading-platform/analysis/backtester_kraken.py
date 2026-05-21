@@ -7,7 +7,7 @@ Fully deterministic — no LLM calls.
 Covers davy-jones (mean_reversion), calypso (mean_reversion_conservative),
 and blackbeard (flow_sentiment) bots. Poseidon and Kraken Current run their
 own strategy-specific simulators.
-See backtester_momentum.py for the simpler Alpaca/Oracle momentum backtest.
+The simpler Alpaca/Oracle momentum backtest (backtester_momentum.py) has been retired.
 
 This replaces the previous P&L replay simulator with a genuine price-based
 backtester that replays OHLCV candles through the actual strategy logic.

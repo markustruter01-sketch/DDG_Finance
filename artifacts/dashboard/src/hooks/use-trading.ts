@@ -814,38 +814,6 @@ export function useRiskMetrics() {
   });
 }
 
-// --- Backtest ---
-
-export interface BacktestResult {
-  initial_equity: number;
-  final_equity: number;
-  total_return_pct: number;
-  max_drawdown_pct: number;
-  total_trades: number;
-  winning_trades: number;
-  losing_trades: number;
-  win_rate: number;
-  avg_win_pct: number;
-  avg_loss_pct: number;
-  equity_curve: Array<{ date: string; equity: number; positions_held: number }>;
-  trades: Array<{
-    ticker: string;
-    entry_date: string;
-    exit_date: string;
-    entry_price: number;
-    exit_price: number;
-    pnl_pct: number;
-    reason: string;
-  }>;
-  error?: string;
-}
-
-export function useRunBacktest() {
-  return useMutation<BacktestResult, Error, number>({
-    mutationFn: async (lookback_days: number = 90) =>
-      (await api.post(`/backtest?lookback_days=${lookback_days}`)).data,
-  });
-}
 
 // --- On-Chain Data ---
 

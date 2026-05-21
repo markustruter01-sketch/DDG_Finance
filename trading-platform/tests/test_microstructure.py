@@ -10,10 +10,9 @@ Covers:
   6. compute_vamp_ohlcv()       — OHLCV VAMP (backward-compat)
   7. compute_vpin_ohlcv()       — OHLCV VPIN (backward-compat)
   8. MicrostructureSignal       — from_orderbook, from_ohlcv, entry_filter, to_dict
-  9. PenaltyTracker             — decay, throttle, record, persist
-  10. compute_parametric_var     — VaR math (shared/)
-  11. VaRCircuitBreaker          — stateful VaR CB: record, check_and_trip, reset
-  12. compute_daily_var           — historical simulation VaR (portfolio/)
+  9. compute_parametric_var     — VaR math (shared/)
+  10. VaRCircuitBreaker          — stateful VaR CB: record, check_and_trip, reset
+  11. compute_daily_var           — historical simulation VaR (portfolio/)
 """
 
 from __future__ import annotations
@@ -53,7 +52,6 @@ from microstructure import (
     OFI_SHORT_MAX,
     VPIN_BLOCK_THRESH,
 )
-from penalty_tracker import PenaltyTracker
 from shared.var_circuit_breaker import (
     VaRCircuitBreaker,
     compute_parametric_var,
@@ -478,101 +476,7 @@ class TestMicrostructureSignal(unittest.TestCase):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 9. PenaltyTracker
-# ══════════════════════════════════════════════════════════════════════════════
-
-class TestPenaltyTracker(unittest.TestCase):
-
-    def _tracker(self):
-        """Create a tracker backed by a temp file so tests don't pollute disk."""
-        f = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
-        f.close()
-        os.unlink(f.name)  # remove file — tracker will create fresh
-        return PenaltyTracker(state_file=f.name)
-
-    def test_initial_points_zero(self):
-        t = self._tracker()
-        self.assertAlmostEqual(t.current_points(), 0.0, places=1)
-
-    def test_not_throttled_initially(self):
-        self.assertFalse(self._tracker().is_throttled())
-
-    def test_placement_adds_one_point(self):
-        t = self._tracker()
-        t.record_placement()
-        self.assertAlmostEqual(t.current_points(), 1.0, delta=0.1)
-
-    def test_cancellation_adds_two_points(self):
-        t = self._tracker()
-        t.record_cancellation()
-        self.assertAlmostEqual(t.current_points(), 2.0, delta=0.1)
-
-    def test_throttled_when_above_80_pct(self):
-        t = self._tracker()
-        # 15 * 0.80 = 12 points → use 13 placements to be safely over the
-        # threshold even accounting for negligible inter-call decay
-        for _ in range(13):
-            t.record_placement()
-        self.assertTrue(t.is_throttled())
-
-    def test_not_throttled_below_80_pct(self):
-        t = self._tracker()
-        for _ in range(11):  # 11 < 12
-            t.record_placement()
-        self.assertFalse(t.is_throttled())
-
-    def test_points_capped_at_max(self):
-        t = self._tracker()
-        for _ in range(30):
-            t.record_placement()
-        self.assertLessEqual(t.current_points(), t.MAX_POINTS)
-
-    def test_remaining_capacity_one_hundred_when_empty(self):
-        t = self._tracker()
-        self.assertAlmostEqual(t.remaining_capacity(), 100.0, delta=1.0)
-
-    def test_remaining_capacity_decreases_with_points(self):
-        t = self._tracker()
-        t.record_placement()
-        self.assertLess(t.remaining_capacity(), 100.0)
-
-    def test_decay_reduces_points_over_time(self):
-        t = self._tracker()
-        for _ in range(5):
-            t.record_placement()
-        pts_before = t.current_points()
-        time.sleep(2.0)  # let bucket drain (1 pt/sec)
-        pts_after = t.current_points()
-        self.assertLess(pts_after, pts_before)
-
-    def test_reset_clears_points(self):
-        t = self._tracker()
-        for _ in range(10):
-            t.record_placement()
-        t.reset()
-        self.assertAlmostEqual(t.current_points(), 0.0, delta=0.1)
-        self.assertFalse(t.is_throttled())
-
-    def test_persist_and_reload(self):
-        """State survives a new PenaltyTracker loaded from the same file."""
-        f = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
-        f.close()
-        os.unlink(f.name)
-        t1 = PenaltyTracker(state_file=f.name)
-        for _ in range(5):
-            t1.record_placement()
-        pts_saved = t1.current_points()
-        t2 = PenaltyTracker(state_file=f.name)
-        # After reload, points should be ≤ saved (decay may have applied)
-        self.assertLessEqual(t2.current_points(), pts_saved + 0.5)
-        os.unlink(f.name)
-
-    def test_repr_contains_class_name(self):
-        self.assertIn("PenaltyTracker", repr(self._tracker()))
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 10. compute_parametric_var (shared/ — pure function)
+# 9. compute_parametric_var (shared/ — pure function)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestComputeParametricVar(unittest.TestCase):

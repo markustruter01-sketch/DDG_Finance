@@ -28,7 +28,6 @@ from data.sentiment import get_sentiment
 from data.onchain import get_onchain_data
 from data.economic_calendar import is_blackout_active, get_upcoming_events
 from analysis.attribution import compute_attribution
-from analysis.backtester_momentum import run_backtest
 from data.cache import get_cache_stats
 from execution.kill_switch import get_state as ks_get_state
 from core.scheduler import get_job_status, is_auto_trading_enabled
@@ -946,24 +945,6 @@ async def equity_curve(limit: int = 90) -> dict:
         return {"curve": synthetic[-limit:], "count": len(synthetic[-limit:]), "source": "synthetic_from_trades"}
     return {"curve": [], "count": 0, "source": "no_data"}
 
-
-@portfolio_router.post("/backtest", tags=["Analytics"])
-async def backtest_endpoint(
-    ticker: str = "SPY",
-    period: str = "6mo",
-    stop_loss: float = 5.0,
-    take_profit: float = 10.0,
-) -> dict:
-    try:
-        result = run_backtest(
-            ticker=ticker,
-            period=period,
-            stop_loss_pct=stop_loss,
-            take_profit_pct=take_profit,
-        )
-        return result
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Backtest failed: {exc}")
 
 
 @portfolio_router.get("/data/snapshot", tags=["Debug"])

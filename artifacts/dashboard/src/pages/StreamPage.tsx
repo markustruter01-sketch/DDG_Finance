@@ -248,7 +248,7 @@ export default function StreamPage() {
       <div
         className="flex items-center shrink-0 z-20 relative"
         style={{
-          background: "transparent",
+          background: "#000000",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
           minHeight: 44,
         }}

@@ -349,6 +349,7 @@ export function OrbVisualiser() {
           position: "absolute",
           left: 12,
           top: 10,
+          bottom: 60,
           width: 216,
           display: "flex",
           flexDirection: "column",
@@ -401,7 +402,9 @@ export function OrbVisualiser() {
             ))}
           </div>
         )}
-        <MiniSynapticWidget />
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <MiniSynapticWidget />
+        </div>
       </div>
 
       {/* ── RIGHT PANEL: OPEN POSITIONS ── */}

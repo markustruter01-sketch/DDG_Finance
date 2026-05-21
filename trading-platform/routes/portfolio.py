@@ -1974,9 +1974,7 @@ async def export_diagnostic_report():
     lines.append("")
     lines.append("  CAPITAL POOLS:")
     lines.append("    Pool 1: Alpaca US Equities        $100k  (Bot #1 Oracle)")
-    lines.append("    Pool 2: Kraken Crypto Fleet       $600k  (Bots #2 Davy Jones, #3 Blackbeard,")
-    lines.append("                                              #4 Calypso, #5 Apex Predator (momentum),")
-    lines.append("                                              #7 Poseidon, #8 Kraken Current)")
+    lines.append("    Pool 2: Kraken Crypto Fleet       $200k  (Bot #2 Jerome Macro, Bot #3 SPY/QQQ Trend)")
     lines.append("    Pool 3: Forex (Navigator)         $100k  (Bot #6)")
     lines.append("  Each pool is independent \u2014 different asset classes, strategies, and risk profiles.")
 
@@ -1992,8 +1990,6 @@ async def export_diagnostic_report():
         fx_positions=_fx_positions,
         opts_positions=[],
         ks_state=_report_ks_state,
-        poseidon_equity=_poseidon_equity,
-        kraken_current_equity=_kc_equity,
     )
 
     try:

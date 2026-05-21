@@ -3181,9 +3181,7 @@ def section_daily_pnl_attribution() -> list[str]:
         "MAX(alpaca_equity) as oracle_eq, "
         "MAX(kraken_equity) as kraken_eq, "
         "MAX(options_equity) as apex_eq, "
-        "MAX(forex_equity) as nav_eq, "
-        "MAX(poseidon_equity) as poseidon_eq, "
-        "MAX(kraken_current_equity) as kc_eq "
+        "MAX(forex_equity) as nav_eq "
         "FROM equity_snapshots "
         "WHERE ts > NOW() - INTERVAL '9 days' "
         "GROUP BY DATE(ts) ORDER BY day ASC"
@@ -3210,10 +3208,10 @@ def section_daily_pnl_attribution() -> list[str]:
             kraken_daily[day_str][label] = float(r.get("pnl") or 0)
 
     # Build daily P&L by diffing consecutive equity snapshots
-    lines.append(f"  {'Date':<12} {'Oracle':>9} {'Kraken MR':>10} {'Apex':>7} {'Navigator':>10} {'Poseidon':>9} {'KC':>8} {'Total':>10}")
-    lines.append("  " + "-" * 80)
+    lines.append(f"  {'Date':<12} {'Oracle':>9} {'Kraken MR':>10} {'Apex':>7} {'Navigator':>10} {'Total':>10}")
+    lines.append("  " + "-" * 63)
 
-    totals = {"oracle": 0, "kraken": 0, "apex": 0, "nav": 0, "poseidon": 0, "kc": 0, "total": 0}
+    totals = {"oracle": 0, "kraken": 0, "apex": 0, "nav": 0, "total": 0}
     prev = None
 
     for row in snap_rows:
@@ -3226,9 +3224,7 @@ def section_daily_pnl_attribution() -> list[str]:
         k_pnl = float(row.get("kraken_eq") or 0) - float(prev.get("kraken_eq") or 0)
         a_pnl = float(row.get("apex_eq") or 0) - float(prev.get("apex_eq") or 0)
         n_pnl = float(row.get("nav_eq") or 0) - float(prev.get("nav_eq") or 0)
-        p_pnl = float(row.get("poseidon_eq") or 0) - float(prev.get("poseidon_eq") or 0)
-        kc_pnl = float(row.get("kc_eq") or 0) - float(prev.get("kc_eq") or 0)
-        total = o_pnl + k_pnl + a_pnl + n_pnl + p_pnl + kc_pnl
+        total = o_pnl + k_pnl + a_pnl + n_pnl
 
         def fmt(v):
             if abs(v) < 0.01:
@@ -3237,24 +3233,20 @@ def section_daily_pnl_attribution() -> list[str]:
             return f"{sign}${abs(v):,.0f}" if v < 0 else f"+${v:,.0f}"
 
         lines.append(
-            f"  {day:<12} {fmt(o_pnl):>9} {fmt(k_pnl):>10} {fmt(a_pnl):>7} {fmt(n_pnl):>10} "
-            f"{fmt(p_pnl):>9} {fmt(kc_pnl):>8} {fmt(total):>10}"
+            f"  {day:<12} {fmt(o_pnl):>9} {fmt(k_pnl):>10} {fmt(a_pnl):>7} {fmt(n_pnl):>10} {fmt(total):>10}"
         )
 
         totals["oracle"] += o_pnl
         totals["kraken"] += k_pnl
         totals["apex"] += a_pnl
         totals["nav"] += n_pnl
-        totals["poseidon"] += p_pnl
-        totals["kc"] += kc_pnl
         totals["total"] += total
         prev = row
 
-    lines.append("  " + "-" * 80)
+    lines.append("  " + "-" * 63)
     lines.append(
         f"  {'7-day total':<12} {_c(totals['oracle']):>9} {_c(totals['kraken']):>10} "
-        f"{_c(totals['apex']):>7} {_c(totals['nav']):>10} {_c(totals['poseidon']):>9} "
-        f"{_c(totals['kc']):>8} {_c(totals['total']):>10}"
+        f"{_c(totals['apex']):>7} {_c(totals['nav']):>10} {_c(totals['total']):>10}"
     )
 
     # Best/worst single trades

@@ -527,8 +527,6 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS options_equity        DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS forex_equity          DOUBLE PRECISION NOT NULL DEFAULT 0;
-ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS poseidon_equity       DOUBLE PRECISION NOT NULL DEFAULT 0;
-ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS kraken_current_equity DOUBLE PRECISION NOT NULL DEFAULT 0;
 """
 
 # Data-only backfill: safe to run repeatedly (idempotent WHERE clause)
@@ -960,8 +958,6 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
                            alpaca_equity, kraken_equity,
                            COALESCE(options_equity, 0) AS options_equity,
                            COALESCE(forex_equity, 0) AS forex_equity,
-                           COALESCE(poseidon_equity, 0) AS poseidon_equity,
-                           COALESCE(kraken_current_equity, 0) AS kraken_current_equity,
                            total_equity, regime, source
                     FROM equity_snapshots
                     ORDER BY ts DESC
@@ -971,7 +967,7 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
                 )
                 rows = cur.fetchall()
         cols = ["id", "ts", "alpaca_equity", "kraken_equity", "options_equity", "forex_equity",
-                "poseidon_equity", "kraken_current_equity", "total_equity", "regime", "source"]
+                "total_equity", "regime", "source"]
         result = []
         for row in reversed(rows):
             d = dict(zip(cols, row))

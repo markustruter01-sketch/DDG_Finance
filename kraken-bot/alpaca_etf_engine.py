@@ -27,6 +27,8 @@ import sys
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+from jerome_alpaca import _nyse_is_open
+
 logger = logging.getLogger("etf_engine")
 
 _YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -217,14 +219,19 @@ class AlpacaEtfEngine:
         side: str,
         notional: float,
     ) -> Optional[dict]:
-        """Place a fractional notional market order. side must be 'buy' or 'sell'."""
+        """Place a fractional notional market order. side must be 'buy' or 'sell'.
+        Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when closed
+        so off-hours orders queue for next open instead of being rejected.
+        """
+        tif = "day" if _nyse_is_open() else "opg"
+        logger.info(f"EtfEngine | Submitting {side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
             order = self.api.submit_order(
                 symbol=symbol,
                 notional=round(notional, 2),
                 side=side,
                 type="market",
-                time_in_force="day",
+                time_in_force=tif,
             )
             logger.info(
                 f"EtfEngine | ORDER PLACED: {side.upper()} {symbol} "
@@ -247,16 +254,20 @@ class AlpacaEtfEngine:
             return False
 
     def close_partial(self, symbol: str, qty: float) -> bool:
-        """Close a specific quantity (for tiered profit-taking scale-outs)."""
+        """Close a specific quantity (for tiered profit-taking scale-outs).
+        Uses "day" when NYSE is open; "opg" when closed so partial exits
+        queue for next open rather than being silently rejected.
+        """
+        tif = "day" if _nyse_is_open() else "opg"
         try:
             self.api.submit_order(
                 symbol=symbol,
                 qty=round(qty, 8),
                 side="sell",
                 type="market",
-                time_in_force="day",
+                time_in_force=tif,
             )
-            logger.info(f"EtfEngine | PARTIAL CLOSE: {symbol} qty={qty:.4f}")
+            logger.info(f"EtfEngine | PARTIAL CLOSE: {symbol} qty={qty:.4f} tif={tif}")
             return True
         except Exception as exc:
             logger.error(f"EtfEngine | Partial close failed {symbol} qty={qty}: {exc}")

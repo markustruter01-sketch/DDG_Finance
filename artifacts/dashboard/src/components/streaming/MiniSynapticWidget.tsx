@@ -7,12 +7,14 @@ const FORMULAS = [
   { label: "Sortino", equation: "S=(Rp-MAR)/σd",  result: "2.12"   },
 ];
 
-const INPUT_NODES_X = [210, 646, 1082, 1518];
-
-const BOX_W = 420;
-const BOX_H = 180;
+const BOX_W = 252;
+const BOX_H = 108;
 const BOX_Y = 100;
-const TITLE_X = 864;
+
+// Four boxes evenly spaced with 16px gaps, starting at x=0
+// Box centres: 126, 394, 662, 930  (total span 0–1056)
+const INPUT_NODES_X = [126, 394, 662, 930];
+const TITLE_X = 528;
 
 export function MiniSynapticWidget() {
   const [activeFormula, setActiveFormula] = useState<number | null>(null);
@@ -41,13 +43,13 @@ export function MiniSynapticWidget() {
       `}} />
 
       <svg
-        viewBox="-20 30 1768 280"
+        viewBox="-12 25 1080 190"
         style={{ display: "block", width: "100%", height: "100%" }}
         preserveAspectRatio="xMidYMax meet"
       >
         {/* ── TITLE ── */}
         <text x={TITLE_X} y="70"
-          fill="rgba(255,255,255,0.9)" fontSize="44" fontFamily="monospace" fontWeight="600"
+          fill="rgba(255,255,255,0.9)" fontSize="26" fontFamily="monospace" fontWeight="600"
           textAnchor="middle" letterSpacing="1"
           style={{ textTransform: "uppercase" }}>
           ◂ Synaptic Math Audit Engine v4.1
@@ -64,17 +66,17 @@ export function MiniSynapticWidget() {
                 fill="rgba(0,0,0,0.6)"
                 stroke={isActive ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}
                 strokeWidth="1.5" />
-              <text x={cx} y={BOX_Y + 40} fill={isActive ? "#67e8f9" : "#0891b2"}
-                fontSize="28" fontFamily="monospace" fontWeight="700"
+              <text x={cx} y={BOX_Y + 24} fill={isActive ? "#67e8f9" : "#0891b2"}
+                fontSize="17" fontFamily="monospace" fontWeight="700"
                 textAnchor="middle" letterSpacing="1">
                 {f.label.toUpperCase()}
               </text>
-              <text x={cx} y={BOX_Y + 105} fill={isActive ? "#ffffff" : "#e2e8f0"}
-                fontSize="38" fontFamily="monospace" fontWeight="600" textAnchor="middle">
+              <text x={cx} y={BOX_Y + 63} fill={isActive ? "#ffffff" : "#e2e8f0"}
+                fontSize="23" fontFamily="monospace" fontWeight="600" textAnchor="middle">
                 {f.equation}
               </text>
-              <text x={cx} y={BOX_Y + 158} fill={isActive ? "#22d3ee" : "#0891b2"}
-                fontSize="38" fontFamily="monospace" fontWeight="700" textAnchor="middle">
+              <text x={cx} y={BOX_Y + 95} fill={isActive ? "#22d3ee" : "#0891b2"}
+                fontSize="23" fontFamily="monospace" fontWeight="700" textAnchor="middle">
                 {f.result}
               </text>
             </g>

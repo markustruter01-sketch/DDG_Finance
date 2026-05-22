@@ -449,8 +449,8 @@ export function OrbVisualiser() {
           position: "absolute",
           left: 12,
           bottom: 8,
-          width: 720,
-          height: 260,
+          width: 432,
+          height: 156,
           zIndex: 20,
           overflow: "hidden",
         }}

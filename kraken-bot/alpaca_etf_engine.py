@@ -173,6 +173,46 @@ class AlpacaEtfEngine:
         import alpaca_trade_api as tradeapi
         self.api = tradeapi.REST(api_key, secret_key, base_url=base_url)
         logger.info("AlpacaEtfEngine | Connected to Alpaca paper account")
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        """Create alpaca_etf_positions if it doesn't exist. Idempotent — safe to call on every startup."""
+        _ensure_tp()
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS alpaca_etf_positions (
+                            id              BIGSERIAL     PRIMARY KEY,
+                            bot_id          TEXT          NOT NULL,
+                            symbol          TEXT          NOT NULL,
+                            direction       TEXT          NOT NULL DEFAULT 'long',
+                            qty             NUMERIC       NOT NULL,
+                            entry_price     NUMERIC       NOT NULL,
+                            entry_atr       NUMERIC,
+                            notional_usd    NUMERIC       NOT NULL,
+                            stop_price      NUMERIC,
+                            tp1_price       NUMERIC,
+                            tp2_price       NUMERIC,
+                            scaled_out_tp1  BOOLEAN       DEFAULT FALSE,
+                            scaled_out_tp2  BOOLEAN       DEFAULT FALSE,
+                            min_hold_until  TIMESTAMPTZ,
+                            status          TEXT          NOT NULL DEFAULT 'open',
+                            opened_at       TIMESTAMPTZ   DEFAULT NOW(),
+                            closed_at       TIMESTAMPTZ,
+                            exit_reason     TEXT,
+                            realised_pnl    NUMERIC
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_etf_pos_status
+                            ON alpaca_etf_positions (bot_id, status, opened_at);
+                    """)
+                conn.commit()
+            logger.info("EtfEngine | alpaca_etf_positions schema verified")
+        except Exception as exc:
+            logger.error(f"EtfEngine | _ensure_schema failed: {exc}")
 
     # ── Account ───────────────────────────────────────────────────────────────
 
@@ -321,7 +361,7 @@ class AlpacaEtfEngine:
                     """, (new_stop, bot_id, symbol))
                 conn.commit()
         except Exception as exc:
-            logger.debug(f"EtfEngine | Trailing stop update failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | Trailing stop update failed: {exc}")
 
     def check_tp1_hit(self, db_position: dict, current_price: float) -> bool:
         """Returns True if tp1_price reached and scale-out not yet done."""
@@ -372,7 +412,7 @@ class AlpacaEtfEngine:
                     cols = [d[0] for d in cur.description]
                     return [dict(zip(cols, row)) for row in cur.fetchall()]
         except Exception as exc:
-            logger.debug(f"EtfEngine | get_db_positions failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | get_db_positions failed: {exc}")
             return []
 
     def record_open(
@@ -414,7 +454,7 @@ class AlpacaEtfEngine:
                 conn.commit()
             logger.info(f"EtfEngine | DB: recorded open {bot_id}/{symbol}")
         except Exception as exc:
-            logger.debug(f"EtfEngine | record_open failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | record_open failed: {exc}")
 
     def record_close(
         self,
@@ -442,7 +482,7 @@ class AlpacaEtfEngine:
                 conn.commit()
             logger.info(f"EtfEngine | DB: recorded close {bot_id}/{symbol} — {exit_reason}")
         except Exception as exc:
-            logger.debug(f"EtfEngine | record_close failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | record_close failed: {exc}")
 
     def mark_scaled_out(self, bot_id: str, symbol: str, tier: int) -> None:
         """Mark tp1 or tp2 scale-out as done (tier=1 or tier=2)."""
@@ -461,7 +501,7 @@ class AlpacaEtfEngine:
                     )
                 conn.commit()
         except Exception as exc:
-            logger.debug(f"EtfEngine | mark_scaled_out failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | mark_scaled_out failed: {exc}")
 
     # ── Heartbeat ─────────────────────────────────────────────────────────────
 
@@ -492,7 +532,7 @@ class AlpacaEtfEngine:
                     """, (equity, position_count, db_id))
                 conn.commit()
         except Exception as exc:
-            logger.debug(f"EtfEngine | Heartbeat update failed (non-fatal): {exc}")
+            logger.error(f"EtfEngine | Heartbeat update failed: {exc}")
 
     # ── Convenience: exit check for a single position ─────────────────────────
 

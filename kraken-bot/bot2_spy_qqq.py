@@ -279,9 +279,18 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             held_symbols.add(symbol)
             live_positions = engine.get_positions()
 
-    # ── Heartbeat ─────────────────────────────────────────────────────────────
+    # ── Portfolio heartbeat ────────────────────────────────────────────────────
     live_positions = engine.get_positions()
-    engine.update_heartbeat(db_id, equity, len(live_positions))
+    try:
+        from core.bot_state import write_portfolio as _write_portfolio
+        _write_portfolio(
+            BOT_ID,
+            cash=account["cash"],
+            equity=equity,
+            positions=live_positions,
+        )
+    except Exception as exc:
+        logger.debug(f"Bot2 | write_portfolio failed (non-fatal): {exc}")
     logger.info(
         f"Bot2 | Cycle complete — equity=${equity:,.2f} "
         f"positions={len(live_positions)}"

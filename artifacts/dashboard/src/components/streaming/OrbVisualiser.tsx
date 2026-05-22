@@ -443,14 +443,14 @@ export function OrbVisualiser() {
         );
       })()}
 
-      {/* ── MATH AUDIT WIDGET (346px wide, anchored to bottom) ── */}
+      {/* ── MATH AUDIT WIDGET (720px wide, anchored to bottom) ── */}
       <div
         style={{
           position: "absolute",
           left: 12,
           bottom: 8,
-          width: 346,
-          height: 308,
+          width: 720,
+          height: 260,
           zIndex: 20,
           overflow: "hidden",
         }}

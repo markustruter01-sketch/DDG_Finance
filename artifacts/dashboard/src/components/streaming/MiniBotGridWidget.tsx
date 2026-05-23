@@ -13,6 +13,9 @@ const BOT_SLOTS: BotSlot[] = [
   { id: "event_trader",      short: "Event",   color: "#8b5cf6" },
   { id: "depeg_hunter",      short: "Depeg",   color: "#fb7185" },
   { id: "memecoin_velocity", short: "Meme",    color: "#a3e635" },
+  { id: "momentum_alpha",   short: "Mom-A",   color: "#22d3ee" },
+  { id: "momentum_beta",    short: "Mom-B",   color: "#a78bfa" },
+  { id: "momentum_gamma",   short: "Mom-G",   color: "#fb7185" },
 ];
 
 interface BotEquitySlice {

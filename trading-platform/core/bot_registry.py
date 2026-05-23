@@ -14,7 +14,7 @@ from typing import Literal, Optional
 BotStatus = Literal["active", "paused", "retired"]
 AssetClass = Literal["stocks", "equity_etf", "sector_etf", "defensive_etf",
                      "bond_etf", "commodity_etf", "crypto", "forex"]
-Exchange = Literal["alpaca", "kraken", "oanda"]
+Exchange = Literal["alpaca", "kraken", "oanda", "binance_data_only"]
 
 
 @dataclass(frozen=True)
@@ -192,6 +192,57 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         trading_hours="24_7",
         cycle_minutes=5,
         color="lime",
+    ),
+    "momentum_alpha": BotEntry(
+        id="momentum_alpha",
+        display_name="Momentum Alpha",
+        short_name="Mom-A",
+        icon="📈",
+        strategy_label="Top-1 momentum rank — EMA20/50 + ADX",
+        asset_class="crypto",
+        exchange="binance_data_only",
+        starting_capital=100_000,
+        db_id=None,
+        status="active",
+        display_order=9,
+        legacy_aliases=(),
+        trading_hours="24_7",
+        cycle_minutes=1440,
+        color="#22d3ee",
+    ),
+    "momentum_beta": BotEntry(
+        id="momentum_beta",
+        display_name="Momentum Beta",
+        short_name="Mom-B",
+        icon="📈",
+        strategy_label="Top-2 momentum rank — EMA20/50 + ADX",
+        asset_class="crypto",
+        exchange="binance_data_only",
+        starting_capital=100_000,
+        db_id=None,
+        status="active",
+        display_order=10,
+        legacy_aliases=(),
+        trading_hours="24_7",
+        cycle_minutes=1440,
+        color="#a78bfa",
+    ),
+    "momentum_gamma": BotEntry(
+        id="momentum_gamma",
+        display_name="Momentum Gamma",
+        short_name="Mom-G",
+        icon="📈",
+        strategy_label="Top-3 momentum rank — EMA20/50 + ADX",
+        asset_class="crypto",
+        exchange="binance_data_only",
+        starting_capital=100_000,
+        db_id=None,
+        status="active",
+        display_order=11,
+        legacy_aliases=(),
+        trading_hours="24_7",
+        cycle_minutes=1440,
+        color="#fb7185",
     ),
 
 }

@@ -121,6 +121,9 @@ export interface FleetEquityData {
   event_trader: BotEquity;
   listing_pump: BotEquity;
   memecoin_velocity: BotEquity;
+  momentum_alpha: BotEquity;
+  momentum_beta: BotEquity;
+  momentum_gamma: BotEquity;
   fleet_total: BotEquity;
   generated_at: string;
   errors: string[];

@@ -506,7 +506,10 @@ VALUES
   ('depeg_hunter',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
   ('event_trader',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
   ('listing_pump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('memecoin_velocity', 100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
+  ('memecoin_velocity', 100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_alpha',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_beta',    100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_gamma',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -515,6 +518,38 @@ CREATE TABLE IF NOT EXISTS listing_dedup (
     key        TEXT PRIMARY KEY,
     first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ── Momentum bots (Phase 3C) ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS momentum_universe (
+    refresh_ts      TIMESTAMPTZ NOT NULL,
+    symbol          TEXT        NOT NULL,
+    market_cap_usd  NUMERIC,
+    binance_pair    TEXT        NOT NULL,
+    PRIMARY KEY (refresh_ts, symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_momentum_universe_refresh
+    ON momentum_universe (refresh_ts);
+
+CREATE TABLE IF NOT EXISTS momentum_bot_trades (
+    id                BIGSERIAL PRIMARY KEY,
+    bot_id            TEXT        NOT NULL,
+    symbol            TEXT        NOT NULL,
+    direction         TEXT        NOT NULL,
+    qty               NUMERIC     NOT NULL,
+    entry_price       NUMERIC     NOT NULL,
+    exit_price        NUMERIC,
+    realised_pnl_usd  NUMERIC,
+    entry_reason      TEXT,
+    exit_reason       TEXT,
+    opened_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    closed_at         TIMESTAMPTZ,
+    ema20_at_entry    NUMERIC,
+    ema50_at_entry    NUMERIC,
+    adx_at_entry      NUMERIC,
+    status            TEXT        NOT NULL DEFAULT 'open'
+);
+CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
+    ON momentum_bot_trades (bot_id, status);
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

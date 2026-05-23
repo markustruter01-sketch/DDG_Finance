@@ -22,7 +22,10 @@ const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: str
   { id: "listing_pump",      name: "Listing Pump",      icon: "🚀", exchange: "kraken",  asset_class: "crypto",   color: "yellow",  status: "active" },
   { id: "event_trader",      name: "Event Trader",      icon: "⚡", exchange: "kraken",  asset_class: "crypto",   color: "yellow",  status: "active" },
   { id: "depeg_hunter",      name: "Depeg Hunter",      icon: "💧", exchange: "kraken",  asset_class: "crypto",   color: "blue",    status: "active" },
-  { id: "memecoin_velocity", name: "Memecoin Velocity", icon: "🌙", exchange: "kraken",  asset_class: "crypto",   color: "orange",  status: "active" },
+  { id: "memecoin_velocity", name: "Memecoin Velocity", icon: "🌙", exchange: "kraken",   asset_class: "crypto", color: "orange", status: "active" },
+  { id: "momentum_alpha",   name: "Momentum Alpha",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "cyan",   status: "active" },
+  { id: "momentum_beta",    name: "Momentum Beta",    icon: "📈", exchange: "binance",  asset_class: "crypto", color: "purple", status: "active" },
+  { id: "momentum_gamma",   name: "Momentum Gamma",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "rose",   status: "active" },
 ];
 
 const PARAMS_TEXT: Record<string, string> = {
@@ -34,6 +37,9 @@ const PARAMS_TEXT: Record<string, string> = {
   event_trader: "Macro event volatility trades | 24/7 crypto",
   depeg_hunter: "Stablecoin depeg arbitrage | 24/7 crypto",
   memecoin_velocity: "Meme token velocity breakouts | 24/7 crypto",
+  momentum_alpha:   "Top-1 momentum rank | EMA20/50 + ADX | 24/7",
+  momentum_beta:    "Top-2 momentum rank | EMA20/50 + ADX | 24/7",
+  momentum_gamma:   "Top-3 momentum rank | EMA20/50 + ADX | 24/7",
 };
 
 function fmtEq(v: number) {
@@ -336,6 +342,27 @@ export default function StreamingBotsScreen() {
     memecoin_velocity: {
       equity: fleetEq?.memecoin_velocity?.equity ?? null,
       paused: fleetEq?.memecoin_velocity?.paused ?? false,
+      openPositionCount: 0,
+      openPositionSymbols: [],
+      recentTrades: [],
+    },
+    momentum_alpha: {
+      equity: fleetEq?.momentum_alpha?.equity ?? null,
+      paused: fleetEq?.momentum_alpha?.paused ?? false,
+      openPositionCount: 0,
+      openPositionSymbols: [],
+      recentTrades: [],
+    },
+    momentum_beta: {
+      equity: fleetEq?.momentum_beta?.equity ?? null,
+      paused: fleetEq?.momentum_beta?.paused ?? false,
+      openPositionCount: 0,
+      openPositionSymbols: [],
+      recentTrades: [],
+    },
+    momentum_gamma: {
+      equity: fleetEq?.momentum_gamma?.equity ?? null,
+      paused: fleetEq?.momentum_gamma?.paused ?? false,
       openPositionCount: 0,
       openPositionSymbols: [],
       recentTrades: [],

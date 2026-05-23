@@ -142,3 +142,51 @@ kind = "web"
 
   [services.env]
   PORT = "8099"
+
+  [[services]]
+  name = "momentum-bot-alpha"
+  localPort = 8101
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 momentum-bot/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 momentum-bot/main.py"]
+
+  [services.env]
+  PORT = "8101"
+  BOT_ID = "momentum_alpha"
+
+  [[services]]
+  name = "momentum-bot-beta"
+  localPort = 8102
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 momentum-bot/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 momentum-bot/main.py"]
+
+  [services.env]
+  PORT = "8102"
+  BOT_ID = "momentum_beta"
+
+  [[services]]
+  name = "momentum-bot-gamma"
+  localPort = 8103
+
+  [services.development]
+  run = "cd /home/runner/workspace && python3 momentum-bot/main.py"
+
+  [services.production]
+
+  [services.production.run]
+  args = ["bash", "-c", "python3 momentum-bot/main.py"]
+
+  [services.env]
+  PORT = "8103"
+  BOT_ID = "momentum_gamma"

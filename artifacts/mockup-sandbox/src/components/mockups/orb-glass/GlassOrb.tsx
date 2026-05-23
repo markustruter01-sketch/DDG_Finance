@@ -347,13 +347,15 @@ export function GlassOrb() {
                 {label:"SORTINO",eq:"S=(Rp-MAR)/σd",val:"2.12",c:"#22d3ee"},
               ].map((f,i)=>(
                 <div key={i} style={{
-                  background: f.active ? "rgba(34,211,238,0.06)" : "rgba(0,0,0,0.3)",
-                  border:`1px solid ${f.active?"rgba(34,211,238,0.45)":"rgba(34,211,238,0.12)"}`,
+                  background: "transparent",
+                  border:`1px solid ${f.active?"rgba(34,211,238,0.45)":"rgba(34,211,238,0.15)"}`,
                   borderRadius:9,
                   padding:"8px 12px",
                   minWidth:110,
                   backdropFilter:"blur(8px)",
-                  boxShadow: f.active ? "0 0 20px rgba(34,211,238,0.2), inset 0 1px 0 rgba(34,211,238,0.1)" : "none",
+                  boxShadow: f.active
+                    ? "0 0 18px rgba(34,211,238,0.25), 0 0 6px rgba(34,211,238,0.15), inset 0 1px 0 rgba(34,211,238,0.08)"
+                    : "0 0 10px rgba(34,211,238,0.08)",
                 }}>
                   <div style={{color:f.c,fontSize:8,fontWeight:700,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:4}}>{f.label}</div>
                   <div style={{color:"rgba(226,232,240,0.85)",fontSize:12,fontFamily:"monospace",fontWeight:600,marginBottom:3}}>{f.eq}</div>
@@ -410,19 +412,17 @@ export function GlassOrb() {
           </div>
 
           {/* Bot Grid Status */}
-          <div style={{
-            borderTop:"1px solid rgba(255,255,255,0.07)",
-            padding:"10px 12px",
-          }}>
+          <div style={{padding:"10px 12px 10px"}}>
             <div style={{color:"rgba(255,255,255,0.35)",fontSize:8,letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:8}}>◂ Bot Grid Status</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gridTemplateRows:"repeat(2,auto)",gap:4}}>
               {bots.map((b,i)=>(
                 <div key={i} style={{
-                  background: b.active?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.2)",
-                  border:`1px solid ${b.active?b.color+"30":"rgba(100,116,139,0.15)"}`,
+                  background: "transparent",
+                  border:`1px solid ${b.active?b.color+"40":"rgba(100,116,139,0.18)"}`,
                   borderRadius:7,
                   padding:"5px 6px",
                   backdropFilter:"blur(8px)",
+                  boxShadow: b.active ? `0 0 10px ${b.color}22` : "none",
                 }}>
                   <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
                     <div style={{

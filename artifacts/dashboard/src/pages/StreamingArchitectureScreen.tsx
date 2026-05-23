@@ -8,11 +8,11 @@ const NODE_GAP = 10;
 const COL_HEADER_H = 34;
 const SVG_PADDING_X = 18;
 const SVG_PADDING_TOP = 14;
-
 const COL_COUNT = 5;
+const NATURAL_W = 1040;
 
-function getColX(col: number, canvasW: number): number {
-  const usable = canvasW - SVG_PADDING_X * 2;
+function getColX(col: number): number {
+  const usable = NATURAL_W - SVG_PADDING_X * 2;
   const spacing = usable / COL_COUNT;
   return SVG_PADDING_X + spacing * col + spacing / 2;
 }
@@ -26,20 +26,18 @@ function svgHeight(): number {
   return SVG_PADDING_TOP + COL_HEADER_H + (maxRow + 1) * (NODE_H + NODE_GAP) + 18;
 }
 
-function nodeCenter(node: ArchNode, canvasW: number): { x: number; y: number } {
-  return { x: getColX(node.col, canvasW), y: getNodeY(node.row) };
+function nodeCenter(node: ArchNode): { x: number; y: number } {
+  return { x: getColX(node.col), y: getNodeY(node.row) };
 }
 
 function EdgePath({
   edge,
   nodes,
-  canvasW,
   highlighted,
   dimmed,
 }: {
   edge: ArchEdge;
   nodes: ArchNode[];
-  canvasW: number;
   highlighted: boolean;
   dimmed: boolean;
 }) {
@@ -47,8 +45,8 @@ function EdgePath({
   const tgt = nodes.find((n) => n.id === edge.to);
   if (!src || !tgt) return null;
 
-  const s = nodeCenter(src, canvasW);
-  const t = nodeCenter(tgt, canvasW);
+  const s = nodeCenter(src);
+  const t = nodeCenter(tgt);
 
   const sameCol = src.col === tgt.col;
   let sx = s.x + NODE_W / 2;
@@ -122,20 +120,18 @@ function EdgePath({
 
 function ArchNodeBox({
   node,
-  canvasW,
   highlighted,
   dimmed,
   selected,
   onClick,
 }: {
   node: ArchNode;
-  canvasW: number;
   highlighted: boolean;
   dimmed: boolean;
   selected: boolean;
   onClick: () => void;
 }) {
-  const { x, y } = nodeCenter(node, canvasW);
+  const { x, y } = nodeCenter(node);
   const nx = x - NODE_W / 2;
   const ny = y - NODE_H / 2;
   const colColor = COLUMN_COLORS[node.col];
@@ -229,11 +225,11 @@ function ArchNodeBox({
   );
 }
 
-function ColumnHeaders({ canvasW }: { canvasW: number }) {
+function ColumnHeaders() {
   return (
     <>
       {([0, 1, 2, 3, 4] as const).map((col) => {
-        const cx = getColX(col, canvasW);
+        const cx = getColX(col);
         const color = COLUMN_COLORS[col];
         return (
           <g key={col}>
@@ -268,13 +264,13 @@ function ColumnHeaders({ canvasW }: { canvasW: number }) {
   );
 }
 
-function NodePopover({ node, canvasW, onClose }: { node: ArchNode; canvasW: number; onClose: () => void }) {
-  const { x, y } = nodeCenter(node, canvasW);
+function NodePopover({ node, onClose }: { node: ArchNode; onClose: () => void }) {
+  const { x, y } = nodeCenter(node);
   const popW = 220;
   const popH = 90;
   let px = x + NODE_W / 2 + 8;
   let py = y - popH / 2;
-  if (px + popW > canvasW - 10) px = x - NODE_W / 2 - popW - 8;
+  if (px + popW > NATURAL_W - 10) px = x - NODE_W / 2 - popW - 8;
   if (py < 4) py = 4;
 
   return (
@@ -548,21 +544,8 @@ function DotGrid({ width, height }: { width: number; height: number }) {
 export default function StreamingArchitectureScreen() {
   const [activeFlow, setActiveFlow] = useState<ArchFlow | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [canvasW, setCanvasW] = useState(900);
 
   const selectedNode = NODES.find((n) => n.id === selectedNodeId) ?? null;
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(() => {
-      setCanvasW(el.clientWidth);
-    });
-    obs.observe(el);
-    setCanvasW(el.clientWidth);
-    return () => obs.disconnect();
-  }, []);
 
   const highlightedNodeIds = activeFlow ? new Set(activeFlow.nodeIds) : null;
   const highlightedEdgeIds = activeFlow ? new Set(activeFlow.edgeIds) : null;
@@ -593,170 +576,146 @@ export default function StreamingArchitectureScreen() {
         height: "100%",
         width: "100%",
         display: "flex",
+        flexDirection: "column",
         background: "#020617",
         overflow: "hidden",
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       }}
     >
-      {/* Canvas area */}
+      {/* Page title — fixed strip */}
       <div
-        ref={containerRef}
-        style={{ flex: 1, minWidth: 0, overflow: "auto", position: "relative" }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) handleClear();
+        style={{
+          flexShrink: 0,
+          padding: "9px 16px 7px",
+          background: "linear-gradient(90deg, rgba(2,6,23,0.98), rgba(8,16,40,0.97))",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          display: "flex",
+          alignItems: "baseline",
+          gap: 10,
         }}
       >
-        {/* Page title */}
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            left: 0,
-            zIndex: 10,
-            padding: "9px 16px 7px",
-            background: "linear-gradient(90deg, rgba(2,6,23,0.98), rgba(8,16,40,0.97))",
-            borderBottom: "1px solid rgba(255,255,255,0.05)",
-            display: "flex",
-            alignItems: "baseline",
-            gap: 10,
-          }}
-        >
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", letterSpacing: "0.04em" }}>
+          System Architecture & Flows
+        </span>
+        <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)", letterSpacing: "0.08em" }}>
+          {NODES.length} components · {EDGES.length} connections · {FLOWS.length} flows
+        </span>
+        {activeFlow && (
           <span
             style={{
-              fontSize: 13,
+              fontSize: 9,
               fontWeight: 700,
-              color: "#e2e8f0",
-              letterSpacing: "0.04em",
+              color: "#a5b4fc",
+              background: "rgba(99,102,241,0.15)",
+              border: "1px solid rgba(99,102,241,0.3)",
+              borderRadius: 4,
+              padding: "2px 8px",
+              marginLeft: 4,
             }}
           >
-            System Architecture & Flows
+            {activeFlow.label}
           </span>
-          <span style={{ fontSize: 9, color: "rgba(148,163,184,0.35)", letterSpacing: "0.08em" }}>
-            {NODES.length} components · {EDGES.length} connections · {FLOWS.length} flows
-          </span>
-          {activeFlow && (
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                color: "#a5b4fc",
-                background: "rgba(99,102,241,0.15)",
-                border: "1px solid rgba(99,102,241,0.3)",
-                borderRadius: 4,
-                padding: "2px 8px",
-                marginLeft: 4,
-              }}
-            >
-              {activeFlow.label}
-            </span>
-          )}
-        </div>
-
-        <svg
-          width={canvasW}
-          height={svgH}
-          style={{ display: "block", minWidth: 680 }}
-        >
-          <DotGrid width={canvasW} height={svgH} />
-
-          <ColumnHeaders canvasW={canvasW} />
-
-          {/* Edges (rendered under nodes) */}
-          {EDGES.map((edge) => {
-            const highlighted = highlightedEdgeIds ? highlightedEdgeIds.has(edge.id) : false;
-            const dimmed = highlightedEdgeIds ? !highlighted : false;
-            return (
-              <EdgePath
-                key={edge.id}
-                edge={edge}
-                nodes={NODES}
-                canvasW={canvasW}
-                highlighted={highlighted}
-                dimmed={dimmed}
-              />
-            );
-          })}
-
-          {/* Nodes */}
-          {NODES.map((node) => {
-            const highlighted = highlightedNodeIds ? highlightedNodeIds.has(node.id) : false;
-            const dimmed = highlightedNodeIds ? !highlighted : false;
-            const selected = selectedNodeId === node.id;
-            return (
-              <ArchNodeBox
-                key={node.id}
-                node={node}
-                canvasW={canvasW}
-                highlighted={highlighted}
-                dimmed={dimmed}
-                selected={selected}
-                onClick={() => handleNodeClick(node.id)}
-              />
-            );
-          })}
-
-          {/* Node popover (no flow active) */}
-          {selectedNode && !activeFlow && (
-            <NodePopover
-              node={selectedNode}
-              canvasW={canvasW}
-              onClose={() => setSelectedNodeId(null)}
-            />
-          )}
-        </svg>
-
-        {/* Legend */}
-        <div
-          style={{
-            position: "sticky",
-            bottom: 0,
-            left: 0,
-            display: "flex",
-            alignItems: "center",
-            gap: 16,
-            padding: "5px 16px",
-            background: "rgba(2,6,23,0.96)",
-            borderTop: "1px solid rgba(255,255,255,0.05)",
-            flexWrap: "wrap",
-          }}
-        >
-          {([0, 1, 2, 3, 4] as const).map((col) => (
-            <div key={col} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 2,
-                  background: `${COLUMN_COLORS[col]}40`,
-                  border: `1px solid ${COLUMN_COLORS[col]}80`,
-                }}
-              />
-              <span style={{ fontSize: 8, color: COLUMN_COLORS[col], fontWeight: 700, letterSpacing: "0.12em" }}>
-                {COLUMN_LABELS[col]}
-              </span>
-            </div>
-          ))}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 18, height: 1, background: "rgba(148,163,184,0.3)", borderTop: "1px dashed rgba(148,163,184,0.3)" }} />
-            <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>data flow</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <div style={{ width: 18, height: 1.5, background: "#6366f1" }} />
-            <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>selected flow</span>
-          </div>
-          <span style={{ fontSize: 8, color: "rgba(148,163,184,0.3)" }}>
-            Click node for details · Click flow to highlight path
-          </span>
-        </div>
+        )}
       </div>
 
-      {/* Sidebar */}
-      <FlowsSidebar
-        flows={FLOWS}
-        activeFlow={activeFlow}
-        onSelect={handleFlowSelect}
-        onClear={handleClear}
-      />
+      {/* Middle row: canvas + sidebar */}
+      <div style={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
+        {/* SVG canvas — fills all available space, diagram scales to fit */}
+        <div
+          style={{ flex: 1, minWidth: 0, overflow: "hidden", position: "relative" }}
+          onClick={(e) => { if (e.target === e.currentTarget) handleClear(); }}
+        >
+          <svg
+            viewBox={`0 0 ${NATURAL_W} ${svgH}`}
+            preserveAspectRatio="xMidYMid meet"
+            style={{ display: "block", width: "100%", height: "100%" }}
+          >
+            <DotGrid width={NATURAL_W} height={svgH} />
+            <ColumnHeaders />
+
+            {EDGES.map((edge) => {
+              const highlighted = highlightedEdgeIds ? highlightedEdgeIds.has(edge.id) : false;
+              const dimmed = highlightedEdgeIds ? !highlighted : false;
+              return (
+                <EdgePath
+                  key={edge.id}
+                  edge={edge}
+                  nodes={NODES}
+                  highlighted={highlighted}
+                  dimmed={dimmed}
+                />
+              );
+            })}
+
+            {NODES.map((node) => {
+              const highlighted = highlightedNodeIds ? highlightedNodeIds.has(node.id) : false;
+              const dimmed = highlightedNodeIds ? !highlighted : false;
+              const selected = selectedNodeId === node.id;
+              return (
+                <ArchNodeBox
+                  key={node.id}
+                  node={node}
+                  highlighted={highlighted}
+                  dimmed={dimmed}
+                  selected={selected}
+                  onClick={() => handleNodeClick(node.id)}
+                />
+              );
+            })}
+
+            {selectedNode && !activeFlow && (
+              <NodePopover node={selectedNode} onClose={() => setSelectedNodeId(null)} />
+            )}
+          </svg>
+        </div>
+
+        <FlowsSidebar
+          flows={FLOWS}
+          activeFlow={activeFlow}
+          onSelect={handleFlowSelect}
+          onClear={handleClear}
+        />
+      </div>
+
+      {/* Legend — fixed strip at bottom */}
+      <div
+        style={{
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "5px 16px",
+          background: "rgba(2,6,23,0.96)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          flexWrap: "wrap",
+        }}
+      >
+        {([0, 1, 2, 3, 4] as const).map((col) => (
+          <div key={col} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div
+              style={{
+                width: 8, height: 8, borderRadius: 2,
+                background: `${COLUMN_COLORS[col]}40`,
+                border: `1px solid ${COLUMN_COLORS[col]}80`,
+              }}
+            />
+            <span style={{ fontSize: 8, color: COLUMN_COLORS[col], fontWeight: 700, letterSpacing: "0.12em" }}>
+              {COLUMN_LABELS[col]}
+            </span>
+          </div>
+        ))}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+          <div style={{ width: 18, height: 1, background: "rgba(148,163,184,0.3)", borderTop: "1px dashed rgba(148,163,184,0.3)" }} />
+          <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>data flow</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <div style={{ width: 18, height: 1.5, background: "#6366f1" }} />
+          <span style={{ fontSize: 8, color: "rgba(148,163,184,0.4)" }}>selected flow</span>
+        </div>
+        <span style={{ fontSize: 8, color: "rgba(148,163,184,0.3)" }}>
+          Click node for details · Click flow to highlight path
+        </span>
+      </div>
     </div>
   );
 }

@@ -69,7 +69,7 @@ function loadPrefs(): StreamPrefs {
       };
     }
   } catch {}
-  return { autoCycle: true, intervalSeconds: 15 };
+  return { autoCycle: false, intervalSeconds: 15 };
 }
 
 function savePrefs(prefs: StreamPrefs) {
@@ -91,7 +91,7 @@ export default function StreamPage() {
 
   function getInitialAutoCycle(): boolean {
     if (urlParams.current.autoCycle !== null) return urlParams.current.autoCycle;
-    return stored.current.autoCycle;
+    return false;
   }
 
   function getInitialInterval(): number {

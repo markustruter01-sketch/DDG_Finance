@@ -443,14 +443,15 @@ export function OrbVisualiser() {
         );
       })()}
 
-      {/* ── MATH AUDIT WIDGET (720px wide, anchored to bottom) ── */}
+      {/* ── MATH AUDIT WIDGET — anchored just above GlobalNav (bottom-5 = 20px, nav ~56px tall, +12px gap = 88px) ── */}
       <div
         style={{
           position: "absolute",
           left: 12,
-          bottom: 8,
+          bottom: 88,
           width: 864,
           height: 312,
+          maxHeight: "calc(100% - 88px - 16px)",
           zIndex: 20,
           overflow: "hidden",
         }}

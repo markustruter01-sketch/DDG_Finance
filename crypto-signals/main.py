@@ -4,7 +4,7 @@ import logging
 import requests
 
 from config import (
-    LISTING_POLL_INTERVAL, DEPEG_POLL_INTERVAL, MEMECOIN_POLL_INTERVAL,
+    LISTING_POLL_INTERVAL, DEPEG_POLL_INTERVAL,
     EVENT_POLL_INTERVAL, PRICE_CACHE_INTERVAL, LOOP_SLEEP_SECONDS, SERVICE_NAME,
     COINGECKO_BASE, COINGECKO_MAX_RPM, REDDIT_MAX_RPM,
     COINBASE_PRODUCTS_API, BINANCE_EXCHANGE_INFO, COINGECKO_COINS_LIST,
@@ -149,7 +149,6 @@ def _scrape_coingecko_new_coins() -> list:
                 # Use coin_id as the dedup key so symbol clashes across forks don't cross-fire
                 "assets": [coin_id],
                 "url": f"https://www.coingecko.com/en/coins/{coin_id}",
-                # Stash the real ticker so listing-pump can use it for price lookups
                 "symbol": symbol,
             })
         return listings
@@ -393,73 +392,6 @@ def _check_price_volume_breakout(symbol: str) -> dict:
         return {"valid": False, "reason": str(e)}
 
 
-def detect_memecoin_velocity():
-    """Triple-gated memecoin breakout detection."""
-    import time as _t
-
-    # === Gate 1: CoinGecko trending ===
-    current_trending = _fetch_trending_coins()
-    _trending_history.append(current_trending)
-    if len(_trending_history) > 5:
-        _trending_history.pop(0)
-
-    if len(_trending_history) < TRENDING_CONSECUTIVE_REQUIRED:
-        return
-
-    recent_trending = _trending_history[-TRENDING_CONSECUTIVE_REQUIRED:]
-    consistently_trending = set.intersection(*recent_trending)
-    candidates = consistently_trending & set(MEMECOIN_UNIVERSE)
-    if not candidates:
-        return
-
-    logger.info(f"trending candidates: {candidates}")
-
-    for symbol in candidates:
-        last_signal = _last_signal_time.get(symbol, 0)
-        if _t.time() - last_signal < COOLDOWN_HOURS * 3600:
-            continue
-
-        # === Gate 2: Reddit mention velocity ===
-        mention_count = _fetch_reddit_mention_count(symbol)
-        history = _reddit_mentions_history.setdefault(symbol, [])
-        history.append((_t.time(), mention_count))
-        cutoff = _t.time() - 86400
-        history[:] = [(t, c) for t, c in history if t >= cutoff]
-        if len(history) < 3:
-            logger.info(f"{symbol}: insufficient reddit history ({len(history)} samples)")
-            continue
-        prior_counts = [c for t, c in history[:-1]]
-        avg_mentions = sum(prior_counts) / len(prior_counts) if prior_counts else 0
-        if mention_count < avg_mentions * 2 or mention_count < 3:
-            logger.info(f"{symbol}: reddit velocity too low (curr={mention_count} avg={avg_mentions:.1f})")
-            continue
-
-        # === Gate 3: Price/volume breakout ===
-        breakout = _check_price_volume_breakout(symbol)
-        if not breakout["valid"]:
-            logger.info(f"{symbol}: price/volume check failed ({breakout.get('reason')})")
-            continue
-        if not breakout["is_new_high"] or breakout["volume_ratio"] < 2.0:
-            logger.info(f"{symbol}: not breakout (new_high={breakout['is_new_high']}, vol={breakout['volume_ratio']:.2f}x)")
-            continue
-
-        # ALL THREE GATES PASSED — emit signal
-        _last_signal_time[symbol] = _t.time()
-        write_signal(
-            signal_type="memecoin_breakout",
-            asset=symbol,
-            severity="high",
-            payload={
-                "current_price": breakout["current_price"],
-                "pair": breakout["pair"],
-                "volume_ratio": breakout["volume_ratio"],
-                "reddit_mentions": mention_count,
-                "reddit_avg": avg_mentions,
-            },
-        )
-        logger.warning(f"MEMECOIN BREAKOUT: {symbol} @ ${breakout['current_price']:.6f} vol={breakout['volume_ratio']:.1f}x reddit={mention_count}")
-
-
 def refresh_event_calendar():
     """Stub — implemented in Session 3."""
     pass
@@ -507,7 +439,7 @@ _ka_threading.Thread(target=_keep_alive_listener, daemon=True).start()
 def main():
     logger.info(f"{SERVICE_NAME} | starting up")
     last_run = {
-        "listings": 0, "depegs": 0, "memecoin": 0, "events": 0, "prices": 0,
+        "listings": 0, "depegs": 0, "events": 0, "prices": 0,
     }
     while True:
         now = time.time()
@@ -518,8 +450,6 @@ def main():
                 detect_listings();           last_run["listings"] = now
             if now - last_run["depegs"]   >= DEPEG_POLL_INTERVAL:
                 detect_depegs();             last_run["depegs"]   = now
-            if now - last_run["memecoin"] >= MEMECOIN_POLL_INTERVAL:
-                detect_memecoin_velocity();  last_run["memecoin"] = now
             if now - last_run["events"]   >= EVENT_POLL_INTERVAL:
                 refresh_event_calendar();    last_run["events"]   = now
         except Exception as e:

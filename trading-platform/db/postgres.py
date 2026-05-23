@@ -550,6 +550,7 @@ CREATE TABLE IF NOT EXISTS momentum_bot_trades (
 );
 CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
     ON momentum_bot_trades (bot_id, status);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

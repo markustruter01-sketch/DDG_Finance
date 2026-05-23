@@ -216,10 +216,7 @@ async def system_health_architecture() -> dict:
         import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
         _kdburl = _kos.environ.get("DATABASE_URL")
         _ARCH_BOTS = [
-            (5, "listing_pump",       "Listing Pump"),
-            (6, "event_trader",       "Event Trader"),
-            (7, "depeg_hunter",       "Depeg Hunter"),
-            (8, "memecoin_velocity",  "Memecoin Velocity"),
+            (1, "depeg_hunter",       "Depeg Hunter"),
         ]
         _bot_levels: list[str] = []
         _bot_detail_parts: list[str] = []
@@ -517,10 +514,7 @@ async def _remediate_component(component: str, triggered_by: str = "manual") -> 
                 import psycopg2 as _pg2r, os as _osr
                 _dburlr = _osr.environ.get("DATABASE_URL")
                 _WILD_BOTS = [
-                    "listing_pump",
-                    "event_trader",
                     "depeg_hunter",
-                    "memecoin_velocity",
                 ]
                 if _dburlr:
                     _rconn = _pg2r.connect(_dburlr)

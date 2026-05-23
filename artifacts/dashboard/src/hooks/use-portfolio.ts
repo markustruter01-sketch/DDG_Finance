@@ -118,9 +118,6 @@ export interface FleetEquityData {
   jerome_macro: BotEquity;
   forex_gump: BotEquity;
   depeg_hunter: BotEquity;
-  event_trader: BotEquity;
-  listing_pump: BotEquity;
-  memecoin_velocity: BotEquity;
   momentum_alpha: BotEquity;
   momentum_beta: BotEquity;
   momentum_gamma: BotEquity;

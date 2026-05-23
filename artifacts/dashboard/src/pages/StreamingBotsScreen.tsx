@@ -19,10 +19,7 @@ const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: str
   { id: "spy_qqq_trend",     name: "SPY/QQQ Trend",     icon: "📈", exchange: "alpaca",  asset_class: "equity_etf", color: "cyan",  status: "active" },
   { id: "jerome_macro",      name: "Jerome",            icon: "🏛",  exchange: "alpaca",  asset_class: "macro_etf", color: "orange", status: "active" },
   { id: "forex_gump",        name: "Forex Gump",        icon: "🐠", exchange: "oanda",   asset_class: "forex",    color: "orange",  status: "active" },
-  { id: "listing_pump",      name: "Listing Pump",      icon: "🚀", exchange: "kraken",  asset_class: "crypto",   color: "yellow",  status: "active" },
-  { id: "event_trader",      name: "Event Trader",      icon: "⚡", exchange: "kraken",  asset_class: "crypto",   color: "yellow",  status: "active" },
   { id: "depeg_hunter",      name: "Depeg Hunter",      icon: "💧", exchange: "kraken",  asset_class: "crypto",   color: "blue",    status: "active" },
-  { id: "memecoin_velocity", name: "Memecoin Velocity", icon: "🌙", exchange: "kraken",   asset_class: "crypto", color: "orange", status: "active" },
   { id: "momentum_alpha",   name: "Momentum Alpha",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "cyan",   status: "active" },
   { id: "momentum_beta",    name: "Momentum Beta",    icon: "📈", exchange: "binance",  asset_class: "crypto", color: "purple", status: "active" },
   { id: "momentum_gamma",   name: "Momentum Gamma",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "rose",   status: "active" },
@@ -33,10 +30,7 @@ const PARAMS_TEXT: Record<string, string> = {
   spy_qqq_trend: "Z-Entry 2.0 | Z-Exit 0.3 | Trail 1.5% | Stop 3%",
   jerome_macro: "LLM analysis at 9AM + 9PM UTC | Groq/Gemini powered",
   forex_gump: "G10 pairs | ATR-based stops | 4hr cycles",
-  listing_pump: "New exchange listing momentum | 24/7 crypto",
-  event_trader: "Macro event volatility trades | 24/7 crypto",
   depeg_hunter: "Stablecoin depeg arbitrage | 24/7 crypto",
-  memecoin_velocity: "Meme token velocity breakouts | 24/7 crypto",
   momentum_alpha:   "Top-1 momentum rank | EMA20/50 + ADX | 24/7",
   momentum_beta:    "Top-2 momentum rank | EMA20/50 + ADX | 24/7",
   momentum_gamma:   "Top-3 momentum rank | EMA20/50 + ADX | 24/7",
@@ -268,10 +262,7 @@ export default function StreamingBotsScreen() {
   const allEquities = [
     oracleEquity, davyEquity, bbEquity,
     fleetEq?.navigator?.equity ?? null,
-    fleetEq?.listing_pump?.equity ?? null,
-    fleetEq?.event_trader?.equity ?? null,
     fleetEq?.depeg_hunter?.equity ?? null,
-    fleetEq?.memecoin_velocity?.equity ?? null,
   ].filter((e): e is number => e != null);
   const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
   const fleetStarting = fleetEq?.fleet_total?.starting ?? allEquities.length * STARTING_BALANCE;
@@ -318,30 +309,9 @@ export default function StreamingBotsScreen() {
       openPositionSymbols: rawForexPos.map((p) => p.pair),
       recentTrades: [],
     },
-    listing_pump: {
-      equity: fleetEq?.listing_pump?.equity ?? null,
-      paused: fleetEq?.listing_pump?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
-    },
-    event_trader: {
-      equity: fleetEq?.event_trader?.equity ?? null,
-      paused: fleetEq?.event_trader?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
-    },
     depeg_hunter: {
       equity: fleetEq?.depeg_hunter?.equity ?? null,
       paused: fleetEq?.depeg_hunter?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
-    },
-    memecoin_velocity: {
-      equity: fleetEq?.memecoin_velocity?.equity ?? null,
-      paused: fleetEq?.memecoin_velocity?.paused ?? false,
       openPositionCount: 0,
       openPositionSymbols: [],
       recentTrades: [],

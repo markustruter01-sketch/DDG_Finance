@@ -99,51 +99,6 @@ kind = "web"
   PORT = "8096"
 
   [[services]]
-  name = "event-trader"
-  localPort = 8097
-
-  [services.development]
-  run = "cd /home/runner/workspace && python3 event-trader/main.py"
-
-  [services.production]
-
-  [services.production.run]
-  args = ["bash", "-c", "python3 event-trader/main.py"]
-
-  [services.env]
-  PORT = "8097"
-
-  [[services]]
-  name = "listing-pump"
-  localPort = 8098
-
-  [services.development]
-  run = "cd /home/runner/workspace && python3 listing-pump/main.py"
-
-  [services.production]
-
-  [services.production.run]
-  args = ["bash", "-c", "python3 listing-pump/main.py"]
-
-  [services.env]
-  PORT = "8098"
-
-  [[services]]
-  name = "memecoin-velocity"
-  localPort = 8099
-
-  [services.development]
-  run = "cd /home/runner/workspace && python3 memecoin-velocity/main.py"
-
-  [services.production]
-
-  [services.production.run]
-  args = ["bash", "-c", "python3 memecoin-velocity/main.py"]
-
-  [services.env]
-  PORT = "8099"
-
-  [[services]]
   name = "momentum-bot-alpha"
   localPort = 8101
 

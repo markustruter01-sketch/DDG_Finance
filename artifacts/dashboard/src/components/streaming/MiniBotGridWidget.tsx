@@ -5,12 +5,10 @@ interface BotSlot {
 }
 
 const BOT_SLOTS: BotSlot[] = [
+  { id: "oracle",            short: "Oracle",  color: "#a78bfa" },
   { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
   { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
   { id: "forex_gump",        short: "Forex",   color: "#60a5fa" },
-  { id: "listing_pump",      short: "Listing", color: "#fb923c" },
-  { id: "event_trader",      short: "Event",   color: "#8b5cf6" },
-  { id: "depeg_hunter",      short: "Depeg",   color: "#fb7185" },
   { id: "memecoin_velocity", short: "Meme",    color: "#a3e635" },
   { id: "momentum_alpha",    short: "Mom-A",   color: "#22d3ee" },
   { id: "momentum_beta",     short: "Mom-B",   color: "#a78bfa" },

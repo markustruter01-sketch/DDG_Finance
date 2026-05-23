@@ -36,11 +36,6 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
   return (
     <div
       style={{
-        background:    "rgba(2,6,23,0.82)",
-        border:        "1px solid rgba(6,182,212,0.25)",
-        borderRadius:  14,
-        padding:       "12px 14px",
-        backdropFilter:"blur(14px)",
         pointerEvents: "none",
         userSelect:    "none",
       }}
@@ -76,11 +71,12 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
             <div
               key={bot.id}
               style={{
-                background:   "rgba(0,0,0,0.55)",
-                border:       `1px solid ${active ? bot.color + "38" : "rgba(100,116,139,0.18)"}`,
+                background:   "transparent",
+                border:       `1px solid ${active ? bot.color + "50" : "rgba(100,116,139,0.18)"}`,
                 borderRadius: 8,
                 padding:      "7px 10px",
                 minWidth:     110,
+                boxShadow:    active ? `0 0 10px ${bot.color}22` : "none",
               }}
             >
               {/* Name row + status dot */}

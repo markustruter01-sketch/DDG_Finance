@@ -448,11 +448,11 @@ export function OrbVisualiser() {
         style={{
           position: "absolute",
           left: 12,
-          bottom: 88,
+          bottom: 20,
           width: 864,
           maxWidth: "calc(50vw - 111px)",
-          height: 312,
-          maxHeight: "calc(100% - 88px - 16px)",
+          height: 250,
+          maxHeight: "calc(100% - 20px - 16px)",
           zIndex: 20,
           overflow: "hidden",
         }}

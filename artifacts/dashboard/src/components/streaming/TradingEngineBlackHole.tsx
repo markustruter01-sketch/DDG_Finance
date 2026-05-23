@@ -175,7 +175,7 @@ const RES_SCALE = 0.85;
 
 function readSpinScale(): number {
   const v = parseFloat(localStorage.getItem("bh_spin_scale") ?? "");
-  return isNaN(v) ? 1.0 : Math.max(0.25, Math.min(5, v));
+  return isNaN(v) ? 3.0 : Math.max(0.25, Math.min(5, v));
 }
 
 export function TradingEngineBlackHole() {

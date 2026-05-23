@@ -50,6 +50,7 @@ function Router() {
     <>
       <Switch>
         <Route path="/"><Redirect to="/stream" /></Route>
+        <Route path="/home" component={Dashboard} />
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
             <Suspense fallback={<StreamingLoader />}>

@@ -79,7 +79,9 @@ class JeromeAlpaca:
         if alpaca_side is None:
             logger.error(f"JeromeAlpaca | Unknown side '{side}' — cannot translate")
             return None
-        tif = "day" if _nyse_is_open() else "opg"
+        # Fractional/notional orders only support time_in_force="day" on Alpaca.
+        # Off-hours "day" orders queue until next market open automatically.
+        tif = "day"
         logger.info(f"JeromeAlpaca | Submitting {alpaca_side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
             order = self.api.submit_order(

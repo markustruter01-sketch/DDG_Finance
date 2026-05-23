@@ -5,7 +5,6 @@ interface BotSlot {
 }
 
 const BOT_SLOTS: BotSlot[] = [
-  { id: "oracle",            short: "Oracle",  color: "#a78bfa" },
   { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
   { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
   { id: "forex_gump",        short: "Forex",   color: "#60a5fa" },
@@ -13,9 +12,9 @@ const BOT_SLOTS: BotSlot[] = [
   { id: "event_trader",      short: "Event",   color: "#8b5cf6" },
   { id: "depeg_hunter",      short: "Depeg",   color: "#fb7185" },
   { id: "memecoin_velocity", short: "Meme",    color: "#a3e635" },
-  { id: "momentum_alpha",   short: "Mom-A",   color: "#22d3ee" },
-  { id: "momentum_beta",    short: "Mom-B",   color: "#a78bfa" },
-  { id: "momentum_gamma",   short: "Mom-G",   color: "#fb7185" },
+  { id: "momentum_alpha",    short: "Mom-A",   color: "#22d3ee" },
+  { id: "momentum_beta",     short: "Mom-B",   color: "#a78bfa" },
+  { id: "momentum_gamma",    short: "Mom-G",   color: "#fb7185" },
 ];
 
 interface BotEquitySlice {
@@ -43,6 +42,19 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
         userSelect:    "none",
       }}
     >
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes botcard-glow-idle {
+          0%, 100% { box-shadow: 0 0 4px rgba(6,182,212,0.12), inset 0 0 6px rgba(6,182,212,0.03); }
+          50%       { box-shadow: 0 0 9px rgba(6,182,212,0.22), inset 0 0 8px rgba(6,182,212,0.05); }
+        }
+        @keyframes botcard-glow-active {
+          0%, 100% { box-shadow: 0 0 10px rgba(34,211,238,0.35), inset 0 0 8px rgba(34,211,238,0.06); }
+          50%       { box-shadow: 0 0 18px rgba(34,211,238,0.55), inset 0 0 12px rgba(34,211,238,0.10); }
+        }
+        .botcard-idle   { animation: botcard-glow-idle   3s ease-in-out infinite; }
+        .botcard-active { animation: botcard-glow-active 2.4s ease-in-out infinite; }
+      `}} />
+
       <div
         style={{
           color:         "rgba(148,163,184,0.5)",
@@ -60,7 +72,6 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
         style={{
           display:             "grid",
           gridTemplateColumns: "repeat(4, 1fr)",
-          gridTemplateRows:    "repeat(2, auto)",
           gap:                 6,
         }}
       >
@@ -73,13 +84,14 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
           return (
             <div
               key={bot.id}
+              className={active ? "botcard-active" : "botcard-idle"}
               style={{
-                background:   "transparent",
-                border:       `1px solid ${active ? bot.color + "50" : "rgba(100,116,139,0.18)"}`,
-                borderRadius: 8,
+                background:   "rgba(0,0,0,0.45)",
+                border:       `1.5px solid ${active ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}`,
+                borderRadius: 5,
                 padding:      "7px 10px",
                 minWidth:     110,
-                boxShadow:    active ? `0 0 10px ${bot.color}22` : "none",
+                backdropFilter: "blur(4px)",
               }}
             >
               {/* Name row + status dot */}
@@ -90,13 +102,13 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                     height:       5,
                     borderRadius: "50%",
                     flexShrink:   0,
-                    background:   active ? "#4ade80" : "#f87171",
-                    boxShadow:    active ? "0 0 6px #4ade8099" : "none",
+                    background:   bot.color,
+                    boxShadow:    `0 0 5px ${bot.color}99`,
                   }}
                 />
                 <span
                   style={{
-                    color:         bot.color,
+                    color:         active ? "rgba(34,211,238,0.9)" : "rgba(6,182,212,0.55)",
                     fontSize:      9,
                     fontFamily:    "monospace",
                     fontWeight:    700,
@@ -123,7 +135,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
               {/* Active / Paused label */}
               <div
                 style={{
-                  color:         active ? "rgba(74,222,128,0.6)" : "rgba(248,113,113,0.6)",
+                  color:         active ? "rgba(34,211,238,0.55)" : "rgba(6,182,212,0.35)",
                   fontSize:      8,
                   fontFamily:    "monospace",
                   letterSpacing: "0.12em",

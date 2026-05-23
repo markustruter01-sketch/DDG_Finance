@@ -72,13 +72,20 @@ class JeromeAlpaca:
         Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when closed
         so off-hours orders queue for next open instead of being rejected.
         """
+        # Translate strategy-layer side ("long"/"short") to Alpaca side ("buy"/"sell").
+        # Jerome's LLM returns long/short. Alpaca REST requires buy/sell.
+        _side_map = {"long": "buy", "short": "sell", "buy": "buy", "sell": "sell"}
+        alpaca_side = _side_map.get(side.lower().strip())
+        if alpaca_side is None:
+            logger.error(f"JeromeAlpaca | Unknown side '{side}' — cannot translate")
+            return None
         tif = "day" if _nyse_is_open() else "opg"
-        logger.info(f"JeromeAlpaca | Submitting {side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
+        logger.info(f"JeromeAlpaca | Submitting {alpaca_side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
             order = self.api.submit_order(
                 symbol=symbol,
                 notional=round(notional, 2),
-                side=side,
+                side=alpaca_side,
                 type="market",
                 time_in_force=tif,
             )

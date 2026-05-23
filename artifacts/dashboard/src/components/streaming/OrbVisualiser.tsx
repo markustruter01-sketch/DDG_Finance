@@ -16,6 +16,7 @@ import { getFleetBotCount } from "@/lib/fleet-capital";
 import { onTradePulse } from "@/components/streaming/tradePulseEvents";
 import { TradingEngineBlackHole } from "@/components/streaming/TradingEngineBlackHole";
 import { MiniSynapticWidget } from "@/components/streaming/MiniSynapticWidget";
+import { MiniBotGridWidget } from "@/components/streaming/MiniBotGridWidget";
 
 // ─── Algorithmic Thought Bubbles ─────────────────────────────────────────────
 
@@ -226,81 +227,9 @@ export function OrbVisualiser() {
     <div style={{ width: "100%", height: "100%", position: "relative", background: "#020617", overflow: "hidden" }}>
       <TradingEngineBlackHole />
 
-      {/* ── LIVE ORB HUD — 30% larger ── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 24,
-          right: 24,
-          background: "rgba(2,6,23,0.82)",
-          border: "1px solid rgba(251,146,60,0.3)",
-          borderRadius: 14,
-          padding: "18px 24px",
-          backdropFilter: "blur(14px)",
-          minWidth: 234,
-        }}
-      >
-        <div style={{ color: "rgba(148,163,184,0.55)", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 12 }}>
-          Live Orb HUD
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 20px" }}>
-          <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>P&amp;L</div>
-            <div style={{ color: combinedPnl >= 0 ? "#4ade80" : "#f87171", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {fmtPnl(combinedPnl)}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Positions</div>
-            <div style={{ color: "#fbbf24", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {openPositions}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Active Bots</div>
-            <div style={{ color: "#22d3ee", fontSize: 18, fontFamily: "monospace", fontWeight: 700 }}>
-              {activeBots} / {getFleetBotCount(registry, fleetEqOrb)}
-            </div>
-          </div>
-
-          <div>
-            <div style={{ color: "rgba(148,163,184,0.5)", fontSize: 10, fontFamily: "monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>Last AI Event</div>
-            <div style={{ color: "#a78bfa", fontSize: 15, fontFamily: "monospace", fontWeight: 700 }}>
-              {lastAiLabel}
-            </div>
-          </div>
-        </div>
-
-        {tradePulse?.active && (
-          <div style={{
-            marginTop: 12,
-            padding: "5px 10px",
-            borderRadius: 7,
-            background: tradePulse.isWin ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)",
-            border: `1px solid ${tradePulse.isWin ? "rgba(34,197,94,0.4)" : "rgba(239,68,68,0.4)"}`,
-            color: tradePulse.isWin ? "#4ade80" : "#f87171",
-            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
-          }}>
-            {tradePulse.isWin ? "✓ WIN" : "✗ LOSS"} — {tradePulse.botName}
-          </div>
-        )}
-
-        {aiRipple && (
-          <div style={{
-            marginTop: 8,
-            padding: "5px 10px",
-            borderRadius: 7,
-            background: "rgba(139,92,246,0.15)",
-            border: "1px solid rgba(139,92,246,0.4)",
-            color: "#a78bfa",
-            fontSize: 11, fontFamily: "monospace", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em",
-          }}>
-            ◉ AI Learning Event
-          </div>
-        )}
+      {/* ── BOT GRID WIDGET — replaces Live Orb HUD ── */}
+      <div style={{ position: "absolute", bottom: 20, right: 20 }}>
+        <MiniBotGridWidget fleetEq={fleetEqOrb as Record<string, { pnl: number; paused: boolean }> | null} />
       </div>
 
       {/* ── ALGO THOUGHT BUBBLES ── */}

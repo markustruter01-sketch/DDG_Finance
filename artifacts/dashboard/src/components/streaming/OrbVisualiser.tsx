@@ -451,7 +451,7 @@ export function OrbVisualiser() {
           bottom: 20,
           width: 864,
           maxWidth: "calc(50vw - 111px)",
-          height: 250,
+          height: 200,
           maxHeight: "calc(100% - 20px - 16px)",
           zIndex: 20,
           overflow: "hidden",

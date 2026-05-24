@@ -499,17 +499,14 @@ CREATE TABLE IF NOT EXISTS bot_portfolio (
 
 INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions, data_source, is_live_broker)
 VALUES
-  ('oracle',            100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('spy_qqq_trend',     100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('jerome_macro',      100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('forex_gump',        100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('depeg_hunter',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('event_trader',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('listing_pump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('memecoin_velocity', 100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_alpha',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_beta',    100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_gamma',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
+  ('oracle',          100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('spy_qqq_trend',   100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('jerome_macro',    100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
+  ('forex_gump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('depeg_hunter',    100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_alpha',  100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_beta',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
+  ('momentum_gamma',  100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -551,6 +548,13 @@ CREATE TABLE IF NOT EXISTS momentum_bot_trades (
 CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
     ON momentum_bot_trades (bot_id, status);
 
+-- RETIREMENT 2026-05-23 ROUND 2 — strip after one publish (Phase 3D.4 Step 5)
+-- Seed INSERT + Phase A INSERT no longer reference these bots, so no re-insertion.
+DELETE FROM bot_portfolio
+WHERE bot_id IN ('event_trader','listing_pump','memecoin_velocity');
+
+DELETE FROM bots_state
+WHERE bot_id IN ('event_trader','listing_pump','memecoin_velocity');
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -694,8 +698,7 @@ def ensure_schema() -> None:
                 """)
                 _bp_cur.execute("""
                     UPDATE bot_portfolio SET data_source = 'internal_sim'
-                    WHERE bot_id IN ('forex_gump', 'depeg_hunter', 'event_trader',
-                                     'listing_pump', 'memecoin_velocity')
+                    WHERE bot_id IN ('forex_gump', 'depeg_hunter')
                       AND data_source IS NULL
                 """)
 
@@ -708,10 +711,7 @@ def ensure_schema() -> None:
                         (bot_id, starting_usd, cash_usd, positions, equity_usd,
                          last_updated, is_live_broker, data_source)
                     VALUES
-                        ('depeg_hunter',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
-                        ('event_trader',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
-                        ('listing_pump',      100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim'),
-                        ('memecoin_velocity', 100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim')
+                        ('depeg_hunter', 100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim')
                     ON CONFLICT (bot_id) DO NOTHING
                 """)
                 logger.info("DB | Phase A: ensured all 8 bots have rows")

@@ -548,13 +548,6 @@ CREATE TABLE IF NOT EXISTS momentum_bot_trades (
 CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
     ON momentum_bot_trades (bot_id, status);
 
--- RETIREMENT 2026-05-23 ROUND 2 — strip after one publish (Phase 3D.4 Step 5)
--- Seed INSERT + Phase A INSERT no longer reference these bots, so no re-insertion.
-DELETE FROM bot_portfolio
-WHERE bot_id IN ('event_trader','listing_pump','memecoin_velocity');
-
-DELETE FROM bots_state
-WHERE bot_id IN ('event_trader','listing_pump','memecoin_velocity');
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

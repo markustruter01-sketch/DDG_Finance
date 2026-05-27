@@ -661,6 +661,46 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | retired bot cleanup failed (non-fatal): {exc}")
 
+    # JEROME V2 SCHEMA — 2026-05-28
+    # Additive only — ADD COLUMN IF NOT EXISTS means fully idempotent.
+    # entry_price       : close price at time of entry (used for trailing stop baseline)
+    # highest_price_seen: best close reached since entry (longs) / lowest close (shorts)
+    #                     stored as the same field — "most favourable close seen"
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE jerome_positions "
+                    "ADD COLUMN IF NOT EXISTS entry_price NUMERIC"
+                )
+                cur.execute(
+                    "ALTER TABLE jerome_positions "
+                    "ADD COLUMN IF NOT EXISTS highest_price_seen NUMERIC"
+                )
+        logger.info("DB | Jerome v2: entry_price + highest_price_seen columns ensured")
+    except Exception as exc:
+        logger.error(f"DB | Jerome v2 schema migration failed (non-fatal): {exc}")
+
+    # JEROME V2 — backfill COPX position that pre-existed v2 launch.
+    # Alpaca avg_entry_price = 86.989133 (verified 2026-05-28).
+    # Idempotent: only touches rows where entry_price IS NULL.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE jerome_positions
+                    SET entry_price          = 86.989133,
+                        highest_price_seen   = 86.989133
+                    WHERE symbol = 'COPX'
+                      AND status = 'open'
+                      AND entry_price IS NULL
+                """)
+                _n = cur.rowcount
+        if _n:
+            logger.info(f"DB | Jerome v2: backfilled COPX entry_price={86.989133} ({_n} row(s))")
+    except Exception as exc:
+        logger.warning(f"DB | Jerome v2 COPX backfill failed (non-fatal): {exc}")
+
     # Phase A — Unified accounting layer rebuild (2026-05-19), part 1: additive columns only.
     # Adds new columns alongside existing schema. Phase D updates writers/readers.
     # Phase E drops legacy columns (updated_at, metadata) and makes data_source NOT NULL.

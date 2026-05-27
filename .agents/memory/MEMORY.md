@@ -1,3 +1,4 @@
 - [Claude Report Endpoint](claude-report-endpoint.md) — GET /trading-api/claude-report: dev DB is separate from prod DB, null jerome/spy sections in dev are expected.
 - [Bot DB Aliasing](bot-db-aliasing.md) — forex_gump→navigator, spy_qqq_trend→bot2_spy_qqq; jerome_positions has no bot_id (singleton).
 - [Oracle bot_portfolio heartbeat](oracle-bot-portfolio-heartbeat.md) — oracle last_updated only ticks during market hours; touch_portfolio() added on market-closed early-return path
+- [Jerome v2 strategy](jerome-v2-strategy.md) — EMA/ADX/ATR trend-following live on blackbeard; LLM stack kept as parachute; prod migration via ensure_schema() on publish.

@@ -258,7 +258,7 @@ export function useForceResume(botId: string) {
 export function useExportReport() {
   return useMutation<ExportReportResult, Error, void>({
     mutationFn: async () => {
-      const res = await api.get("/reports/performance", { responseType: "text" });
+      const res = await api.get("/claude-report.txt?days=1", { responseType: "text" });
       const text = typeof res.data === "string" ? res.data : String(res.data);
       const lineCount = parseInt(res.headers["x-report-lines"] || "0", 10) || text.split("\n").length;
       const charCount = parseInt(res.headers["x-report-chars"] || "0", 10) || text.length;

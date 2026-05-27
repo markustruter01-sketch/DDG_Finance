@@ -88,7 +88,6 @@ _SOURCE_FILES: list[str] = [
     "trading-platform/routes/_deps.py",
     "trading-platform/routes/system.py",
     "trading-platform/routes/portfolio.py",
-    "trading-platform/routes/report_sections.py",
     "trading-platform/routes/control.py",
     "trading-platform/routes/admin.py",
     "trading-platform/routes/kraken.py",

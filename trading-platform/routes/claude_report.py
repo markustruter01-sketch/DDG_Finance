@@ -1042,6 +1042,173 @@ def _build_exit_attribution_30d(errors: list) -> dict:
             result[b] = {"count": 0, "pnl_usd": 0.0}
     return result
 
+# ── Text formatter ─────────────────────────────────────────────────────────────
+
+def _format_text(r: dict) -> str:
+    """Convert the claude-report JSON dict into a copy-pasteable plain-text report."""
+    SEP  = "═" * 67
+    DASH = "─" * 4
+
+    def _c(v) -> str:
+        return f"${v:,.2f}" if v is not None else "N/A"
+
+    def _sgn(v) -> str:
+        if v is None:
+            return "N/A"
+        return f"+${v:,.2f}" if v >= 0 else f"-${abs(v):,.2f}"
+
+    def _pct(v) -> str:
+        if v is None:
+            return "N/A"
+        return f"+{v:.2f}%" if v >= 0 else f"{v:.2f}%"
+
+    lines: list[str] = [
+        SEP,
+        "QUANT TERMINAL — CLAUDE REPORT",
+        f"Generated: {r.get('generated_at', 'N/A')}",
+        f"Window:    {r.get('window_days', 1)} day(s)",
+        SEP,
+        "",
+    ]
+
+    # ── Fleet ──────────────────────────────────────────────────────────────────
+    fleet = r.get("fleet") or {}
+    best  = fleet.get("best_bot")  or {}
+    worst = fleet.get("worst_bot") or {}
+    lines += [
+        f"{DASH} FLEET {DASH}",
+        f"Equity:      {_c(fleet.get('equity_total'))}",
+        f"Starting:    {_c(fleet.get('starting_total'))}",
+        f"P&L:         {_sgn(fleet.get('pnl_total'))} ({_pct(fleet.get('pnl_pct'))})",
+        f"Cash:        {_c(fleet.get('cash_deployed'))}",
+        f"Positions:   {fleet.get('positions_total', 0)}",
+        f"Best:        {best.get('id', 'N/A')} ({_pct(best.get('pnl_pct'))})",
+        f"Worst:       {worst.get('id', 'N/A')} ({_pct(worst.get('pnl_pct'))})",
+        "",
+    ]
+
+    # ── Bots ───────────────────────────────────────────────────────────────────
+    lines.append(f"{DASH} BOTS {DASH}")
+    for b in (r.get("bots") or []):
+        sm = b.get("stale_minutes")
+        stale_s = f"stale={int(sm)}m" if sm is not None else "stale=?"
+        lines.append(
+            f"{b.get('id', '?'):<20} {b.get('status', '?'):<16}"
+            f"equity={_c(b.get('equity'))}  "
+            f"pnl={_sgn(b.get('pnl_usd'))} ({_pct(b.get('pnl_pct'))})  "
+            f"pos={b.get('positions_count', 0)}  {stale_s}"
+        )
+    lines.append("")
+
+    # ── Open positions ─────────────────────────────────────────────────────────
+    lines.append(f"{DASH} OPEN POSITIONS {DASH}")
+    open_pos = r.get("open_positions") or []
+    if not open_pos:
+        lines.append("  (none)")
+    for p in open_pos:
+        unreal_s = _sgn(p.get("unrealised_pnl_usd"))
+        unreal_pct = p.get("unrealised_pnl_pct")
+        if unreal_pct is not None:
+            unreal_s += f" ({_pct(unreal_pct)})"
+        lines.append(
+            f"{p.get('bot_id', '?'):<20} {p.get('symbol', '?'):<10} "
+            f"{str(p.get('direction', '?')):<5}"
+            f"qty={p.get('qty', '?')}  entry={_c(p.get('entry_price'))}  "
+            f"current={_c(p.get('current_price'))}  unreal={unreal_s}  "
+            f"held={p.get('days_held', '?')}d"
+        )
+    lines.append("")
+
+    # ── Trades in window ───────────────────────────────────────────────────────
+    lines.append(f"{DASH} TRADES IN WINDOW {DASH}")
+    trades = r.get("trades_window") or []
+    if not trades:
+        lines.append("  (none)")
+    for t in trades:
+        reason = str(t.get("exit_reason") or "?")[:30]
+        lines.append(
+            f"{t.get('bot_id', '?'):<20} {t.get('symbol', '?'):<10} "
+            f"{str(t.get('direction', '?')):<5}"
+            f"entry={_c(t.get('entry_price'))}  exit={_c(t.get('exit_price'))}  "
+            f"pnl={_sgn(t.get('realised_pnl_usd'))}  reason={reason}"
+        )
+    lines.append("")
+
+    # ── Metrics 30d ────────────────────────────────────────────────────────────
+    lines.append(f"{DASH} METRICS (30d) {DASH}")
+    for m in (r.get("metrics_30d") or []):
+        gate    = "Y" if m.get("live_capital_gate_met") else "N"
+        sharpe  = m.get("sharpe_proxy")
+        sharpe_s = f"{sharpe:.2f}" if sharpe is not None else "N/A"
+        wr       = m.get("win_rate", 0) or 0
+        lines.append(
+            f"{m.get('bot_id', '?'):<20}"
+            f"trades={m.get('trades_count', 0)}  "
+            f"WR={wr * 100:.1f}%  "
+            f"expectancy={_sgn(m.get('expectancy_usd'))}  "
+            f"total={_sgn(m.get('pnl_total_usd'))}  "
+            f"sharpe={sharpe_s}  gate={gate}"
+        )
+    lines.append("")
+
+    # ── Reconciliation flags ───────────────────────────────────────────────────
+    lines.append(f"{DASH} RECONCILIATION FLAGS {DASH}")
+    flags = r.get("reconciliation_flags") or []
+    if not flags:
+        lines.append("  (none)")
+    for fl in sorted(flags, key=lambda x: (x.get("severity") or ""), reverse=True):
+        sev   = (fl.get("severity") or "?").upper()
+        ftype = fl.get("type", "?")
+        bid   = fl.get("bot_id") or ""
+        det   = fl.get("detail") or ""
+        bid_s = f" {bid}" if bid else ""
+        lines.append(f"  [{sev}] {ftype}{bid_s}: {det}")
+    lines.append("")
+
+    # ── Errors window ──────────────────────────────────────────────────────────
+    days = r.get("window_days", 1)
+    lines.append(f"{DASH} ERRORS (last {days} day(s)) {DASH}")
+    errs = r.get("errors_window") or []
+    if not errs:
+        lines.append("  (none)")
+    for e in errs[:50]:
+        sev   = (e.get("severity") or "?").upper()
+        pat   = str(e.get("pattern") or e.get("error_type") or "?")[:80]
+        cnt   = e.get("count", 1)
+        first = (e.get("first_seen") or "?")[:19]
+        last  = (e.get("last_seen")  or "?")[:19]
+        hint  = e.get("bot_id_hint") or ""
+        lines.append(f"  [{sev}] {pat} (count={cnt}, first={first}, last={last}, bot={hint})")
+    lines.append("")
+
+    # ── Decisions pending ──────────────────────────────────────────────────────
+    lines.append(f"{DASH} DECISIONS PENDING {DASH}")
+    decisions = r.get("decisions_pending") or []
+    if not decisions:
+        lines.append("  (none)")
+    for d in decisions:
+        exec_s = "Y" if d.get("executed") else "N"
+        fill_s = "Y" if d.get("fills_pending") else "N"
+        lines.append(
+            f"{d.get('bot_id', '?')} @ {(d.get('decided_at') or '?')[:19]}: "
+            f"{d.get('decision_type', '?')}  "
+            f"entries={d.get('entries_count', 0)}  closes={d.get('closes_count', 0)}  "
+            f"executed={exec_s}  fills_pending={fill_s}"
+        )
+    lines.append("")
+
+    # ── Exit attribution ───────────────────────────────────────────────────────
+    lines.append(f"{DASH} EXIT ATTRIBUTION (30d) {DASH}")
+    attr = r.get("exit_attribution_30d") or {}
+    for bucket in ("trailing_stop", "rank_dropout", "direction_flip",
+                   "max_hold", "trend_exit", "llm_close", "other"):
+        d = attr.get(bucket) or {"count": 0, "pnl_usd": 0.0}
+        lines.append(f"  {bucket:<20} count={d.get('count', 0)}, pnl={_sgn(d.get('pnl_usd'))}")
+
+    lines += ["", SEP, "END OF REPORT", SEP, ""]
+    return "\n".join(lines)
+
+
 # ── Main route handler ─────────────────────────────────────────────────────────
 
 @router.get("/claude-report", tags=["Claude Report"])
@@ -1095,3 +1262,56 @@ async def claude_report(days: int = 1, include_logs: bool = True) -> dict:
         "exit_attribution_30d":  exit_attr,
         "_section_errors":       errors,
     }
+
+
+@router.get("/claude-report.txt", tags=["Claude Report"])
+async def claude_report_text(days: int = 1):
+    """
+    Plain-text version of the Claude report — same data as /claude-report,
+    formatted for copy-paste into Claude / Gemini. Triggers file download.
+    """
+    from starlette.responses import Response as _Resp
+
+    t0           = time.perf_counter()
+    days         = min(max(days, 1), _DAYS_CAP)
+    window_start = _now() - timedelta(days=days)
+    errors: list[dict] = []
+
+    live_pos_cache = await _build_live_pos_cache()
+    log_events     = _build_errors_window(window_start, errors)
+    open_positions = _build_open_positions(live_pos_cache, errors)
+    fleet          = _build_fleet(open_positions, errors)
+    bots           = _build_bots(log_events, open_positions, errors)
+    trades_window  = _build_trades_window(window_start, errors)
+    metrics_30d    = _build_metrics_30d(errors)
+    recon_flags    = _build_reconciliation_flags(live_pos_cache, errors)
+    decisions      = _build_decisions_pending(window_start, errors)
+    exit_attr      = _build_exit_attribution_30d(errors)
+
+    report_dict = {
+        "generated_at":          _iso(_now()),
+        "window_days":           days,
+        "fleet":                 fleet,
+        "bots":                  bots,
+        "open_positions":        open_positions,
+        "trades_window":         trades_window,
+        "metrics_30d":           metrics_30d,
+        "reconciliation_flags":  recon_flags,
+        "errors_window":         log_events,
+        "decisions_pending":     decisions,
+        "exit_attribution_30d":  exit_attr,
+    }
+
+    body = _format_text(report_dict)
+    elapsed_ms = round((time.perf_counter() - t0) * 1000)
+    logger.info(f"claude_report_text | generated in {elapsed_ms}ms | "
+                f"lines={body.count(chr(10))} chars={len(body)}")
+
+    return _Resp(
+        content=body,
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "x-report-lines": str(body.count("\n")),
+            "x-report-chars": str(len(body)),
+        },
+    )

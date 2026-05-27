@@ -29,11 +29,17 @@ export function CombinedPortfolioSummary() {
   const handleExportReport = async () => {
     try {
       const result = await exportReport.mutateAsync();
-      await navigator.clipboard.writeText(result.report);
-      toast({
-        title: "Report Copied to Clipboard",
-        description: `${result.line_count.toLocaleString()} lines · ${Math.round(result.char_count / 1000)}k chars · Paste into Claude or Gemini for analysis.`,
-      });
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+      const filename = `quant-terminal-report-${ts}.txt`;
+      const blob = new Blob([result.report], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Report downloaded", description: filename });
     } catch (err: any) {
       toast({ variant: "destructive", title: "Export Failed", description: err?.message ?? "Could not generate report." });
     }

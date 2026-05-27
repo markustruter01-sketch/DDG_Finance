@@ -724,21 +724,19 @@ function ExportReportButton() {
     setLoading(true);
     try {
       const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/reports/performance-parts`);
+      const res = await fetch(`${base}/claude-report.txt?days=1`);
       if (!res.ok) throw new Error("Export failed");
-      const data = await res.json();
-
-      for (const part of Object.values(data.parts || {}) as Array<{ text: string; filename: string }>) {
-        if (!part) continue;
-        const blob = new Blob([part.text], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = part.filename;
-        a.click();
-        URL.revokeObjectURL(url);
-        await new Promise((r) => setTimeout(r, 300));
-      }
+      const text = await res.text();
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+      const filename = `quant-terminal-report-${ts}.txt`;
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     } catch {
       alert("Export failed — check that the trading API is running.");
     } finally {
@@ -753,7 +751,7 @@ function ExportReportButton() {
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] text-xs font-mono text-muted-foreground hover:text-white transition-all disabled:opacity-50"
     >
       <FileText className="h-3.5 w-3.5" />
-      {loading ? "Downloading 4 files..." : "Export Report"}
+      {loading ? "Generating…" : "Export Report"}
     </button>
   );
 }

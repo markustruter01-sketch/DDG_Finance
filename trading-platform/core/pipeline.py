@@ -771,7 +771,12 @@ async def _run_pipeline_inner(
     try:
         logger.info("Pipeline | Oracle STF Step 1: Fetching positions + momentum universe...")
         from execution.broker import get_positions as _scan_gpos, get_account as _scan_acct
-        from analysis.schemas import RegimeAnalysisOutput as _ScanRAO, RegimeAllocationSlot as _ScanRAS
+        from analysis.schemas import (
+            RegimeAnalysisOutput as _ScanRAO,
+            RegimeAllocationSlot as _ScanRAS,
+            LEVERAGED_RISK_TICKERS as _LRT,
+            BEAR_HEDGE_TICKERS as _BHT,
+        )
         from execution.algo_scanner import run_algo_scan as _run_scan
 
         _open_pos  = _scan_gpos()
@@ -951,6 +956,48 @@ async def _run_pipeline_inner(
                     _actual_regime_label = _read_regime
         except Exception as _re_exc:
             logger.debug(f"Pipeline | Could not read market_regime.json for regime label: {_re_exc}")
+
+        # ── Regime-aware slot filter ──────────────────────────────────────────
+        # The STF scanner ranks on pure technicals (ADX/RSI/momentum) and is
+        # regime-blind. Leveraged ETFs (TQQQ/SOXL/UPRO) that pass technical
+        # filters are forbidden in Sideways and Bear regimes.  Strip them here,
+        # before RegimeAnalysisOutput is instantiated, so a single forbidden
+        # ticker never aborts the entire scan cycle.
+        _regime_forbidden: frozenset[str] = frozenset()
+        if _actual_regime_label == "Sideways":
+            _regime_forbidden = frozenset(_LRT | _BHT)
+        elif _actual_regime_label == "Bear":
+            _regime_forbidden = frozenset(_LRT)   # leveraged longs also forbidden
+
+        _dropped_tickers = [s.ticker for s in _alloc_slots if s.ticker in _regime_forbidden]
+        if _dropped_tickers:
+            _kept = [s for s in _alloc_slots if s.ticker not in _regime_forbidden]
+            _alloc_slots = [
+                s.model_copy(update={"slot": i + 1}) for i, s in enumerate(_kept)
+            ]
+            logger.info(
+                f"Pipeline | {_actual_regime_label} regime filter: stripped "
+                f"{_dropped_tickers} — {len(_alloc_slots)} slot(s) remaining"
+            )
+
+        # Edge case: filter emptied all entry signals
+        if not _alloc_slots and not _oracle_stf_protected:
+            logger.info(
+                f"Pipeline | Oracle STF: all signals filtered by {_actual_regime_label} "
+                f"regime rules and no open positions — holding cash this cycle"
+            )
+            result["status"] = "ok"
+            result["market_regime"] = (
+                f"STF: all signals filtered ({_actual_regime_label} regime) — holding cash"
+            )
+            _update_state(result, started, trading_mode="stf_no_signals")
+            return result
+
+        if not _alloc_slots:
+            logger.info(
+                f"Pipeline | Oracle STF: all entry signals filtered by {_actual_regime_label} "
+                f"regime rules — monitoring {len(_oracle_stf_protected)} open position(s)"
+            )
 
         allocation = _ScanRAO(
             regime=_actual_regime_label,

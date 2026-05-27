@@ -12,6 +12,7 @@ from .new_bots import new_bots_router
 from .claude_review import claude_review_router
 from .claude_context import claude_context_router
 from .fleet_equity import fleet_equity_router
+from .claude_report import router as claude_report_router
 
 ALL_ROUTERS = [
     system_router,
@@ -28,4 +29,5 @@ ALL_ROUTERS = [
     claude_review_router,
     claude_context_router,
     fleet_equity_router,
+    claude_report_router,
 ]

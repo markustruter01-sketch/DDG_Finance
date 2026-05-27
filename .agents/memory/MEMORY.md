@@ -1,0 +1,2 @@
+- [Claude Report Endpoint](claude-report-endpoint.md) — GET /trading-api/claude-report: dev DB is separate from prod DB, null jerome/spy sections in dev are expected.
+- [Bot DB Aliasing](bot-db-aliasing.md) — forex_gump→navigator, spy_qqq_trend→bot2_spy_qqq; jerome_positions has no bot_id (singleton).

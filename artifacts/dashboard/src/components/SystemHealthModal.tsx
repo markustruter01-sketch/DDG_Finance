@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Zap, RotateCcw, Clock, Brain, Globe, Target, Bell } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Brain, Globe, Target, Bell } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 
 const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/trading-api";
@@ -34,17 +34,6 @@ interface NodeHealth {
 interface HealthData {
   timestamp: number;
   nodes: Record<string, NodeHealth>;
-}
-
-interface HealEntry {
-  ts: number;
-  component: string;
-  action: string;
-  result: string;
-  success: boolean;
-  triggered_by: string;
-  heal_type?: string;
-  state_changed?: boolean;
 }
 
 interface Overrides {
@@ -339,22 +328,8 @@ function ArchitectureNode({
   );
 }
 
-/* ── Active Alerts Digest + Fix Buttons ─────────────────────────────────── */
-function AlertsDigest({
-  nodes,
-  onFix,
-  fixingComponent,
-  onHealAll,
-  healAllLoading,
-  lastHealResults,
-}: {
-  nodes: Record<string, NodeHealth>;
-  onFix: (component: string) => void;
-  fixingComponent: string | null;
-  onHealAll: () => void;
-  healAllLoading: boolean;
-  lastHealResults: Record<string, { success: boolean; result: string }>;
-}) {
+/* ── Active Alerts Digest ────────────────────────────────────────────────── */
+function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
   const alerts = useMemo(() => {
     return Object.entries(nodes)
       .filter(([, n]) => n.level !== "green")
@@ -387,19 +362,6 @@ function AlertsDigest({
           {criticalCount > 0 && degradedCount > 0 && <span className="text-muted-foreground/40"> · </span>}
           {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
         </span>
-        <button
-          onClick={onHealAll}
-          disabled={healAllLoading}
-          className={cn(
-            "ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-mono font-semibold transition-all border",
-            healAllLoading
-              ? "border-violet-500/30 text-violet-400/60 bg-violet-500/5 cursor-not-allowed"
-              : "border-violet-500/40 text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 hover:border-violet-400/60"
-          )}
-        >
-          <Zap className={cn("h-3 w-3", healAllLoading && "animate-pulse")} />
-          {healAllLoading ? "Healing…" : "⚡ Heal All"}
-        </button>
       </div>
 
       {/* alert rows */}
@@ -409,9 +371,6 @@ function AlertsDigest({
           const explanation = buildExplanation(key, node);
           const isOpen = expanded === key;
           const Icon = node.level === "red" ? XCircle : AlertTriangle;
-          const isFixing = fixingComponent === key;
-          const healResult = lastHealResults[key];
-
           return (
             <div key={key} className={cn("transition-colors", isOpen && "bg-white/[0.02]")}>
               <div className="flex items-start gap-3 px-5 py-2.5">
@@ -438,40 +397,18 @@ function AlertsDigest({
                       {node.data_age_s != null && node.latency_ms == null && (
                         <span className="text-[8px] font-mono text-muted-foreground/50">{node.data_age_s.toFixed(0)}s old</span>
                       )}
-                      {/* heal result badge */}
-                      {healResult && (
-                        <span className={cn(
-                          "text-[8px] font-mono px-1.5 py-0.5 rounded-full border flex items-center gap-1",
-                          healResult.success
-                            ? "text-green-400 bg-green-500/10 border-green-500/20"
-                            : "text-red-400 bg-red-500/10 border-red-500/20"
-                        )}>
-                          {healResult.success ? "✓ healed" : "✗ failed"}
-                        </span>
-                      )}
                     </div>
                     <div className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 truncate">{node.detail}</div>
 
-                    {/* expanded explanation + heal result */}
+                    {/* expanded explanation */}
                     {isOpen && (
-                      <div className="mt-2 space-y-1.5">
+                      <div className="mt-2">
                         <div className={cn("text-[10px] leading-relaxed rounded-lg px-3 py-2 border", colors.bg, colors.border, colors.text)}>
                           <div className="flex gap-1.5">
                             <Info className="h-3 w-3 mt-0.5 shrink-0 opacity-70" />
                             <span>{explanation}</span>
                           </div>
                         </div>
-                        {healResult && (
-                          <div className={cn(
-                            "text-[9px] font-mono rounded-lg px-3 py-1.5 border leading-relaxed",
-                            healResult.success
-                              ? "bg-green-500/5 border-green-500/20 text-green-400/80"
-                              : "bg-red-500/5 border-red-500/20 text-red-400/80"
-                          )}>
-                            <span className="font-semibold">{healResult.success ? "✓ Healed: " : "✗ Failed: "}</span>
-                            {healResult.result}
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -480,76 +417,7 @@ function AlertsDigest({
                     {isOpen ? "▲" : "▼"}
                   </span>
                 </button>
-
-                {/* Fix button */}
-                <button
-                  onClick={() => onFix(key)}
-                  disabled={isFixing || healAllLoading}
-                  className={cn(
-                    "shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[9px] font-mono font-semibold transition-all border mt-0.5",
-                    isFixing
-                      ? "border-cyan-500/30 text-cyan-400/60 bg-cyan-500/5 cursor-not-allowed"
-                      : healResult?.success
-                      ? "border-green-500/30 text-green-400 bg-green-500/5 hover:bg-green-500/10"
-                      : "border-cyan-500/30 text-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/15 hover:border-cyan-400/50"
-                  )}
-                >
-                  {isFixing ? (
-                    <><RotateCcw className="h-2.5 w-2.5 animate-spin" /> fixing…</>
-                  ) : healResult?.success ? (
-                    <><CheckCircle2 className="h-2.5 w-2.5" /> fixed</>
-                  ) : (
-                    <>Fix →</>
-                  )}
-                </button>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ── Remediation Log Panel ───────────────────────────────────────────────── */
-const HEAL_TYPE_STYLES: Record<string, string> = {
-  HEALED: "text-green-400 border-green-500/30 bg-green-500/10",
-  LOGGED: "text-blue-400 border-blue-500/30 bg-blue-500/10",
-  FAILED: "text-red-400 border-red-500/30 bg-red-500/10",
-};
-
-function RemediationLog({ log }: { log: HealEntry[] }) {
-  if (log.length === 0) return null;
-
-  return (
-    <div className="border-t border-white/5 bg-slate-950/60 shrink-0">
-      <div className="flex items-center gap-2 px-5 py-1.5 border-b border-white/5">
-        <Clock className="h-3 w-3 text-muted-foreground/40" />
-        <span className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/40 font-semibold">Heal Log</span>
-        <span className="text-[8px] font-mono text-muted-foreground/30 ml-auto">{log.length} entr{log.length === 1 ? "y" : "ies"}</span>
-      </div>
-      <div className="max-h-28 overflow-y-auto divide-y divide-white/[0.03]">
-        {log.map((entry, i) => {
-          const label = COMPONENT_LABELS[entry.component] ?? entry.component;
-          const byLabel = entry.triggered_by === "auto_heal" ? "auto" : entry.triggered_by === "heal_all" ? "heal-all" : "manual";
-          const timeStr = new Date(entry.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-          const healType = entry.heal_type ?? (entry.success ? "HEALED" : "FAILED");
-          const healTypeStyle = HEAL_TYPE_STYLES[healType] ?? "text-slate-400 border-white/10 bg-white/5";
-          return (
-            <div key={i} className="flex items-center gap-2 px-5 py-1.5 flex-wrap">
-              <span className="text-[8px] font-mono text-muted-foreground/50 shrink-0 w-16">{timeStr}</span>
-              <span className={cn("text-[7px] font-mono font-bold shrink-0 px-1.5 py-px rounded border uppercase tracking-wider", healTypeStyle)}>
-                {healType}
-              </span>
-              <span className={cn("text-[7px] font-mono shrink-0 px-1 py-px rounded border",
-                entry.triggered_by === "auto_heal"
-                  ? "text-violet-400 border-violet-500/20 bg-violet-500/5"
-                  : "text-cyan-400/60 border-cyan-500/15 bg-cyan-500/5"
-              )}>
-                {byLabel}
-              </span>
-              <span className="text-[8px] font-mono text-white/60 shrink-0">{label}</span>
-              <span className="text-[8px] font-mono text-muted-foreground/40 truncate flex-1">{entry.result}</span>
             </div>
           );
         })}
@@ -733,7 +601,6 @@ function TestControlPanel({
 
 /* ── Main Modal ─────────────────────────────────────────────────────────── */
 export function SystemHealthModal({ onClose }: { onClose: () => void }) {
-  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
@@ -741,18 +608,8 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
     retry: false,
   });
 
-  const { data: logData } = useQuery({
-    queryKey: ["/system/remediate/log"],
-    queryFn: async () => (await api.get("/system/remediate/log")).data,
-    refetchInterval: 5_000,
-    retry: false,
-  });
-
   const [overrides, setOverrides] = useState<Overrides>({});
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [fixingComponent, setFixingComponent] = useState<string | null>(null);
-  const [healAllLoading, setHealAllLoading] = useState(false);
-  const [lastHealResults, setLastHealResults] = useState<Record<string, { success: boolean; result: string }>>({});
   const resetOverrides = useCallback(() => setOverrides({}), []);
 
   useEffect(() => {
@@ -784,42 +641,6 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const overallColors = LEVEL_COLORS[overallLevel];
   const hasOverrides = Object.keys(overrides).length > 0;
   const selectedHealth = selectedNode && mergedNodes ? mergedNodes[selectedNode] : null;
-
-  const handleFix = useCallback(async (component: string) => {
-    setFixingComponent(component);
-    try {
-      const res = await api.post(`/system/remediate/${component}`);
-      const result = res.data as { success: boolean; result: string };
-      setLastHealResults(prev => ({ ...prev, [component]: { success: result.success, result: result.result } }));
-      queryClient.invalidateQueries({ queryKey: ["/system/remediate/log"] });
-      queryClient.invalidateQueries({ queryKey: ["/system/health-architecture"] });
-    } catch (err) {
-      setLastHealResults(prev => ({ ...prev, [component]: { success: false, result: `Request failed: ${err}` } }));
-    } finally {
-      setFixingComponent(null);
-    }
-  }, [queryClient]);
-
-  const handleHealAll = useCallback(async () => {
-    setHealAllLoading(true);
-    try {
-      const res = await api.post("/system/remediate/all");
-      const result = res.data as { success: boolean; results: Array<{ component: string; success: boolean; result: string }> };
-      const newResults: Record<string, { success: boolean; result: string }> = {};
-      for (const r of result.results) {
-        newResults[r.component] = { success: r.success, result: r.result };
-      }
-      setLastHealResults(prev => ({ ...prev, ...newResults }));
-      queryClient.invalidateQueries({ queryKey: ["/system/remediate/log"] });
-      queryClient.invalidateQueries({ queryKey: ["/system/health-architecture"] });
-    } catch (err) {
-      console.error("Heal all failed:", err);
-    } finally {
-      setHealAllLoading(false);
-    }
-  }, [queryClient]);
-
-  const healLog: HealEntry[] = logData?.log ?? [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
@@ -854,7 +675,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                   "bg-red-400 animate-pulse": overallLevel === "red",
                 })} />
                 <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                  {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — self-heal active" : "Critical — auto-remediating"}
+                  {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — manual intervention required" : "Critical — manual intervention required"}
                 </span>
               </div>
             </div>
@@ -863,13 +684,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                 Test Mode
               </span>
             )}
-            {overallLevel !== "green" && (
-              <span className="text-[8px] font-mono px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-widest"
-                style={{ background: `${overallColors.wire}12`, color: overallColors.wire, border: `1px solid ${overallColors.wire}30` }}>
-                <Zap className="h-2.5 w-2.5" />
-                self-heal active
-              </span>
-            )}
+
           </div>
           <button onClick={onClose}
             className="p-2 rounded-lg text-muted-foreground hover:text-white transition-colors"
@@ -1046,18 +861,8 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
 
         {/* ── Alerts + Fix Buttons ── */}
         {mergedNodes && (
-          <AlertsDigest
-            nodes={mergedNodes}
-            onFix={handleFix}
-            fixingComponent={fixingComponent}
-            onHealAll={handleHealAll}
-            healAllLoading={healAllLoading}
-            lastHealResults={lastHealResults}
-          />
+          <AlertsDigest nodes={mergedNodes} />
         )}
-
-        {/* ── Remediation Log ── */}
-        <RemediationLog log={healLog} />
       </div>
     </div>
   );

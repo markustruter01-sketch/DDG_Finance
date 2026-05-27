@@ -44,59 +44,12 @@ _kraken_commentary_round_robin_idx = 0
 _COMMENTARY_CACHE_FILE = Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "commentary_cache.json"))
 _commentary_file_lock = threading.Lock()
 
-_heal_log: list[dict] = []
-_heal_lock = threading.Lock()
-
 VAULT_TICKER = "JEPQ"
 KNOWN_CRYPTO_SYMBOLS = {"BTCUSD", "ETHUSD"}
 VAULT_TICKER_PROTECTED = {"JEPQ"}
 
 _KRAKEN_IMPORTED_SIDECAR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "kraken_imported_trades.json")
 _kraken_imported_lock = threading.Lock()
-
-
-def _add_heal_entry(
-    component: str,
-    action: str,
-    result: str,
-    success: bool,
-    triggered_by: str = "manual",
-    state_changed: bool = False,
-) -> dict:
-    """
-    Add an entry to the in-memory heal log.
-
-    heal_type semantics:
-      HEALED  — remediation succeeded AND the bot/system state actually changed
-                (e.g. force_refresh set, params tightened, cache cleared)
-      LOGGED  — success but no concrete state change occurred (verified OK,
-                nothing to fix, or observation-only)
-      FAILED  — the remediation attempt itself failed or errored
-    """
-    if not success:
-        heal_type = "FAILED"
-    elif state_changed:
-        heal_type = "HEALED"
-    else:
-        heal_type = "LOGGED"
-
-    entry = {
-        "ts": time.time(),
-        "component": component,
-        "action": action,
-        "result": result,
-        "success": success,
-        "triggered_by": triggered_by,
-        "heal_type": heal_type,
-        "state_changed": state_changed,
-    }
-    with _heal_lock:
-        _heal_log.insert(0, entry)
-        while len(_heal_log) > 50:
-            _heal_log.pop()
-    return entry
-
-
 def _load_commentary_caches() -> None:
     global _commentary_cache, _kraken_commentary_cache, _kraken_commentary_caches
     if not _COMMENTARY_CACHE_FILE.exists():

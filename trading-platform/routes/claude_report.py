@@ -723,6 +723,66 @@ def _build_metrics_30d(errors: list) -> list[dict]:
 
     return metrics
 
+# ── Stale-bot thresholds (seconds) ────────────────────────────────────────────
+# depeg_hunter intentionally excluded — idle is its normal state.
+_BOT_STALE_THRESHOLDS: dict[str, int] = {
+    "oracle":          108000,  # 30h — covers weekends and market holidays
+    "spy_qqq_trend":   108000,  # 30h — same
+    "jerome_macro":     50000,  # ~14h, between 09:00 and 21:00 UTC cycles
+    "forex_gump":        5400,  # 90 min
+    "momentum_alpha":   94000,  # ~26h, daily 00:05 UTC cycle
+    "momentum_beta":    94000,  # same
+    "momentum_gamma":   94000,  # same
+}
+
+
+def _build_stale_flags(errors: list) -> list[dict]:
+    """Check bot_portfolio.last_updated against per-bot thresholds.
+
+    Emits a HIGH severity entry to system_degradations on stale detection
+    AND returns the flag for inclusion in the report.  Dual emission means
+    stale bots appear in both errors_window AND reconciliation_flags.
+    """
+    flags: list[dict] = []
+    try:
+        rows = _pg_rows(
+            "SELECT bot_id, last_updated, "
+            "EXTRACT(EPOCH FROM (NOW() - last_updated)) AS age_s "
+            "FROM bot_portfolio WHERE bot_id = ANY(%s)",
+            (list(_BOT_STALE_THRESHOLDS.keys()),),
+        )
+        for r in rows:
+            age_s = r.get("age_s")
+            if age_s is None:
+                continue
+            age_s = float(age_s)
+            bot_id = r["bot_id"]
+            threshold = _BOT_STALE_THRESHOLDS[bot_id]
+            if age_s > threshold:
+                flags.append({
+                    "type":      "bot_stale",
+                    "bot_id":    bot_id,
+                    "detail":    f"last_updated {int(age_s)}s ago (threshold {threshold}s)",
+                    "severity":  "high",
+                })
+                try:
+                    from core.degradation_tracker import record_degradation
+                    record_degradation(
+                        component=f"bot/{bot_id}",
+                        severity="high",
+                        error_type="bot_stale_workflow",
+                        message=(
+                            f"{bot_id} stale: last_updated {int(age_s)}s ago "
+                            f"(threshold {threshold}s). Manual restart required."
+                        ),
+                    )
+                except Exception as exc:
+                    logger.warning(f"claude_report | stale flag degradation write failed: {exc}")
+    except Exception as exc:
+        errors.append({"section": "recon_flags.bot_stale", "error": str(exc)})
+    return flags
+
+
 # ── Section: reconciliation_flags ─────────────────────────────────────────────
 
 def _build_reconciliation_flags(live_pos_cache: dict, errors: list) -> list[dict]:
@@ -823,6 +883,9 @@ def _build_reconciliation_flags(live_pos_cache: dict, errors: list) -> list[dict
                 })
     except Exception as exc:
         errors.append({"section": "recon_flags.decision_unexecuted", "error": str(exc)})
+
+    # (f) stale bots — per-bot last_updated thresholds
+    flags.extend(_build_stale_flags(errors))
 
     return flags
 

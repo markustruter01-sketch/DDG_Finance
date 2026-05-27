@@ -33,7 +33,6 @@ from routes._deps import (
     _load_commentary_caches,
     _get_forex_engine,
 )
-from routes.system import _auto_heal_check
 from routes import ALL_ROUTERS
 from routes.bot_registry_route import router as bot_registry_router
 from routes.reports import router as reports_router
@@ -79,16 +78,6 @@ async def lifespan(app: FastAPI):
     logger.info("24/7 crypto trading enabled — crypto cycles fire when stock market is closed")
 
     from apscheduler.triggers.interval import IntervalTrigger as _ITrigger
-    scheduler.add_job(
-        func=_auto_heal_check,
-        trigger=_ITrigger(minutes=2),
-        id="auto_heal",
-        name="Auto Self-Heal Monitor",
-        replace_existing=True,
-        misfire_grace_time=60,
-    )
-    logger.info("Auto-heal monitor registered (2-min interval, always active — not paused by auto-trading toggle)")
-
     def _scheduled_snapshot_export():
         try:
             from analysis.learning_snapshot import export_snapshot

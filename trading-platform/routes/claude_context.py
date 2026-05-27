@@ -25,7 +25,7 @@ PLATFORM OVERVIEW
 - Exchange connections: Alpaca (US stocks), Kraken (crypto), OANDA (forex paper)
 - All bots running paper trading
 - Reserved VM on Replit (0.5 vCPU / 2 GiB RAM) — always on
-- In-process watchdog on all bots (auto-restart on crash)
+- Bot stall detection via bot_portfolio.last_updated; manual intervention required
 - UptimeRobot monitoring health endpoint every 5 minutes
 - Review flags system active — check dashboard for due dates
 """)
@@ -183,7 +183,7 @@ RECENT MAJOR CHANGES (Apr 2026)
 - Navigator: 4 entry fixes + per-pair cooldown
 - Poseidon: Complete strategy replacement (pairs -> momentum)
 - Oracle: Trail trigger 1.5->2.5xATR, profit-gated exits
-- All bots: In-process watchdog, DB-backed state, fleet halt
+- All bots: stall detection via bot_portfolio.last_updated, DB-backed state, fleet halt
 - Fee drag confirmed: Kraken bots NOT live-capital ready (need 40%+ WR over 60 trades)
 
 REVIEW FLAGS DUE

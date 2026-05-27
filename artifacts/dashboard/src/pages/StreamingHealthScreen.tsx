@@ -28,17 +28,6 @@ interface HealthData {
   nodes: Record<string, NodeHealth>;
 }
 
-interface HealEntry {
-  ts: number;
-  component: string;
-  action: string;
-  result: string;
-  success: boolean;
-  triggered_by: string;
-  heal_type?: string;
-  state_changed?: boolean;
-}
-
 const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; wire: string; text: string; bg: string; border: string }> = {
   green: {
     fill: "rgba(34,197,94,0.08)",
@@ -120,12 +109,6 @@ const BOT_DISPLAY: Record<string, string> = {
   kraken_blackbeard: "Jerome",
   kraken_poseidon: "Poseidon",
   kraken_kraken_current: "Kraken Current",
-};
-
-const HEAL_TYPE_STYLES: Record<string, string> = {
-  HEALED: "text-green-400 border-green-500/30 bg-green-500/10",
-  LOGGED: "text-blue-400 border-blue-500/30 bg-blue-500/10",
-  FAILED: "text-red-400 border-red-500/30 bg-red-500/10",
 };
 
 function GlowingWire({ x1, y1, x2, y2, bend, level, id }: { x1: number; y1: number; x2: number; y2: number; bend: "h-first" | "v-first"; level: Level; id: string }) {
@@ -363,7 +346,7 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
           <div className="flex items-center gap-2 px-5 py-1.5">
             <AlertTriangle className="h-2.5 w-2.5 text-yellow-500/60 shrink-0" />
             <span className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.4)" }}>
-              +{hiddenCount} more alert{hiddenCount !== 1 ? "s" : ""} — check remediate log for details
+              +{hiddenCount} more alert{hiddenCount !== 1 ? "s" : ""}
             </span>
           </div>
         )}
@@ -459,58 +442,11 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
   );
 }
 
-/* ── Heal Log ─────────────────────────────────────────────────────────────── */
-function StreamingHealLog({ log }: { log: HealEntry[] }) {
-  if (log.length === 0) return null;
-  const recent = log.slice(0, 4);
-
-  return (
-    <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)", background: "rgba(2,6,23,0.9)" }}>
-      <div className="flex items-center gap-2 px-5 py-1" style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-        <Clock className="h-2.5 w-2.5" style={{ color: "rgba(148,163,184,0.35)" }} />
-        <span className="text-[7px] font-mono uppercase tracking-widest font-semibold" style={{ color: "rgba(148,163,184,0.35)" }}>Heal Log</span>
-        <span className="ml-auto text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>{log.length} entries</span>
-      </div>
-      <div className="divide-y" style={{ divideColor: "rgba(255,255,255,0.03)" } as React.CSSProperties}>
-        {recent.map((entry, i) => {
-          const label = COMPONENT_LABELS[entry.component] ?? entry.component;
-          const byLabel = entry.triggered_by === "auto_heal" ? "auto" : entry.triggered_by === "heal_all" ? "heal-all" : "manual";
-          const timeStr = new Date(entry.ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-          const healType = entry.heal_type ?? (entry.success ? "HEALED" : "FAILED");
-          const healTypeStyle = HEAL_TYPE_STYLES[healType] ?? "text-slate-400 border-white/10 bg-white/5";
-          return (
-            <div key={i} className="flex items-center gap-2 px-5 py-1 flex-wrap">
-              <span className="text-[8px] font-mono shrink-0 w-16" style={{ color: "rgba(148,163,184,0.5)" }}>{timeStr}</span>
-              <span className={`text-[7px] font-mono font-bold shrink-0 px-1.5 py-px rounded border uppercase tracking-wider ${healTypeStyle}`}>
-                {healType}
-              </span>
-              <span className={`text-[7px] font-mono shrink-0 px-1 py-px rounded border ${
-                entry.triggered_by === "auto_heal"
-                  ? "text-violet-400 border-violet-500/20 bg-violet-500/5"
-                  : "text-cyan-400/60 border-cyan-500/15 bg-cyan-500/5"
-              }`}>{byLabel}</span>
-              <span className="text-[8px] font-mono shrink-0" style={{ color: "rgba(255,255,255,0.6)" }}>{label}</span>
-              <span className="text-[8px] font-mono truncate flex-1" style={{ color: "rgba(148,163,184,0.4)" }}>{entry.result}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 /* ── Main Screen ──────────────────────────────────────────────────────────── */
 export default function StreamingHealthScreen() {
   const { data, isLoading } = useQuery<HealthData>({
     queryKey: ["/system/health-architecture"],
     queryFn: async () => (await api.get("/system/health-architecture")).data,
-    refetchInterval: 10_000,
-    retry: false,
-  });
-
-  const { data: logData } = useQuery({
-    queryKey: ["/system/remediate/log"],
-    queryFn: async () => (await api.get("/system/remediate/log")).data,
     refetchInterval: 10_000,
     retry: false,
   });
@@ -532,7 +468,6 @@ export default function StreamingHealthScreen() {
   }, [nodes]);
 
   const overallColors = LEVEL_COLORS[overallLevel];
-  const healLog: HealEntry[] = (logData as { log?: HealEntry[] } | undefined)?.log ?? [];
 
   const alertCount = nodes ? Object.values(nodes).filter(n => n.level !== "green").length : 0;
 
@@ -567,16 +502,10 @@ export default function StreamingHealthScreen() {
               SYS / HEALTH
             </span>
             <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>
-              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · self-heal active" : "Critical · auto-remediating"}
+              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · manual intervention required" : "Critical · manual intervention required"}
             </span>
           </div>
-          {overallLevel !== "green" && (
-            <span className="text-[8px] font-mono px-2 py-0.5 rounded flex items-center gap-1 uppercase tracking-widest"
-              style={{ background: `${overallColors.wire}12`, color: overallColors.wire, border: `1px solid ${overallColors.wire}30` }}>
-              <Zap className="h-2.5 w-2.5" />
-              self-heal active
-            </span>
-          )}
+
         </div>
         <div className="text-right">
             <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.3)" }}>
@@ -653,10 +582,9 @@ export default function StreamingHealthScreen() {
           {nodes && <PerBotFleetStrip nodes={nodes} />}
         </div>
 
-        {/* RIGHT — full alert list + heal log */}
+        {/* RIGHT — full alert list */}
         <div className="flex flex-col w-1/2 min-h-0 overflow-y-auto" style={{ background: "rgba(2,6,23,0.6)" }}>
           {nodes && <AlertPanel nodes={nodes} />}
-          <StreamingHealLog log={healLog} />
         </div>
 
       </div>

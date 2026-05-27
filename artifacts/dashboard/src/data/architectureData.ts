@@ -124,11 +124,11 @@ export const NODES: ArchNode[] = [
   },
   {
     id: "api_system",
-    label: "Auto-Heal",
-    subtitle: "/system · health + remediate",
+    label: "System Health",
+    subtitle: "/system · health",
     col: 1, row: 4,
     color: "#22d3ee",
-    description: "Health checker and auto-remediation engine. Runs on a 2-minute timer. Detects stale heartbeats, fires kick-restart sequences, clears degradation state.",
+    description: "Health checker and stale-bot detection. Monitors bot_portfolio.last_updated per-bot thresholds and surfaces degradation events. Manual intervention required on stale detection.",
   },
   {
     id: "api_claude_review",
@@ -371,11 +371,11 @@ export const FLOWS: ArchFlow[] = [
     nodeIds: ["api_system", "db_bots_state", "ext_alerts"],
     edgeIds: ["e_system_state", "e_api_alerts"],
     steps: [
-      "Auto-Heal job fires every 2 minutes inside the Trading API",
-      "Reads all rows from bots_state, computes heartbeat_age for each bot",
-      "Bot with age > threshold → degradation_tracker escalates to yellow/red",
-      "Remediation action taken: force_refresh flag set, kick sequence dispatched",
-      "If heal fails, alert pushed to Discord with component name and failure reason",
+      "Claude report reconciliation runs on demand or scheduled",
+      "Reads bot_portfolio.last_updated per-bot, computes age against per-bot thresholds",
+      "Bot with age > threshold → degradation_tracker records bot_stale_workflow HIGH severity",
+      "Stale flag appears in reconciliation_flags and errors_window of the Claude report",
+      "Manual restart of the stale workflow is required — no auto-remediation layer",
     ],
   },
   {

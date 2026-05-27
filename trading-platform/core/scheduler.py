@@ -54,8 +54,9 @@ _last_reset_date: date | None = None
 #
 #   2. If the Kraken bot process crashes, this scheduler has no visibility.
 #      The kraken_heartbeat table going stale (>30 min) is the only signal.
-#      The degradation_tracker will alert on stale heartbeat within 5 min
-#      (TTL fixed from 1800s to 300s in audit fix F11).
+#      The degradation_tracker will alert on stale heartbeat within 5 min.
+#      There is no auto-remediation layer — stale detection surfaces alerts
+#      only; manual restart of the Replit workflow is required.
 #
 #   3. There is no cross-process kill switch. A manual trip of the Alpaca
 #      kill switch does NOT stop Kraken bots. Use the /rebalance endpoint
@@ -265,7 +266,7 @@ def is_auto_trading_enabled() -> bool:
     return _auto_trading_enabled
 
 
-_ALWAYS_ACTIVE_JOBS = {"auto_heal", "daily_discord_pnl_report"}  # always run regardless of trading toggle
+_ALWAYS_ACTIVE_JOBS = {"daily_discord_pnl_report"}  # always run regardless of trading toggle
 
 
 def set_auto_trading(enabled: bool) -> dict:
@@ -283,7 +284,7 @@ def set_auto_trading(enabled: bool) -> dict:
             if job.id not in _ALWAYS_ACTIVE_JOBS:
                 job.pause()
         _auto_trading_enabled = False
-        logger.warning("AUTO-TRADING DISABLED — trading jobs paused (auto-heal monitor remains active)")
+        logger.warning("AUTO-TRADING DISABLED — trading jobs paused (math_auditor, discord_pnl, snapshot_export remain active)")
 
     return {
         "auto_trading_enabled": _auto_trading_enabled,

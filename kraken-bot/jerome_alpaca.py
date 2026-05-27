@@ -111,6 +111,39 @@ class JeromeAlpaca:
             logger.error(f"JeromeAlpaca | Close failed {symbol}: {exc}")
             return False
 
+    def get_orders(
+        self,
+        symbol: str,
+        side: str = "sell",
+        status: str = "filled",
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return orders for a symbol filtered by side and status."""
+        try:
+            orders = self.api.list_orders(
+                status=status,
+                side=side,
+                limit=limit,
+                direction="desc",
+            )
+            return [
+                {
+                    "id":               o.id,
+                    "symbol":           o.symbol,
+                    "side":             o.side,
+                    "status":           o.status,
+                    "filled_avg_price": getattr(o, "filled_avg_price", None),
+                    "filled_qty":       getattr(o, "filled_qty", None),
+                    "filled_at":        str(getattr(o, "filled_at", "") or ""),
+                    "submitted_at":     str(getattr(o, "submitted_at", "") or ""),
+                }
+                for o in orders
+                if o.symbol == symbol
+            ]
+        except Exception as exc:
+            logger.warning(f"JeromeAlpaca | get_orders({symbol}, {side}): {exc}")
+            return []
+
     def is_market_open(self) -> bool:
         try:
             clock = self.api.get_clock()

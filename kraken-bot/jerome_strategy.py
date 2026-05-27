@@ -128,6 +128,8 @@ def run_jerome_cycle(profile: dict, db_id: int) -> None:
                 )
                 open_positions = alpaca.get_open_positions()
 
+    _reconcile_jerome_pnl(alpaca)
+
     try:
         _add_trading_platform_to_path()
         from core.bot_state import write_portfolio as _write_portfolio
@@ -233,7 +235,12 @@ def _record_trade_open(
 
 
 def _record_trade_close(symbol: str, reason: str, db_id: int) -> None:
-    """Mark position as closed in jerome_positions table."""
+    """Mark position as closed in jerome_positions table.
+
+    realised_pnl_usd is intentionally left NULL here — the SELL order is
+    submitted fire-and-forget with no fill confirmation.  _reconcile_jerome_pnl()
+    runs every cycle and back-fills P&L once the Alpaca fill arrives.
+    """
     try:
         _add_trading_platform_to_path()
         from db.postgres import get_conn, is_pg_available
@@ -249,6 +256,91 @@ def _record_trade_close(symbol: str, reason: str, db_id: int) -> None:
             conn.commit()
     except Exception as exc:
         logger.debug(f"Jerome | DB close record failed (non-fatal): {exc}")
+
+
+def _reconcile_jerome_pnl(alpaca: "JeromeAlpaca") -> None:
+    """Back-fill realised_pnl_usd for closed rows whose SELL hasn't filled yet.
+
+    Runs every cycle (idempotent: only touches rows with realised_pnl_usd IS NULL).
+
+    P&L formula per DB row:
+        row_pnl = (sell_filled_avg × sell_filled_qty − total_notional)
+                  × (row_notional / total_notional)
+
+    When multiple DB rows share the same symbol (Jerome held duplicate lots),
+    the single SELL order covers all of them and P&L is split proportionally
+    by notional invested.
+    """
+    try:
+        _add_trading_platform_to_path()
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id, symbol, notional_usd, closed_at
+                    FROM jerome_positions
+                    WHERE status = 'closed' AND realised_pnl_usd IS NULL
+                    ORDER BY symbol, closed_at
+                """)
+                null_rows = cur.fetchall()
+
+        if not null_rows:
+            return
+
+        logger.info(f"Jerome | P&L reconciler: {len(null_rows)} row(s) with NULL pnl")
+
+        from collections import defaultdict
+        by_symbol: dict = defaultdict(list)
+        for row_id, sym, notional, closed_at in null_rows:
+            by_symbol[sym].append((row_id, float(notional), closed_at))
+
+        for sym, rows in by_symbol.items():
+            try:
+                filled_sells = alpaca.get_orders(symbol=sym, side="sell", status="filled")
+                if not filled_sells:
+                    logger.debug(
+                        f"Jerome | Reconciler: no filled SELL for {sym} yet — deferring"
+                    )
+                    continue
+
+                sell = max(filled_sells, key=lambda o: o.get("filled_at") or "")
+                sell_avg = float(sell.get("filled_avg_price") or 0)
+                sell_qty = float(sell.get("filled_qty") or 0)
+                if not sell_avg or not sell_qty:
+                    logger.debug(
+                        f"Jerome | Reconciler: {sym} SELL fill price not available — deferring"
+                    )
+                    continue
+
+                total_notional = sum(r[1] for r in rows)
+                total_proceeds = sell_avg * sell_qty
+                total_pnl      = total_proceeds - total_notional
+
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        for row_id, notional, _ in rows:
+                            row_pnl = round(total_pnl * (notional / total_notional), 2)
+                            cur.execute("""
+                                UPDATE jerome_positions
+                                SET realised_pnl_usd = %s
+                                WHERE id = %s AND realised_pnl_usd IS NULL
+                            """, (row_pnl, row_id))
+                            logger.info(
+                                f"Jerome | Reconciler: {sym} id={row_id} "
+                                f"pnl=${row_pnl:+.2f} "
+                                f"(sell_avg={sell_avg:.4f} × {sell_qty:.4f} qty "
+                                f"notional_share={notional:.0f}/{total_notional:.0f})"
+                            )
+                    conn.commit()
+
+            except Exception as exc:
+                logger.warning(f"Jerome | Reconciler failed for {sym}: {exc}")
+
+    except Exception as exc:
+        logger.warning(f"Jerome | P&L reconciler failed (non-fatal): {exc}")
 
 
 

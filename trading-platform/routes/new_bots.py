@@ -167,7 +167,7 @@ async def pair_learning():
     # Total trade count across ALL bots: Kraken trades + Alpaca journal (Oracle)
     kraken_count_rows = _pg_query("SELECT COUNT(*) AS cnt FROM kraken_trades WHERE closed_at IS NOT NULL")
     alpaca_count_rows = _pg_query(
-        "SELECT COUNT(*) AS cnt FROM trade_journal WHERE status IN ('Closed_Win','Closed_Loss','Closed')"
+        "SELECT COUNT(*) AS cnt FROM trades WHERE status IN ('Closed_Win','Closed_Loss','Closed')"
     )
     kraken_total = int(kraken_count_rows[0]["cnt"] or 0) if kraken_count_rows else 0
     alpaca_total = int(alpaca_count_rows[0]["cnt"] or 0) if alpaca_count_rows else 0

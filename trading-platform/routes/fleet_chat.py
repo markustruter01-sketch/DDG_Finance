@@ -261,8 +261,9 @@ async def _get_fleet_context() -> str:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT ticker, side, entry_price, exit_price, pnl_pct, pnl_usd, strategy, closed_at
-                       FROM trade_journal WHERE closed_at > NOW() - INTERVAL '48 hours'
+                    """SELECT symbol AS ticker, side, entry_price, exit_price, pnl_pct, pnl_usd,
+                              NULL::text AS strategy, closed_at
+                       FROM kraken_trades WHERE closed_at > NOW() - INTERVAL '48 hours'
                        ORDER BY closed_at DESC LIMIT 20"""
                 )
                 cols = [d[0] for d in cur.description]

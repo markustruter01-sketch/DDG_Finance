@@ -903,6 +903,43 @@ async def _run_pipeline_inner(
             sym for sym in _open_syms if sym not in _CRYPTO_SKIP
         )
 
+        # ── Oracle trades reconciler ──────────────────────────────────────────
+        # On every cycle, compare live Alpaca positions against Active rows in
+        # the trades table.  Any position that has no matching Active row gets
+        # a backfill entry — self-healing past log_trade failures (DB churn,
+        # server restarts mid-execution, SQLite→PostgreSQL migration gaps, etc).
+        try:
+            from db.postgres import get_conn as _recon_gc, is_pg_available as _recon_pg
+            from analysis.trade_journal import log_trade as _recon_log
+            if _recon_pg():
+                with _recon_gc() as _rc:
+                    with _rc.cursor() as _rcur:
+                        _rcur.execute(
+                            "SELECT ticker FROM trades "
+                            "WHERE status = 'Active' AND asset_class = 'momentum_equity'"
+                        )
+                        _db_active: set[str] = {row[0] for row in _rcur.fetchall()}
+                for _rpos in _open_pos:
+                    _rsym = _rpos.get("symbol", "")
+                    if not _rsym or _rsym in _CRYPTO_SKIP or _rsym in _db_active:
+                        continue
+                    _recon_avg = float(_rpos.get("avg_entry_price") or 0) or None
+                    _recon_log(
+                        trade_id=f"RECON-{_rsym}-{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+                        ticker=_rsym,
+                        asset_class="momentum_equity",
+                        conviction_score=0.0,
+                        original_thesis=f"Reconciled: Alpaca position had no trades row",
+                        intended_price=_recon_avg,
+                        regime_at_entry=None,
+                    )
+                    logger.info(
+                        f"Pipeline | Reconciler: inserted missing trades row for "
+                        f"{_rsym} (avg_entry={_recon_avg})"
+                    )
+        except Exception as _recon_exc:
+            logger.warning(f"Pipeline | Oracle reconciler failed (non-fatal): {_recon_exc}")
+
         # Equity for ATR-based position sizing
         try:
             _stf_acct  = _scan_acct()

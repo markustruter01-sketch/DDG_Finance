@@ -242,6 +242,13 @@ export default function StreamingBotsScreen() {
   const { data: davyStatus } = useKrakenStatus("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
+  const { data: depegStatus } = useKrakenStatus("depeg_hunter");
+  const { data: momentumAlphaStatus } = useKrakenStatus("momentum_alpha");
+  const { data: momentumBetaStatus } = useKrakenStatus("momentum_beta");
+  const { data: momentumGammaStatus } = useKrakenStatus("momentum_gamma");
+  const { data: listingPumpStatus } = useKrakenStatus("listing_pump");
+  const { data: eventTraderStatus } = useKrakenStatus("event_trader");
+  const { data: memecoinStatus } = useKrakenStatus("memecoin_velocity");
   const { data: forexState } = useForexState();
   const { data: forexPosRaw } = useForexPositions();
   const { data: fleetEq } = useFleetEquity();
@@ -310,32 +317,78 @@ export default function StreamingBotsScreen() {
       recentTrades: [],
     },
     depeg_hunter: {
-      equity: fleetEq?.depeg_hunter?.equity ?? null,
-      paused: fleetEq?.depeg_hunter?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
+      equity: depegStatus?.total_equity_usd ?? fleetEq?.depeg_hunter?.equity ?? null,
+      paused: depegStatus?.bot_paused ?? false,
+      stale: fleetEq?.depeg_hunter?.stale ?? false,
+      openPositionCount: depegStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (depegStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (depegStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
     },
     momentum_alpha: {
-      equity: fleetEq?.momentum_alpha?.equity ?? null,
-      paused: fleetEq?.momentum_alpha?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
+      equity: momentumAlphaStatus?.total_equity_usd ?? fleetEq?.momentum_alpha?.equity ?? null,
+      paused: momentumAlphaStatus?.bot_paused ?? false,
+      stale: fleetEq?.momentum_alpha?.stale ?? false,
+      openPositionCount: momentumAlphaStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (momentumAlphaStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (momentumAlphaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
     },
     momentum_beta: {
-      equity: fleetEq?.momentum_beta?.equity ?? null,
-      paused: fleetEq?.momentum_beta?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
+      equity: momentumBetaStatus?.total_equity_usd ?? fleetEq?.momentum_beta?.equity ?? null,
+      paused: momentumBetaStatus?.bot_paused ?? false,
+      stale: fleetEq?.momentum_beta?.stale ?? false,
+      openPositionCount: momentumBetaStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (momentumBetaStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (momentumBetaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
     },
     momentum_gamma: {
-      equity: fleetEq?.momentum_gamma?.equity ?? null,
-      paused: fleetEq?.momentum_gamma?.paused ?? false,
-      openPositionCount: 0,
-      openPositionSymbols: [],
-      recentTrades: [],
+      equity: momentumGammaStatus?.total_equity_usd ?? fleetEq?.momentum_gamma?.equity ?? null,
+      paused: momentumGammaStatus?.bot_paused ?? false,
+      stale: fleetEq?.momentum_gamma?.stale ?? false,
+      openPositionCount: momentumGammaStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (momentumGammaStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (momentumGammaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
+    },
+    listing_pump: {
+      equity: listingPumpStatus?.total_equity_usd ?? null,
+      paused: listingPumpStatus?.bot_paused ?? false,
+      openPositionCount: listingPumpStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (listingPumpStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (listingPumpStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
+    },
+    event_trader: {
+      equity: eventTraderStatus?.total_equity_usd ?? null,
+      paused: eventTraderStatus?.bot_paused ?? false,
+      openPositionCount: eventTraderStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (eventTraderStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (eventTraderStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
+    },
+    memecoin_velocity: {
+      equity: memecoinStatus?.total_equity_usd ?? null,
+      paused: memecoinStatus?.bot_paused ?? false,
+      openPositionCount: memecoinStatus?.open_positions?.length ?? 0,
+      openPositionSymbols: (memecoinStatus?.open_positions ?? []).map((p) => p.symbol),
+      recentTrades: (memecoinStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
+        symbol: t.symbol,
+        pnl_usd: t.pnl_usd,
+      })),
     },
   };
 

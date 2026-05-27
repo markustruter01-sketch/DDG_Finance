@@ -455,6 +455,23 @@ class AlpacaEtfEngine:
             logger.info(f"EtfEngine | DB: recorded open {bot_id}/{symbol}")
         except Exception as exc:
             logger.error(f"EtfEngine | record_open failed: {exc}")
+        # Mirror to trades table so /journal and reporting pick it up
+        try:
+            from analysis.trade_journal import log_trade as _lt
+            _lt(
+                trade_id=f"ETF-{bot_id}-{symbol}-{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+                ticker=symbol,
+                asset_class="momentum_etf",
+                conviction_score=0.0,
+                original_thesis=(
+                    f"ETF Trend Long {bot_id}: entry={entry_price:.2f} "
+                    f"stop={stop_price:.2f} notional=${notional_usd:,.0f}"
+                ),
+                intended_price=entry_price,
+            )
+            logger.info(f"EtfEngine | log_trade: recorded trades row for {bot_id}/{symbol}")
+        except Exception as _lt_exc:
+            logger.warning(f"EtfEngine | log_trade mirror failed (non-fatal): {_lt_exc}")
 
     def record_close(
         self,
@@ -483,6 +500,86 @@ class AlpacaEtfEngine:
             logger.info(f"EtfEngine | DB: recorded close {bot_id}/{symbol} — {exit_reason}")
         except Exception as exc:
             logger.error(f"EtfEngine | record_close failed: {exc}")
+        # Mirror close to trades table
+        try:
+            from db.postgres import get_conn as _gc
+            from analysis.trade_journal import close_trade as _ct
+            with _gc() as _c:
+                with _c.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT trade_id, intended_price FROM trades "
+                        "WHERE ticker = %s AND asset_class = 'momentum_etf' AND status = 'Active' "
+                        "ORDER BY date DESC LIMIT 1",
+                        (symbol,),
+                    )
+                    _row = _cur.fetchone()
+            if _row:
+                _tid, _entry = _row[0], float(_row[1] or 0)
+                # Use ±1.0 sentinel (supported by close_trade) when full cost basis unavailable
+                _pnl_pct = (1.0 if (realised_pnl or 0) >= 0 else -1.0)
+                _ct(
+                    trade_id=_tid,
+                    pnl_percentage=_pnl_pct,
+                    realized_pnl=realised_pnl,
+                    exit_reason=exit_reason,
+                )
+                logger.info(f"EtfEngine | close_trade: updated trades row for {bot_id}/{symbol}")
+        except Exception as _ct_exc:
+            logger.warning(f"EtfEngine | close_trade mirror failed (non-fatal): {_ct_exc}")
+
+    def reconcile_etf_trades(self, bot_id: str) -> None:
+        """Mirror of Oracle reconciler for ETF bots.
+
+        For every open alpaca_etf_positions row that has no matching Active row
+        in the trades table (asset_class='momentum_etf'), insert one via log_trade().
+        Runs every cycle — idempotent, non-fatal.
+        """
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT symbol, entry_price, notional_usd FROM alpaca_etf_positions "
+                        "WHERE bot_id = %s AND status = 'open'",
+                        (bot_id,),
+                    )
+                    open_etf = {
+                        row[0]: (float(row[1] or 0), float(row[2] or 0))
+                        for row in cur.fetchall()
+                    }
+
+            if not open_etf:
+                return
+
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT ticker FROM trades "
+                        "WHERE status = 'Active' AND asset_class = 'momentum_etf'"
+                    )
+                    active_tickers = {row[0] for row in cur.fetchall()}
+
+            from analysis.trade_journal import log_trade as _lt
+            for sym, (entry_px, notional) in open_etf.items():
+                if sym in active_tickers:
+                    continue
+                _lt(
+                    trade_id=f"RECON-ETF-{bot_id}-{sym}-{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+                    ticker=sym,
+                    asset_class="momentum_etf",
+                    conviction_score=0.0,
+                    original_thesis=f"Reconciled: {bot_id} ETF position had no trades row",
+                    intended_price=entry_px or None,
+                )
+                logger.info(
+                    f"EtfEngine | Reconciler: inserted trades row for "
+                    f"{bot_id}/{sym} (entry={entry_px:.2f})"
+                )
+        except Exception as exc:
+            logger.warning(f"EtfEngine | reconcile_etf_trades failed (non-fatal): {exc}")
 
     def mark_scaled_out(self, bot_id: str, symbol: str, tier: int) -> None:
         """Mark tp1 or tp2 scale-out as done (tier=1 or tier=2)."""

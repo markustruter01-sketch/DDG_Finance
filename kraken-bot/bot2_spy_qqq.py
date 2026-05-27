@@ -279,6 +279,9 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             held_symbols.add(symbol)
             live_positions = engine.get_positions()
 
+    # ── Trades reconciler (self-heals any missing trades rows every cycle) ─────
+    engine.reconcile_etf_trades(BOT_ID)
+
     # ── Portfolio heartbeat ────────────────────────────────────────────────────
     live_positions = engine.get_positions()
     try:

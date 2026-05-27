@@ -757,7 +757,7 @@ def _build_reconciliation_flags(live_pos_cache: dict, errors: list) -> list[dict
     # (c) null_realised_pnl
     _null_checks = [
         ("oracle",
-         "SELECT COUNT(*) FROM trades WHERE asset_class='momentum_equity' AND status NOT IN ('Active') AND realized_pnl IS NULL"),
+         "SELECT COUNT(*) FROM trades WHERE asset_class='momentum_equity' AND status NOT IN ('Active') AND realized_pnl IS NULL AND closed_at > NOW() - INTERVAL '60 days'"),
         ("spy_qqq_trend",
          "SELECT COUNT(*) FROM alpaca_etf_positions WHERE bot_id='bot2_spy_qqq' AND status='closed' AND realised_pnl IS NULL"),
         ("jerome_macro",

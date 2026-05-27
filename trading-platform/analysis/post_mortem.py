@@ -82,6 +82,7 @@ async def _fetch_closed_orders() -> list[dict[str, Any]]:
                 "order_type": order_type,
                 "exit_price": float(order.filled_avg_price),
                 "filled_at":  str(order.filled_at),
+                "filled_qty": float(order.filled_qty or 0),
             })
         return result
 
@@ -201,7 +202,12 @@ async def run_post_mortem() -> dict[str, Any]:
         # ── Close trade with all Phase 1 RAG fields ────────────────────────
         # Replaces update_trade_fill_price() + update_trade_outcome() with
         # a single atomic call that also stores exit_reason / time / slippage.
-        _qty = float(journal_entry.get("qty") or journal_entry.get("shares") or 0)
+        _qty = float(
+            order.get("filled_qty") or
+            journal_entry.get("qty") or
+            journal_entry.get("shares") or
+            0
+        )
         realized_pnl_val = round(pnl_pct / 100.0 * entry_price * _qty, 2) if _qty > 0 else None
         try:
             close_trade(

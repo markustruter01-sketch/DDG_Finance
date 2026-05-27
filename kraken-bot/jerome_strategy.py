@@ -104,6 +104,17 @@ def run_jerome_cycle(profile: dict, db_id: int) -> None:
             side  = entry["direction"]
             theme = entry["theme"]
 
+            # DB gate — must be first. Catches OPG orders placed off-hours that
+            # are queued but not yet filled, so they don't appear in Alpaca's
+            # list_positions() response and the broker-state check below is blind.
+            _db_open = _count_open_db_positions(sym)
+            if _db_open > 0:
+                logger.info(
+                    f"Jerome | Skip entry: already holding {sym} "
+                    f"({_db_open} open DB row(s))"
+                )
+                continue
+
             if any(p["symbol"] == sym for p in open_positions):
                 logger.info(f"Jerome | Already holding {sym} — skipping")
                 continue
@@ -176,6 +187,30 @@ def _get_holding_themes(positions: list[dict], themes_map: dict) -> set:
     """Return set of commodity themes currently held."""
     symbol_theme = {s: theme for theme, syms in themes_map.items() for s in syms}
     return {symbol_theme.get(p["symbol"], "unknown") for p in positions}
+
+
+def _count_open_db_positions(symbol: str) -> int:
+    """Return number of open DB rows for symbol.
+
+    Used as the first gate in the entry loop to catch pending OPG orders
+    that have not yet filled and therefore do not appear in Alpaca's
+    list_positions() response.
+    """
+    try:
+        _add_trading_platform_to_path()
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return 0
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) FROM jerome_positions WHERE symbol = %s AND status = 'open'",
+                    (symbol,),
+                )
+                row = cur.fetchone()
+                return int(row[0]) if row else 0
+    except Exception:
+        return 0
 
 
 def _get_days_held(symbol: str) -> Optional[float]:

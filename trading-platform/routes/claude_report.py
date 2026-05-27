@@ -133,22 +133,39 @@ def _fetch_alpaca_positions_sync(api_key: str, secret_key: str) -> list[dict]:
     ]
 
 async def _build_live_pos_cache() -> dict[str, list[dict]]:
-    cache: dict[str, list[dict]] = {}
+    # Build list of (bot_id, acct_key, coroutine_or_None) upfront so we can
+    # fan out all Alpaca calls in parallel via asyncio.gather instead of
+    # awaiting them one-by-one in a for loop (B.1.1 perf fix).
+    tasks: list[tuple[str, str, object]] = []
     for bot_id, (api_env, sec_env) in _ALPACA_ENV_VARS.items():
         api_key    = os.environ.get(api_env, "")
         secret_key = os.environ.get(sec_env, "")
+        acct_key   = _BOT_BROKER_LABEL[bot_id]
         if not api_key or not secret_key:
             logger.warning(f"claude_report | Missing Alpaca creds for {bot_id} ({api_env})")
-            cache[_BOT_BROKER_LABEL[bot_id]] = []
+            tasks.append((bot_id, acct_key, None))
+        else:
+            tasks.append((
+                bot_id, acct_key,
+                asyncio.to_thread(_fetch_alpaca_positions_sync, api_key, secret_key),
+            ))
+
+    coroutines = [coro for _, _, coro in tasks if coro is not None]
+    settled    = await asyncio.gather(*coroutines, return_exceptions=True)
+
+    cache: dict[str, list[dict]] = {}
+    result_iter = iter(settled)
+    for bot_id, acct_key, coro in tasks:
+        if coro is None:
+            cache[acct_key] = []
             continue
-        try:
-            acct_key  = _BOT_BROKER_LABEL[bot_id]
-            positions = await asyncio.to_thread(_fetch_alpaca_positions_sync, api_key, secret_key)
-            cache[acct_key] = positions
-            logger.debug(f"claude_report | Alpaca {bot_id}: {len(positions)} live positions")
-        except Exception as exc:
-            logger.warning(f"claude_report | Alpaca {bot_id} fetch failed: {exc}")
-            cache[_BOT_BROKER_LABEL[bot_id]] = []
+        result = next(result_iter)
+        if isinstance(result, Exception):
+            logger.warning(f"claude_report | Alpaca {bot_id} fetch failed: {result}")
+            cache[acct_key] = []
+        else:
+            cache[acct_key] = result
+            logger.debug(f"claude_report | Alpaca {bot_id}: {len(result)} live positions")
     return cache
 
 # ── Section: fleet ─────────────────────────────────────────────────────────────

@@ -11,16 +11,8 @@ except ImportError:
 
 from config import EMA_FAST, EMA_SLOW, ADX_PERIOD, ADX_THRESHOLD, ATR_PERIOD
 
-_exchange = ccxt.binance({
+_exchange = ccxt.kucoin({
     "enableRateLimit": True,
-    "options": {"defaultType": "spot"},
-    "urls": {
-        "api": {
-            "public":  "https://data-api.binance.vision/api/v3",
-            "private": "https://data-api.binance.vision/api/v3",
-            "v1":      "https://data-api.binance.vision/api/v1",
-        }
-    },
 })
 
 

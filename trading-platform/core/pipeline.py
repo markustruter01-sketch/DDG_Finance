@@ -676,6 +676,13 @@ async def _run_pipeline_inner(
         result["status"] = "market_closed"
         result["market_regime"] = "Market closed — Oracle only trades NYSE hours"
         _update_state(result, started, trading_mode="market_closed")
+        # Touch oracle heartbeat so last_updated stays fresh during after-hours /
+        # weekends and doesn't trigger false-positive stale-bot alerts.
+        try:
+            from core.bot_state import touch_portfolio as _touch_pf
+            _touch_pf("oracle")
+        except Exception:
+            pass
         return result
 
     # ── Pre-dispatch Signal Guardrails (authoritative temporal gate) ──────────

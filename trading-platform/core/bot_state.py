@@ -198,6 +198,21 @@ def get_portfolio(bot_id: str) -> dict:
         return {}
 
 
+def touch_portfolio(bot_id: str) -> None:
+    """Touch last_updated only — no equity/cash change. Called on market-closed
+    pipeline cycles so oracle heartbeat stays fresh without overwriting live data."""
+    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    try:
+        with _get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE bot_portfolio SET last_updated = NOW() WHERE bot_id = %s",
+                    (canonical,),
+                )
+    except Exception as exc:
+        logger.debug(f"BotState | touch_portfolio({bot_id}) failed (non-fatal): {exc}")
+
+
 def write_portfolio(
     bot_id: str,
     cash: float,

@@ -701,6 +701,25 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | Jerome v2 COPX backfill failed (non-fatal): {exc}")
 
+    # BUCK FUTURES — add bot_id column to jerome_positions so Jerome and Buck
+    # Futures can share the table without row collisions. Fully idempotent.
+    # Jerome rows default to 'jerome_macro'; Buck Futures writes 'buck_futures'.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE jerome_positions "
+                    "ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'jerome_macro'"
+                )
+                cur.execute("""
+                    UPDATE jerome_positions
+                    SET bot_id = 'jerome_macro'
+                    WHERE bot_id IS NULL
+                """)
+        logger.info("DB | jerome_positions: bot_id column ensured (jerome_macro default)")
+    except Exception as exc:
+        logger.error(f"DB | jerome_positions bot_id migration failed (non-fatal): {exc}")
+
     # Phase A — Unified accounting layer rebuild (2026-05-19), part 1: additive columns only.
     # Adds new columns alongside existing schema. Phase D updates writers/readers.
     # Phase E drops legacy columns (updated_at, metadata) and makes data_source NOT NULL.

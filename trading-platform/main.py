@@ -197,18 +197,21 @@ async def lifespan(app: FastAPI):
     except Exception as _fxdb_err:
         logger.warning(f"Forex DB | Bootstrap failed (non-fatal): {_fxdb_err}")
 
-    import pytz as _pytz
-    _et_tz = _pytz.timezone("America/New_York")
-    scheduler.add_job(
-        func=_forex_navigator_cycle,
-        trigger=_ITrigger(hours=4),
-        id="forex_navigator",
-        name="Forex Navigator 4h Cycle",
-        replace_existing=True,
-        misfire_grace_time=600,
-        next_run_time=__import__("datetime").datetime.now(_et_tz),
-    )
-    logger.info("Forex Navigator registered (4-hour interval, first run immediate)")
+    # FOREX NAVIGATOR DISABLED 2026-05-28 — forex shelved (2 backtests, both NO-GO).
+    # Navigator slot repurposed as Buck Futures (kraken-bot/buck_futures_strategy.py).
+    # Leaving _forex_navigator_cycle and forex-engine code on disk as a parachute.
+    # import pytz as _pytz
+    # _et_tz = _pytz.timezone("America/New_York")
+    # scheduler.add_job(
+    #     func=_forex_navigator_cycle,
+    #     trigger=_ITrigger(hours=4),
+    #     id="forex_navigator",
+    #     name="Forex Navigator 4h Cycle",
+    #     replace_existing=True,
+    #     misfire_grace_time=600,
+    #     next_run_time=__import__("datetime").datetime.now(_et_tz),
+    # )
+    # logger.info("Forex Navigator registered (4-hour interval, first run immediate)")
 
     try:
         from notifications.alert_manager import start_alert_scheduler

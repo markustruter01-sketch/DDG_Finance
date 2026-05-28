@@ -86,8 +86,9 @@ except ImportError:
 # jerome_strategy.py (LLM stack) kept on disk as parachute — revert by
 # changing jerome_v2_strategy → jerome_strategy + run_jerome_v2_cycle → run_jerome_cycle
 BOTS = [
-    ("blackbeard",       "jerome_v2_strategy", "run_jerome_v2_cycle"),
-    ("bot2_spy_qqq",     "bot2_spy_qqq",       "run_bot2_cycle"),
+    ("blackbeard",       "jerome_v2_strategy",    "run_jerome_v2_cycle"),
+    ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
+    ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint

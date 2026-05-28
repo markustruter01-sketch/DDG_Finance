@@ -175,6 +175,23 @@ BOT_PROFILES = {
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
         "BOT_PAUSED":        False,
     },
+
+    # ── Buck Futures — Industrial & Broad commodity trend-following ─────────
+    # Repurposes the retired forex navigator slot.
+    # Strategy: clone of Jerome v2 (EMA/ADX/ATR) on DBB, PICK, DBC, PDBC, GSG.
+    # Inherits navigator/forex Alpaca account (ALPACA_API_KEY / ALPACA_SECRET_KEY).
+    # DB: writes to jerome_positions with bot_id='buck_futures'.
+    "buck_futures": {
+        "display_name":      "Buck Futures",
+        "db_id":             6,
+        "strategy_type":     "commodity_trend",
+        "strategy_label":    "Commodity Trend (Industrial & Broad)",
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "LOOP_SLEEP_SECONDS": 900,           # 15-min polling (exits every cycle)
+        "BOT_PAUSED":        False,
+    },
 }
 
 BOT_ID = os.environ.get("BOT_ID", "davy-jones")

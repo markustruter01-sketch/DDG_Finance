@@ -31,9 +31,10 @@ logger = logging.getLogger("jerome.v2")
 UNIVERSE: dict[str, list[str]] = {
     "ENERGY":          ["XLE", "USO", "XOP"],
     "PRECIOUS_METALS": ["GLD", "SLV", "GDX", "GDXJ"],
-    "INDUSTRIAL":      ["DBB", "PICK"],
-    "BROAD":           ["DBC", "PDBC", "GSG"],
 }
+
+# Bot identity for DB row tagging (shared jerome_positions table)
+BOT_ID = "jerome_macro"
 
 CYCLE_HOUR_UTC  = 13     # entry scan window start
 CYCLE_MIN_START = 30     # 13:30 UTC
@@ -48,6 +49,38 @@ THEME_CAP       = 2      # max positions per theme
 
 # Once-per-day gate state (module-level; resets across restarts, that's OK)
 _last_entry_scan_date: Optional[date] = None
+
+# Schema bootstrap flag — runs once per process, before first DB operation
+_bot_id_col_ensured: bool = False
+
+
+def _ensure_bot_id_column() -> None:
+    """
+    Idempotent: add bot_id column to jerome_positions if it doesn't exist,
+    then tag any untagged rows as 'jerome_macro'.  Called once per process on
+    first cycle so kraken-bot-runner doesn't depend on trading-api startup order.
+    """
+    global _bot_id_col_ensured
+    if _bot_id_col_ensured:
+        return
+    _add_trading_platform_to_path()
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE jerome_positions "
+                    "ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'jerome_macro'"
+                )
+                cur.execute(
+                    "UPDATE jerome_positions SET bot_id='jerome_macro' WHERE bot_id IS NULL"
+                )
+        _bot_id_col_ensured = True
+        logger.info("Jerome v2 | jerome_positions.bot_id column ensured")
+    except Exception as exc:
+        logger.warning(f"Jerome v2 | bot_id column ensure failed (non-fatal): {exc}")
 
 
 # ─── Universe helpers ──────────────────────────────────────────────────────────
@@ -167,6 +200,7 @@ def _get_open_db_positions() -> list[dict]:
                            entry_price, highest_price_seen, opened_at
                     FROM jerome_positions
                     WHERE status = 'open'
+                      AND bot_id = 'jerome_macro'
                     ORDER BY opened_at ASC
                 """)
                 cols = [d[0] for d in cur.description]
@@ -187,7 +221,7 @@ def _count_open_in_theme(theme: str) -> int:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT COUNT(*) FROM jerome_positions "
-                    "WHERE theme = %s AND status = 'open'",
+                    "WHERE theme = %s AND status = 'open' AND bot_id = 'jerome_macro'",
                     (theme,),
                 )
                 row = cur.fetchone()
@@ -207,7 +241,7 @@ def _count_open_by_symbol(symbol: str) -> int:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT COUNT(*) FROM jerome_positions "
-                    "WHERE symbol = %s AND status = 'open'",
+                    "WHERE symbol = %s AND status = 'open' AND bot_id = 'jerome_macro'",
                     (symbol,),
                 )
                 row = cur.fetchone()
@@ -261,8 +295,8 @@ def _record_trade_open(
                         (symbol, direction, theme, notional_usd,
                          entry_price, highest_price_seen,
                          conviction, stop_loss_pct, take_profit_pct,
-                         max_hold_days, thesis, status, opened_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open',NOW())
+                         max_hold_days, thesis, status, opened_at, bot_id)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open',NOW(),'jerome_macro')
                 """, (
                     symbol, direction, theme, round(notional_usd, 2),
                     round(entry_price, 6), round(close_at_signal, 6),
@@ -583,6 +617,8 @@ def run_jerome_v2_cycle(profile: dict, db_id: int) -> None:
     """
     from jerome_alpaca import JeromeAlpaca
     from jerome_strategy import _reconcile_jerome_pnl   # reuse existing reconciler
+
+    _ensure_bot_id_column()
 
     now = datetime.now(timezone.utc)
     logger.info(

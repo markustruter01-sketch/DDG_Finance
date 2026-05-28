@@ -88,7 +88,11 @@ except ImportError:
 BOTS = [
     ("blackbeard",       "jerome_v2_strategy",    "run_jerome_v2_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
-    ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
+    # HALTED 2026-05-28: buck_futures shares Oracle's Alpaca account (PA33G6QCIHDS /
+    # caa2a89b-d35c-4c19-8f19-596d36ebb1ef). No 4th account exists. Re-enable ONLY
+    # after ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY are added to Secrets and
+    # config.py buck_futures profile is updated to use them.
+    # ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint

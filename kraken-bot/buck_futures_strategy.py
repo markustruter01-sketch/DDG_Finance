@@ -614,6 +614,23 @@ def run_buck_futures_cycle(profile: dict, db_id: int) -> None:
       - Scans all 5 universe instruments for entry signals
       - Submits orders for qualifying candidates
     """
+    # ── SAFETY HALT: account collision guard ──────────────────────────────
+    # Buck Futures currently has no dedicated Alpaca account. ALPACA_API_KEY /
+    # ALPACA_SECRET_KEY point to Oracle's account (caa2a89b-d35c-4c19-8f19-596d36ebb1ef).
+    # Trading is blocked until ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY are
+    # provisioned and config.py is updated. Remove this block only then.
+    import os as _os
+    _buck_key = _os.environ.get("ALPACA_BUCK_API_KEY", "")
+    if not _buck_key:
+        logger.error(
+            "Buck Futures | HALTED — no dedicated Alpaca account. "
+            "ALPACA_BUCK_API_KEY is not set. "
+            "Add a new paper account key pair (ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY) "
+            "to Secrets, update config.py, then re-enable the BOTS entry in runner.py."
+        )
+        return
+    # ── END SAFETY HALT ───────────────────────────────────────────────────
+
     from jerome_alpaca import JeromeAlpaca
 
     _ensure_bot_id_column()

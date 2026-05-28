@@ -1,19 +1,40 @@
 ---
 name: Buck futures Alpaca account collision
-description: buck_futures bot uses the same Alpaca account as oracle, causing fleet equity double-counting of ~$96k.
+description: buck_futures used Oracle's Alpaca account. Bot is HALTED until a 4th account is provisioned.
 ---
 
-## Rule
-Do NOT treat buck_futures equity as independent until it has its own Alpaca account. Fleet equity double-counts while the collision exists.
+## Current State (2026-05-28)
+Buck Futures is HALTED. It was removed from runner.py BOTS list and a safety guard
+was added to run_buck_futures_cycle. It cannot trade until ALPACA_BUCK_API_KEY exists.
 
-## Detail
-- `ALPACA_API_KEY` / `ALPACA_SECRET_KEY` env vars (the "navigator slot" assigned to buck_futures in kraken-bot/config.py) point to the same Alpaca paper account as oracle (PA33G6QCIHDS).
-- `bot_portfolio` for `buck_futures` shows AMD, INTC, NUE, QCOM, TXN, UNH — identical to oracle's positions.
-- `/fleet/equity` sums BOTH rows → fleet equity overstated by ~$96,683.
-- Reported fleet equity ~$901,517. True (deduplicated) ~$804,834.
+## Root Cause
+`ALPACA_API_KEY` / `ALPACA_SECRET_KEY` env vars (the "navigator slot") point to
+Oracle's Alpaca paper account: `caa2a89b-d35c-4c19-8f19-596d36ebb1ef`.
+The forex navigator never had its own Alpaca account — it also shared this one.
 
-## Why this happened
-Buck Futures was assigned the ALPACA_API_KEY/SECRET env vars which were originally the forex navigator slot, but that slot's Alpaca credentials were the same as oracle's.
+## Account inventory (3 total, all confirmed)
+| Bot | Env vars | Key prefix |
+|-----|----------|------------|
+| Oracle | ALPACA_API_KEY / ALPACA_SECRET_KEY | PKKBYO... |
+| Jerome (blackbeard) | ALPACA_JEROME_API_KEY / SECRET | PKG42L... |
+| SPY/QQQ (bot2_spy_qqq) | ALPACA_BB_API_KEY / SECRET | PK6OIL... |
+| Buck Futures | MISSING — needs new account | — |
 
-## Fix required before Phase 2
-Either: assign buck_futures a dedicated paper Alpaca account, or exclude buck_futures from fleet_total until resolved.
+## Oracle account confirmed clean
+- Verified no DBB/PICK/DBC/PDBC/GSG open positions or orders from buck_futures
+- 6 PDBC orders in history are from Jerome's old broad universe (April, all closed)
+- jerome_positions has zero rows for bot_id='buck_futures'
+
+## Why
+No 4th Alpaca paper account existed when buck_futures was created. It was
+erroneously assigned the retired forex navigator slot which shared Oracle's account.
+
+## How to re-enable Buck Futures
+1. Markus creates a new Alpaca paper account at alpaca.markets
+2. Add `ALPACA_BUCK_API_KEY` + `ALPACA_BUCK_SECRET_KEY` to Replit Secrets
+3. Update `kraken-bot/config.py` buck_futures profile:
+   `"ALPACA_API_KEY": os.environ.get("ALPACA_BUCK_API_KEY", "")`
+   `"ALPACA_SECRET_KEY": os.environ.get("ALPACA_BUCK_SECRET_KEY", "")`
+4. Uncomment `("buck_futures", "buck_futures_strategy", "run_buck_futures_cycle")` in runner.py
+5. Remove the ALPACA_BUCK_API_KEY safety halt block from run_buck_futures_cycle
+6. Restart kraken-bot-runner workflow

@@ -3,3 +3,6 @@
 - [Oracle bot_portfolio heartbeat](oracle-bot-portfolio-heartbeat.md) — oracle last_updated only ticks during market hours; touch_portfolio() added on market-closed early-return path
 - [Jerome v2 strategy](jerome-v2-strategy.md) — EMA/ADX/ATR trend-following live on blackbeard; LLM stack kept as parachute; prod migration via ensure_schema() on publish.
 - [Buck Futures bot](buck-futures-bot.md) — Industrial+Broad commodity clone of Jerome v2; navigator/forex slot; uses ALPACA_API_KEY/SECRET; shares jerome_positions table with bot_id tagging.
+- [Fleet equity key mismatches](fleet-equity-key-mismatches.md) — /fleet/equity keys are DB bot_ids; two frontend screens read wrong keys causing null equity display for spy_qqq_trend and jerome_macro.
+- [Buck futures account collision](buck-futures-account-collision.md) — buck_futures uses same Alpaca account as oracle; fleet equity double-counts ~$96k; fix before Phase 2 refactor.
+- [Fleet win rate gap](fleet-win-rate-gap.md) — no server endpoint returns fleet-wide win rate; currently assembled client-side in two different ways in FleetPerformanceHero and useRealFeed.

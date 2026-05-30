@@ -91,6 +91,7 @@ export interface KrakenFleetSummary {
   total_starting_usd: number;
   total_trades: number;
   total_wins: number;
+  fleet_win_rate: number | null;
   total_pnl_usd: number;
   bot_count: number;
   bots: Array<{

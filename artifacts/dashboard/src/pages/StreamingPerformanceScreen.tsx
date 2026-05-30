@@ -70,8 +70,14 @@ function ratioColor(v: number | null | undefined, goodThreshold = 1): string {
 
 /* ── bot config ──────────────────────────────────────────── */
 const BOT_META: Record<string, { icon: string; color: string; startCap: number; label: string }> = {
-  "davy-jones":     { icon: getBotIdentity("davy-jones").icon,    color: C.cyan,   startCap: 100_000, label: getBotIdentity("davy-jones").displayName },
-  "blackbeard":     { icon: getBotIdentity("blackbeard").icon,    color: C.red,    startCap: 100_000, label: getBotIdentity("blackbeard").displayName },
+  "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", startCap: 100_000, label: getBotIdentity("oracle").displayName },
+  "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    startCap: 100_000, label: getBotIdentity("spy_qqq_trend").displayName },
+  "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  startCap: 100_000, label: getBotIdentity("jerome_macro").displayName },
+  "forex_gump":     { icon: getBotIdentity("forex_gump").icon,     color: C.green,   startCap: 100_000, label: getBotIdentity("forex_gump").displayName },
+  "depeg_hunter":   { icon: getBotIdentity("depeg_hunter").icon,   color: C.blue,    startCap: 100_000, label: getBotIdentity("depeg_hunter").displayName },
+  "momentum_alpha": { icon: getBotIdentity("momentum_alpha").icon, color: C.cyan,    startCap: 100_000, label: getBotIdentity("momentum_alpha").displayName },
+  "momentum_beta":  { icon: getBotIdentity("momentum_beta").icon,  color: C.violet,  startCap: 100_000, label: getBotIdentity("momentum_beta").displayName },
+  "momentum_gamma": { icon: getBotIdentity("momentum_gamma").icon, color: C.red,     startCap: 100_000, label: getBotIdentity("momentum_gamma").displayName },
 };
 
 /* ── fear & greed helpers ────────────────────────────────── */
@@ -117,16 +123,29 @@ export default function StreamingPerformanceScreen() {
   const marketFG = sg?.market_fear_greed?.value;
   const regime   = st?.groq?.regime ?? "—";
 
-  /* Kraken 6-bot P&L from fleet-summary bot rows (for per-bot matrix display) */
-  const fleetBots = fl?.bots ?? [];
+  /* Bot matrix: drive from registry (correct 8 bots), not stale fleet-summary */
+  const registryBots = registry?.bots ?? [];
 
-  /* Full fleet totals from single source of truth */
+  /* Fleet equity lookup by bot ID */
+  const fleetEqByBotId: Record<string, { equity: number; pnl: number; positions: number } | undefined> = fleetEq ? {
+    oracle:         fleetEq.oracle,
+    spy_qqq_trend:  fleetEq.spy_qqq_trend,
+    jerome_macro:   fleetEq.jerome_macro,
+    forex_gump:     fleetEq.forex_gump,
+    depeg_hunter:   fleetEq.depeg_hunter,
+    momentum_alpha: fleetEq.momentum_alpha,
+    momentum_beta:  fleetEq.momentum_beta,
+    momentum_gamma: fleetEq.momentum_gamma,
+  } : {};
+
+  /* Full fleet totals from single source of truth (fleet_equity API) */
   const fleetEquity = fleetEq?.fleet_total?.equity ?? 0;
   const fleetPnL    = fleetEq?.fleet_total?.pnl ?? 0;
-  const fleetTrades = fl?.total_trades ?? fleetBots.reduce((s, b) => s + b.trades, 0);
-  const fleetWins   = fl?.total_wins   ?? fleetBots.reduce((s, b) => s + b.wins, 0);
-  // Single canonical win rate — always the server-computed value, no client-side arithmetic drift
-  const fleetWinRate = fl?.fleet_win_rate ?? (fleetTrades > 0 ? (fleetWins / fleetTrades) * 100 : null);
+
+  /* Fleet trade stats from journal — the only table with real closed-trade records */
+  const fleetTrades  = j?.summary.total ?? 0;
+  const fleetWins    = j?.summary.wins  ?? 0;
+  const fleetWinRate = fleetTrades > 0 ? (fleetWins / fleetTrades) * 100 : null;
 
   /* overall win rate — attribution returns 0-100 already */
   const overallWinRate = at?.overall.win_rate ?? null;
@@ -264,27 +283,13 @@ export default function StreamingPerformanceScreen() {
 
           {/* bot rows */}
           <div style={{ flex: 1, overflowY: "auto", padding: "6px 0" }}>
-            {fleetBots.length > 0 ? fleetBots.map((bot) => {
-              const meta = BOT_META[bot.bot_id] ?? { icon: "🤖", color: C.label, startCap: 100_000, label: bot.bot_id };
-              const botEqData = (() => {
-                if (!fleetEq) return null;
-                const m: Record<string, typeof fleetEq.oracle> = {
-                  "oracle":          fleetEq.oracle,
-                  "spy_qqq_trend":   fleetEq.spy_qqq_trend,
-                  "jerome_macro":    fleetEq.jerome_macro,
-                  "forex_gump":      fleetEq.forex_gump,
-                  "depeg_hunter":    fleetEq.depeg_hunter,
-                  "momentum_alpha":  fleetEq.momentum_alpha,
-                  "momentum_beta":   fleetEq.momentum_beta,
-                  "momentum_gamma":  fleetEq.momentum_gamma,
-                };
-                return m[bot.bot_id] ?? null;
-              })();
-              const equity = botEqData?.equity ?? null;
-              const pnl = botEqData?.pnl ?? null;
-              const wr   = bot.trades > 0 ? (bot.wins / bot.trades) * 100 : null;
+            {registryBots.length > 0 ? registryBots.map((bot) => {
+              const meta = BOT_META[bot.id] ?? { icon: "🤖", color: C.label, startCap: 100_000, label: bot.id };
+              const botEq = fleetEqByBotId[bot.id];
+              const equity = botEq?.equity ?? null;
+              const pnl    = botEq?.pnl ?? null;
               return (
-                <div key={bot.bot_id} style={{
+                <div key={bot.id} style={{
                   display: "grid",
                   gridTemplateColumns: "32px 1fr 72px 52px 80px",
                   gap: "0 8px",
@@ -301,18 +306,12 @@ export default function StreamingPerformanceScreen() {
                       {equity != null ? `$${(equity / 1000).toFixed(1)}k equity` : "— equity"}
                     </div>
                   </div>
-                  {/* win rate with mini bar */}
+                  {/* win rate — no per-bot breakdown available; shown at fleet level */}
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 16, fontFamily: "monospace", fontWeight: 900, color: wr != null ? (wr >= 50 ? C.green : C.red) : C.dim }}>
-                      {wr != null ? `${wr.toFixed(0)}%` : "—"}
-                    </div>
-                    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${wr ?? 0}%`, background: wr != null ? (wr >= 50 ? C.green : C.red) : "transparent", borderRadius: 2, transition: "width 0.6s ease" }} />
-                    </div>
+                    <div style={{ fontSize: 16, fontFamily: "monospace", fontWeight: 900, color: C.dim }}>—</div>
+                    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginTop: 3 }} />
                   </div>
-                  <div style={{ fontSize: 14, fontFamily: "monospace", color: C.label, textAlign: "right" }}>
-                    {bot.trades}
-                  </div>
+                  <div style={{ fontSize: 14, fontFamily: "monospace", color: C.dim, textAlign: "right" }}>—</div>
                   <div style={{ fontSize: 18, fontFamily: "monospace", fontWeight: 900, color: pnlColor(pnl), textAlign: "right" }}>
                     {fmtMoney(pnl)}
                   </div>

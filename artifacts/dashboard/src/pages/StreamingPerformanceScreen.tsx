@@ -73,7 +73,6 @@ const BOT_META: Record<string, { icon: string; color: string; startCap: number; 
   "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", startCap: 100_000, label: getBotIdentity("oracle").displayName },
   "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    startCap: 100_000, label: getBotIdentity("spy_qqq_trend").displayName },
   "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  startCap: 100_000, label: getBotIdentity("jerome_macro").displayName },
-  "forex_gump":     { icon: getBotIdentity("forex_gump").icon,     color: C.green,   startCap: 100_000, label: getBotIdentity("forex_gump").displayName },
 };
 
 /* ── fear & greed helpers ────────────────────────────────── */
@@ -127,7 +126,6 @@ export default function StreamingPerformanceScreen() {
     oracle:         fleetEq.oracle,
     spy_qqq_trend:  fleetEq.spy_qqq_trend,
     jerome_macro:   fleetEq.jerome_macro,
-    forex_gump:     fleetEq.forex_gump,
   } : {};
 
   /* Full fleet totals from single source of truth (fleet_equity API) */

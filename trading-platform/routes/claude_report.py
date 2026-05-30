@@ -45,7 +45,6 @@ _BOT_BROKER_LABEL: dict[str, str] = {
     "oracle":        "alpaca_PA33G6QCIHDS",
     "spy_qqq_trend": "alpaca_PA3X9UBVZ6T8",
     "jerome_macro":  "alpaca_PA37SP8ID1XU",
-    "forex_gump":    "oanda_navigator",
 }
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -95,8 +94,6 @@ def _infer_bot_from_component(component: str) -> Optional[str]:
     _MAP = {
         "oracle": "oracle", "stf": "oracle",
         "jerome": "jerome_macro",
-        "forex":  "forex_gump",
-        "navigator": "forex_gump",
         "spy_qqq": "spy_qqq_trend",
         "bot2":    "spy_qqq_trend",
     }
@@ -219,11 +216,6 @@ def _get_last_trade_at(bot_id: str) -> Optional[str]:
         elif bot_id == "jerome_macro":
             result = _pg_scalar(
                 "SELECT GREATEST(MAX(opened_at), MAX(closed_at)) FROM jerome_positions"
-            )
-        elif bot_id == "forex_gump":
-            result = _pg_scalar(
-                "SELECT GREATEST(MAX(entry_time), MAX(exit_time)) FROM forex_trades WHERE bot_id = %s",
-                ("navigator",),
             )
         else:
             return None
@@ -382,31 +374,6 @@ def _build_open_positions(live_pos_cache: dict, errors: list) -> list[dict]:
     except Exception as exc:
         errors.append({"section": "open_positions.jerome_macro", "error": str(exc)})
 
-    # Forex — forex_trades (status=open, bot_id=navigator)
-    try:
-        rows = _pg_rows(
-            "SELECT pair, direction, units, entry_price, sl_price, llm_thesis, entry_time "
-            "FROM forex_trades WHERE status = 'open' AND bot_id = %s",
-            ("navigator",),
-        )
-        for r in rows:
-            entry_time = _tz(r["entry_time"])
-            days_held  = (now - entry_time).days if entry_time else None
-            positions.append({
-                "bot_id": "forex_gump", "symbol": r["pair"], "direction": r["direction"],
-                "qty":           float(r["units"] or 0),
-                "entry_price":   float(r["entry_price"] or 0),
-                "current_price": None,
-                "unrealised_pnl_usd": None,
-                "unrealised_pnl_pct": None,
-                "days_held":    days_held,
-                "trailing_stop": float(r["sl_price"]) if r["sl_price"] else None,
-                "entry_reason":  (r.get("llm_thesis") or "")[:80] or None,
-                "asset_class":   "forex",
-            })
-    except Exception as exc:
-        errors.append({"section": "open_positions.forex_gump", "error": str(exc)})
-
     return positions
 
 # ── Section: trades_window ─────────────────────────────────────────────────────
@@ -499,29 +466,6 @@ def _build_trades_window(window_start: datetime, errors: list) -> list[dict]:
     except Exception as exc:
         errors.append({"section": "trades_window.jerome_macro", "error": str(exc)})
 
-    # Forex
-    try:
-        rows = _pg_rows(
-            """SELECT pair, direction, units::float AS qty,
-                      entry_price::float, exit_price::float,
-                      entry_time AS opened_at, exit_time AS closed_at,
-                      pnl_usd::float AS realised_pnl_usd, status
-               FROM forex_trades
-               WHERE bot_id = %s
-                 AND (exit_time >= %s OR (status = 'open' AND entry_time >= %s))
-               ORDER BY COALESCE(exit_time, entry_time) DESC""",
-            ("navigator", window_start, window_start),
-        )
-        for r in rows:
-            trades.append(_trade_row(
-                "forex_gump", r["pair"], r["direction"],
-                r["qty"], r["entry_price"], r["exit_price"],
-                r["opened_at"], r["closed_at"], r["realised_pnl_usd"],
-                None, "forex", r["status"],
-            ))
-    except Exception as exc:
-        errors.append({"section": "trades_window.forex_gump", "error": str(exc)})
-
     return trades
 
 # ── Section: metrics_30d ───────────────────────────────────────────────────────
@@ -546,11 +490,6 @@ def _build_metrics_30d(errors: list) -> list[dict]:
             "bot_id": "jerome_macro",
             "sql": """SELECT realised_pnl_usd AS pnl FROM jerome_positions
                       WHERE status = 'closed' AND closed_at >= %s""",
-        },
-        {
-            "bot_id": "forex_gump",
-            "sql": """SELECT pnl_usd AS pnl FROM forex_trades
-                      WHERE bot_id = 'navigator' AND status != 'open' AND exit_time >= %s""",
         },
     ]
 
@@ -600,7 +539,6 @@ _BOT_STALE_THRESHOLDS: dict[str, int] = {
     "oracle":          108000,  # 30h — covers weekends and market holidays
     "spy_qqq_trend":   108000,  # 30h — same
     "jerome_macro":     50000,  # ~14h, between 09:00 and 21:00 UTC cycles
-    "forex_gump":        5400,  # 90 min
 }
 
 

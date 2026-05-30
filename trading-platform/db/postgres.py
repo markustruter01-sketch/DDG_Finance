@@ -501,8 +501,7 @@ INSERT INTO bot_portfolio (bot_id, starting_usd, cash_usd, equity_usd, positions
 VALUES
   ('oracle',          100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
   ('spy_qqq_trend',   100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('jerome_macro',    100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('forex_gump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
+  ('jerome_macro',    100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -797,9 +796,9 @@ def ensure_schema() -> None:
             with _f_conn.cursor() as _f_cur:
                 _f_cur.execute(
                     "DELETE FROM bot_portfolio WHERE bot_id = ANY(%s)",
-                    (["depeg_hunter", "momentum_alpha", "momentum_beta", "momentum_gamma"],),
+                    (["depeg_hunter", "momentum_alpha", "momentum_beta", "momentum_gamma", "forex_gump"],),
                 )
-                logger.info("DB | Phase F: deleted crypto bot_portfolio rows")
+                logger.info("DB | Phase F: deleted retired bot_portfolio rows")
     except Exception as _f_exc:
         logger.error(f"DB | Phase F bot_portfolio delete failed: {_f_exc}")
 

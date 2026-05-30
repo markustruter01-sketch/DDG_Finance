@@ -15,8 +15,6 @@ const IDENTITY_MAP: Record<string, BotIdentity> = {
   "davy-jones":          { canonicalId: "spy_qqq_trend",      displayName: "SPY/QQQ Trend",      icon: "📈" },
   "jerome_macro":        { canonicalId: "jerome_macro",       displayName: "Jerome",             icon: "🏛️" },
   "blackbeard":          { canonicalId: "jerome_macro",       displayName: "Jerome",             icon: "🏛️" },
-  "forex_gump":          { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
-  "navigator":           { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
   "buck_futures":        { canonicalId: "buck_futures",       displayName: "Buck Futures",       icon: "🐂" },
 };
 

@@ -8,7 +8,6 @@ const BOT_SLOTS: BotSlot[] = [
   { id: "oracle",            short: "Oracle",  color: "#a78bfa" },
   { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
   { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
-  { id: "forex_gump",        short: "Forex",   color: "#60a5fa" },
 ];
 
 interface BotEquitySlice {

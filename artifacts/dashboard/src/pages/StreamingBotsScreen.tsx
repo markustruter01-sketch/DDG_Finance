@@ -2,12 +2,9 @@ import {
   usePortfolio,
   useKrakenPerformance,
   useKrakenStatus,
-  useForexState,
-  useForexPositions,
   useFleetEquity,
   useBotRegistry,
   useRecentTrades,
-  type ForexPosition,
 } from "@/hooks/use-trading";
 import { getBotColors } from "@/lib/bot-colors";
 import { DDGBadge } from "@/components/DDGBadge";
@@ -18,14 +15,12 @@ const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: str
   { id: "oracle",            name: "Oracle",            icon: "🔮", exchange: "alpaca",  asset_class: "stocks",   color: "purple",  status: "active" },
   { id: "spy_qqq_trend",     name: "SPY/QQQ Trend",     icon: "📈", exchange: "alpaca",  asset_class: "equity_etf", color: "cyan",  status: "active" },
   { id: "jerome_macro",      name: "Jerome",            icon: "🏛",  exchange: "alpaca",  asset_class: "macro_etf", color: "orange", status: "active" },
-  { id: "forex_gump",        name: "Forex Gump",        icon: "🐠", exchange: "oanda",   asset_class: "forex",    color: "orange",  status: "active" },
 ];
 
 const PARAMS_TEXT: Record<string, string> = {
   oracle: "Z-Score > 2.1 | Min Profit 0.5% | NYSE hours only",
   spy_qqq_trend: "Z-Entry 2.0 | Z-Exit 0.3 | Trail 1.5% | Stop 3%",
   jerome_macro: "LLM analysis at 9AM + 9PM UTC | Groq/Gemini powered",
-  forex_gump: "G10 pairs | ATR-based stops | 4hr cycles",
 };
 
 function fmtEq(v: number) {
@@ -237,8 +232,6 @@ export default function StreamingBotsScreen() {
   const { data: listingPumpStatus } = useKrakenStatus("listing_pump");
   const { data: eventTraderStatus } = useKrakenStatus("event_trader");
   const { data: memecoinStatus } = useKrakenStatus("memecoin_velocity");
-  const { data: forexState } = useForexState();
-  const { data: forexPosRaw } = useForexPositions();
   const { data: fleetEq } = useFleetEquity();
   const { data: registry } = useBotRegistry();
   const { data: recentTrades } = useRecentTrades(15);
@@ -249,16 +242,11 @@ export default function StreamingBotsScreen() {
   const spyEquity = fleetEq?.spy_qqq_trend?.equity ?? davyPerf?.current_equity ?? null;
   const jeromeEquity = fleetEq?.jerome_macro?.equity ?? bbPerf?.current_equity ?? null;
 
-  const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
-    ? (forexPosRaw as ForexPosition[])
-    : ((forexPosRaw as { positions?: ForexPosition[] } | null)?.positions ?? []);
-
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
   const allEquities = [
     oracleEquity, spyEquity, jeromeEquity,
-    fleetEq?.forex_gump?.equity ?? null,
   ].filter((e): e is number => e != null);
-  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 4 ? allEquities.reduce((s, e) => s + e, 0) : null);
+  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 3 ? allEquities.reduce((s, e) => s + e, 0) : null);
   const fleetStarting = fleetEq?.fleet_total?.starting ?? allEquities.length * STARTING_BALANCE;
   const fleetPnl = fleetTotal != null ? fleetTotal - fleetStarting : null;
   const fleetPnlColor = fleetPnl == null ? "#94a3b8" : fleetPnl >= 0 ? "#34d399" : "#f87171";
@@ -295,13 +283,6 @@ export default function StreamingBotsScreen() {
         symbol: t.symbol,
         pnl_usd: t.pnl_usd,
       })),
-    },
-    forex_gump: {
-      equity: fleetEq?.forex_gump?.equity ?? null,
-      paused: forexState?.paused ?? false,
-      openPositionCount: rawForexPos.length,
-      openPositionSymbols: rawForexPos.map((p) => p.pair),
-      recentTrades: [],
     },
     listing_pump: {
       equity: listingPumpStatus?.total_equity_usd ?? null,

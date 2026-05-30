@@ -18,7 +18,6 @@ const BOT_COLORS: Record<string, string> = {
   oracle:          "#8b5cf6",
   spy_qqq_trend:   "#fbbf24",
   jerome_macro:    "#f87171",
-  forex_gump:      "#60a5fa",
 };
 const BOT_KEYS = Object.keys(BOT_COLORS);
 

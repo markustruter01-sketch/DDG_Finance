@@ -1256,18 +1256,6 @@ async def _run_pipeline_inner(
         logger.warning(f"Pipeline | Correlation matrix failed (non-fatal): {_corr_exc}")
         _eq_crypto_corr = 0.0
 
-    try:
-        from analysis.crypto_regime import classify_crypto_regime
-        _crypto_regime = classify_crypto_regime(
-            correlation_with_equity=_eq_crypto_corr,
-        )
-        logger.debug(
-            f"Pipeline | Crypto regime: {_crypto_regime.get('crypto_regime')} "
-            f"(score={_crypto_regime.get('score')}, contagion={_crypto_regime.get('equity_contagion')})"
-        )
-    except Exception as _cr_exc:
-        logger.warning(f"Pipeline | Crypto regime classification failed (non-fatal): {_cr_exc}")
-
     # ── Equity snapshot ─────────────────────────────────────────────────────
     # Write a time-series equity point to PostgreSQL for the equity curve chart.
     # Kraken equity is read from the authoritative kraken_heartbeat DB table.

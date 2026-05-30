@@ -117,10 +117,6 @@ export interface FleetEquityData {
   spy_qqq_trend: BotEquity;
   jerome_macro: BotEquity;
   forex_gump: BotEquity;
-  depeg_hunter: BotEquity;
-  momentum_alpha: BotEquity;
-  momentum_beta: BotEquity;
-  momentum_gamma: BotEquity;
   fleet_total: BotEquity;
   generated_at: string;
   errors: string[];

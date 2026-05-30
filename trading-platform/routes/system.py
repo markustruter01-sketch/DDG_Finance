@@ -212,9 +212,7 @@ async def system_health_architecture() -> dict:
         from datetime import datetime as _dt, timezone as _tz
         import psycopg2 as _pg2, psycopg2.extras as _pg2x, os as _kos
         _kdburl = _kos.environ.get("DATABASE_URL")
-        _ARCH_BOTS = [
-            (1, "depeg_hunter",       "Depeg Hunter"),
-        ]
+        _ARCH_BOTS: list = []
         _bot_levels: list[str] = []
         _bot_detail_parts: list[str] = []
 

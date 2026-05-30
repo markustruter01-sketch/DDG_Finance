@@ -54,7 +54,6 @@ _SOURCE_FILES: list[str] = [
     "trading-platform/analysis/auditor.py",
     "trading-platform/analysis/attribution.py",
     "trading-platform/analysis/correlation_matrix.py",
-    "trading-platform/analysis/crypto_regime.py",
     "trading-platform/analysis/fleet_commander.py",
     "trading-platform/analysis/fleet_enforcer.py",
     "trading-platform/analysis/groq_budget.py",

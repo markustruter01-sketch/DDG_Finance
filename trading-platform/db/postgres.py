@@ -502,11 +502,7 @@ VALUES
   ('oracle',          100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
   ('spy_qqq_trend',   100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
   ('jerome_macro',    100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
-  ('forex_gump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('depeg_hunter',    100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_alpha',  100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_beta',   100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE),
-  ('momentum_gamma',  100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
+  ('forex_gump',      100000, 100000, 100000, '[]'::jsonb, 'internal_sim', FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
 
 -- Listing dedup table — persists seen exchange:asset keys across restarts
@@ -750,23 +746,13 @@ def ensure_schema() -> None:
                 """)
                 _bp_cur.execute("""
                     UPDATE bot_portfolio SET data_source = 'internal_sim'
-                    WHERE bot_id IN ('forex_gump', 'depeg_hunter')
+                    WHERE bot_id = 'forex_gump'
                       AND data_source IS NULL
                 """)
 
                 logger.info("DB | Phase A: backfilled data_source")
 
-                # Insert any missing wild bots that weren't in the original seed.
-                # ON CONFLICT DO NOTHING — never overwrites existing rows.
-                _bp_cur.execute("""
-                    INSERT INTO bot_portfolio
-                        (bot_id, starting_usd, cash_usd, positions, equity_usd,
-                         last_updated, is_live_broker, data_source)
-                    VALUES
-                        ('depeg_hunter', 100000, 100000, '[]'::jsonb, 100000, NOW(), FALSE, 'internal_sim')
-                    ON CONFLICT (bot_id) DO NOTHING
-                """)
-                logger.info("DB | Phase A: ensured all 8 bots have rows")
+                logger.info("DB | Phase A: ensured all bots have rows")
     except Exception as _bp_exc:
         logger.error(f"DB | Phase A migration failed: {_bp_exc}")
         raise
@@ -788,6 +774,34 @@ def ensure_schema() -> None:
                 logger.info("DB | Phase E2a: dropped bot_portfolio.metadata")
     except Exception as _e2_exc:
         logger.error(f"DB | Phase E2a metadata drop failed: {_e2_exc}")
+
+    # Phase F — Crypto bot removal (Phase 2 cleanup).
+    # Drop decommissioned crypto tables and purge 4 bot_portfolio rows.
+    # Safe to re-run: IF EXISTS guards + ON CONFLICT checks make it idempotent.
+    try:
+        with get_conn() as _f_conn:
+            with _f_conn.cursor() as _f_cur:
+                _f_cur.execute("DROP TABLE IF EXISTS crypto_signals")
+                logger.info("DB | Phase F: dropped crypto_signals")
+    except Exception as _f_exc:
+        logger.error(f"DB | Phase F crypto_signals drop failed: {_f_exc}")
+    try:
+        with get_conn() as _f_conn:
+            with _f_conn.cursor() as _f_cur:
+                _f_cur.execute("DROP TABLE IF EXISTS crypto_price_cache")
+                logger.info("DB | Phase F: dropped crypto_price_cache")
+    except Exception as _f_exc:
+        logger.error(f"DB | Phase F crypto_price_cache drop failed: {_f_exc}")
+    try:
+        with get_conn() as _f_conn:
+            with _f_conn.cursor() as _f_cur:
+                _f_cur.execute(
+                    "DELETE FROM bot_portfolio WHERE bot_id = ANY(%s)",
+                    (["depeg_hunter", "momentum_alpha", "momentum_beta", "momentum_gamma"],),
+                )
+                logger.info("DB | Phase F: deleted crypto bot_portfolio rows")
+    except Exception as _f_exc:
+        logger.error(f"DB | Phase F bot_portfolio delete failed: {_f_exc}")
 
 
 def insert_post_mortem(

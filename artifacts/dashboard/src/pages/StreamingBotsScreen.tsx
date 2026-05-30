@@ -19,10 +19,6 @@ const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: str
   { id: "spy_qqq_trend",     name: "SPY/QQQ Trend",     icon: "📈", exchange: "alpaca",  asset_class: "equity_etf", color: "cyan",  status: "active" },
   { id: "jerome_macro",      name: "Jerome",            icon: "🏛",  exchange: "alpaca",  asset_class: "macro_etf", color: "orange", status: "active" },
   { id: "forex_gump",        name: "Forex Gump",        icon: "🐠", exchange: "oanda",   asset_class: "forex",    color: "orange",  status: "active" },
-  { id: "depeg_hunter",      name: "Depeg Hunter",      icon: "💧", exchange: "kraken",  asset_class: "crypto",   color: "blue",    status: "active" },
-  { id: "momentum_alpha",   name: "Momentum Alpha",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "cyan",   status: "active" },
-  { id: "momentum_beta",    name: "Momentum Beta",    icon: "📈", exchange: "binance",  asset_class: "crypto", color: "purple", status: "active" },
-  { id: "momentum_gamma",   name: "Momentum Gamma",   icon: "📈", exchange: "binance",  asset_class: "crypto", color: "rose",   status: "active" },
 ];
 
 const PARAMS_TEXT: Record<string, string> = {
@@ -30,10 +26,6 @@ const PARAMS_TEXT: Record<string, string> = {
   spy_qqq_trend: "Z-Entry 2.0 | Z-Exit 0.3 | Trail 1.5% | Stop 3%",
   jerome_macro: "LLM analysis at 9AM + 9PM UTC | Groq/Gemini powered",
   forex_gump: "G10 pairs | ATR-based stops | 4hr cycles",
-  depeg_hunter: "Stablecoin depeg arbitrage | 24/7 crypto",
-  momentum_alpha:   "Top-1 momentum rank | EMA20/50 + ADX | 24/7",
-  momentum_beta:    "Top-2 momentum rank | EMA20/50 + ADX | 24/7",
-  momentum_gamma:   "Top-3 momentum rank | EMA20/50 + ADX | 24/7",
 };
 
 function fmtEq(v: number) {
@@ -242,10 +234,6 @@ export default function StreamingBotsScreen() {
   const { data: davyStatus } = useKrakenStatus("davy-jones");
   const { data: bbPerf } = useKrakenPerformance("blackbeard");
   const { data: bbStatus } = useKrakenStatus("blackbeard");
-  const { data: depegStatus } = useKrakenStatus("depeg_hunter");
-  const { data: momentumAlphaStatus } = useKrakenStatus("momentum_alpha");
-  const { data: momentumBetaStatus } = useKrakenStatus("momentum_beta");
-  const { data: momentumGammaStatus } = useKrakenStatus("momentum_gamma");
   const { data: listingPumpStatus } = useKrakenStatus("listing_pump");
   const { data: eventTraderStatus } = useKrakenStatus("event_trader");
   const { data: memecoinStatus } = useKrakenStatus("memecoin_velocity");
@@ -269,12 +257,8 @@ export default function StreamingBotsScreen() {
   const allEquities = [
     oracleEquity, spyEquity, jeromeEquity,
     fleetEq?.forex_gump?.equity ?? null,
-    fleetEq?.depeg_hunter?.equity ?? null,
-    fleetEq?.momentum_alpha?.equity ?? null,
-    fleetEq?.momentum_beta?.equity ?? null,
-    fleetEq?.momentum_gamma?.equity ?? null,
   ].filter((e): e is number => e != null);
-  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
+  const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 4 ? allEquities.reduce((s, e) => s + e, 0) : null);
   const fleetStarting = fleetEq?.fleet_total?.starting ?? allEquities.length * STARTING_BALANCE;
   const fleetPnl = fleetTotal != null ? fleetTotal - fleetStarting : null;
   const fleetPnlColor = fleetPnl == null ? "#94a3b8" : fleetPnl >= 0 ? "#34d399" : "#f87171";
@@ -318,50 +302,6 @@ export default function StreamingBotsScreen() {
       openPositionCount: rawForexPos.length,
       openPositionSymbols: rawForexPos.map((p) => p.pair),
       recentTrades: [],
-    },
-    depeg_hunter: {
-      equity: fleetEq?.depeg_hunter?.equity ?? (depegStatus?.total_equity_usd || null),
-      paused: depegStatus?.bot_paused ?? false,
-      stale: fleetEq?.depeg_hunter?.stale ?? false,
-      openPositionCount: depegStatus?.open_positions?.length ?? fleetEq?.depeg_hunter?.positions ?? 0,
-      openPositionSymbols: (depegStatus?.open_positions ?? []).map((p) => p.symbol),
-      recentTrades: (depegStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
-        symbol: t.symbol,
-        pnl_usd: t.pnl_usd,
-      })),
-    },
-    momentum_alpha: {
-      equity: fleetEq?.momentum_alpha?.equity ?? (momentumAlphaStatus?.total_equity_usd || null),
-      paused: momentumAlphaStatus?.bot_paused ?? false,
-      stale: fleetEq?.momentum_alpha?.stale ?? false,
-      openPositionCount: momentumAlphaStatus?.open_positions?.length ?? fleetEq?.momentum_alpha?.positions ?? 0,
-      openPositionSymbols: (momentumAlphaStatus?.open_positions ?? []).map((p) => p.symbol),
-      recentTrades: (momentumAlphaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
-        symbol: t.symbol,
-        pnl_usd: t.pnl_usd,
-      })),
-    },
-    momentum_beta: {
-      equity: fleetEq?.momentum_beta?.equity ?? (momentumBetaStatus?.total_equity_usd || null),
-      paused: momentumBetaStatus?.bot_paused ?? false,
-      stale: fleetEq?.momentum_beta?.stale ?? false,
-      openPositionCount: momentumBetaStatus?.open_positions?.length ?? fleetEq?.momentum_beta?.positions ?? 0,
-      openPositionSymbols: (momentumBetaStatus?.open_positions ?? []).map((p) => p.symbol),
-      recentTrades: (momentumBetaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
-        symbol: t.symbol,
-        pnl_usd: t.pnl_usd,
-      })),
-    },
-    momentum_gamma: {
-      equity: fleetEq?.momentum_gamma?.equity ?? (momentumGammaStatus?.total_equity_usd || null),
-      paused: momentumGammaStatus?.bot_paused ?? false,
-      stale: fleetEq?.momentum_gamma?.stale ?? false,
-      openPositionCount: momentumGammaStatus?.open_positions?.length ?? fleetEq?.momentum_gamma?.positions ?? 0,
-      openPositionSymbols: (momentumGammaStatus?.open_positions ?? []).map((p) => p.symbol),
-      recentTrades: (momentumGammaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
-        symbol: t.symbol,
-        pnl_usd: t.pnl_usd,
-      })),
     },
     listing_pump: {
       equity: listingPumpStatus?.total_equity_usd ?? null,

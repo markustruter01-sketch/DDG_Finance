@@ -6,3 +6,4 @@
 - [Fleet equity key mismatches](fleet-equity-key-mismatches.md) — /fleet/equity keys are DB bot_ids; two frontend screens read wrong keys causing null equity display for spy_qqq_trend and jerome_macro.
 - [Buck futures account collision](buck-futures-account-collision.md) — buck_futures uses same Alpaca account as oracle; fleet equity double-counts ~$96k; fix before Phase 2 refactor.
 - [Fleet win rate gap](fleet-win-rate-gap.md) — no server endpoint returns fleet-wide win rate; currently assembled client-side in two different ways in FleetPerformanceHero and useRealFeed.
+- [Crypto removal Phase F migration](crypto-removal-phase-f.md) — Phase F in ensure_schema() drops crypto_signals/crypto_price_cache and deletes 4 bot_portfolio rows; fires on first trading-api startup after publish.

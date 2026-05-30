@@ -9,10 +9,6 @@ const BOT_SLOTS: BotSlot[] = [
   { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
   { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
   { id: "forex_gump",        short: "Forex",   color: "#60a5fa" },
-  { id: "depeg_hunter",      short: "Depeg",   color: "#38bdf8" },
-  { id: "momentum_alpha",    short: "Mom-A",   color: "#22d3ee" },
-  { id: "momentum_beta",     short: "Mom-B",   color: "#a78bfa" },
-  { id: "momentum_gamma",    short: "Mom-G",   color: "#fb7185" },
 ];
 
 interface BotEquitySlice {

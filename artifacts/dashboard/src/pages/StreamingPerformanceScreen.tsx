@@ -74,10 +74,6 @@ const BOT_META: Record<string, { icon: string; color: string; startCap: number; 
   "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    startCap: 100_000, label: getBotIdentity("spy_qqq_trend").displayName },
   "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  startCap: 100_000, label: getBotIdentity("jerome_macro").displayName },
   "forex_gump":     { icon: getBotIdentity("forex_gump").icon,     color: C.green,   startCap: 100_000, label: getBotIdentity("forex_gump").displayName },
-  "depeg_hunter":   { icon: getBotIdentity("depeg_hunter").icon,   color: C.blue,    startCap: 100_000, label: getBotIdentity("depeg_hunter").displayName },
-  "momentum_alpha": { icon: getBotIdentity("momentum_alpha").icon, color: C.cyan,    startCap: 100_000, label: getBotIdentity("momentum_alpha").displayName },
-  "momentum_beta":  { icon: getBotIdentity("momentum_beta").icon,  color: C.violet,  startCap: 100_000, label: getBotIdentity("momentum_beta").displayName },
-  "momentum_gamma": { icon: getBotIdentity("momentum_gamma").icon, color: C.red,     startCap: 100_000, label: getBotIdentity("momentum_gamma").displayName },
 };
 
 /* ── fear & greed helpers ────────────────────────────────── */
@@ -132,10 +128,6 @@ export default function StreamingPerformanceScreen() {
     spy_qqq_trend:  fleetEq.spy_qqq_trend,
     jerome_macro:   fleetEq.jerome_macro,
     forex_gump:     fleetEq.forex_gump,
-    depeg_hunter:   fleetEq.depeg_hunter,
-    momentum_alpha: fleetEq.momentum_alpha,
-    momentum_beta:  fleetEq.momentum_beta,
-    momentum_gamma: fleetEq.momentum_gamma,
   } : {};
 
   /* Full fleet totals from single source of truth (fleet_equity API) */

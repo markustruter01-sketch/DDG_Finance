@@ -19,10 +19,6 @@ const BOT_COLORS: Record<string, string> = {
   spy_qqq_trend:   "#fbbf24",
   jerome_macro:    "#f87171",
   forex_gump:      "#60a5fa",
-  depeg_hunter:    "#38bdf8",
-  momentum_alpha:  "#22d3ee",
-  momentum_beta:   "#a78bfa",
-  momentum_gamma:  "#fb7185",
 };
 const BOT_KEYS = Object.keys(BOT_COLORS);
 

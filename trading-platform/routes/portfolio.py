@@ -1000,23 +1000,6 @@ async def news_feed() -> dict:
         return {"articles": [], "error": str(exc)}
 
 
-@portfolio_router.get("/crypto-regime")
-async def get_crypto_regime():
-    """
-    Stage 3 — Independent crypto regime classification.
-    Returns the current crypto-native regime (decoupled from equity).
-    """
-    try:
-        from analysis.crypto_regime import get_cached_crypto_regime, classify_crypto_regime
-        cached = get_cached_crypto_regime()
-        if cached:
-            return cached
-        return classify_crypto_regime(correlation_with_equity=0.0)
-    except Exception as exc:
-        logger.warning(f"API | crypto-regime failed: {exc}")
-        return {"crypto_regime": "unknown", "error": str(exc)}
-
-
 @portfolio_router.get("/correlation-matrix")
 async def get_correlation_matrix():
     """

@@ -18,10 +18,6 @@ const IDENTITY_MAP: Record<string, BotIdentity> = {
   "forex_gump":          { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
   "navigator":           { canonicalId: "forex_gump",         displayName: "Forex Gump",         icon: "💱" },
   "buck_futures":        { canonicalId: "buck_futures",       displayName: "Buck Futures",       icon: "🐂" },
-  "depeg_hunter":        { canonicalId: "depeg_hunter",       displayName: "Depeg Hunter",       icon: "🎯" },
-  "momentum_alpha":      { canonicalId: "momentum_alpha",     displayName: "Momentum α",         icon: "⚡" },
-  "momentum_beta":       { canonicalId: "momentum_beta",      displayName: "Momentum β",         icon: "🌊" },
-  "momentum_gamma":      { canonicalId: "momentum_gamma",     displayName: "Momentum γ",         icon: "🔥" },
 };
 
 export function getBotIdentity(legacyOrCanonicalId: string): BotIdentity {

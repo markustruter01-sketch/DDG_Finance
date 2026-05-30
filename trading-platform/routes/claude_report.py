@@ -46,10 +46,6 @@ _BOT_BROKER_LABEL: dict[str, str] = {
     "spy_qqq_trend": "alpaca_PA3X9UBVZ6T8",
     "jerome_macro":  "alpaca_PA37SP8ID1XU",
     "forex_gump":    "oanda_navigator",
-    "momentum_alpha": "kucoin",
-    "momentum_beta":  "kucoin",
-    "momentum_gamma": "kucoin",
-    "depeg_hunter":  "stable_monitor",
 }
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
@@ -99,10 +95,6 @@ def _infer_bot_from_component(component: str) -> Optional[str]:
     _MAP = {
         "oracle": "oracle", "stf": "oracle",
         "jerome": "jerome_macro",
-        "momentum_alpha": "momentum_alpha",
-        "momentum_beta":  "momentum_beta",
-        "momentum_gamma": "momentum_gamma",
-        "depeg": "depeg_hunter",
         "forex":  "forex_gump",
         "navigator": "forex_gump",
         "spy_qqq": "spy_qqq_trend",
@@ -233,15 +225,6 @@ def _get_last_trade_at(bot_id: str) -> Optional[str]:
                 "SELECT GREATEST(MAX(entry_time), MAX(exit_time)) FROM forex_trades WHERE bot_id = %s",
                 ("navigator",),
             )
-        elif bot_id in ("momentum_alpha", "momentum_beta", "momentum_gamma"):
-            result = _pg_scalar(
-                "SELECT GREATEST(MAX(opened_at), MAX(closed_at)) FROM momentum_bot_trades WHERE bot_id = %s",
-                (bot_id,),
-            )
-        elif bot_id == "depeg_hunter":
-            result = _pg_scalar(
-                "SELECT GREATEST(MAX(entry_time), MAX(exit_time)) FROM depeg_hunter_trades"
-            )
         else:
             return None
         return _iso(result)
@@ -278,10 +261,8 @@ def _build_bots(log_events: list, open_positions: list, errors: list) -> list[di
             ]
             if bot_errors:
                 status = "ERROR"
-            elif stale_mins is not None and stale_mins > _STALE_MINUTES and bid != "depeg_hunter":
+            elif stale_mins is not None and stale_mins > _STALE_MINUTES:
                 status = "STALE"
-            elif bid == "depeg_hunter":
-                status = "IDLE_BY_DESIGN"
             else:
                 status = "TRADING"
 
@@ -401,30 +382,6 @@ def _build_open_positions(live_pos_cache: dict, errors: list) -> list[dict]:
     except Exception as exc:
         errors.append({"section": "open_positions.jerome_macro", "error": str(exc)})
 
-    # Momentum — momentum_bot_trades (status=open)
-    try:
-        rows = _pg_rows(
-            "SELECT bot_id, symbol, direction, qty, entry_price, entry_reason, opened_at "
-            "FROM momentum_bot_trades WHERE status = 'open'"
-        )
-        for r in rows:
-            opened_at = _tz(r["opened_at"])
-            days_held = (now - opened_at).days if opened_at else None
-            positions.append({
-                "bot_id": r["bot_id"], "symbol": r["symbol"], "direction": r["direction"],
-                "qty":           float(r["qty"] or 0),
-                "entry_price":   float(r["entry_price"] or 0),
-                "current_price": None,
-                "unrealised_pnl_usd": None,
-                "unrealised_pnl_pct": None,
-                "days_held":    days_held,
-                "trailing_stop": None,
-                "entry_reason":  r.get("entry_reason"),
-                "asset_class":   "momentum_crypto",
-            })
-    except Exception as exc:
-        errors.append({"section": "open_positions.momentum", "error": str(exc)})
-
     # Forex — forex_trades (status=open, bot_id=navigator)
     try:
         rows = _pg_rows(
@@ -449,30 +406,6 @@ def _build_open_positions(live_pos_cache: dict, errors: list) -> list[dict]:
             })
     except Exception as exc:
         errors.append({"section": "open_positions.forex_gump", "error": str(exc)})
-
-    # Depeg hunter — depeg_hunter_trades (exit_time IS NULL)
-    try:
-        rows = _pg_rows(
-            "SELECT stable, units, entry_price, severity, entry_time "
-            "FROM depeg_hunter_trades WHERE exit_time IS NULL"
-        )
-        for r in rows:
-            entry_time = _tz(r["entry_time"])
-            days_held  = (now - entry_time).days if entry_time else None
-            positions.append({
-                "bot_id": "depeg_hunter", "symbol": r["stable"], "direction": "short",
-                "qty":           float(r["units"] or 0),
-                "entry_price":   float(r["entry_price"] or 0),
-                "current_price": None,
-                "unrealised_pnl_usd": None,
-                "unrealised_pnl_pct": None,
-                "days_held":    days_held,
-                "trailing_stop": None,
-                "entry_reason":  f"depeg_severity={r.get('severity', '?')}",
-                "asset_class":   "stablecoin_arbitrage",
-            })
-    except Exception as exc:
-        errors.append({"section": "open_positions.depeg_hunter", "error": str(exc)})
 
     return positions
 
@@ -566,28 +499,6 @@ def _build_trades_window(window_start: datetime, errors: list) -> list[dict]:
     except Exception as exc:
         errors.append({"section": "trades_window.jerome_macro", "error": str(exc)})
 
-    # Momentum
-    try:
-        rows = _pg_rows(
-            """SELECT bot_id, symbol, direction, qty::float,
-                      entry_price::float, exit_price::float,
-                      opened_at, closed_at, realised_pnl_usd::float,
-                      exit_reason, status
-               FROM momentum_bot_trades
-               WHERE (closed_at >= %s OR (status = 'open' AND opened_at >= %s))
-               ORDER BY COALESCE(closed_at, opened_at) DESC""",
-            (window_start, window_start),
-        )
-        for r in rows:
-            trades.append(_trade_row(
-                r["bot_id"], r["symbol"], r["direction"],
-                r["qty"], r["entry_price"], r["exit_price"],
-                r["opened_at"], r["closed_at"], r["realised_pnl_usd"],
-                r["exit_reason"], "momentum_crypto", r["status"],
-            ))
-    except Exception as exc:
-        errors.append({"section": "trades_window.momentum", "error": str(exc)})
-
     # Forex
     try:
         rows = _pg_rows(
@@ -610,29 +521,6 @@ def _build_trades_window(window_start: datetime, errors: list) -> list[dict]:
             ))
     except Exception as exc:
         errors.append({"section": "trades_window.forex_gump", "error": str(exc)})
-
-    # Depeg hunter
-    try:
-        rows = _pg_rows(
-            """SELECT stable AS symbol, units::float AS qty,
-                      entry_price::float, exit_price::float,
-                      entry_time AS opened_at, exit_time AS closed_at,
-                      pnl_usd::float AS realised_pnl_usd, reason AS exit_reason
-               FROM depeg_hunter_trades
-               WHERE (exit_time >= %s OR (exit_time IS NULL AND entry_time >= %s))
-               ORDER BY COALESCE(exit_time, entry_time) DESC""",
-            (window_start, window_start),
-        )
-        for r in rows:
-            status = "open" if r["closed_at"] is None else "closed"
-            trades.append(_trade_row(
-                "depeg_hunter", r["symbol"], None,
-                r["qty"], r["entry_price"], r["exit_price"],
-                r["opened_at"], r["closed_at"], r["realised_pnl_usd"],
-                r["exit_reason"], "stablecoin_arbitrage", status,
-            ))
-    except Exception as exc:
-        errors.append({"section": "trades_window.depeg_hunter", "error": str(exc)})
 
     return trades
 
@@ -663,22 +551,6 @@ def _build_metrics_30d(errors: list) -> list[dict]:
             "bot_id": "forex_gump",
             "sql": """SELECT pnl_usd AS pnl FROM forex_trades
                       WHERE bot_id = 'navigator' AND status != 'open' AND exit_time >= %s""",
-        },
-        {
-            "bot_id": "depeg_hunter",
-            "sql": "SELECT pnl_usd AS pnl FROM depeg_hunter_trades WHERE exit_time >= %s",
-        },
-        {
-            "bot_id": "momentum_alpha",
-            "sql": "SELECT realised_pnl_usd::float AS pnl FROM momentum_bot_trades WHERE bot_id='momentum_alpha' AND status='closed' AND closed_at >= %s",
-        },
-        {
-            "bot_id": "momentum_beta",
-            "sql": "SELECT realised_pnl_usd::float AS pnl FROM momentum_bot_trades WHERE bot_id='momentum_beta' AND status='closed' AND closed_at >= %s",
-        },
-        {
-            "bot_id": "momentum_gamma",
-            "sql": "SELECT realised_pnl_usd::float AS pnl FROM momentum_bot_trades WHERE bot_id='momentum_gamma' AND status='closed' AND closed_at >= %s",
         },
     ]
 
@@ -724,15 +596,11 @@ def _build_metrics_30d(errors: list) -> list[dict]:
     return metrics
 
 # ── Stale-bot thresholds (seconds) ────────────────────────────────────────────
-# depeg_hunter intentionally excluded — idle is its normal state.
 _BOT_STALE_THRESHOLDS: dict[str, int] = {
     "oracle":          108000,  # 30h — covers weekends and market holidays
     "spy_qqq_trend":   108000,  # 30h — same
     "jerome_macro":     50000,  # ~14h, between 09:00 and 21:00 UTC cycles
     "forex_gump":        5400,  # 90 min
-    "momentum_alpha":   94000,  # ~26h, daily 00:05 UTC cycle
-    "momentum_beta":    94000,  # same
-    "momentum_gamma":   94000,  # same
 }
 
 
@@ -1003,12 +871,6 @@ def _build_exit_attribution_30d(errors: list) -> dict:
         "WHERE status='closed' AND closed_at >= %s",
         (thirty_days_ago,),
     )
-    _collect(
-        "SELECT exit_reason, realised_pnl_usd::float AS pnl FROM momentum_bot_trades "
-        "WHERE status='closed' AND closed_at >= %s",
-        (thirty_days_ago,),
-    )
-
     def _bucket(reason: str) -> str:
         r = reason.lower()
         if any(k in r for k in ("trail", "stop")):       return "trailing_stop"

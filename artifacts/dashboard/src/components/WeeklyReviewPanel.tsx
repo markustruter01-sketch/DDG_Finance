@@ -1,4 +1,4 @@
-import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useForexState, useFleetEquity, useBotRegistry } from "@/hooks/use-trading";
+import { useWeeklyReview, usePortfolio, useKrakenFleetSummary, useFleetEquity, useBotRegistry } from "@/hooks/use-trading";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui";
 import { Activity, TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle2, Clock, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ export function WeeklyReviewPanel() {
   const { data, isLoading, isError } = useWeeklyReview();
   const { data: portfolio } = usePortfolio();
   const { data: fleetSummary } = useKrakenFleetSummary();
-  const { data: forexState } = useForexState();
   const { data: fleetEq } = useFleetEquity();
   const { data: registry } = useBotRegistry();
 
@@ -38,7 +37,6 @@ export function WeeklyReviewPanel() {
   const equityReady = liveTotal > 0;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
-  const forexEquity = fleetEq?.forex_gump?.equity ?? null;
   const krakenEquity = ([
     fleetEq?.spy_qqq_trend?.equity,
     fleetEq?.jerome_macro?.equity,
@@ -140,10 +138,9 @@ export function WeeklyReviewPanel() {
           </div>
 
           {/* Bot equity breakdown */}
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2">
             {[
               { label: "Oracle", val: oracleEquity, start: 100_000 },
-              { label: "Forex Gump", val: forexEquity, start: 100_000 },
               { label: "Kraken (6)", val: krakenEquity, start: 600_000 },
             ].map(({ label, val, start }) => {
               const pnl = val != null ? val - start : null;

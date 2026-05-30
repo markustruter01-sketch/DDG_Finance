@@ -11,7 +11,7 @@ Phase F in `trading-platform/db/postgres.py` `ensure_schema()` handles the produ
 ## What it does
 - `DROP TABLE IF EXISTS crypto_signals`
 - `DROP TABLE IF EXISTS crypto_price_cache`
-- `DELETE FROM bot_portfolio WHERE bot_id = ANY([depeg_hunter, momentum_alpha, momentum_beta, momentum_gamma])`
+- `DELETE FROM bot_portfolio WHERE bot_id = ANY([depeg_hunter, momentum_alpha, momentum_beta, momentum_gamma, forex_gump])`
 
 ## Why
 `executeSql` with `environment: "production"` is read-only — DDL and DML writes against production can only reach the DB through either the Publish schema-diff flow (for CREATE/ALTER/DROP TABLE) or startup migration code that runs in the production container after deploy.

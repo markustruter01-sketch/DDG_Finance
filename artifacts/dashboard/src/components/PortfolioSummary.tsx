@@ -1,7 +1,7 @@
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   usePortfolio, useLivePositions, useVault, useKrakenStatus, useKrakenFleetSummary,
-  useExportReport, useForexState, useFleetEquity, useBotRegistry,
+  useExportReport, useFleetEquity, useBotRegistry,
 } from "@/hooks/use-trading";
 import { AnimatedCurrency, RollingCurrency } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui";
 import {
   TrendingUp, TrendingDown, Zap, Vault, ArrowUpRight, Coins,
-  TrendingUp as GrowthIcon, RefreshCw, FileDown, Navigation, Zap as BoltIcon,
+  TrendingUp as GrowthIcon, RefreshCw, FileDown, Zap as BoltIcon,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Trophy } from "lucide-react";
@@ -20,7 +20,6 @@ export function CombinedPortfolioSummary() {
   const { data: positions } = useLivePositions();
   const { data: kraken }    = useKrakenStatus();
   const { data: fleetSummary } = useKrakenFleetSummary();
-  const { data: fxState }   = useForexState();
   const { data: fleetEq }   = useFleetEquity();
   const { data: registry }       = useBotRegistry();
   const exportReport        = useExportReport();
@@ -90,15 +89,6 @@ export function CombinedPortfolioSummary() {
   const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
-
-  const forexEquity   = fleetEq?.forex_gump?.equity ?? 0;
-  const forexPnl      = fleetEq?.forex_gump?.pnl ?? 0;
-  const forexTrades   = fxState?.total_trades ?? 0;
-  const forexWins     = fxState?.total_wins ?? 0;
-  const forexPaper    = fxState?.paper_mode ?? true;
-  const forexStart    = 100_000;
-  const forexPnlPct   = (forexPnl / forexStart) * 100;
-  const forexPosCount = fxState?.position_count ?? 0;
 
   const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
 
@@ -242,45 +232,6 @@ export function CombinedPortfolioSummary() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Navigation className="h-3 w-3 text-teal-400/60" />
-            <span className="text-[9px] uppercase tracking-widest text-teal-400/60 font-semibold">Navigator · Forex</span>
-            {forexPaper && <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 uppercase tracking-wide">Paper</span>}
-            <div className="h-px flex-1 bg-teal-500/10" />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/20 transition-all duration-500 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-teal-500/30 to-transparent" />
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Equity</div>
-                <AnimatedCurrency value={forexEquity} className={cn("fluid-metric font-mono font-bold tracking-tight", forexPnl >= 0 ? "text-teal-400" : "text-teal-400/60")} />
-                <div className={cn("text-xs mt-1.5 flex items-center gap-1 font-medium", forexPnl >= 0 ? "text-green-400/70" : "text-red-400/70")}>
-                  {forexPnl >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                  {forexPnl >= 0 ? "+" : ""}{formatCurrency(forexPnl)}
-                  {forexPnlPct !== 0 && <span className={cn("text-[9px] font-mono px-1 py-0.5 rounded", forexPnl >= 0 ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400")}>{forexPnlPct >= 0 ? "+" : ""}{forexPnlPct.toFixed(2)}%</span>}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/15 transition-all duration-500">
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Positions</div>
-                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{forexPosCount} / 10</div>
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5">{forexTrades} trades</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/15 transition-all duration-500">
-              <CardContent className="p-3">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5">Win Rate</div>
-                <div className="fluid-metric font-mono font-bold text-white tracking-tight">{forexTrades > 0 ? `${(forexWins / forexTrades * 100).toFixed(0)}%` : "—"}</div>
-                <div className="text-[10px] text-muted-foreground/50 mt-1.5">{forexWins}W · {forexTrades - forexWins}L</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -88,11 +88,10 @@ except ImportError:
 BOTS = [
     ("blackbeard",       "jerome_v2_strategy",    "run_jerome_v2_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
-    # HALTED 2026-05-28: buck_futures shares Oracle's Alpaca account (PA33G6QCIHDS /
-    # caa2a89b-d35c-4c19-8f19-596d36ebb1ef). No 4th account exists. Re-enable ONLY
-    # after ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY are added to Secrets and
-    # config.py buck_futures profile is updated to use them.
-    # ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
+    # Re-enabled 2026-05-30: config.py buck_futures profile updated to use
+    # ALPACA_JEROME_API_KEY / ALPACA_JEROME_SECRET_KEY (shared Jerome account,
+    # symbol-partitioned). Position-cap and cash guard prevent cross-bot interference.
+    ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint
@@ -114,7 +113,16 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
     Called by _run_bot_loop after each successful leaf cycle.
     Returns True if write succeeded, False if any step failed.
     All exceptions are caught — never propagates.
+
+    Note: buck_futures shares the Jerome account (6da42513-...) with blackbeard.
+    Its equity is NOT written here — blackbeard's cycle already writes the shared
+    account equity to jerome_macro. Writing it again under buck_futures would
+    double-count that account in the fleet total. Buck is tracked as a $100k
+    notional sim entry in bot_portfolio; its equity does not change via Alpaca writes.
     """
+    if bot_id == "buck_futures":
+        logger.debug(f"[{bot_id}] portfolio write skipped — shares Jerome account; tracked as notional sim")
+        return True
     if not _portfolio_write_ok or not _heartbeat_ok:
         return False
     try:

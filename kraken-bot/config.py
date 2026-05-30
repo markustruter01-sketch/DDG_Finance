@@ -186,8 +186,11 @@ BOT_PROFILES = {
         "db_id":             6,
         "strategy_type":     "commodity_trend",
         "strategy_label":    "Commodity Trend (Industrial & Broad)",
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
+        # Shares the Jerome paper account — partitioned by non-overlapping symbol universe.
+        # Jerome trades: GLD, SLV, GDX, GDXJ, XLE, USO, XOP
+        # Buck trades:   DBB, PICK, DBC, PDBC, GSG
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "LOOP_SLEEP_SECONDS": 900,           # 15-min polling (exits every cycle)
         "BOT_PAUSED":        False,

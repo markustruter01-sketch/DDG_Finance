@@ -54,6 +54,64 @@ _last_entry_scan_date: Optional[date] = None
 # Schema bootstrap flag — runs once per process, before first DB operation
 _bot_id_col_ensured: bool = False
 
+# Portfolio reset flag — runs once per process to clear stale Oracle positions
+_portfolio_reset_done: bool = False
+
+
+def _ensure_clean_portfolio() -> None:
+    """
+    One-time production fix: reset bot_portfolio for buck_futures if it still
+    contains stale Oracle positions (AMD, INTC, NUE, QCOM, TXN, UNH) from the
+    account-collision incident. Sets equity/cash/starting to $100k with empty
+    positions. Idempotent — checks first, writes only if non-Buck symbols found.
+    """
+    global _portfolio_reset_done
+    if _portfolio_reset_done:
+        return
+    _add_trading_platform_to_path()
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return
+        # Buck's valid symbol universe — anything outside this is stale
+        BUCK_VALID = {"DBB", "PICK", "DBC", "PDBC", "GSG"}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT positions FROM bot_portfolio WHERE bot_id = 'buck_futures'"
+                )
+                row = cur.fetchone()
+                if not row:
+                    _portfolio_reset_done = True
+                    return
+                import json as _json
+                positions = row[0] if isinstance(row[0], list) else _json.loads(row[0] or "[]")
+                has_stale = any(
+                    p.get("symbol", "") not in BUCK_VALID
+                    for p in positions
+                    if p.get("symbol")
+                )
+                if not has_stale:
+                    logger.debug("Buck Futures | bot_portfolio already clean — no reset needed")
+                    _portfolio_reset_done = True
+                    return
+                cur.execute("""
+                    UPDATE bot_portfolio
+                    SET equity_usd   = 100000.0,
+                        cash_usd     = 100000.0,
+                        starting_usd = 100000.0,
+                        positions    = '[]'::jsonb,
+                        last_updated = NOW()
+                    WHERE bot_id = 'buck_futures'
+                """)
+        _portfolio_reset_done = True
+        logger.info(
+            "Buck Futures | bot_portfolio reset: cleared stale Oracle positions, "
+            "set equity/cash/starting=$100k"
+        )
+    except Exception as exc:
+        logger.warning(f"Buck Futures | _ensure_clean_portfolio failed (non-fatal): {exc}")
+
 
 def _ensure_bot_id_column() -> None:
     """
@@ -448,21 +506,37 @@ def _manage_exits(alpaca: "JeromeAlpaca", equity: float) -> None:
 
 # ─── Entry scan (once per day at 13:35 UTC) ───────────────────────────────────
 
-def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
+def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float = 0.0) -> None:
     """
     Scan all 5 universe instruments for entry signals.
     Applies theme cap, position cap, and capital checks before submitting orders.
+
+    buying_power: shared-account available cash passed from the cycle; used as a
+    rolling guard so Jerome + Buck Futures cannot jointly over-deploy the pool.
     """
     global _last_entry_scan_date
+
+    # Buck's universe — used to partition position-cap from Jerome's positions
+    # on the shared account. Only positions in THIS set count toward Buck's cap.
+    BUCK_SYMBOLS = {"DBB", "PICK", "DBC", "PDBC", "GSG"}
 
     logger.info("Buck Futures | === ENTRY SCAN START ===")
 
     # Count currently open positions (Alpaca is source-of-truth for live count)
+    # Filter to Buck's own universe — Jerome shares the account but trades
+    # a non-overlapping set (GLD, SLV, GDX, GDXJ, XLE, USO, XOP).
     alpaca_positions = alpaca.get_open_positions()
-    open_count       = len(alpaca_positions)
-    open_symbols     = {p["symbol"] for p in alpaca_positions}
+    open_count       = len([p for p in alpaca_positions if p["symbol"] in BUCK_SYMBOLS])
+    open_symbols     = {p["symbol"] for p in alpaca_positions if p["symbol"] in BUCK_SYMBOLS}
 
-    logger.info(f"Buck Futures | Open positions: {open_count}/{MAX_POSITIONS}")
+    logger.info(
+        f"Buck Futures | Open positions (Buck universe): {open_count}/{MAX_POSITIONS} "
+        f"| shared-account buying_power=${buying_power:,.2f}"
+    )
+
+    # Rolling cash tracker — prevents over-deployment when both bots size against
+    # the same shared account pool in the same cycle.
+    cash_remaining = buying_power
 
     if open_count >= MAX_POSITIONS:
         logger.info("Buck Futures | Position cap reached — no new entries")
@@ -568,6 +642,17 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
             )
             continue
 
+        # ── Guard: shared-account cash ─────────────────────────────────────
+        # Both Jerome and Buck Futures draw from the same ~$96.7k paper account.
+        # Skip this entry if notional exceeds the remaining available cash so
+        # we cannot jointly over-deploy the shared pool.
+        if notional > cash_remaining:
+            logger.warning(
+                f"Buck Futures | {ticker}: insufficient shared-account cash "
+                f"(need ${notional:,.0f}, available=${cash_remaining:,.0f}) — skip"
+            )
+            continue
+
         # ── Submit order ───────────────────────────────────────────────────
         alpaca_side = "buy" if direction == "long" else "sell"
         logger.info(
@@ -590,9 +675,10 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
             close_at_signal=close,
         )
 
-        open_count     += 1
+        open_count      += 1
         open_symbols.add(ticker)
         entries_this_cycle += 1
+        cash_remaining  -= notional   # deduct from shared-account cash tracker
 
     logger.info(
         f"Buck Futures | === ENTRY SCAN END === "
@@ -614,25 +700,9 @@ def run_buck_futures_cycle(profile: dict, db_id: int) -> None:
       - Scans all 5 universe instruments for entry signals
       - Submits orders for qualifying candidates
     """
-    # ── SAFETY HALT: account collision guard ──────────────────────────────
-    # Buck Futures currently has no dedicated Alpaca account. ALPACA_API_KEY /
-    # ALPACA_SECRET_KEY point to Oracle's account (caa2a89b-d35c-4c19-8f19-596d36ebb1ef).
-    # Trading is blocked until ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY are
-    # provisioned and config.py is updated. Remove this block only then.
-    import os as _os
-    _buck_key = _os.environ.get("ALPACA_BUCK_API_KEY", "")
-    if not _buck_key:
-        logger.error(
-            "Buck Futures | HALTED — no dedicated Alpaca account. "
-            "ALPACA_BUCK_API_KEY is not set. "
-            "Add a new paper account key pair (ALPACA_BUCK_API_KEY / ALPACA_BUCK_SECRET_KEY) "
-            "to Secrets, update config.py, then re-enable the BOTS entry in runner.py."
-        )
-        return
-    # ── END SAFETY HALT ───────────────────────────────────────────────────
-
     from jerome_alpaca import JeromeAlpaca
 
+    _ensure_clean_portfolio()   # one-time: clears stale Oracle positions from collision
     _ensure_bot_id_column()
 
     now = datetime.now(timezone.utc)
@@ -666,7 +736,7 @@ def run_buck_futures_cycle(profile: dict, db_id: int) -> None:
 
     # ── Once per day: entry scan ───────────────────────────────────────────
     if should_run_buck_cycle(now):
-        _run_entry_scan(alpaca, equity)
+        _run_entry_scan(alpaca, equity, buying_power=account["buying_power"])
     else:
         next_window = f"{CYCLE_HOUR_UTC:02d}:{CYCLE_MIN_START:02d}–{CYCLE_MIN_END:02d} UTC"
         logger.debug(

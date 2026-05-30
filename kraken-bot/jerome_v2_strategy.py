@@ -448,21 +448,37 @@ def _manage_exits(alpaca: "JeromeAlpaca", equity: float) -> None:
 
 # ─── Entry scan (once per day at 13:35 UTC) ───────────────────────────────────
 
-def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
+def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float = 0.0) -> None:
     """
     Scan all 12 universe instruments for entry signals.
     Applies theme cap, position cap, and capital checks before submitting orders.
+
+    buying_power: shared-account available cash passed from the cycle; used as a
+    rolling guard so Jerome + Buck Futures cannot jointly over-deploy the pool.
     """
     global _last_entry_scan_date
+
+    # Jerome's universe — used to partition position-cap from Buck Futures' positions
+    # on the shared account. Only positions in THIS set count toward Jerome's cap.
+    JEROME_SYMBOLS = {"GLD", "SLV", "GDX", "GDXJ", "XLE", "USO", "XOP"}
 
     logger.info("Jerome v2 | === ENTRY SCAN START ===")
 
     # Count currently open positions (Alpaca is source-of-truth for live count)
+    # Filter to Jerome's own universe — Buck Futures shares the account but trades
+    # a non-overlapping set (DBB, PICK, DBC, PDBC, GSG), so exclude their positions.
     alpaca_positions = alpaca.get_open_positions()
-    open_count       = len(alpaca_positions)
-    open_symbols     = {p["symbol"] for p in alpaca_positions}
+    open_count       = len([p for p in alpaca_positions if p["symbol"] in JEROME_SYMBOLS])
+    open_symbols     = {p["symbol"] for p in alpaca_positions if p["symbol"] in JEROME_SYMBOLS}
 
-    logger.info(f"Jerome v2 | Open positions: {open_count}/{MAX_POSITIONS}")
+    logger.info(
+        f"Jerome v2 | Open positions (Jerome universe): {open_count}/{MAX_POSITIONS} "
+        f"| shared-account buying_power=${buying_power:,.2f}"
+    )
+
+    # Rolling cash tracker — prevents over-deployment when both bots size against
+    # the same shared account pool in the same cycle.
+    cash_remaining = buying_power
 
     if open_count >= MAX_POSITIONS:
         logger.info("Jerome v2 | Position cap reached — no new entries")
@@ -568,6 +584,17 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
             )
             continue
 
+        # ── Guard: shared-account cash ─────────────────────────────────────
+        # Both Jerome and Buck Futures draw from the same ~$96.7k paper account.
+        # Skip this entry if notional exceeds the remaining available cash so
+        # we cannot jointly over-deploy the shared pool.
+        if notional > cash_remaining:
+            logger.warning(
+                f"Jerome v2 | {ticker}: insufficient shared-account cash "
+                f"(need ${notional:,.0f}, available=${cash_remaining:,.0f}) — skip"
+            )
+            continue
+
         # ── Submit order ───────────────────────────────────────────────────
         alpaca_side = "buy" if direction == "long" else "sell"
         logger.info(
@@ -590,9 +617,10 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float) -> None:
             close_at_signal=close,
         )
 
-        open_count     += 1
+        open_count      += 1
         open_symbols.add(ticker)
         entries_this_cycle += 1
+        cash_remaining  -= notional   # deduct from shared-account cash tracker
 
     logger.info(
         f"Jerome v2 | === ENTRY SCAN END === "
@@ -657,7 +685,7 @@ def run_jerome_v2_cycle(profile: dict, db_id: int) -> None:
 
     # ── Once per day: entry scan ───────────────────────────────────────────
     if should_run_v2_cycle(now):
-        _run_entry_scan(alpaca, equity)
+        _run_entry_scan(alpaca, equity, buying_power=account["buying_power"])
     else:
         next_window = f"{CYCLE_HOUR_UTC:02d}:{CYCLE_MIN_START:02d}–{CYCLE_MIN_END:02d} UTC"
         logger.debug(

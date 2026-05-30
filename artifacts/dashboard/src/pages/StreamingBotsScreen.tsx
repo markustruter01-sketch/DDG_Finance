@@ -258,8 +258,8 @@ export default function StreamingBotsScreen() {
   const oracleEquity = fleetEq?.oracle?.equity ?? portfolio?.account?.equity ?? null;
   const oraclePositions = (portfolio?.positions ?? []).filter((p) => (p.market_value ?? 0) > 10);
 
-  const davyEquity = davyPerf?.current_equity ?? davyStatus?.total_equity_usd ?? fleetEq?.davy_jones?.equity ?? null;
-  const bbEquity = bbPerf?.current_equity ?? bbStatus?.total_equity_usd ?? fleetEq?.blackbeard?.equity ?? null;
+  const spyEquity = fleetEq?.spy_qqq_trend?.equity ?? davyPerf?.current_equity ?? null;
+  const jeromeEquity = fleetEq?.jerome_macro?.equity ?? bbPerf?.current_equity ?? null;
 
   const rawForexPos: ForexPosition[] = Array.isArray(forexPosRaw)
     ? (forexPosRaw as ForexPosition[])
@@ -267,9 +267,12 @@ export default function StreamingBotsScreen() {
 
   const fleetTotalFromEquity = fleetEq?.fleet_total?.equity ?? null;
   const allEquities = [
-    oracleEquity, davyEquity, bbEquity,
-    fleetEq?.navigator?.equity ?? null,
+    oracleEquity, spyEquity, jeromeEquity,
+    fleetEq?.forex_gump?.equity ?? null,
     fleetEq?.depeg_hunter?.equity ?? null,
+    fleetEq?.momentum_alpha?.equity ?? null,
+    fleetEq?.momentum_beta?.equity ?? null,
+    fleetEq?.momentum_gamma?.equity ?? null,
   ].filter((e): e is number => e != null);
   const fleetTotal = fleetTotalFromEquity ?? (allEquities.length >= 6 ? allEquities.reduce((s, e) => s + e, 0) : null);
   const fleetStarting = fleetEq?.fleet_total?.starting ?? allEquities.length * STARTING_BALANCE;
@@ -288,10 +291,10 @@ export default function StreamingBotsScreen() {
       })),
     },
     spy_qqq_trend: {
-      equity: davyEquity,
+      equity: spyEquity,
       paused: davyStatus?.bot_paused ?? false,
-      stale: fleetEq?.davy_jones?.stale ?? false,
-      openPositionCount: davyStatus?.open_positions?.length ?? 0,
+      stale: fleetEq?.spy_qqq_trend?.stale ?? false,
+      openPositionCount: davyStatus?.open_positions?.length ?? fleetEq?.spy_qqq_trend?.positions ?? 0,
       openPositionSymbols: (davyStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (davyStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -299,10 +302,10 @@ export default function StreamingBotsScreen() {
       })),
     },
     jerome_macro: {
-      equity: bbEquity,
+      equity: jeromeEquity,
       paused: bbStatus?.bot_paused ?? false,
-      stale: fleetEq?.blackbeard?.stale ?? false,
-      openPositionCount: bbStatus?.open_positions?.length ?? 0,
+      stale: fleetEq?.jerome_macro?.stale ?? false,
+      openPositionCount: bbStatus?.open_positions?.length ?? fleetEq?.jerome_macro?.positions ?? 0,
       openPositionSymbols: (bbStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (bbStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -310,17 +313,17 @@ export default function StreamingBotsScreen() {
       })),
     },
     forex_gump: {
-      equity: fleetEq?.navigator?.equity ?? null,
+      equity: fleetEq?.forex_gump?.equity ?? null,
       paused: forexState?.paused ?? false,
       openPositionCount: rawForexPos.length,
       openPositionSymbols: rawForexPos.map((p) => p.pair),
       recentTrades: [],
     },
     depeg_hunter: {
-      equity: depegStatus?.total_equity_usd ?? fleetEq?.depeg_hunter?.equity ?? null,
+      equity: fleetEq?.depeg_hunter?.equity ?? (depegStatus?.total_equity_usd || null),
       paused: depegStatus?.bot_paused ?? false,
       stale: fleetEq?.depeg_hunter?.stale ?? false,
-      openPositionCount: depegStatus?.open_positions?.length ?? 0,
+      openPositionCount: depegStatus?.open_positions?.length ?? fleetEq?.depeg_hunter?.positions ?? 0,
       openPositionSymbols: (depegStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (depegStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -328,10 +331,10 @@ export default function StreamingBotsScreen() {
       })),
     },
     momentum_alpha: {
-      equity: momentumAlphaStatus?.total_equity_usd ?? fleetEq?.momentum_alpha?.equity ?? null,
+      equity: fleetEq?.momentum_alpha?.equity ?? (momentumAlphaStatus?.total_equity_usd || null),
       paused: momentumAlphaStatus?.bot_paused ?? false,
       stale: fleetEq?.momentum_alpha?.stale ?? false,
-      openPositionCount: momentumAlphaStatus?.open_positions?.length ?? 0,
+      openPositionCount: momentumAlphaStatus?.open_positions?.length ?? fleetEq?.momentum_alpha?.positions ?? 0,
       openPositionSymbols: (momentumAlphaStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (momentumAlphaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -339,10 +342,10 @@ export default function StreamingBotsScreen() {
       })),
     },
     momentum_beta: {
-      equity: momentumBetaStatus?.total_equity_usd ?? fleetEq?.momentum_beta?.equity ?? null,
+      equity: fleetEq?.momentum_beta?.equity ?? (momentumBetaStatus?.total_equity_usd || null),
       paused: momentumBetaStatus?.bot_paused ?? false,
       stale: fleetEq?.momentum_beta?.stale ?? false,
-      openPositionCount: momentumBetaStatus?.open_positions?.length ?? 0,
+      openPositionCount: momentumBetaStatus?.open_positions?.length ?? fleetEq?.momentum_beta?.positions ?? 0,
       openPositionSymbols: (momentumBetaStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (momentumBetaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -350,10 +353,10 @@ export default function StreamingBotsScreen() {
       })),
     },
     momentum_gamma: {
-      equity: momentumGammaStatus?.total_equity_usd ?? fleetEq?.momentum_gamma?.equity ?? null,
+      equity: fleetEq?.momentum_gamma?.equity ?? (momentumGammaStatus?.total_equity_usd || null),
       paused: momentumGammaStatus?.bot_paused ?? false,
       stale: fleetEq?.momentum_gamma?.stale ?? false,
-      openPositionCount: momentumGammaStatus?.open_positions?.length ?? 0,
+      openPositionCount: momentumGammaStatus?.open_positions?.length ?? fleetEq?.momentum_gamma?.positions ?? 0,
       openPositionSymbols: (momentumGammaStatus?.open_positions ?? []).map((p) => p.symbol),
       recentTrades: (momentumGammaStatus?.recent_trades ?? []).slice(0, 3).map((t) => ({
         symbol: t.symbol,
@@ -398,7 +401,7 @@ export default function StreamingBotsScreen() {
     const runtime = botRuntimeByRegistryId[bot.id] ?? {};
     return {
       id: bot.id,
-      name: bot.display_name,
+      name: (bot as { display_name?: string }).display_name ?? (bot as { name?: string }).name ?? bot.id,
       icon: bot.icon,
       exchangeLabel: getExchangeLabel(bot.exchange, bot.asset_class),
       color: colors.hex,

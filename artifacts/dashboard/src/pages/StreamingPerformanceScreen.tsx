@@ -268,9 +268,15 @@ export default function StreamingPerformanceScreen() {
               const meta = BOT_META[bot.bot_id] ?? { icon: "🤖", color: C.label, startCap: 100_000, label: bot.bot_id };
               const botEqData = (() => {
                 if (!fleetEq) return null;
-                const m: Record<string, typeof fleetEq.davy_jones> = {
-                  "davy-jones":      fleetEq.davy_jones,
-                  "blackbeard":      fleetEq.blackbeard,
+                const m: Record<string, typeof fleetEq.oracle> = {
+                  "oracle":          fleetEq.oracle,
+                  "spy_qqq_trend":   fleetEq.spy_qqq_trend,
+                  "jerome_macro":    fleetEq.jerome_macro,
+                  "forex_gump":      fleetEq.forex_gump,
+                  "depeg_hunter":    fleetEq.depeg_hunter,
+                  "momentum_alpha":  fleetEq.momentum_alpha,
+                  "momentum_beta":   fleetEq.momentum_beta,
+                  "momentum_gamma":  fleetEq.momentum_gamma,
                 };
                 return m[bot.bot_id] ?? null;
               })();

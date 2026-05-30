@@ -103,7 +103,7 @@ export function StreamHeaderBar() {
   const auditTotal = auditChecked;
 
   const botStatuses = BOT_KEYS.map(k => {
-    const b = fleet ? (fleet as Record<string, unknown>)[k] as { equity?: number; stale?: boolean } | undefined : undefined;
+    const b = fleet ? (fleet as unknown as Record<string, unknown>)[k] as { equity?: number; stale?: boolean } | undefined : undefined;
     const active = b != null && typeof b.equity === "number" && b.equity > 0 && !b.stale;
     return { key: k, color: BOT_COLORS[k], active };
   });

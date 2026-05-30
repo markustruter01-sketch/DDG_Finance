@@ -40,10 +40,10 @@ export function WeeklyReviewPanel() {
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
   const forexEquity = fleetEq?.forex_gump?.equity ?? null;
   const krakenEquity = ([
-    fleetEq?.davy_jones?.equity,
-    fleetEq?.blackbeard?.equity,
+    fleetEq?.spy_qqq_trend?.equity,
+    fleetEq?.jerome_macro?.equity,
   ].every(v => v != null)
-    ? [fleetEq?.davy_jones?.equity ?? 0, fleetEq?.blackbeard?.equity ?? 0].reduce((a, b) => a + b, 0)
+    ? [fleetEq?.spy_qqq_trend?.equity ?? 0, fleetEq?.jerome_macro?.equity ?? 0].reduce((a, b) => a + b, 0)
     : null);
 
   if (isLoading) {

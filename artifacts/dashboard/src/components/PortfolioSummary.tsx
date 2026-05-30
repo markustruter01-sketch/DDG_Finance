@@ -75,14 +75,14 @@ export function CombinedPortfolioSummary() {
   const krakenReady       = !!kraken && kraken.status !== "not_started";
   const krakenBotPaused   = kraken?.bot_paused ?? false;
   const krakenFleetEquity = [
-    fleetEq?.davy_jones?.equity ?? 0,
-    fleetEq?.blackbeard?.equity ?? 0,
+    fleetEq?.spy_qqq_trend?.equity ?? 0,
+    fleetEq?.jerome_macro?.equity ?? 0,
   ].reduce((a, b) => a + b, 0);
   const krakenDeployed    = kraken?.deployed_pct ?? 0;
   const krakenPaper       = kraken?.paper_trading ?? true;
   const krakenPnl         = [
-    fleetEq?.davy_jones?.pnl ?? 0,
-    fleetEq?.blackbeard?.pnl ?? 0,
+    fleetEq?.spy_qqq_trend?.pnl ?? 0,
+    fleetEq?.jerome_macro?.pnl ?? 0,
   ].reduce((a, b) => a + b, 0);
   const krakenTrades      = fleetSummary?.total_trades ?? kraken?.paper_summary?.total_trades ?? 0;
   const krakenWins        = fleetSummary?.total_wins ?? kraken?.paper_summary?.win_count ?? 0;

@@ -37,8 +37,8 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform")) # trading-platf
 
 from loguru import logger
 
-# Bridge stdlib logging → loguru so that jerome_strategy / jerome_alpaca /
-# jerome_investor logger.error() calls are visible in the workflow output.
+# Bridge stdlib logging → loguru so that jerome_alpaca / etf_engine
+# logger.error() calls are visible in the workflow output.
 import logging as _stdlib_logging
 
 
@@ -83,8 +83,6 @@ except ImportError:
     _portfolio_write_ok = False
 
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
-# jerome_strategy.py (LLM stack) kept on disk as parachute — revert by
-# changing jerome_v2_strategy → jerome_strategy + run_jerome_v2_cycle → run_jerome_cycle
 BOTS = [
     ("blackbeard",       "jerome_v2_strategy",    "run_jerome_v2_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),

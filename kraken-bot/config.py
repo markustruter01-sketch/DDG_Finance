@@ -50,8 +50,6 @@ BOT_PROFILES = {
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        # ── Groq / cycle settings ──────────────────────────────────────────────
-        # "GROQ_CYCLE_HOURS": [9, 21],  # Jerome v2: LLM cycle replaced by EMA/ADX scan
         "LOOP_SLEEP_SECONDS": 900,       # 15-min polling (exits checked every cycle)
         # ── Universe ──────────────────────────────────────────────────────────
         "COMMODITY_UNIVERSE": [

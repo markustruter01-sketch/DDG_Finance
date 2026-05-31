@@ -3,7 +3,7 @@ import { getBotIdentity } from "@/lib/bot-identity";
 import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
-  useLivePositions, useKrakenStatus, useKrakenPerformance,
+  useLivePositions, useKrakenStatus,
   useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
   useMathAuditSummary, useMathAuditRecent, useWeeklyReview, useReviewFlags,

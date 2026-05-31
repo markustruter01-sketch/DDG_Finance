@@ -802,6 +802,57 @@ def ensure_schema() -> None:
     except Exception as _f_exc:
         logger.error(f"DB | Phase F bot_portfolio delete failed: {_f_exc}")
 
+    # Phase G — Oracle orphan-close one-time fix.
+    # ALL (trade_id 1a6ab178-c2a4-4d4b-988a-4358731b58fc) and CDNS
+    # (d9ef004e-24c7-44c1-9241-2e7cae2171ac) were opened 2026-04-16 and
+    # confirmed absent from Alpaca PA33G6QCIHDS as of 2026-05-31.
+    # The inverse reconciler in pipeline.py will handle future occurrences;
+    # this block back-fills the two known pre-existing orphans once.
+    # Idempotent: WHERE status = 'Active' means re-runs are no-ops.
+    _g_orphan_ids = [
+        "1a6ab178-c2a4-4d4b-988a-4358731b58fc",  # ALL
+        "d9ef004e-24c7-44c1-9241-2e7cae2171ac",   # CDNS
+    ]
+    try:
+        with get_conn() as _g_conn:
+            with _g_conn.cursor() as _g_cur:
+                _g_cur.execute(
+                    """
+                    UPDATE trades
+                    SET status            = 'Closed_Reconciled',
+                        closed_at         = NOW(),
+                        exit_reason       = 'orphan_db_reconciler',
+                        actual_fill_price = NULL,
+                        realized_pnl      = NULL,
+                        pnl_percentage    = NULL
+                    WHERE trade_id = ANY(%s)
+                      AND status = 'Active'
+                    RETURNING trade_id, ticker
+                    """,
+                    (_g_orphan_ids,),
+                )
+                _g_closed = _g_cur.fetchall()
+        for _g_trade_id, _g_ticker in _g_closed:
+            try:
+                with get_conn() as _g_deg_conn:
+                    with _g_deg_conn.cursor() as _g_dcur:
+                        _g_dcur.execute(
+                            """
+                            INSERT INTO system_degradations
+                                (ts, component, severity, error_type, message)
+                            VALUES (NOW(), 'oracle', 'medium', 'orphan_db_closed',
+                                    %s)
+                            """,
+                            (f"{_g_ticker} marked closed — DB Active but no broker position",),
+                        )
+            except Exception as _g_deg_exc:
+                logger.warning(f"DB | Phase G degradation insert failed for {_g_ticker}: {_g_deg_exc}")
+            logger.info(f"DB | Phase G: {_g_ticker} ({_g_trade_id}) → Closed_Reconciled")
+        if not _g_closed:
+            logger.info("DB | Phase G: no orphan rows to close (already applied or clean)")
+    except Exception as _g_exc:
+        logger.error(f"DB | Phase G orphan-close failed: {_g_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

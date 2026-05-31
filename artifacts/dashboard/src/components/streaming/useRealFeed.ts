@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import {
-  useJournal, useKrakenPerformance, useOptionsState, useForexState,
-  useKrakenStatus, useLivePositions, useForexPositions, useForexTrades,
+  useJournal, useOptionsState, useForexState,
+  useLivePositions, useForexPositions, useForexTrades,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -43,15 +43,11 @@ export type BotStats = {
 export function useRealFeed(maxTrades = 20) {
   const journalQuery = useJournal();
   const journal = journalQuery.data;
-  const djPerf = useKrakenPerformance("davy-jones");
-  const bbPerf = useKrakenPerformance("blackbeard");
-  const djStatus = useKrakenStatus("davy-jones");
-  const bbStatus = useKrakenStatus("blackbeard");
   const { data: livePositions } = useLivePositions();
-  const { data: fxPositions } = useForexPositions();
-  const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
-  const { data: fxTrades } = useForexTrades();
+  const { data: fxPositions }   = useForexPositions();
+  const { data: optState }      = useOptionsState();
+  const { data: fxState }       = useForexState();
+  const { data: fxTrades }      = useForexTrades();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -59,23 +55,13 @@ export function useRealFeed(maxTrades = 20) {
     if (journal?.trades) {
       for (const t of journal.trades) {
         if (t.status !== "Closed_Win" && t.status !== "Closed_Loss") continue;
-        const isKraken = t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-");
-        const isForex = t.asset_class === "forex" || t.source === "forex";
-        const isOptions = t.asset_class === "options" || t.source === "options";
+        // Skip Kraken-sourced journal entries — those bots are retired
+        if (t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-")) continue;
 
-        let _id = getBotIdentity("oracle");
-        if (isKraken) {
-          const thesis = (t.original_thesis || "").toLowerCase();
-          if (thesis.includes("blackbeard") || t.trade_id?.includes("blackbeard")) {
-            _id = getBotIdentity("blackbeard");
-          } else {
-            _id = getBotIdentity("davy-jones");
-          }
-        } else if (isForex) {
-          _id = getBotIdentity("forex_gump");
-        }
-        const bot = _id.displayName;
-        const icon = _id.icon;
+        const isForex = t.asset_class === "forex" || t.source === "forex";
+        const _oracle = getBotIdentity("oracle");
+        const _fx     = getBotIdentity("forex_gump");
+        const _id     = isForex ? _fx : _oracle;
 
         const cleaned = (t.ticker || "").replace("=X", "");
         const sym = /USD$/.test(cleaned) && !cleaned.includes("/")
@@ -83,61 +69,26 @@ export function useRealFeed(maxTrades = 20) {
           : cleaned;
 
         const rawPnlUsd = t.pnl_usd ?? (t as Record<string, unknown>).realized_pnl as number | undefined ?? null;
-        const hasExplicitPnl = rawPnlUsd != null;
-        // Skip Kraken journal entries with no pnl — they're covered by the
-        // Kraken status recent_trades path which always carries a proper dollar amount.
-        if (isKraken && !hasExplicitPnl) continue;
-
-        const pnlUsd = rawPnlUsd ?? 0;
-        const raw = t as Record<string, unknown>;
+        const pnlUsd    = rawPnlUsd ?? 0;
+        const raw       = t as Record<string, unknown>;
         const sizeUsd: number | undefined =
           (raw.market_value  as number | undefined) ??
           (raw.cost_basis    as number | undefined) ??
           (typeof raw.qty === "number" && typeof raw.avg_entry_price === "number"
             ? Math.abs((raw.qty as number) * (raw.avg_entry_price as number))
             : undefined);
+
         all.push({
           id: t.trade_id,
-          bot,
-          icon,
+          bot: _id.displayName,
+          icon: _id.icon,
           symbol: sym,
           side: t.side || t.direction || "",
           pnlPct: t.pnl_percentage,
           pnlUsd,
-          isWin: hasExplicitPnl ? pnlUsd >= 0 : t.status === "Closed_Win",
+          isWin: rawPnlUsd != null ? pnlUsd >= 0 : t.status === "Closed_Win",
           date: t.date,
           sizeUsd,
-        });
-      }
-    }
-
-    const _dj = getBotIdentity("davy-jones");
-    const _bb = getBotIdentity("blackbeard");
-    const krakenRecent: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
-      { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
-    ];
-    const journalIds = new Set(all.map(t => t.id));
-    for (const { data, bot, icon } of krakenRecent) {
-      if (!data?.recent_trades) continue;
-      for (const rt of data.recent_trades) {
-        const id = `${bot}-${rt.symbol}-${rt.closed_at}`;
-        if (journalIds.has(id)) continue;
-        // Derive notional from pnl_pct when available
-        const rtSize = Math.abs(rt.pnl_pct) > 0.01
-          ? Math.abs(rt.pnl_usd / (rt.pnl_pct / 100))
-          : undefined;
-        all.push({
-          id,
-          bot,
-          icon,
-          symbol: rt.symbol,
-          side: rt.side || "",
-          pnlPct: rt.pnl_pct,
-          pnlUsd: rt.pnl_usd,
-          isWin: rt.pnl_usd >= 0,
-          date: rt.closed_at,
-          sizeUsd: rtSize,
         });
       }
     }
@@ -153,7 +104,6 @@ export function useRealFeed(maxTrades = 20) {
         const pnlPct = ft.entry_price > 0 && ft.exit_price
           ? ((ft.exit_price - ft.entry_price) / ft.entry_price) * 100 * (ft.direction === "short" ? -1 : 1)
           : 0;
-        // Notional size: units × entry price (forex pair units)
         const fxSize = ft.units > 0 && ft.entry_price > 0
           ? Math.abs(ft.units * ft.entry_price)
           : undefined;
@@ -174,40 +124,15 @@ export function useRealFeed(maxTrades = 20) {
 
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, djStatus.data, bbStatus.data, fxTrades]);
+  }, [journal, maxTrades, fxTrades]);
 
-  const krakenWins = useMemo(() =>
-    [djPerf, bbPerf].reduce((s, p) => s + (p.data?.win_count ?? 0), 0),
-    [djPerf.data, bbPerf.data]
-  );
-
-  const krakenLosses = useMemo(() =>
-    [djPerf, bbPerf].reduce((s, p) => s + (p.data?.loss_count ?? 0), 0),
-    [djPerf.data, bbPerf.data]
-  );
-
-  const wins = useMemo(() => {
-    const alpacaWins = journal?.summary?.wins ?? 0;
-    const optWins = optState?.total_wins ?? 0;
-    const fxWins = fxState?.total_wins ?? 0;
-    return alpacaWins + krakenWins + optWins + fxWins;
-  }, [journal, krakenWins, optState, fxState]);
-
-  const losses = useMemo(() => {
-    const alpacaLosses = journal?.summary?.losses ?? 0;
-    const optLosses = (optState?.total_trades ?? 0) - (optState?.total_wins ?? 0);
-    const fxLosses = (fxState?.total_trades ?? 0) - (fxState?.total_wins ?? 0);
-    return alpacaLosses + krakenLosses + optLosses + fxLosses;
-  }, [journal, krakenLosses, optState, fxState]);
+  // wins/losses from journal summary — server-computed, no client aggregation
+  const wins   = journal?.summary?.wins ?? 0;
+  const losses = journal?.summary?.losses ?? 0;
 
   const botStats: BotStats[] = useMemo(() => {
     const stats: BotStats[] = [];
-
     const _oracle = getBotIdentity("oracle");
-    const _dj = getBotIdentity("davy-jones");
-    const _bb = getBotIdentity("blackbeard");
-    const _fx = getBotIdentity("forex_gump");
-
     const jSummary = journal?.summary;
     if (jSummary) {
       stats.push({
@@ -219,28 +144,8 @@ export function useRealFeed(maxTrades = 20) {
         trades: jSummary.total ?? 0,
       });
     }
-
-    if (djPerf.data?.has_data) {
-      stats.push({
-        name: _dj.displayName, icon: _dj.icon,
-        totalPnl: djPerf.data.total_pnl_usd ?? 0,
-        totalPnlPct: djPerf.data.total_pnl_pct ?? 0,
-        wins: djPerf.data.win_count, losses: djPerf.data.loss_count,
-        trades: djPerf.data.total_trades,
-      });
-    }
-
-    if (bbPerf.data?.has_data) {
-      stats.push({
-        name: _bb.displayName, icon: _bb.icon,
-        totalPnl: bbPerf.data.total_pnl_usd ?? 0,
-        totalPnlPct: bbPerf.data.total_pnl_pct ?? 0,
-        wins: bbPerf.data.win_count, losses: bbPerf.data.loss_count,
-        trades: bbPerf.data.total_trades,
-      });
-    }
-
     if (fxState) {
+      const _fx = getBotIdentity("forex_gump");
       stats.push({
         name: _fx.displayName, icon: _fx.icon,
         totalPnl: 0,
@@ -250,9 +155,8 @@ export function useRealFeed(maxTrades = 20) {
         trades: fxState.total_trades ?? 0,
       });
     }
-
     return stats.sort((a, b) => b.totalPnl - a.totalPnl || b.totalPnlPct - a.totalPnlPct);
-  }, [journal, djPerf.data, bbPerf.data, optState, fxState]);
+  }, [journal, fxState]);
 
   const totalTrades = wins + losses;
 
@@ -265,47 +169,13 @@ export function useRealFeed(maxTrades = 20) {
         count++;
       }
     }
-    const krakenBotData = [djPerf.data, bbPerf.data];
-    for (const p of krakenBotData) {
-      if (p?.has_data && p.trades_today) count += p.trades_today;
-    }
     return count;
-  }, [journal, djPerf.data, bbPerf.data]);
+  }, [journal]);
 
   const openPositions: OpenPosition[] = useMemo(() => {
     const all: OpenPosition[] = [];
-
-    const _dj = getBotIdentity("davy-jones");
-    const _bb = getBotIdentity("blackbeard");
     const _oracle = getBotIdentity("oracle");
-    const _fx = getBotIdentity("forex_gump");
-
-    const krakenBots: Array<{ data: typeof djStatus.data; bot: string; icon: string }> = [
-      { data: djStatus.data, bot: _dj.displayName, icon: _dj.icon },
-      { data: bbStatus.data, bot: _bb.displayName, icon: _bb.icon },
-    ];
-    for (const { data, bot, icon } of krakenBots) {
-      if (!data?.open_positions) continue;
-      for (const p of data.open_positions) {
-        const entry = p.entry_price ?? 0;
-        const current = p.best_price ?? entry;
-        const pnlPct = entry > 0
-          ? ((current - entry) / entry) * 100 * (p.side === "short" ? -1 : 1)
-          : 0;
-        const pnlUsd = entry > 0 && p.size_usd
-          ? (current - entry) / entry * p.size_usd * (p.side === "short" ? -1 : 1)
-          : 0;
-        all.push({
-          id: `${bot}-${p.symbol}`,
-          bot, icon,
-          symbol: p.symbol,
-          side: p.side,
-          pnlPct,
-          pnlUsd,
-          sizeUsd: p.size_usd,
-        });
-      }
-    }
+    const _fx     = getBotIdentity("forex_gump");
 
     if (livePositions?.positions) {
       for (const p of livePositions.positions) {
@@ -337,10 +207,13 @@ export function useRealFeed(maxTrades = 20) {
     }
 
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [djStatus.data, bbStatus.data, livePositions, fxPositions]);
+  }, [livePositions, fxPositions]);
+
+  // suppress unused — optState kept for future use
+  void optState;
 
   const seenTradeIds = useRef<Set<string>>(new Set());
-  const initialized = useRef(false);
+  const initialized  = useRef(false);
 
   useEffect(() => {
     if (trades.length === 0) return;

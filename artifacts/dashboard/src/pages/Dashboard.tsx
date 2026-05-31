@@ -1461,8 +1461,6 @@ interface UnifiedTrade {
 
 function AllClosedTradesSection() {
   const { data: journal } = useJournal();
-  const { data: davyStatus } = useKrakenStatus("davy-jones");
-  const { data: bbStatus }   = useKrakenStatus("blackbeard");
   const [page, setPage] = useState(1);
   const PER_PAGE  = 25;
   const MAX_TRADES = 100;
@@ -1495,33 +1493,12 @@ function AllClosedTradesSection() {
       }
     }
 
-    // Kraken bots — each returns up to 50 recent trades
-    const krakenBots: { status: typeof davyStatus; name: string; color: string }[] = [
-      { status: davyStatus, name: `${getBotIdentity("davy-jones").displayName} #2`, color: "text-emerald-400" },
-      { status: bbStatus,   name: `${getBotIdentity("blackbeard").displayName} #3`,  color: "text-amber-400"   },
-    ];
-    for (const { status, name, color } of krakenBots) {
-      if (!status?.recent_trades) continue;
-      for (const t of status.recent_trades) {
-        trades.push({
-          id: `${name}-${t.closed_at}-${t.symbol}`,
-          bot: name,
-          botColor: color,
-          symbol: t.symbol,
-          side: t.side ?? "—",
-          pnl_pct: t.pnl_pct ?? 0,
-          pnl_usd: t.pnl_usd ?? null,
-          reason: t.reason ?? null,
-          closed_at: t.closed_at,
-          is_win: (t.pnl_usd ?? 0) > 0 || (t.pnl_usd == null && (t.pnl_pct ?? 0) > 0),
-        });
-      }
-    }
+    // (Kraken bots retired — no more live status polls)
 
     // Sort newest-first, cap at MAX_TRADES
     trades.sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime());
     return trades.slice(0, MAX_TRADES);
-  }, [journal, davyStatus, bbStatus]);
+  }, [journal]);
 
   const totalPages = Math.max(1, Math.ceil(allTrades.length / PER_PAGE));
   const safePage   = Math.min(page, totalPages);

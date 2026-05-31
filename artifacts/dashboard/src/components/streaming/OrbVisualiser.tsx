@@ -4,7 +4,6 @@ import { useRealFeed } from "@/components/streaming/useRealFeed";
 import {
   useLivePositions,
   useLearningJournal,
-  useKrakenStatus,
   useOptionsState,
   useForexState,
   useAuditorReport,
@@ -137,8 +136,6 @@ interface TradePulseState {
 export function OrbVisualiser() {
   const { data: livePos       } = useLivePositions();
   const { data: journal       } = useLearningJournal(undefined, undefined, 5);
-  const { data: djStatus      } = useKrakenStatus("davy-jones");
-  const { data: bbStatus      } = useKrakenStatus("blackbeard");
   const { data: optState      } = useOptionsState();
   const { data: fxState       } = useForexState();
   const { data: auditor       } = useAuditorReport();
@@ -183,12 +180,11 @@ export function OrbVisualiser() {
 
   const openPositions = useMemo(() => {
     let n = livePos?.count ?? 0;
-    n += djStatus?.position_count ?? 0;
-    n += bbStatus?.position_count ?? 0;
+
     n += optState?.positions_count ?? 0;
     n += fxState?.position_count ?? 0;
     return n;
-  }, [livePos, djStatus, bbStatus, fleetEqOrb, optState, fxState]);
+  }, [livePos, fleetEqOrb, optState, fxState]);
 
   const activeBots = useMemo(() => {
     const ACTIVE_STATUSES = new Set(["active", "running", "idle"]);

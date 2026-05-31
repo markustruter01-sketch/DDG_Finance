@@ -3,7 +3,7 @@
 - [Oracle bot_portfolio heartbeat](oracle-bot-portfolio-heartbeat.md) — oracle last_updated only ticks during market hours; touch_portfolio() added on market-closed early-return path
 - [Jerome v2 strategy](jerome-v2-strategy.md) — EMA/ADX/ATR trend-following live on blackbeard; LLM stack kept as parachute; prod migration via ensure_schema() on publish.
 - [Buck Futures bot](buck-futures-bot.md) — Industrial+Broad commodity clone of Jerome v2; navigator/forex slot; uses ALPACA_API_KEY/SECRET; shares jerome_positions table with bot_id tagging.
-- [Fleet equity key mismatches](fleet-equity-key-mismatches.md) — /fleet/equity keys are DB bot_ids; two frontend screens read wrong keys causing null equity display for spy_qqq_trend and jerome_macro.
 - [Buck futures account collision](buck-futures-account-collision.md) — buck_futures uses same Alpaca account as oracle; fleet equity double-counts ~$96k; fix before Phase 2 refactor.
-- [Fleet win rate gap](fleet-win-rate-gap.md) — no server endpoint returns fleet-wide win rate; currently assembled client-side in two different ways in FleetPerformanceHero and useRealFeed.
 - [Crypto removal Phase F migration](crypto-removal-phase-f.md) — Phase F in ensure_schema() drops crypto_signals/crypto_price_cache and deletes 4 bot_portfolio rows; fires on first trading-api startup after publish.
+- [Fleet equity SSOT](fleet-equity-ssot.md) — /fleet/equity is the single source of truth: provides pnl, pnl_pct, win_rate per bot + fleet_total. Never recompute these client-side.
+- [Bot identity canonical set](bot-identity-canonical.md) — bot-identity.ts has exactly 4 entries: oracle, spy_qqq_trend, jerome_macro, buck_futures. All Kraken aliases (davy-jones, blackbeard, bot2_spy_qqq) removed after Phase 2 cleanup.

@@ -48,9 +48,8 @@ export function CombinedPortfolioSummary() {
   const alpacaCash          = portfolio?.account.cash            ?? 0;
   const alpacaBuying        = portfolio?.account.buying_power    ?? 0;
   const alpacaInitialMargin = portfolio?.account.initial_margin  ?? 0;
-  const alpacaStart         = 100_000;
   const alpacaPnl           = fleetEq?.oracle?.pnl ?? 0;
-  const alpacaPnlPct        = (alpacaPnl / alpacaStart) * 100;
+  const alpacaPnlPct        = fleetEq?.oracle?.pnl_pct ?? 0;
   const alpacaProfit        = alpacaPnl >= 0;
 
   const SHORT_MARGIN_CAP_PCT = 35;

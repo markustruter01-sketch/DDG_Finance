@@ -214,6 +214,29 @@ class AlpacaEtfEngine:
         except Exception as exc:
             logger.error(f"EtfEngine | _ensure_schema failed: {exc}")
 
+        # Bug-1 backfill (idempotent): rows opened before TP logic was added have
+        # NULL tp1_price/tp2_price. Compute from entry_price + constants.
+        # WHERE guard ensures this runs once per affected row and is a no-op thereafter.
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE alpaca_etf_positions
+                        SET tp1_price = ROUND((entry_price * 1.06)::numeric, 2),
+                            tp2_price = ROUND((entry_price * 1.12)::numeric, 2)
+                        WHERE (tp1_price IS NULL OR tp2_price IS NULL)
+                          AND status = 'open'
+                    """)
+                    rows = cur.rowcount
+                conn.commit()
+            if rows:
+                logger.info(f"EtfEngine | TP backfill: updated {rows} row(s) with missing tp1/tp2 prices")
+        except Exception as exc:
+            logger.warning(f"EtfEngine | TP backfill failed (non-fatal): {exc}")
+
     # ── Account ───────────────────────────────────────────────────────────────
 
     def get_account(self) -> dict:

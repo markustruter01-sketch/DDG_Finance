@@ -113,10 +113,15 @@ def _should_enter(symbol: str) -> tuple[bool, dict]:
 
 def _should_exit_trend(symbol: str, ema_fast_value: float) -> tuple[bool, str]:
     """
-    Trend-based exit: price closes below EMA-50 OR 5% drop in any 3-day window.
-    Trailing stop is handled by AlpacaEtfEngine.run_exit_checks().
+    Trend-based exit: price closes below EMA-50 OR 5% cumulative drop in any
+    3-day rolling window. Trailing stop is handled by AlpacaEtfEngine.run_exit_checks().
+
+    Bug fixes (Phase 9):
+      - Fetch 80 bars (was 10) so EMA-50 has sufficient warmup and returns a float.
+      - 3-day check now computes true cumulative 3-day return closes[i] / closes[i-3]
+        instead of consecutive 1-day comparisons within a 3-bar slice.
     """
-    ohlcv = _yahoo_daily_ohlcv(symbol, days=10)
+    ohlcv = _yahoo_daily_ohlcv(symbol, days=80)   # was 10 — needs ≥50 for EMA-50 warmup
     if not ohlcv or len(ohlcv["closes"]) < 4:
         return False, ""
 
@@ -128,14 +133,12 @@ def _should_exit_trend(symbol: str, ema_fast_value: float) -> tuple[bool, str]:
     if ema_fast_now and current < ema_fast_now:
         return True, f"price_below_ema50 (price={current:.2f} ema50={ema_fast_now:.2f})"
 
-    # Exit 2: 5% drop in any 3-day window
-    for i in range(len(closes) - 3, len(closes)):
-        if i < 1:
-            continue
-        start = closes[i - 1]
-        end   = closes[i]
-        if start > 0 and (start - end) / start >= MAX_3DAY_DROP_PCT:
-            return True, f"3day_drop_{((start-end)/start*100):.1f}%"
+    # Exit 2: true cumulative 3-day rolling drop ≥ MAX_3DAY_DROP_PCT
+    # closes[i-3] → closes[i] captures the full 3-calendar-day move.
+    for i in range(3, len(closes)):
+        three_day_chg = (closes[i] - closes[i - 3]) / closes[i - 3]
+        if three_day_chg <= -MAX_3DAY_DROP_PCT:
+            return True, f"3day_drop_{three_day_chg * 100:.1f}%"
 
     return False, ""
 

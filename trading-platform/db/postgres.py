@@ -853,6 +853,69 @@ def ensure_schema() -> None:
     except Exception as _g_exc:
         logger.error(f"DB | Phase G orphan-close failed: {_g_exc}")
 
+    # Phase H — Jerome v1 duplicate-row cleanup (one-time, idempotent).
+    #
+    # Jerome v1's LLM loop re-inserted positions every cycle without checking
+    # for an existing open row, creating multiple DB rows per ticker backed by
+    # one real broker position.  Two sub-steps:
+    #
+    # H-1: Close the open COPX phantom (id=9, opened 2026-05-25).  id=4
+    #      (opened 2026-05-24) is the canonical live position.
+    #      Idempotent: WHERE status='open' is a no-op after first run.
+    #
+    # H-2: Append ' [v1_duplicate]' to the exit_reason of every non-first
+    #      v1 row (opened_at < 2026-05-28) for each symbol.  This marks
+    #      WEAT ids 3/6/8/11, GLD ids 7/10, and COPX id=9 so future
+    #      metrics queries can filter them out.
+    #      Idempotent: NOT LIKE guard prevents double-appending.
+    try:
+        with get_conn() as _h_conn:
+            with _h_conn.cursor() as _h_cur:
+                # H-1: close the open COPX duplicate
+                _h_cur.execute(
+                    """
+                    UPDATE jerome_positions
+                    SET status           = 'Closed_Reconciled',
+                        closed_at        = NOW(),
+                        exit_reason      = 'duplicate_row_reconciler',
+                        realised_pnl_usd = 0.00
+                    WHERE id = 9
+                      AND bot_id = 'jerome_macro'
+                      AND symbol = 'COPX'
+                      AND status = 'open'
+                    RETURNING id
+                    """
+                )
+                _h1_count = len(_h_cur.fetchall())
+
+                # H-2: mark all non-first v1 rows with [v1_duplicate]
+                _h_cur.execute(
+                    """
+                    UPDATE jerome_positions
+                    SET exit_reason = COALESCE(exit_reason, '') || ' [v1_duplicate]'
+                    WHERE id IN (
+                        SELECT id FROM jerome_positions
+                        WHERE bot_id   = 'jerome_macro'
+                          AND opened_at < '2026-05-28 00:00:00+00'
+                          AND id NOT IN (
+                              SELECT MIN(id)
+                              FROM jerome_positions
+                              WHERE bot_id   = 'jerome_macro'
+                                AND opened_at < '2026-05-28 00:00:00+00'
+                              GROUP BY symbol
+                          )
+                    )
+                    AND (exit_reason NOT LIKE '%%[v1_duplicate]%%' OR exit_reason IS NULL)
+                    """
+                )
+                _h2_count = _h_cur.rowcount
+        logger.info(
+            f"DB | Phase H: H-1 closed {_h1_count} COPX phantom row(s); "
+            f"H-2 marked {_h2_count} v1 duplicate row(s) with [v1_duplicate]"
+        )
+    except Exception as _h_exc:
+        logger.error(f"DB | Phase H duplicate-row cleanup failed: {_h_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

@@ -488,8 +488,13 @@ def _build_metrics_30d(errors: list) -> list[dict]:
         },
         {
             "bot_id": "jerome_macro",
+            # opened_at filter excludes v1 LLM trades (pre-2026-05-28).
+            # v1 used verbose LLM exits; v2 uses EMA/ADX mechanical signals.
+            # v1 rows stay in the table as historical record but must not
+            # pollute Jerome v2's live-trading scorecard.
             "sql": """SELECT realised_pnl_usd AS pnl FROM jerome_positions
-                      WHERE status = 'closed' AND closed_at >= %s""",
+                      WHERE status = 'closed' AND closed_at >= %s
+                        AND opened_at >= '2026-05-28 00:00:00+00'""",
         },
     ]
 
@@ -805,8 +810,9 @@ def _build_exit_attribution_30d(errors: list) -> dict:
         (thirty_days_ago,),
     )
     _collect(
+        # opened_at >= 2026-05-28: exclude v1 LLM exits from attribution buckets
         "SELECT exit_reason, realised_pnl_usd::float AS pnl FROM jerome_positions "
-        "WHERE status='closed' AND closed_at >= %s",
+        "WHERE status='closed' AND closed_at >= %s AND opened_at >= '2026-05-28 00:00:00+00'",
         (thirty_days_ago,),
     )
     def _bucket(reason: str) -> str:

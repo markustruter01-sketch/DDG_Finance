@@ -670,7 +670,9 @@ def _build_reconciliation_flags(live_pos_cache: dict, errors: list) -> list[dict
     try:
         decisions = _pg_rows(
             "SELECT id, decided_at, entries_count, entries_json "
-            "FROM jerome_groq_decisions WHERE entries_count > 0 ORDER BY decided_at DESC LIMIT 20"
+            "FROM jerome_groq_decisions WHERE entries_count > 0 "
+            "AND decided_at >= '2026-05-28 00:00:00+00' "
+            "ORDER BY decided_at DESC LIMIT 20"
         )
         for d in decisions:
             entries = d.get("entries_json") or []

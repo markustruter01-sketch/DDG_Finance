@@ -140,16 +140,8 @@ async def lifespan(app: FastAPI):
     def _equity_heartbeat_sync():
         import asyncio as _aio
         try:
-            loop = _aio.get_event_loop()
-            if loop.is_running():
-                _hb_task = loop.create_task(_record_equity_snapshot_now())
-                _hb_task.add_done_callback(
-                    lambda t: logger.error(
-                        f"Equity Heartbeat | async task failed: {t.exception()}"
-                    ) if not t.cancelled() and t.exception() else None
-                )
-            else:
-                loop.run_until_complete(_record_equity_snapshot_now())
+            _aio.run(_record_equity_snapshot_now())
+            logger.info("Equity Heartbeat | snapshot written")
         except Exception as _e:
             logger.warning(f"Equity Heartbeat | Failed: {_e}")
 

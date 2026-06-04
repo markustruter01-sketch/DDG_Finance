@@ -18,6 +18,7 @@ const BOT_COLORS: Record<string, string> = {
   oracle:          "#8b5cf6",
   spy_qqq_trend:   "#fbbf24",
   jerome_macro:    "#f87171",
+  buck_futures:    "#22d3ee",
 };
 const BOT_KEYS = Object.keys(BOT_COLORS);
 
@@ -85,8 +86,9 @@ export function StreamHeaderBar() {
   const vaultAmt    = vault?.total_vaulted_usd     ?? null;
   const wins        = journal?.summary?.wins       ?? null;
   const losses      = journal?.summary?.losses     ?? null;
-  const winRate     = wins != null && losses != null && wins + losses > 0
-    ? (wins / (wins + losses)) * 100 : null;
+  // Win rate sourced from canonical /fleet/equity (30-day, active bots only)
+  const _fleetWr    = fleet?.fleet_total?.win_rate;
+  const winRate     = _fleetWr != null ? _fleetWr * 100 : null;
 
   const trades = (recent?.trades ?? []).filter(t => t.pnl_usd != null);
   const bestTrade  = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? -Infinity) > (a.pnl_usd ?? -Infinity) ? b : a) : null;
@@ -189,11 +191,9 @@ export function StreamHeaderBar() {
         <span style={LABEL_STYLE}>WIN RATE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[14px] font-bold leading-none" style={{ color: "#22d3ee" }}>
-            {winRate != null ? `${winRate.toFixed(0)}%` : "—"}
+            {winRate != null ? `${winRate.toFixed(1)}%` : "—"}
           </span>
-          <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>
-            {wins != null && losses != null ? `${wins}W/${losses}L` : ""}
-          </span>
+          <span className="text-[10px] font-medium" style={{ color: "rgba(100,116,139,0.6)" }}>30d</span>
         </div>
       </div>
 

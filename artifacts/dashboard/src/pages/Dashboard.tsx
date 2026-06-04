@@ -1474,6 +1474,8 @@ function AllClosedTradesSection() {
       for (const t of journal.trades) {
         if (t.status === "Active") continue;
         if (t.source === "kraken") continue;
+        // Only show active-bot asset classes; exclude retired forex/crypto/legacy
+        if (t.asset_class && !["momentum_equity", "momentum_etf"].includes(t.asset_class)) continue;
         const pnlUsd = t.realized_pnl ?? null;
         const isWin = t.status === "Closed_Win" ||
           (t.status === "Closed" && (t.pnl_percentage ?? 0) > 0) ||

@@ -81,6 +81,9 @@ def _fetch_fleet_equity() -> dict:
             raise RuntimeError("bot_portfolio returned empty — falling back")
 
         result: dict = {}
+        _now_utc   = datetime.now(timezone.utc)
+        _STALE_SEC = 25 * 60  # bot cycles every 15 min; stale after 25 min without update
+
         for p in portfolios:
             bot_id = p["bot_id"]
             eq      = float(p["equity_usd"] or _STARTING)
@@ -92,6 +95,21 @@ def _fetch_fleet_equity() -> dict:
             pnl_pct = round((pnl / start) * 100, 4) if start else 0.0
             upd     = p.get("last_updated")
 
+            # Compute staleness from last_updated before converting to string
+            if upd is None:
+                stale = True
+            elif isinstance(upd, datetime):
+                upd_aware = upd if upd.tzinfo else upd.replace(tzinfo=timezone.utc)
+                stale = (_now_utc - upd_aware).total_seconds() > _STALE_SEC
+            else:
+                try:
+                    upd_dt = datetime.fromisoformat(str(upd).replace("Z", "+00:00"))
+                    if upd_dt.tzinfo is None:
+                        upd_dt = upd_dt.replace(tzinfo=timezone.utc)
+                    stale = (_now_utc - upd_dt).total_seconds() > _STALE_SEC
+                except Exception:
+                    stale = False
+
             result[bot_id] = {
                 "equity":    round(eq, 2),
                 "starting":  round(start, 2),
@@ -101,6 +119,7 @@ def _fetch_fleet_equity() -> dict:
                 "positions": pos_count,
                 "source":    "bot_portfolio",
                 "last_updated": upd if isinstance(upd, str) else (upd.isoformat() if upd else None),
+                "stale":     stale,
             }
 
         # Merge paused state from bots_state

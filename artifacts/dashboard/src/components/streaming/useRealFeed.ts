@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import {
   useJournal, useOptionsState, useForexState,
-  useLivePositions, useForexPositions, useForexTrades,
+  useLivePositions, useForexPositions,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -47,7 +47,6 @@ export function useRealFeed(maxTrades = 20) {
   const { data: fxPositions }   = useForexPositions();
   const { data: optState }      = useOptionsState();
   const { data: fxState }       = useForexState();
-  const { data: fxTrades }      = useForexTrades();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -55,18 +54,13 @@ export function useRealFeed(maxTrades = 20) {
     if (journal?.trades) {
       for (const t of journal.trades) {
         if (t.status !== "Closed_Win" && t.status !== "Closed_Loss") continue;
-        // Skip Kraken-sourced journal entries — those bots are retired
+        // Skip retired bots: Kraken and forex_gump
         if (t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-")) continue;
+        if (t.asset_class === "forex" || t.source === "forex") continue;
 
-        const isForex = t.asset_class === "forex" || t.source === "forex";
         const _oracle = getBotIdentity("oracle");
-        const _fx     = getBotIdentity("forex_gump");
-        const _id     = isForex ? _fx : _oracle;
 
-        const cleaned = (t.ticker || "").replace("=X", "");
-        const sym = /USD$/.test(cleaned) && !cleaned.includes("/")
-          ? cleaned.replace(/USD$/, "/USD")
-          : cleaned;
+        const sym = (t.ticker || "").replace("=X", "");
 
         const rawPnlUsd = t.pnl_usd ?? (t as Record<string, unknown>).realized_pnl as number | undefined ?? null;
         const pnlUsd    = rawPnlUsd ?? 0;
@@ -80,8 +74,8 @@ export function useRealFeed(maxTrades = 20) {
 
         all.push({
           id: t.trade_id,
-          bot: _id.displayName,
-          icon: _id.icon,
+          bot: _oracle.displayName,
+          icon: _oracle.icon,
           symbol: sym,
           side: t.side || t.direction || "",
           pnlPct: t.pnl_percentage,
@@ -93,38 +87,9 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
-    if (fxTrades?.trades) {
-      const _fxId = getBotIdentity("forex_gump");
-      const existingSymbols = new Set(all.map(t => `${t.bot}-${t.symbol}-${t.date}`));
-      for (const ft of fxTrades.trades) {
-        if (ft.status !== "closed" && ft.status !== "Closed_Win" && ft.status !== "Closed_Loss") continue;
-        if (!ft.exit_time) continue;
-        const key = `Navigator-${ft.pair}-${ft.exit_time}`;
-        if (existingSymbols.has(key)) continue;
-        const pnlPct = ft.entry_price > 0 && ft.exit_price
-          ? ((ft.exit_price - ft.entry_price) / ft.entry_price) * 100 * (ft.direction === "short" ? -1 : 1)
-          : 0;
-        const fxSize = ft.units > 0 && ft.entry_price > 0
-          ? Math.abs(ft.units * ft.entry_price)
-          : undefined;
-        all.push({
-          id: `fx-${ft.id}`,
-          bot: _fxId.displayName,
-          icon: _fxId.icon,
-          symbol: ft.pair.replace("_", "/"),
-          side: ft.direction || "",
-          pnlPct,
-          pnlUsd: ft.pnl_usd ?? 0,
-          isWin: (ft.pnl_usd ?? 0) >= 0,
-          date: ft.exit_time,
-          sizeUsd: fxSize,
-        });
-      }
-    }
-
     all.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return all.slice(0, maxTrades);
-  }, [journal, maxTrades, fxTrades]);
+  }, [journal, maxTrades]);
 
   // wins/losses from journal summary — server-computed, no client aggregation
   const wins   = journal?.summary?.wins ?? 0;

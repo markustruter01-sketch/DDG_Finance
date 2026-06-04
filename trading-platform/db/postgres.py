@@ -88,10 +88,22 @@ def get_conn() -> "Generator[psycopg2.extensions.connection, None, None]":
     Yield a psycopg2 connection from the pool.
     Commits on success, rolls back on exception, returns conn to pool on exit.
     Raises RuntimeError if PostgreSQL is not available.
+
+    Health-check: when the pool returns a connection the PostgreSQL server has
+    dropped while it was idle (conn.closed != 0), we discard it and pull a
+    fresh one.  This prevents "connection already closed" errors that arise
+    under concurrent thread access (Jerome v2 + Buck Futures share the pool)
+    when a stale connection is handed to the second thread.
     """
     if not is_pg_available():
         raise RuntimeError("PostgreSQL is not available")
     conn = _pool.getconn()
+    if conn.closed:
+        try:
+            _pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = _pool.getconn()
     try:
         yield conn
         conn.commit()

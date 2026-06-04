@@ -82,6 +82,44 @@ def is_pg_available() -> bool:
     return _pg_ok and _pool is not None
 
 
+def _acquire_healthy_conn() -> "psycopg2.extensions.connection":
+    """
+    Pull a connection from the pool, validating it is genuinely alive.
+
+    Two distinct failure modes require two distinct checks:
+
+      1. conn.closed != 0 — psycopg2 has already marked this connection as
+         closed on the client side (e.g. the pool returned one that exceeded
+         minconn and was explicitly conn.close()'d).  Detectable immediately.
+
+      2. conn.closed == 0 but the PostgreSQL server dropped it while it was
+         idle between cycles (TCP keepalive / server idle-timeout).  psycopg2
+         does NOT update conn.closed until it tries to send a query, so the
+         only reliable way to detect this is a lightweight SELECT 1 ping.
+
+    Stale connections are discarded with putconn(close=True) so the pool
+    creates a fresh replacement.  Up to 3 attempts are made before raising.
+    """
+    for _ in range(3):
+        conn = _pool.getconn()
+        if conn.closed:
+            try:
+                _pool.putconn(conn, close=True)
+            except Exception:
+                pass
+            continue
+        try:
+            with conn.cursor() as _cur:
+                _cur.execute("SELECT 1")
+            return conn
+        except Exception:
+            try:
+                _pool.putconn(conn, close=True)
+            except Exception:
+                pass
+    raise RuntimeError("DB | Could not acquire a live connection after 3 attempts")
+
+
 @contextmanager
 def get_conn() -> "Generator[psycopg2.extensions.connection, None, None]":
     """
@@ -89,21 +127,12 @@ def get_conn() -> "Generator[psycopg2.extensions.connection, None, None]":
     Commits on success, rolls back on exception, returns conn to pool on exit.
     Raises RuntimeError if PostgreSQL is not available.
 
-    Health-check: when the pool returns a connection the PostgreSQL server has
-    dropped while it was idle (conn.closed != 0), we discard it and pull a
-    fresh one.  This prevents "connection already closed" errors that arise
-    under concurrent thread access (Jerome v2 + Buck Futures share the pool)
-    when a stale connection is handed to the second thread.
+    Delegates connection acquisition to _acquire_healthy_conn() which handles
+    both client-side and server-side stale-connection failure modes.
     """
     if not is_pg_available():
         raise RuntimeError("PostgreSQL is not available")
-    conn = _pool.getconn()
-    if conn.closed:
-        try:
-            _pool.putconn(conn, close=True)
-        except Exception:
-            pass
-        conn = _pool.getconn()
+    conn = _acquire_healthy_conn()
     try:
         yield conn
         conn.commit()

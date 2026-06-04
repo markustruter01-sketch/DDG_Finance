@@ -8,11 +8,12 @@ const BOT_SLOTS: BotSlot[] = [
   { id: "oracle",            short: "Oracle",  color: "#a78bfa" },
   { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
   { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
+  { id: "buck_futures",      short: "Buck",    color: "#22d3ee" },
 ];
 
 interface BotEquitySlice {
   pnl:    number;
-  paused: boolean;
+  stale?: boolean;
 }
 
 interface Props {
@@ -71,7 +72,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
         {BOT_SLOTS.map(bot => {
           const eq     = fleetEq?.[bot.id];
           const pnl    = eq?.pnl    ?? 0;
-          const active = !(eq?.paused ?? false);
+          const active = !(eq?.stale ?? false);
           const pnlColor = pnl >= 0 ? "#4ade80" : "#f87171";
 
           return (
@@ -136,7 +137,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                   marginTop:     3,
                 }}
               >
-                {active ? "active" : "paused"}
+                {active ? "active" : "stale"}
               </div>
             </div>
           );

@@ -225,7 +225,7 @@ export function OrbVisualiser() {
 
       {/* ── BOT GRID WIDGET — replaces Live Orb HUD ── */}
       <div style={{ position: "absolute", bottom: 20, right: 20 }}>
-        <MiniBotGridWidget fleetEq={fleetEqOrb as unknown as Record<string, { pnl: number; paused: boolean }> | null} />
+        <MiniBotGridWidget fleetEq={fleetEqOrb as unknown as Record<string, { pnl: number; stale?: boolean }> | null} />
       </div>
 
       {/* ── ALGO THOUGHT BUBBLES ── */}

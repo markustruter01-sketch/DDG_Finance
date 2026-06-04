@@ -957,6 +957,36 @@ def ensure_schema() -> None:
     except Exception as _h_exc:
         logger.error(f"DB | Phase H duplicate-row cleanup failed: {_h_exc}")
 
+    # Phase I — bot_evaluation_history table (live-capital readiness snapshots).
+    #
+    # Created once; idempotent via CREATE TABLE IF NOT EXISTS.  Populated by
+    # GET /fleet/scorecard at most once per 12 hours per bot.
+    try:
+        with get_conn() as _i_conn:
+            with _i_conn.cursor() as _i_cur:
+                _i_cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS bot_evaluation_history (
+                        id              SERIAL PRIMARY KEY,
+                        bot_id          TEXT NOT NULL,
+                        snapshot_at     TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        trades_count    INTEGER,
+                        win_rate        DOUBLE PRECISION,
+                        expectancy_usd  DOUBLE PRECISION,
+                        sharpe          DOUBLE PRECISION,
+                        max_drawdown    DOUBLE PRECISION,
+                        gates_passed    INTEGER,
+                        readiness_score DOUBLE PRECISION,
+                        verdict         TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_bot_eval_history_bot_time
+                        ON bot_evaluation_history (bot_id, snapshot_at DESC);
+                    """
+                )
+        logger.info("DB | Phase I: bot_evaluation_history table ensured")
+    except Exception as _i_exc:
+        logger.error(f"DB | Phase I bot_evaluation_history failed: {_i_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

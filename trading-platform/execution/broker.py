@@ -199,7 +199,7 @@ def place_stop_order(ticker: str, qty: float, stop_price: float) -> dict:
         qty=round(qty, 8),
         side=OrderSide.SELL,
         time_in_force=tif,
-        stop_price=round(stop_price, 4),
+        stop_price=round(stop_price, 2),   # Alpaca rejects sub-penny precision (code 42210000)
     )
 
     logger.info(f"Broker | Stop-sell {ticker} qty={qty:.6f} stop=${stop_price:.4f} (GTC)")

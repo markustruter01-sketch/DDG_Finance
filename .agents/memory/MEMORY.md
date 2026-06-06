@@ -8,3 +8,5 @@
 - [Fleet equity SSOT](fleet-equity-ssot.md) — /fleet/equity is the single source of truth: provides pnl, pnl_pct, win_rate per bot + fleet_total. Never recompute these client-side.
 - [Bot identity canonical set](bot-identity-canonical.md) — bot-identity.ts has exactly 4 entries: oracle, spy_qqq_trend, jerome_macro, buck_futures. All Kraken aliases (davy-jones, blackbeard, bot2_spy_qqq) removed after Phase 2 cleanup.
 - [DB pool stale connection fix](db-pool-stale-connection.md) — conn.closed==0 even for server-dropped connections; must SELECT 1 ping after getconn() to detect. Two-stage check in _acquire_healthy_conn().
+- [Oracle OOS validation results](oracle-oos-results.md) — MARGINAL (3/4 criteria): passes 4/5 windows, survives stress, MaxDD always <20%, but pooled Sharpe 0.156 (below 0.5 threshold).
+- [OOS harness cash-tracking pattern](oos-cash-tracking.md) — backtest engines must track cash explicitly; never do equity+=pnl on close when daily MTM already reflects unrealized gains (double-counts).

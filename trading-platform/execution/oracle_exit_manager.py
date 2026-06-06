@@ -29,6 +29,7 @@ The pipeline closes these positions and records them to the trade journal.
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -163,6 +164,57 @@ def _check_position(
             init_stop = fill_price + atr * ATR_MULTIPLIER
         if not dry_run:
             save_stop(symbol, init_stop, fill_price, atr, ATR_MULTIPLIER, side)
+
+            # ── Broker GTC stop placement ────────────────────────────────────
+            # floor(live qty): GTC stop orders require whole shares on Alpaca paper.
+            # Sub-1-share remainder (if any) stays software-only.
+            _stop_qty = math.floor(abs(qty))
+            if _stop_qty < 1:
+                logger.error(
+                    f"ExitManager | {symbol}: sub-1-share position after floor "
+                    f"({abs(qty):.6f} shares) — DB stop kept, no broker GTC stop"
+                )
+                try:
+                    from core.degradation_tracker import record_degradation
+                    record_degradation(
+                        component="oracle_stop",
+                        severity="high",
+                        error_type="sub_1_share_no_broker_stop",
+                        message=f"{symbol}: sub-1-share ({abs(qty):.6f} shares) — broker GTC stop not placed",
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    from execution.broker import place_stop_order
+                    _stop_result  = place_stop_order(symbol, _stop_qty, init_stop)
+                    _order_id     = _stop_result.get("id")
+                    save_stop(
+                        symbol, init_stop, fill_price, atr, ATR_MULTIPLIER,
+                        side, stop_order_id=_order_id,
+                    )
+                    logger.info(
+                        f"ExitManager | {symbol}: GTC stop placed "
+                        f"qty={_stop_qty} stop=${init_stop:.4f} order_id={_order_id}"
+                    )
+                except Exception as _stop_exc:
+                    logger.error(
+                        f"ExitManager | {symbol}: GTC stop placement FAILED "
+                        f"(qty={_stop_qty} stop=${init_stop:.4f}): {_stop_exc} "
+                        f"— position unprotected at broker"
+                    )
+                    try:
+                        from core.degradation_tracker import record_degradation
+                        record_degradation(
+                            component="oracle_stop",
+                            severity="high",
+                            error_type="broker_stop_rejected",
+                            message=f"{symbol}: Alpaca rejected GTC stop — position unprotected",
+                            detail=str(_stop_exc)[:500],
+                        )
+                    except Exception:
+                        pass
+
         logger.info(
             f"ExitManager | {symbol} ({side}): ratchet stop initialised "
             f"@ ${init_stop:.3f} (fill=${fill_price:.3f} ATR={atr:.3f})"

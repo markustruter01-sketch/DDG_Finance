@@ -44,6 +44,7 @@ Universe (v4.3):
   Vault:          JEPQ  (profit sweep only, LLM cannot sell)
 """
 
+import math
 import os
 import sys
 import time
@@ -843,7 +844,7 @@ def _execute_slot(
             f"remaining cash: ${remaining_cash:,.2f}"
         )
 
-        if overheated and actual_fill_price and actual_fill_price > 0:
+        if actual_fill_price and actual_fill_price > 0 and poll_status not in ("canceled", "rejected", "expired"):
             _place_ratchet_stop(ticker, notional_usd, actual_fill_price, results, dry_run)
 
         if overheated and sgov_notional >= MIN_NOTIONAL_USD:
@@ -881,10 +882,29 @@ def _place_ratchet_stop(
     """
     from execution.ratchet_stop import FALLBACK_STOP_PCT, ATR_MULTIPLIER, LEVERAGED_ATR_MULTIPLIER
 
-    qty     = notional_usd / fill_price
-    is_letf = ticker in LEVERAGED_RISK_TICKERS
+    raw_qty  = notional_usd / fill_price
+    qty      = math.floor(raw_qty)           # whole shares only — Alpaca GTC rejects fractional qty
+    is_letf  = ticker in LEVERAGED_RISK_TICKERS
     atr_mult = LEVERAGED_ATR_MULTIPLIER if is_letf else ATR_MULTIPLIER
     mult_label = f"{atr_mult}×ATR {'[LETF tighter stop]' if is_letf else ''}"
+
+    if qty < 1:
+        logger.error(
+            f"Risk Overlay | {ticker}: sub-1-share after floor "
+            f"(notional=${notional_usd:.2f} / fill=${fill_price:.4f} = {raw_qty:.4f}) "
+            f"— GTC stop cannot be placed"
+        )
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="oracle_stop",
+                severity="high",
+                error_type="sub_1_share_no_broker_stop",
+                message=f"{ticker}: sub-1-share ({raw_qty:.4f} shares) — broker GTC stop not placed",
+            )
+        except Exception:
+            pass
+        return
 
     # ── ExitBracket: compute expected exit levels for logging ─────────────────
     # The ATR value is not yet known (initialise_ratchet_stop fetches it); use
@@ -913,13 +933,33 @@ def _place_ratchet_stop(
             dry_run=dry_run,
         )
         if stop_result:
-            results["risk_overrides"][-1]["stop_order"] = stop_result.get("order")
-            results["risk_overrides"][-1]["stop_price"] = stop_result.get("stop_price")
-            results["risk_overrides"][-1]["atr"]        = stop_result.get("atr")
-            results["risk_overrides"][-1]["exit_bracket_preview"] = _bracket.to_dict()
+            _stop_data = {
+                "stop_order":            stop_result.get("order"),
+                "stop_price":            stop_result.get("stop_price"),
+                "atr":                   stop_result.get("atr"),
+                "exit_bracket_preview":  _bracket.to_dict(),
+            }
+            if results.get("risk_overrides"):
+                results["risk_overrides"][-1].update(_stop_data)
+            else:
+                results.setdefault("ratchet_stop_results", []).append(
+                    {"ticker": ticker, **_stop_data}
+                )
     except Exception as exc:
-        logger.warning(f"Risk Overlay | Ratchet stop init failed for {ticker}: {exc} — position unprotected")
-        results["risk_overrides"][-1]["stop_order_error"] = str(exc)
+        logger.error(f"Risk Overlay | Ratchet stop init failed for {ticker}: {exc} — position unprotected")
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="oracle_stop",
+                severity="high",
+                error_type="broker_stop_rejected",
+                message=f"{ticker}: executor GTC stop placement failed — position unprotected",
+                detail=str(exc)[:500],
+            )
+        except Exception:
+            pass
+        if results.get("risk_overrides"):
+            results["risk_overrides"][-1]["stop_order_error"] = str(exc)
 
 
 def _reroute_to_sgov(

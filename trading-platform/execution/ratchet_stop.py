@@ -46,8 +46,8 @@ from typing import Optional
 import numpy as np
 from loguru import logger
 
-ATR_MULTIPLIER:           float = 2.5   # Standard multiplier for all tickers  [STORM MODE: 2.0→2.5 Wide-Lung ATR]
-LEVERAGED_ATR_MULTIPLIER: float = 2.0   # Tighter multiplier for leveraged ETFs  [STORM MODE: 1.5→2.0]
+ATR_MULTIPLIER:           float = 2.0   # canonical = algo_scanner.ATR_MULTIPLIER (2.0); Storm Mode 2.5 reverted
+LEVERAGED_ATR_MULTIPLIER: float = 2.0   # Tighter multiplier for leveraged ETFs (no leveraged tickers currently held by Oracle)
 ATR_PERIOD:               int   = 14
 ATR_LOOKBACK_DAYS:        int   = 30     # yfinance fetch window (extra buffer)
 FALLBACK_STOP_PCT:        float = 0.02   # 2% static fallback if ATR unavailable
@@ -470,7 +470,18 @@ def initialise_ratchet_stop(
                 "order":          result,
             }
         except Exception as exc:
-            logger.error(f"Ratchet | Failed to place stop order for {ticker} [{side}]: {exc}")
+            logger.error(f"Ratchet | Failed to place stop order for {ticker} [{side}]: {exc} — position unprotected at broker")
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="oracle_stop",
+                    severity="high",
+                    error_type="broker_stop_rejected",
+                    message=f"{ticker}: Alpaca rejected GTC stop order — position unprotected",
+                    detail=str(exc)[:500],
+                )
+            except Exception:
+                pass
             return {
                 "stop_price":     stop_price,
                 "atr":            atr_used,

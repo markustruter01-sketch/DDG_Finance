@@ -193,13 +193,15 @@ def get_market_state(persist: bool = True) -> dict[str, Any]:
         if len(closes) < MSE_CRISIS_LOOKBACK + 1:
             logger.warning(
                 f"MSE | Insufficient SPY data ({len(closes)} bars, "
-                f"need {MSE_CRISIS_LOOKBACK + 1}) — returning BULL (fail-open)"
+                f"need {MSE_CRISIS_LOOKBACK + 1}) — fail-safe CRISIS (entries blocked until real data)"
             )
             return {
-                "regime": "BULL", "high_vol": False, "spy_close": None,
+                "regime": "CRISIS", "high_vol": False, "spy_close": None,
                 "spy_20d_ret": None, "spy_200sma": None, "spy_10d_vol": None,
                 "computed_at": _now_utc().isoformat(), "data_bars": len(closes),
-                "error": f"insufficient_data ({len(closes)} bars)",
+                "fail_safe": True,
+                "fail_safe_reason": f"insufficient_data ({len(closes)} bars — need {MSE_CRISIS_LOOKBACK + 1})",
+                "error": None,
             }
 
         state = _compute_from_spy_closes(closes)
@@ -213,15 +215,18 @@ def get_market_state(persist: bool = True) -> dict[str, Any]:
             if state.get("spy_20d_ret") is not None else
             f"MSE | regime={state['regime']}  high_vol={state['high_vol']}"
         )
-        state["error"] = None
+        state["error"]     = None
+        state["fail_safe"] = False
         return state
 
     except Exception as exc:
-        logger.warning(f"MSE | get_market_state failed: {exc}")
+        logger.warning(f"MSE | get_market_state failed: {exc} — fail-safe CRISIS active")
         return {
-            "regime": "BULL", "high_vol": False, "spy_close": None,
+            "regime": "CRISIS", "high_vol": False, "spy_close": None,
             "spy_20d_ret": None, "spy_200sma": None, "spy_10d_vol": None,
             "computed_at": _now_utc().isoformat(), "data_bars": 0,
+            "fail_safe": True,
+            "fail_safe_reason": f"computation_error: {exc}",
             "error": str(exc),
         }
 

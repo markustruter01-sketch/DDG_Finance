@@ -475,9 +475,10 @@ def scan_trend_signals(
         _crisis_20d_ret = float(_spy_closes[-1]) / float(_spy_closes[-21]) - 1
         _crisis_active  = _crisis_20d_ret <= _MSE_CRISIS_THRESHOLD
     else:
+        _crisis_active = True   # fail-safe CRISIS: block entries until real data available
         logger.warning(
             f"Oracle STF | CRISIS GATE: insufficient SPY data "
-            f"({len(_spy_closes)} bars, need 21) — gate not active"
+            f"({len(_spy_closes)} bars, need 21) — fail-safe CRISIS active (entries blocked)"
         )
 
     if _crisis_active:

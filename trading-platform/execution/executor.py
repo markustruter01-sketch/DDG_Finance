@@ -409,7 +409,7 @@ def execute_allocations(
     # Scanner already filters signals; executor re-checks as safety net.
     # CRISIS (SPY 20d return <= -12%): block ALL momentum_equity entries both sides.
     # Exception: TLT/GLD/IEF pass through as longs (already 0.5× sized by scanner).
-    _exec_crisis_active   = False
+    _exec_crisis_active   = True   # fail-safe: block entries until SPY data confirms NOT in crisis
     _exec_crisis_20d_ret: float | None = None
     _EXEC_MSE_SAFE_HAVENS = frozenset({"TLT", "GLD", "IEF"})
     try:
@@ -429,9 +429,18 @@ def execute_allocations(
                         f"Executor | CRISIS GATE: not active "
                         f"(SPY 20d={_exec_crisis_20d_ret:+.1%})"
                     )
+            else:
+                logger.warning(
+                    f"Executor | CRISIS GATE: insufficient SPY data "
+                    f"({len(_exec_spy_c)} bars, need 21) — fail-safe CRISIS active"
+                )
+        else:
+            logger.warning(
+                "Executor | CRISIS GATE: momentum cache empty — fail-safe CRISIS active"
+            )
     except Exception as _cre:
         logger.warning(
-            f"Executor | CRISIS GATE: check failed ({_cre}) — assuming not active"
+            f"Executor | CRISIS GATE: check failed ({_cre}) — fail-safe CRISIS active"
         )
 
     for slot in sorted(output.allocations, key=lambda x: x.slot):

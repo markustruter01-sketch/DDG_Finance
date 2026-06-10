@@ -228,8 +228,10 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         f"max={MAX_DEPLOYMENT*100:.0f}%"
     )
 
-    # ── MSE CRISIS gate: SPY 20-day return <= -12% blocks all new entries ────
-    _crisis_gate = False
+    # ── MSE CRISIS gate: fail-safe CRISIS until SPY data confirms NOT in crisis ─
+    # Default True = block entries. Only cleared when SPY 20d return > -12% AND
+    # data is sufficient. Transient: clears automatically once data is available.
+    _crisis_gate = True
     try:
         from alpaca_etf_engine import _yahoo_daily_ohlcv as _spy_ohlcv
         _spy_data = _spy_ohlcv("SPY", days=30)
@@ -243,8 +245,15 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                         f"Bot2 | CRISIS GATE: SPY 20d {_spy_20d:+.1%} <= -12% "
                         f"— all new entries blocked this cycle"
                     )
+            else:
+                logger.warning(
+                    f"Bot2 | CRISIS GATE: insufficient SPY data "
+                    f"({len(_spy_c)} bars) — fail-safe CRISIS active"
+                )
+        else:
+            logger.warning("Bot2 | CRISIS GATE: SPY data unavailable — fail-safe CRISIS active")
     except Exception as _cg_exc:
-        logger.debug(f"Bot2 | CRISIS check non-fatal: {_cg_exc}")
+        logger.warning(f"Bot2 | CRISIS GATE: SPY fetch failed ({_cg_exc}) — fail-safe CRISIS active")
 
     for symbol in UNIVERSE:
         if _crisis_gate:

@@ -509,20 +509,28 @@ def _manage_exits(alpaca: "JeromeAlpaca", equity: float) -> None:
 def _is_crisis_active() -> bool:
     """
     MSE CRISIS gate: return True if SPY 20-day return <= -12%.
-    Uses the same Yahoo Finance data source as the rest of the strategy.
-    Non-fatal: returns False on any error (fail-open for entries).
+
+    FAIL-SAFE direction: returns True (block entries) on insufficient data or
+    any error. This is TRANSIENT — the moment SPY data is available and computes
+    cleanly, it returns the real regime. No sticky state.
     """
     try:
         spy = _fetch_ohlcv("SPY", days=30)
         if spy is None:
-            return False
+            logger.warning("Buck Futures | CRISIS GATE: SPY data unavailable — fail-safe CRISIS active")
+            return True   # fail-safe: block entries
         closes = spy.get("closes") or []
         if len(closes) < 21:
-            return False
+            logger.warning(
+                f"Buck Futures | CRISIS GATE: insufficient SPY data "
+                f"({len(closes)} bars, need 21) — fail-safe CRISIS active"
+            )
+            return True   # fail-safe: block entries
         ret_20d = float(closes[-1]) / float(closes[-21]) - 1
         return ret_20d <= -0.12
-    except Exception:
-        return False
+    except Exception as exc:
+        logger.warning(f"Buck Futures | CRISIS GATE: computation failed ({exc}) — fail-safe CRISIS active")
+        return True  # fail-safe: block entries
 
 
 def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float = 0.0) -> None:

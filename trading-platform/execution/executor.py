@@ -362,10 +362,66 @@ def execute_allocations(
         f"short={max(0, MAX_SHORT_SLOTS - _live_shorts)}"
     )
 
+    # ── SPY regime gate (belt-and-suspenders, independent of scanner) ─────────
+    # Recomputes SPY 200SMA + 5d brake from the same momentum cache.
+    # Fail-safe: default to BLOCKED if cache is missing or data is too short.
+    _exec_regime_long_ok = False
+    try:
+        from data.yfinance_client import get_cached_momentum_data as _get_mom_cache
+        _mom_cache = _get_mom_cache()
+        if _mom_cache:
+            _exec_spy_closes = (_mom_cache.get("by_ticker", {}).get("SPY", {}).get("closes") or [])
+            if len(_exec_spy_closes) >= 201:
+                _exec_spy_close  = float(_exec_spy_closes[-1])
+                _exec_spy_200sma = float(sum(_exec_spy_closes[-200:]) / 200)
+                _exec_spy_5d_ret = float(_exec_spy_closes[-1]) / float(_exec_spy_closes[-6]) - 1
+                _exec_regime_long_ok = (_exec_spy_close > _exec_spy_200sma) and (_exec_spy_5d_ret > -0.03)
+                if not _exec_regime_long_ok:
+                    _exec_conds = []
+                    if _exec_spy_close <= _exec_spy_200sma:
+                        _exec_conds.append(f"SPY {_exec_spy_close:.2f} ≤ 200SMA {_exec_spy_200sma:.2f}")
+                    if _exec_spy_5d_ret <= -0.03:
+                        _exec_conds.append(f"5d {_exec_spy_5d_ret:+.1%} ≤ -3%")
+                    logger.warning(
+                        f"Executor | REGIME GATE: longs blocked — {' + '.join(_exec_conds)}"
+                    )
+                else:
+                    logger.info(
+                        f"Executor | REGIME GATE: longs OK — "
+                        f"SPY {_exec_spy_close:.2f} > 200SMA {_exec_spy_200sma:.2f}, "
+                        f"5d {_exec_spy_5d_ret:+.1%} > -3%"
+                    )
+            else:
+                logger.warning(
+                    f"Executor | REGIME GATE: insufficient SPY data "
+                    f"({len(_exec_spy_closes)} bars) — defaulting to BLOCKED (fail-safe)"
+                )
+        else:
+            logger.warning(
+                "Executor | REGIME GATE: momentum cache empty — defaulting to BLOCKED (fail-safe)"
+            )
+    except Exception as _rge:
+        logger.warning(
+            f"Executor | REGIME GATE: check failed ({_rge}) — defaulting to BLOCKED (fail-safe)"
+        )
+
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         _regime_for_slot = regime_label or (output.regime if hasattr(output, "regime") else None)
         _slot_asset = getattr(slot, "asset_class", None)
         _slot_side  = getattr(slot, "side", None)
+
+        # ── Regime gate (belt-and-suspenders, longs only) ───────────────────────
+        if _slot_asset == "momentum_equity" and _slot_side == "long" and not _exec_regime_long_ok:
+            logger.warning(
+                f"Regime gate | Slot {slot.slot}: {slot.ticker} → SKIP "
+                f"(longs blocked by market regime)"
+            )
+            results["skipped"].append({
+                "slot":   slot.slot,
+                "ticker": slot.ticker,
+                "reason": "regime_gate_long",
+            })
+            continue
 
         # ── Hard cap gate — refuse to exceed MAX_LONG_SLOTS / MAX_SHORT_SLOTS ─
         if _slot_asset == "momentum_equity":

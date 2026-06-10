@@ -408,11 +408,53 @@ def scan_trend_signals(
     long_signals:  list[dict] = []
     short_signals: list[dict] = []
 
-    _avail_long  = max(0, MAX_LONG_SLOTS  - open_long_count)
+    # ── SPY regime gate: block longs in bear market or fast-crash ────────────
+    # Condition a: SPY last close < SPY 200-day SMA  (bear-market line)
+    # Condition b: SPY 5-day return < -3.0%          (fast-crash brake)
+    # Shorts are NOT gated. Fail-safe: block longs if SPY data is insufficient.
+    _SPY_SMA200_BARS = 200
+    _SPY_5D_BRAKE    = -0.03
+    _spy_data        = by_ticker.get("SPY", {})
+    _spy_closes      = _spy_data.get("closes") or []
+    _regime_long_ok  = False
+    _regime_block_reason: str | None = None
+
+    if len(_spy_closes) < _SPY_SMA200_BARS + 1:
+        _regime_block_reason = (
+            f"spy_insufficient_data ({len(_spy_closes)} bars, need {_SPY_SMA200_BARS + 1})"
+        )
+        logger.warning(
+            f"Oracle STF | REGIME GATE: longs BLOCKED — {_regime_block_reason} "
+            f"(fail-safe: never default open)"
+        )
+    else:
+        _spy_close  = float(_spy_closes[-1])
+        _spy_200sma = float(sum(_spy_closes[-_SPY_SMA200_BARS:]) / _SPY_SMA200_BARS)
+        _spy_5d_ret = float(_spy_closes[-1]) / float(_spy_closes[-6]) - 1
+        _regime_long_ok = (_spy_close > _spy_200sma) and (_spy_5d_ret > _SPY_5D_BRAKE)
+        if not _regime_long_ok:
+            _conds = []
+            if _spy_close <= _spy_200sma:
+                _conds.append(f"SPY {_spy_close:.2f} ≤ 200SMA {_spy_200sma:.2f}")
+            if _spy_5d_ret <= _SPY_5D_BRAKE:
+                _conds.append(f"5d ret {_spy_5d_ret:+.1%} ≤ {_SPY_5D_BRAKE:.0%}")
+            _regime_block_reason = " + ".join(_conds)
+            logger.warning(
+                f"Oracle STF | REGIME GATE: longs BLOCKED — {_regime_block_reason}"
+            )
+        else:
+            logger.info(
+                f"Oracle STF | REGIME GATE: longs OK — "
+                f"SPY {_spy_close:.2f} > 200SMA {_spy_200sma:.2f}, "
+                f"5d {_spy_5d_ret:+.1%} > {_SPY_5D_BRAKE:.0%}"
+            )
+
+    _avail_long  = max(0, MAX_LONG_SLOTS  - open_long_count) if _regime_long_ok else 0
     _avail_short = max(0, MAX_SHORT_SLOTS - open_short_count)
     logger.info(
         f"Oracle STF | Slot budget — open_long={open_long_count}/{MAX_LONG_SLOTS} "
-        f"open_short={open_short_count}/{MAX_SHORT_SLOTS} → "
+        f"open_short={open_short_count}/{MAX_SHORT_SLOTS} "
+        f"regime_ok={_regime_long_ok} → "
         f"avail_long={_avail_long} avail_short={_avail_short}"
     )
 
@@ -503,11 +545,13 @@ def scan_trend_signals(
     )
 
     return {
-        "long_signals":  long_signals,
-        "short_signals": short_signals,
-        "top5_long":     top5_long,
-        "top5_short":    top5_short,
-        "universe_size": universe_loaded,
+        "long_signals":          long_signals,
+        "short_signals":         short_signals,
+        "top5_long":             top5_long,
+        "top5_short":            top5_short,
+        "universe_size":         universe_loaded,
+        "regime_long_ok":        _regime_long_ok,
+        "regime_block_reason":   _regime_block_reason,
         "filter_stages": {
             "universe_loaded": universe_loaded,
             "with_data":       with_data,
@@ -589,14 +633,16 @@ def run_algo_scan(
     )
 
     return {
-        "regime":           "trend",
-        "signals":          long_signals,
-        "short_signals":    short_signals,
-        "top5_long":        result["top5_long"],
-        "top5_short":       result["top5_short"],
-        "activated":        bool(long_signals or short_signals),
-        "scan_type":        "stock_trend_follower_v1",
-        "active_signals":   len(long_signals),
-        "universe_scanned": fetched,
-        "filter_stages":    stages,
+        "regime":               "trend",
+        "signals":              long_signals,
+        "short_signals":        short_signals,
+        "top5_long":            result["top5_long"],
+        "top5_short":           result["top5_short"],
+        "activated":            bool(long_signals or short_signals),
+        "scan_type":            "stock_trend_follower_v1",
+        "active_signals":       len(long_signals),
+        "universe_scanned":     fetched,
+        "filter_stages":        stages,
+        "regime_long_ok":       result.get("regime_long_ok", False),
+        "regime_block_reason":  result.get("regime_block_reason"),
     }

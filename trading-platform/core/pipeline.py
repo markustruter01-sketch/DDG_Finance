@@ -1005,7 +1005,14 @@ async def _run_pipeline_inner(
         except Exception:
             _stf_equity = 0.0
 
-        _algo_result = _run_scan(open_symbols=_open_syms, equity=_stf_equity)
+        _open_long_count  = sum(1 for p in _open_pos if float(p.get("qty", 0)) > 0)
+        _open_short_count = sum(1 for p in _open_pos if float(p.get("qty", 0)) < 0)
+        _algo_result = _run_scan(
+            open_symbols=_open_syms,
+            equity=_stf_equity,
+            open_long_count=_open_long_count,
+            open_short_count=_open_short_count,
+        )
         _long_slots  = _algo_result.get("signals", [])
         _oracle_short_signals = _algo_result.get("short_signals", [])
 

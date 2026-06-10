@@ -74,6 +74,7 @@ from execution.broker import (
     place_order,
     place_stop_order,
 )
+from execution.algo_scanner import MAX_LONG_SLOTS, MAX_SHORT_SLOTS
 from execution.compliance import check_wash_sale, DRIP_ENABLED
 from execution.ratchet_stop import initialise_ratchet_stop, delete_stop
 from data.yfinance_client import get_cached_market_data
@@ -348,8 +349,49 @@ def execute_allocations(
         f"\u2192 deployable=${remaining_cash:,.2f}"
     )
 
+    # ── Oracle position-cap gate: counts from live Alpaca (source of truth) ──
+    # Positive qty = long; negative qty = short.  Queried once per cycle; local
+    # counters are incremented after each placement so multiple entries within
+    # one cycle also respect the cap without re-querying Alpaca.
+    _live_longs  = sum(1 for p in current_positions.values() if float(p.get("qty", 0)) > 0)
+    _live_shorts = sum(1 for p in current_positions.values() if float(p.get("qty", 0)) < 0)
+    logger.info(
+        f"Cap gate | live_longs={_live_longs}/{MAX_LONG_SLOTS}  "
+        f"live_shorts={_live_shorts}/{MAX_SHORT_SLOTS}  "
+        f"available: long={max(0, MAX_LONG_SLOTS - _live_longs)}  "
+        f"short={max(0, MAX_SHORT_SLOTS - _live_shorts)}"
+    )
+
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         _regime_for_slot = regime_label or (output.regime if hasattr(output, "regime") else None)
+        _slot_asset = getattr(slot, "asset_class", None)
+        _slot_side  = getattr(slot, "side", None)
+
+        # ── Hard cap gate — refuse to exceed MAX_LONG_SLOTS / MAX_SHORT_SLOTS ─
+        if _slot_asset == "momentum_equity":
+            if _slot_side == "long" and _live_longs >= MAX_LONG_SLOTS:
+                logger.warning(
+                    f"Cap gate | Slot {slot.slot}: {slot.ticker} → SKIP "
+                    f"(longs {_live_longs}/{MAX_LONG_SLOTS} — cap reached)"
+                )
+                results["skipped"].append({
+                    "slot":   slot.slot,
+                    "ticker": slot.ticker,
+                    "reason": f"cap_gate_long ({_live_longs}/{MAX_LONG_SLOTS})",
+                })
+                continue
+            if _slot_side == "short" and _live_shorts >= MAX_SHORT_SLOTS:
+                logger.warning(
+                    f"Cap gate | Slot {slot.slot}: {slot.ticker} → SKIP "
+                    f"(shorts {_live_shorts}/{MAX_SHORT_SLOTS} — cap reached)"
+                )
+                results["skipped"].append({
+                    "slot":   slot.slot,
+                    "ticker": slot.ticker,
+                    "reason": f"cap_gate_short ({_live_shorts}/{MAX_SHORT_SLOTS})",
+                })
+                continue
+
         _placed_before = len(results["placed"])
         results, remaining_cash = _execute_slot(
             slot, equity, max_position_usd, remaining_cash,
@@ -360,6 +402,11 @@ def execute_allocations(
         )
         if len(results["placed"]) > _placed_before:
             _db_active_tickers.add(_normalize_symbol(slot.ticker))
+            if _slot_asset == "momentum_equity":
+                if _slot_side == "long":
+                    _live_longs += 1
+                elif _slot_side == "short":
+                    _live_shorts += 1
 
     # Oracle v3.0: vault sweep disabled — JEPQ physical buy removed.
     # Profit reserve is tracked as a DB ledger via add_oracle_profit_contribution()

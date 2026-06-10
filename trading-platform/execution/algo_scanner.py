@@ -243,6 +243,8 @@ def scan_trend_signals(
     momentum_data: dict,
     open_symbols: set[str] | None = None,
     equity: float = 100_000.0,
+    open_long_count: int = 0,
+    open_short_count: int = 0,
 ) -> dict:
     """
     Stock Trend Follower v1.0 scan.
@@ -406,7 +408,15 @@ def scan_trend_signals(
     long_signals:  list[dict] = []
     short_signals: list[dict] = []
 
-    for i, c in enumerate(long_fresh[:MAX_LONG_SLOTS]):
+    _avail_long  = max(0, MAX_LONG_SLOTS  - open_long_count)
+    _avail_short = max(0, MAX_SHORT_SLOTS - open_short_count)
+    logger.info(
+        f"Oracle STF | Slot budget — open_long={open_long_count}/{MAX_LONG_SLOTS} "
+        f"open_short={open_short_count}/{MAX_SHORT_SLOTS} → "
+        f"avail_long={_avail_long} avail_short={_avail_short}"
+    )
+
+    for i, c in enumerate(long_fresh[:_avail_long]):
         kelly = _kelly_from_atr(equity, c["atr"], c["price"])
         if kelly <= 0:
             logger.warning(
@@ -439,7 +449,7 @@ def scan_trend_signals(
             f"ADX={c['adx']:.1f} spread={c['ema_spread']:+.2f}%"
         )
 
-    for i, c in enumerate(short_fresh[:MAX_SHORT_SLOTS]):
+    for i, c in enumerate(short_fresh[:_avail_short]):
         kelly = _kelly_from_atr(equity, c["atr"], c["price"])
         if kelly <= 0:
             logger.warning(
@@ -513,6 +523,8 @@ def run_algo_scan(
     veto_tickers: Optional[set[str]] = None,
     open_symbols: Optional[set[str]] = None,
     equity: float = 100_000.0,
+    open_long_count: int = 0,
+    open_short_count: int = 0,
 ) -> dict:
     """
     Main entry point — called from pipeline.py every 15-min market cycle.
@@ -557,7 +569,13 @@ def run_algo_scan(
             "filter_stages":    {},
         }
 
-    result       = scan_trend_signals(momentum_data, open_symbols=open_symbols or set(), equity=equity)
+    result       = scan_trend_signals(
+        momentum_data,
+        open_symbols=open_symbols or set(),
+        equity=equity,
+        open_long_count=open_long_count,
+        open_short_count=open_short_count,
+    )
     long_signals = result["long_signals"]
     short_signals = result["short_signals"]
     stages       = result["filter_stages"]

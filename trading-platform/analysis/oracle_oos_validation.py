@@ -2375,7 +2375,519 @@ def run_pass_b(verbose: bool = True) -> list[dict]:
     return results
 
 
+# ── Pass C: CRISIS-only MSE (stripped-down, minimal validated overlay) ────────
+
+def simulate_window_mse_c(
+    universe_data: dict[str, dict],
+    window_start:  date,
+    window_end:    date,
+    window_name:   str,
+    spy_mse:       dict[str, dict],
+    verbose:       bool = False,
+) -> dict:
+    """
+    Pass C simulation — CRISIS-only MSE overlay on baseline Oracle.
+
+    Changes vs baseline simulate_window:
+      • CRISIS (SPY 20d return ≤ -12%):
+          - Block ALL new entries, both longs AND shorts
+          - Exception: TLT/GLD/IEF may enter as longs, capped at 2 safe-haven
+            positions total at any given time
+          - Safe-haven entries sized at 0.5× (HIGH_VOL scale)
+      • Everything else = exact Pass A baseline (5L/2S, 1.5% risk, full universe,
+        no BEAR gate, no cooldown, no sector cap)
+    """
+    spy_data = universe_data.get("SPY")
+    if spy_data is None:
+        return {}
+
+    all_dates_str = spy_data["dates"]
+    ws = window_start.strftime("%Y-%m-%d")
+    we = window_end.strftime("%Y-%m-%d")
+    window_dates = [d for d in all_dates_str if ws <= d <= we]
+    if not window_dates:
+        return {}
+
+    ticker_date_idx: dict[str, dict[str, int]] = {}
+    for ticker, data in universe_data.items():
+        ticker_date_idx[ticker] = {d: i for i, d in enumerate(data["dates"])}
+
+    first_trading_day = window_dates[0]
+    tickers_with_data = [
+        t for t in universe_data
+        if first_trading_day in ticker_date_idx.get(t, {})
+    ]
+    coverage_pct     = len(tickers_with_data) / max(len(universe_data), 1) * 100
+    missing_at_start = [t for t in universe_data if t not in tickers_with_data]
+
+    if verbose:
+        print(f"  [{window_name}] {len(window_dates)} trading days  "
+              f"coverage {coverage_pct:.0f}% ({len(tickers_with_data)}/{len(universe_data)} tickers)")
+
+    ind_cache = precompute_indicators(universe_data)
+
+    equity:       float = STARTING_EQUITY
+    cash:         float = STARTING_EQUITY
+    positions:    dict  = {}
+    equity_curve: list  = []
+    all_trades:   list  = []
+    last_known_bar: dict = {}
+
+    killswitch_days:      int   = 0
+    prev_equity:          float = STARTING_EQUITY
+    max_single_day_swing: float = 0.0
+
+    # Pass C tracking
+    crisis_days:          int = 0
+    crisis_blocked_days:  int = 0   # days CRISIS actively blocked an entry attempt
+    safe_haven_entries:   int = 0
+
+    for day_n, day_str in enumerate(window_dates):
+        fresh_bar: dict = {}
+        for ticker in universe_data:
+            idx = ticker_date_idx[ticker].get(day_str, -1)
+            if idx >= 0:
+                fresh_bar[ticker] = idx
+                last_known_bar[ticker] = idx
+
+        mtm_bar: dict = {**fresh_bar}
+        for ticker in positions:
+            if ticker not in mtm_bar and ticker in last_known_bar:
+                mtm_bar[ticker] = last_known_bar[ticker]
+
+        # ── 1. Exits ──────────────────────────────────────────────────────────
+        positions, closed = _check_exits(
+            positions, universe_data, fresh_bar, day_n, ind_cache
+        )
+        for trade in closed:
+            if trade["side"] == "long":
+                cash += trade["exit_price"] * trade["shares"]
+            else:
+                cash += max(0.0, (2.0 * trade["entry_price"] - trade["exit_price"])
+                             * trade["shares"])
+        all_trades.extend(closed)
+
+        # ── 2. MTM equity ─────────────────────────────────────────────────────
+        mtm_bar = {**fresh_bar}
+        for ticker in positions:
+            if ticker not in mtm_bar and ticker in last_known_bar:
+                mtm_bar[ticker] = last_known_bar[ticker]
+
+        pos_value = 0.0
+        for ticker, pos in list(positions.items()):
+            idx = mtm_bar.get(ticker, -1)
+            if idx < 0:
+                continue
+            close_p = universe_data[ticker]["closes"][idx]
+            if pos["side"] == "long":
+                pos_value += close_p * pos["shares"]
+            else:
+                pos_value += max(
+                    0.0, (2.0 * pos["entry_price"] - close_p) * pos["shares"]
+                )
+        equity = cash + pos_value
+        equity_curve.append(equity)
+
+        if prev_equity > 0:
+            day_swing = abs(equity / prev_equity - 1.0)
+            if day_swing > max_single_day_swing:
+                max_single_day_swing = day_swing
+
+        daily_dd         = (prev_equity - equity) / prev_equity if prev_equity > 0 else 0.0
+        killswitch_fired = daily_dd >= KILLSWITCH_DAILY_DD
+        if killswitch_fired:
+            killswitch_days += 1
+        prev_equity = equity
+
+        # ── 3. MSE: CRISIS check ──────────────────────────────────────────────
+        mse_day  = spy_mse.get(day_str, {"regime": "BULL"})
+        is_crisis = mse_day["regime"] == "CRISIS"
+        if is_crisis:
+            crisis_days += 1
+
+        # ── 4. Entries ────────────────────────────────────────────────────────
+        n_longs  = sum(1 for p in positions.values() if p["side"] == "long")
+        n_shorts = sum(1 for p in positions.values() if p["side"] == "short")
+        avail_long  = MAX_LONG_SLOTS  - n_longs
+        avail_short = MAX_SHORT_SLOTS - n_shorts
+
+        if (avail_long > 0 or avail_short > 0) and not killswitch_fired:
+            long_cands, short_cands = _compute_signals(
+                universe_data, fresh_bar, set(positions.keys()), equity, ind_cache
+            )
+
+            if is_crisis:
+                # Block all shorts; filter longs to safe-havens only (max 2 total)
+                n_safe = sum(
+                    1 for t, p in positions.items()
+                    if p["side"] == "long" and t in MSE_SAFE_HAVENS
+                )
+                safe_avail = max(0, 2 - n_safe)
+                had_cands  = len(long_cands) > 0 or len(short_cands) > 0
+                long_cands  = [c for c in long_cands
+                               if c["ticker"] in MSE_SAFE_HAVENS][:safe_avail]
+                short_cands = []
+                if had_cands and not long_cands:
+                    crisis_blocked_days += 1
+            else:
+                # Normal baseline — no filtering
+                pass
+
+            entries = (
+                [(c, "long")  for c in long_cands[:avail_long]]
+                + [(c, "short") for c in short_cands[:avail_short]]
+            )
+
+            for cand, side in entries:
+                ticker = cand["ticker"]
+                price  = cand["price"]
+                atr    = cand["atr"]
+
+                risk_amount    = equity * RISK_PER_TRADE
+                stop_dist      = atr * ATR_MULTIPLIER
+                if stop_dist <= 0:
+                    continue
+                shares_raw     = risk_amount / stop_dist
+                position_value = shares_raw * price
+                kelly_frac     = min(position_value / equity, MAX_POSITION_PCT)
+                position_value = kelly_frac * equity
+
+                # CRISIS safe-haven entries: 0.5× size
+                if is_crisis and ticker in MSE_SAFE_HAVENS:
+                    position_value *= MSE_HIGH_VOL_SCALE
+
+                shares = position_value / price
+                if shares <= 0 or position_value > cash:
+                    continue
+
+                stop_price = (
+                    price - atr * ATR_MULTIPLIER if side == "long"
+                    else price + atr * ATR_MULTIPLIER
+                )
+                positions[ticker] = {
+                    "side":            side,
+                    "entry_price":     price,
+                    "shares":          shares,
+                    "atr_at_entry":    atr,
+                    "stop_price":      stop_price,
+                    "best_price":      price,
+                    "trailing_active": False,
+                    "entry_day":       day_n,
+                }
+                cash -= position_value
+
+                if side == "long" and ticker in MSE_SAFE_HAVENS:
+                    safe_haven_entries += 1
+
+    # ── Force-close at window end ─────────────────────────────────────────────
+    last_day_str = window_dates[-1]
+    last_bar: dict[str, int] = {}
+    for ticker in universe_data:
+        idx = ticker_date_idx[ticker].get(last_day_str, -1)
+        if idx >= 0:
+            last_bar[ticker] = idx
+
+    for ticker, pos in list(positions.items()):
+        idx = last_bar.get(ticker, -1)
+        if idx < 0:
+            continue
+        close_p = universe_data[ticker]["closes"][idx]
+        side    = pos["side"]
+        pnl     = ((close_p - pos["entry_price"]) * pos["shares"] if side == "long"
+                   else max((pos["entry_price"] - close_p) * pos["shares"],
+                            -pos["entry_price"] * pos["shares"]))
+        all_trades.append({
+            "ticker":      ticker,
+            "side":        side,
+            "entry_price": pos["entry_price"],
+            "exit_price":  close_p,
+            "shares":      pos["shares"],
+            "pnl":         pnl,
+            "hold_days":   len(window_dates) - pos["entry_day"],
+            "exit_reason": "window_end",
+        })
+
+    # ── Metrics ───────────────────────────────────────────────────────────────
+    if len(equity_curve) < 2:
+        return {"window": window_name, "sharpe": 0.0, "max_dd": 0.0,
+                "win_rate": 0.0, "n_trades": 0, "error": "insufficient_data"}
+
+    daily_returns = [
+        (equity_curve[i] / equity_curve[i - 1] - 1)
+        for i in range(1, len(equity_curve))
+    ]
+    mean_ret = statistics.mean(daily_returns)
+    std_ret  = statistics.stdev(daily_returns) if len(daily_returns) > 1 else 1e-9
+    sharpe   = (mean_ret / std_ret) * math.sqrt(252) if std_ret > 0 else 0.0
+
+    peak_eq  = STARTING_EQUITY
+    max_dd   = 0.0
+    for eq in equity_curve:
+        if eq > peak_eq:
+            peak_eq = eq
+        dd = (peak_eq - eq) / peak_eq
+        if dd > max_dd:
+            max_dd = dd
+
+    wins     = [t for t in all_trades if t["pnl"] > 0]
+    win_rate = len(wins) / len(all_trades) if all_trades else 0.0
+    total_ret = (equity_curve[-1] - STARTING_EQUITY) / STARTING_EQUITY
+
+    return {
+        "window":               window_name,
+        "start":                ws,
+        "end":                  we,
+        "trading_days":         len(window_dates),
+        "sharpe":               round(sharpe,   4),
+        "max_dd":               round(max_dd,   4),
+        "win_rate":             round(win_rate, 4),
+        "n_trades":             len(all_trades),
+        "total_return":         round(total_ret, 4),
+        "final_equity":         round(equity_curve[-1], 2),
+        "equity_curve":         equity_curve,
+        "daily_returns":        daily_returns,
+        "trades":               all_trades,
+        "coverage_pct":         round(coverage_pct, 1),
+        "missing_at_start":     missing_at_start[:20],
+        "killswitch_days":      killswitch_days,
+        "max_single_day_swing": round(max_single_day_swing, 6),
+        "crisis_days":          crisis_days,
+        "crisis_blocked_days":  crisis_blocked_days,
+        "safe_haven_entries":   safe_haven_entries,
+    }
+
+
+def run_pass_c(verbose: bool = True) -> list[dict]:
+    """
+    Pass C — CRISIS-only MSE overlay (minimal validated overlay).
+
+    Pass B proved BEAR gate + cooldown + sector cap are net-harmful.
+    Pass C tests only the one component that worked in Pass B: the CRISIS
+    gate + safe-haven rotation, stripped of everything else.
+
+    PRE-REGISTERED SUCCESS BAR:
+      1. Pooled Sharpe (concat) >= 0.599  (baseline — keep 2020 gain without BEAR damage)
+      2. Pooled MaxDD            <= 17.0% (baseline)
+      3. 2020: Sharpe >= 1.45  AND  MaxDD <= 12%
+      4. 2019 AND 2022: each degrade <= 0.20 Sharpe vs baseline
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from execution.momentum_universe import FULL_UNIVERSE
+
+    SEP  = "=" * 72
+    SEP2 = "-" * 72
+
+    PASS_A_BASELINE = {
+        "2019":    {"sharpe": +1.411, "max_dd": 0.066, "win_rate": 0.608,
+                    "n_trades": 107,  "total_return": +0.175},
+        "2020":    {"sharpe": +1.363, "max_dd": 0.146, "win_rate": 0.533,
+                    "n_trades": 150,  "total_return": +0.337},
+        "2021":    {"sharpe": -0.153, "max_dd": 0.130, "win_rate": 0.504,
+                    "n_trades": 123,  "total_return": -0.041},
+        "2022":    {"sharpe": -0.059, "max_dd": 0.128, "win_rate": 0.449,
+                    "n_trades": 136,  "total_return": -0.027},
+        "2023-24": {"sharpe": +0.561, "max_dd": 0.170, "win_rate": 0.525,
+                    "n_trades": 238,  "total_return": +0.164},
+        "_pooled_sharpe_concat": 0.599,
+        "_pooled_max_dd":        0.170,
+    }
+
+    print(SEP)
+    print("ORACLE OOS VALIDATION — PASS C  (CRISIS-ONLY MSE)")
+    print(SEP)
+    print(f"Universe  : {len(FULL_UNIVERSE)} tickers (FULL_UNIVERSE)")
+    print(f"Data src  : Alpaca SIP (consolidated tape, cache={CACHE_FILE_SIP.name})")
+    print(f"Overlay   : CRISIS-only (SPY 20d return ≤ -12%)")
+    print(f"  CRISIS  : block ALL new entries; safe havens (TLT/GLD/IEF, ≤2) at 0.5× size")
+    print(f"  Normal  : exact Pass A baseline — 5L/2S, 1.5% risk, full universe")
+    print(f"  Removed : BEAR gate, cooldown, sector cap, 3-slot restriction")
+    print(f"Success bar (PRE-REGISTERED):")
+    print(f"  Pooled Sharpe ≥0.599 | MaxDD ≤17.0% | "
+          f"2020 Sharpe ≥1.45 & MaxDD ≤12% | 2019+2022 degrade ≤0.20")
+    print()
+
+    universe_data = load_universe_data_sip(FULL_UNIVERSE, verbose=True)
+    print(f"\nLoaded: {len(universe_data)}/{len(FULL_UNIVERSE)} tickers\n")
+
+    spy_data = universe_data.get("SPY")
+    if spy_data is None:
+        raise RuntimeError("SPY missing")
+    print("  Computing MSE regime series …")
+    spy_mse = _compute_spy_mse_series(spy_data)
+    print(f"  MSE series ready: {len(spy_mse)} dates\n")
+
+    results: list[dict] = []
+    for window in OOS_WINDOWS:
+        print(f"Running window: {window['name']}  ({window['start']} → {window['end']}) …")
+        r = simulate_window_mse_c(
+            universe_data,
+            window["start"],
+            window["end"],
+            window["name"],
+            spy_mse,
+            verbose=True,
+        )
+        results.append(r)
+        if "error" not in r and r.get("sharpe") is not None:
+            ks  = r.get("killswitch_days",     0)
+            sw  = r.get("max_single_day_swing", 0.0)
+            cd  = r.get("crisis_days",          0)
+            cbd = r.get("crisis_blocked_days",  0)
+            she = r.get("safe_haven_entries",   0)
+            print(f"  → Sharpe={r['sharpe']:+.3f}  MaxDD={r['max_dd']:.1%}  "
+                  f"WR={r['win_rate']:.1%}  Trades={r['n_trades']}  "
+                  f"TotRet={r['total_return']:+.1%}  KillSw={ks}d  "
+                  f"CRISIS={cd}d  Blocked={cbd}d  SafeHaven={she}")
+        else:
+            print(f"  → ERROR: {r.get('error')}")
+        print()
+
+    valid = [r for r in results if "error" not in r and r.get("sharpe") is not None]
+    if not valid:
+        print("No valid windows.")
+        return results
+
+    pooled_sharpe_mean   = statistics.mean(r["sharpe"]   for r in valid)
+    pooled_dd            = max(r["max_dd"]               for r in valid)
+    pooled_wr            = statistics.mean(r["win_rate"] for r in valid)
+    total_trades         = sum(r["n_trades"]             for r in valid)
+
+    all_daily: list[float] = []
+    for r in valid:
+        all_daily.extend(r.get("daily_returns", []))
+    if len(all_daily) > 1:
+        m = statistics.mean(all_daily)
+        s = statistics.stdev(all_daily)
+        pooled_sharpe_concat = (m / s) * math.sqrt(252) if s > 0 else 0.0
+    else:
+        pooled_sharpe_concat = pooled_sharpe_mean
+
+    # ── Side-by-side table ────────────────────────────────────────────────────
+    print(SEP)
+    print("PASS C RESULTS — CRISIS-ONLY MSE vs PASS A BASELINE (SIDE BY SIDE)")
+    print(SEP)
+    print(f"{'Window':<10}  {'── PASS A (baseline) ──':^31}  "
+          f"{'── PASS C (crisis-only) ──':^31}  {'Δ Sharpe':>9}")
+    print(f"{'':10}  {'Sharpe':>8} {'MaxDD':>6} {'WR':>6} {'TotRet':>8}  "
+          f"{'Sharpe':>8} {'MaxDD':>6} {'WR':>6} {'TotRet':>8}  {'(C-A)':>9}")
+    print(SEP2)
+
+    result_map = {r["window"]: r for r in results if "error" not in r}
+    for window in OOS_WINDOWS:
+        wn = window["name"]
+        a  = PASS_A_BASELINE.get(wn, {})
+        c  = result_map.get(wn, {})
+        if not a or not c:
+            continue
+        dc = c["sharpe"] - a["sharpe"]
+        print(f"{wn:<10}  "
+              f"{a['sharpe']:>+8.3f} {a['max_dd']:>6.1%} "
+              f"{a['win_rate']:>6.1%} {a['total_return']:>+8.1%}  "
+              f"{c['sharpe']:>+8.3f} {c['max_dd']:>6.1%} "
+              f"{c['win_rate']:>6.1%} {c['total_return']:>+8.1%}  "
+              f"{dc:>+9.3f}")
+
+    print(SEP2)
+    pa_pool_s = PASS_A_BASELINE["_pooled_sharpe_concat"]
+    pa_pool_d = PASS_A_BASELINE["_pooled_max_dd"]
+    delta_s   = pooled_sharpe_concat - pa_pool_s
+    print(f"{'POOLED':<10}  "
+          f"{pa_pool_s:>+8.3f} {pa_pool_d:>6.1%} {'-':>6} {'-':>8}  "
+          f"{pooled_sharpe_concat:>+8.3f} {pooled_dd:>6.1%} "
+          f"{pooled_wr:>6.1%} {'-':>8}  {delta_s:>+9.3f}")
+    print(f"(concat)   pass-a={pa_pool_s:+.3f}  pass-c={pooled_sharpe_concat:+.3f}  "
+          f"Δ={delta_s:+.3f}")
+    print()
+
+    # ── CRISIS activity table ─────────────────────────────────────────────────
+    print("CRISIS ACTIVITY PER WINDOW")
+    print(SEP2)
+    print(f"{'Window':<10}  {'CrisisDays':>11} {'Blocked':>8} {'SafeHaven':>10}")
+    print(SEP2)
+    for window in OOS_WINDOWS:
+        wn = window["name"]
+        c  = result_map.get(wn, {})
+        if not c:
+            continue
+        print(f"{wn:<10}  "
+              f"{c.get('crisis_days', 0):>11} "
+              f"{c.get('crisis_blocked_days', 0):>8} "
+              f"{c.get('safe_haven_entries', 0):>10}")
+    print()
+
+    # ── Verdict ───────────────────────────────────────────────────────────────
+    print(SEP)
+    print("PASS C VERDICT  (pre-registered bar, no post-hoc tuning)")
+    print(SEP)
+
+    c20  = result_map.get("2020", {})
+    c19  = result_map.get("2019", {})
+    c22  = result_map.get("2022", {})
+    a20  = PASS_A_BASELINE["2020"]
+    a19  = PASS_A_BASELINE["2019"]
+    a22  = PASS_A_BASELINE["2022"]
+
+    # Gate 1: pooled Sharpe ≥ 0.599
+    g1 = pooled_sharpe_concat >= 0.599
+    print(f"  Gate 1  Pooled Sharpe ≥ 0.599  :  "
+          f"{pooled_sharpe_concat:+.3f}  →  {'PASS ✓' if g1 else 'FAIL ✗'}")
+
+    # Gate 2: MaxDD ≤ 17.0%
+    g2 = pooled_dd <= 0.170
+    print(f"  Gate 2  MaxDD ≤ 17.0%           :  "
+          f"{pooled_dd:.1%}      →  {'PASS ✓' if g2 else 'FAIL ✗'}")
+
+    # Gate 3: 2020 Sharpe ≥ 1.45 AND MaxDD ≤ 12%
+    b20_s = c20.get("sharpe", 0.0)
+    b20_d = c20.get("max_dd", 1.0)
+    g3a   = b20_s >= 1.45
+    g3b   = b20_d <= 0.12
+    g3    = g3a and g3b
+    print(f"  Gate 3a 2020 Sharpe ≥ 1.45      :  "
+          f"A={a20['sharpe']:+.3f} → C={b20_s:+.3f}  →  {'PASS ✓' if g3a else 'FAIL ✗'}")
+    print(f"  Gate 3b 2020 MaxDD ≤ 12%         :  "
+          f"A={a20['max_dd']:.1%}  → C={b20_d:.1%}    →  {'PASS ✓' if g3b else 'FAIL ✗'}")
+
+    # Gate 4: 2019 degrade ≤ 0.20 AND 2022 degrade ≤ 0.20
+    b19_s = c19.get("sharpe", a19["sharpe"])
+    b22_s = c22.get("sharpe", a22["sharpe"])
+    drop19 = a19["sharpe"] - b19_s
+    drop22 = a22["sharpe"] - b22_s
+    g4a = drop19 <= 0.20
+    g4b = drop22 <= 0.20
+    g4  = g4a and g4b
+    print(f"  Gate 4a 2019 degrade ≤ 0.20     :  "
+          f"A={a19['sharpe']:+.3f} → C={b19_s:+.3f}  drop={drop19:.3f}  →  "
+          f"{'PASS ✓' if g4a else 'FAIL ✗'}")
+    print(f"  Gate 4b 2022 degrade ≤ 0.20     :  "
+          f"A={a22['sharpe']:+.3f} → C={b22_s:+.3f}  drop={drop22:.3f}  →  "
+          f"{'PASS ✓' if g4b else 'FAIL ✗'}")
+
+    print(SEP2)
+    all_pass = g1 and g2 and g3 and g4
+    if all_pass:
+        verdict = ("PASS — CRISIS-only overlay clears all gates. "
+                   "Proceed with production CRISIS-gate integration.")
+    else:
+        fails = []
+        if not g1: fails.append(f"pooled Sharpe {pooled_sharpe_concat:+.3f} < 0.599")
+        if not g2: fails.append(f"MaxDD {pooled_dd:.1%} > 17.0%")
+        if not g3: fails.append(
+            f"2020 {'Sharpe' if not g3a else 'MaxDD'} "
+            f"({'%.3f'%b20_s if not g3a else '%.1f%%'%b20_d})"
+        )
+        if not g4: fails.append(
+            f"{'2019' if not g4a else '2022'} degraded >"
+            f"0.20 (drop={drop19:.3f if not g4a else drop22:.3f})"
+        )
+        verdict = f"FAIL — {'; '.join(fails)}. Build market_state.py visibility-only."
+    print(f"\n  VERDICT: {verdict}\n")
+
+    return results
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    run_pass_b(verbose=True)
+    run_pass_c(verbose=True)

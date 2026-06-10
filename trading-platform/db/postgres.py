@@ -584,6 +584,20 @@ CREATE TABLE IF NOT EXISTS momentum_bot_trades (
 CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
     ON momentum_bot_trades (bot_id, status);
 
+-- ── Market State Engine (MSE) ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS market_state (
+    id          SERIAL      PRIMARY KEY,
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    regime      TEXT        NOT NULL,   -- BULL | BEAR | CRISIS
+    high_vol    BOOLEAN     NOT NULL DEFAULT FALSE,
+    spy_close   NUMERIC,
+    spy_20d_ret NUMERIC,
+    spy_200sma  NUMERIC,
+    spy_10d_vol NUMERIC
+);
+CREATE INDEX IF NOT EXISTS idx_market_state_recorded_at
+    ON market_state (recorded_at DESC);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

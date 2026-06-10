@@ -506,6 +506,25 @@ def _manage_exits(alpaca: "JeromeAlpaca", equity: float) -> None:
 
 # ─── Entry scan (once per day at 13:35 UTC) ───────────────────────────────────
 
+def _is_crisis_active() -> bool:
+    """
+    MSE CRISIS gate: return True if SPY 20-day return <= -12%.
+    Uses the same Yahoo Finance data source as the rest of the strategy.
+    Non-fatal: returns False on any error (fail-open for entries).
+    """
+    try:
+        spy = _fetch_ohlcv("SPY", days=30)
+        if spy is None:
+            return False
+        closes = spy.get("closes") or []
+        if len(closes) < 21:
+            return False
+        ret_20d = float(closes[-1]) / float(closes[-21]) - 1
+        return ret_20d <= -0.12
+    except Exception:
+        return False
+
+
 def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float = 0.0) -> None:
     """
     Scan all 5 universe instruments for entry signals.
@@ -540,6 +559,15 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
 
     if open_count >= MAX_POSITIONS:
         logger.info("Buck Futures | Position cap reached — no new entries")
+        _last_entry_scan_date = datetime.now(timezone.utc).date()
+        return
+
+    # ── MSE CRISIS gate: SPY 20-day return <= -12% blocks all new entries ────
+    if _is_crisis_active():
+        logger.warning(
+            "Buck Futures | CRISIS GATE: SPY 20-day return <= -12% — "
+            "all new entries blocked this cycle (exits unaffected)"
+        )
         _last_entry_scan_date = datetime.now(timezone.utc).date()
         return
 

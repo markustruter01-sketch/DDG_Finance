@@ -405,6 +405,35 @@ def execute_allocations(
             f"Executor | REGIME GATE: check failed ({_rge}) — defaulting to BLOCKED (fail-safe)"
         )
 
+    # ── MSE CRISIS gate (belt-and-suspenders, independent of scanner) ─────────
+    # Scanner already filters signals; executor re-checks as safety net.
+    # CRISIS (SPY 20d return <= -12%): block ALL momentum_equity entries both sides.
+    # Exception: TLT/GLD/IEF pass through as longs (already 0.5× sized by scanner).
+    _exec_crisis_active   = False
+    _exec_crisis_20d_ret: float | None = None
+    _EXEC_MSE_SAFE_HAVENS = frozenset({"TLT", "GLD", "IEF"})
+    try:
+        if _mom_cache:
+            _exec_spy_c = (_mom_cache.get("by_ticker", {}).get("SPY", {}).get("closes") or [])
+            if len(_exec_spy_c) >= 21:
+                _exec_crisis_20d_ret = float(_exec_spy_c[-1]) / float(_exec_spy_c[-21]) - 1
+                _exec_crisis_active  = _exec_crisis_20d_ret <= -0.12
+                if _exec_crisis_active:
+                    logger.warning(
+                        f"Executor | CRISIS GATE: SPY 20d {_exec_crisis_20d_ret:+.1%} <= -12% "
+                        f"— momentum_equity entries blocked except "
+                        f"{sorted(_EXEC_MSE_SAFE_HAVENS)}"
+                    )
+                else:
+                    logger.debug(
+                        f"Executor | CRISIS GATE: not active "
+                        f"(SPY 20d={_exec_crisis_20d_ret:+.1%})"
+                    )
+    except Exception as _cre:
+        logger.warning(
+            f"Executor | CRISIS GATE: check failed ({_cre}) — assuming not active"
+        )
+
     for slot in sorted(output.allocations, key=lambda x: x.slot):
         _regime_for_slot = regime_label or (output.regime if hasattr(output, "regime") else None)
         _slot_asset = getattr(slot, "asset_class", None)
@@ -422,6 +451,31 @@ def execute_allocations(
                 "reason": "regime_gate_long",
             })
             continue
+
+        # ── CRISIS gate (belt-and-suspenders, momentum_equity only) ───────────
+        if _exec_crisis_active and _slot_asset == "momentum_equity":
+            if _slot_side == "short":
+                logger.warning(
+                    f"CRISIS gate | Slot {slot.slot}: {slot.ticker} → SKIP "
+                    f"(shorts blocked during CRISIS)"
+                )
+                results["skipped"].append({
+                    "slot":   slot.slot,
+                    "ticker": slot.ticker,
+                    "reason": "crisis_gate_short",
+                })
+                continue
+            if _slot_side == "long" and slot.ticker not in _EXEC_MSE_SAFE_HAVENS:
+                logger.warning(
+                    f"CRISIS gate | Slot {slot.slot}: {slot.ticker} → SKIP "
+                    f"(non-safe-haven long blocked during CRISIS)"
+                )
+                results["skipped"].append({
+                    "slot":   slot.slot,
+                    "ticker": slot.ticker,
+                    "reason": "crisis_gate_non_safe_haven",
+                })
+                continue
 
         # ── Hard cap gate — refuse to exceed MAX_LONG_SLOTS / MAX_SHORT_SLOTS ─
         if _slot_asset == "momentum_equity":

@@ -458,8 +458,47 @@ def scan_trend_signals(
         f"avail_long={_avail_long} avail_short={_avail_short}"
     )
 
+    # ── MSE CRISIS gate (Pass C OOS validated: pooled Sharpe +0.633 vs +0.599) ─
+    # Dual-gate coexistence:
+    #   Live fast gate (above): SPY > 200SMA AND 5d > -3% → Oracle long-only brake.
+    #   CRISIS gate (here):     SPY 20d return ≤ -12% → both-sides block + safe-havens.
+    # These are COMPLEMENTARY. Fast gate fires on shorter lookback; CRISIS on deeper.
+    # When both active simultaneously, CRISIS is more restrictive. Exits never gated.
+    _MSE_CRISIS_THRESHOLD = -0.12
+    _MSE_SAFE_HAVENS      = frozenset({"TLT", "GLD", "IEF"})
+    _MSE_SAFE_HAVEN_MAX   = 2
+    _MSE_HIGH_VOL_SCALE   = 0.50
+    _crisis_active        = False
+    _crisis_20d_ret: float | None = None
+
+    if len(_spy_closes) >= 21:
+        _crisis_20d_ret = float(_spy_closes[-1]) / float(_spy_closes[-21]) - 1
+        _crisis_active  = _crisis_20d_ret <= _MSE_CRISIS_THRESHOLD
+    else:
+        logger.warning(
+            f"Oracle STF | CRISIS GATE: insufficient SPY data "
+            f"({len(_spy_closes)} bars, need 21) — gate not active"
+        )
+
+    if _crisis_active:
+        logger.warning(
+            f"Oracle STF | CRISIS GATE: SPY 20d {_crisis_20d_ret:+.1%} ≤ "
+            f"{_MSE_CRISIS_THRESHOLD:.0%} — ALL new entries BLOCKED. "
+            f"Safe-haven longs (TLT/GLD/IEF) only, max {_MSE_SAFE_HAVEN_MAX} at 0.5× size."
+        )
+        _avail_long  = _MSE_SAFE_HAVEN_MAX   # cap to safe-haven max; executor deduplicates
+        _avail_short = 0                     # shorts blocked during CRISIS
+        long_fresh   = [c for c in long_fresh if c["ticker"] in _MSE_SAFE_HAVENS]
+    else:
+        logger.debug(
+            f"Oracle STF | CRISIS GATE: not active "
+            f"(SPY 20d={'N/A' if _crisis_20d_ret is None else f'{_crisis_20d_ret:+.1%}'})"
+        )
+
     for i, c in enumerate(long_fresh[:_avail_long]):
         kelly = _kelly_from_atr(equity, c["atr"], c["price"])
+        if _crisis_active and c["ticker"] in _MSE_SAFE_HAVENS:
+            kelly *= _MSE_HIGH_VOL_SCALE   # 0.5× sizing for safe-havens during CRISIS
         if kelly <= 0:
             logger.warning(
                 f"AlgoScanner | Dropping {c['ticker']} from long signals — kelly=0 (ATR={c['atr']:.4f}). "
@@ -552,6 +591,8 @@ def scan_trend_signals(
         "universe_size":         universe_loaded,
         "regime_long_ok":        _regime_long_ok,
         "regime_block_reason":   _regime_block_reason,
+        "crisis_active":         _crisis_active,
+        "crisis_20d_ret":        _crisis_20d_ret,
         "filter_stages": {
             "universe_loaded": universe_loaded,
             "with_data":       with_data,

@@ -850,6 +850,19 @@ def _build_exit_attribution_30d(errors: list) -> dict:
             result[b] = {"count": 0, "pnl_usd": 0.0}
     return result
 
+# ── Section: market_state ─────────────────────────────────────────────────────
+
+
+def _build_market_state(errors: list) -> dict:
+    """Fetch current MSE regime. Non-fatal: returns {} on any error."""
+    try:
+        from core.market_state import get_market_state
+        return get_market_state(persist=False)
+    except Exception as exc:
+        errors.append({"section": "market_state", "error": str(exc)})
+        return {}
+
+
 # ── Text formatter ─────────────────────────────────────────────────────────────
 
 def _format_text(r: dict) -> str:
@@ -878,6 +891,31 @@ def _format_text(r: dict) -> str:
         SEP,
         "",
     ]
+
+    # ── Market State ───────────────────────────────────────────────────────────
+    _ms        = r.get("market_state") or {}
+    _ms_regime = _ms.get("regime", "UNKNOWN")
+    _ms_hv     = _ms.get("high_vol", False)
+    _ms_20d    = _ms.get("spy_20d_ret")
+    _ms_close  = _ms.get("spy_close")
+    _ms_200sma = _ms.get("spy_200sma")
+    _vol_flag  = "  ⚠ HIGH_VOL" if _ms_hv else ""
+    lines += [
+        f"{DASH} MARKET STATE {DASH}",
+        f"Regime:    {_ms_regime}{_vol_flag}",
+    ]
+    if _ms_20d is not None:
+        lines.append(f"SPY 20d:   {_ms_20d:+.2%}")
+    if _ms_close is not None and _ms_200sma is not None:
+        lines.append(f"SPY close: {_ms_close:.2f}  200SMA: {_ms_200sma:.2f}")
+    if _ms_regime == "CRISIS":
+        lines.append(
+            "CRISIS GATE ACTIVE — all new entries blocked "
+            "(safe-havens TLT/GLD/IEF longs only, max 2, 0.5× size)"
+        )
+    elif _ms_regime == "BEAR":
+        lines.append("BEAR (display only — no trading gate active)")
+    lines.append("")
 
     # ── Fleet ──────────────────────────────────────────────────────────────────
     fleet = r.get("fleet") or {}
@@ -1049,6 +1087,7 @@ async def claude_report(days: int = 1, include_logs: bool = True) -> dict:
     recon_flags   = _build_reconciliation_flags(live_pos_cache, errors)
     decisions     = _build_decisions_pending(window_start, errors)
     exit_attr     = _build_exit_attribution_30d(errors)
+    market_state  = _build_market_state(errors)
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000)
     logger.info(f"claude_report | generated in {elapsed_ms}ms | "
@@ -1068,6 +1107,7 @@ async def claude_report(days: int = 1, include_logs: bool = True) -> dict:
         "errors_window":         log_events if include_logs else None,
         "decisions_pending":     decisions,
         "exit_attribution_30d":  exit_attr,
+        "market_state":          market_state,
         "_section_errors":       errors,
     }
 
@@ -1095,6 +1135,7 @@ async def claude_report_text(days: int = 1):
     recon_flags    = _build_reconciliation_flags(live_pos_cache, errors)
     decisions      = _build_decisions_pending(window_start, errors)
     exit_attr      = _build_exit_attribution_30d(errors)
+    market_state   = _build_market_state(errors)
 
     report_dict = {
         "generated_at":          _iso(_now()),
@@ -1108,6 +1149,7 @@ async def claude_report_text(days: int = 1):
         "errors_window":         log_events,
         "decisions_pending":     decisions,
         "exit_attribution_30d":  exit_attr,
+        "market_state":          market_state,
     }
 
     body = _format_text(report_dict)

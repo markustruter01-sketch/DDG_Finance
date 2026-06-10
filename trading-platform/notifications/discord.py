@@ -121,7 +121,31 @@ def notify_daily_pnl_report() -> None:
         pnl_pct = float(bot.get("pnl_pct", 0.0))
         lines.append(_pnl_line(label, pnl, pnl_pct))
 
-    description = "\n".join(lines) if lines else "_No bot data available._"
+    # ── Prepend market state header ────────────────────────────────────────────
+    _state_header = ""
+    try:
+        import sys as _sys
+        import os as _os
+        _tp_root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")
+        if _tp_root not in _sys.path:
+            _sys.path.insert(0, _tp_root)
+        from core.market_state import get_market_state as _get_ms
+        _ms = _get_ms(persist=False)
+        _regime   = _ms.get("regime", "UNKNOWN")
+        _high_vol = _ms.get("high_vol", False)
+        _spy_20d  = _ms.get("spy_20d_ret")
+        _emoji    = {"CRISIS": "🚨", "BEAR": "🐻", "BULL": "🟢"}.get(_regime, "❓")
+        _state_header = f"{_emoji} **Market: {_regime}**"
+        if _high_vol:
+            _state_header += "  ⚠ HIGH_VOL"
+        if _spy_20d is not None:
+            _state_header += f"  (SPY 20d: {_spy_20d:+.1%})"
+        _state_header += "\n"
+    except Exception as _mse:
+        logger.debug(f"Discord | market_state fetch non-fatal: {_mse}")
+
+    _body = "\n".join(lines) if lines else "_No bot data available._"
+    description = (_state_header + "\n" + _body) if _state_header else _body
 
     # ── Fleet-level fields ─────────────────────────────────────────────────
     fleet_eq     = float(fleet_total.get("equity",   0.0))

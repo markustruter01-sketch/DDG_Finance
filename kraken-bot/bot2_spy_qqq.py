@@ -228,7 +228,28 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         f"max={MAX_DEPLOYMENT*100:.0f}%"
     )
 
+    # ── MSE CRISIS gate: SPY 20-day return <= -12% blocks all new entries ────
+    _crisis_gate = False
+    try:
+        from alpaca_etf_engine import _yahoo_daily_ohlcv as _spy_ohlcv
+        _spy_data = _spy_ohlcv("SPY", days=30)
+        if _spy_data:
+            _spy_c = _spy_data.get("closes") or []
+            if len(_spy_c) >= 21:
+                _spy_20d = float(_spy_c[-1]) / float(_spy_c[-21]) - 1
+                _crisis_gate = _spy_20d <= -0.12
+                if _crisis_gate:
+                    logger.warning(
+                        f"Bot2 | CRISIS GATE: SPY 20d {_spy_20d:+.1%} <= -12% "
+                        f"— all new entries blocked this cycle"
+                    )
+    except Exception as _cg_exc:
+        logger.debug(f"Bot2 | CRISIS check non-fatal: {_cg_exc}")
+
     for symbol in UNIVERSE:
+        if _crisis_gate:
+            logger.debug(f"Bot2 | {symbol}: CRISIS gate — entry blocked")
+            continue
         if symbol in held_symbols:
             logger.info(f"Bot2 | {symbol}: already holding — skip")
             continue

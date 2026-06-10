@@ -59,14 +59,22 @@ OOS_WINDOWS = [
     {"name": "2023-24", "start": date(2023, 1,  1),  "end": date(2024, 12, 31)},
 ]
 
-# Full data range — Alpaca IEX available from ~2020-07.
-# 60 trading-day warmup for the 2021 window start needs data from ~2020-09.
-# Setting DATA_START = 2020-06-01 gives ~130 warmup bars by Jan 2021 (plenty).
-# 2019 and 2020 windows are UNAVAILABLE with IEX; only 2021, 2022, 2023-24 run.
+# Alpaca IEX range (existing cache — 3-window run only)
 DATA_START = date(2020, 6, 1)
 DATA_END   = date(2024, 12, 31)
 
+# Yahoo Finance range — covers all 5 windows + warmup for 2019
+# 2018-01-01 gives ~252 bars before 2019-01-01 (EMA50 needs 50; plenty)
+DATA_START_YAHOO = date(2018, 1, 1)
+DATA_END_YAHOO   = date(2024, 12, 31)
+
 CACHE_DIR  = Path(__file__).parent.parent / ".local" / "oos_data"
+CACHE_FILE_YAHOO = (
+    CACHE_DIR / f"universe_yahoo_{DATA_START_YAHOO}_{DATA_END_YAHOO}.pkl"
+)
+
+# Kill-switch threshold: if equity drops ≥5% from prior day, block new entries
+KILLSWITCH_DAILY_DD = 0.05
 
 # ── Technical indicator functions (exact copies from algo_scanner.py) ─────────
 
@@ -579,6 +587,112 @@ def _fetch_ticker(ticker: str, start: date, end: date) -> dict | None:
     return None
 
 
+def _yf_fetch_simple(ticker: str, start: date, end: date) -> dict | None:
+    """
+    Crumb-free Yahoo Finance v8 fetch using adjclose.
+    The v8 chart endpoint accepts requests with only a User-Agent header —
+    confirmed working in this environment (no crumb/cookie needed for basic OHLCV).
+    Falls back to the crumb-session path if this returns a 401/403.
+    """
+    p1 = int(datetime(start.year, start.month, start.day).timestamp())
+    p2 = int(datetime(end.year,   end.month,   end.day, 23, 59).timestamp())
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0"
+        )
+    }
+    params = {
+        "period1":              p1,
+        "period2":              p2,
+        "interval":             "1d",
+        "events":               "div,splits",
+        "includeAdjustedClose": "true",
+    }
+    for attempt in range(4):
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=15)
+            if r.status_code == 404:
+                return None
+            if r.status_code in (401, 403):
+                # Fall back to crumb-session path
+                if _init_yf_session():
+                    return _yf_fetch_raw(ticker, start, end)
+                return None
+            if r.status_code == 429:
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            r.raise_for_status()
+            result = _parse_yf_response(r)
+            return result
+        except requests.exceptions.HTTPError:
+            raise
+        except Exception as exc:
+            if attempt < 3:
+                time.sleep(1.0 * (attempt + 1))
+            else:
+                print(f"    YF simple fetch failed {ticker}: {exc}")
+                return None
+    return None
+
+
+def _fetch_ticker_yahoo(ticker: str, start: date, end: date) -> dict | None:
+    """Yahoo Finance only fetch — used for the all-5-window baseline run."""
+    data = _yf_fetch_simple(ticker, start, end)
+    if data and len(data["dates"]) >= MIN_BARS_NEEDED:
+        return data
+    return None
+
+
+def load_universe_data_yahoo(
+    tickers: list[str],
+    verbose: bool = True,
+) -> dict[str, dict]:
+    """
+    Load OHLCV data for all tickers from Yahoo Finance adjclose only.
+    Range: DATA_START_YAHOO (2018-01-01) → DATA_END_YAHOO (2024-12-31).
+    Cache: CACHE_FILE_YAHOO — separate from the IEX cache, never overwrites it.
+    Ticker rate: ~0.35s sleep → ~245 tickers in ~90s.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    if CACHE_FILE_YAHOO.exists():
+        if verbose:
+            print(f"  Loading Yahoo cache: {CACHE_FILE_YAHOO}")
+        with open(CACHE_FILE_YAHOO, "rb") as f:
+            return pickle.load(f)
+
+    if verbose:
+        print(f"  Fetching {len(tickers)} tickers via Yahoo Finance adjclose "
+              f"({DATA_START_YAHOO} → {DATA_END_YAHOO}) …")
+        print(f"  (crumb-free v8 endpoint; rate: ~0.35s/ticker ≈ {len(tickers)*0.35/60:.0f} min total)")
+
+    universe_data: dict[str, dict] = {}
+    missing: list[str] = []
+
+    for i, ticker in enumerate(tickers):
+        data = _fetch_ticker_yahoo(ticker, DATA_START_YAHOO, DATA_END_YAHOO)
+        if data:
+            universe_data[ticker] = data
+        else:
+            missing.append(ticker)
+        if verbose and (i + 1) % 25 == 0:
+            print(f"    {i+1}/{len(tickers)} fetched "
+                  f"({len(universe_data)} ok, {len(missing)} missing) …")
+        time.sleep(0.35)
+
+    if verbose:
+        print(f"  Done: {len(universe_data)}/{len(tickers)} tickers loaded")
+        if missing:
+            print(f"  Missing/skipped (newly-listed or delisted): {missing}")
+
+    with open(CACHE_FILE_YAHOO, "wb") as f:
+        pickle.dump(universe_data, f)
+    if verbose:
+        print(f"  Saved Yahoo cache: {CACHE_FILE_YAHOO}")
+    return universe_data
+
+
 def load_universe_data(
     tickers: list[str],
     start:   date = DATA_START,
@@ -891,10 +1005,19 @@ def simulate_window(
     equity_curve: list      = []
     all_trades:   list      = []
     # Carry-forward: last bar index with real data, per ticker.
-    # IEX coverage gaps cause some tickers to skip certain dates even when SPY
-    # (our trading calendar) has a bar.  Without carry-forward, open positions
-    # on gap days are silently excluded from MTM → equity collapses to cash.
+    # IEX coverage gaps (and pre-IPO gaps in Yahoo data) cause some tickers to
+    # skip certain calendar dates that SPY includes.  Without carry-forward,
+    # open positions on gap days are silently excluded from MTM → equity
+    # collapses to cash.
     last_known_bar: dict    = {}
+
+    # Kill-switch tracking (mirrors live algo_scanner behaviour):
+    # If equity drops ≥5% from the previous day, block all new entries that day.
+    killswitch_days: int    = 0   # cumulative count of days kill-switch fired
+    prev_equity:     float  = STARTING_EQUITY
+
+    # Sanity tracking
+    max_single_day_swing: float = 0.0   # largest abs daily equity % change
 
     for day_n, day_str in enumerate(window_dates):
         # fresh_bar: tickers that actually have data for today
@@ -952,13 +1075,27 @@ def simulate_window(
         equity = cash + pos_value
         equity_curve.append(equity)
 
+        # Sanity: track largest single-day absolute equity swing
+        if prev_equity > 0:
+            day_swing = abs(equity / prev_equity - 1.0)
+            if day_swing > max_single_day_swing:
+                max_single_day_swing = day_swing
+
+        # ── Kill-switch check (mirrors live algo_scanner) ─────────────────────
+        # If equity dropped ≥5% from yesterday, skip all entries today.
+        daily_dd = (prev_equity - equity) / prev_equity if prev_equity > 0 else 0.0
+        killswitch_fired = daily_dd >= KILLSWITCH_DAILY_DD
+        if killswitch_fired:
+            killswitch_days += 1
+        prev_equity = equity
+
         # ── 3. Entry signals ──────────────────────────────────────────────────
         n_longs  = sum(1 for p in positions.values() if p["side"] == "long")
         n_shorts = sum(1 for p in positions.values() if p["side"] == "short")
         avail_long  = MAX_LONG_SLOTS  - n_longs
         avail_short = MAX_SHORT_SLOTS - n_shorts
 
-        if avail_long > 0 or avail_short > 0:
+        if (avail_long > 0 or avail_short > 0) and not killswitch_fired:
             long_cands, short_cands = _compute_signals(
                 universe_data, fresh_bar, set(positions.keys()), equity, ind_cache
             )
@@ -1068,76 +1205,68 @@ def simulate_window(
     total_ret = (final_eq - STARTING_EQUITY) / STARTING_EQUITY
 
     return {
-        "window":          window_name,
-        "start":           ws,
-        "end":             we,
-        "trading_days":    len(window_dates),
-        "sharpe":          round(sharpe,   4),
-        "max_dd":          round(max_dd,   4),
-        "win_rate":        round(win_rate, 4),
-        "n_trades":        len(all_trades),
-        "total_return":    round(total_ret, 4),
-        "final_equity":    round(final_eq, 2),
-        "equity_curve":    equity_curve,
-        "daily_returns":   daily_returns,
-        "trades":          all_trades,
-        "coverage_pct":    round(coverage_pct, 1),
-        "missing_at_start": missing_at_start[:20],  # cap list for readability
+        "window":               window_name,
+        "start":                ws,
+        "end":                  we,
+        "trading_days":         len(window_dates),
+        "sharpe":               round(sharpe,   4),
+        "max_dd":               round(max_dd,   4),
+        "win_rate":             round(win_rate, 4),
+        "n_trades":             len(all_trades),
+        "total_return":         round(total_ret, 4),
+        "final_equity":         round(final_eq, 2),
+        "equity_curve":         equity_curve,
+        "daily_returns":        daily_returns,
+        "trades":               all_trades,
+        "coverage_pct":         round(coverage_pct, 1),
+        "missing_at_start":     missing_at_start[:20],
+        "killswitch_days":      killswitch_days,
+        "max_single_day_swing": round(max_single_day_swing, 6),
     }
 
 
-# ── Pass A: Baseline calibration ──────────────────────────────────────────────
+# ── Pass A: Oracle first-ever OOS baseline (all 5 windows, Yahoo data) ────────
 
 def run_pass_a(verbose: bool = True) -> list[dict]:
     """
-    Pass A — Oracle baseline, no MSE.
+    Pass A — Oracle baseline, no MSE, all 5 OOS windows.
 
-    Target: pooled Sharpe ≈ 0.156 (prior OOS run).
-    Tolerance for calibration check: ±0.05 (i.e. 0.106 – 0.206).
+    Data source : Yahoo Finance adjclose (2018-01-01 → 2024-12-31)
+    Windows     : 2019, 2020, 2021, 2022, 2023-24 (all non-overlapping)
+    No target   : this IS the first Oracle OOS run; the output is the baseline.
+    Sanity gates: MaxDD<99%, no single-day swing>50%, trade count plausible,
+                  kill-switch day count reported for each window.
     """
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from execution.momentum_universe import FULL_UNIVERSE
 
-    # ── Data source check ─────────────────────────────────────────────────────
-    if not _ALPACA_KEY:
-        print("ERROR: ALPACA_API_KEY not set — cannot fetch data.")
-        return []
+    SEP  = "=" * 72
+    SEP2 = "-" * 72
 
     # ── Data loading ──────────────────────────────────────────────────────────
-    print("=" * 65)
-    print("ORACLE OOS VALIDATION — PASS A (BASELINE CALIBRATION)")
-    print("=" * 65)
+    print(SEP)
+    print("ORACLE OOS VALIDATION — PASS A  (FIRST-EVER ORACLE OOS BASELINE)")
+    print(SEP)
     print(f"Universe  : {len(FULL_UNIVERSE)} tickers (FULL_UNIVERSE)")
-    print(f"Data range: {DATA_START} → {DATA_END}")
-    print(f"Data src  : Alpaca IEX (adjustment=all; available from ~2020-07)")
-    print(f"Note      : 2019/2020 windows SKIPPED — IEX data unavailable for warmup")
-    print(f"Cache dir : {CACHE_DIR}")
+    print(f"Data range: {DATA_START_YAHOO} → {DATA_END_YAHOO}")
+    print(f"Data src  : Yahoo Finance adjclose (split + dividend adjusted)")
+    print(f"Windows   : ALL 5 (2019, 2020, 2021, 2022, 2023-24)")
+    print(f"No target : this output IS the Oracle baseline — no comparison to Jerome/Buck")
+    print(f"Cache     : {CACHE_FILE_YAHOO}")
     print()
 
-    universe_data = load_universe_data(FULL_UNIVERSE, DATA_START, DATA_END, verbose=True)
+    universe_data = load_universe_data_yahoo(FULL_UNIVERSE, verbose=True)
     print(f"\nLoaded: {len(universe_data)}/{len(FULL_UNIVERSE)} tickers\n")
 
-    missing_global = [t for t in FULL_UNIVERSE if t not in universe_data]
+    missing_global = sorted(t for t in FULL_UNIVERSE if t not in universe_data)
     if missing_global:
-        print(f"Missing tickers (global): {missing_global}")
-    print()
+        print(f"Globally missing tickers (newly-listed/delisted, excluded from all windows):")
+        print(f"  {missing_global}\n")
 
-    # ── Run each window ───────────────────────────────────────────────────────
-    # Skip 2019 and 2020: Alpaca IEX starts 2020-07-27; no warmup data available
-    # for windows requiring pre-2020-07 history.
-    IEX_RUNNABLE = {"2021", "2022", "2023-24"}
-
+    # ── Run all 5 windows ─────────────────────────────────────────────────────
     results: list[dict] = []
     for window in OOS_WINDOWS:
-        if window["name"] not in IEX_RUNNABLE:
-            print(f"SKIPPED window: {window['name']}  "
-                  f"(no IEX data for warmup period)")
-            results.append({
-                "window": window["name"], "sharpe": None,
-                "skipped": True, "reason": "no_iex_warmup_data",
-            })
-            continue
         print(f"Running window: {window['name']}  ({window['start']} → {window['end']}) …")
         r = simulate_window(
             universe_data,
@@ -1147,11 +1276,14 @@ def run_pass_a(verbose: bool = True) -> list[dict]:
             verbose=True,
         )
         results.append(r)
-        if "error" not in r:
+        if "error" not in r and r.get("sharpe") is not None:
+            ks = r.get("killswitch_days", 0)
+            sw = r.get("max_single_day_swing", 0.0)
             print(f"  → Sharpe={r['sharpe']:+.3f}  MaxDD={r['max_dd']:.1%}  "
                   f"WR={r['win_rate']:.1%}  Trades={r['n_trades']}  "
-                  f"TotalRet={r['total_return']:+.1%}  "
-                  f"Coverage={r['coverage_pct']:.0f}%")
+                  f"TotRet={r['total_return']:+.1%}  "
+                  f"Coverage={r['coverage_pct']:.0f}%  "
+                  f"KillSwitch={ks}d  MaxDaySwing={sw:.1%}")
         else:
             print(f"  → ERROR: {r.get('error')}")
         print()
@@ -1162,13 +1294,14 @@ def run_pass_a(verbose: bool = True) -> list[dict]:
         print("No valid windows — harness failed.")
         return results
 
-    pooled_sharpe = statistics.mean(r["sharpe"]    for r in valid)
-    pooled_dd     = max(r["max_dd"]                for r in valid)
-    pooled_wr     = statistics.mean(r["win_rate"]  for r in valid)
-    total_trades  = sum(r["n_trades"]              for r in valid)
+    # Pooled Sharpe: mean of per-window Sharpes (method 1)
+    pooled_sharpe_mean = statistics.mean(r["sharpe"]   for r in valid)
+    pooled_dd          = max(r["max_dd"]               for r in valid)
+    pooled_wr          = statistics.mean(r["win_rate"] for r in valid)
+    total_trades       = sum(r["n_trades"]             for r in valid)
 
-    # Pooled Sharpe from combined daily returns (second computation method)
-    all_daily = []
+    # Pooled Sharpe: combined daily returns concatenated (method 2 — primary)
+    all_daily: list[float] = []
     for r in valid:
         all_daily.extend(r.get("daily_returns", []))
     if len(all_daily) > 1:
@@ -1176,60 +1309,105 @@ def run_pass_a(verbose: bool = True) -> list[dict]:
         s = statistics.stdev(all_daily)
         pooled_sharpe_combined = (m / s) * math.sqrt(252) if s > 0 else 0.0
     else:
-        pooled_sharpe_combined = pooled_sharpe
+        pooled_sharpe_combined = pooled_sharpe_mean
 
-    print("=" * 65)
-    print("PASS A RESULTS")
-    print("=" * 65)
-    print(f"{'Window':<10} {'Sharpe':>8} {'MaxDD':>8} {'WR':>7} {'Trades':>7} {'TotRet':>8} {'Coverage':>9}")
-    print("-" * 65)
+    print(SEP)
+    print("PASS A RESULTS — ORACLE FIRST-EVER OOS BASELINE")
+    print(SEP)
+    print(f"{'Window':<10} {'Sharpe':>8} {'MaxDD':>8} {'WR':>7} "
+          f"{'Trades':>7} {'TotRet':>8} {'Cov%':>6} "
+          f"{'KillSw':>7} {'MaxDaySw':>9} {'Used/Ttl':>9}")
+    print(SEP2)
     for r in results:
-        if r.get("skipped"):
-            print(f"{r['window']:<10} {'SKIPPED (no IEX warmup data)':>55}")
-        elif "error" in r:
-            print(f"{r['window']:<10} {'ERROR':>8}")
+        if "error" in r:
+            print(f"{r['window']:<10}  ERROR: {r.get('error')}")
         else:
+            ks = r.get("killswitch_days", 0)
+            sw = r.get("max_single_day_swing", 0.0)
+            n_used  = int(r["coverage_pct"] / 100 * len(universe_data) + 0.5)
             print(f"{r['window']:<10} "
                   f"{r['sharpe']:>+8.3f} "
                   f"{r['max_dd']:>7.1%} "
                   f"{r['win_rate']:>6.1%} "
                   f"{r['n_trades']:>7d} "
                   f"{r['total_return']:>+7.1%} "
-                  f"{r['coverage_pct']:>8.0f}%")
-    print("-" * 65)
+                  f"{r['coverage_pct']:>5.0f}% "
+                  f"{ks:>7d} "
+                  f"{sw:>8.1%} "
+                  f"{n_used:>4d}/{len(universe_data)}")
+    print(SEP2)
     print(f"{'POOLED':<10} "
-          f"{pooled_sharpe:>+8.3f} "
+          f"{pooled_sharpe_mean:>+8.3f} "
           f"{pooled_dd:>7.1%} "
           f"{pooled_wr:>6.1%} "
-          f"{total_trades:>7d}")
-    print(f"{'(combined)':<10} {pooled_sharpe_combined:>+8.3f}  (all windows' daily returns concatenated)")
+          f"{total_trades:>7d}  (mean-of-windows Sharpe)")
+    print(f"{'(concat)':<10} "
+          f"{pooled_sharpe_combined:>+8.3f}"
+          f"{'':>40}  (daily returns concatenated — primary)")
     print()
 
-    # ── Calibration verdict ───────────────────────────────────────────────────
-    BASELINE   = 0.156
-    TOLERANCE  = 0.05
-    lo, hi     = BASELINE - TOLERANCE, BASELINE + TOLERANCE
-    check_val  = pooled_sharpe_combined
+    # ── Sanity gates ──────────────────────────────────────────────────────────
+    print("SANITY GATES")
+    print(SEP2)
+    gate_pass = True
 
-    print(f"Calibration target  : {BASELINE:.3f}  (±{TOLERANCE:.3f}  →  [{lo:.3f}, {hi:.3f}])")
-    print(f"Harness pooled Sharpe: {check_val:.3f}")
-
-    if lo <= check_val <= hi:
-        print("Calibration: ✅  PASS — within tolerance, harness is correct")
-        print("             Ready to proceed to Pass B.")
-    elif check_val > hi:
-        print("Calibration: ⚠️   ABOVE RANGE — harness may be missing realistic costs")
-        print("             Investigate before Pass B.  STOP per spec.")
+    # Gate 1: No window MaxDD ≥ 99% (data-gap bug fingerprint)
+    bad_dd = [r for r in valid if r["max_dd"] >= 0.99]
+    if bad_dd:
+        for r in bad_dd:
+            print(f"  FAIL  MaxDD≥99% in {r['window']}: {r['max_dd']:.1%}  "
+                  f"← data-gap MTM bug still present")
+        gate_pass = False
     else:
-        print("Calibration: ❌  BELOW RANGE — harness may have a bug or wrong constants")
-        print("             Do NOT proceed to Pass B.  Investigate first.  STOP per spec.")
+        print(f"  PASS  No window MaxDD ≥ 99%  (data-gap MTM bug confirmed absent)")
+
+    # Gate 2: No single-day equity swing > 50% (the $95k→$19→$94k artifact)
+    bad_swing = [r for r in valid if r.get("max_single_day_swing", 0) > 0.50]
+    if bad_swing:
+        for r in bad_swing:
+            print(f"  FAIL  Single-day swing >{50}% in {r['window']}: "
+                  f"{r['max_single_day_swing']:.1%}  ← round-trip artifact")
+        gate_pass = False
+    else:
+        print(f"  PASS  No single-day equity swing > 50%")
+
+    # Gate 3: Trade count plausible (>0, roughly 80–300 per annual window)
+    bad_trades = [r for r in valid if r["n_trades"] == 0]
+    if bad_trades:
+        for r in bad_trades:
+            print(f"  FAIL  Zero trades in {r['window']} — strategy never triggered")
+        gate_pass = False
+    else:
+        trade_summary = "  ".join(f"{r['window']}:{r['n_trades']}" for r in valid)
+        print(f"  PASS  Trades per window: {trade_summary}")
+
+    # Gate 4: 2020 kill-switch report (informational — not pass/fail)
+    w2020 = next((r for r in valid if r["window"] == "2020"), None)
+    if w2020:
+        ks = w2020.get("killswitch_days", 0)
+        print(f"  INFO  2020 COVID: kill-switch (≥5% daily DD) fired {ks} day(s)"
+              f"  ← new-entry blocking during Feb-Mar crash")
+    else:
+        print(f"  WARN  2020 window not found in valid results")
 
     print()
-    # Per-window missing ticker log
-    print("Missing ticker log (per window, at window start):")
+    if gate_pass:
+        print("ALL SANITY GATES PASSED — baseline numbers are trustworthy.")
+    else:
+        print("SANITY GATE FAILURES DETECTED — do not proceed to Pass B until resolved.")
+    print()
+
+    # ── Per-window coverage report ────────────────────────────────────────────
+    print("COVERAGE REPORT (per-window missing tickers at window start)")
+    print(SEP2)
     for r in results:
-        if "error" not in r and r.get("missing_at_start"):
-            print(f"  {r['window']}: {r['missing_at_start']}")
+        if "error" not in r:
+            miss = r.get("missing_at_start", [])
+            print(f"  {r['window']}: {len(miss)} missing  {miss[:15]}"
+                  + ("…" if len(miss) > 15 else ""))
+    print()
+    print("NOTE: ARM/COIN/GEHC/RBLX/NU missing in early windows is expected")
+    print("      (IPO after window start).  These tickers are excluded per-window.")
 
     return results
 

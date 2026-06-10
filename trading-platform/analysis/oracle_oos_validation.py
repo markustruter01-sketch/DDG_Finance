@@ -68,9 +68,18 @@ DATA_END   = date(2024, 12, 31)
 DATA_START_YAHOO = date(2018, 1, 1)
 DATA_END_YAHOO   = date(2024, 12, 31)
 
+# Alpaca SIP (consolidated tape) range — confirmed accessible from 2018-01-02.
+# SIP is the primary source for the 5-window baseline: full tape, no single-
+# exchange bias, same adjustment model as IEX (adjustment=all).
+DATA_START_SIP = date(2018, 1, 1)
+DATA_END_SIP   = date(2024, 12, 31)
+
 CACHE_DIR  = Path(__file__).parent.parent / ".local" / "oos_data"
 CACHE_FILE_YAHOO = (
     CACHE_DIR / f"universe_yahoo_{DATA_START_YAHOO}_{DATA_END_YAHOO}.pkl"
+)
+CACHE_FILE_SIP = (
+    CACHE_DIR / f"universe_sip_{DATA_START_SIP}_{DATA_END_SIP}.pkl"
 )
 
 # Kill-switch threshold: if equity drops ≥5% from prior day, block new entries
@@ -569,6 +578,153 @@ def _alpaca_fetch_raw(ticker: str, start: date, end: date) -> dict | None:
         "closes":  [float(b["c"]) for b in all_bars],
         "volumes": [float(b["v"]) for b in all_bars],
     }
+
+
+def _alpaca_sip_fetch_raw(ticker: str, start: date, end: date) -> dict | None:
+    """
+    Fetch daily adjusted OHLCV from Alpaca SIP (consolidated tape).
+    Identical to _alpaca_fetch_raw except feed=sip instead of feed=iex.
+    SIP: full consolidated tape, confirmed accessible from 2018-01-02.
+    """
+    if not _ALPACA_KEY or not _ALPACA_SECRET:
+        return None
+
+    headers = {
+        "APCA-API-KEY-ID":     _ALPACA_KEY,
+        "APCA-API-SECRET-KEY": _ALPACA_SECRET,
+    }
+    params: dict[str, Any] = {
+        "symbols":    ticker,
+        "timeframe":  "1Day",
+        "start":      start.isoformat(),
+        "end":        end.isoformat(),
+        "adjustment": "all",
+        "feed":       "sip",          # consolidated tape
+        "limit":      10_000,
+    }
+
+    all_bars: list[dict] = []
+    for attempt in range(3):
+        try:
+            while True:
+                r = requests.get(
+                    f"{_ALPACA_DATA}/v2/stocks/bars",
+                    headers=headers,
+                    params=params,
+                    timeout=20,
+                )
+                if r.status_code == 429:
+                    time.sleep(2.0 * (attempt + 1))
+                    break
+                if r.status_code != 200:
+                    return None
+                body = r.json()
+                bars = body.get("bars", {}).get(ticker, [])
+                all_bars.extend(bars)
+                npt = body.get("next_page_token")
+                if not npt:
+                    break
+                params["page_token"] = npt
+            if all_bars:
+                break
+        except Exception as exc:
+            if attempt < 2:
+                time.sleep(1.0)
+            else:
+                print(f"    Alpaca SIP fetch failed {ticker}: {exc}")
+                return None
+
+    if not all_bars:
+        return None
+
+    all_bars.sort(key=lambda b: b["t"])
+    return {
+        "dates":   [b["t"][:10]    for b in all_bars],
+        "opens":   [float(b["o"])  for b in all_bars],
+        "highs":   [float(b["h"])  for b in all_bars],
+        "lows":    [float(b["l"])  for b in all_bars],
+        "closes":  [float(b["c"])  for b in all_bars],
+        "volumes": [float(b["v"])  for b in all_bars],
+    }
+
+
+def load_universe_data_sip(
+    tickers: list[str],
+    verbose: bool = True,
+) -> dict[str, dict]:
+    """
+    Load OHLCV data for all tickers from Alpaca SIP (consolidated tape).
+    Range: DATA_START_SIP (2018-01-01) → DATA_END_SIP (2024-12-31).
+    Cache: CACHE_FILE_SIP — separate from IEX and Yahoo caches.
+
+    Incremental caching: partial results written every 25 tickers so a
+    mid-fetch kill loses at most 25 tickers of progress.  On restart the
+    cache is loaded and the run resumes from where it left off.
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Load complete cache if it exists
+    if CACHE_FILE_SIP.exists():
+        if verbose:
+            print(f"  Loading SIP cache: {CACHE_FILE_SIP}")
+        with open(CACHE_FILE_SIP, "rb") as f:
+            data = pickle.load(f)
+        if verbose:
+            print(f"  Loaded {len(data)} tickers from cache")
+        return data
+
+    if not _ALPACA_KEY:
+        raise RuntimeError("ALPACA_API_KEY not set — cannot fetch SIP data")
+
+    # Partial cache: resume from checkpoint if prior run was killed mid-fetch
+    partial_path = CACHE_DIR / "universe_sip_partial.pkl"
+    universe_data: dict[str, dict] = {}
+    if partial_path.exists():
+        with open(partial_path, "rb") as f:
+            universe_data = pickle.load(f)
+        if verbose:
+            print(f"  Resuming from partial cache: {len(universe_data)} tickers already fetched")
+
+    already_done = set(universe_data.keys())
+    remaining    = [t for t in tickers if t not in already_done]
+    missing: list[str] = []
+
+    if verbose:
+        print(f"  Fetching {len(remaining)}/{len(tickers)} tickers via Alpaca SIP "
+              f"({DATA_START_SIP} → {DATA_END_SIP}) …")
+        print(f"  (feed=sip consolidated tape; ~0.15s/ticker + checkpoint every 25)")
+
+    for i, ticker in enumerate(remaining):
+        data = _alpaca_sip_fetch_raw(ticker, DATA_START_SIP, DATA_END_SIP)
+        if data:
+            universe_data[ticker] = data
+        else:
+            missing.append(ticker)
+        time.sleep(0.15)
+
+        # Checkpoint every 25 tickers — survive mid-fetch kills
+        if (i + 1) % 25 == 0:
+            with open(partial_path, "wb") as f:
+                pickle.dump(universe_data, f)
+            if verbose:
+                done_total = len(already_done) + i + 1
+                print(f"    checkpoint: {done_total}/{len(tickers)} fetched "
+                      f"({len(universe_data)} ok, {len(missing)} missing this run) …")
+
+    if verbose:
+        total_ok = len(universe_data)
+        print(f"  Done: {total_ok}/{len(tickers)} tickers loaded")
+        if missing:
+            print(f"  Missing/skipped (newly-listed/delisted): {missing}")
+
+    # Write final complete cache and clean up partial
+    with open(CACHE_FILE_SIP, "wb") as f:
+        pickle.dump(universe_data, f)
+    if partial_path.exists():
+        partial_path.unlink()
+    if verbose:
+        print(f"  Saved SIP cache: {CACHE_FILE_SIP}")
+    return universe_data
 
 
 def _fetch_ticker(ticker: str, start: date, end: date) -> dict | None:
@@ -1249,14 +1405,15 @@ def run_pass_a(verbose: bool = True) -> list[dict]:
     print("ORACLE OOS VALIDATION — PASS A  (FIRST-EVER ORACLE OOS BASELINE)")
     print(SEP)
     print(f"Universe  : {len(FULL_UNIVERSE)} tickers (FULL_UNIVERSE)")
-    print(f"Data range: {DATA_START_YAHOO} → {DATA_END_YAHOO}")
-    print(f"Data src  : Yahoo Finance adjclose (split + dividend adjusted)")
+    print(f"Data range: {DATA_START_SIP} → {DATA_END_SIP}")
+    print(f"Data src  : Alpaca SIP (consolidated tape, adjustment=all)")
+    print(f"SIP access: CONFIRMED 2018-01-02+ (SPY/AAPL/MSFT/XOM/JPM Q1-2018 = 61 bars each)")
     print(f"Windows   : ALL 5 (2019, 2020, 2021, 2022, 2023-24)")
     print(f"No target : this output IS the Oracle baseline — no comparison to Jerome/Buck")
-    print(f"Cache     : {CACHE_FILE_YAHOO}")
+    print(f"Cache     : {CACHE_FILE_SIP}")
     print()
 
-    universe_data = load_universe_data_yahoo(FULL_UNIVERSE, verbose=True)
+    universe_data = load_universe_data_sip(FULL_UNIVERSE, verbose=True)
     print(f"\nLoaded: {len(universe_data)}/{len(FULL_UNIVERSE)} tickers\n")
 
     missing_global = sorted(t for t in FULL_UNIVERSE if t not in universe_data)

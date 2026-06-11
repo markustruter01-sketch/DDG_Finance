@@ -146,10 +146,9 @@ void main(){
     if(t>80.0||trans<0.005) break;
   }
 
-  // Stars use screen-space UV so they don't spin with the camera.
-  // A tiny time offset adds a very slow independent drift across the sky.
-  vec2 starUV = uv + vec2(uTime*0.0022, uTime*0.0008);
-  if(!swallowed) accum+=starField(normalize(vec3(starUV.x,starUV.y,1.5)))*trans;
+  // Use a screen-space direction (not camera ray) so stars stay fixed
+  // as the camera orbits — they map to constant pixel positions.
+  if(!swallowed) accum+=starField(normalize(vec3(uv.x,uv.y,1.5)))*trans;
 
   if(!swallowed){
     float ring=exp(-pow((minR-1.5)/0.10,2.0));

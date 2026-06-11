@@ -289,9 +289,12 @@ export function TradingEngineBlackHole() {
       lastNow = now;
       // Auto-orbit: slowed 95% — stars drift very slowly, black hole disk animation unchanged
       if (!drag) tTheta += dt * 0.0175;
+      // Vertical pan: ±25° (0.4363 rad) sine wave over 60 s, infinite loop.
+      // Paused while dragging so manual control stays responsive.
+      const panPhi = drag ? 0 : 0.4363 * Math.sin((Math.PI * 2 * now) / 60000);
       const s = 0.08;
-      camTheta += (tTheta - camTheta) * s;
-      camPhi   += (tPhi   - camPhi)   * s;
+      camTheta += (tTheta            - camTheta) * s;
+      camPhi   += (tPhi + panPhi     - camPhi)   * s;
       camRadius += (tRadius - camRadius) * s;
       gl.uniform1f(U.uTime,      now * 0.001);
       gl.uniform1f(U.uTheta,     camTheta);

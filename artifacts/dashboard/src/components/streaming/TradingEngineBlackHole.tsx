@@ -146,7 +146,9 @@ void main(){
     if(t>80.0||trans<0.005) break;
   }
 
-  if(!swallowed) accum+=starField(rd)*trans;
+  // Use a screen-space direction (not camera ray) so stars stay fixed
+  // as the camera orbits — they map to constant pixel positions.
+  if(!swallowed) accum+=starField(normalize(vec3(uv.x,uv.y,1.5)))*trans;
 
   if(!swallowed){
     float ring=exp(-pow((minR-1.5)/0.10,2.0));

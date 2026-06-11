@@ -287,11 +287,11 @@ export function TradingEngineBlackHole() {
       if (document.hidden) { lastNow = now; return; }
       const dt = Math.min((now - lastNow) * 0.001, 0.05); // seconds, capped at 50ms
       lastNow = now;
-      // Auto-orbit: slowed 95% — stars drift very slowly, black hole disk animation unchanged
-      if (!drag) tTheta += dt * 0.0175;
-      // Vertical pan: ±25° (0.4363 rad) sine wave over 60 s, infinite loop.
+      // Auto-orbit: full rotation every 5 s (2π / 5 ≈ 1.2566 rad/s)
+      if (!drag) tTheta += dt * 1.2566;
+      // Vertical pan: ±15° (0.2618 rad) sine wave over 60 s, infinite loop.
       // Paused while dragging so manual control stays responsive.
-      const panPhi = drag ? 0 : 0.4363 * Math.sin((Math.PI * 2 * now) / 60000);
+      const panPhi = drag ? 0 : 0.2618 * Math.sin((Math.PI * 2 * now) / 60000);
       const s = 0.08;
       camTheta += (tTheta            - camTheta) * s;
       camPhi   += (tPhi + panPhi     - camPhi)   * s;

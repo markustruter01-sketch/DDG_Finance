@@ -344,10 +344,11 @@ def _check_position(
         })
         return
 
+    _stop_str = f"{ratchet['stop_price']:.3f}" if ratchet else "N/A"
     logger.debug(
         f"ExitManager | {symbol} ({side}): HOLD — "
         f"EMA20={ema20:.2f} EMA50={ema50:.2f} ADX={adx:.1f} "
-        f"held≈{td_held}d stop=${ f\"{ratchet['stop_price']:.3f}\" if ratchet else 'N/A' }"
+        f"held≈{td_held}d stop=${_stop_str}"
     )
 
 

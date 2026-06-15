@@ -1097,9 +1097,37 @@ async def _run_pipeline_inner(
 
         if not _alloc_slots:
             logger.info(
-                f"Pipeline | Oracle STF: all entry signals filtered by {_actual_regime_label} "
-                f"regime rules — monitoring {len(_oracle_stf_protected)} open position(s)"
+                f"Pipeline | Oracle STF: cap full — "
+                f"{len(_oracle_stf_protected)} open position(s) held, no new entries "
+                f"({_actual_regime_label} regime)"
             )
+            result["status"] = "ok"
+            result["market_regime"] = (
+                f"STF monitoring: {len(_oracle_stf_protected)} open position(s) held — "
+                f"no new entries ({_actual_regime_label})"
+            )
+            try:
+                from core.bot_state import write_portfolio as _mon_wpf
+                from execution.broker import get_account as _mon_get_acct
+                _mon_acct_data = _mon_get_acct()
+                _mon_eq   = float(
+                    _mon_acct_data.get("equity") or _mon_acct_data.get("portfolio_value") or 0.0
+                )
+                _mon_cash = float(_mon_acct_data.get("cash") or 0.0)
+                _mon_wpf("oracle", cash=round(_mon_cash, 2), equity=round(_mon_eq, 2), positions=[])
+                logger.info(
+                    f"Pipeline | Oracle monitoring heartbeat: equity=${_mon_eq:,.2f} "
+                    f"cash=${_mon_cash:,.2f}"
+                )
+            except Exception as _mon_exc:
+                logger.warning(f"Pipeline | Oracle monitoring heartbeat failed (non-fatal): {_mon_exc}")
+                try:
+                    from core.bot_state import touch_portfolio as _mon_tpf
+                    _mon_tpf("oracle")
+                except Exception:
+                    pass
+            _update_state(result, started, trading_mode="monitoring_holding")
+            return result
 
         allocation = _ScanRAO(
             regime=_actual_regime_label,

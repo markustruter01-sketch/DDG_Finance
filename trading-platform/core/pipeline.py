@@ -884,6 +884,10 @@ async def _run_pipeline_inner(
         # Manages trailing stops and checks EMA reversal / ADX / time exits.
         # Non-fatal — if it fails, existing positions continue unchanged.
         _CRYPTO_SKIP = frozenset({"BTCUSD", "ETHUSD", "SOLUSD", "AVAXUSD"})
+        # Symbols the exit manager closes THIS cycle — reconciler must not re-insert them.
+        # The close order is in-flight for up to several minutes (day orders), so the
+        # broker still reports the position as open when the reconciler runs ~0.5s later.
+        _just_exited_syms: frozenset[str] = frozenset()
         if _open_pos:
             try:
                 from execution.oracle_exit_manager import (
@@ -893,6 +897,7 @@ async def _run_pipeline_inner(
                 _mom_cache = _get_mom_cache()
                 _exit_list = _run_exits(_mom_cache, dry_run=dry_run)
                 if _exit_list:
+                    _just_exited_syms = frozenset(e["symbol"] for e in _exit_list)
                     _exit_result = _exec_exits(_exit_list, dry_run=dry_run)
                     result.setdefault("oracle_exits", []).extend(_exit_result.get("closed", []))
                     logger.info(
@@ -928,7 +933,12 @@ async def _run_pipeline_inner(
                         _db_active: set[str] = {row[0] for row in _rcur.fetchall()}
                 for _rpos in _open_pos:
                     _rsym = _rpos.get("symbol", "")
-                    if not _rsym or _rsym in _CRYPTO_SKIP or _rsym in _db_active:
+                    if (
+                        not _rsym
+                        or _rsym in _CRYPTO_SKIP
+                        or _rsym in _db_active
+                        or _rsym in _just_exited_syms  # skip same-cycle closes (race guard)
+                    ):
                         continue
                     _recon_avg = float(_rpos.get("avg_entry_price") or 0) or None
                     _recon_log(

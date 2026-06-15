@@ -662,6 +662,33 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
 
+    # One-time repair: close the RECON-SNOW-20260615 phantom row inserted by the
+    # reconciler race on 2026-06-15.  The exit manager submitted a day-order sell
+    # for SNOW at 13:31:26 UTC; the sell didn't fill until 13:40:12 UTC, so the
+    # reconciler (running ~0.5s later) still saw SNOW as an open broker position
+    # and inserted a spurious Active row.  True P&L is captured in the real
+    # Closed_Loss row (trade_id=35775d2e, realized_pnl=-531.16).
+    # Idempotent: AND status='Active' makes this a no-op once already closed.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE trades
+                    SET status            = 'Closed_Reconciled',
+                        actual_fill_price = 232.843038,
+                        realized_pnl      = 0.00,
+                        exit_reason       = 'reconciler_race_phantom',
+                        closed_at         = '2026-06-15T13:40:12+00:00'
+                    WHERE trade_id = 'RECON-SNOW-20260615'
+                      AND status   = 'Active'
+                    """
+                )
+                if cur.rowcount:
+                    logger.info("DB | RECON-SNOW-20260615 phantom row closed (reconciler_race_phantom)")
+    except Exception as exc:
+        logger.warning(f"DB | SNOW phantom repair failed (non-fatal): {exc}")
+
     # Seed bots_state with canonical bot IDs and known pause states (idempotent)
     try:
         with get_conn() as conn:

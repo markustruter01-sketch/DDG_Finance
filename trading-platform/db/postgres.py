@@ -694,7 +694,15 @@ def ensure_schema() -> None:
                 )
                 logger.info(f"DB | ratchet_stops backfill applied ({cur.rowcount} rows upserted)")
     except Exception as exc:
-        logger.warning(f"DB | ratchet_stops backfill failed (non-fatal): {exc}")
+        logger.error(f"DB | ratchet_stops backfill FAILED: {exc}")
+        try:
+            from core.degradation_tracker import record_degradation as _rd
+            _rd(component="oracle", severity="high",
+                error_type="startup_repair_failed",
+                message=f"ratchet_stops backfill failed — 6 live positions may have no DB stop record",
+                detail=str(exc)[:2000])
+        except Exception:
+            pass
 
     # One-time repair: close the RECON-SNOW-20260615 phantom row inserted by the
     # reconciler race on 2026-06-15.  The exit manager submitted a day-order sell
@@ -721,7 +729,15 @@ def ensure_schema() -> None:
                 if cur.rowcount:
                     logger.info("DB | RECON-SNOW-20260615 phantom row closed (reconciler_race_phantom)")
     except Exception as exc:
-        logger.warning(f"DB | SNOW phantom repair failed (non-fatal): {exc}")
+        logger.error(f"DB | SNOW phantom repair FAILED: {exc}")
+        try:
+            from core.degradation_tracker import record_degradation as _rd
+            _rd(component="oracle", severity="high",
+                error_type="startup_repair_failed",
+                message=f"SNOW phantom trade row (RECON-SNOW-20260615) repair failed — Active count overstated by 1",
+                detail=str(exc)[:2000])
+        except Exception:
+            pass
 
     # Seed bots_state with canonical bot IDs and known pause states (idempotent)
     try:

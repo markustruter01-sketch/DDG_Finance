@@ -662,6 +662,40 @@ def ensure_schema() -> None:
     except Exception as exc:
         logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
 
+    # One-time backfill: seed ratchet_stops for all 6 live Oracle equity positions.
+    # ARM and MU had no broker GTC stops; placed manually 2026-06-15 (order_ids below).
+    # CSCO/DELL/MS/PANW already had broker stops; this links their order_ids to the DB.
+    # MRVL skipped (sub-1-share, cannot place broker stop).
+    # ATR=0.0 for positions where ATR was unavailable at entry time (known Jun 9-10 issue).
+    # Idempotent: ON CONFLICT (symbol) DO UPDATE keeps the record fresh on re-runs.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO ratchet_stops
+                        (symbol, stop_price, fill_price, atr, atr_multiplier, side, last_updated, stop_order_id)
+                    VALUES
+                        ('ARM',  242.44,  319.784916, 38.6728, 2.0, 'long', CURRENT_DATE, 'b5c5020c-0110-45cf-af2b-cfa0077d6c28'),
+                        ('MU',   761.67,  922.116585, 80.2227, 2.0, 'long', CURRENT_DATE, 'e2ea75e3-63e9-42bf-8dc7-a5b00c900905'),
+                        ('CSCO', 117.01,  119.396432, 0.0,     2.0, 'long', CURRENT_DATE, '9605dae2-d4e5-4751-a939-d74a75515390'),
+                        ('DELL', 326.72,  379.434447, 0.0,     2.0, 'long', CURRENT_DATE, '5899798a-5079-4472-984b-58c119dfab56'),
+                        ('MS',   203.61,  207.77,     0.0,     2.0, 'long', CURRENT_DATE, 'd9df546c-fa03-478e-a16a-4f3d8e257928'),
+                        ('PANW', 257.40,  262.65,     0.0,     2.0, 'long', CURRENT_DATE, 'b289f55a-1af3-49ac-9d7b-5c4699f7e9e6')
+                    ON CONFLICT (symbol) DO UPDATE
+                        SET stop_price     = EXCLUDED.stop_price,
+                            fill_price     = EXCLUDED.fill_price,
+                            atr            = EXCLUDED.atr,
+                            atr_multiplier = EXCLUDED.atr_multiplier,
+                            side           = EXCLUDED.side,
+                            last_updated   = EXCLUDED.last_updated,
+                            stop_order_id  = EXCLUDED.stop_order_id
+                    """
+                )
+                logger.info(f"DB | ratchet_stops backfill applied ({cur.rowcount} rows upserted)")
+    except Exception as exc:
+        logger.warning(f"DB | ratchet_stops backfill failed (non-fatal): {exc}")
+
     # One-time repair: close the RECON-SNOW-20260615 phantom row inserted by the
     # reconciler race on 2026-06-15.  The exit manager submitted a day-order sell
     # for SNOW at 13:31:26 UTC; the sell didn't fill until 13:40:12 UTC, so the

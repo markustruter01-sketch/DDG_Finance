@@ -10,3 +10,5 @@
 - [DB pool stale connection fix](db-pool-stale-connection.md) — conn.closed==0 even for server-dropped connections; must SELECT 1 ping after getconn() to detect. Two-stage check in _acquire_healthy_conn().
 - [Oracle OOS validation results](oracle-oos-results.md) — MARGINAL (3/4 criteria): passes 4/5 windows, survives stress, MaxDD always <20%, but pooled Sharpe 0.156 (below 0.5 threshold).
 - [OOS harness cash-tracking pattern](oos-cash-tracking.md) — backtest engines must track cash explicitly; never do equity+=pnl on close when daily MTM already reflects unrealized gains (double-counts).
+- [Prod DB direct write path](prod-db-direct-write.md) — NEON_DATABASE_URL in process env is prod; DATABASE_URL is dev. Use psycopg2 + NEON_DATABASE_URL from bash for emergency prod writes (executeSql is read-only on prod).
+- [Phase J ratchet_stops cleanup](phase-j-ratchet-stops.md) — Jun-26 autopsy fix: 12 stale rows deleted, ARM/MS/MU/PANW stop_order_ids linked, MRVL cleared. DB now matches broker exactly (6 rows, 5 with live GTC stops).

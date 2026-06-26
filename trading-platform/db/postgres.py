@@ -1078,6 +1078,76 @@ def ensure_schema() -> None:
     except Exception as _i_exc:
         logger.error(f"DB | Phase I bot_evaluation_history failed: {_i_exc}")
 
+    # Phase J — ratchet_stops orphan cleanup (2026-06-26, one-time, idempotent).
+    #
+    # Autopsy of the Jun-9 reconciler mass-exit revealed two problems:
+    #   1. Four active positions (ARM/MS/MU/PANW) have live GTC stop orders at
+    #      Alpaca but ratchet_stops.stop_order_id = NULL (backfill linkage gap).
+    #      maybe_ratchet skips cancel_order when old_id is None → would place a
+    #      second stop on next ratchet trigger → duplicate GTC orders.
+    #      Fix: write the live Alpaca order IDs into the DB.
+    #   2. Thirteen stale ratchet_stops rows remain for closed/reconciled positions
+    #      (INTC/NUE/QCOM/TXN/UNH/AMD closed Jun-10 via orphan_db_reconciler;
+    #       DDOG/FTNT/HPE closed Jun-9 via deleted EOD reconciler;
+    #       APD/CCL/USO from Kraken era).  These cause nightly compute_atr
+    #      "possibly delisted" log noise.  All five orphan GTC orders confirmed
+    #      already gone from Alpaca PA33G6QCIHDS as of 2026-06-26.
+    #   3. MRVL has a stale d96941eb stop_order_id — order gone from broker
+    #      (sub-share 0.285 can't take a whole-share stop).  Clear the ref.
+    #
+    # Idempotency:
+    #   Part A UPDATEs: setting same UUID twice is harmless.
+    #   Part B DELETEs: deleting absent rows is a no-op (returns 0 rows).
+    #   Part C UPDATE:  setting NULL twice is harmless.
+    try:
+        with get_conn() as _j_conn:
+            with _j_conn.cursor() as _j_cur:
+
+                # Part A — link live broker stop_order_ids into ratchet_stops
+                _j_live_stops = [
+                    ("ARM",  "b5c5020c-0110-45cf-af2b-cfa0077d6c28"),
+                    ("MS",   "d9df546c-fa03-478e-a16a-4f3d8e257928"),
+                    ("MU",   "e2ea75e3-63e9-42bf-8dc7-a5b00c900905"),
+                    ("PANW", "b289f55a-1af3-49ac-9d7b-5c4699f7e9e6"),
+                ]
+                _j_a_updated: list[str] = []
+                for _j_sym, _j_oid in _j_live_stops:
+                    _j_cur.execute(
+                        "UPDATE ratchet_stops SET stop_order_id = %s WHERE symbol = %s"
+                        " AND (stop_order_id IS NULL OR stop_order_id != %s)"
+                        " RETURNING symbol",
+                        (_j_oid, _j_sym, _j_oid),
+                    )
+                    if _j_cur.fetchone():
+                        _j_a_updated.append(_j_sym)
+
+                # Part B — delete stale rows for closed positions
+                _j_stale = [
+                    "INTC", "NUE", "QCOM", "TXN", "UNH", "AMD",  # orphan_db_reconciler Jun-10
+                    "DDOG", "FTNT", "HPE",                          # reconciler_market_exit Jun-9
+                    "APD",  "CCL",  "USO",                          # Kraken-era, all closed
+                ]
+                _j_cur.execute(
+                    "DELETE FROM ratchet_stops WHERE symbol = ANY(%s) RETURNING symbol",
+                    (_j_stale,),
+                )
+                _j_b_deleted = [r[0] for r in _j_cur.fetchall()]
+
+                # Part C — clear stale stop_order_id on MRVL (sub-share, order gone)
+                _j_cur.execute(
+                    "UPDATE ratchet_stops SET stop_order_id = NULL WHERE symbol = 'MRVL'"
+                    " AND stop_order_id IS NOT NULL RETURNING symbol",
+                )
+                _j_c_cleared = bool(_j_cur.fetchone())
+
+        logger.info(
+            f"DB | Phase J: A-linked={_j_a_updated}, "
+            f"B-deleted={_j_b_deleted}, "
+            f"C-MRVL-cleared={_j_c_cleared}"
+        )
+    except Exception as _j_exc:
+        logger.error(f"DB | Phase J ratchet_stops cleanup failed: {_j_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

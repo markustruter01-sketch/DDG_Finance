@@ -185,35 +185,83 @@ def _check_position(
                 except Exception:
                     pass
             else:
+                # ── Pre-submission guard (STEP 2) ─────────────────────────────────
+                # Validate init_stop vs live Alpaca price before submitting.
+                # Same Jun-9 guard as ratchet_stop.initialise_ratchet_stop().
+                _live_price: "float | None" = None
                 try:
-                    from execution.broker import place_stop_order
-                    _stop_result  = place_stop_order(symbol, _stop_qty, init_stop)
-                    _order_id     = _stop_result.get("id")
-                    save_stop(
-                        symbol, init_stop, fill_price, atr, ATR_MULTIPLIER,
-                        side, stop_order_id=_order_id,
+                    from execution.broker import get_latest_price
+                    _live_price = get_latest_price(symbol)
+                except Exception as _pp_exc:
+                    logger.warning(
+                        f"ExitManager | {symbol}: live-price fetch failed: {_pp_exc}"
                     )
-                    logger.info(
-                        f"ExitManager | {symbol}: GTC stop placed "
-                        f"qty={_stop_qty} stop=${init_stop:.4f} order_id={_order_id}"
-                    )
-                except Exception as _stop_exc:
+
+                if _live_price is None:
+                    # Cannot validate — defer to per-cycle sweep rather than submit blind
                     logger.error(
-                        f"ExitManager | {symbol}: GTC stop placement FAILED "
-                        f"(qty={_stop_qty} stop=${init_stop:.4f}): {_stop_exc} "
-                        f"— position unprotected at broker"
+                        f"ExitManager | {symbol}: Alpaca price unavailable — "
+                        f"cannot validate stop ${init_stop:.2f}. "
+                        f"Position UNPROTECTED; sweep will retry next cycle."
                     )
                     try:
                         from core.degradation_tracker import record_degradation
                         record_degradation(
                             component="oracle_stop",
                             severity="high",
-                            error_type="broker_stop_rejected",
-                            message=f"{symbol}: Alpaca rejected GTC stop — position unprotected",
-                            detail=str(_stop_exc)[:500],
+                            error_type="stop_placement_no_price",
+                            message=f"{symbol}: no live price — stop deferred, position unprotected",
                         )
                     except Exception:
                         pass
+                else:
+                    if init_stop >= _live_price:
+                        # Stop at/above current price — Alpaca will reject it.
+                        # Reanchor to live price using same ATR distance (or 2% fallback).
+                        _init_reanchored = (
+                            _live_price - atr * ATR_MULTIPLIER
+                            if atr > 0
+                            else _live_price * 0.98
+                        )
+                        _init_reanchored = max(_init_reanchored, 0.01)
+                        logger.warning(
+                            f"ExitManager | {symbol}: init_stop ${init_stop:.2f} ≥ "
+                            f"current ${_live_price:.2f} — reanchored to ${_init_reanchored:.2f} "
+                            f"[Jun-9 rejection guard]"
+                        )
+                        init_stop = _init_reanchored
+                        if not dry_run:
+                            save_stop(symbol, init_stop, fill_price, atr, ATR_MULTIPLIER, side)
+
+                    try:
+                        from execution.broker import place_stop_order
+                        _stop_result  = place_stop_order(symbol, _stop_qty, init_stop)
+                        _order_id     = _stop_result.get("id")
+                        save_stop(
+                            symbol, init_stop, fill_price, atr, ATR_MULTIPLIER,
+                            side, stop_order_id=_order_id,
+                        )
+                        logger.info(
+                            f"ExitManager | {symbol}: GTC stop placed "
+                            f"qty={_stop_qty} stop=${init_stop:.4f} order_id={_order_id}"
+                        )
+                    except Exception as _stop_exc:
+                        logger.error(
+                            f"ExitManager | {symbol}: GTC stop FAILED "
+                            f"(qty={_stop_qty} stop=${init_stop:.4f}): {_stop_exc} "
+                            f"— position UNPROTECTED, sweep will retry next cycle"
+                        )
+                        try:
+                            from core.degradation_tracker import record_degradation
+                            record_degradation(
+                                component="oracle_stop",
+                                severity="high",
+                                error_type="stop_placement_failed",
+                                message=f"{symbol}: GTC stop FAILED — position UNPROTECTED, retry next cycle",
+                                detail=str(_stop_exc)[:500],
+                            )
+                        except Exception:
+                            pass
 
         logger.info(
             f"ExitManager | {symbol} ({side}): ratchet stop initialised "

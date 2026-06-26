@@ -133,6 +133,67 @@ def compute_initial_stop(
         return max(stop, 0.01)
 
 
+# ── Pre-submission stop-price validation ───────────────────────────────────
+
+def _safe_stop_price(
+    ticker: str,
+    intended_stop: float,
+    atr: Optional[float],
+    atr_mult: float,
+    side: str = "long",
+) -> tuple[float, str]:
+    """
+    Validate *intended_stop* against the live Alpaca price and return a stop
+    that is guaranteed to be accepted by the broker.
+
+    Returns (stop_price, status) where status is one of:
+      'ok'         — intended_stop is valid relative to current price, submit as-is
+      'reanchored' — stop was at/above current price; recomputed from live price
+                     using the same ATR multiplier (or 2% fallback if ATR=None)
+      'no_price'   — Alpaca price unavailable; caller MUST defer, not submit blind
+
+    Root-cause guard for the Jun-9 mass-exit: ATR=None → 2% fallback anchored to
+    FILL price → by placement time price had already dropped below that stop →
+    Alpaca rejected ("stop price must be below current price") → stop_order_id=NULL
+    → position ran naked until deleted EOD reconciler fired.
+
+    ATR/fallback distances (2.0×ATR / 2%) are UNCHANGED — this only shifts the
+    anchor point from fill to live price when the fill-anchored stop is invalid.
+    """
+    try:
+        from execution.broker import get_latest_price
+        current_price: Optional[float] = get_latest_price(ticker)
+    except Exception as exc:
+        logger.warning(f"Ratchet | {ticker}: live-price fetch failed: {exc}")
+        current_price = None
+
+    if current_price is None:
+        return intended_stop, "no_price"
+
+    if side == "long":
+        if intended_stop < current_price:
+            return intended_stop, "ok"
+        # Stop is at or above current price — Alpaca will reject it.
+        # Reanchor: compute the same ATR distance below the LIVE price instead.
+        live_stop = compute_initial_stop(current_price, atr, atr_mult, side="long")
+        logger.warning(
+            f"Ratchet | {ticker} [LONG]: intended stop ${intended_stop:.2f} ≥ "
+            f"current ${current_price:.2f} — reanchored to live price "
+            f"→ ${live_stop:.2f}  [Jun-9 rejection guard]"
+        )
+        return live_stop, "reanchored"
+    else:
+        # Short: stop is ABOVE current price
+        if intended_stop > current_price:
+            return intended_stop, "ok"
+        live_stop = compute_initial_stop(current_price, atr, atr_mult, side="short")
+        logger.warning(
+            f"Ratchet | {ticker} [SHORT]: intended stop ${intended_stop:.2f} ≤ "
+            f"current ${current_price:.2f} — reanchored to live price → ${live_stop:.2f}"
+        )
+        return live_stop, "reanchored"
+
+
 def ratchet_stop(
     current_price: float,
     atr: Optional[float],
@@ -452,6 +513,46 @@ def initialise_ratchet_stop(
     save_stop(ticker, stop_price, fill_price, atr_used, atr_mult, side=side)
 
     if not dry_run:
+        # ── Pre-submission guard (STEP 2) ────────────────────────────────────────
+        # Validate stop vs live Alpaca price BEFORE submitting.
+        # Prevents the Jun-9 scenario: ATR=None → 2% fallback anchored to fill →
+        # by placement time price had dropped → Alpaca rejected → naked position.
+        # Only applies to longs (short stops are above price, already safe for broker).
+        if side == "long":
+            safe_price, price_status = _safe_stop_price(
+                ticker, stop_price, atr, atr_mult, side="long"
+            )
+            if price_status == "no_price":
+                # Can't validate — do NOT submit blind. Sweep retries next cycle.
+                logger.error(
+                    f"Ratchet | {ticker} [LONG]: Alpaca price unavailable — "
+                    f"cannot validate stop ${stop_price:.2f}. "
+                    f"Position UNPROTECTED; sweep will retry next cycle."
+                )
+                try:
+                    from core.degradation_tracker import record_degradation
+                    record_degradation(
+                        component="oracle_stop",
+                        severity="high",
+                        error_type="stop_placement_no_price",
+                        message=f"{ticker}: no live Alpaca price — stop deferred, position unprotected",
+                    )
+                except Exception:
+                    pass
+                return {
+                    "stop_price":     stop_price,
+                    "atr":            atr_used,
+                    "atr_multiplier": atr_mult,
+                    "side":           side,
+                    "order":          None,
+                    "needs_retry":    True,
+                }
+            if price_status == "reanchored":
+                # DB record was saved with fill-price anchor above; overwrite with
+                # live-price anchor now that we know the fill anchor is stale.
+                stop_price = safe_price
+                save_stop(ticker, stop_price, fill_price, atr_used, atr_mult, side=side)
+
         try:
             if side == "short":
                 from execution.broker import place_short_stop_order
@@ -460,7 +561,10 @@ def initialise_ratchet_stop(
                 from execution.broker import place_stop_order
                 result = place_stop_order(ticker, qty, stop_price)
             order_id = result.get("id")
-            logger.info(f"Ratchet | GTC stop placed for {ticker} [{side}]: {order_id}")
+            logger.info(
+                f"Ratchet | GTC stop placed for {ticker} [{side}]: "
+                f"{order_id} @ ${stop_price:.4f}"
+            )
             save_stop(ticker, stop_price, fill_price, atr_used, atr_mult, side=side, stop_order_id=order_id)
             return {
                 "stop_price":     stop_price,
@@ -470,14 +574,17 @@ def initialise_ratchet_stop(
                 "order":          result,
             }
         except Exception as exc:
-            logger.error(f"Ratchet | Failed to place stop order for {ticker} [{side}]: {exc} — position unprotected at broker")
+            logger.error(
+                f"Ratchet | {ticker} [{side.upper()}]: GTC stop FAILED — "
+                f"{exc} — position UNPROTECTED, sweep will retry next cycle."
+            )
             try:
                 from core.degradation_tracker import record_degradation
                 record_degradation(
                     component="oracle_stop",
                     severity="high",
-                    error_type="broker_stop_rejected",
-                    message=f"{ticker}: Alpaca rejected GTC stop order — position unprotected",
+                    error_type="stop_placement_failed",
+                    message=f"{ticker}: GTC stop placement FAILED — position UNPROTECTED, retry next cycle",
                     detail=str(exc)[:500],
                 )
             except Exception:
@@ -488,6 +595,7 @@ def initialise_ratchet_stop(
                 "atr_multiplier": atr_mult,
                 "side":           side,
                 "order":          None,
+                "needs_retry":    True,
             }
 
     return {
@@ -498,6 +606,181 @@ def initialise_ratchet_stop(
         "order":          None,
         "dry_run":        True,
     }
+
+
+# ── Per-cycle naked-stop sweep (STEP 3) ────────────────────────────────────
+
+def sweep_naked_positions(dry_run: bool = False) -> dict:
+    """
+    Per-cycle safety sweep — permanent replacement for the deleted EOD reconciler.
+
+    Called by pipeline.py on every 15-minute intraday cycle.  Checks every open
+    Oracle long position against live Alpaca open orders.  Any long with no
+    active GTC stop-sell gets a new stop placed via the _safe_stop_price path.
+
+    This means a naked position can persist for at most ONE cycle (≤ 15 min).
+
+    Logic per naked position:
+      1. Read ratchet_stops record (stop_price, fill_price, ATR).
+      2. Validate/reanchor stop vs live price (_safe_stop_price).
+      3. Place GTC stop if price is available; defer + degrade if not.
+
+    Returns dict: {placed: [...], deferred: [...], skipped: [...], errors: [...]}
+    """
+    import math as _math
+    from execution.broker import get_positions, get_open_orders
+
+    results: dict = {"placed": [], "deferred": [], "skipped": [], "errors": []}
+
+    try:
+        live_positions = get_positions()
+        open_orders    = get_open_orders()
+    except Exception as exc:
+        logger.error(f"StopSweep | Cannot fetch broker data: {exc}")
+        return results
+
+    # Symbols that already have a live GTC stop-sell at the broker
+    covered: set[str] = {
+        o["symbol"]
+        for o in open_orders
+        if o.get("side") == "sell"
+        and o.get("status") in ("new", "accepted", "pending_new")
+    }
+
+    naked_found = 0
+    for pos in live_positions:
+        symbol = pos.get("symbol", "")
+        side   = pos.get("side", "long")
+        qty    = float(pos.get("qty", 0))
+
+        # Only sweep long positions (short stop-buys are different mechanics)
+        if side != "long":
+            results["skipped"].append({"symbol": symbol, "reason": "short_not_swept"})
+            continue
+
+        if symbol in covered:
+            results["skipped"].append({"symbol": symbol, "reason": "has_broker_stop"})
+            continue
+
+        # Position is naked — no live GTC stop-sell at broker
+        naked_found += 1
+        stop_qty = _math.floor(abs(qty))
+        if stop_qty < 1:
+            logger.debug(f"StopSweep | {symbol}: sub-1-share, cannot place broker stop")
+            results["skipped"].append({"symbol": symbol, "reason": "sub_1_share"})
+            continue
+
+        ratchet = get_stop(symbol)
+        if ratchet is None:
+            logger.warning(
+                f"StopSweep | {symbol}: naked long with NO ratchet_stops record — "
+                f"cannot compute safe stop"
+            )
+            results["errors"].append({"symbol": symbol, "error": "no_ratchet_record"})
+            continue
+
+        db_stop    = ratchet["stop_price"]
+        fill_price = ratchet["fill_price"]
+        atr_raw    = ratchet.get("atr") or 0.0
+        atr_opt: Optional[float] = atr_raw if atr_raw > 0 else None
+        atr_mult   = ratchet.get("atr_multiplier", ATR_MULTIPLIER)
+
+        # Validate/reanchor stop vs live price
+        safe_stop, price_status = _safe_stop_price(
+            symbol, db_stop, atr_opt, atr_mult, side="long"
+        )
+
+        if price_status == "no_price":
+            logger.error(
+                f"StopSweep | {symbol}: naked long — Alpaca price unavailable, "
+                f"deferring stop to next cycle."
+            )
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="oracle_stop",
+                    severity="high",
+                    error_type="stop_sweep_no_price",
+                    message=f"{symbol}: naked long — no Alpaca price, stop deferred to next cycle",
+                )
+            except Exception:
+                pass
+            results["deferred"].append({"symbol": symbol, "reason": "no_price"})
+            continue
+
+        if price_status == "reanchored":
+            logger.warning(
+                f"StopSweep | {symbol}: DB stop ${db_stop:.2f} invalid vs live price, "
+                f"reanchored to ${safe_stop:.2f} — updating DB"
+            )
+            save_stop(
+                symbol, safe_stop, fill_price, atr_raw, atr_mult,
+                side="long", stop_order_id=None,
+            )
+
+        logger.warning(
+            f"StopSweep | {symbol}: NAKED long — placing GTC stop "
+            f"qty={stop_qty} @ ${safe_stop:.2f}"
+            + (" [DRY RUN]" if dry_run else "")
+        )
+
+        if dry_run:
+            results["placed"].append({
+                "symbol":       symbol,
+                "stop_price":   safe_stop,
+                "qty":          stop_qty,
+                "price_status": price_status,
+                "dry_run":      True,
+            })
+            continue
+
+        try:
+            from execution.broker import place_stop_order
+            order    = place_stop_order(symbol, stop_qty, safe_stop)
+            order_id = order.get("id")
+            save_stop(
+                symbol, safe_stop, fill_price, atr_raw, atr_mult,
+                side="long", stop_order_id=order_id,
+            )
+            logger.info(
+                f"StopSweep | ✓ {symbol}: GTC stop placed "
+                f"qty={stop_qty} stop=${safe_stop:.2f} order_id={order_id}"
+            )
+            results["placed"].append({
+                "symbol":       symbol,
+                "stop_price":   safe_stop,
+                "qty":          stop_qty,
+                "order_id":     order_id,
+                "price_status": price_status,
+            })
+        except Exception as exc:
+            logger.error(
+                f"StopSweep | ✗ {symbol}: GTC stop FAILED "
+                f"(qty={stop_qty} stop=${safe_stop:.2f}): {exc} — still naked, retry next cycle"
+            )
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="oracle_stop",
+                    severity="high",
+                    error_type="stop_sweep_placement_failed",
+                    message=f"{symbol}: stop sweep GTC placement FAILED — still naked, retry next cycle",
+                    detail=str(exc)[:500],
+                )
+            except Exception:
+                pass
+            results["errors"].append({"symbol": symbol, "error": str(exc)})
+
+    if naked_found:
+        logger.warning(
+            f"StopSweep | Cycle complete — naked found={naked_found}: "
+            f"placed={len(results['placed'])} deferred={len(results['deferred'])} "
+            f"errors={len(results['errors'])}"
+        )
+    else:
+        logger.debug("StopSweep | All open long positions have live broker stops ✓")
+
+    return results
 
 
 def maybe_ratchet(ticker: str, current_price: float, qty: float, dry_run: bool = False) -> Optional[dict]:

@@ -915,6 +915,20 @@ async def _run_pipeline_inner(
             sym for sym in _open_syms if sym not in _CRYPTO_SKIP
         )
 
+        # ── Per-cycle naked-stop sweep (STEP 3 — replaces deleted EOD reconciler) ──
+        # For every open long that has no live GTC stop-sell at the broker, attempt
+        # placement via the safe (live-price-validated) path.  A naked position can
+        # persist for at most one cycle (≤ 15 min).  The sweep is non-fatal — a
+        # failure here logs and degrades loud but never blocks the rest of the cycle.
+        if _open_pos:
+            try:
+                from execution.ratchet_stop import sweep_naked_positions as _sweep
+                _sweep_result = _sweep(dry_run=dry_run)
+                if _sweep_result.get("placed") or _sweep_result.get("deferred") or _sweep_result.get("errors"):
+                    result.setdefault("stop_sweep", _sweep_result)
+            except Exception as _sweep_exc:
+                logger.error(f"Pipeline | Stop sweep failed (non-fatal): {_sweep_exc}")
+
         # ── Oracle trades reconciler ──────────────────────────────────────────
         # On every cycle, compare live Alpaca positions against Active rows in
         # the trades table.  Any position that has no matching Active row gets

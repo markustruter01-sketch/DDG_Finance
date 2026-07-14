@@ -1148,6 +1148,101 @@ def ensure_schema() -> None:
     except Exception as _j_exc:
         logger.error(f"DB | Phase J ratchet_stops cleanup failed: {_j_exc}")
 
+    # ── Phase K — oos_envelope table + seed ───────────────────────────────────
+    # Stores the pre-registered OOS envelope for each bot (pooled Sharpe,
+    # worst-window floor, maxDD, params hash).  The nightly walk-forward job
+    # reads these to classify GREEN/AMBER/RED/INSUFFICIENT_DATA/DISQUALIFIED.
+    # Seeded once; ON CONFLICT DO NOTHING keeps it idempotent.
+    try:
+        import hashlib as _hlib
+        import json as _json_k
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS oos_envelope (
+                        bot_id               TEXT PRIMARY KEY,
+                        pooled_sharpe        DOUBLE PRECISION,
+                        worst_window_sharpe  DOUBLE PRECISION,
+                        worst_window         TEXT,
+                        best_window_sharpe   DOUBLE PRECISION,
+                        worst_window_maxdd   DOUBLE PRECISION,
+                        oos_run_date         DATE,
+                        params_hash          TEXT,
+                        disqualified         BOOLEAN DEFAULT FALSE,
+                        disqualified_reason  TEXT,
+                        created_at           TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+
+                _oracle_params = {
+                    "strategy": "stf_v1.0_momentum_equity",
+                    "note":     "STF v1.0 deployed config as-of 2026-07-14 OOS run",
+                }
+                _spy_params = {
+                    "ema_fast": 50, "ema_slow": 200,
+                    "trail_stop_pct": 0.08, "position_size_pct": 0.40,
+                    "max_deployment": 0.80, "min_hold_days": 5,
+                    "tp1_pct": 0.06, "tp2_pct": 0.12,
+                    "crisis_threshold": -0.12, "max_3day_drop_pct": 0.05,
+                }
+                _disq_params = {"disqualified": True}
+
+                def _h(d: dict) -> str:
+                    return _hlib.sha256(
+                        _json_k.dumps(d, sort_keys=True).encode()
+                    ).hexdigest()[:16]
+
+                _seed_rows = [
+                    ("oracle",        0.633,  -0.153, "2021",  1.526, 0.170, "2026-07-14", _h(_oracle_params), False, None),
+                    ("spy_qqq_trend", 0.862,  -1.889, "2022",  1.411, 0.065, "2026-07-14", _h(_spy_params),    False, None),
+                    ("jerome_macro",  None,   None,   None,    None,  None,  None,          _h(_disq_params),   True,  "No OOS run completed — flag any live trading as anomaly"),
+                    ("buck_futures",  None,   None,   None,    None,  None,  None,          _h(_disq_params),   True,  "No OOS run completed — flag any live trading as anomaly"),
+                ]
+                for row in _seed_rows:
+                    cur.execute("""
+                        INSERT INTO oos_envelope
+                            (bot_id, pooled_sharpe, worst_window_sharpe, worst_window,
+                             best_window_sharpe, worst_window_maxdd, oos_run_date,
+                             params_hash, disqualified, disqualified_reason)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (bot_id) DO NOTHING
+                    """, row)
+
+        logger.info("DB | Phase K: oos_envelope table ensured and seeded")
+    except Exception as _k_exc:
+        logger.error(f"DB | Phase K oos_envelope setup failed: {_k_exc}")
+
+    # ── Phase L — walk-forward columns on bot_evaluation_history ──────────────
+    # Adds 14 new WF columns to the existing table.  All ADD COLUMN IF NOT EXISTS
+    # → fully idempotent.  Populated nightly by the arc2_walk_forward job.
+    try:
+        _wf_cols = [
+            ("wf_sharpe_30d",             "DOUBLE PRECISION"),
+            ("wf_sharpe_90d",             "DOUBLE PRECISION"),
+            ("wf_maxdd_30d",              "DOUBLE PRECISION"),
+            ("wf_maxdd_90d",              "DOUBLE PRECISION"),
+            ("wf_trades_30d",             "INTEGER"),
+            ("wf_trades_90d",             "INTEGER"),
+            ("wf_win_rate_30d",           "DOUBLE PRECISION"),
+            ("wf_win_rate_90d",           "DOUBLE PRECISION"),
+            ("wf_expectancy_30d",         "DOUBLE PRECISION"),
+            ("wf_expectancy_90d",         "DOUBLE PRECISION"),
+            ("wf_status",                 "TEXT"),
+            ("wf_consecutive_below_floor","INTEGER"),
+            ("wf_oos_floor_sharpe",       "DOUBLE PRECISION"),
+        ]
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for col, dtype in _wf_cols:
+                    cur.execute(
+                        f"ALTER TABLE bot_evaluation_history "
+                        f"ADD COLUMN IF NOT EXISTS {col} {dtype}"
+                    )
+        logger.info(f"DB | Phase L: {len(_wf_cols)} walk-forward columns ensured on bot_evaluation_history")
+    except Exception as _l_exc:
+        logger.error(f"DB | Phase L walk-forward column migrations failed: {_l_exc}")
+
 
 def insert_post_mortem(
     ticker: str,

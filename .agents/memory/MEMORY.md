@@ -15,3 +15,4 @@
 - [Jul-7 reconciler mass-orphan incident](jul7-reconciler-incident.md) — Alpaca returned [] → all 5 Active trades orphaned; kill switch saved; RECON rows self-repaired; empty-response guard added to pipeline.
 - [Bot2 safety fixes](bot2-safety-fixes.md) — Three post-OOS fixes: empty-response entry guard, 3-day exit last-3-bars, multi-lot TP dedup.
 - [SPY/QQQ OOS results](spy-qqq-oos-results.md) — MARGINAL: Sharpe 0.877 ✓, MaxDD ≤9% ✓, 2020 ✓, 2022 ✗ (−5.0%), 4/5 positive ✓. 3-day exit (all-80-bars) dominated turnover.
+- [ARC 2 walk-forward validation](arc2-walk-forward.md) — nightly WF job at 17:30 ET; Arc-0 filters; Phase K/L schema; oracle floor=-0.153, spy floor=-1.889; jerome/buck DISQUALIFIED.

@@ -20,7 +20,8 @@ async def _generate_text(days: int = 1) -> str:
         _build_live_pos_cache, _build_errors_window, _build_open_positions,
         _build_fleet, _build_bots, _build_trades_window, _build_metrics_30d,
         _build_reconciliation_flags, _build_decisions_pending,
-        _build_exit_attribution_30d, _format_text, _DAYS_CAP, _now,
+        _build_exit_attribution_30d, _build_walk_forward_status,
+        _format_text, _DAYS_CAP, _now,
     )
     from datetime import timedelta
 
@@ -28,16 +29,17 @@ async def _generate_text(days: int = 1) -> str:
     window_start = _now() - timedelta(days=days)
     errors: list[dict] = []
 
-    live_pos_cache = await _build_live_pos_cache()
-    log_events     = _build_errors_window(window_start, errors)
-    open_positions = _build_open_positions(live_pos_cache, errors)
-    fleet          = _build_fleet(open_positions, errors)
-    bots           = _build_bots(log_events, open_positions, errors)
-    trades_window  = _build_trades_window(window_start, errors)
-    metrics_30d    = _build_metrics_30d(errors)
-    recon_flags    = _build_reconciliation_flags(live_pos_cache, errors)
-    decisions      = _build_decisions_pending(window_start, errors)
-    exit_attr      = _build_exit_attribution_30d(errors)
+    live_pos_cache      = await _build_live_pos_cache()
+    log_events          = _build_errors_window(window_start, errors)
+    open_positions      = _build_open_positions(live_pos_cache, errors)
+    fleet               = _build_fleet(open_positions, errors)
+    bots                = _build_bots(log_events, open_positions, errors)
+    trades_window       = _build_trades_window(window_start, errors)
+    metrics_30d         = _build_metrics_30d(errors)
+    recon_flags         = _build_reconciliation_flags(live_pos_cache, errors)
+    decisions           = _build_decisions_pending(window_start, errors)
+    exit_attr           = _build_exit_attribution_30d(errors)
+    walk_forward_status = _build_walk_forward_status(errors)
 
     from routes.claude_report import _iso
     report_dict = {
@@ -52,6 +54,7 @@ async def _generate_text(days: int = 1) -> str:
         "errors_window":         log_events,
         "decisions_pending":     decisions,
         "exit_attribution_30d":  exit_attr,
+        "walk_forward_status":   walk_forward_status,
     }
     return _format_text(report_dict)
 

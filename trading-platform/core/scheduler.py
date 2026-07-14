@@ -1,12 +1,13 @@
 """
 APScheduler — Job Definitions
 -------------------------------------
-Three recurring jobs:
+Five recurring jobs:
 
   Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Pure momentum scan + execution
   Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
   Job 3 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
   Job 4 | 05:00 AEST daily (Brisbane, 7 days)   — Discord fleet P&L digest
+  Job 5 | 17:30 ET daily (Mon-Fri)              — Walk-forward validation (ARC 2)
 
 Oracle only trades during NYSE market hours (no afterhours crypto).
 The Gemini Self-Critic pre-market veto and crypto-only cycles have been retired.
@@ -139,6 +140,21 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: daily_benchmark_snapshot (Mon–Fri 17:10 ET)")
 
+    scheduler.add_job(
+        func=_nightly_walk_forward,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour=17,
+            minute=30,
+            timezone="America/New_York",
+        ),
+        id="nightly_walk_forward",
+        name="Walk-Forward Validation (ARC 2)",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: nightly_walk_forward (Mon–Fri 17:30 ET)")
+
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
@@ -266,7 +282,10 @@ def is_auto_trading_enabled() -> bool:
     return _auto_trading_enabled
 
 
-_ALWAYS_ACTIVE_JOBS = {"daily_discord_pnl_report"}  # always run regardless of trading toggle
+_ALWAYS_ACTIVE_JOBS = {
+    "daily_discord_pnl_report",
+    "nightly_walk_forward",  # monitoring job — runs even when trading is disabled
+}
 
 
 def set_auto_trading(enabled: bool) -> dict:
@@ -305,6 +324,25 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
+
+
+async def _nightly_walk_forward() -> None:
+    """
+    Job 5 — fires Mon–Fri at 17:30 ET (30 min after benchmark snapshot).
+    Computes trailing 30d/90d metrics for all 4 bots, classifies each vs its
+    OOS envelope (GREEN/AMBER/RED/INSUFFICIENT_DATA/DISQUALIFIED), and
+    persists to bot_evaluation_history.  Runs regardless of trading toggle
+    (monitoring job — always active).
+    """
+    logger.info("Scheduler | JOB STARTING: nightly_walk_forward")
+    try:
+        import asyncio
+        from analysis.arc2_walk_forward import run_walk_forward_job
+        results = await asyncio.to_thread(run_walk_forward_job, False)
+        summary = ", ".join(f"{b}: {r['status']}" for b, r in results.items())
+        logger.info(f"Scheduler | nightly_walk_forward complete — {summary}")
+    except Exception as exc:
+        logger.error(f"Scheduler | nightly_walk_forward FAILED: {exc}")
 
 
 async def _daily_benchmark_snapshot() -> None:

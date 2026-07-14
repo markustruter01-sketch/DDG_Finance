@@ -144,7 +144,50 @@ def notify_daily_pnl_report() -> None:
     except Exception as _mse:
         logger.debug(f"Discord | market_state fetch non-fatal: {_mse}")
 
+    # ── Walk-forward status banners (ARC 2) ───────────────────────────────────
+    # Prepend RED/AMBER banners before the per-bot P&L lines.
+    # DISQUALIFIED bots that are actively trading also surface here.
+    _wf_banners: list[str] = []
+    try:
+        from analysis.arc2_walk_forward import get_current_wf_status
+        _wf_rows = get_current_wf_status()
+        _STATUS_EMOJI = {"RED": "🔴", "AMBER": "🟡", "GREEN": "✅",
+                         "INSUFFICIENT_DATA": "⏳", "DISQUALIFIED": "⚫"}
+        for _wf in _wf_rows:
+            _st = _wf.get("wf_status", "")
+            _bid = _wf.get("bot_id", "?")
+            if _st == "RED":
+                _sh = _wf.get("wf_sharpe_90d")
+                _fl = _wf.get("wf_oos_floor_sharpe")
+                _days = _wf.get("wf_consecutive_below_floor") or 0
+                _sh_s = f"{_sh:.3f}" if _sh is not None else "N/A"
+                _fl_s = f"{_fl:.3f}" if _fl is not None else "N/A"
+                _protocol = ""
+                if _days >= 120:
+                    _protocol = " — ⛔ HALT ENTRIES (human action required)"
+                elif _days >= 60:
+                    _protocol = " — ⚠ HALVE SIZE (human action required)"
+                _wf_banners.append(
+                    f"🔴 **{_bid} RED**: trailing Sharpe {_sh_s} "
+                    f"below OOS floor {_fl_s} for **{_days}d**{_protocol}"
+                )
+            elif _st == "AMBER":
+                _sh = _wf.get("wf_sharpe_90d")
+                _fl = _wf.get("wf_oos_floor_sharpe")
+                _days = _wf.get("wf_consecutive_below_floor") or 0
+                _sh_s = f"{_sh:.3f}" if _sh is not None else "N/A"
+                _fl_s = f"{_fl:.3f}" if _fl is not None else "N/A"
+                _wf_banners.append(
+                    f"🟡 **{_bid} AMBER**: trailing Sharpe {_sh_s} "
+                    f"below OOS floor {_fl_s} ({_days}/60d)"
+                )
+    except Exception as _wfe:
+        logger.debug(f"Discord | walk-forward status fetch non-fatal: {_wfe}")
+
     _body = "\n".join(lines) if lines else "_No bot data available._"
+    _banner_block = "\n".join(_wf_banners)
+    if _banner_block:
+        _body = _banner_block + "\n\n" + _body
     description = (_state_header + "\n" + _body) if _state_header else _body
 
     # ── Fleet-level fields ─────────────────────────────────────────────────

@@ -874,6 +874,21 @@ def _build_market_state(errors: list) -> dict:
         return {}
 
 
+# ── Section: walk_forward_status ──────────────────────────────────────────────
+
+def _build_walk_forward_status(errors: list) -> list[dict]:
+    """
+    Read the most-recent walk-forward row per bot from bot_evaluation_history.
+    Non-fatal: returns [] if table not yet populated (pre-first-run).
+    """
+    try:
+        from analysis.arc2_walk_forward import get_current_wf_status
+        return get_current_wf_status()
+    except Exception as exc:
+        errors.append({"section": "walk_forward_status", "error": str(exc)})
+        return []
+
+
 # ── Text formatter ─────────────────────────────────────────────────────────────
 
 def _format_text(r: dict) -> str:
@@ -1062,6 +1077,49 @@ def _format_text(r: dict) -> str:
         d = attr.get(bucket) or {"count": 0, "pnl_usd": 0.0}
         lines.append(f"  {bucket:<20} count={d.get('count', 0)}, pnl={_sgn(d.get('pnl_usd'))}")
 
+    # ── Walk-Forward Validation ────────────────────────────────────────────────
+    _STATUS_ICON = {
+        "GREEN":            "✅ GREEN",
+        "AMBER":            "🟡 AMBER",
+        "RED":              "🔴 RED",
+        "INSUFFICIENT_DATA":"⏳ INSUFFICIENT_DATA",
+        "DISQUALIFIED":     "⚫ DISQUALIFIED",
+    }
+    wf = r.get("walk_forward_status") or []
+    lines.append(f"{DASH} WALK-FORWARD VALIDATION (ARC 2) {DASH}")
+    if not wf:
+        lines.append("  (no data — run nightly_walk_forward job or wait for first 17:30 ET cycle)")
+    for w in wf:
+        bid   = w.get("bot_id", "?")
+        st    = w.get("wf_status") or "?"
+        icon  = _STATUS_ICON.get(st, st)
+        sh90  = w.get("wf_sharpe_90d")
+        sh30  = w.get("wf_sharpe_30d")
+        floor = w.get("wf_oos_floor_sharpe")
+        days  = w.get("wf_consecutive_below_floor") or 0
+        cnt   = w.get("wf_trades_90d") or 0
+        mdd   = w.get("wf_maxdd_90d")
+        snap  = (w.get("snapshot_at") or "?")[:19]
+        sh90_s  = f"{sh90:.3f}" if sh90 is not None else "N/A"
+        sh30_s  = f"{sh30:.3f}" if sh30 is not None else "N/A"
+        floor_s = f"{floor:.3f}" if floor is not None else "N/A"
+        mdd_s   = f"{mdd * 100:.1f}%" if mdd is not None else "N/A"
+        lines.append(
+            f"  {bid:<20} {icon:<25} "
+            f"Sharpe90d={sh90_s}  floor={floor_s}  "
+            f"Sharpe30d={sh30_s}  trades90d={cnt}  "
+            f"maxDD={mdd_s}  below={days}d  snap={snap}"
+        )
+        if st == "RED":
+            _protocol = ""
+            if days >= 120:
+                _protocol = "  ⛔ PROTOCOL: HALT ENTRIES (human action required)"
+            elif days >= 60:
+                _protocol = "  ⚠ PROTOCOL: HALVE POSITION SIZE (human action required)"
+            if _protocol:
+                lines.append(f"  {'':20} {_protocol}")
+    lines.append("")
+
     lines += ["", SEP, "END OF REPORT", SEP, ""]
     return "\n".join(lines)
 
@@ -1097,8 +1155,9 @@ async def claude_report(days: int = 1, include_logs: bool = True) -> dict:
     metrics_30d   = _build_metrics_30d(errors)
     recon_flags   = _build_reconciliation_flags(live_pos_cache, errors)
     decisions     = _build_decisions_pending(window_start, errors)
-    exit_attr     = _build_exit_attribution_30d(errors)
-    market_state  = _build_market_state(errors)
+    exit_attr          = _build_exit_attribution_30d(errors)
+    market_state       = _build_market_state(errors)
+    walk_forward_status = _build_walk_forward_status(errors)
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000)
     logger.info(f"claude_report | generated in {elapsed_ms}ms | "
@@ -1119,6 +1178,7 @@ async def claude_report(days: int = 1, include_logs: bool = True) -> dict:
         "decisions_pending":     decisions,
         "exit_attribution_30d":  exit_attr,
         "market_state":          market_state,
+        "walk_forward_status":   walk_forward_status,
         "_section_errors":       errors,
     }
 
@@ -1145,8 +1205,9 @@ async def claude_report_text(days: int = 1):
     metrics_30d    = _build_metrics_30d(errors)
     recon_flags    = _build_reconciliation_flags(live_pos_cache, errors)
     decisions      = _build_decisions_pending(window_start, errors)
-    exit_attr      = _build_exit_attribution_30d(errors)
-    market_state   = _build_market_state(errors)
+    exit_attr           = _build_exit_attribution_30d(errors)
+    market_state        = _build_market_state(errors)
+    walk_forward_status = _build_walk_forward_status(errors)
 
     report_dict = {
         "generated_at":          _iso(_now()),
@@ -1161,6 +1222,7 @@ async def claude_report_text(days: int = 1):
         "decisions_pending":     decisions,
         "exit_attribution_30d":  exit_attr,
         "market_state":          market_state,
+        "walk_forward_status":   walk_forward_status,
     }
 
     body = _format_text(report_dict)

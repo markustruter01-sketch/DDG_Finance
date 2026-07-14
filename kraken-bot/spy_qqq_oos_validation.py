@@ -5,7 +5,7 @@ LOCKED PARAMETERS (bot2_spy_qqq.py + alpaca_etf_engine.py — extracted Step 1):
   UNIVERSE         = ["SPY", "QQQ"]
   EMA_FAST         = 50      EMA_SLOW = 200
   TRAIL_STOP_PCT   = 0.08    (software stop, ratchets up, overrides min-hold)
-  MAX_3DAY_DROP    = 0.05    (scans ALL 80 bars — Discrepancy #2, replicated)
+  MAX_3DAY_DROP    = 0.05    (FIXED: last-3-bars only — closes[-1] vs closes[-4])
   POSITION_SIZE    = 0.40    (40% equity per entry)
   MAX_DEPLOYMENT   = 0.80    CASH_RESERVE = 0.20
   MIN_HOLD_DAYS    = 5       (calendar days from entry date)
@@ -17,9 +17,9 @@ FIDELITY NOTES (known gaps vs live):
   1. Cadence: DAILY close. Live bot = hourly. Trailing stops checked once/day vs
      once/hour. Harness is conservative: stops caught at close, not intraday open.
   2. EMA seed: naive prices[0] (NOT SMA seed) — exact live implementation.
-  3. 3-day exit: for i in range(3, len(closes_80)) — scans all 80 bars (AS-CODED).
-     Historical drops that already recovered can trigger this exit the first day
-     min-hold clears, if those bars are in the 80-day window.
+  3. 3-day exit: FIXED — single check closes[-1] vs closes[-4] (last 3 bars only).
+     Matches deployed bot2_spy_qqq.py. Previous as-coded run scanned all 80 bars
+     and produced 45/57 churn exits in 2020.
   4. TP qty: ORIGINAL qty used for both TP1 and TP2 scale sizes (not decremented).
   5. Min-hold: calendar days (date diff), not trading bars.
   6. ema_fast_prev: closes[:-5] chop-last-5-and-rerun — exact live method.
@@ -179,14 +179,14 @@ def _exit_price_below_ema50(closes_80: list[float]) -> Optional[str]:
     return None
 
 
-# ── Trend exit: 3-day drop >= 5% — ALL BARS (AS-CODED, Discrepancy #2) ────
-# FIDELITY: for i in range(3, len(closes)) — scans ALL bars in 80-day window.
-# A historical drop from weeks ago fires this exit the moment min-hold clears
-# if those bars are still in the window.
+# ── Trend exit: 3-day drop >= 5% — LAST 3 BARS ONLY (FIXED, deployed code) ─
+# Was: range(3, len(closes)) — scanned ALL 80 bars, fired on historical drops
+# that had already recovered. Caused pathological churn (45/57 exits in 2020).
+# Fixed in bot2_spy_qqq.py: single check closes[-1] vs closes[-4] only.
 
 def _exit_3day_drop(closes_80: list[float]) -> Optional[str]:
-    for i in range(3, len(closes_80)):
-        chg = (closes_80[i] - closes_80[i - 3]) / closes_80[i - 3]
+    if len(closes_80) >= 4:
+        chg = (closes_80[-1] - closes_80[-4]) / closes_80[-4]
         if chg <= -MAX_3DAY_DROP_PCT:
             return f"3day_drop({chg*100:.1f}%)"
     return None

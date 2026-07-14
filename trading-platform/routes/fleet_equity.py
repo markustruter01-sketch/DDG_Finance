@@ -40,6 +40,10 @@ def _fetch_win_rates() -> dict[str, tuple[int, int]]:
                     WHERE asset_class IN ('momentum_equity', 'momentum_etf')
                       AND status LIKE 'Closed%'
                       AND closed_at > NOW() - INTERVAL '30 days'
+                      AND realized_pnl IS NOT NULL
+                      AND exit_reason NOT LIKE 'orphan%'
+                      AND exit_reason != 'reconciler_race_phantom'
+                      AND trade_id NOT LIKE 'RECON-%'
                     GROUP BY 1
                 """)
                 for row in cur.fetchall():

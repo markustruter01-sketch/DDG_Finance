@@ -313,6 +313,9 @@ def _build_open_positions(live_pos_cache: dict, errors: list) -> list[dict]:
         errors.append({"section": "open_positions.oracle", "error": str(exc)})
 
     # SPY/QQQ — alpaca_etf_positions
+    # Multiple DB lots of the same symbol are aggregated into one position entry
+    # (weighted-avg entry price, summed qty) so the P&L from Alpaca's single
+    # merged position is not mirrored across duplicate rows in the report.
     try:
         spy_live = {p["symbol"]: p for p in live_pos_cache.get("alpaca_PA3X9UBVZ6T8", [])}
         rows = _pg_rows(
@@ -320,21 +323,29 @@ def _build_open_positions(live_pos_cache: dict, errors: list) -> list[dict]:
             "FROM alpaca_etf_positions WHERE bot_id = %s AND status = 'open'",
             ("bot2_spy_qqq",),
         )
+        _lots_by_sym: dict = {}
         for r in rows:
-            sym  = r["symbol"]
+            _lots_by_sym.setdefault(r["symbol"], []).append(r)
+        for sym, lots in _lots_by_sym.items():
             live = spy_live.get(sym, {})
-            opened_at = _tz(r["opened_at"])
-            days_held = (now - opened_at).days if opened_at else None
+            opened_ats = [_tz(r["opened_at"]) for r in lots if r["opened_at"]]
+            opened_at  = min(opened_ats) if opened_ats else None
+            days_held  = (now - opened_at).days if opened_at else None
+            total_qty  = sum(float(r["qty"] or 0) for r in lots)
+            wavg_entry = (
+                sum(float(r["qty"] or 0) * float(r["entry_price"] or 0) for r in lots) / total_qty
+                if total_qty else 0.0
+            )
             urpc = live.get("unrealized_plpc")
             positions.append({
-                "bot_id": "spy_qqq_trend", "symbol": sym, "direction": r["direction"],
-                "qty":           float(r["qty"] or 0),
-                "entry_price":   float(r["entry_price"] or 0),
+                "bot_id": "spy_qqq_trend", "symbol": sym, "direction": lots[0]["direction"],
+                "qty":           round(total_qty, 6),
+                "entry_price":   round(wavg_entry, 4),
                 "current_price": live.get("current_price"),
                 "unrealised_pnl_usd": live.get("unrealized_pl"),
                 "unrealised_pnl_pct": round(urpc * 100, 4) if urpc is not None else None,
                 "days_held":    days_held,
-                "trailing_stop": float(r["stop_price"]) if r["stop_price"] else None,
+                "trailing_stop": float(lots[0]["stop_price"]) if lots[0]["stop_price"] else None,
                 "entry_reason":  None,
                 "asset_class":   "momentum_etf",
             })
@@ -606,7 +617,7 @@ def _build_reconciliation_flags(live_pos_cache: dict, errors: list) -> list[dict
          "SELECT COUNT(*) FROM trades WHERE asset_class='momentum_equity' AND status='Active'",
          ()),
         ("spy_qqq_trend", "alpaca_PA3X9UBVZ6T8",
-         "SELECT COUNT(*) FROM alpaca_etf_positions WHERE bot_id='bot2_spy_qqq' AND status='open'",
+         "SELECT COUNT(DISTINCT symbol) FROM alpaca_etf_positions WHERE bot_id='bot2_spy_qqq' AND status='open'",
          ()),
         ("jerome_macro",  "alpaca_PA37SP8ID1XU",
          "SELECT COUNT(*) FROM jerome_positions WHERE status='open'",

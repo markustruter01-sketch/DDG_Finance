@@ -975,6 +975,12 @@ async def _run_pipeline_inner(
         # DB has Active row but Alpaca has no corresponding position → ghost.
         # Mark ghost rows Closed_Reconciled so Active count stays honest.
         # 7-day floor prevents false-closing positions Alpaca hasn't synced yet.
+        #
+        # EMPTY-RESPONSE GUARD: Alpaca occasionally returns an empty positions
+        # list due to transient API failures. If _open_pos is empty but the DB
+        # has Active rows, do NOT orphan — it would mass-close live positions.
+        # The Jul-7 incident (ARM/DELL/PANW/MS/MU orphaned in one cycle) was
+        # caused by exactly this failure mode.
         try:
             from db.postgres import get_conn as _inv_gc, is_pg_available as _inv_pg
             from core.degradation_tracker import record_degradation as _inv_deg
@@ -991,34 +997,51 @@ async def _run_pipeline_inner(
                         )
                         _inv_rows = _icur.fetchall()
                 _inv_broker = {p.get("symbol", "") for p in _open_pos}
-                for _inv_trade_id, _inv_ticker in _inv_rows:
-                    if _inv_ticker in _inv_broker:
-                        continue
-                    with _inv_gc() as _irc2:
-                        with _irc2.cursor() as _icur2:
-                            _icur2.execute(
-                                """
-                                UPDATE trades
-                                SET status            = 'Closed_Reconciled',
-                                    closed_at         = NOW(),
-                                    exit_reason       = 'orphan_db_reconciler',
-                                    actual_fill_price = NULL,
-                                    realized_pnl      = NULL,
-                                    pnl_percentage    = NULL
-                                WHERE trade_id = %s AND status = 'Active'
-                                """,
-                                (_inv_trade_id,),
-                            )
+                if not _open_pos and _inv_rows:
+                    logger.warning(
+                        f"Pipeline | Inverse reconciler: Alpaca returned 0 positions "
+                        f"but DB has {len(_inv_rows)} Active row(s) — skipping orphan-close "
+                        f"(likely transient API empty, not a real broker close)"
+                    )
                     _inv_deg(
                         component="oracle",
-                        severity="medium",
-                        error_type="orphan_db_closed",
-                        message=f"{_inv_ticker} marked closed — DB Active but no broker position",
+                        severity="high",
+                        error_type="reconciler_empty_response_guard",
+                        message=(
+                            f"Alpaca returned empty positions list with {len(_inv_rows)} "
+                            f"Active DB rows — orphan-close suppressed to prevent false positives. "
+                            f"Symbols: {[t for _, t in _inv_rows]}"
+                        ),
                     )
-                    logger.info(
-                        f"Pipeline | Inverse reconciler: {_inv_ticker} "
-                        f"({_inv_trade_id}) → Closed_Reconciled (no broker position)"
-                    )
+                else:
+                    for _inv_trade_id, _inv_ticker in _inv_rows:
+                        if _inv_ticker in _inv_broker:
+                            continue
+                        with _inv_gc() as _irc2:
+                            with _irc2.cursor() as _icur2:
+                                _icur2.execute(
+                                    """
+                                    UPDATE trades
+                                    SET status            = 'Closed_Reconciled',
+                                        closed_at         = NOW(),
+                                        exit_reason       = 'orphan_db_reconciler',
+                                        actual_fill_price = NULL,
+                                        realized_pnl      = NULL,
+                                        pnl_percentage    = NULL
+                                    WHERE trade_id = %s AND status = 'Active'
+                                    """,
+                                    (_inv_trade_id,),
+                                )
+                        _inv_deg(
+                            component="oracle",
+                            severity="medium",
+                            error_type="orphan_db_closed",
+                            message=f"{_inv_ticker} marked closed — DB Active but no broker position",
+                        )
+                        logger.info(
+                            f"Pipeline | Inverse reconciler: {_inv_ticker} "
+                            f"({_inv_trade_id}) → Closed_Reconciled (no broker position)"
+                        )
         except Exception as _inv_exc:
             logger.warning(f"Pipeline | Oracle inverse reconciler failed (non-fatal): {_inv_exc}")
 

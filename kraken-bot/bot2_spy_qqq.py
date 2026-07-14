@@ -27,6 +27,7 @@ Uses AlpacaEtfEngine (shared) — no LLM.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from alpaca_etf_engine import (
@@ -133,10 +134,12 @@ def _should_exit_trend(symbol: str, ema_fast_value: float) -> tuple[bool, str]:
     if ema_fast_now and current < ema_fast_now:
         return True, f"price_below_ema50 (price={current:.2f} ema50={ema_fast_now:.2f})"
 
-    # Exit 2: true cumulative 3-day rolling drop ≥ MAX_3DAY_DROP_PCT
-    # closes[i-3] → closes[i] captures the full 3-calendar-day move.
-    for i in range(3, len(closes)):
-        three_day_chg = (closes[i] - closes[i - 3]) / closes[i - 3]
+    # Exit 2: true cumulative 3-day return — LAST 3 BARS ONLY.
+    # FIX: was range(3, len(closes)) which scanned all 80 bars and could fire
+    # on weeks-old history that had already recovered. Now restricted to the
+    # single most-recent 3-bar window: closes[-4] → closes[-1].
+    if len(closes) >= 4:
+        three_day_chg = (closes[-1] - closes[-4]) / closes[-4]
         if three_day_chg <= -MAX_3DAY_DROP_PCT:
             return True, f"3day_drop_{three_day_chg * 100:.1f}%"
 
@@ -186,10 +189,43 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     )
 
     # ── Exit checks ───────────────────────────────────────────────────────────
-    for db_pos in db_positions:
-        symbol = db_pos["symbol"]
+    # FIX #3 — Multi-lot deduplication.
+    # If a prior cycle's empty-response guard failed and a double-buy occurred,
+    # db_positions may contain 2 rows for the same symbol (e.g. SPY Jul-7).
+    # Strategy: process each symbol's EARLIEST lot through full exit logic
+    # (trailing stop + TP partial + trend exit). Secondary lots get trailing-stop
+    # DB updates only — no TP partial sells and no duplicate close_position()
+    # calls. If the primary lot fires a full close, secondary lots are
+    # record_close'd immediately without a second Alpaca order.
+    _lots_by_sym: dict[str, list[dict]] = defaultdict(list)
+    for _dp in db_positions:
+        _lots_by_sym[_dp["symbol"]].append(_dp)
+    for _sym in _lots_by_sym:
+        _lots_by_sym[_sym].sort(key=lambda p: p.get("opened_at") or "")
 
-        # 1. Engine handles trailing stop + TP scale-outs
+    _closed_this_cycle: set[str] = set()
+
+    for db_pos in db_positions:
+        symbol   = db_pos["symbol"]
+        lots     = _lots_by_sym[symbol]
+        is_primary = (db_pos is lots[0])   # identity: primary = earliest opened_at
+
+        # Primary lot already closed Alpaca position this cycle —
+        # just close this secondary DB row (no new order).
+        if symbol in _closed_this_cycle:
+            engine.record_close(BOT_ID, symbol, "multi_lot_primary_closed", None)
+            logger.info(f"Bot2 | {symbol}: secondary lot DB-closed (primary already closed Alpaca)")
+            continue
+
+        if not is_primary:
+            # Secondary lot: update trailing stop in DB, skip TP partial sells.
+            live_p = next((p for p in live_positions if p["symbol"] == symbol), None)
+            if live_p:
+                engine.update_trailing_stop(BOT_ID, symbol, live_p["current_price"], TRAIL_STOP_PCT)
+            logger.info(f"Bot2 | {symbol}: secondary lot detected — TP skipped, trailing stop DB updated only")
+            continue
+
+        # 1. Engine handles trailing stop + TP scale-outs (primary lot only)
         exit_reason = engine.run_exit_checks(
             bot_id=BOT_ID,
             db_position=db_pos,
@@ -202,6 +238,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             realised_pnl = live["unrealised_pnl_usd"] if live else None
             engine.close_position(symbol)
             engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
+            _closed_this_cycle.add(symbol)
             live_positions = engine.get_positions()
             continue
 
@@ -215,10 +252,42 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 realised_pnl = live["unrealised_pnl_usd"] if live else None
                 engine.close_position(symbol)
                 engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
+                _closed_this_cycle.add(symbol)
                 live_positions = engine.get_positions()
 
     # ── Entry scan ────────────────────────────────────────────────────────────
     live_positions = engine.get_positions()
+
+    # FIX #1 — Empty-response guard (prevents Jul-7-style double-buy).
+    # If Alpaca returns [] but the DB has open rows, the broker API is likely
+    # transiently degraded. Entering new positions in this state would add a
+    # second lot for a symbol we already hold. Skip the entry scan entirely
+    # this cycle and record a degradation event for alerting.
+    _entry_scan_ok = True
+    _db_open_rows  = engine.get_db_positions(BOT_ID)
+    if not live_positions and _db_open_rows:
+        _entry_scan_ok = False
+        _open_syms = [p["symbol"] for p in _db_open_rows]
+        logger.warning(
+            f"Bot2 | ENTRY GUARD: Alpaca returned 0 positions but DB has "
+            f"{len(_db_open_rows)} open row(s) {_open_syms} — "
+            f"skipping entry scan this cycle (likely transient API empty)"
+        )
+        try:
+            from core.degradation_tracker import record_degradation as _deg
+            _deg(
+                component="bot2_spy_qqq",
+                severity="high",
+                error_type="entry_empty_response_guard",
+                message=(
+                    f"Alpaca returned empty positions list with {len(_db_open_rows)} "
+                    f"open DB rows — entry scan suppressed to prevent double-buy. "
+                    f"Symbols: {_open_syms}"
+                ),
+            )
+        except Exception as _deg_exc:
+            logger.warning(f"Bot2 | degradation_tracker write failed (non-fatal): {_deg_exc}")
+
     deployed_usd   = sum(p["market_value"] for p in live_positions)
     deployed_pct   = deployed_usd / equity if equity > 0 else 1.0
     held_symbols   = {p["symbol"] for p in live_positions}
@@ -256,6 +325,9 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         logger.warning(f"Bot2 | CRISIS GATE: SPY fetch failed ({_cg_exc}) — fail-safe CRISIS active")
 
     for symbol in UNIVERSE:
+        if not _entry_scan_ok:
+            logger.debug(f"Bot2 | {symbol}: entry guard active (empty Alpaca response) — skipped")
+            continue
         if _crisis_gate:
             logger.debug(f"Bot2 | {symbol}: CRISIS gate — entry blocked")
             continue

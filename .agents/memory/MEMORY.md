@@ -13,3 +13,5 @@
 - [Prod DB direct write path](prod-db-direct-write.md) — NEON_DATABASE_URL in process env is prod; DATABASE_URL is dev. Use psycopg2 + NEON_DATABASE_URL from bash for emergency prod writes (executeSql is read-only on prod).
 - [Phase J ratchet_stops cleanup](phase-j-ratchet-stops.md) — Jun-26 autopsy fix: 12 stale rows deleted, ARM/MS/MU/PANW stop_order_ids linked, MRVL cleared. DB now matches broker exactly (6 rows, 5 with live GTC stops).
 - [Jul-7 reconciler mass-orphan incident](jul7-reconciler-incident.md) — Alpaca returned [] → all 5 Active trades orphaned; kill switch saved; RECON rows self-repaired; empty-response guard added to pipeline.
+- [Bot2 safety fixes](bot2-safety-fixes.md) — Three post-OOS fixes: empty-response entry guard, 3-day exit last-3-bars, multi-lot TP dedup.
+- [SPY/QQQ OOS results](spy-qqq-oos-results.md) — MARGINAL: Sharpe 0.877 ✓, MaxDD ≤9% ✓, 2020 ✓, 2022 ✗ (−5.0%), 4/5 positive ✓. 3-day exit (all-80-bars) dominated turnover.

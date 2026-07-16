@@ -8,6 +8,11 @@ import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/HomePage";
 import Dashboard from "@/pages/Dashboard";
 import StreamPage from "@/pages/StreamPage";
+import Design1Vaudeville from "@/pages/design/Design1Vaudeville";
+import Design2Terminal from "@/pages/design/Design2Terminal";
+import Design3MissionControl from "@/pages/design/Design3MissionControl";
+import Design4Arcade from "@/pages/design/Design4Arcade";
+import Design5SpaceFleet from "@/pages/design/Design5SpaceFleet";
 import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
 
@@ -65,6 +70,11 @@ function Router() {
         <Route path="/streaming-v2">
           <Redirect to="/stream?sub=b" />
         </Route>
+        <Route path="/design/1" component={Design1Vaudeville} />
+        <Route path="/design/2" component={Design2Terminal} />
+        <Route path="/design/3" component={Design3MissionControl} />
+        <Route path="/design/4" component={Design4Arcade} />
+        <Route path="/design/5" component={Design5SpaceFleet} />
         <Route component={NotFound} />
       </Switch>
       <GlobalNav />

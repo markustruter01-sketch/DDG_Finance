@@ -23,6 +23,11 @@ from loguru import logger
 _WEBHOOK_URL: str | None = os.environ.get("DISCORD_WEBHOOK_URL")
 _lock = threading.Lock()
 
+# Rate-limit guard for notify_capital_risk: same symbol fires at most once
+# every 30 min so a stop failing every 15-min cycle doesn't spam the channel.
+_CAPITAL_RISK_LAST_FIRED: dict[str, float] = {}
+_CAPITAL_RISK_COOLDOWN = 1800  # seconds (30 min)
+
 
 def _send(payload: dict) -> None:
     if not _WEBHOOK_URL:
@@ -50,6 +55,30 @@ def alert_critical(title: str, description: str, fields: list[dict] | None = Non
     """
     payload = {"embeds": [_embed(title, description, COLOR_RED, fields=fields)]}
     _send_async(payload)
+
+
+def notify_capital_risk(msg: str, symbol: str | None = None) -> None:
+    """
+    Post a capital-risk alert string directly to Discord.
+
+    Rate-limited: the same symbol fires at most once every 30 minutes so a
+    stop that keeps failing every 15-min cycle does not spam the channel.
+    Never raises — failures are logged and swallowed.
+    NOT gated on the degradation tracker.
+
+    Used by: ratchet_stop (B-1/B-2), executor (B-3/B-5),
+             oracle_exit_manager (B-4).
+    """
+    import time as _time
+    key = (symbol or "__global__").upper()
+    now = _time.time()
+    if now - _CAPITAL_RISK_LAST_FIRED.get(key, 0.0) < _CAPITAL_RISK_COOLDOWN:
+        return  # rate-limited: same symbol already alerted within 30 min
+    _CAPITAL_RISK_LAST_FIRED[key] = now
+    try:
+        _send_async({"content": msg})
+    except Exception as _e:
+        logger.error(f"notify_capital_risk | send failed ({key}): {_e}")
 
 
 def _embed(
@@ -80,10 +109,10 @@ COLOR_PURPLE = 0xA855F7
 COLOR_ORANGE = 0xF97316
 
 _DISPLAY_NAMES = {
-    "oracle":        "Oracle (Momentum Equities)",
-    "spy_qqq_trend": "SPY/QQQ Trend",
-    "jerome_macro":  "Jerome v2 (Commodity Trend)",
-    "buck_futures":  "Buck Futures (Commodity Trend)",
+    "oracle":        "Larry (Oracle)",
+    "spy_qqq_trend": "Moe (SPY/QQQ)",
+    "jerome_macro":  "Curly (Jerome)",
+    "buck_futures":  "Curly Jr (Buck)",
 }
 
 _BOT_ORDER = ["oracle", "spy_qqq_trend", "jerome_macro", "buck_futures"]

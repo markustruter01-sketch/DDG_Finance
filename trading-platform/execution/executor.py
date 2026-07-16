@@ -674,6 +674,32 @@ def _close_stale_positions(
                     )
             except Exception as _je:
                 logger.warning(f"Executor | close_trade journal write failed for {symbol}: {_je}")
+                # B-5 fix: direct Discord alert + tag the trade row for audit/dedup.
+                try:
+                    from notifications.discord import notify_capital_risk
+                    notify_capital_risk(
+                        f"🔴 {symbol}: Alpaca closed but trade journal write FAILED"
+                        f" — DB may still show Active, manual check needed",
+                        symbol=symbol,
+                    )
+                except Exception:
+                    pass
+                if _trade_id:
+                    try:
+                        from db.postgres import _acquire_healthy_conn
+                        _conn = _acquire_healthy_conn()
+                        with _conn.cursor() as _cur:
+                            _cur.execute(
+                                "UPDATE trades SET exit_reason='journal_write_failed'"
+                                " WHERE trade_id=%s",
+                                (_trade_id,),
+                            )
+                        _conn.commit()
+                        _conn.close()
+                    except Exception as _ue:
+                        logger.error(
+                            f"Executor | Could not tag trade_id={_trade_id} exit_reason: {_ue}"
+                        )
         except Exception as exc:
             logger.error(f"Failed to close {symbol}: {exc}")
             results["errors"].append({"symbol": symbol, "error": str(exc)})
@@ -1121,6 +1147,15 @@ def _place_ratchet_stop(
                 error_type="broker_stop_rejected",
                 message=f"{ticker}: executor GTC stop placement failed — position unprotected",
                 detail=str(exc)[:500],
+            )
+        except Exception:
+            pass
+        # B-3 fix: direct Discord alert — fires even if degradation tracker is down.
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 {ticker}: ratchet stop init FAILED after buy — position unprotected until next cycle",
+                symbol=ticker,
             )
         except Exception:
             pass

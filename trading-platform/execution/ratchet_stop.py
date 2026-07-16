@@ -589,6 +589,15 @@ def initialise_ratchet_stop(
                 )
             except Exception:
                 pass
+            # B-1 fix: direct Discord alert — fires even if degradation tracker is down.
+            try:
+                from notifications.discord import notify_capital_risk
+                notify_capital_risk(
+                    f"🔴 {ticker}: stop placement FAILED — naked until next cycle",
+                    symbol=ticker,
+                )
+            except Exception:
+                pass
             return {
                 "stop_price":     stop_price,
                 "atr":            atr_used,
@@ -766,6 +775,15 @@ def sweep_naked_positions(dry_run: bool = False) -> dict:
                     error_type="stop_sweep_placement_failed",
                     message=f"{symbol}: stop sweep GTC placement FAILED — still naked, retry next cycle",
                     detail=str(exc)[:500],
+                )
+            except Exception:
+                pass
+            # B-2 fix: escalated alert — naked AND sweep also failed.
+            try:
+                from notifications.discord import notify_capital_risk
+                notify_capital_risk(
+                    f"🔴 {symbol}: sweep stop placement FAILED — naked, sweep ALSO failed",
+                    symbol=symbol,
                 )
             except Exception:
                 pass

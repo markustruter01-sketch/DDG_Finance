@@ -608,6 +608,32 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
                     f"ExitManager | Journal close_trade FAILED for {symbol} "
                     f"trade_id={trade_id}: {exc} — Alpaca sold but DB still Active"
                 )
+                # B-4 fix: direct Discord alert + tag row so re-entry dedup sees it
+                # and audit trail shows why status stayed Active.
+                try:
+                    from notifications.discord import notify_capital_risk
+                    notify_capital_risk(
+                        f"🔴 {symbol}: Alpaca SOLD but journal write FAILED "
+                        f"(trade_id={trade_id}) — DB still Active, manual check needed",
+                        symbol=symbol,
+                    )
+                except Exception:
+                    pass
+                if trade_id:
+                    try:
+                        from db.postgres import _acquire_healthy_conn
+                        _conn = _acquire_healthy_conn()
+                        with _conn.cursor() as _cur:
+                            _cur.execute(
+                                "UPDATE trades SET exit_reason='journal_write_failed' WHERE trade_id=%s",
+                                (trade_id,)
+                            )
+                        _conn.commit()
+                        _conn.close()
+                    except Exception as _ue:
+                        logger.error(
+                            f"ExitManager | Could not tag trade_id={trade_id} exit_reason: {_ue}"
+                        )
 
         result["closed"].append({
             "symbol":      symbol,

@@ -33,7 +33,19 @@ permitted trading to continue or closed positions went unconfirmed.
 C-2/C-3/C-4/C-5 all recompute fresh each call — no sticky state in the except
 handler. A transient DB blip clears automatically next cycle when DB is up again.
 
+## notify_capital_risk() — stop/journal alert path (Batch 2)
+`trading-platform/notifications/discord.py:notify_capital_risk(msg, symbol=None)`
+- Plain-text content (not embed), rate-limited 30 min per symbol key
+- `_CAPITAL_RISK_LAST_FIRED` dict + `_CAPITAL_RISK_COOLDOWN=1800` at module level
+- Used by B-1 ratchet_stop GTC fail, B-2 sweep fail (escalated), B-3 executor buy-stop fail, B-4/B-5 journal write fail
+- B-4/B-5 also do direct SQL: `UPDATE trades SET exit_reason='journal_write_failed' WHERE trade_id=...` in own try/except
+
+## Stooges display rename (Batch 2, cosmetic only)
+oracle→"Larry (Oracle)", spy_qqq_trend→"Moe (SPY/QQQ)", jerome_macro→"Curly (Jerome)", buck_futures→"Curly Jr (Buck)"
+Changed in: bot-identity.ts IDENTITY_MAP displayName + discord.py _DISPLAY_NAMES. Zero DB/SQL/bot_id/envelope keys touched.
+
 ## How to apply
 - Any new safety guard exception handler: default to return the "blocked" value (True for is_halted/is_crisis/kill_switch, should_pause=True for drawdown guard).
-- Any close/order submission failure: call alert_critical() directly, wrap in its own try/except, then call record_degradation() in a second independent try/except.
+- Any close/order submission failure: call alert_critical() (rich embed) for full-sentence context, or notify_capital_risk() (plain text, rate-limited) for stop/journal failures that repeat every cycle.
 - Never call alert_critical() inside the degradation tracker — circular dependency risk.
+- notify_capital_risk rate-limit key is symbol.upper() — keep symbol-keyed to allow different symbols to fire independently.

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
+import HomePage from "@/pages/HomePage";
 import Dashboard from "@/pages/Dashboard";
 import StreamPage from "@/pages/StreamPage";
 import { GlobalNav } from "@/components/GlobalNav";
@@ -49,8 +50,8 @@ function Router() {
   return (
     <>
       <Switch>
-        <Route path="/"><Redirect to="/stream" /></Route>
-        <Route path="/home" component={Dashboard} />
+        <Route path="/" component={HomePage} />
+        <Route path="/home"><Redirect to="/" /></Route>
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
             <Suspense fallback={<StreamingLoader />}>

@@ -488,9 +488,12 @@ def _build_metrics_30d(errors: list) -> list[dict]:
     _sources = [
         {
             "bot_id": "oracle",
+            # ARC 4: exclude reconciliation tracking rows (is_recon_tracking=TRUE)
+            # so WR/expectancy only counts genuine oracle trades, not ghost-repair rows.
             "sql": """SELECT realized_pnl AS pnl FROM trades
                       WHERE asset_class = 'momentum_equity'
-                        AND status NOT IN ('Active') AND closed_at >= %s""",
+                        AND status NOT IN ('Active') AND closed_at >= %s
+                        AND NOT COALESCE(is_recon_tracking, FALSE)""",
         },
         {
             "bot_id": "spy_qqq_trend",

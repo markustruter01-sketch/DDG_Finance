@@ -16,4 +16,5 @@
 - [Bot2 safety fixes](bot2-safety-fixes.md) — Three post-OOS fixes: empty-response entry guard, 3-day exit last-3-bars, multi-lot TP dedup.
 - [SPY/QQQ OOS results](spy-qqq-oos-results.md) — MARGINAL: Sharpe 0.877 ✓, MaxDD ≤9% ✓, 2020 ✓, 2022 ✗ (−5.0%), 4/5 positive ✓. 3-day exit (all-80-bars) dominated turnover.
 - [ARC 2 walk-forward validation](arc2-walk-forward.md) — nightly WF job at 17:30 ET; Arc-0 filters; Phase K/L schema; oracle floor=-0.153, spy floor=-1.889; jerome/buck DISQUALIFIED.
+- [ARC 4 data model cleanup](arc4-data-model.md) — reconciliation_events table + is_recon_tracking column replace LIKE 'RECON-%' hack; shadow_signals ledger wired into all 4 bots.
 - [ARC 3 fail-closed safety pattern](arc3-fail-closed.md) — all 6 Bucket-C silent failures fixed; alert_critical() in discord.py is the direct-webhook path for capital alerts.

@@ -934,8 +934,10 @@ async def _run_pipeline_inner(
         # the trades table.  Any position that has no matching Active row gets
         # a backfill entry — self-healing past log_trade failures (DB churn,
         # server restarts mid-execution, SQLite→PostgreSQL migration gaps, etc).
+        # ARC 4: tracking rows tagged is_recon_tracking=TRUE + reconciliation_event written.
         try:
             from db.postgres import get_conn as _recon_gc, is_pg_available as _recon_pg
+            from db.postgres import record_reconciliation_event as _rec_recon_evt
             from analysis.trade_journal import log_trade as _recon_log
             if _recon_pg():
                 with _recon_gc() as _rc:
@@ -955,8 +957,18 @@ async def _run_pipeline_inner(
                     ):
                         continue
                     _recon_avg = float(_rpos.get("avg_entry_price") or 0) or None
+                    _recon_trade_id = f"RECON-{_rsym}-{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+                    # ARC 4: write audit event before inserting tracking row
+                    _rec_recon_evt(
+                        event_type="recon_insert",
+                        bot_id="oracle",
+                        symbol=_rsym,
+                        trade_id_ref=_recon_trade_id,
+                        detail=f"Alpaca position had no trades row; avg_entry={_recon_avg}",
+                        broker_state_snapshot={"avg_entry_price": _recon_avg},
+                    )
                     _recon_log(
-                        trade_id=f"RECON-{_rsym}-{datetime.now(timezone.utc).strftime('%Y%m%d')}",
+                        trade_id=_recon_trade_id,
                         ticker=_rsym,
                         asset_class="momentum_equity",
                         conviction_score=0.0,
@@ -964,8 +976,19 @@ async def _run_pipeline_inner(
                         intended_price=_recon_avg,
                         regime_at_entry=None,
                     )
+                    # ARC 4: tag tracking row so WR/expectancy use NOT is_recon_tracking
+                    try:
+                        with _recon_gc() as _rtag:
+                            with _rtag.cursor() as _rtag_cur:
+                                _rtag_cur.execute(
+                                    "UPDATE trades SET is_recon_tracking = TRUE "
+                                    "WHERE trade_id = %s",
+                                    (_recon_trade_id,),
+                                )
+                    except Exception as _rt_exc:
+                        logger.debug(f"Pipeline | is_recon_tracking tag failed: {_rt_exc}")
                     logger.info(
-                        f"Pipeline | Reconciler: inserted missing trades row for "
+                        f"Pipeline | Reconciler: tracking row + recon_event for "
                         f"{_rsym} (avg_entry={_recon_avg})"
                     )
         except Exception as _recon_exc:
@@ -1032,6 +1055,19 @@ async def _run_pipeline_inner(
                                     """,
                                     (_inv_trade_id,),
                                 )
+                        # ARC 4: write orphan-close event to reconciliation_events
+                        try:
+                            from db.postgres import record_reconciliation_event as _rec_oc
+                            _rec_oc(
+                                event_type="orphan_close",
+                                bot_id="oracle",
+                                symbol=_inv_ticker,
+                                trade_id_ref=_inv_trade_id,
+                                detail="DB Active row had no broker position — marked Closed_Reconciled",
+                                broker_state_snapshot={"broker_symbols": sorted(_inv_broker)},
+                            )
+                        except Exception as _oc_exc:
+                            logger.debug(f"Pipeline | orphan_close recon_event failed: {_oc_exc}")
                         _inv_deg(
                             component="oracle",
                             severity="medium",
@@ -1128,6 +1164,69 @@ async def _run_pipeline_inner(
                 f"Pipeline | {_actual_regime_label} regime filter: stripped "
                 f"{_dropped_tickers} — {len(_alloc_slots)} slot(s) remaining"
             )
+
+        # ── ARC 4: Oracle shadow signal ledger ────────────────────────────────
+        # Log every signal that passed the technical scan (long_slots + short_signals)
+        # tagged executed=TRUE if it made it into _alloc_slots, otherwise tagged with
+        # the gate that blocked it.  Fire-and-forget, never raises.
+        try:
+            from db.shadow_signals import log_shadow_signal as _log_oracle_shadow
+            _shadow_alloc_tickers = {s.ticker for s in _alloc_slots}
+            _shadow_dropped_set   = set(_dropped_tickers)
+
+            for _sig in _long_slots:
+                _sig_ticker = _sig.get("ticker", "")
+                if not _sig_ticker:
+                    continue
+                if _suppress_oracle_longs:
+                    _sig_skip, _sig_exec = "regime_gate", False
+                elif _sig_ticker in _shadow_dropped_set:
+                    _sig_skip, _sig_exec = "regime_gate", False
+                elif _sig_ticker in _shadow_alloc_tickers:
+                    _sig_skip, _sig_exec = None, True
+                else:
+                    _sig_skip, _sig_exec = "cap_full", False
+                _log_oracle_shadow(
+                    "oracle",
+                    _sig_ticker,
+                    side="long",
+                    entry_price_at_signal=_sig.get("price"),
+                    score=_sig.get("adx"),
+                    regime_at_signal=_actual_regime_label,
+                    executed=_sig_exec,
+                    skip_reason=_sig_skip,
+                    extra_context={
+                        "adx":        _sig.get("adx"),
+                        "ema_spread": _sig.get("ema_spread"),
+                        "rsi":        _sig.get("rsi"),
+                        "ret10d":     _sig.get("ret10d"),
+                        "atr":        _sig.get("atr"),
+                    },
+                )
+
+            for _sig in _oracle_short_signals:
+                _sig_ticker = _sig.get("ticker", "")
+                if not _sig_ticker:
+                    continue
+                _log_oracle_shadow(
+                    "oracle",
+                    _sig_ticker,
+                    side="short",
+                    entry_price_at_signal=_sig.get("price"),
+                    score=_sig.get("adx"),
+                    regime_at_signal=_actual_regime_label,
+                    executed=not _suppress_oracle_longs,
+                    skip_reason="regime_gate" if _suppress_oracle_longs else None,
+                    extra_context={
+                        "adx":        _sig.get("adx"),
+                        "ema_spread": _sig.get("ema_spread"),
+                        "rsi":        _sig.get("rsi"),
+                        "ret10d":     _sig.get("ret10d"),
+                        "atr":        _sig.get("atr"),
+                    },
+                )
+        except Exception as _oss_exc:
+            logger.debug(f"Pipeline | Oracle shadow signal logging failed (non-fatal): {_oss_exc}")
 
         # Edge case: filter emptied all entry signals
         if not _alloc_slots and not _oracle_stf_protected:

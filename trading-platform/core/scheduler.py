@@ -155,9 +155,54 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: nightly_walk_forward (Mon–Fri 17:30 ET)")
 
+    # ARC 4: 90-day retention sweep for shadow_signals (runs daily at 18:00 ET)
+    scheduler.add_job(
+        func=_shadow_signal_retention_sweep,
+        trigger=CronTrigger(
+            hour=18,
+            minute=0,
+            timezone="America/New_York",
+        ),
+        id="shadow_signal_retention",
+        name="Shadow Signal 90-Day Retention Sweep",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler | Registered: shadow_signal_retention (daily 18:00 ET)")
+
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
+
+
+async def _shadow_signal_retention_sweep() -> None:
+    """
+    ARC 4: delete shadow_signals rows older than 90 days.
+    Runs daily at 18:00 ET.  Fire-and-forget — logs result but never raises.
+    """
+    logger.info("Scheduler | JOB STARTING: shadow_signal_retention_sweep")
+    try:
+        loop = asyncio.get_event_loop()
+
+        def _sweep() -> int:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return 0
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM shadow_signals "
+                        "WHERE signal_ts < NOW() - INTERVAL '90 days'"
+                    )
+                    return cur.rowcount
+
+        deleted = await loop.run_in_executor(None, _sweep)
+        logger.info(
+            f"Scheduler | shadow_signal_retention_sweep complete: "
+            f"deleted {deleted} row(s) older than 90 days"
+        )
+    except Exception as exc:
+        logger.warning(f"Scheduler | shadow_signal_retention_sweep failed (non-fatal): {exc}")
 
 
 async def _intraday_cycle() -> None:

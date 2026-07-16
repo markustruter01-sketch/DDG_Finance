@@ -607,6 +607,21 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
 
     entries_this_cycle = 0
 
+    # ARC 4: fire-and-forget shadow signal helper (decision ledger without execution)
+    def _shadow_jv2(sym, dir_, price, score, *, executed: bool = False, skip: str | None = None) -> None:
+        try:
+            from db.shadow_signals import log_shadow_signal
+            log_shadow_signal(
+                "jerome_macro", sym,
+                side=dir_,
+                entry_price_at_signal=price,
+                score=score,
+                executed=executed,
+                skip_reason=skip,
+            )
+        except Exception:
+            pass
+
     for cand in candidates:
         if open_count >= MAX_POSITIONS:
             break
@@ -620,9 +635,11 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
         # ── Guard: already holding (DB gate — catches pending OPG orders) ──
         if _count_open_by_symbol(ticker) > 0:
             logger.debug(f"Jerome v2 | {ticker}: already open in DB — skip")
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="already_holding")
             continue
         if ticker in open_symbols:
             logger.debug(f"Jerome v2 | {ticker}: already open on Alpaca — skip")
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="already_holding")
             continue
 
         # ── Guard: theme cap ───────────────────────────────────────────────
@@ -632,11 +649,13 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
                 f"Jerome v2 | {ticker}: theme cap reached "
                 f"({theme} has {theme_open}/{THEME_CAP}) — skip"
             )
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="theme_cap")
             continue
 
         # ── Guard: ATR sanity ──────────────────────────────────────────────
         if atr <= 0:
             logger.debug(f"Jerome v2 | {ticker}: ATR={atr} invalid — skip")
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="atr_invalid")
             continue
 
         # ── Sizing ────────────────────────────────────────────────────────
@@ -660,6 +679,7 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
             logger.debug(
                 f"Jerome v2 | {ticker}: notional ${notional:.0f} < $500 — skip"
             )
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="min_position")
             continue
 
         # ── Guard: shared-account cash ─────────────────────────────────────
@@ -671,6 +691,7 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
                 f"Jerome v2 | {ticker}: insufficient shared-account cash "
                 f"(need ${notional:,.0f}, available=${cash_remaining:,.0f}) — skip"
             )
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="cash")
             continue
 
         # ── Submit order ───────────────────────────────────────────────────
@@ -683,6 +704,7 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
         order = alpaca.place_order(ticker, alpaca_side, notional)
         if order is None:
             logger.error(f"Jerome v2 | Order FAILED for {ticker} — skipping DB write")
+            _shadow_jv2(ticker, direction, close, cand["score"], skip="order_failed")
             continue
 
         # ── DB record ──────────────────────────────────────────────────────
@@ -699,6 +721,7 @@ def _run_entry_scan(alpaca: "JeromeAlpaca", equity: float, buying_power: float =
         open_symbols.add(ticker)
         entries_this_cycle += 1
         cash_remaining  -= notional   # deduct from shared-account cash tracker
+        _shadow_jv2(ticker, direction, close, cand["score"], executed=True)
 
     logger.info(
         f"Jerome v2 | === ENTRY SCAN END === "

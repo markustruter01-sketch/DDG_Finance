@@ -373,24 +373,47 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     except Exception as _cg_exc:
         logger.warning(f"Bot2 | CRISIS GATE: SPY fetch failed ({_cg_exc}) — fail-safe CRISIS active")
 
+    # ARC 4: fire-and-forget shadow signal helper (decision ledger without execution)
+    def _shadow_b2(sym, *, executed: bool = False, skip: str | None = None,
+                   price: float | None = None, score: float | None = None,
+                   extra: dict | None = None) -> None:
+        try:
+            from db.shadow_signals import log_shadow_signal
+            log_shadow_signal(
+                "spy_qqq_trend", sym,
+                side="long",
+                entry_price_at_signal=price,
+                score=score,
+                executed=executed,
+                skip_reason=skip,
+                extra_context=extra,
+            )
+        except Exception:
+            pass
+
     for symbol in UNIVERSE:
         if not _entry_scan_ok:
             logger.debug(f"Bot2 | {symbol}: entry guard active (empty Alpaca response) — skipped")
+            _shadow_b2(symbol, skip="empty_response_guard")
             continue
         if _crisis_gate:
             logger.debug(f"Bot2 | {symbol}: CRISIS gate — entry blocked")
+            _shadow_b2(symbol, skip="crisis")
             continue
         if symbol in held_symbols:
             logger.info(f"Bot2 | {symbol}: already holding — skip")
+            _shadow_b2(symbol, skip="already_holding")
             continue
 
         if deployed_pct + POSITION_SIZE_PCT > MAX_DEPLOYMENT:
             logger.info(f"Bot2 | Deployment ceiling reached ({deployed_pct*100:.1f}%) — skipping {symbol}")
+            _shadow_b2(symbol, skip="cap_full")
             continue
 
         enter, ctx = _should_enter(symbol)
         if not enter:
             logger.info(f"Bot2 | {symbol}: trend conditions not met — holding cash")
+            _shadow_b2(symbol, skip="signal_fail")
             continue
 
         entry_price = ctx["current_price"]
@@ -432,6 +455,11 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             deployed_pct += POSITION_SIZE_PCT
             held_symbols.add(symbol)
             live_positions = engine.get_positions()
+            _shadow_b2(
+                symbol, executed=True, price=entry_price,
+                score=ctx.get("adx"),
+                extra={"atr": atr, "notional": round(notional, 2)},
+            )
 
     # ── Trades reconciler (self-heals any missing trades rows every cycle) ─────
     engine.reconcile_etf_trades(BOT_ID)

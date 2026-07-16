@@ -43,7 +43,7 @@ def _fetch_win_rates() -> dict[str, tuple[int, int]]:
                       AND realized_pnl IS NOT NULL
                       AND exit_reason NOT LIKE 'orphan%'
                       AND exit_reason != 'reconciler_race_phantom'
-                      AND trade_id NOT LIKE 'RECON-%'
+                      AND NOT COALESCE(is_recon_tracking, FALSE)
                     GROUP BY 1
                 """)
                 for row in cur.fetchall():

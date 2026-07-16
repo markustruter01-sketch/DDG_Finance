@@ -598,6 +598,41 @@ CREATE TABLE IF NOT EXISTS market_state (
 CREATE INDEX IF NOT EXISTS idx_market_state_recorded_at
     ON market_state (recorded_at DESC);
 
+-- ARC 4: Reconciliation event ledger — replaces RECON-* pseudo-trade rows.
+-- Both reconcilers write here; trades table gets is_recon_tracking tag.
+CREATE TABLE IF NOT EXISTS reconciliation_events (
+    id                    BIGSERIAL PRIMARY KEY,
+    event_type            TEXT NOT NULL,   -- orphan_close / recon_insert / race_phantom / empty_response_skip
+    bot_id                TEXT NOT NULL,
+    symbol                TEXT,
+    trade_id_ref          TEXT,            -- trade_id of the trades row being described
+    detail                TEXT,
+    broker_state_snapshot JSONB,           -- snapshot of broker positions dict at event time
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_recon_events_bot_ts    ON reconciliation_events (bot_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recon_events_trade_ref ON reconciliation_events (trade_id_ref);
+
+-- ARC 4: Shadow-signal ledger — decision data without execution.
+-- One row per evaluated candidate per cycle; executed=TRUE if an order fired.
+-- Retention: 90-day nightly sweep (see scheduler.py).
+CREATE TABLE IF NOT EXISTS shadow_signals (
+    id                    BIGSERIAL PRIMARY KEY,
+    bot_id                TEXT NOT NULL,
+    symbol                TEXT NOT NULL,
+    side                  TEXT,            -- long / short / buy
+    signal_ts             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    entry_price_at_signal DOUBLE PRECISION,
+    score                 DOUBLE PRECISION,   -- bot-specific signal strength (ADX, EMA-score, etc.)
+    conviction            DOUBLE PRECISION,   -- 0–1 conviction weight (jerome/buck)
+    regime_at_signal      TEXT,
+    executed              BOOLEAN NOT NULL DEFAULT FALSE,
+    skip_reason           TEXT,              -- cap_full / regime_gate / crisis / cash / theme_cap / already_holding
+    extra_context         JSONB             -- additional fields (atr, ema_spread, kelly, etc.)
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_signals_bot_ts ON shadow_signals (bot_id, signal_ts DESC);
+CREATE INDEX IF NOT EXISTS idx_shadow_signals_symbol  ON shadow_signals (symbol, signal_ts DESC);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -610,6 +645,18 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS options_equity        DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS forex_equity          DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS is_recon_tracking    BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS recon_event_id       BIGINT;
+"""
+
+# ARC 4 backfill: tag existing RECON-* rows so WR/expectancy queries can use the
+# clean boolean predicate (NOT is_recon_tracking) instead of LIKE 'RECON-%'.
+# Idempotent — safe to run on every startup.
+_ARC4_BACKFILL_SQL = """
+UPDATE trades
+SET    is_recon_tracking = TRUE
+WHERE  trade_id LIKE 'RECON-%'
+  AND  NOT is_recon_tracking;
 """
 
 # Data-only backfill: safe to run repeatedly (idempotent WHERE clause)
@@ -661,6 +708,18 @@ def ensure_schema() -> None:
             logger.info(f"DB | Backfilled exit_reason for {updated} historical Oracle trade(s)")
     except Exception as exc:
         logger.warning(f"DB | exit_reason backfill failed (non-fatal): {exc}")
+
+    # ARC 4: tag existing RECON-* rows as is_recon_tracking=TRUE so WR queries
+    # can use the clean boolean predicate instead of LIKE 'RECON-%' string-match.
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(_ARC4_BACKFILL_SQL.strip())
+                updated = cur.rowcount
+        if updated:
+            logger.info(f"DB | ARC4 backfill: tagged {updated} RECON-* row(s) as is_recon_tracking=TRUE")
+    except Exception as exc:
+        logger.warning(f"DB | ARC4 is_recon_tracking backfill failed (non-fatal): {exc}")
 
     # One-time backfill: seed ratchet_stops for all 6 live Oracle equity positions.
     # ARM and MU had no broker GTC stops; placed manually 2026-06-15 (order_ids below).
@@ -1665,3 +1724,44 @@ def get_oracle_profit_reserve() -> dict:
     except Exception as exc:
         logger.error(f"OraclePR | get_oracle_profit_reserve failed: {exc}")
         return {"total_usd": 0.0, "contributions": 0, "last_contribution": 0.0, "last_ts": None}
+
+
+# ── ARC 4: Reconciliation event writer ────────────────────────────────────────
+
+def record_reconciliation_event(
+    event_type: str,
+    bot_id: str,
+    symbol: str | None = None,
+    trade_id_ref: str | None = None,
+    detail: str | None = None,
+    broker_state_snapshot: dict | None = None,
+) -> None:
+    """
+    ARC 4: Write one reconciliation_events row.
+    event_type: recon_insert | orphan_close | race_phantom | empty_response_skip
+    Fire-and-forget — never raises; all errors logged at DEBUG.
+    """
+    import json as _rce_json
+    try:
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO reconciliation_events
+                        (event_type, bot_id, symbol, trade_id_ref, detail,
+                         broker_state_snapshot)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        event_type,
+                        bot_id,
+                        symbol,
+                        trade_id_ref,
+                        detail,
+                        _rce_json.dumps(broker_state_snapshot) if broker_state_snapshot else None,
+                    ),
+                )
+    except Exception as exc:
+        logger.debug(f"DB | record_reconciliation_event failed (non-fatal): {exc}")

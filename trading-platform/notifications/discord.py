@@ -40,6 +40,18 @@ def _send_async(payload: dict) -> None:
     t.start()
 
 
+def alert_critical(title: str, description: str, fields: list[dict] | None = None) -> None:
+    """
+    Send a capital-safety CRITICAL alert directly via webhook.
+
+    Called from kill_switch, fleet_halt, drawdown_guard, exit_manager, and any
+    path where a safety check fails.  Does NOT route through the degradation
+    tracker — the webhook call fires even if the tracker itself is unavailable.
+    """
+    payload = {"embeds": [_embed(title, description, COLOR_RED, fields=fields)]}
+    _send_async(payload)
+
+
 def _embed(
     title: str,
     description: str,

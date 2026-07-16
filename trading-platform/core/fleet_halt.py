@@ -41,8 +41,22 @@ def is_halted() -> bool:
         _CACHE["checked_at"] = now
         return active
     except Exception as exc:
-        logger.debug(f"FleetHalt | DB check failed (non-fatal): {exc}")
-        return False
+        # C-2 fix: fail-HALTED when DB is unavailable.
+        # If we have a prior successful read in the cache, honour it — an operator
+        # halt written before the DB flap must still propagate.  If the cache is
+        # cold (first check, DB never reached), fail HALTED rather than fail-open.
+        if _CACHE["checked_at"] > 0:
+            logger.warning(
+                f"FleetHalt | DB check failed — returning cached value "
+                f"(active={_CACHE['active']}, "
+                f"{int(now - _CACHE['checked_at'])}s ago): {exc}"
+            )
+            return _CACHE["active"]
+        logger.warning(
+            f"FleetHalt | DB check failed with NO cached state — "
+            f"failing HALTED (fail-closed) to protect capital: {exc}"
+        )
+        return True
 
 
 def set_halt(active: bool, reason: str = "", halted_by: str = "operator") -> bool:

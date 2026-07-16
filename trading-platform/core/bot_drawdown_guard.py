@@ -141,8 +141,20 @@ def check_bot_drawdown(bot_id: str, current_equity: float) -> dict:
             conn.close()
 
     except Exception as exc:
-        logger.debug(f"DrawdownGuard | {bot_id} check failed (non-fatal): {exc}")
-        return _ok(current_equity, _STARTING)
+        # C-4 fix: fail-CLOSED — when the guard cannot be evaluated, pause rather
+        # than permit.  Transient: the caller re-checks each cycle; the moment DB
+        # recovers, the guard runs normally and will unpause if drawdown is fine.
+        logger.warning(
+            f"DrawdownGuard | {bot_id} check failed — returning should_pause=True "
+            f"(fail-closed, no capital deployed until guard recovers): {exc}"
+        )
+        return {
+            "should_pause":  True,
+            "reason":        "drawdown_guard_unavailable",
+            "drawdown_pct":  0.0,
+            "hwm":           round(current_equity, 2),
+            "current":       round(current_equity, 2),
+        }
 
 
 def _ok(current: float, hwm: float) -> dict:

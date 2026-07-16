@@ -241,8 +241,15 @@ def is_crisis() -> bool:
     try:
         state = get_market_state(persist=False)
         return state.get("regime") == "CRISIS"
-    except Exception:
-        return False
+    except Exception as exc:
+        # C-5 fix: fail-CLOSED — block entries rather than open them when crisis
+        # detection fails.  Matches the jerome/buck pattern (jerome_v2_strategy.py:473).
+        # Transient: every call recomputes fresh; recovers automatically next cycle.
+        logger.warning(
+            f"MarketState | is_crisis() check failed — failing CLOSED "
+            f"(treating as CRISIS to block entries): {exc}"
+        )
+        return True
 
 
 def get_market_state_with_history(history_limit: int = 5) -> dict[str, Any]:

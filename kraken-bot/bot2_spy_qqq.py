@@ -39,6 +39,53 @@ from alpaca_etf_engine import (
 
 logger = logging.getLogger("bot2.spy_qqq")
 
+
+def _safe_close(engine: "AlpacaEtfEngine", symbol: str, exit_reason: str,
+                realised_pnl: "float | None", bot_id: str) -> bool:
+    """
+    C-1 fix: check engine.close_position() return value before recording the close.
+
+    Returns True  → Alpaca close succeeded; caller should call record_close.
+    Returns False → Alpaca close failed; DB stays Active; next cycle retries.
+    """
+    ok = engine.close_position(symbol)
+    if ok:
+        return True
+
+    logger.error(
+        f"Bot2 | CLOSE FAILED for {symbol} ({exit_reason}) — "
+        f"close_position() returned False.  "
+        f"Position stays Active in DB.  Next cycle will retry the exit."
+    )
+    try:
+        from notifications.discord import alert_critical
+        alert_critical(
+            title=f"🔴 Bot2 SPY/QQQ | Position Close FAILED | {symbol}",
+            description=(
+                f"**{symbol}** ({exit_reason}): `close_position()` returned False — "
+                f"broker call failed or raised.\n"
+                f"Position remains **open at Alpaca**. "
+                f"DB row stays **Active** so next cycle retries the exit.\n"
+                f"No double-close risk — `record_close` was NOT called."
+            ),
+        )
+    except Exception as _da:
+        logger.error(f"Bot2 | Discord alert failed for {symbol}: {_da}")
+    try:
+        from core.degradation_tracker import record_degradation
+        record_degradation(
+            component="bot2_spy_qqq",
+            severity="critical",
+            error_type="close_position_failed",
+            message=(
+                f"{symbol} ({exit_reason}): close_position() returned False — "
+                f"position open at broker, DB stays Active, retry next cycle"
+            ),
+        )
+    except Exception as _deg_e:
+        logger.error(f"Bot2 | record_degradation failed for {symbol}: {_deg_e}")
+    return False
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 UNIVERSE         = ["SPY", "QQQ"]
@@ -236,8 +283,9 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             logger.info(f"Bot2 | EXIT {symbol}: {exit_reason}")
             live = next((p for p in live_positions if p["symbol"] == symbol), None)
             realised_pnl = live["unrealised_pnl_usd"] if live else None
-            engine.close_position(symbol)
-            engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
+            # C-1 fix: only record_close when broker confirmed the close.
+            if _safe_close(engine, symbol, exit_reason, realised_pnl, BOT_ID):
+                engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
             _closed_this_cycle.add(symbol)
             live_positions = engine.get_positions()
             continue
@@ -250,8 +298,9 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 logger.info(f"Bot2 | TREND EXIT {symbol}: {trend_reason}")
                 live = next((p for p in live_positions if p["symbol"] == symbol), None)
                 realised_pnl = live["unrealised_pnl_usd"] if live else None
-                engine.close_position(symbol)
-                engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
+                # C-1 fix: only record_close when broker confirmed the close.
+                if _safe_close(engine, symbol, trend_reason, realised_pnl, BOT_ID):
+                    engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
                 _closed_this_cycle.add(symbol)
                 live_positions = engine.get_positions()
 

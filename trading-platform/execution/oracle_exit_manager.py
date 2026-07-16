@@ -515,6 +515,35 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
         except Exception as exc:
             logger.error(f"ExitManager | Failed to close {symbol}: {exc}")
             result["errors"].append({"symbol": symbol, "error": str(exc)})
+            # C-6 fix: capital-risk failure — alert directly (not routed through
+            # degradation tracker) so the alert fires even if tracker is down.
+            try:
+                from notifications.discord import alert_critical
+                alert_critical(
+                    title=f"🔴 Oracle Exit FAILED | {symbol}",
+                    description=(
+                        f"**{symbol}** ({exit_reason}): `close_position()` raised an exception.\n"
+                        f"Position remains **open at Alpaca** with no stop reattached.\n"
+                        f"Next cycle will retry the exit automatically.\n"
+                        f"```{str(exc)[:300]}```"
+                    ),
+                )
+            except Exception as _da:
+                logger.error(f"ExitManager | Discord alert failed for {symbol}: {_da}")
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="oracle_exit",
+                    severity="critical",
+                    error_type="close_position_failed",
+                    message=(
+                        f"{symbol} ({exit_reason}): close_position() raised — "
+                        f"position open at broker, retry next cycle"
+                    ),
+                    detail=str(exc)[:500],
+                )
+            except Exception as _deg_e:
+                logger.error(f"ExitManager | record_degradation failed for {symbol}: {_deg_e}")
             continue
 
         # Clean up ratchet stop

@@ -187,8 +187,26 @@ def check(current_equity: float | None = None) -> bool:
         return False
 
     except Exception as exc:
-        logger.error(f"Kill switch check failed: {exc} — trading will continue")
-        return False
+        # C-3 fix: fail-CLOSED — treat as tripped so no new orders fire.
+        # Transient: next cycle calls check() fresh; if DB recovers, check
+        # proceeds normally and will return False if drawdown is within limits.
+        logger.critical(
+            f"Kill switch | check() raised — treating as TRIPPED to protect capital: {exc}"
+        )
+        try:
+            from notifications.discord import alert_critical
+            alert_critical(
+                title="🔴 KILL SWITCH | Check Exception — Treating as Tripped",
+                description=(
+                    f"Kill switch equity check raised an exception.\n"
+                    f"Trading **blocked this cycle** (fail-closed).\n"
+                    f"Next cycle re-evaluates fresh — if DB recovers the check resumes normally.\n"
+                    f"```{str(exc)[:300]}```"
+                ),
+            )
+        except Exception as _da:
+            logger.error(f"Kill switch | Discord alert failed: {_da}")
+        return True
 
 
 def manual_trip(reason: str = "manual_emergency") -> None:

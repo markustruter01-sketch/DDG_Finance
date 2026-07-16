@@ -309,7 +309,28 @@ def _record_trade_open(
         logger.info(f"Jerome v2 | DB: recorded OPEN {direction.upper()} {symbol} "
                     f"notional=${notional_usd:,.0f} entry={entry_price:.4f}")
     except Exception as exc:
-        logger.warning(f"Jerome v2 | _record_trade_open failed (non-fatal): {exc}")
+        # B-8 fix: broker order is LIVE but DB record failed — position untracked.
+        # Direct Discord alert + degradation so operator can reconcile manually.
+        logger.error(f"Jerome v2 | _record_trade_open FAILED — broker order LIVE but DB untracked: {exc}")
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 Jerome {symbol}: broker order LIVE but DB record failed — untracked position",
+                symbol=symbol,
+            )
+        except Exception:
+            pass
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="jerome_macro",
+                severity="high",
+                error_type="db_record_open_failed",
+                message=f"Jerome {symbol}: broker order LIVE but _record_trade_open failed — untracked",
+                detail=str(exc)[:400],
+            )
+        except Exception:
+            pass
 
 
 def _record_trade_close(row_id: int, exit_reason: str) -> None:
@@ -328,7 +349,28 @@ def _record_trade_close(row_id: int, exit_reason: str) -> None:
                 """, (exit_reason, row_id))
         logger.info(f"Jerome v2 | DB: recorded CLOSE id={row_id} reason={exit_reason}")
     except Exception as exc:
-        logger.warning(f"Jerome v2 | _record_trade_close({row_id}) failed (non-fatal): {exc}")
+        # B-8 fix: broker close is DONE but DB record failed — row stays 'open'.
+        logger.error(f"Jerome v2 | _record_trade_close({row_id}) FAILED — position may show Open in DB: {exc}")
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 Jerome: DB close record FAILED (id={row_id}, reason={exit_reason}) "
+                f"— position may still show Open in DB",
+                symbol=f"JEROME_ID{row_id}",
+            )
+        except Exception:
+            pass
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="jerome_macro",
+                severity="high",
+                error_type="db_record_close_failed",
+                message=f"Jerome id={row_id}: _record_trade_close failed — row may still show open",
+                detail=str(exc)[:400],
+            )
+        except Exception:
+            pass
 
 
 # ─── Time gate ────────────────────────────────────────────────────────────────

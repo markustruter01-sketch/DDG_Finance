@@ -579,8 +579,16 @@ def _has_safe_haven_momentum(allocations: list[dict]) -> bool:
             if mom == "positive":
                 return True
     except Exception as exc:
-        logger.debug(f"Allocator | Could not read safe-haven momentum: {exc}")
-        return True   # fail-safe: don't force SGOV if we can't check
+        # B-11 fix: fail-DEFENSIVE — in a bear/CRISIS path, unknown = defensive.
+        # Force SGOV rather than allowing risky allocation when the check can't run.
+        # This function is ONLY consulted inside _apply_bear_sgov_default which is
+        # ONLY called inside `if regime in _BEAR_REGIMES_ALLOC` — safe to flip;
+        # BULL regime never reaches this code.
+        logger.warning(
+            f"Allocator | _has_safe_haven_momentum check failed — "
+            f"defaulting to FORCE SGOV (fail-defensive, bear/CRISIS path only): {exc}"
+        )
+        return False   # False = no positive safe-haven momentum → SGOV sweep fires
 
     return False   # no safe haven has positive 3-month momentum
 

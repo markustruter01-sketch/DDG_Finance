@@ -992,7 +992,23 @@ def _execute_slot(
             from db.postgres import record_position_entry
             record_position_entry(ticker, entry_price=intended_price)
         except Exception as _et_exc:
-            logger.debug(f"Executor | record_position_entry failed for {ticker}: {_et_exc}")
+            # B-12 fix: debug→warning + degradation so this is grep-visible.
+            # 5-day inverse-ETF exit rule is blind for this position until resolved.
+            logger.warning(
+                f"Executor | record_position_entry failed for {ticker}: {_et_exc} "
+                f"— 5-day inverse-ETF exit rule blind for this position"
+            )
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="executor_entry",
+                    severity="medium",
+                    error_type="entry_timestamp_lost",
+                    message=f"entry_timestamp_lost — 5-day inverse-ETF rule blind for {ticker}",
+                    detail=str(_et_exc)[:300],
+                )
+            except Exception:
+                pass
 
         remaining_cash -= notional_usd
 

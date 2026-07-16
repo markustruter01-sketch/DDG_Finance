@@ -367,7 +367,27 @@ def _record_trade_open(
         logger.info(f"Buck Futures | DB: recorded OPEN {direction.upper()} {symbol} "
                     f"notional=${notional_usd:,.0f} entry={entry_price:.4f}")
     except Exception as exc:
-        logger.warning(f"Buck Futures | _record_trade_open failed (non-fatal): {exc}")
+        # B-8 fix: broker order is LIVE but DB record failed — position untracked.
+        logger.error(f"Buck Futures | _record_trade_open FAILED — broker order LIVE but DB untracked: {exc}")
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 Curly Jr {symbol}: broker order LIVE but DB record failed — untracked position",
+                symbol=symbol,
+            )
+        except Exception:
+            pass
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="buck_futures",
+                severity="high",
+                error_type="db_record_open_failed",
+                message=f"Buck {symbol}: broker order LIVE but _record_trade_open failed — untracked",
+                detail=str(exc)[:400],
+            )
+        except Exception:
+            pass
 
 
 def _record_trade_close(row_id: int, exit_reason: str) -> None:
@@ -386,7 +406,28 @@ def _record_trade_close(row_id: int, exit_reason: str) -> None:
                 """, (exit_reason, row_id))
         logger.info(f"Buck Futures | DB: recorded CLOSE id={row_id} reason={exit_reason}")
     except Exception as exc:
-        logger.warning(f"Buck Futures | _record_trade_close({row_id}) failed (non-fatal): {exc}")
+        # B-8 fix: broker close is DONE but DB record failed — row stays 'open'.
+        logger.error(f"Buck Futures | _record_trade_close({row_id}) FAILED — position may show Open in DB: {exc}")
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 Curly Jr: DB close record FAILED (id={row_id}, reason={exit_reason}) "
+                f"— position may still show Open in DB",
+                symbol=f"BUCK_ID{row_id}",
+            )
+        except Exception:
+            pass
+        try:
+            from core.degradation_tracker import record_degradation
+            record_degradation(
+                component="buck_futures",
+                severity="high",
+                error_type="db_record_close_failed",
+                message=f"Buck id={row_id}: _record_trade_close failed — row may still show open",
+                detail=str(exc)[:400],
+            )
+        except Exception:
+            pass
 
 
 # ─── Time gate ────────────────────────────────────────────────────────────────

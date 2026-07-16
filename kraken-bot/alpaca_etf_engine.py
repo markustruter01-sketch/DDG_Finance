@@ -314,6 +314,16 @@ class AlpacaEtfEngine:
             return True
         except Exception as exc:
             logger.error(f"EtfEngine | Close failed {symbol}: {exc}")
+            # B-6 fix: alert inside the engine so ANY caller gets the Discord ping
+            # even if it forgot to check the return value.
+            try:
+                from notifications.discord import notify_capital_risk
+                notify_capital_risk(
+                    f"🔴 {symbol}: ETF close_position FAILED at broker",
+                    symbol=symbol,
+                )
+            except Exception:
+                pass
             return False
 
     def close_partial(self, symbol: str, qty: float) -> bool:
@@ -494,7 +504,8 @@ class AlpacaEtfEngine:
             )
             logger.info(f"EtfEngine | log_trade: recorded trades row for {bot_id}/{symbol}")
         except Exception as _lt_exc:
-            logger.warning(f"EtfEngine | log_trade mirror failed (non-fatal): {_lt_exc}")
+            # B-10 fix: warning→error so grep finds mirror failures.
+            logger.error(f"EtfEngine | log_trade mirror failed: {_lt_exc}")
 
     def record_close(
         self,
@@ -548,7 +559,8 @@ class AlpacaEtfEngine:
                 )
                 logger.info(f"EtfEngine | close_trade: updated trades row for {bot_id}/{symbol}")
         except Exception as _ct_exc:
-            logger.warning(f"EtfEngine | close_trade mirror failed (non-fatal): {_ct_exc}")
+            # B-10 fix: warning→error so grep finds mirror failures.
+            logger.error(f"EtfEngine | close_trade mirror failed: {_ct_exc}")
 
     def reconcile_etf_trades(self, bot_id: str) -> None:
         """Mirror of Oracle reconciler for ETF bots.
@@ -602,7 +614,20 @@ class AlpacaEtfEngine:
                     f"{bot_id}/{sym} (entry={entry_px:.2f})"
                 )
         except Exception as exc:
-            logger.warning(f"EtfEngine | reconcile_etf_trades failed (non-fatal): {exc}")
+            # B-9 fix: self-healing layer failing must be visible — escalate to ERROR
+            # + record degradation so it surfaces in the dashboard audit trail.
+            logger.error(f"EtfEngine | reconcile_etf_trades FAILED — self-healing layer down: {exc}")
+            try:
+                from core.degradation_tracker import record_degradation
+                record_degradation(
+                    component="etf_reconciler",
+                    severity="medium",
+                    error_type="etf_reconciler_failed",
+                    message=f"ETF reconciler failed for bot_id={bot_id}: {str(exc)[:200]}",
+                    detail=str(exc)[:500],
+                )
+            except Exception:
+                pass
 
     def mark_scaled_out(self, bot_id: str, symbol: str, tier: int) -> None:
         """Mark tp1 or tp2 scale-out as done (tier=1 or tier=2)."""
@@ -707,6 +732,17 @@ class AlpacaEtfEngine:
                 if self.close_partial(symbol, scale_qty):
                     self.mark_scaled_out(bot_id, symbol, tier=2)
                     logger.info(f"EtfEngine | TP2 scale-out: {symbol} {scale_qty:.4f} shares")
+                else:
+                    # B-7 fix: alert on TP failure; scaled_out_tp2 NOT set so next
+                    # cycle retries the partial close automatically.
+                    try:
+                        from notifications.discord import notify_capital_risk
+                        notify_capital_risk(
+                            f"⚠️ {symbol}: TP scale-out FAILED — position stays full size",
+                            symbol=symbol,
+                        )
+                    except Exception:
+                        pass
             return None  # Position still open (partial close)
 
         # 4. TP1 scale-out
@@ -717,6 +753,16 @@ class AlpacaEtfEngine:
                 if self.close_partial(symbol, scale_qty):
                     self.mark_scaled_out(bot_id, symbol, tier=1)
                     logger.info(f"EtfEngine | TP1 scale-out: {symbol} {scale_qty:.4f} shares")
+                else:
+                    # B-7 fix: same — scaled_out_tp1 NOT set, retries next cycle.
+                    try:
+                        from notifications.discord import notify_capital_risk
+                        notify_capital_risk(
+                            f"⚠️ {symbol}: TP scale-out FAILED — position stays full size",
+                            symbol=symbol,
+                        )
+                    except Exception:
+                        pass
             return None  # Position still open (partial close)
 
         return None  # Hold

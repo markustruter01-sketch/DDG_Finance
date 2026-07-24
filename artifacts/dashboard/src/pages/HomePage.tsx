@@ -13,6 +13,7 @@ import {
 } from "@/hooks/useFleetData";
 import { useExportReport } from "@/hooks/use-kraken";
 import { useToast } from "@/hooks/use-toast";
+import { getBotIdentity } from "@/lib/bot-identity";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -366,7 +367,7 @@ function CurlyShipCard({ jerome, jeromeStatus, jeromeWF, buck, buckStatus, buckW
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] font-black tracking-[0.15em] uppercase"
             style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}>TITAN-CLASS</span>
-          <span className="text-[9px] text-slate-600">Curly · Jerome + Buck</span>
+          <span className="text-[9px] text-slate-600">{getBotIdentity("jerome_macro").shortName} · Jerome + {getBotIdentity("buck_futures").shortName}</span>
           <div className="ml-auto flex items-center gap-1.5">
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.color,
               boxShadow: `0 0 6px ${st.color}`, flexShrink: 0 }} />
@@ -375,9 +376,10 @@ function CurlyShipCard({ jerome, jeromeStatus, jeromeWF, buck, buckStatus, buckW
         </div>
 
         {([
-          { name: "MACRO-J", label: "Curly (Jerome)",  bot: jerome, status: jeromeStatus, wf: jeromeWF },
-          { name: "BUCK-F",  label: "Curly Jr (Buck)", bot: buck,   status: buckStatus,   wf: buckWF   },
-        ] as const).map(({ name, label, bot, status, wf }) => {
+          { id: "jerome_macro", bot: jerome, status: jeromeStatus, wf: jeromeWF },
+          { id: "buck_futures", bot: buck,   status: buckStatus,   wf: buckWF   },
+        ] as const).map(({ id, bot, status, wf }) => {
+          const { shortName: name, displayName: label } = getBotIdentity(id);
           const pnl = bot?.pnl ?? 0;
           const posC = pnl >= 0 ? "#4ade80" : "#f87171";
           const subSt = STATUS_SHIP[status];
@@ -510,10 +512,10 @@ function ExportDropdown({
       `──────────────────────────────────`,
       `FLEET TOTAL  ${fmtEq(total?.equity ?? 0)}  ${fmtPct(total?.pnl_pct ?? 0)}  ${fmtDollar(total?.pnl ?? 0)}`,
       ``,
-      `SPY-HAWK     ${fmtEq(spy?.equity ?? 0)}  ${fmtPct(spy?.pnl_pct ?? 0)}  ${fmtDollar(spy?.pnl ?? 0)}`,
-      `ORACLE-7     ${fmtEq(oracle?.equity ?? 0)}  ${fmtPct(oracle?.pnl_pct ?? 0)}  ${fmtDollar(oracle?.pnl ?? 0)}`,
-      `MACRO-J      ${fmtEq(jerome?.equity ?? 0)}  ${fmtPct(jerome?.pnl_pct ?? 0)}  ${fmtDollar(jerome?.pnl ?? 0)}`,
-      `BUCK-F       ${fmtEq(buck?.equity ?? 0)}  ${fmtPct(buck?.pnl_pct ?? 0)}  ${fmtDollar(buck?.pnl ?? 0)}`,
+      `${getBotIdentity("spy_qqq_trend").displayName.padEnd(16)}  ${fmtEq(spy?.equity ?? 0)}  ${fmtPct(spy?.pnl_pct ?? 0)}  ${fmtDollar(spy?.pnl ?? 0)}`,
+      `${getBotIdentity("oracle").displayName.padEnd(16)}  ${fmtEq(oracle?.equity ?? 0)}  ${fmtPct(oracle?.pnl_pct ?? 0)}  ${fmtDollar(oracle?.pnl ?? 0)}`,
+      `${getBotIdentity("jerome_macro").displayName.padEnd(16)}  ${fmtEq(jerome?.equity ?? 0)}  ${fmtPct(jerome?.pnl_pct ?? 0)}  ${fmtDollar(jerome?.pnl ?? 0)}`,
+      `${getBotIdentity("buck_futures").displayName.padEnd(16)}  ${fmtEq(buck?.equity ?? 0)}  ${fmtPct(buck?.pnl_pct ?? 0)}  ${fmtDollar(buck?.pnl ?? 0)}`,
       ``,
       `REGIME: ${regime ?? "UNKNOWN"}`,
       `KILL SWITCH: ${killTripped == null ? "UNKNOWN" : killTripped ? "TRIPPED ⚠" : "ARMED"}`,
@@ -669,21 +671,21 @@ export default function HomePage() {
   const pos = (fleetPnl ?? 0) >= 0;
   const pnlColor = pos ? "#4ade80" : "#f87171";
 
-  // Constellation stars (fixed angles, radius from equity)
+  // Constellation stars — labels from bot-identity.ts SSOT
   const stars = useMemo<BotStar[]>(() => [
-    { id: "spy",    label: "MOE",    equity: spy?.equity    ?? 100000, pnl: spy?.pnl    ?? 0, angle: -45  },
-    { id: "oracle", label: "LARRY",  equity: oracle?.equity ?? 100000, pnl: oracle?.pnl ?? 0, angle: 225  },
-    { id: "jerome", label: "CURLY",  equity: jerome?.equity ?? 100000, pnl: jerome?.pnl ?? 0, angle: 135  },
-    { id: "buck",   label: "BUCK",   equity: buck?.equity   ?? 100000, pnl: buck?.pnl   ?? 0, angle: 315  },
+    { id: "spy_qqq_trend", label: getBotIdentity("spy_qqq_trend").shortName, equity: spy?.equity    ?? 100000, pnl: spy?.pnl    ?? 0, angle: -45  },
+    { id: "oracle",        label: getBotIdentity("oracle").shortName,        equity: oracle?.equity ?? 100000, pnl: oracle?.pnl ?? 0, angle: 225  },
+    { id: "jerome_macro",  label: getBotIdentity("jerome_macro").shortName,  equity: jerome?.equity ?? 100000, pnl: jerome?.pnl ?? 0, angle: 135  },
+    { id: "buck_futures",  label: getBotIdentity("buck_futures").shortName,  equity: buck?.equity   ?? 100000, pnl: buck?.pnl   ?? 0, angle: 315  },
   ], [spy, oracle, jerome, buck]);
 
   // Ticker segments
   const tickerSegments = useMemo(() => {
     const segs: string[] = [
-      spy    ? `SPY-HAWK  ${fmtPct(spy.pnl_pct)}  ${fmtDollar(spy.pnl)}`       : null,
-      oracle ? `ORACLE-7  ${fmtPct(oracle.pnl_pct)}  ${fmtDollar(oracle.pnl)}` : null,
-      jerome ? `MACRO-J   ${fmtPct(jerome.pnl_pct)}  ${fmtDollar(jerome.pnl)}` : null,
-      buck   ? `BUCK-F    ${fmtPct(buck.pnl_pct)}  ${fmtDollar(buck.pnl)}`     : null,
+      spy    ? `${getBotIdentity("spy_qqq_trend").shortName}  ${fmtPct(spy.pnl_pct)}  ${fmtDollar(spy.pnl)}`    : null,
+      oracle ? `${getBotIdentity("oracle").shortName}  ${fmtPct(oracle.pnl_pct)}  ${fmtDollar(oracle.pnl)}` : null,
+      jerome ? `${getBotIdentity("jerome_macro").shortName}  ${fmtPct(jerome.pnl_pct)}  ${fmtDollar(jerome.pnl)}` : null,
+      buck   ? `${getBotIdentity("buck_futures").shortName}  ${fmtPct(buck.pnl_pct)}  ${fmtDollar(buck.pnl)}`   : null,
       total  ? `FLEET  ${fmtPct(total.pnl_pct)}  ${fmtDollar(total.pnl)}`      : null,
       `REGIME: ${regime ?? "…"}`,
       killTripped == null ? null : killTripped ? "KILL SWITCH: TRIPPED ⚠" : "KILL SWITCH: ARMED",
@@ -741,9 +743,9 @@ export default function HomePage() {
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
-        <ShipCard shipName="SPY-HAWK"  callsign="Moe · SPY/QQQ"  bot={spy}    status={spyStatus}
+        <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
           wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" posChips={spyChips} />
-        <ShipCard shipName="ORACLE-7"  callsign="Larry · Oracle"  bot={oracle} status={oraStatus}
+        <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
           wfStatus={wfMap.get("oracle")}        accent="#a78bfa" posChips={oraChips} />
         <CurlyShipCard
           jerome={jerome} jeromeStatus={jeromeStatus} jeromeWF={wfMap.get("jerome_macro")}

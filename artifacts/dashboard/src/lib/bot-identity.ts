@@ -3,21 +3,23 @@
 
 export interface BotIdentity {
   canonicalId: string;
-  displayName: string;
-  icon: string;
+  displayName: string; // Full label: "Moe (SPY/QQQ)"
+  shortName:   string; // Compact label for tight spaces: "Moe"
+  icon:        string;
 }
 
 const IDENTITY_MAP: Record<string, BotIdentity> = {
-  "oracle":        { canonicalId: "oracle",        displayName: "Larry (Oracle)",    icon: "🔮" },
-  "spy_qqq_trend": { canonicalId: "spy_qqq_trend", displayName: "Moe (SPY/QQQ)",    icon: "📈" },
-  "jerome_macro":  { canonicalId: "jerome_macro",  displayName: "Curly (Jerome)",   icon: "🏛️" },
-  "buck_futures":  { canonicalId: "buck_futures",  displayName: "Curly Jr (Buck)",  icon: "🐂" },
+  "oracle":        { canonicalId: "oracle",        displayName: "Larry (Oracle)",   shortName: "Larry",    icon: "🔮" },
+  "spy_qqq_trend": { canonicalId: "spy_qqq_trend", displayName: "Moe (SPY/QQQ)",   shortName: "Moe",      icon: "📈" },
+  "jerome_macro":  { canonicalId: "jerome_macro",  displayName: "Curly (Jerome)",  shortName: "Curly",    icon: "🏛️" },
+  "buck_futures":  { canonicalId: "buck_futures",  displayName: "Curly Jr (Buck)", shortName: "Curly Jr", icon: "🐂" },
 };
 
 export function getBotIdentity(id: string): BotIdentity {
   return IDENTITY_MAP[id] ?? {
     canonicalId: id,
     displayName: id,
+    shortName:   id,
     icon: "🤖",
   };
 }

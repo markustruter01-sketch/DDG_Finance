@@ -3,15 +3,16 @@
  * Animations: warp starfield pulse · constellation star map · scrolling comms ticker
  * Rule 27: all P&L values are server-computed — zero arithmetic on the client
  */
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   useFleetData,
   getBotStatus,
   fmtEq, fmtPct, fmtDollar,
-  STATUS_SHIP_LABEL,
   type BotSlice, type BotStatus,
 } from "@/hooks/useFleetData";
+import { useExportReport } from "@/hooks/use-kraken";
+import { useToast } from "@/hooks/use-toast";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -437,6 +438,204 @@ function RegimeChip({ regime }: { regime: string | undefined }) {
   );
 }
 
+// ── Export dropdown ───────────────────────────────────────────────────────────
+
+function ExportDropdown({
+  spy, oracle, jerome, buck, total, regime, killTripped,
+}: {
+  spy?: BotSlice; oracle?: BotSlice; jerome?: BotSlice; buck?: BotSlice;
+  total?: BotSlice; regime?: string; killTripped?: boolean | null;
+}) {
+  const [open, setOpen]     = useState(false);
+  const [busy, setBusy]     = useState<string | null>(null);
+  const ref                 = useRef<HTMLDivElement>(null);
+  const exportReport        = useExportReport();
+  const { toast }           = useToast();
+  const [, navigate]        = useLocation();
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const handleExportReport = useCallback(async () => {
+    setBusy("report");
+    try {
+      const result = await exportReport.mutateAsync();
+      const now = new Date();
+      const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+      const filename = `quant-terminal-report-${ts}.txt`;
+      const blob = new Blob([result.report], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Report downloaded", description: filename });
+      setOpen(false);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Export failed", description: err?.message ?? "Could not generate report." });
+    } finally { setBusy(null); }
+  }, [exportReport, toast]);
+
+  const handleClaudeBrief = useCallback(async () => {
+    setBusy("brief");
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
+      const res = await fetch(`${base}/claude-context`);
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      const text = data.prompt as string;
+      const date = new Date().toISOString().slice(0, 10);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `claude-brief-${date}.txt`; a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Claude Brief downloaded", description: `claude-brief-${date}.txt` });
+      setOpen(false);
+    } catch {
+      toast({ title: "Download failed", description: "Check the trading API is running.", variant: "destructive" });
+    } finally { setBusy(null); }
+  }, [toast]);
+
+  const handleCopyFleetStatus = useCallback(async () => {
+    setBusy("copy");
+    const lines = [
+      `STOOGE FLEET STATUS — ${new Date().toLocaleString()}`,
+      `──────────────────────────────────`,
+      `FLEET TOTAL  ${fmtEq(total?.equity ?? 0)}  ${fmtPct(total?.pnl_pct ?? 0)}  ${fmtDollar(total?.pnl ?? 0)}`,
+      ``,
+      `SPY-HAWK     ${fmtEq(spy?.equity ?? 0)}  ${fmtPct(spy?.pnl_pct ?? 0)}  ${fmtDollar(spy?.pnl ?? 0)}`,
+      `ORACLE-7     ${fmtEq(oracle?.equity ?? 0)}  ${fmtPct(oracle?.pnl_pct ?? 0)}  ${fmtDollar(oracle?.pnl ?? 0)}`,
+      `MACRO-J      ${fmtEq(jerome?.equity ?? 0)}  ${fmtPct(jerome?.pnl_pct ?? 0)}  ${fmtDollar(jerome?.pnl ?? 0)}`,
+      `BUCK-F       ${fmtEq(buck?.equity ?? 0)}  ${fmtPct(buck?.pnl_pct ?? 0)}  ${fmtDollar(buck?.pnl ?? 0)}`,
+      ``,
+      `REGIME: ${regime ?? "UNKNOWN"}`,
+      `KILL SWITCH: ${killTripped == null ? "UNKNOWN" : killTripped ? "TRIPPED ⚠" : "ARMED"}`,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(lines);
+      toast({ title: "Fleet status copied", description: "Paste into any AI or document." });
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = lines; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+      toast({ title: "Fleet status copied" });
+    } finally { setBusy(null); setOpen(false); }
+  }, [spy, oracle, jerome, buck, total, regime, killTripped, toast]);
+
+  const items = [
+    {
+      id: "report",
+      icon: "📥",
+      label: "Export Full Report",
+      sub: "quant-terminal-report-{ts}.txt",
+      action: handleExportReport,
+      accent: "#22d3ee",
+    },
+    {
+      id: "brief",
+      icon: "🧠",
+      label: "Claude Brief",
+      sub: "Paste into new Claude session",
+      action: handleClaudeBrief,
+      accent: "#a78bfa",
+    },
+    {
+      id: "copy",
+      icon: "📋",
+      label: "Copy Fleet Status",
+      sub: "Snapshot to clipboard",
+      action: handleCopyFleetStatus,
+      accent: "#4ade80",
+    },
+    {
+      id: "stream",
+      icon: "📡",
+      label: "Full Stream Report",
+      sub: "Live positions & analytics",
+      action: () => { navigate("/stream"); setOpen(false); },
+      accent: "#f59e0b",
+    },
+  ];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          fontSize: 10, fontFamily: "monospace", fontWeight: 700,
+          letterSpacing: "0.12em", textTransform: "uppercase",
+          padding: "4px 10px", borderRadius: 8,
+          background: open ? "rgba(34,211,238,0.12)" : "rgba(34,211,238,0.06)",
+          border: "1px solid rgba(34,211,238,0.22)",
+          color: "#22d3ee", cursor: "pointer",
+          transition: "all 0.15s",
+        }}
+      >
+        <span>EXPORT</span>
+        <span style={{ fontSize: 8, opacity: 0.7, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>▼</span>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 6px)", right: 0,
+            minWidth: 240, borderRadius: 12,
+            background: "rgba(6,10,22,0.98)",
+            border: "1px solid rgba(34,211,238,0.16)",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,211,238,0.08)",
+            backdropFilter: "blur(12px)",
+            zIndex: 100,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "8px 12px 6px", fontSize: 8, letterSpacing: "0.2em", color: "#334155", fontFamily: "monospace", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            REPORTS &amp; EXPORTS
+          </div>
+          {items.map((item) => (
+            <button
+              key={item.id}
+              disabled={busy === item.id}
+              onClick={item.action}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                width: "100%", padding: "10px 14px",
+                background: "transparent", border: "none",
+                cursor: busy === item.id ? "not-allowed" : "pointer",
+                opacity: busy !== null && busy !== item.id ? 0.4 : 1,
+                borderBottom: "1px solid rgba(255,255,255,0.04)",
+                textAlign: "left",
+                transition: "background 0.12s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = `${item.accent}12`)}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <span style={{ fontSize: 16, flexShrink: 0 }}>
+                {busy === item.id ? "⏳" : item.icon}
+              </span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: item.accent, fontFamily: "monospace", letterSpacing: "0.05em" }}>
+                  {busy === item.id ? "Working…" : item.label}
+                </div>
+                <div style={{ fontSize: 9, color: "#475569", fontFamily: "monospace", marginTop: 1 }}>
+                  {item.sub}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HomePage ──────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
@@ -520,7 +719,7 @@ export default function HomePage() {
             )}
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
           <RegimeChip regime={regime} />
           {killTripped != null && (
             <div className="flex items-center gap-1.5">
@@ -533,6 +732,10 @@ export default function HomePage() {
               </span>
             </div>
           )}
+          <ExportDropdown
+            spy={spy} oracle={oracle} jerome={jerome} buck={buck}
+            total={total ?? undefined} regime={regime} killTripped={killTripped}
+          />
         </div>
       </div>
 

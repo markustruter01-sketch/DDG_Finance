@@ -7,8 +7,15 @@ Entry:  Both EMA-50 and EMA-200 sloping upward AND price above EMA-50.
 Exit:   Price closes below EMA-50  OR  8% trailing stop  OR
         5% drop in any 3-day rolling window.
 Hold:   Minimum 5 trading days (locked by min_hold_until in DB).
-Sizing: 40% equity per position when trend confirmed (max 80% deployed,
-        20% cash reserve always maintained).
+Sizing: Vol-targeted per position (target_vol=12% ann, 25% hard cap) via
+        core.vol_targeting.vol_scaled_size — Stage 2 wiring. (Legacy: 40%.)
+        Max 80% deployed; 20% cash reserve always maintained.
+Regime: core.regional_regime.regional_regime("SPY") gates all entries.
+        Blocks on CRISIS (20d ≤ -12%) AND BEAR (EMA-50 < EMA-200).
+        More conservative than the old SPY-crisis-only inline check.
+Corr:   Correlation cap (core.correlation_cap) is EXEMPT within bot2.
+        SPY + QQQ are intentionally held together (OOS-validated paired
+        position). The cap applies at portfolio level across bots (Stage 5).
 Cycle:  Once daily at ~4:30 PM ET (after market close) — triggered by
         main.py LOOP_SLEEP_SECONDS + caller schedule.
 
@@ -36,6 +43,22 @@ from alpaca_etf_engine import (
     calculate_atr,
     _yahoo_daily_ohlcv,
 )
+
+# ── Stage 2: risk-module imports from trading-platform/core/ ──────────────────
+# runner.py puts trading-platform/ first on sys.path before any bot is loaded,
+# so these resolve correctly in both live and test contexts.
+# Fail-safe: import errors set _RISK_MODULES_OK=False → sizing returns 0
+# (skip entry) and regime check defaults to CRISIS (block entry).
+try:
+    from core.vol_targeting import vol_scaled_size as _vol_scaled_size
+    from core.regional_regime import regional_regime as _regional_regime
+    _RISK_MODULES_OK = True
+except ImportError as _rme:
+    logger.warning(f"Bot2 | Stage 2 risk modules unavailable ({_rme}) — fail-safe mode active")
+    _RISK_MODULES_OK = False
+    def _vol_scaled_size(*a, **kw): return 0          # type: ignore[misc]
+    def _regional_regime(*a, **kw): return {"entries_allowed": False, "regime": "CRISIS",  # type: ignore[misc]
+                                            "fail_safe": True, "fail_safe_reason": "import_failed"}
 
 logger = logging.getLogger("bot2.spy_qqq")
 
@@ -93,7 +116,9 @@ EMA_FAST         = 50
 EMA_SLOW         = 200
 TRAIL_STOP_PCT   = 0.08
 MAX_3DAY_DROP_PCT = 0.05
-POSITION_SIZE_PCT = 0.40
+POSITION_SIZE_PCT = 0.40   # LEGACY — kept for reference; no longer used for sizing
+VOL_TARGET_VOL   = 0.12   # Stage 2: target 12% annualised vol per position
+VOL_SIZE_CAP     = 0.25   # Stage 2: hard cap (matches core.vol_targeting.MAX_POSITION_FRAC)
 MIN_HOLD_DAYS    = 5
 MAX_DEPLOYMENT   = 0.80   # never deploy more than 80% of equity
 CASH_RESERVE     = 0.20   # minimum 20% cash always
@@ -346,32 +371,34 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         f"max={MAX_DEPLOYMENT*100:.0f}%"
     )
 
-    # ── MSE CRISIS gate: fail-safe CRISIS until SPY data confirms NOT in crisis ─
-    # Default True = block entries. Only cleared when SPY 20d return > -12% AND
-    # data is sufficient. Transient: clears automatically once data is available.
-    _crisis_gate = True
+    # ── Stage 2 regime gate — regional_regime("SPY") ─────────────────────────
+    # For US Core (SPY/QQQ), the per-ETF regime IS the global regime (same signal).
+    # Blocks entries when:
+    #   • SPY 20d return ≤ -12%  (CRISIS — same threshold as old inline gate)
+    #   • SPY EMA-50 < EMA-200   (BEAR  — new, more conservative than old gate)
+    #   • global_override CRISIS  (same SPY data: won't double-gate for SPY)
+    # Fail-safe: any module error → entries_allowed=False (CRISIS). Identical
+    # fail direction to the previous inline gate.
+    _crisis_gate = True   # default: block until confirmed open
     try:
-        from alpaca_etf_engine import _yahoo_daily_ohlcv as _spy_ohlcv
-        _spy_data = _spy_ohlcv("SPY", days=30)
-        if _spy_data:
-            _spy_c = _spy_data.get("closes") or []
-            if len(_spy_c) >= 21:
-                _spy_20d = float(_spy_c[-1]) / float(_spy_c[-21]) - 1
-                _crisis_gate = _spy_20d <= -0.12
-                if _crisis_gate:
-                    logger.warning(
-                        f"Bot2 | CRISIS GATE: SPY 20d {_spy_20d:+.1%} <= -12% "
-                        f"— all new entries blocked this cycle"
-                    )
-            else:
-                logger.warning(
-                    f"Bot2 | CRISIS GATE: insufficient SPY data "
-                    f"({len(_spy_c)} bars) — fail-safe CRISIS active"
-                )
+        _regime_state = _regional_regime("SPY")
+        _crisis_gate  = not _regime_state.get("entries_allowed", False)
+        _regime_label = _regime_state.get("regime", "UNKNOWN")
+        _regime_fs    = _regime_state.get("fail_safe", True)
+        if _crisis_gate:
+            logger.warning(
+                f"Bot2 | REGIME GATE: SPY regime={_regime_label} "
+                f"ret20d={_regime_state.get('ret_20d', 0) or 0:+.1%} "
+                f"entries_allowed=False — all new entries blocked this cycle"
+                + (" (fail-safe active)" if _regime_fs else "")
+            )
         else:
-            logger.warning("Bot2 | CRISIS GATE: SPY data unavailable — fail-safe CRISIS active")
+            logger.info(
+                f"Bot2 | REGIME GATE: SPY regime={_regime_label} "
+                f"ret20d={_regime_state.get('ret_20d', 0) or 0:+.1%} — entries open"
+            )
     except Exception as _cg_exc:
-        logger.warning(f"Bot2 | CRISIS GATE: SPY fetch failed ({_cg_exc}) — fail-safe CRISIS active")
+        logger.warning(f"Bot2 | REGIME GATE: regional_regime failed ({_cg_exc}) — fail-safe CRISIS active")
 
     # ARC 4: fire-and-forget shadow signal helper (decision ledger without execution)
     def _shadow_b2(sym, *, executed: bool = False, skip: str | None = None,
@@ -405,7 +432,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             _shadow_b2(symbol, skip="already_holding")
             continue
 
-        if deployed_pct + POSITION_SIZE_PCT > MAX_DEPLOYMENT:
+        if deployed_pct + VOL_SIZE_CAP > MAX_DEPLOYMENT:   # VOL_SIZE_CAP=0.25 is worst-case vol-targeted notional
             logger.info(f"Bot2 | Deployment ceiling reached ({deployed_pct*100:.1f}%) — skipping {symbol}")
             _shadow_b2(symbol, skip="cap_full")
             continue
@@ -418,11 +445,25 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
 
         entry_price = ctx["current_price"]
         atr         = ctx["atr"]
-        notional    = equity * POSITION_SIZE_PCT
 
-        # Safety check: don't deploy if cash would drop below reserve
-        if notional > equity * (1 - CASH_RESERVE):
-            notional = equity * (1 - CASH_RESERVE)
+        # ── Stage 2: vol-targeted sizing ────────────────────────────────────
+        # vol_scaled_size returns whole shares (0 on any data failure).
+        # 0 → skip entry (fail-CLOSED — never trade unguarded).
+        try:
+            _shares = _vol_scaled_size(equity, symbol, entry_price, target_vol=VOL_TARGET_VOL)
+        except Exception as _vs_exc:
+            logger.warning(f"Bot2 | {symbol}: vol_scaled_size failed ({_vs_exc}) — skipping (fail-safe)")
+            _shares = 0
+        if _shares == 0:
+            logger.warning(
+                f"Bot2 | {symbol}: vol_scaled_size=0 — skipping entry "
+                f"(fail-CLOSED: insufficient vol data or equity too small)"
+            )
+            _shadow_b2(symbol, skip="vol_target_zero")
+            continue
+        notional = _shares * entry_price     # whole-share notional (≤ 25% equity by construction)
+        # Safety backstop: never go below cash reserve (belt-and-suspenders)
+        notional = min(notional, equity * (1 - CASH_RESERVE))
 
         # Calculate stops and TPs
         stop_price = entry_price * (1 - TRAIL_STOP_PCT)
@@ -452,7 +493,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 tp2_price=tp2_price,
                 min_hold_days=MIN_HOLD_DAYS,
             )
-            deployed_pct += POSITION_SIZE_PCT
+            deployed_pct += notional / equity   # track actual vol-targeted fraction
             held_symbols.add(symbol)
             live_positions = engine.get_positions()
             _shadow_b2(

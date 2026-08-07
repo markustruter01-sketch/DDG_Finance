@@ -84,7 +84,7 @@ except ImportError:
 
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
-    ("blackbeard",       "jerome_v2_strategy",    "run_jerome_v2_cycle"),
+    ("blackbeard",       "latam_trend_strategy",  "run_latam_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
     # Re-enabled 2026-05-30: config.py buck_futures profile updated to use
     # ALPACA_JEROME_API_KEY / ALPACA_JEROME_SECRET_KEY (shared Jerome account,

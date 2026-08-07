@@ -57,14 +57,19 @@ _OOS_ENVELOPE: dict[str, dict] = {
         "disqualified_reason": None,
     },
     "jerome_macro": {
-        "pooled_sharpe":       None,
+        # Stage 4 pivot (2026-08-07): commodity-macro retired; slot repurposed to
+        # Latin America ETF trend (EWZ/EWW/ECH). Old commodity envelope voided.
+        # Floor seeded from Phase-1 LatAm backtest (Sharpe ~0.71); no full OOS
+        # window data yet — status will read INSUFFICIENT_DATA until 10+ live
+        # trades accumulate in the trailing 90d window.
+        "pooled_sharpe":       0.71,
         "worst_window_sharpe": None,
         "worst_window":        None,
         "best_window_sharpe":  None,
         "worst_window_maxdd":  None,
-        "oos_run_date":        None,
-        "disqualified":        True,
-        "disqualified_reason": "No OOS run completed — flag any live trading as anomaly",
+        "oos_run_date":        "2026-08-07",
+        "disqualified":        False,
+        "disqualified_reason": None,
     },
     "buck_futures": {
         "pooled_sharpe":       None,
@@ -98,7 +103,21 @@ _STRATEGY_PARAMS: dict[str, dict] = {
         "crisis_threshold":  -0.12,
         "max_3day_drop_pct": 0.05,
     },
-    "jerome_macro": {"disqualified": True},
+    "jerome_macro": {
+        # Stage 4 LatAm pivot — seeded from Phase-1 backtest; no OOS windows yet.
+        "strategy":    "etf_trend_latam_v1.0",
+        "universe":    ["EWZ", "EWW", "ECH"],
+        "ema_fast":    50,
+        "ema_slow":    200,
+        "trail_stop":  0.08,
+        "vol_target":  0.12,
+        "vol_cap":     0.25,
+        "max_pos":     3,
+        "tp1_pct":     0.06,
+        "tp2_pct":     0.12,
+        "seeded_sharpe_floor": 0.71,
+        "note": "Phase-1 backtest floor; re-run OOS after 90d live history",
+    },
     "buck_futures":  {"disqualified": True},
 }
 

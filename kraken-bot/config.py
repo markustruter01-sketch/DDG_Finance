@@ -42,34 +42,29 @@ BOT_PROFILES = {
         "LOSS_STREAK_COOLDOWN_HOURS": 6,
     },
     "blackbeard": {
-        "display_name":      "Jerome",
+        # Stage 4 (2026-08-07): commodity-macro retired; slot repurposed to
+        # Latin America ETF trend strategy (EWZ/EWW/ECH).
+        "display_name":      "Latin America",
         "db_id":             2,
-        "strategy_type":     "llm_commodity",
-        "strategy_label":    "LLM Commodity Macro",
+        "strategy_type":     "etf_trend_latam",
+        "strategy_label":    "LatAm ETF Trend (EWZ/EWW/ECH)",
         # ── Alpaca account (Jerome's dedicated paper account) ──────────────────
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 900,       # 15-min polling (exits checked every cycle)
-        # ── Universe ──────────────────────────────────────────────────────────
-        "COMMODITY_UNIVERSE": [
-            "GLD", "SLV", "GDX", "GDXJ", "PPLT",
-            "USO", "BNO", "UNG", "XLE", "OIH",
-            "DBA", "WEAT", "CORN", "SOYB", "JO",
-            "COPX", "JJC", "PDBC", "GSG", "DJP",
-        ],
-        "COMMODITY_THEMES": {
-            "precious_metals": ["GLD", "SLV", "GDX", "GDXJ", "PPLT"],
-            "energy":          ["USO", "BNO", "UNG", "XLE", "OIH"],
-            "agriculture":     ["DBA", "WEAT", "CORN", "SOYB", "JO"],
-            "industrial":      ["COPX", "JJC", "PDBC", "GSG", "DJP"],
-        },
-        # ── Risk management ───────────────────────────────────────────────────
+        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour; entry once/day at close)
+        # ── Universe (ARGT excluded per brief amendment) ──────────────────────
+        "LATAM_UNIVERSE":    ["EWZ", "EWW", "ECH"],
+        # ── Risk management (mirrors validated bot2 params) ───────────────────
         "MAX_POSITIONS":     3,
-        "STOP_LOSS_PCT":     0.04,     # 4% hard stop per position
-        "TAKE_PROFIT_PCT":   0.08,     # 8% default take-profit
-        "MAX_HOLD_DAYS":     21,       # time-stop
-        "MIN_CONVICTION":    0.65,     # Groq conviction threshold to enter
+        "VOL_TARGET":        0.12,
+        "VOL_CAP":           0.25,
+        "TRAIL_STOP_PCT":    0.08,
+        "TP1_PCT":           0.06,
+        "TP2_PCT":           0.12,
+        "MIN_HOLD_DAYS":     5,
+        "MAX_DEPLOYMENT":    0.80,
+        "BOT_PAUSED":        False,
     },
     "calypso": {
         "display_name": "Calypso's Tide",

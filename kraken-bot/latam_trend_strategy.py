@@ -106,7 +106,7 @@ try:
 except Exception as _cc_err:
     _CORR_CAP_OK = False
     logger.error(f"LatAm | correlation_cap import FAILED — cap disabled: {_cc_err}")
-    def _corr_cap_check_real(*a, **kw): return True, "stub_allow"  # type: ignore[misc]
+    def _corr_cap_check_real(*a, **kw): return False, "fail_safe_blocked"  # type: ignore[misc]
     def _fetch_price_history(tickers, days=90): return {}            # type: ignore[misc]
 
 
@@ -147,8 +147,8 @@ def _corr_cap_check(candidate: str, held_etfs: list[str]) -> tuple[bool, str]:
         price_history = _fetch_price_history(all_tickers, days=90)
         return _corr_cap_check_real(candidate, held_etfs, price_history)
     except Exception as exc:
-        logger.error(f"LatAm | corr_cap_check({candidate}) error: {exc}")
-        return True, "error_allow"
+        logger.error(f"LatAm | corr_cap_check({candidate}) error — fail-CLOSED: {exc}")
+        return False, "fail_safe_blocked"
 
 
 # ── Cross-bot held-ETF helper ─────────────────────────────────────────────────

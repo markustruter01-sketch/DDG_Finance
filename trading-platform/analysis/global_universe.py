@@ -2,6 +2,14 @@
 PRE-REGISTERED 2026-08-06. Universe locked before backtest.
 Selection = liquidity + diversification only. No performance-based changes
 permitted without documented re-registration.
+
+RE-REGISTRATION 2026-08-06 — ARGT REMOVED:
+  Argentina ETF (ARGT) excluded on structural grounds: Alpaca IEX data audit
+  revealed 25 gap events including single-day moves of 25.8% that a daily-close
+  8% trailing stop physically cannot manage. This is a market-microstructure
+  disqualification (peso devaluation / capital-control events), NOT a
+  performance-based exclusion. Re-registered at same date. No other tickers
+  changed. Universe shrinks from 17 to 16 tickers.
 """
 
 # ── GLOBAL REGIONAL ETF UNIVERSE ─────────────────────────────────────────────

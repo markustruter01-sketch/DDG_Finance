@@ -186,7 +186,7 @@ def _get_cross_bot_held_etfs(exclude_bot_id: str = BOT_ID) -> list[str]:
                 cur.execute("""
                     SELECT DISTINCT symbol
                     FROM   alpaca_etf_positions
-                    WHERE  status   = 'Active'
+                    WHERE  status   = 'open'
                       AND  bot_id  != %s
                 """, (exclude_bot_id,))
                 return [row[0] for row in cur.fetchall()]

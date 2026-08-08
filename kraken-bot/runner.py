@@ -84,6 +84,9 @@ except ImportError:
 
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
+    # Stage 3B (2026-08-07): oracle slot repurposed to Asia-Pacific ETF trend.
+    # bot_id stays "oracle" (frozen — DB, dashboard, fleet equity all key on it).
+    ("oracle",           "asia_trend_strategy",   "run_asia_cycle"),
     ("blackbeard",       "latam_trend_strategy",  "run_latam_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
     # Re-enabled 2026-05-30: config.py buck_futures profile updated to use

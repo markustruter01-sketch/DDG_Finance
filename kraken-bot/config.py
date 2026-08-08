@@ -21,6 +21,31 @@ PAPER_FEE_PCT = 0.0026
 GLOBAL_EMERGENCY_STOP = False
 
 BOT_PROFILES = {
+    "oracle": {
+        # Stage 3B (2026-08-07): oracle stock-scanner retired; slot repurposed to
+        # Asia-Pacific ETF trend strategy (EWY/EWT/INDA/EWJ/EWM/VNM).
+        "display_name":      "Asia-Pacific",
+        "db_id":             5,
+        "strategy_type":     "etf_trend_asia",
+        "strategy_label":    "Asia-Pacific ETF Trend (EWY/EWT/INDA/EWJ/EWM/VNM)",
+        # ── Alpaca account (oracle's dedicated paper account) ──────────────────
+        "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
+        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
+        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
+        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour; entry once/day at close)
+        # ── Universe ──────────────────────────────────────────────────────────
+        "ASIA_UNIVERSE":     ["EWY", "EWT", "INDA", "EWJ", "EWM", "VNM"],
+        # ── Risk management (mirrors validated bot2/LatAm params) ─────────────
+        "MAX_POSITIONS":     4,        # 6-ETF universe; max 3–4 concurrent
+        "VOL_TARGET":        0.12,
+        "VOL_CAP":           0.25,
+        "TRAIL_STOP_PCT":    0.08,
+        "TP1_PCT":           0.06,
+        "TP2_PCT":           0.12,
+        "MIN_HOLD_DAYS":     5,
+        "MAX_DEPLOYMENT":    0.80,
+        "BOT_PAUSED":        False,
+    },
     "davy-jones": {
         "display_name": "Davy Jones' Portfolio",
         "db_id": 1,

@@ -37,12 +37,17 @@ from loguru import logger
 
 _OOS_ENVELOPE: dict[str, dict] = {
     "oracle": {
-        "pooled_sharpe":       0.633,
-        "worst_window_sharpe": -0.153,
-        "worst_window":        "2021",
-        "best_window_sharpe":  1.526,
-        "worst_window_maxdd":  0.170,
-        "oos_run_date":        "2026-07-14",
+        # Stage 3B (2026-08-07): oracle stock-scanner envelope VOIDED.
+        # Slot repurposed to Asia-Pacific ETF trend (EWY/EWT/INDA/EWJ/EWM/VNM).
+        # Floor seeded from Phase-1 Asia backtest (Sharpe ~0.74); no full OOS
+        # window data yet — status will read INSUFFICIENT_DATA until 10+ live
+        # trades accumulate in the trailing 90d window.
+        "pooled_sharpe":       0.74,
+        "worst_window_sharpe": None,
+        "worst_window":        None,
+        "best_window_sharpe":  None,
+        "worst_window_maxdd":  None,
+        "oos_run_date":        "2026-08-07",
         "disqualified":        False,
         "disqualified_reason": None,
     },
@@ -88,8 +93,20 @@ _OOS_ENVELOPE: dict[str, dict] = {
 
 _STRATEGY_PARAMS: dict[str, dict] = {
     "oracle": {
-        "strategy": "stf_v1.0_momentum_equity",
-        "note":     "STF v1.0 deployed config as-of 2026-07-14 OOS run",
+        # Stage 3B (2026-08-07): Asia-Pacific ETF trend pivot.
+        # Old stf_v1.0_momentum_equity params voided; seeded from Phase-1 backtest.
+        "strategy":    "etf_trend_asia_v1.0",
+        "universe":    ["EWY", "EWT", "INDA", "EWJ", "EWM", "VNM"],
+        "ema_fast":    50,
+        "ema_slow":    200,
+        "trail_stop":  0.08,
+        "vol_target":  0.12,
+        "vol_cap":     0.25,
+        "max_pos":     4,
+        "tp1_pct":     0.06,
+        "tp2_pct":     0.12,
+        "seeded_sharpe_floor": 0.74,
+        "note": "Phase-1 backtest floor; re-run OOS after 90d live history",
     },
     "spy_qqq_trend": {
         "ema_fast":          50,
@@ -134,12 +151,9 @@ def compute_params_hash(bot_id: str) -> str:
 
 _ARC0: dict[str, str] = {
     "oracle": """
-        AND status       NOT IN ('Active')
-        AND closed_at    IS NOT NULL
-        AND realized_pnl IS NOT NULL
-        AND exit_reason  NOT LIKE '%%[v1_duplicate]%%'
-        AND exit_reason  != 'reconciler_race_phantom'
-        AND exit_reason  != 'stf_v1_liquidation'
+        AND status           = 'closed'
+        AND realised_pnl_usd IS NOT NULL
+        AND opened_at        >= '2026-08-07 00:00:00+00'
     """,
     "spy_qqq_trend": """
         AND status       = 'closed'
@@ -177,11 +191,13 @@ def _fetch_closed_trades(bot_id: str, days_back: int) -> list[tuple[datetime, fl
         with get_conn() as conn:
             with conn.cursor() as cur:
                 if bot_id == "oracle":
+                    # Stage 3B (2026-08-07): oracle slot is now Asia-Pacific ETF
+                    # trend. Reads from alpaca_etf_positions (same as jerome_macro).
                     cur.execute(f"""
-                        SELECT closed_at, realized_pnl
-                        FROM   trades
-                        WHERE  asset_class = 'momentum_equity'
-                          AND  closed_at  >= %s
+                        SELECT closed_at, realised_pnl_usd::float
+                        FROM   alpaca_etf_positions
+                        WHERE  bot_id    = 'oracle'
+                          AND  closed_at >= %s
                           {arc0}
                         ORDER  BY closed_at
                     """, (cutoff,))

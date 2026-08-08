@@ -9,7 +9,7 @@ export interface BotIdentity {
 }
 
 const IDENTITY_MAP: Record<string, BotIdentity> = {
-  "oracle":        { canonicalId: "oracle",        displayName: "Larry (Oracle)",   shortName: "Larry",    icon: "🔮" },
+  "oracle":        { canonicalId: "oracle",        displayName: "Asia-Pacific",     shortName: "Asia",     icon: "🌏" },
   "spy_qqq_trend": { canonicalId: "spy_qqq_trend", displayName: "Moe (SPY/QQQ)",   shortName: "Moe",      icon: "📈" },
   "jerome_macro":  { canonicalId: "jerome_macro",  displayName: "Latin America",  shortName: "LatAm",    icon: "🌎" },
   "buck_futures":  { canonicalId: "buck_futures",  displayName: "Curly Jr (Buck)", shortName: "Curly Jr", icon: "🐂" },

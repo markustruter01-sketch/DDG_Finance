@@ -66,22 +66,23 @@ BOT_PROFILES = {
         "LOSS_STREAK_LIMIT": 12,
         "LOSS_STREAK_COOLDOWN_HOURS": 6,
     },
-    "blackbeard": {
-        # Stage 4 (2026-08-07): commodity-macro retired; slot repurposed to
-        # Latin America ETF trend strategy (EWZ/EWW/ECH).
-        "display_name":      "Latin America",
+    "jerome_macro": {
+        # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)
+        # merged into one 8-ETF Emerging Markets bot. Resolves the two-bots-one-account
+        # collision. Jerome account (6da42513) is now the sole account for this bot.
+        "display_name":      "Emerging Markets",
         "db_id":             2,
-        "strategy_type":     "etf_trend_latam",
-        "strategy_label":    "LatAm ETF Trend (EWZ/EWW/ECH)",
-        # ── Alpaca account (Jerome's dedicated paper account) ──────────────────
+        "strategy_type":     "etf_trend_em",
+        "strategy_label":    "EM ETF Trend (EWZ/EWW/ECH/EEM/EZA/EPOL/GREK/TUR)",
+        # ── Alpaca account (Jerome's dedicated paper account — sole EM bot) ───
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour; entry once/day at close)
-        # ── Universe (ARGT excluded per brief amendment) ──────────────────────
-        "LATAM_UNIVERSE":    ["EWZ", "EWW", "ECH"],
-        # ── Risk management (mirrors validated bot2 params) ───────────────────
-        "MAX_POSITIONS":     3,
+        # ── Universe ──────────────────────────────────────────────────────────
+        "EM_UNIVERSE":       ["EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR"],
+        # ── Risk management ───────────────────────────────────────────────────
+        "MAX_POSITIONS":     4,        # 8-ETF basket; high-vol names trim naturally
         "VOL_TARGET":        0.12,
         "VOL_CAP":           0.25,
         "TRAIL_STOP_PCT":    0.08,
@@ -194,34 +195,19 @@ BOT_PROFILES = {
         "BOT_PAUSED":        False,
     },
 
-    # ── Buck Futures — Frontier / Emerging-Markets ETF trend-following ────────
-    # Stage 5 (2026-08-11): commodity strategy retired; slot repurposed to
-    # Frontier/EM ETF trend strategy (EEM/EZA/EPOL/GREK/TUR).
-    # Shares Jerome paper account with blackbeard/LatAm — non-overlapping universe.
+    # ── buck_futures — RETIRED (Stage 5 merge, 2026-08-11) ────────────────────
+    # Slot merged into jerome_macro (EM bot). Not dispatched by runner.py.
+    # Kept here for reference; BOT_PAUSED=True prevents accidental activation.
     "buck_futures": {
-        "display_name":      "Frontier",
+        "display_name":      "Frontier (RETIRED — merged into EM)",
         "db_id":             6,
         "strategy_type":     "etf_trend_frontier",
-        "strategy_label":    "Frontier/EM ETF Trend (EEM/EZA/EPOL/GREK/TUR)",
-        # Shares the Jerome paper account — partitioned by non-overlapping symbol universe.
-        # LatAm (blackbeard) trades: EWZ, EWW, ECH
-        # Frontier (buck_futures) trades: EEM, EZA, EPOL, GREK, TUR
+        "strategy_label":    "RETIRED — merged into jerome_macro EM bot",
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 3600,          # hourly cycle (exits every hour; entry once/day at close)
-        # ── Universe ──────────────────────────────────────────────────────────
-        "FRONTIER_UNIVERSE": ["EEM", "EZA", "EPOL", "GREK", "TUR"],
-        # ── Risk management (mirrors validated bot2/LatAm/Asia params) ────────
-        "MAX_POSITIONS":     3,        # 5-ETF high-vol basket; expect 1–2 in practice
-        "VOL_TARGET":        0.12,
-        "VOL_CAP":           0.25,
-        "TRAIL_STOP_PCT":    0.08,
-        "TP1_PCT":           0.06,
-        "TP2_PCT":           0.12,
-        "MIN_HOLD_DAYS":     5,
-        "MAX_DEPLOYMENT":    0.80,
-        "BOT_PAUSED":        False,
+        "LOOP_SLEEP_SECONDS": 3600,
+        "BOT_PAUSED":        True,     # permanently retired — do not activate
     },
 }
 

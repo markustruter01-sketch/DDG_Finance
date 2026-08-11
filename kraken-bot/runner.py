@@ -84,16 +84,14 @@ except ImportError:
 
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
 BOTS = [
-    # Stage 3B (2026-08-07): oracle slot repurposed to Asia-Pacific ETF trend.
-    # bot_id stays "oracle" (frozen — DB, dashboard, fleet equity all key on it).
-    ("oracle",           "asia_trend_strategy",   "run_asia_cycle"),
-    ("blackbeard",       "latam_trend_strategy",  "run_latam_cycle"),
-    ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
-    # Stage 5 (2026-08-11): buck_futures slot repurposed to Frontier/EM ETF trend.
-    # bot_id stays "buck_futures" (frozen — DB, dashboard, fleet equity all key on it).
-    # Alpaca account: ALPACA_JEROME_API_KEY / ALPACA_JEROME_SECRET_KEY (Jerome paper
-    # account, shared with blackbeard/LatAm — partitioned by non-overlapping universe).
-    ("buck_futures",     "frontier_trend_strategy", "run_frontier_cycle"),
+    # Final 3-bot fleet (Stage 5 merge, 2026-08-11):
+    #   US Core  (bot2_spy_qqq) → BB account     (3d743bc5)
+    #   Asia     (oracle)       → Oracle account  (caa2a89b)
+    #   EM       (jerome_macro) → Jerome account  (6da42513)
+    # LatAm + Frontier merged into a single EM bot on one account; no account sharing.
+    ("oracle",        "asia_trend_strategy", "run_asia_cycle"),
+    ("jerome_macro",  "em_trend_strategy",   "run_em_cycle"),
+    ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint
@@ -116,15 +114,9 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
     Returns True if write succeeded, False if any step failed.
     All exceptions are caught — never propagates.
 
-    Note: buck_futures shares the Jerome account (6da42513-...) with blackbeard.
-    Its equity is NOT written here — blackbeard's cycle already writes the shared
-    account equity to jerome_macro. Writing it again under buck_futures would
-    double-count that account in the fleet total. Buck is tracked as a $100k
-    notional sim entry in bot_portfolio; its equity does not change via Alpaca writes.
+    Stage 5 merge (2026-08-11): buck_futures retired; jerome_macro is now the sole
+    EM bot on account 6da42513. No account-sharing special cases needed.
     """
-    if bot_id == "buck_futures":
-        logger.debug(f"[{bot_id}] portfolio write skipped — shares Jerome account; tracked as notional sim")
-        return True
     if not _portfolio_write_ok or not _heartbeat_ok:
         return False
     try:

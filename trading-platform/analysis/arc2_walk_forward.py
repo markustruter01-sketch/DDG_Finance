@@ -62,27 +62,11 @@ _OOS_ENVELOPE: dict[str, dict] = {
         "disqualified_reason": None,
     },
     "jerome_macro": {
-        # Stage 4 pivot (2026-08-07): commodity-macro retired; slot repurposed to
-        # Latin America ETF trend (EWZ/EWW/ECH). Old commodity envelope voided.
-        # Floor seeded from Phase-1 LatAm backtest (Sharpe ~0.71); no full OOS
-        # window data yet — status will read INSUFFICIENT_DATA until 10+ live
-        # trades accumulate in the trailing 90d window.
-        "pooled_sharpe":       0.71,
-        "worst_window_sharpe": None,
-        "worst_window":        None,
-        "best_window_sharpe":  None,
-        "worst_window_maxdd":  None,
-        "oos_run_date":        "2026-08-07",
-        "disqualified":        False,
-        "disqualified_reason": None,
-    },
-    "buck_futures": {
-        # Stage 5 (2026-08-11): commodity strategy retired; slot repurposed to
-        # Frontier/EM ETF trend (EEM/EZA/EPOL/GREK/TUR). Old commodity envelope voided.
-        # Floor seeded from Phase-1 Frontier backtest (Sharpe ~0.77); no full OOS
-        # window data yet — status will read INSUFFICIENT_DATA until 10+ live
-        # trades accumulate in the trailing 90d window.
-        "pooled_sharpe":       0.77,
+        # Stage 5 merge (2026-08-11): LatAm (0.71) + Frontier (0.77) merged into
+        # one 8-ETF Emerging Markets bot. Blended floor = 0.74 (midpoint of both
+        # Phase-1 backtests). No full OOS window data yet — status will read
+        # INSUFFICIENT_DATA until 10+ live trades accumulate in trailing 90d window.
+        "pooled_sharpe":       0.74,
         "worst_window_sharpe": None,
         "worst_window":        None,
         "best_window_sharpe":  None,
@@ -90,6 +74,18 @@ _OOS_ENVELOPE: dict[str, dict] = {
         "oos_run_date":        "2026-08-11",
         "disqualified":        False,
         "disqualified_reason": None,
+    },
+    "buck_futures": {
+        # Stage 5 merge (2026-08-11): buck_futures slot retired — merged into
+        # jerome_macro EM bot. Envelope voided; DISQUALIFIED so arc2 ignores it.
+        "pooled_sharpe":       None,
+        "worst_window_sharpe": None,
+        "worst_window":        None,
+        "best_window_sharpe":  None,
+        "worst_window_maxdd":  None,
+        "oos_run_date":        None,
+        "disqualified":        True,
+        "disqualified_reason": "Slot retired — merged into jerome_macro EM bot (Stage 5, 2026-08-11)",
     },
 }
 
@@ -126,35 +122,21 @@ _STRATEGY_PARAMS: dict[str, dict] = {
         "max_3day_drop_pct": 0.05,
     },
     "jerome_macro": {
-        # Stage 4 LatAm pivot — seeded from Phase-1 backtest; no OOS windows yet.
-        "strategy":    "etf_trend_latam_v1.0",
-        "universe":    ["EWZ", "EWW", "ECH"],
+        # Stage 5 merge (2026-08-11): LatAm + Frontier merged into EM bot.
+        "strategy":    "etf_trend_em_v1.0",
+        "universe":    ["EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR"],
         "ema_fast":    50,
         "ema_slow":    200,
         "trail_stop":  0.08,
         "vol_target":  0.12,
         "vol_cap":     0.25,
-        "max_pos":     3,
+        "max_pos":     4,
         "tp1_pct":     0.06,
         "tp2_pct":     0.12,
-        "seeded_sharpe_floor": 0.71,
-        "note": "Phase-1 backtest floor; re-run OOS after 90d live history",
+        "seeded_sharpe_floor": 0.74,
+        "note": "Blended Phase-1 floor (LatAm 0.71 + Frontier 0.77); re-run OOS after 90d",
     },
-    "buck_futures": {
-        # Stage 5 (2026-08-11): Frontier/EM ETF pivot — seeded from Phase-1 backtest.
-        "strategy":    "etf_trend_frontier_v1.0",
-        "universe":    ["EEM", "EZA", "EPOL", "GREK", "TUR"],
-        "ema_fast":    50,
-        "ema_slow":    200,
-        "trail_stop":  0.08,
-        "vol_target":  0.12,
-        "vol_cap":     0.25,
-        "max_pos":     3,
-        "tp1_pct":     0.06,
-        "tp2_pct":     0.12,
-        "seeded_sharpe_floor": 0.77,
-        "note": "Phase-1 backtest floor; re-run OOS after 90d live history",
-    },
+    "buck_futures": {"disqualified": True, "retired": "merged into jerome_macro EM bot"},
 }
 
 
@@ -182,8 +164,9 @@ _ARC0: dict[str, str] = {
     "jerome_macro": """
         AND status           = 'closed'
         AND realised_pnl_usd IS NOT NULL
-        AND opened_at        >= '2026-05-28 00:00:00+00'
+        AND opened_at        >= '2026-08-11 00:00:00+00'
     """,
+    # buck_futures retired — no live trades expected under this bot_id going forward
     "buck_futures": """
         AND status           = 'closed'
         AND realised_pnl_usd IS NOT NULL

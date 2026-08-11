@@ -89,10 +89,11 @@ BOTS = [
     ("oracle",           "asia_trend_strategy",   "run_asia_cycle"),
     ("blackbeard",       "latam_trend_strategy",  "run_latam_cycle"),
     ("bot2_spy_qqq",     "bot2_spy_qqq",          "run_bot2_cycle"),
-    # Re-enabled 2026-05-30: config.py buck_futures profile updated to use
-    # ALPACA_JEROME_API_KEY / ALPACA_JEROME_SECRET_KEY (shared Jerome account,
-    # symbol-partitioned). Position-cap and cash guard prevent cross-bot interference.
-    ("buck_futures",     "buck_futures_strategy", "run_buck_futures_cycle"),
+    # Stage 5 (2026-08-11): buck_futures slot repurposed to Frontier/EM ETF trend.
+    # bot_id stays "buck_futures" (frozen — DB, dashboard, fleet equity all key on it).
+    # Alpaca account: ALPACA_JEROME_API_KEY / ALPACA_JEROME_SECRET_KEY (Jerome paper
+    # account, shared with blackbeard/LatAm — partitioned by non-overlapping universe).
+    ("buck_futures",     "frontier_trend_strategy", "run_frontier_cycle"),
 ]
 
 # Per-bot status tracker for health endpoint

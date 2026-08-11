@@ -12,7 +12,7 @@ const IDENTITY_MAP: Record<string, BotIdentity> = {
   "oracle":        { canonicalId: "oracle",        displayName: "Asia-Pacific",     shortName: "Asia",     icon: "🌏" },
   "spy_qqq_trend": { canonicalId: "spy_qqq_trend", displayName: "US Core",          shortName: "US Core",  icon: "📈" },
   "jerome_macro":  { canonicalId: "jerome_macro",  displayName: "Latin America",  shortName: "LatAm",    icon: "🌎" },
-  "buck_futures":  { canonicalId: "buck_futures",  displayName: "Curly Jr (Buck)", shortName: "Curly Jr", icon: "🐂" },
+  "buck_futures":  { canonicalId: "buck_futures",  displayName: "Frontier",        shortName: "Frontier", icon: "🌍" },
 };
 
 export function getBotIdentity(id: string): BotIdentity {

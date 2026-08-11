@@ -194,23 +194,33 @@ BOT_PROFILES = {
         "BOT_PAUSED":        False,
     },
 
-    # ── Buck Futures — Industrial & Broad commodity trend-following ─────────
-    # Repurposes the retired forex navigator slot.
-    # Strategy: clone of Jerome v2 (EMA/ADX/ATR) on DBB, PICK, DBC, PDBC, GSG.
-    # Inherits navigator/forex Alpaca account (ALPACA_API_KEY / ALPACA_SECRET_KEY).
-    # DB: writes to jerome_positions with bot_id='buck_futures'.
+    # ── Buck Futures — Frontier / Emerging-Markets ETF trend-following ────────
+    # Stage 5 (2026-08-11): commodity strategy retired; slot repurposed to
+    # Frontier/EM ETF trend strategy (EEM/EZA/EPOL/GREK/TUR).
+    # Shares Jerome paper account with blackbeard/LatAm — non-overlapping universe.
     "buck_futures": {
-        "display_name":      "Buck Futures",
+        "display_name":      "Frontier",
         "db_id":             6,
-        "strategy_type":     "commodity_trend",
-        "strategy_label":    "Commodity Trend (Industrial & Broad)",
+        "strategy_type":     "etf_trend_frontier",
+        "strategy_label":    "Frontier/EM ETF Trend (EEM/EZA/EPOL/GREK/TUR)",
         # Shares the Jerome paper account — partitioned by non-overlapping symbol universe.
-        # Jerome trades: GLD, SLV, GDX, GDXJ, XLE, USO, XOP
-        # Buck trades:   DBB, PICK, DBC, PDBC, GSG
+        # LatAm (blackbeard) trades: EWZ, EWW, ECH
+        # Frontier (buck_futures) trades: EEM, EZA, EPOL, GREK, TUR
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 900,           # 15-min polling (exits every cycle)
+        "LOOP_SLEEP_SECONDS": 3600,          # hourly cycle (exits every hour; entry once/day at close)
+        # ── Universe ──────────────────────────────────────────────────────────
+        "FRONTIER_UNIVERSE": ["EEM", "EZA", "EPOL", "GREK", "TUR"],
+        # ── Risk management (mirrors validated bot2/LatAm/Asia params) ────────
+        "MAX_POSITIONS":     3,        # 5-ETF high-vol basket; expect 1–2 in practice
+        "VOL_TARGET":        0.12,
+        "VOL_CAP":           0.25,
+        "TRAIL_STOP_PCT":    0.08,
+        "TP1_PCT":           0.06,
+        "TP2_PCT":           0.12,
+        "MIN_HOLD_DAYS":     5,
+        "MAX_DEPLOYMENT":    0.80,
         "BOT_PAUSED":        False,
     },
 }

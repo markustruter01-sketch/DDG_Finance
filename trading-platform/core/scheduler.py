@@ -210,6 +210,21 @@ async def _intraday_cycle() -> None:
 
     logger.info("Scheduler | JOB STARTING: intraday_cycle")
 
+    # Stage 3B (2026-08-11): oracle stock-scanner retired — slot repurposed to
+    # Asia-Pacific ETF trend (asia_trend_strategy via kraken-bot/runner.py).
+    # Hard-stop this job so it cannot open new stock positions after publish.
+    # Belt-and-suspenders: also reads bots_state.paused from DB.
+    try:
+        from core.bot_state import is_paused as _is_bot_paused
+        if _is_bot_paused("oracle"):
+            logger.info("Scheduler | oracle paused in DB — intraday_cycle skipped (Stage 3B retirement)")
+            return
+    except Exception as _pause_chk_err:
+        logger.warning(f"Scheduler | oracle pause-check failed ({_pause_chk_err}) — continuing")
+    # Hard-exit: oracle stock pipeline is permanently retired as of Stage 3B publish.
+    logger.info("Scheduler | intraday_cycle DISABLED — oracle stock scanner retired (Stage 3B). ETF bots run via runner.py.")
+    return
+
     if not is_market_open():
         logger.info("Scheduler | Market closed — skipping intraday cycle")
         return

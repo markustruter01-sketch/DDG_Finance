@@ -362,6 +362,12 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
         except Exception as _deg_exc:
             logger.warning(f"Bot2 | degradation_tracker write failed (non-fatal): {_deg_exc}")
 
+    # Exclude SGOV cash-park from deployment math, position count, and caps.
+    # Must happen AFTER the empty-response guard so a SGOV-only account
+    # doesn't incorrectly trigger "Alpaca returned [] but DB has open rows".
+    from sgov_parking import filter_alpha_positions as _filter_alpha
+    live_positions = _filter_alpha(live_positions)
+
     deployed_usd   = sum(p["market_value"] for p in live_positions)
     deployed_pct   = deployed_usd / equity if equity > 0 else 1.0
     held_symbols   = {p["symbol"] for p in live_positions}
@@ -417,6 +423,23 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             )
         except Exception:
             pass
+
+    # Sell SGOV first to free cash before placing any entry orders (same cycle).
+    # Only runs if entries are actually allowed this cycle to avoid a pointless
+    # sell + re-buy when the crisis gate or entry guard would block all entries.
+    if _entry_scan_ok and not _crisis_gate:
+        try:
+            from sgov_parking import unpark_for_entry as _sgov_unpark
+            _all_pos_with_sgov = engine.get_positions()
+            if any(p["symbol"] == "SGOV" for p in _all_pos_with_sgov):
+                _freed = _sgov_unpark(engine, "Bot2", _all_pos_with_sgov)
+                if _freed > 0:
+                    # Refresh account cash after unpark so deployment math is accurate
+                    _fresh_acct = engine.get_account()
+                    deployed_usd  = sum(p["market_value"] for p in live_positions)
+                    deployed_pct  = deployed_usd / equity if equity > 0 else 1.0
+        except Exception as _up_exc:
+            logger.debug(f"Bot2 | SGOV unpark error (non-fatal): {_up_exc}")
 
     for symbol in UNIVERSE:
         if not _entry_scan_ok:
@@ -504,6 +527,14 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
 
     # ── Trades reconciler (self-heals any missing trades rows every cycle) ─────
     engine.reconcile_etf_trades(BOT_ID)
+
+    # ── SGOV idle-cash parking ─────────────────────────────────────────────────
+    try:
+        from sgov_parking import park_idle_cash as _sgov_park
+        _park_acct = engine.get_account()
+        _sgov_park(engine, "Bot2", engine.get_positions(), _park_acct["cash"])
+    except Exception as _park_exc:
+        logger.debug(f"Bot2 | SGOV park error (non-fatal): {_park_exc}")
 
     # ── Portfolio heartbeat ────────────────────────────────────────────────────
     live_positions = engine.get_positions()

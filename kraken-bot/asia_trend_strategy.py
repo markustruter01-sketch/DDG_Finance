@@ -462,10 +462,23 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
 
     if not _in_entry_window():
         logger.info("Asia | Outside entry window — exit-only cycle complete")
+        # Park idle cash after exit-only cycle
+        try:
+            from sgov_parking import park_idle_cash as _sgov_park
+            _exit_acct = engine.get_account()
+            _sgov_park(engine, "Asia", engine.get_positions(), _exit_acct["cash"])
+        except Exception as _sp_exc:
+            logger.debug(f"Asia | SGOV park (exit-only path) error (non-fatal): {_sp_exc}")
         return
 
     logger.info("Asia | === ENTRY SCAN (post-close window) ===")
     _last_entry_scan_date = datetime.now(timezone.utc).date()
+
+    # Exclude SGOV cash-park from position counts, deployment math, and corr-cap.
+    # This must happen AFTER the empty-response guard so that a SGOV-only account
+    # doesn't falsely trigger the guard (Alpaca returning only SGOV ≠ API empty).
+    from sgov_parking import filter_alpha_positions as _filter_alpha
+    live_positions = _filter_alpha(live_positions)
 
     # Position cap
     current_count  = len(live_positions)
@@ -578,6 +591,15 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         reverse=True,
     )
 
+    # Sell SGOV first to free cash before placing any entry orders
+    if candidates:
+        try:
+            from sgov_parking import unpark_for_entry as _sgov_unpark
+            _all_pos_with_sgov = engine.get_positions()
+            _sgov_unpark(engine, "Asia", _all_pos_with_sgov)
+        except Exception as _up_exc:
+            logger.debug(f"Asia | SGOV unpark error (non-fatal): {_up_exc}")
+
     for cand in candidates:
         if current_count >= MAX_POSITIONS:
             break
@@ -638,5 +660,13 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
                 )
             except Exception:
                 pass
+
+    # Park idle cash in SGOV after all entry/exit logic completes
+    try:
+        from sgov_parking import park_idle_cash as _sgov_park
+        _park_acct = engine.get_account()
+        _sgov_park(engine, "Asia", engine.get_positions(), _park_acct["cash"])
+    except Exception as _park_exc:
+        logger.debug(f"Asia | SGOV park error (non-fatal): {_park_exc}")
 
     logger.info(f"Asia | Cycle complete. Positions: {current_count}")

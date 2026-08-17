@@ -633,6 +633,18 @@ CREATE TABLE IF NOT EXISTS shadow_signals (
 CREATE INDEX IF NOT EXISTS idx_shadow_signals_bot_ts ON shadow_signals (bot_id, signal_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_shadow_signals_symbol  ON shadow_signals (symbol, signal_ts DESC);
 
+-- Life-of-platform fleet equity history — one row per day, written by the nightly scheduler.
+-- Powers the sparkline on the home dashboard. ON CONFLICT DO UPDATE keeps only the latest
+-- value for each date so re-runs are idempotent.
+CREATE TABLE IF NOT EXISTS fleet_equity_history (
+    id            SERIAL      PRIMARY KEY,
+    snapshot_date DATE        NOT NULL UNIQUE,
+    total_equity  NUMERIC     NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_equity_history_date
+    ON fleet_equity_history (snapshot_date DESC);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

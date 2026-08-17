@@ -222,3 +222,34 @@ export function useBotRegistry() {
     staleTime: 60_000,
   });
 }
+
+// ── Sparkline + World Map ─────────────────────────────────────────────────────
+
+export interface FleetHistoryPoint { date: string; total_equity: number }
+export interface FleetHistoryResponse { history: FleetHistoryPoint[] }
+
+export function useFleetHistory() {
+  return useQuery<FleetHistoryResponse>({
+    queryKey: ["fleet-equity-history"],
+    queryFn: async () => (await api.get("/fleet/equity-history")).data,
+    staleTime: 300_000,
+    refetchInterval: useVisibleInterval(600_000),
+    retry: 1,
+  });
+}
+
+export interface RegionStatus {
+  oracle:        boolean;
+  spy_qqq_trend: boolean;
+  jerome_macro:  boolean;
+}
+
+export function useRegionStatus() {
+  return useQuery<RegionStatus>({
+    queryKey: ["fleet-region-status"],
+    queryFn: async () => (await api.get("/fleet/region-status")).data,
+    staleTime: 30_000,
+    refetchInterval: useVisibleInterval(60_000),
+    retry: 1,
+  });
+}

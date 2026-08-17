@@ -260,3 +260,70 @@ async def fleet_equity():
     _cache["data"] = data
     _cache["ts"] = now
     return data
+
+
+@fleet_equity_router.get("/fleet/equity-history")
+async def fleet_equity_history():
+    """
+    Life-of-platform fleet equity time series for the home dashboard sparkline.
+    Written nightly by the scheduler. Returns [] until the first snapshot is saved.
+    """
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return {"history": []}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT snapshot_date::text, total_equity
+                    FROM fleet_equity_history
+                    ORDER BY snapshot_date ASC
+                """)
+                rows = cur.fetchall()
+        history = [{"date": str(r[0]), "total_equity": round(float(r[1]), 2)} for r in rows]
+        return {"history": history}
+    except Exception as exc:
+        logger.debug(f"fleet_equity_history | error (non-fatal): {exc}")
+        return {"history": []}
+
+
+@fleet_equity_router.get("/fleet/region-status")
+async def fleet_region_status():
+    """
+    Per-bot in-market status: true when the bot holds real (non-SGOV) strategy positions.
+    Used by the pulsing world map on the home dashboard.
+    """
+    result: dict = {"oracle": False, "spy_qqq_trend": False, "jerome_macro": False}
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return result
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # oracle + spy_qqq_trend from alpaca_etf_positions
+                cur.execute("""
+                    SELECT bot_id, COUNT(*)
+                    FROM alpaca_etf_positions
+                    WHERE bot_id IN ('oracle', 'spy_qqq_trend')
+                      AND status = 'open'
+                      AND symbol != 'SGOV'
+                    GROUP BY bot_id
+                """)
+                for row in cur.fetchall():
+                    bid, cnt = row
+                    if bid in result and cnt > 0:
+                        result[bid] = True
+                # jerome_macro from jerome_positions
+                cur.execute("""
+                    SELECT COUNT(*) FROM jerome_positions
+                    WHERE bot_id = 'jerome_macro'
+                      AND status = 'open'
+                      AND symbol != 'SGOV'
+                """)
+                row = cur.fetchone()
+                if row and row[0] > 0:
+                    result["jerome_macro"] = True
+        return result
+    except Exception as exc:
+        logger.debug(f"fleet_region_status | error (non-fatal): {exc}")
+        return result

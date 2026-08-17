@@ -874,6 +874,15 @@ def run_jerome_v2_cycle(profile: dict, db_id: int) -> None:
 
     # ── Once per day: entry scan ───────────────────────────────────────────
     if should_run_v2_cycle(now):
+        # Unpark SGOV first (same cycle) before entry scan consumes cash.
+        # SGOV is excluded from Jerome's JEROME_SYMBOLS partition so it never
+        # affects position count; but we must free the cash before sizing.
+        try:
+            from sgov_parking import unpark_for_entry as _sgov_unpark
+            _jerome_live = alpaca.get_open_positions()
+            _sgov_unpark(alpaca, "Jerome", _jerome_live)
+        except Exception as _up_exc:
+            logger.debug(f"Jerome v2 | SGOV unpark error (non-fatal): {_up_exc}")
         _run_entry_scan(alpaca, equity, buying_power=account["buying_power"])
     else:
         next_window = f"{CYCLE_HOUR_UTC:02d}:{CYCLE_MIN_START:02d}–{CYCLE_MIN_END:02d} UTC"
@@ -881,5 +890,18 @@ def run_jerome_v2_cycle(profile: dict, db_id: int) -> None:
             f"Jerome v2 | Entry scan not due "
             f"(window={next_window}, last={_last_entry_scan_date})"
         )
+
+    # Park idle cash in SGOV after all exit/entry logic.
+    # JeromeAlpaca uses side="long" (translated to "buy" internally).
+    try:
+        from sgov_parking import park_idle_cash as _sgov_park
+        _jerome_live = alpaca.get_open_positions()
+        _park_account = alpaca.get_account()
+        _sgov_park(
+            alpaca, "Jerome", _jerome_live, _park_account["cash"],
+            buy_side="long",
+        )
+    except Exception as _park_exc:
+        logger.debug(f"Jerome v2 | SGOV park error (non-fatal): {_park_exc}")
 
     logger.info("Jerome v2 | === CYCLE END ===")

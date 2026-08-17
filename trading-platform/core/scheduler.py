@@ -1,13 +1,15 @@
 """
 APScheduler — Job Definitions
 -------------------------------------
-Five recurring jobs:
+Seven recurring jobs:
 
   Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Pure momentum scan + execution
   Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
   Job 3 | 16:30 ET daily (Mon-Fri)              — HITL Auditor Agent daily report
   Job 4 | 05:00 AEST daily (Brisbane, 7 days)   — Discord fleet P&L digest
   Job 5 | 17:30 ET daily (Mon-Fri)              — Walk-forward validation (ARC 2)
+  Job 6 | 18:30 ET daily                        — Deploy hash verification
+  Job 7 | 19:00 ET daily                        — Fleet equity snapshot (sparkline)
 
 Oracle only trades during NYSE market hours (no afterhours crypto).
 The Gemini Self-Critic pre-market veto and crypto-only cycles have been retired.
@@ -219,6 +221,21 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         misfire_grace_time=120,
     )
     logger.info(f"Scheduler | Registered: deploy_hash_check_startup (one-shot at {_startup_check_dt.isoformat()})")
+
+    # ── Job 7: fleet equity snapshot — nightly at 19:00 ET ───────────────────
+    scheduler.add_job(
+        func=_snapshot_fleet_equity,
+        trigger=CronTrigger(
+            hour=19,
+            minute=0,
+            timezone="America/New_York",
+        ),
+        id="nightly_fleet_equity_snapshot",
+        name="Nightly Fleet Equity Snapshot (Sparkline)",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler | Registered: nightly_fleet_equity_snapshot (daily 19:00 ET)")
 
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
@@ -647,6 +664,56 @@ def _fetch_benchmark_closes() -> dict:
         except Exception as e:
             logger.warning(f"Scheduler | benchmark_closes: {ticker} fetch failed — {e}")
     return results
+
+
+async def _snapshot_fleet_equity() -> None:
+    """
+    Job 7 — fires daily at 19:00 ET.
+    Writes one fleet_equity_history row (date, total_equity) for the sparkline.
+    Uses bot_portfolio as source of truth (same as /fleet/equity route).
+    ON CONFLICT DO UPDATE keeps the latest value for each calendar date.
+    """
+    logger.info("Scheduler | JOB STARTING: nightly_fleet_equity_snapshot")
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            logger.warning("Scheduler | fleet_equity_snapshot: PG unavailable — skip")
+            return
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # Sum all non-stale bots (updated within 25 min)
+                cur.execute("""
+                    SELECT COALESCE(SUM(equity_usd), 0)
+                    FROM bot_portfolio
+                    WHERE last_updated > NOW() - INTERVAL '25 minutes'
+                """)
+                row = cur.fetchone()
+                total = float(row[0]) if row else 0.0
+
+                # Fall back to all bots if no recent heartbeat (weekend, market closed)
+                if total == 0:
+                    cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM bot_portfolio")
+                    row = cur.fetchone()
+                    total = float(row[0]) if row else 0.0
+
+            if total <= 0:
+                logger.warning(f"Scheduler | fleet_equity_snapshot: total=${total:,.2f} — skip (zero equity)")
+                return
+
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO fleet_equity_history (snapshot_date, total_equity)
+                    VALUES (CURRENT_DATE, %s)
+                    ON CONFLICT (snapshot_date)
+                    DO UPDATE SET total_equity = EXCLUDED.total_equity,
+                                  created_at   = NOW()
+                """, (round(total, 2),))
+            conn.commit()
+
+        logger.info(f"Scheduler | fleet_equity_snapshot complete — ${total:,.2f} saved for {__import__('datetime').date.today()}")
+    except Exception as exc:
+        logger.error(f"Scheduler | fleet_equity_snapshot FAILED: {exc}")
 
 
 def _fetch_fleet_equity_total() -> float:

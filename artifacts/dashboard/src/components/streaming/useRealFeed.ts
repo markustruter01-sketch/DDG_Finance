@@ -134,6 +134,19 @@ export function useRealFeed(maxTrades = 20) {
 
   const totalTrades = wins + losses;
 
+  // Surface null P&L trades in dev tools so they don't silently disappear
+  useEffect(() => {
+    const summary = journal?.summary as Record<string, unknown> | undefined;
+    const count = summary?.null_pnl_count as number | undefined;
+    const ids   = summary?.null_pnl_trade_ids as string[] | undefined;
+    if (count != null && count > 0) {
+      console.warn(
+        `[useRealFeed] ${count} closed trade(s) have null realized_pnl — skipped from display.`,
+        "IDs:", ids ?? [],
+      );
+    }
+  }, [journal]);
+
   const trades24h = useMemo(() => {
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
     let count = 0;

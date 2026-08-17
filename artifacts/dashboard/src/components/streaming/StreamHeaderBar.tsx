@@ -157,7 +157,7 @@ export function StreamHeaderBar() {
         </div>
       </div>
 
-      {/* ── BEST TRADE ── */}
+      {/* ── BEST TRADE (all-time) ── */}
       <div className={CELL} style={{ ...DIV_STYLE, width: 138 }}>
         <span style={LABEL_STYLE}>BEST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
@@ -167,10 +167,13 @@ export function StreamHeaderBar() {
           <span className="text-[10px] font-medium" style={{ color: "rgba(74,222,128,0.7)" }}>
             {bestTradeSymbol ?? ""}
           </span>
+          <span className="text-[9px] font-medium" style={{ color: "rgba(100,116,139,0.5)" }}>
+            all-time
+          </span>
         </div>
       </div>
 
-      {/* ── WORST TRADE ── */}
+      {/* ── WORST TRADE (all-time) ── */}
       <div className={CELL} style={{ ...DIV_STYLE, width: 138 }}>
         <span style={LABEL_STYLE}>WORST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
@@ -179,6 +182,9 @@ export function StreamHeaderBar() {
           </span>
           <span className="text-[10px] font-medium" style={{ color: "rgba(248,113,113,0.7)" }}>
             {worstTradeSymbol ?? ""}
+          </span>
+          <span className="text-[9px] font-medium" style={{ color: "rgba(100,116,139,0.5)" }}>
+            all-time
           </span>
         </div>
       </div>

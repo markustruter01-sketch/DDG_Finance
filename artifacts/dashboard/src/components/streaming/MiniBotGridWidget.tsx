@@ -1,15 +1,15 @@
 import { getBotIdentity } from "@/lib/bot-identity";
 
-// Active bot IDs in display order — exactly the 3 live bots.
-// buck_futures is retired (last heartbeat May 30) and excluded here.
-const ACTIVE_BOT_IDS = ["oracle", "spy_qqq_trend", "jerome_macro"] as const;
-
-// Per-bot accent colours (not from identity — purely visual)
+// Per-bot accent colours — purely visual, not a bot-list definition.
+// The runtime bot list derives from fleetEq keys filtered by stale===false.
 const BOT_COLORS: Record<string, string> = {
   oracle:        "#a78bfa",
   spy_qqq_trend: "#fbbf24",
   jerome_macro:  "#f87171",
 };
+
+// Keys that fleet/equity returns that are NOT bot entries
+const FLEET_META_KEYS = new Set(["fleet_total", "generated_at", "errors"]);
 
 interface BotEquitySlice {
   pnl:    number;
@@ -29,6 +29,46 @@ function fmtPnl(v: number): string {
 }
 
 export function MiniBotGridWidget({ fleetEq }: Props) {
+  // Fleet data unavailable — explicit error state, no hardcoded fallback
+  if (fleetEq == null) {
+    return (
+      <div style={{ pointerEvents: "none", userSelect: "none" }}>
+        <div
+          style={{
+            color:         "rgba(248,113,113,0.7)",
+            fontSize:      10,
+            fontFamily:    "monospace",
+            letterSpacing: "0.12em",
+          }}
+        >
+          ◂ Fleet data unavailable
+        </div>
+      </div>
+    );
+  }
+
+  // Derive active bot list from fleet equity keys — stale bots are excluded
+  const activeBotIds = Object.keys(fleetEq).filter(
+    k => !FLEET_META_KEYS.has(k) && !(fleetEq[k] as BotEquitySlice)?.stale
+  );
+
+  if (activeBotIds.length === 0) {
+    return (
+      <div style={{ pointerEvents: "none", userSelect: "none" }}>
+        <div
+          style={{
+            color:         "rgba(248,113,113,0.6)",
+            fontSize:      10,
+            fontFamily:    "monospace",
+            letterSpacing: "0.12em",
+          }}
+        >
+          ◂ No active bots
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -65,15 +105,14 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
       <div
         style={{
           display:             "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
+          gridTemplateColumns: `repeat(${activeBotIds.length}, 1fr)`,
           gap:                 6,
         }}
       >
-        {ACTIVE_BOT_IDS.map(botId => {
+        {activeBotIds.map(botId => {
           const identity = getBotIdentity(botId);
-          const eq       = fleetEq?.[botId];
+          const eq       = fleetEq[botId] as BotEquitySlice | undefined;
           const pnl      = eq?.pnl ?? 0;
-          // Absent fleet key or stale flag = inactive (retired bots always stale)
           const active   = eq != null && !(eq.stale ?? false);
           const pnlColor = pnl >= 0 ? "#4ade80" : "#f87171";
           const color    = BOT_COLORS[botId] ?? "#64748b";

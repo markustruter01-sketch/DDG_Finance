@@ -23,7 +23,7 @@ so it is torn down cleanly on shutdown.
 
 import asyncio
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import httpx
 import pytz
@@ -193,9 +193,78 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: shadow_signal_retention (daily 18:00 ET)")
 
+    # ── Deploy hash check: nightly at 18:30 ET ───────────────────────────────
+    scheduler.add_job(
+        func=_deploy_hash_check,
+        trigger=CronTrigger(
+            hour=18,
+            minute=30,
+            timezone="America/New_York",
+        ),
+        id="deploy_hash_check_nightly",
+        name="Nightly Deploy Hash Verification",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: deploy_hash_check_nightly (daily 18:30 ET)")
+
+    # ── Deploy hash check: 60s after startup (one-shot) ───────────────────
+    _startup_check_dt = datetime.now(_et) + timedelta(seconds=60)
+    scheduler.add_job(
+        func=_deploy_hash_check,
+        trigger=DateTrigger(run_date=_startup_check_dt),
+        id="deploy_hash_check_startup",
+        name="60s Post-Startup Deploy Hash Check",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    logger.info(f"Scheduler | Registered: deploy_hash_check_startup (one-shot at {_startup_check_dt.isoformat()})")
+
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
+
+
+async def _deploy_hash_check() -> None:
+    """
+    Compare the running-process git hash (captured at startup) against the
+    current repo HEAD. Alert via Discord if they differ — the service is
+    running stale code and needs a restart.
+    """
+    try:
+        import subprocess as _sp
+        latest = _sp.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=_sp.DEVNULL,
+            timeout=3,
+        ).decode().strip()
+
+        # Lazy import to avoid circular dependency (main imports scheduler)
+        try:
+            from main import _RUNNING_HASH as _running
+        except Exception:
+            _running = "unknown"
+
+        if _running == "unknown" or latest != _running:
+            from notifications.discord import alert_critical
+            alert_critical(
+                title="⚠️ Deploy Hash Mismatch",
+                description=(
+                    f"Running process: `{_running}`\n"
+                    f"Repo HEAD: `{latest}`\n\n"
+                    f"The trading-api is serving stale code. "
+                    f"Restart the workflow to pick up the latest commit."
+                ),
+            )
+            logger.warning(
+                f"Scheduler | deploy_hash_check: MISMATCH "
+                f"running={_running} latest={latest}"
+            )
+        else:
+            logger.info(f"Scheduler | deploy_hash_check: OK — both {latest}")
+    except Exception as exc:
+        logger.debug(f"Scheduler | deploy_hash_check: failed (non-fatal): {exc}")
 
 
 async def _shadow_signal_retention_sweep() -> None:

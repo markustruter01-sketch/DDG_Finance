@@ -787,6 +787,20 @@ def get_journal_summary() -> dict:
                 result["best_trade_usd"]    = float(best_row[1])  if best_row  else None
                 result["worst_trade_symbol"]= worst_row[0] if worst_row else None
                 result["worst_trade_usd"]   = float(worst_row[1]) if worst_row else None
+
+                # Null P&L audit — closed trades with no realized dollar amount
+                cur.execute("""
+                    SELECT COUNT(*) FROM trades
+                    WHERE status LIKE 'Closed_%' AND realized_pnl IS NULL
+                """)
+                _nc = cur.fetchone()
+                cur.execute("""
+                    SELECT trade_id FROM trades
+                    WHERE status LIKE 'Closed_%' AND realized_pnl IS NULL
+                    ORDER BY date DESC LIMIT 20
+                """)
+                result["null_pnl_count"]     = int(_nc[0]) if _nc else 0
+                result["null_pnl_trade_ids"] = [r[0] for r in cur.fetchall()]
         return result
     else:
         with _sqlite_conn() as conn:
@@ -809,6 +823,14 @@ def get_journal_summary() -> dict:
             result["best_trade_usd"]     = float(best_row[1]) if best_row  else None
             result["worst_trade_symbol"] = worst_row[0]        if worst_row else None
             result["worst_trade_usd"]    = float(worst_row[1]) if worst_row else None
+            # Null P&L audit (SQLite path)
+            result["null_pnl_count"] = conn.execute(
+                "SELECT COUNT(*) FROM trades WHERE status LIKE 'Closed_%' AND realized_pnl IS NULL"
+            ).fetchone()[0] or 0
+            _null_ids = conn.execute(
+                "SELECT trade_id FROM trades WHERE status LIKE 'Closed_%' AND realized_pnl IS NULL ORDER BY date DESC LIMIT 20"
+            ).fetchall()
+            result["null_pnl_trade_ids"] = [r[0] for r in _null_ids]
         return result
 
 

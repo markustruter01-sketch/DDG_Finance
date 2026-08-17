@@ -23,11 +23,14 @@ export type FleetEquityResp = {
   oracle?: BotSlice;
   spy_qqq_trend?: BotSlice;
   jerome_macro?: BotSlice;
+  /** Retired May 2026 — kept in type for graceful fallback rendering only; always stale */
   buck_futures?: BotSlice;
   fleet_total?: {
     equity: number;
     pnl: number;
     pnl_pct: number;
+    pnl_24h: number;
+    pnl_24h_pct: number;
     positions: number;
     win_rate: number | null;
   };
@@ -163,7 +166,6 @@ export function useFleetData() {
     oracle:  fleet?.oracle,
     spy:     fleet?.spy_qqq_trend,
     jerome:  fleet?.jerome_macro,
-    buck:    fleet?.buck_futures,
     total:   fleet?.fleet_total,
     allPos,
     spyPos,

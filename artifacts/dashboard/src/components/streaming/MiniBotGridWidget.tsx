@@ -1,15 +1,15 @@
-interface BotSlot {
-  id:    string;
-  short: string;
-  color: string;
-}
+import { getBotIdentity } from "@/lib/bot-identity";
 
-const BOT_SLOTS: BotSlot[] = [
-  { id: "oracle",            short: "Oracle",  color: "#a78bfa" },
-  { id: "spy_qqq_trend",     short: "SPY/QQQ", color: "#fbbf24" },
-  { id: "jerome_macro",      short: "Jerome",  color: "#f87171" },
-  { id: "buck_futures",      short: "Buck",    color: "#22d3ee" },
-];
+// Active bot IDs in display order — exactly the 3 live bots.
+// buck_futures is retired (last heartbeat May 30) and excluded here.
+const ACTIVE_BOT_IDS = ["oracle", "spy_qqq_trend", "jerome_macro"] as const;
+
+// Per-bot accent colours (not from identity — purely visual)
+const BOT_COLORS: Record<string, string> = {
+  oracle:        "#a78bfa",
+  spy_qqq_trend: "#fbbf24",
+  jerome_macro:  "#f87171",
+};
 
 interface BotEquitySlice {
   pnl:    number;
@@ -65,26 +65,29 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
       <div
         style={{
           display:             "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(3, 1fr)",
           gap:                 6,
         }}
       >
-        {BOT_SLOTS.map(bot => {
-          const eq     = fleetEq?.[bot.id];
-          const pnl    = eq?.pnl    ?? 0;
-          const active = !(eq?.stale ?? false);
+        {ACTIVE_BOT_IDS.map(botId => {
+          const identity = getBotIdentity(botId);
+          const eq       = fleetEq?.[botId];
+          const pnl      = eq?.pnl ?? 0;
+          // Absent fleet key or stale flag = inactive (retired bots always stale)
+          const active   = eq != null && !(eq.stale ?? false);
           const pnlColor = pnl >= 0 ? "#4ade80" : "#f87171";
+          const color    = BOT_COLORS[botId] ?? "#64748b";
 
           return (
             <div
-              key={bot.id}
+              key={botId}
               className={active ? "botcard-active" : "botcard-idle"}
               style={{
                 background:   "rgba(0,0,0,0.45)",
                 border:       `1.5px solid ${active ? "rgba(34,211,238,0.85)" : "rgba(6,182,212,0.22)"}`,
                 borderRadius: 5,
                 padding:      "7px 10px",
-                minWidth:     110,
+                minWidth:     90,
                 backdropFilter: "blur(4px)",
               }}
             >
@@ -96,8 +99,8 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                     height:       5,
                     borderRadius: "50%",
                     flexShrink:   0,
-                    background:   bot.color,
-                    boxShadow:    `0 0 5px ${bot.color}99`,
+                    background:   color,
+                    boxShadow:    `0 0 5px ${color}99`,
                   }}
                 />
                 <span
@@ -110,7 +113,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                     textTransform: "uppercase",
                   }}
                 >
-                  {bot.short}
+                  {identity.shortName}
                 </span>
               </div>
 
@@ -126,7 +129,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                 {fmtPnl(pnl)}
               </div>
 
-              {/* Active / Paused label */}
+              {/* Active / Stale label */}
               <div
                 style={{
                   color:         active ? "rgba(34,211,238,0.55)" : "rgba(6,182,212,0.35)",

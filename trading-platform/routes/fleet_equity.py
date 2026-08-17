@@ -14,6 +14,55 @@ _CACHE_TTL = 30  # seconds
 _cache: dict = {"data": None, "ts": 0.0}
 
 
+def _fetch_24h_pnl() -> dict[str, float]:
+    """
+    Return {bot_id: realized_pnl_last_24h}.
+    Queries oracle/spy_qqq_trend from trades, jerome_macro from jerome_positions.
+    Best-effort — silently returns {} on any failure.
+    """
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return {}
+        result: dict[str, float] = {}
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # oracle (momentum_equity) + spy_qqq_trend (momentum_etf)
+                cur.execute("""
+                    SELECT
+                        CASE asset_class
+                            WHEN 'momentum_equity' THEN 'oracle'
+                            WHEN 'momentum_etf'    THEN 'spy_qqq_trend'
+                        END AS bot_id,
+                        COALESCE(SUM(realized_pnl), 0) AS pnl_24h
+                    FROM trades
+                    WHERE asset_class IN ('momentum_equity', 'momentum_etf')
+                      AND status LIKE 'Closed_%'
+                      AND closed_at > NOW() - INTERVAL '24 hours'
+                      AND realized_pnl IS NOT NULL
+                    GROUP BY 1
+                """)
+                for row in cur.fetchall():
+                    if row[0]:
+                        result[row[0]] = round(float(row[1]), 2)
+                # jerome_macro from jerome_positions
+                cur.execute("""
+                    SELECT bot_id, COALESCE(SUM(realised_pnl_usd), 0) AS pnl_24h
+                    FROM jerome_positions
+                    WHERE bot_id = 'jerome_macro'
+                      AND status = 'closed'
+                      AND closed_at > NOW() - INTERVAL '24 hours'
+                      AND realised_pnl_usd IS NOT NULL
+                    GROUP BY bot_id
+                """)
+                for row in cur.fetchall():
+                    result[row[0]] = round(float(row[1]), 2)
+        return result
+    except Exception as exc:
+        logger.debug(f"fleet_equity | 24h pnl fetch failed: {exc}")
+        return {}
+
+
 def _fetch_win_rates() -> dict[str, tuple[int, int]]:
     """
     Return {bot_id: (wins_30d, total_30d)} from each bot's canonical trade table.
@@ -171,6 +220,17 @@ def _fetch_fleet_equity() -> dict:
             else:
                 data["win_rate"] = None
         result["fleet_total"]["win_rate"] = round(fleet_w / fleet_t, 4) if fleet_t > 0 else None
+
+        # Inject 24h realized P&L (best-effort — failure leaves pnl_24h=0)
+        _p24 = _fetch_24h_pnl()
+        fleet_24h_sum = 0.0
+        for bid, data in result.items():
+            if bid in _meta_keys or bid in {"generated_at", "errors"}:
+                continue
+            data["pnl_24h"] = _p24.get(bid, 0.0)
+            fleet_24h_sum += data["pnl_24h"]
+        result["fleet_total"]["pnl_24h"]     = round(fleet_24h_sum, 2)
+        result["fleet_total"]["pnl_24h_pct"] = round(fleet_24h_sum / fleet_start * 100, 4) if fleet_start else 0.0
 
         result["generated_at"] = datetime.now(timezone.utc).isoformat()
         result["errors"] = []

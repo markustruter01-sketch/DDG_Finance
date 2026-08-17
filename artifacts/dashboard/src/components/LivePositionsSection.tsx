@@ -4,6 +4,7 @@ import {
   useLivePositions, useKrakenStatus, usePlatformStatus,
   useForceRebalance, useCloseAndReallocate,
   useOptionsPositions, useForexPositions,
+  useFleetEquity,
 } from "@/hooks/use-trading";
 import { useMarketCountdown, RollingPnl } from "@/lib/dashboard-shared";
 import { AlpacaPositionsPanel, KrakenPositionsPanel, ThesisModal } from "@/components/PositionCards";
@@ -106,6 +107,7 @@ export function LivePositionsSection() {
   const [confirmClose, setConfirmClose] = useState<string | null>(null);
 
   const closingSymbol = isClosing ? (closingVar as string) : null;
+  const { data: fleetEq } = useFleetEquity();
   const krakenPositions = krakenStatus?.open_positions ?? [];
   const optionsPositionsList = optPositions?.positions ?? [];
   const forexPositionsList = fxPositions?.positions ?? [];
@@ -118,13 +120,19 @@ export function LivePositionsSection() {
     });
   };
 
-  const totalUnrealized = useMemo(() => {
-    const alpacaPnl = data?.positions?.reduce((sum, p) => sum + p.unrealized_pl, 0) ?? 0;
-    const krakenPnl = krakenPositions.reduce((sum, p) => sum + (p.unrealized_pnl_usd ?? 0), 0);
-    const optionsPnl = optionsPositionsList.reduce((sum, p) => sum + (p.unrealized_pnl ?? 0), 0);
-    const forexPnl = forexPositionsList.reduce((sum, p) => sum + (p.unrealized_pnl_usd ?? 0), 0);
-    return alpacaPnl + krakenPnl + optionsPnl + forexPnl;
-  }, [data, krakenPositions, optionsPositionsList, forexPositionsList]);
+  // Fleet-level P&L sourced from server's fleet_total — no client-side aggregation.
+  // Rule 27: server is SSOT for all P&L values.
+  const totalUnrealized = fleetEq?.fleet_total?.pnl ?? 0;
+
+  // Pre-compute sub-totals once so they aren't recalculated inline for each render.
+  const optionsPnlTotal = useMemo(
+    () => optionsPositionsList.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0),
+    [optionsPositionsList],
+  );
+  const forexPnlTotal = useMemo(
+    () => forexPositionsList.reduce((s, p) => s + (p.unrealized_pnl_usd ?? 0), 0),
+    [forexPositionsList],
+  );
 
   const totalCount = (data?.count ?? 0) + krakenPositions.length + optionsPositionsList.length + forexPositionsList.length;
 
@@ -220,10 +228,10 @@ export function LivePositionsSection() {
             <Badge variant="outline" className="text-[8px] px-1 py-0 border-red-500/20 text-red-400/50">{optionsPositionsList.length}</Badge>
             <span className="text-[9px] text-muted-foreground/30 ml-1">straddle positions</span>
             <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums",
-              optionsPositionsList.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0) >= 0 ? "text-green-400" : "text-red-400"
+              optionsPnlTotal >= 0 ? "text-green-400" : "text-red-400"
             )}>
-              {optionsPositionsList.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0) >= 0 ? "+" : ""}
-              {formatCurrency(optionsPositionsList.reduce((s, p) => s + (p.unrealized_pnl ?? 0), 0))}
+              {optionsPnlTotal >= 0 ? "+" : ""}
+              {formatCurrency(optionsPnlTotal)}
             </span>
           </div>
           <div className="px-3 pb-3 space-y-1.5">
@@ -249,10 +257,10 @@ export function LivePositionsSection() {
             <Badge variant="outline" className="text-[8px] px-1 py-0 border-teal-500/20 text-teal-400/50">{forexPositionsList.length}</Badge>
             <span className="text-[9px] text-muted-foreground/30 ml-1">forex swings</span>
             <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums",
-              forexPositionsList.reduce((s, p) => s + (p.unrealized_pnl_usd ?? 0), 0) >= 0 ? "text-green-400" : "text-red-400"
+              forexPnlTotal >= 0 ? "text-green-400" : "text-red-400"
             )}>
-              {forexPositionsList.reduce((s, p) => s + (p.unrealized_pnl_usd ?? 0), 0) >= 0 ? "+" : ""}
-              {formatCurrency(forexPositionsList.reduce((s, p) => s + (p.unrealized_pnl_usd ?? 0), 0))}
+              {forexPnlTotal >= 0 ? "+" : ""}
+              {formatCurrency(forexPnlTotal)}
             </span>
           </div>
           <div className="px-3 pb-3 space-y-1.5">

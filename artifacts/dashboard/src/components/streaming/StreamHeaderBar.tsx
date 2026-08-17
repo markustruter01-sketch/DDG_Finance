@@ -6,7 +6,6 @@ import type {
   VaultState,
   TradeJournal,
   MathAuditSummary,
-  RecentTrades,
 } from "@/hooks/use-trading";
 
 const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
@@ -14,13 +13,13 @@ const hdrApi = axios.create({ baseURL: BASE });
 
 const INTERVAL = 3_000;
 
+// Exactly the 3 live bots — buck_futures retired May 30, excluded permanently.
 const BOT_COLORS: Record<string, string> = {
-  oracle:          "#8b5cf6",
-  spy_qqq_trend:   "#fbbf24",
-  jerome_macro:    "#f87171",
-  buck_futures:    "#22d3ee",
+  oracle:        "#8b5cf6",
+  spy_qqq_trend: "#fbbf24",
+  jerome_macro:  "#f87171",
 };
-const BOT_KEYS = Object.keys(BOT_COLORS);
+// Drive bot-dot list from fleet equity keys at render time (dynamic, not hardcoded count)
 
 function fmt$(v: number | null): string {
   if (v == null) return "—";
@@ -65,13 +64,6 @@ export function StreamHeaderBar() {
     staleTime: 2_000,
   });
 
-  const { data: recent } = useQuery<RecentTrades>({
-    queryKey: ["/journal/recent", 50],
-    queryFn: async () => (await hdrApi.get("/journal/recent?n=50")).data,
-    refetchInterval: INTERVAL,
-    staleTime: 2_000,
-  });
-
   const { data: audit } = useQuery<MathAuditSummary>({
     queryKey: ["/admin/math-audit/summary", 24],
     queryFn: async () => (await hdrApi.get("/admin/math-audit/summary?hours=24")).data,
@@ -90,19 +82,24 @@ export function StreamHeaderBar() {
   const _fleetWr    = fleet?.fleet_total?.win_rate;
   const winRate     = _fleetWr != null ? _fleetWr * 100 : null;
 
-  const trades = (recent?.trades ?? []).filter(t => t.pnl_usd != null);
-  const bestTrade  = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? -Infinity) > (a.pnl_usd ?? -Infinity) ? b : a) : null;
-  const worstTrade = trades.length > 0 ? trades.reduce((a, b) => (b.pnl_usd ?? Infinity) < (a.pnl_usd ?? Infinity) ? b : a) : null;
+  // Best/worst sourced from server all-time journal summary — no 50-trade window reduce()
+  type SummaryExt = { best_trade_usd?: number|null; best_trade_symbol?: string|null; worst_trade_usd?: number|null; worst_trade_symbol?: string|null; };
+  const summary = journal?.summary as (NonNullable<typeof journal>["summary"] & SummaryExt) | undefined;
+  const bestTradeUsd    = summary?.best_trade_usd    ?? null;
+  const bestTradeSymbol = summary?.best_trade_symbol ?? null;
+  const worstTradeUsd   = summary?.worst_trade_usd   ?? null;
+  const worstTradeSymbol= summary?.worst_trade_symbol ?? null;
 
   const auditChecked = audit != null ? (audit.pass ?? 0) + (audit.warn ?? 0) + (audit.fail ?? 0) : null;
   const auditPassRate = auditChecked != null && auditChecked > 0
     ? (((audit!.pass ?? 0) / auditChecked) * 100).toFixed(1) : null;
   const auditTotal = auditChecked;
 
-  const botStatuses = BOT_KEYS.map(k => {
+  // Drive bot dots from the 3-bot color map — dynamic, no hardcoded count
+  const botStatuses = Object.entries(BOT_COLORS).map(([k, color]) => {
     const b = fleet ? (fleet as unknown as Record<string, unknown>)[k] as { equity?: number; stale?: boolean } | undefined : undefined;
     const active = b != null && typeof b.equity === "number" && b.equity > 0 && !b.stale;
-    return { key: k, color: BOT_COLORS[k], active };
+    return { key: k, color, active };
   });
   const activeCount = botStatuses.filter(b => b.active).length;
 
@@ -165,10 +162,10 @@ export function StreamHeaderBar() {
         <span style={LABEL_STYLE}>BEST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[14px] font-bold leading-none" style={{ color: "#4ade80" }}>
-            {bestTrade?.pnl_usd != null ? `+$${Math.round(bestTrade.pnl_usd).toLocaleString()}` : "—"}
+            {bestTradeUsd != null ? `+$${Math.round(Math.abs(bestTradeUsd)).toLocaleString()}` : "—"}
           </span>
           <span className="text-[10px] font-medium" style={{ color: "rgba(74,222,128,0.7)" }}>
-            {bestTrade?.symbol ?? ""}
+            {bestTradeSymbol ?? ""}
           </span>
         </div>
       </div>
@@ -178,10 +175,10 @@ export function StreamHeaderBar() {
         <span style={LABEL_STYLE}>WORST TRADE</span>
         <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="text-[14px] font-bold leading-none" style={{ color: "#f87171" }}>
-            {worstTrade?.pnl_usd != null ? `${worstTrade.pnl_usd >= 0 ? "+" : "-"}$${Math.round(Math.abs(worstTrade.pnl_usd)).toLocaleString()}` : "—"}
+            {worstTradeUsd != null ? `-$${Math.round(Math.abs(worstTradeUsd)).toLocaleString()}` : "—"}
           </span>
           <span className="text-[10px] font-medium" style={{ color: "rgba(248,113,113,0.7)" }}>
-            {worstTrade?.symbol ?? ""}
+            {worstTradeSymbol ?? ""}
           </span>
         </div>
       </div>
@@ -257,7 +254,7 @@ export function StreamHeaderBar() {
               />
             ))}
             <span className="text-[11px] font-bold ml-1" style={{ color: "#22d3ee" }}>
-              {activeCount}/{BOT_KEYS.length}
+              {activeCount}/{botStatuses.length}
             </span>
           </div>
         </div>

@@ -127,160 +127,56 @@ def _pnl_line(label: str, pnl: float, pnl_pct: float | None = None) -> str:
 
 def notify_daily_pnl_report() -> None:
     """
-    Build and send the daily fleet P&L digest to Discord.
-    Called by APScheduler every day at 05:00 AEST (Brisbane).
+    Send the daily fleet digest as exactly 3 lines:
+      Line 1 — 24h % change
+      Line 2 — 24h $ change
+      Line 3 — market regime (Bull / Bear / Flat / Crisis)
 
-    Data source: _fetch_fleet_equity() — the same function that backs
-    GET /fleet/equity — reads bot_portfolio for all 4 live bots.
-    No duplicate queries, no stale tables.
+    One `content` POST, no embed, no per-bot breakdown.
+    Called by APScheduler every day at 05:00 AEST (Brisbane).
     """
     if not _WEBHOOK_URL:
-        logger.info("Discord | DISCORD_WEBHOOK_URL not set — skipping daily P&L report")
+        logger.info("Discord | DISCORD_WEBHOOK_URL not set — skipping daily report")
         return
 
-    # ── Pull canonical fleet data ──────────────────────────────────────────
+    # ── Fleet data ─────────────────────────────────────────────────────────
     try:
         from routes.fleet_equity import _fetch_fleet_equity
         fleet = _fetch_fleet_equity()
     except Exception as exc:
-        logger.warning(f"Discord | fleet equity fetch failed — skipping daily P&L report: {exc}")
+        logger.warning(f"Discord | fleet equity fetch failed — skipping: {exc}")
         return
 
     fleet_total = fleet.get("fleet_total", {})
     if not fleet_total:
-        logger.warning("Discord | fleet_total missing from fleet equity response — skipping")
+        logger.warning("Discord | fleet_total missing — skipping")
         return
 
-    # ── Per-bot lines (canonical order, known bots only) ──────────────────
-    lines: list[str] = []
-    for bot_id in _BOT_ORDER:
-        bot = fleet.get(bot_id)
-        if not bot:
-            continue
-        label = _DISPLAY_NAMES.get(bot_id, bot_id)
-        pnl     = float(bot.get("pnl", 0.0))
-        pnl_pct = float(bot.get("pnl_pct", 0.0))
-        lines.append(_pnl_line(label, pnl, pnl_pct))
+    pnl_24h     = float(fleet_total.get("pnl_24h",     0.0))
+    pnl_24h_pct = float(fleet_total.get("pnl_24h_pct", 0.0))
+    sign_pct    = "+" if pnl_24h_pct >= 0 else ""
+    sign_usd    = "+" if pnl_24h     >= 0 else ""
 
-    # ── Prepend market state header ────────────────────────────────────────────
-    _state_header = ""
+    # ── Regime ────────────────────────────────────────────────────────────
+    regime = "Unknown"
     try:
-        import sys as _sys
-        import os as _os
-        _tp_root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")
-        if _tp_root not in _sys.path:
-            _sys.path.insert(0, _tp_root)
         from core.market_state import get_market_state as _get_ms
-        _ms = _get_ms(persist=False)
-        _regime   = _ms.get("regime", "UNKNOWN")
-        _high_vol = _ms.get("high_vol", False)
-        _spy_20d  = _ms.get("spy_20d_ret")
-        _emoji    = {"CRISIS": "🚨", "BEAR": "🐻", "BULL": "🟢"}.get(_regime, "❓")
-        _state_header = f"{_emoji} **Market: {_regime}**"
-        if _high_vol:
-            _state_header += "  ⚠ HIGH_VOL"
-        if _spy_20d is not None:
-            _state_header += f"  (SPY 20d: {_spy_20d:+.1%})"
-        _state_header += "\n"
+        _ms    = _get_ms(persist=False)
+        regime = _ms.get("regime", "Unknown")
     except Exception as _mse:
         logger.debug(f"Discord | market_state fetch non-fatal: {_mse}")
 
-    # ── Walk-forward status banners (ARC 2) ───────────────────────────────────
-    # Prepend RED/AMBER banners before the per-bot P&L lines.
-    # DISQUALIFIED bots that are actively trading also surface here.
-    _wf_banners: list[str] = []
-    try:
-        from analysis.arc2_walk_forward import get_current_wf_status
-        _wf_rows = get_current_wf_status()
-        _STATUS_EMOJI = {"RED": "🔴", "AMBER": "🟡", "GREEN": "✅",
-                         "INSUFFICIENT_DATA": "⏳", "DISQUALIFIED": "⚫"}
-        for _wf in _wf_rows:
-            _st = _wf.get("wf_status", "")
-            _bid = _wf.get("bot_id", "?")
-            if _st == "RED":
-                _sh = _wf.get("wf_sharpe_90d")
-                _fl = _wf.get("wf_oos_floor_sharpe")
-                _days = _wf.get("wf_consecutive_below_floor") or 0
-                _sh_s = f"{_sh:.3f}" if _sh is not None else "N/A"
-                _fl_s = f"{_fl:.3f}" if _fl is not None else "N/A"
-                _protocol = ""
-                if _days >= 120:
-                    _protocol = " — ⛔ HALT ENTRIES (human action required)"
-                elif _days >= 60:
-                    _protocol = " — ⚠ HALVE SIZE (human action required)"
-                _wf_banners.append(
-                    f"🔴 **{_bid} RED**: trailing Sharpe {_sh_s} "
-                    f"below OOS floor {_fl_s} for **{_days}d**{_protocol}"
-                )
-            elif _st == "AMBER":
-                _sh = _wf.get("wf_sharpe_90d")
-                _fl = _wf.get("wf_oos_floor_sharpe")
-                _days = _wf.get("wf_consecutive_below_floor") or 0
-                _sh_s = f"{_sh:.3f}" if _sh is not None else "N/A"
-                _fl_s = f"{_fl:.3f}" if _fl is not None else "N/A"
-                _wf_banners.append(
-                    f"🟡 **{_bid} AMBER**: trailing Sharpe {_sh_s} "
-                    f"below OOS floor {_fl_s} ({_days}/60d)"
-                )
-    except Exception as _wfe:
-        logger.debug(f"Discord | walk-forward status fetch non-fatal: {_wfe}")
+    # Map to clean label
+    regime_label = {"BULL": "Bull", "BEAR": "Bear", "CRISIS": "Crisis"}.get(regime, "Flat")
 
-    _body = "\n".join(lines) if lines else "_No bot data available._"
-    _banner_block = "\n".join(_wf_banners)
-    if _banner_block:
-        _body = _banner_block + "\n\n" + _body
-    description = (_state_header + "\n" + _body) if _state_header else _body
+    line1 = f"📊 24h: {sign_pct}{pnl_24h_pct:.2f}%"
+    line2 = f"💰 24h: {sign_usd}${pnl_24h:,.0f}"
+    line3 = f"📈 Regime: {regime_label}"
 
-    # ── Fleet-level fields ─────────────────────────────────────────────────
-    fleet_eq     = float(fleet_total.get("equity",   0.0))
-    fleet_start  = float(fleet_total.get("starting", 0.0))
-    fleet_pnl    = float(fleet_total.get("pnl",      0.0))
-    fleet_pnl_pct = float(fleet_total.get("pnl_pct", 0.0))
-    fleet_wr     = fleet_total.get("win_rate")
-    bot_count    = len([b for b in _BOT_ORDER if b in fleet])
-
-    sign_fleet = "+" if fleet_pnl >= 0 else ""
-    fleet_color = COLOR_GREEN if fleet_pnl >= 0 else COLOR_RED
-
-    wr_val = f"{fleet_wr * 100:.1f}%" if fleet_wr is not None else "—"
-
-    fields: list[dict] = [
-        {
-            "name":   "Total P&L (all-time)",
-            "value":  f"{sign_fleet}${fleet_pnl:,.2f}  ({sign_fleet}{fleet_pnl_pct:.2f}%)",
-            "inline": False,
-        },
-        {
-            "name":   "Fleet Equity",
-            "value":  f"${fleet_eq:,.2f}",
-            "inline": True,
-        },
-        {
-            "name":   "Starting Capital",
-            "value":  f"${fleet_start:,.0f}",
-            "inline": True,
-        },
-        {
-            "name":   "30d Win Rate",
-            "value":  wr_val,
-            "inline": True,
-        },
-    ]
-
-    now_brisbane = datetime.now(timezone.utc).strftime("%d %b %Y · %H:%M UTC")
-
-    embed = _embed(
-        title="📊 Daily Fleet P&L Report",
-        description=description,
-        color=fleet_color,
-        fields=fields,
-        footer=f"Quant Terminal · {bot_count}-Bot Fleet · {now_brisbane}",
-    )
-
-    _send({"embeds": [embed]})
+    _send({"content": f"{line1}\n{line2}\n{line3}"})
     logger.info(
-        f"Discord | Daily P&L report sent — fleet equity: ${fleet_eq:,.2f}  "
-        f"total P&L: {sign_fleet}${fleet_pnl:,.2f} ({sign_fleet}{fleet_pnl_pct:.2f}%)"
+        f"Discord | 3-line report sent — "
+        f"24h: {sign_pct}{pnl_24h_pct:.2f}% / {sign_usd}${pnl_24h:,.0f} / {regime_label}"
     )
 
 

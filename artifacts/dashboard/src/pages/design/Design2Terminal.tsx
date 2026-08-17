@@ -116,12 +116,11 @@ function TermBotCard({ tag, name, bot, status, wfStatus }: TermBotProps) {
 }
 
 export default function Design2Terminal() {
-  const { oracle, spy, jerome, buck, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
 
   const spyStatus  = getBotStatus(spy,    mktOpen, false);
   const oraStatus  = getBotStatus(oracle, mktOpen, false);
   const jerStatus  = getBotStatus(jerome, mktOpen, false);
-  const buckStatus = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
@@ -168,11 +167,10 @@ export default function Design2Terminal() {
         {/* Curly dual card */}
         <AsciiBox>
           <div className="px-3 py-1.5" style={{ borderBottom: "1px solid #00550d" }}>
-            <span className="text-[10px] font-bold" style={{ color: "#33ff33" }}>┌─ BOT3: CURLY · JEROME + BUCK ─</span>
+            <span className="text-[10px] font-bold" style={{ color: "#33ff33" }}>┌─ BOT3: CURLY · JEROME ─</span>
           </div>
           {([
-            { tag: "JEROME", label: "CURLY",    bot: jerome, status: jerStatus,  wf: wfMap.get("jerome_macro"), isADX: false },
-            { tag: "BUCK",   label: "CURLY_JR", bot: buck,   status: buckStatus, wf: wfMap.get("buck_futures"), isADX: true  },
+            { tag: "JEROME", label: "CURLY", bot: jerome, status: jerStatus, wf: wfMap.get("jerome_macro"), isADX: false },
           ] as const).map(({ tag, label, bot, status, wf }) => {
             const pnl = bot?.pnl ?? 0;
             const clr = STATUS_CLR[status];

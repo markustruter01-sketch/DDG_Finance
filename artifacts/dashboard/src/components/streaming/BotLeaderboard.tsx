@@ -28,7 +28,8 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
           {sorted.map((bot, i) => {
             const totalPnl = bot.totalPnl ?? 0;
             const totalPnlPct = bot.totalPnlPct ?? 0;
-            const winRate = bot.trades > 0 ? ((bot.wins / bot.trades) * 100).toFixed(0) : "0";
+            // Use server-supplied win_rate from /fleet/equity — no client arithmetic
+            const winRate = bot.winRate != null ? (bot.winRate * 100).toFixed(0) : "—";
             const hasPnlUsd = totalPnl !== 0;
             const pnlPositive = hasPnlUsd ? totalPnl >= 0 : totalPnlPct >= 0;
             return (

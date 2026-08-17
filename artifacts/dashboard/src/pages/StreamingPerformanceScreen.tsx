@@ -73,7 +73,7 @@ const BOT_META: Record<string, { icon: string; color: string; startCap: number; 
   "oracle":         { icon: getBotIdentity("oracle").icon,         color: "#a78bfa", startCap: 100_000, label: getBotIdentity("oracle").displayName },
   "spy_qqq_trend":  { icon: getBotIdentity("spy_qqq_trend").icon,  color: C.cyan,    startCap: 100_000, label: getBotIdentity("spy_qqq_trend").displayName },
   "jerome_macro":   { icon: getBotIdentity("jerome_macro").icon,   color: C.orange,  startCap: 100_000, label: getBotIdentity("jerome_macro").displayName },
-  "buck_futures":   { icon: getBotIdentity("buck_futures").icon,   color: "#4ade80", startCap: 100_000, label: getBotIdentity("buck_futures").displayName },
+  // buck_futures retired May 2026 — removed from performance view
 };
 
 /* ── fear & greed helpers ────────────────────────────────── */

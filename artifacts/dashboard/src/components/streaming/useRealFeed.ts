@@ -1,7 +1,7 @@
 import { useMemo, useRef, useEffect } from "react";
 import {
   useJournal, useOptionsState, useForexState,
-  useLivePositions, useForexPositions,
+  useLivePositions, useForexPositions, useFleetEquity,
 } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -38,6 +38,8 @@ export type BotStats = {
   wins: number;
   losses: number;
   trades: number;
+  /** Server-computed win rate from /fleet/equity, range 0–1. Use instead of wins/trades arithmetic. */
+  winRate?: number;
 };
 
 export function useRealFeed(maxTrades = 20) {
@@ -47,6 +49,8 @@ export function useRealFeed(maxTrades = 20) {
   const { data: fxPositions }   = useForexPositions();
   const { data: optState }      = useOptionsState();
   const { data: fxState }       = useForexState();
+  // Fleet equity provides server-computed win rates and P&L — no client arithmetic.
+  const { data: fleetEq }       = useFleetEquity();
 
   const trades: RealTrade[] = useMemo(() => {
     const all: RealTrade[] = [];
@@ -62,8 +66,10 @@ export function useRealFeed(maxTrades = 20) {
 
         const sym = (t.ticker || "").replace("=X", "");
 
-        const rawPnlUsd = t.pnl_usd ?? (t as Record<string, unknown>).realized_pnl as number | undefined ?? null;
-        const pnlUsd    = rawPnlUsd ?? 0;
+        const rawPnlUsd: number | null = (t.pnl_usd ?? (t as Record<string, unknown>).realized_pnl as number | undefined) ?? null;
+        // Null P&L must NOT silently become $0/win — skip trades with no known dollar amount
+        if (rawPnlUsd === null) continue;
+        const pnlUsd = rawPnlUsd;
         const raw       = t as Record<string, unknown>;
         const sizeUsd: number | undefined =
           (raw.market_value  as number | undefined) ??
@@ -102,11 +108,14 @@ export function useRealFeed(maxTrades = 20) {
     if (jSummary) {
       stats.push({
         name: _oracle.displayName, icon: _oracle.icon,
-        totalPnl: 0,
-        totalPnlPct: (jSummary.avg_pnl ?? 0) * (jSummary.total ?? 0),
-        wins: jSummary.wins ?? 0,
+        // Server-computed P&L from /fleet/equity — avg×total formula was wrong
+        totalPnl:    fleetEq?.oracle?.pnl     ?? 0,
+        totalPnlPct: fleetEq?.oracle?.pnl_pct ?? 0,
+        wins:   jSummary.wins   ?? 0,
         losses: jSummary.losses ?? 0,
-        trades: jSummary.total ?? 0,
+        trades: jSummary.total  ?? 0,
+        // Server win rate from /fleet/equity — eliminates client wins/trades arithmetic
+        winRate: fleetEq?.oracle?.win_rate ?? undefined,
       });
     }
     if (fxState) {

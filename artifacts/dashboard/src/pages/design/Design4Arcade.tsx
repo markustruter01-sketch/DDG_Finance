@@ -140,12 +140,11 @@ function ArcPlayerCard({ player, name, bots, statuses, wfStatuses, accent }: Arc
 }
 
 export default function Design4Arcade() {
-  const { oracle, spy, jerome, buck, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
 
   const spyStatus  = getBotStatus(spy,    mktOpen, false);
   const oraStatus  = getBotStatus(oracle, mktOpen, false);
   const jerStatus  = getBotStatus(jerome, mktOpen, false);
-  const buckStatus = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? 0;
   const fleetPnl = total?.pnl     ?? 0;
@@ -157,7 +156,7 @@ export default function Design4Arcade() {
     { player: 1, name: PLAYER_NAMES[0], bots: [spy],          statuses: [spyStatus],               wfStatuses: [wfMap.get("spy_qqq_trend")],                    accent: ACCENTS[0], equity: spy?.equity    ?? 0 },
     { player: 2, name: PLAYER_NAMES[1], bots: [oracle],        statuses: [oraStatus],               wfStatuses: [wfMap.get("oracle")],                           accent: ACCENTS[1], equity: oracle?.equity ?? 0 },
     /* Curly sort key = Jerome's equity (primary bot — no summing per Rule 27) */
-    { player: 3, name: PLAYER_NAMES[2], bots: [jerome, buck],  statuses: [jerStatus, buckStatus],   wfStatuses: [wfMap.get("jerome_macro"), wfMap.get("buck_futures")], accent: ACCENTS[2], equity: jerome?.equity ?? 0 },
+    { player: 3, name: PLAYER_NAMES[2], bots: [jerome],        statuses: [jerStatus],               wfStatuses: [wfMap.get("jerome_macro")],                           accent: ACCENTS[2], equity: jerome?.equity ?? 0 },
   ].sort((a, b) => b.equity - a.equity);
 
   return (

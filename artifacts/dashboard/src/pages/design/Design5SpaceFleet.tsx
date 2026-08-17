@@ -148,12 +148,11 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, cargo = [
 }
 
 export default function Design5SpaceFleet() {
-  const { oracle, spy, jerome, buck, total, wfMap, allPos, spyPos, otherPos, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, allPos, spyPos, otherPos, regime, killTripped, mktOpen } = useFleetData();
 
   const spyStatus  = getBotStatus(spy,    mktOpen, false);
   const oraStatus  = getBotStatus(oracle, mktOpen, false);
   const jerStatus  = getBotStatus(jerome, mktOpen, false);
-  const buckStatus = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
@@ -164,12 +163,8 @@ export default function Design5SpaceFleet() {
   const oraWF  = wfMap.get("oracle");
   const spyWF  = wfMap.get("spy_qqq_trend");
   const jerWF  = wfMap.get("jerome_macro");
-  const buckWF = wfMap.get("buck_futures");
 
-  const curlyStatus: BotStatus = jerStatus === "DOWN" || buckStatus === "DOWN" ? "DOWN"
-    : jerStatus === "LIVE" || buckStatus === "LIVE" ? "LIVE"
-    : jerStatus === "IDLE" || buckStatus === "IDLE" ? "IDLE"
-    : "MKT_CLOSED";
+  const curlyStatus: BotStatus = jerStatus;
 
   const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
 
@@ -248,11 +243,10 @@ export default function Design5SpaceFleet() {
               <span className="text-[10px] font-black tracking-[0.15em] uppercase" style={{ color: "#f87171", textShadow: "0 0 8px #f8717166" }}>
                 TITAN-CLASS
               </span>
-              <span className="text-[9px] text-slate-600">Curly · Jerome + Buck</span>
+              <span className="text-[9px] text-slate-600">Curly · Jerome</span>
             </div>
             {([
-              { name: "MACRO-J", label: "Curly (Jerome)",    bot: jerome, status: jerStatus,  wf: jerWF,  isADX: false },
-              { name: "BUCK-F",  label: "Curly Jr (Buck)",   bot: buck,   status: buckStatus, wf: buckWF, isADX: true  },
+              { name: "MACRO-J", label: "Curly (Jerome)", bot: jerome, status: jerStatus, wf: jerWF, isADX: false },
             ] as const).map(({ name, label, bot, status, wf }) => {
               const pnl = bot?.pnl ?? 0;
               const posC = pnl >= 0 ? "#4ade80" : "#f87171";

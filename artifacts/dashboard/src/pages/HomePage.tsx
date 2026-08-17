@@ -18,18 +18,6 @@ import { getBotIdentity } from "@/lib/bot-identity";
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
 const CSS_ANIMATIONS = `
-@keyframes ticker-scroll {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-@keyframes constellation-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-@keyframes star-twinkle {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.45; }
-}
 @keyframes warp-out {
   0%   { transform: scale(1);    opacity: 1; }
   35%  { transform: scale(1.22); opacity: 0.65; }
@@ -341,87 +329,6 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, posChips 
   );
 }
 
-// ── Curly dual-ship card (Jerome + Buck, two sub-rows, no summing) ─────────────
-
-interface CurlyShipCardProps {
-  jerome: BotSlice | undefined; jeromeStatus: BotStatus; jeromeWF?: string | null;
-  buck:   BotSlice | undefined; buckStatus:   BotStatus; buckWF?:   string | null;
-}
-
-function CurlyShipCard({ jerome, jeromeStatus, jeromeWF, buck, buckStatus, buckWF }: CurlyShipCardProps) {
-  const [open, setOpen] = useState(false);
-  const accent = "#f87171";
-  const overall: BotStatus =
-    jeromeStatus === "DOWN"  || buckStatus === "DOWN"  ? "DOWN"  :
-    jeromeStatus === "LIVE"  || buckStatus === "LIVE"  ? "LIVE"  :
-    jeromeStatus === "IDLE"  || buckStatus === "IDLE"  ? "IDLE"  : "MKT_CLOSED";
-  const st = STATUS_SHIP[overall];
-
-  return (
-    <div className="rounded-2xl overflow-hidden cursor-pointer select-none transition-shadow duration-300"
-      style={{ background: "rgba(8,12,24,0.97)", border: `1px solid ${accent}35`,
-        boxShadow: open ? `0 0 30px ${accent}18` : "none" }}
-      onClick={() => setOpen(v => !v)}>
-      <div style={{ height: 2, background: `linear-gradient(90deg, ${accent}cc, ${accent}44 50%, transparent)` }} />
-      <div className="px-4 pt-3 pb-3">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] font-black tracking-[0.15em] uppercase"
-            style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}>TITAN-CLASS</span>
-          <span className="text-[9px] text-slate-600">{getBotIdentity("jerome_macro").shortName} · Jerome + {getBotIdentity("buck_futures").shortName}</span>
-          <div className="ml-auto flex items-center gap-1.5">
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.color,
-              boxShadow: `0 0 6px ${st.color}`, flexShrink: 0 }} />
-            <span className="text-[8px] font-bold tracking-widest uppercase" style={{ color: st.color }}>{st.label}</span>
-          </div>
-        </div>
-
-        {([
-          { id: "jerome_macro", bot: jerome, status: jeromeStatus, wf: jeromeWF },
-          { id: "buck_futures", bot: buck,   status: buckStatus,   wf: buckWF   },
-        ] as const).map(({ id, bot, status, wf }) => {
-          const { shortName: name, displayName: label } = getBotIdentity(id);
-          const pnl = bot?.pnl ?? 0;
-          const posC = pnl >= 0 ? "#4ade80" : "#f87171";
-          const subSt = STATUS_SHIP[status];
-          const wfH = WF_HEALTH[wf ?? ""] ?? WF_HEALTH["INSUFFICIENT_DATA"];
-          return (
-            <div key={name} className="mb-3 pl-3" style={{ borderLeft: "1px solid #f8717130" }}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[9px] font-black" style={{ color: accent }}>{name}</span>
-                <span className="text-[8px] text-slate-600">{label}</span>
-                <div style={{ width: 5, height: 5, borderRadius: "50%", background: subSt.color,
-                  boxShadow: `0 0 4px ${subSt.color}`, marginLeft: "auto" }} />
-                <span className="text-[8px]" style={{ color: subSt.color }}>{subSt.label}</span>
-              </div>
-              <div className="flex items-baseline gap-2 mb-1">
-                <span className="text-[17px] font-bold tabular-nums text-white">{fmtEq(bot?.equity ?? 0)}</span>
-                <span className="text-[12px] tabular-nums" style={{ color: posC }}>{fmtPct(bot?.pnl_pct ?? 0)}</span>
-                <span className="text-[10px] tabular-nums" style={{ color: `${posC}88` }}>{fmtDollar(pnl)}</span>
-                <WFBadge status={wf} />
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "#0f172a" }}>
-                  <div className="h-full rounded-full" style={{ width: `${wfH.pct}%`, background: wfH.color, boxShadow: `0 0 4px ${wfH.color}` }} />
-                </div>
-                <span className="text-[8px] shrink-0" style={{ color: wfH.color }}>{wfH.label}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {open && (
-        <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
-          onClick={e => e.stopPropagation()}>
-          <p className="text-[9px] text-slate-700 mt-3 italic">
-            Positions tracked in shared Alpaca account — see Stream for detail.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Market + kill-switch chips ────────────────────────────────────────────────
 
 function RegimeChip({ regime }: { regime: string | undefined }) {
@@ -443,10 +350,11 @@ function RegimeChip({ regime }: { regime: string | undefined }) {
 // ── Export dropdown ───────────────────────────────────────────────────────────
 
 function ExportDropdown({
-  spy, oracle, jerome, buck, total, regime, killTripped,
+  spy, oracle, jerome, total, regime, killTripped,
 }: {
-  spy?: BotSlice; oracle?: BotSlice; jerome?: BotSlice; buck?: BotSlice;
-  total?: BotSlice; regime?: string; killTripped?: boolean | null;
+  spy?: BotSlice; oracle?: BotSlice; jerome?: BotSlice;
+  total?: { equity?: number; pnl?: number; pnl_pct?: number };
+  regime?: string; killTripped?: boolean | null;
 }) {
   const [open, setOpen]     = useState(false);
   const [busy, setBusy]     = useState<string | null>(null);
@@ -508,14 +416,13 @@ function ExportDropdown({
   const handleCopyFleetStatus = useCallback(async () => {
     setBusy("copy");
     const lines = [
-      `STOOGE FLEET STATUS — ${new Date().toLocaleString()}`,
+      `3-BOT FLEET STATUS — ${new Date().toLocaleString()}`,
       `──────────────────────────────────`,
       `FLEET TOTAL  ${fmtEq(total?.equity ?? 0)}  ${fmtPct(total?.pnl_pct ?? 0)}  ${fmtDollar(total?.pnl ?? 0)}`,
       ``,
       `${getBotIdentity("spy_qqq_trend").displayName.padEnd(16)}  ${fmtEq(spy?.equity ?? 0)}  ${fmtPct(spy?.pnl_pct ?? 0)}  ${fmtDollar(spy?.pnl ?? 0)}`,
       `${getBotIdentity("oracle").displayName.padEnd(16)}  ${fmtEq(oracle?.equity ?? 0)}  ${fmtPct(oracle?.pnl_pct ?? 0)}  ${fmtDollar(oracle?.pnl ?? 0)}`,
       `${getBotIdentity("jerome_macro").displayName.padEnd(16)}  ${fmtEq(jerome?.equity ?? 0)}  ${fmtPct(jerome?.pnl_pct ?? 0)}  ${fmtDollar(jerome?.pnl ?? 0)}`,
-      `${getBotIdentity("buck_futures").displayName.padEnd(16)}  ${fmtEq(buck?.equity ?? 0)}  ${fmtPct(buck?.pnl_pct ?? 0)}  ${fmtDollar(buck?.pnl ?? 0)}`,
       ``,
       `REGIME: ${regime ?? "UNKNOWN"}`,
       `KILL SWITCH: ${killTripped == null ? "UNKNOWN" : killTripped ? "TRIPPED ⚠" : "ARMED"}`,
@@ -529,7 +436,7 @@ function ExportDropdown({
       document.execCommand("copy"); document.body.removeChild(ta);
       toast({ title: "Fleet status copied" });
     } finally { setBusy(null); setOpen(false); }
-  }, [spy, oracle, jerome, buck, total, regime, killTripped, toast]);
+  }, [spy, oracle, jerome, total, regime, killTripped, toast]);
 
   const items = [
     {
@@ -643,7 +550,7 @@ function ExportDropdown({
 export default function HomePage() {
   const [, navigate] = useLocation();
   const {
-    oracle, spy, jerome, buck, total,
+    oracle, spy, jerome, total,
     spyPos, otherPos, wfMap,
     regime, killTripped, lastCycle, mktOpen,
   } = useFleetData();
@@ -652,18 +559,16 @@ export default function HomePage() {
   const [warp, setWarp] = useState(false);
   const prevCycle = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (lastCycle && lastCycle !== prevCycle.current) {
-      prevCycle.current = lastCycle;
-      setWarp(true);
-      const t = setTimeout(() => setWarp(false), 800);
-      return () => clearTimeout(t);
-    }
+    if (!lastCycle || lastCycle === prevCycle.current) return;
+    prevCycle.current = lastCycle;
+    setWarp(true);
+    const t = setTimeout(() => setWarp(false), 800);
+    return () => clearTimeout(t);
   }, [lastCycle]);
 
   const spyStatus    = getBotStatus(spy,    mktOpen, false);
   const oraStatus    = getBotStatus(oracle, mktOpen, false);
   const jeromeStatus = getBotStatus(jerome, mktOpen, false);
-  const buckStatus   = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
@@ -671,27 +576,9 @@ export default function HomePage() {
   const pos = (fleetPnl ?? 0) >= 0;
   const pnlColor = pos ? "#4ade80" : "#f87171";
 
-  // Constellation stars — labels from bot-identity.ts SSOT
-  const stars = useMemo<BotStar[]>(() => [
-    { id: "spy_qqq_trend", label: getBotIdentity("spy_qqq_trend").shortName, equity: spy?.equity    ?? 100000, pnl: spy?.pnl    ?? 0, angle: -45  },
-    { id: "oracle",        label: getBotIdentity("oracle").shortName,        equity: oracle?.equity ?? 100000, pnl: oracle?.pnl ?? 0, angle: 225  },
-    { id: "jerome_macro",  label: getBotIdentity("jerome_macro").shortName,  equity: jerome?.equity ?? 100000, pnl: jerome?.pnl ?? 0, angle: 135  },
-    { id: "buck_futures",  label: getBotIdentity("buck_futures").shortName,  equity: buck?.equity   ?? 100000, pnl: buck?.pnl   ?? 0, angle: 315  },
-  ], [spy, oracle, jerome, buck]);
-
-  // Ticker segments
-  const tickerSegments = useMemo(() => {
-    const segs: string[] = [
-      spy    ? `${getBotIdentity("spy_qqq_trend").shortName}  ${fmtPct(spy.pnl_pct)}  ${fmtDollar(spy.pnl)}`    : null,
-      oracle ? `${getBotIdentity("oracle").shortName}  ${fmtPct(oracle.pnl_pct)}  ${fmtDollar(oracle.pnl)}` : null,
-      jerome ? `${getBotIdentity("jerome_macro").shortName}  ${fmtPct(jerome.pnl_pct)}  ${fmtDollar(jerome.pnl)}` : null,
-      buck   ? `${getBotIdentity("buck_futures").shortName}  ${fmtPct(buck.pnl_pct)}  ${fmtDollar(buck.pnl)}`   : null,
-      total  ? `FLEET  ${fmtPct(total.pnl_pct)}  ${fmtDollar(total.pnl)}`      : null,
-      `REGIME: ${regime ?? "…"}`,
-      killTripped == null ? null : killTripped ? "KILL SWITCH: TRIPPED ⚠" : "KILL SWITCH: ARMED",
-    ].filter(Boolean) as string[];
-    return segs.length ? segs : ["LOADING FLEET DATA…"];
-  }, [spy, oracle, jerome, buck, total, regime, killTripped]);
+  // 24h P&L from server fleet_total — no client arithmetic
+  const pnl24h    = total?.pnl_24h    ?? null;
+  const pnl24hPct = total?.pnl_24h_pct ?? null;
 
   const spyChips   = spyPos.map(p => ({ symbol: p.symbol, plPct: p.unrealized_plpc * 100 }));
   const oraChips   = otherPos.map(p => ({ symbol: p.symbol, plPct: p.unrealized_plpc * 100 }));
@@ -708,7 +595,7 @@ export default function HomePage() {
         style={{ background: "rgba(3,7,18,0.92)", borderBottom: "1px solid rgba(34,211,238,0.10)", backdropFilter: "blur(8px)" }}
       >
         <div>
-          <div className="text-[8px] uppercase tracking-[0.2em] text-slate-700 mb-0.5">STOOGE FLEET · TOTAL ASSETS</div>
+          <div className="text-[8px] uppercase tracking-[0.2em] text-slate-700 mb-0.5">3-BOT FLEET · TOTAL ASSETS</div>
           <div className="flex items-baseline gap-2">
             <span className="text-[22px] font-bold tabular-nums text-white leading-none"
               style={{ textShadow: "0 0 20px #22d3ee25" }}>
@@ -717,6 +604,12 @@ export default function HomePage() {
             {fleetPnl != null && (
               <span className="text-[13px] font-semibold tabular-nums" style={{ color: pnlColor }}>
                 {fmtDollar(fleetPnl)} ({fmtPct(fleetPct ?? 0)})
+              </span>
+            )}
+            {pnl24h != null && (
+              <span className="text-[10px] tabular-nums ml-1" style={{ color: pnl24h >= 0 ? "#4ade8099" : "#f8717199" }}>
+                24h {pnl24h >= 0 ? "+" : ""}{fmtDollar(pnl24h)}
+                {pnl24hPct != null && ` (${pnl24hPct >= 0 ? "+" : ""}${pnl24hPct.toFixed(2)}%)`}
               </span>
             )}
           </div>
@@ -735,7 +628,7 @@ export default function HomePage() {
             </div>
           )}
           <ExportDropdown
-            spy={spy} oracle={oracle} jerome={jerome} buck={buck}
+            spy={spy} oracle={oracle} jerome={jerome}
             total={total ?? undefined} regime={regime} killTripped={killTripped}
           />
         </div>
@@ -747,21 +640,8 @@ export default function HomePage() {
           wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" posChips={spyChips} />
         <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
           wfStatus={wfMap.get("oracle")}        accent="#a78bfa" posChips={oraChips} />
-        <CurlyShipCard
-          jerome={jerome} jeromeStatus={jeromeStatus} jeromeWF={wfMap.get("jerome_macro")}
-          buck={buck}     buckStatus={buckStatus}     buckWF={wfMap.get("buck_futures")} />
-
-        {/* ── Animation zone ── */}
-        <div className="rounded-2xl overflow-hidden" style={{ background: "rgba(6,10,22,0.85)", border: "1px solid rgba(34,211,238,0.08)" }}>
-
-          {/* Constellation map */}
-          <div className="flex justify-center py-4">
-            <ConstellationMap stars={stars} />
-          </div>
-
-          {/* Comms ticker */}
-          <CommsTicker segments={tickerSegments} />
-        </div>
+        <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
+          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" posChips={[]} />
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"

@@ -139,12 +139,11 @@ function MCBotPanel({ mission, subsys, bot, status, wfStatus, accent }: MCBotPro
 }
 
 export default function Design3MissionControl() {
-  const { oracle, spy, jerome, buck, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
 
   const spyStatus  = getBotStatus(spy,    mktOpen, false);
   const oraStatus  = getBotStatus(oracle, mktOpen, false);
   const jerStatus  = getBotStatus(jerome, mktOpen, false);
-  const buckStatus = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? null;
   const fleetPct = total?.pnl_pct ?? null;
@@ -195,17 +194,11 @@ export default function Design3MissionControl() {
         {/* Curly dual panel */}
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid #f8717130", background: "#060d1f" }}>
           <div className="flex items-center justify-between px-4 py-2" style={{ background: "#f8717110", borderBottom: "1px solid #f8717130" }}>
-            <span className="text-[10px] font-black tracking-widest" style={{ color: "#f87171" }}>CURLY · JEROME + BUCK</span>
-            <StatusLight status={
-              jerStatus === "DOWN"  || buckStatus === "DOWN"  ? "DOWN"  :
-              jerStatus === "LIVE"  || buckStatus === "LIVE"  ? "LIVE"  :
-              jerStatus === "IDLE"  || buckStatus === "IDLE"  ? "IDLE"  :
-              "MKT_CLOSED"
-            } />
+            <span className="text-[10px] font-black tracking-widest" style={{ color: "#f87171" }}>CURLY · JEROME</span>
+            <StatusLight status={jerStatus} />
           </div>
           {([
-            { label: "SUBSYS-C1 · CURLY (JEROME)",    bot: jerome, status: jerStatus,  wf: wfMap.get("jerome_macro"), isADX: false },
-            { label: "SUBSYS-C2 · CURLY JR (BUCK)",   bot: buck,   status: buckStatus, wf: wfMap.get("buck_futures"), isADX: true  },
+            { label: "SUBSYS-C · CURLY (JEROME)", bot: jerome, status: jerStatus, wf: wfMap.get("jerome_macro"), isADX: false },
           ] as const).map(({ label, bot, status, wf }) => {
             const pnl = bot?.pnl ?? 0;
             const posClr = pnl >= 0 ? "#22c55e" : "#ef4444";

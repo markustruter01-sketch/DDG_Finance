@@ -12,13 +12,30 @@ All endpoint handlers live in ``routes/`` sub-modules.  This file keeps only:
 
 import asyncio
 import os
+import subprocess as _subprocess
 import sys
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone as _tz
 from typing import Any
 
 from fastapi import FastAPI, APIRouter
 from loguru import logger
+
+# ── Running-process git hash (captured once at startup) ──────────────────────
+def _read_git_hash() -> str:
+    try:
+        return _subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=_subprocess.DEVNULL,
+            timeout=3,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+_RUNNING_HASH: str = _read_git_hash()
+_STARTED_AT: str   = datetime.now(_tz.utc).isoformat()
 
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
@@ -582,6 +599,30 @@ class DegradationCaptureMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(DegradationCaptureMiddleware)
+
+
+@app.get("/trading-api/version", tags=["System"])
+async def version_info():
+    """
+    Return the running-process git hash (captured at startup) alongside the
+    current HEAD hash.  If they differ, the process has not been restarted
+    since the last deploy — restart the deployment to pick up the new code.
+    """
+    try:
+        latest = _subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=_subprocess.DEVNULL,
+            timeout=3,
+        ).decode().strip()
+    except Exception:
+        latest = "unknown"
+    return {
+        "running_hash": _RUNNING_HASH,
+        "latest_hash":  latest,
+        "match":        _RUNNING_HASH == latest,
+        "started_at":   _STARTED_AT,
+    }
 
 
 for sub_router in ALL_ROUTERS:

@@ -748,6 +748,11 @@ def get_all_trades(limit: int = 200) -> list[dict]:
 
 
 def get_journal_summary() -> dict:
+    """
+    Returns aggregated trade stats.
+    Includes best_trade_usd / best_trade_symbol and worst_trade_usd / worst_trade_symbol
+    so the dashboard can display server-computed extremes without client-side reduce() calls.
+    """
     if _use_pg():
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -762,8 +767,27 @@ def get_journal_summary() -> dict:
                     FROM trades
                 """)
                 row = cur.fetchone()
-        keys = ("total", "active", "wins", "losses", "avg_pnl")
-        return dict(zip(keys, row))
+                keys = ("total", "active", "wins", "losses", "avg_pnl")
+                result = dict(zip(keys, row))
+
+                # Best and worst trade by realized_pnl (all-time, closed trades only)
+                cur.execute("""
+                    SELECT ticker, realized_pnl FROM trades
+                    WHERE status LIKE 'Closed_%' AND realized_pnl IS NOT NULL
+                    ORDER BY realized_pnl DESC LIMIT 1
+                """)
+                best_row = cur.fetchone()
+                cur.execute("""
+                    SELECT ticker, realized_pnl FROM trades
+                    WHERE status LIKE 'Closed_%' AND realized_pnl IS NOT NULL
+                    ORDER BY realized_pnl ASC LIMIT 1
+                """)
+                worst_row = cur.fetchone()
+                result["best_trade_symbol"] = best_row[0]  if best_row  else None
+                result["best_trade_usd"]    = float(best_row[1])  if best_row  else None
+                result["worst_trade_symbol"]= worst_row[0] if worst_row else None
+                result["worst_trade_usd"]   = float(worst_row[1]) if worst_row else None
+        return result
     else:
         with _sqlite_conn() as conn:
             row = conn.execute("""
@@ -774,7 +798,18 @@ def get_journal_summary() -> dict:
                     AVG(CASE WHEN status!='Active' THEN pnl_percentage END) AS avg_pnl
                 FROM trades
             """).fetchone()
-        return dict(row)
+            result = dict(row)
+            best_row = conn.execute(
+                "SELECT ticker, realized_pnl FROM trades WHERE status LIKE 'Closed_%' AND realized_pnl IS NOT NULL ORDER BY realized_pnl DESC LIMIT 1"
+            ).fetchone()
+            worst_row = conn.execute(
+                "SELECT ticker, realized_pnl FROM trades WHERE status LIKE 'Closed_%' AND realized_pnl IS NOT NULL ORDER BY realized_pnl ASC LIMIT 1"
+            ).fetchone()
+            result["best_trade_symbol"]  = best_row[0]        if best_row  else None
+            result["best_trade_usd"]     = float(best_row[1]) if best_row  else None
+            result["worst_trade_symbol"] = worst_row[0]        if worst_row else None
+            result["worst_trade_usd"]    = float(worst_row[1]) if worst_row else None
+        return result
 
 
 def get_slippage_stats() -> dict:

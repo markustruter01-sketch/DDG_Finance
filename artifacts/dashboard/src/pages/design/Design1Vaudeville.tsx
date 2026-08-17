@@ -121,12 +121,11 @@ function VBotCard({ emoji, name, role, bot, status, wfStatus, accent }: VBotProp
 }
 
 export default function Design1Vaudeville() {
-  const { oracle, spy, jerome, buck, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
 
   const spyStatus    = getBotStatus(spy,    mktOpen, false);
   const oraStatus    = getBotStatus(oracle, mktOpen, false);
   const jerStatus    = getBotStatus(jerome, mktOpen, false);
-  const buckStatus   = getBotStatus(buck,   mktOpen, true);
 
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
@@ -176,12 +175,11 @@ export default function Design1Vaudeville() {
             <div className="flex items-center gap-2 mb-3">
               <span className="text-3xl">🎺</span>
               <span className="text-[15px] font-black text-amber-100">Curly</span>
-              <span className="text-[9px] text-amber-700 uppercase tracking-widest">Jerome + Buck</span>
+              <span className="text-[9px] text-amber-700 uppercase tracking-widest">Jerome</span>
             </div>
             {/* Sub-rows */}
             {([
-              { label: "Curly",    bot: jerome, status: jerStatus,  wf: wfMap.get("jerome_macro"), isADX: false },
-              { label: "Curly Jr", bot: buck,   status: buckStatus, wf: wfMap.get("buck_futures"), isADX: true  },
+              { label: "Curly", bot: jerome, status: jerStatus, wf: wfMap.get("jerome_macro"), isADX: false },
             ] as const).map(({ label, bot, status, wf }) => {
               const st = STATUSES[status];
               const pnl = bot?.pnl ?? 0;

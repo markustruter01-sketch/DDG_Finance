@@ -11,14 +11,14 @@ const STATIC_BOTS: Array<{ id: string; name: string; icon: string; exchange: str
   { id: "oracle",        name: "Oracle",        icon: "🔮", exchange: "alpaca", asset_class: "stocks",        color: "purple", status: "active" },
   { id: "spy_qqq_trend", name: "SPY/QQQ Trend", icon: "📈", exchange: "alpaca", asset_class: "equity_etf",    color: "cyan",   status: "active" },
   { id: "jerome_macro",  name: "Jerome",        icon: "🏛",  exchange: "alpaca", asset_class: "macro_etf",     color: "orange", status: "active" },
-  { id: "buck_futures",  name: "Buck Futures",  icon: "🐂", exchange: "alpaca", asset_class: "commodity_etf", color: "green",  status: "active" },
+  // buck_futures retired May 2026 — removed from display
 ];
 
 const PARAMS_TEXT: Record<string, string> = {
   oracle:        "Z-Score > 2.1 | Min Profit 0.5% | NYSE hours only",
   spy_qqq_trend: "Z-Entry 2.0 | Z-Exit 0.3 | Trail 1.5% | Stop 3%",
   jerome_macro:  "EMA/ADX/ATR trend-following | LLM parachute | 9AM+9PM UTC",
-  buck_futures:  "Industrial + Broad commodity ETFs | EMA/ADX/ATR | Jerome clone",
+  // buck_futures retired May 2026 — no params entry
 };
 
 function fmtEq(v: number) {
@@ -256,18 +256,17 @@ export default function StreamingBotsScreen() {
       openPositionSymbols: [],
       recentTrades: [],
     },
-    buck_futures: {
-      equity:             fleetEq?.buck_futures?.equity ?? null,
-      pnl:                fleetEq?.buck_futures?.pnl ?? null,
-      pnl_pct:            fleetEq?.buck_futures?.pnl_pct ?? null,
-      paused:             fleetEq?.buck_futures?.paused ?? false,
-      openPositionCount:  fleetEq?.buck_futures?.positions ?? 0,
-      openPositionSymbols: [],
-      recentTrades: [],
-    },
+    // buck_futures retired May 2026 — no runtime slot
   };
 
-  const botSource = registry?.bots ?? STATIC_BOTS;
+  const rawBotSource = registry?.bots ?? STATIC_BOTS;
+  // Filter: hide any bot whose fleet-equity slot is stale (retired bots always stale)
+  // When fleet is not yet loaded, show all so the skeleton renders properly.
+  const botSource = rawBotSource.filter((b: { id: string }) => {
+    if (!fleetEq) return true;
+    const eq = (fleetEq as unknown as Record<string, { stale?: boolean } | undefined>)[b.id];
+    return eq != null && !eq.stale;
+  });
   const bots: BotCardData[] = botSource.map((bot) => {
     const colors = getBotColors(bot.color);
     const runtime = botRuntimeByRegistryId[bot.id] ?? {};

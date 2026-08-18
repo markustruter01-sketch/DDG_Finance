@@ -191,6 +191,21 @@ def get_market_state(persist: bool = True) -> dict[str, Any]:
         closes   = list(spy_data.get("closes") or [])
 
         if len(closes) < MSE_CRISIS_LOOKBACK + 1:
+            # Cold-start fallback: momentum cache not yet populated (VM restart
+            # before first pipeline run).  Fetch SPY directly rather than
+            # defaulting to fail-safe CRISIS and blocking all entries.
+            logger.warning(
+                f"MSE | Momentum cache cold ({len(closes)} SPY bars) — "
+                f"attempting direct sync fetch"
+            )
+            try:
+                from data.yfinance_client import fetch_spy_closes_sync
+                closes = fetch_spy_closes_sync(n_bars=250)
+            except Exception as _spy_exc:
+                logger.warning(f"MSE | SPY sync fallback raised: {_spy_exc}")
+                closes = []
+
+        if len(closes) < MSE_CRISIS_LOOKBACK + 1:
             logger.warning(
                 f"MSE | Insufficient SPY data ({len(closes)} bars, "
                 f"need {MSE_CRISIS_LOOKBACK + 1}) — fail-safe CRISIS (entries blocked until real data)"

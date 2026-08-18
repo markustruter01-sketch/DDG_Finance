@@ -437,6 +437,45 @@ def get_cached_momentum_data() -> dict | None:
     return _cached_momentum_data
 
 
+def fetch_spy_closes_sync(n_bars: int = 250) -> list[float]:
+    """Synchronously fetch SPY daily closes from the Alpaca data API.
+
+    Used as a cold-start fallback in get_market_state() when the in-process
+    momentum cache hasn't been populated yet (e.g. after a VM restart before
+    the first full pipeline run).  Returns closes oldest-first, empty on error.
+    """
+    import requests
+    from datetime import date, timedelta
+
+    try:
+        start = (date.today() - timedelta(days=n_bars + 60)).isoformat()
+        end   = date.today().isoformat()
+        resp = requests.get(
+            f"{ALPACA_DATA_BASE_URL}/stocks/SPY/bars",
+            headers={
+                "APCA-API-KEY-ID":     settings.alpaca_api_key,
+                "APCA-API-SECRET-KEY": settings.alpaca_secret_key,
+            },
+            params={
+                "timeframe": "1Day",
+                "start":     start,
+                "end":       end,
+                "limit":     n_bars,
+                "feed":      "iex",
+                "sort":      "asc",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        bars = resp.json().get("bars") or []
+        closes = [float(b["c"]) for b in bars]
+        logger.info(f"MSE | SPY sync fallback fetch — {len(closes)} bars retrieved")
+        return closes
+    except Exception as exc:
+        logger.warning(f"MSE | SPY sync fallback fetch failed: {exc}")
+        return []
+
+
 async def fetch_momentum_universe() -> dict[str, Any]:
     import time
     global _cached_momentum_data, _momentum_cache_ts

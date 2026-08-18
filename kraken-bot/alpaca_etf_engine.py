@@ -306,6 +306,32 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Order failed {side} {symbol}: {exc}")
             return None
 
+    def buy_market(self, symbol: str, shares: float) -> Optional[dict]:
+        """Place a whole-share market buy order.
+        Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when
+        closed so off-hours orders queue for next open instead of being rejected.
+        """
+        tif = "day" if _nyse_is_open() else "opg"
+        qty = round(shares, 8)
+        logger.info(f"EtfEngine | Submitting BUY {symbol} qty={qty} tif={tif}")
+        try:
+            order = self.api.submit_order(
+                symbol=symbol,
+                qty=qty,
+                side="buy",
+                type="market",
+                time_in_force=tif,
+            )
+            logger.info(
+                f"EtfEngine | ORDER PLACED: BUY {symbol} "
+                f"qty={qty} order_id={order.id}"
+            )
+            return {"order_id": order.id, "symbol": symbol,
+                    "side": "buy", "qty": qty}
+        except Exception as exc:
+            logger.error(f"EtfEngine | buy_market failed {symbol}: {exc}")
+            return None
+
     def close_position(self, symbol: str) -> bool:
         """Close entire position in a symbol."""
         try:

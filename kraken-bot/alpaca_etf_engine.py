@@ -283,10 +283,11 @@ class AlpacaEtfEngine:
         notional: float,
     ) -> Optional[dict]:
         """Place a fractional notional market order. side must be 'buy' or 'sell'.
-        Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when closed
-        so off-hours orders queue for next open instead of being rejected.
+        Always uses time_in_force="day" — Alpaca rejects fractional (notional)
+        orders with tif="opg". A pre-market DAY order queues for the 09:30 open,
+        achieving the same effect without the rejection.
         """
-        tif = "day" if _nyse_is_open() else "opg"
+        tif = "day"
         logger.info(f"EtfEngine | Submitting {side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
             order = self.api.submit_order(
@@ -307,11 +308,11 @@ class AlpacaEtfEngine:
             return None
 
     def buy_market(self, symbol: str, shares: float) -> Optional[dict]:
-        """Place a whole-share market buy order.
-        Uses time_in_force="day" when NYSE is open; "opg" (at-the-open) when
-        closed so off-hours orders queue for next open instead of being rejected.
+        """Place a fractional-share market buy order.
+        Always uses time_in_force="day" — Alpaca rejects fractional qty orders
+        with tif="opg". A pre-market DAY order queues for the 09:30 open.
         """
-        tif = "day" if _nyse_is_open() else "opg"
+        tif = "day"
         qty = round(shares, 8)
         logger.info(f"EtfEngine | Submitting BUY {symbol} qty={qty} tif={tif}")
         try:

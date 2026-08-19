@@ -94,7 +94,7 @@ function ConstellationMap({ stars }: { stars: BotStar[] }) {
 
   return (
     <div className="flex flex-col items-center" style={{ gap: 4 }}>
-      <div className="text-[8px] uppercase tracking-[0.25em] text-slate-700 mb-1">FLEET CONSTELLATION</div>
+      <div className="text-[8px] uppercase tracking-[0.25em] text-white mb-1">FLEET CONSTELLATION</div>
       <svg
         width="200" height="200"
         viewBox="0 0 200 200"
@@ -204,11 +204,11 @@ const WF_CFG: Record<string, { label: string; color: string }> = {
   PASS:              { label: "PASS",   color: "#22c55e" },
   MARGINAL:          { label: "AMBER",  color: "#f59e0b" },
   FAIL:              { label: "FAIL",   color: "#ef4444" },
-  INSUFFICIENT_DATA: { label: "INSUFF", color: "#64748b" },
+  INSUFFICIENT_DATA: { label: "INSUFF", color: "#ffffff" },
 };
 
 function WFBadge({ status }: { status: string | null | undefined }) {
-  const b = WF_CFG[status ?? ""] ?? { label: "N/A", color: "#334155" };
+  const b = WF_CFG[status ?? ""] ?? { label: "N/A", color: "#ffffff" };
   return (
     <span className="text-[8px] font-black tracking-widest uppercase px-1.5 py-0.5 rounded border"
       style={{ color: b.color, borderColor: `${b.color}40`, background: `${b.color}12` }}>
@@ -223,14 +223,14 @@ const WF_HEALTH: Record<string, { pct: number; color: string; label: string }> =
   PASS:              { pct: 100, color: "#22c55e", label: "SHIELDS 100%" },
   MARGINAL:          { pct: 55,  color: "#f59e0b", label: "SHIELDS 55%"  },
   FAIL:              { pct: 15,  color: "#ef4444", label: "SHIELDS 15%"  },
-  INSUFFICIENT_DATA: { pct: 0,   color: "#64748b", label: "NO DATA"      },
+  INSUFFICIENT_DATA: { pct: 0,   color: "#ffffff", label: "NO DATA"      },
 };
 
 function HealthBar({ wfStatus }: { wfStatus: string | null | undefined }) {
   const h = WF_HEALTH[wfStatus ?? ""] ?? WF_HEALTH["INSUFFICIENT_DATA"];
   return (
     <div className="flex items-center gap-2">
-      <div className="text-[8px] uppercase tracking-widest text-slate-600 shrink-0 w-14">SHIELDS</div>
+      <div className="text-[8px] uppercase tracking-widest text-white shrink-0 w-14">SHIELDS</div>
       <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#0f172a" }}>
         <div className="h-full rounded-full transition-all duration-700"
           style={{ width: `${h.pct}%`, background: h.color, boxShadow: `0 0 6px ${h.color}` }} />
@@ -258,7 +258,7 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
 
   if (!entryWindow) {
     return (
-      <div className="mt-3 text-[9px] tracking-wide text-slate-600">
+      <div className="mt-3 text-[9px] tracking-wide text-white">
         ⏱ Window schedule syncing…
       </div>
     );
@@ -312,7 +312,7 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
 
 const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
   LIVE:       { label: "ONLINE",   color: "#22c55e" },
-  MKT_CLOSED: { label: "DOCKED",   color: "#64748b" },
+  MKT_CLOSED: { label: "DOCKED",   color: "#ffffff" },
   DOWN:       { label: "DISTRESS", color: "#ef4444" },
   IDLE:       { label: "STANDBY",  color: "#eab308" },
 };
@@ -328,7 +328,7 @@ function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: 
   return (
     <div className="mt-2 space-y-1">
       {real.length === 0 && !sgov && (
-        <div className="text-[9px] italic" style={{ color: "#334155" }}>
+        <div className="text-[9px] italic text-white">
           In cash — no open positions
         </div>
       )}
@@ -371,15 +371,15 @@ function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: 
             {isOpen && (
               <div className="flex gap-4 px-2 pb-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                 <div className="pt-1">
-                  <div className="text-[7px] uppercase tracking-widest" style={{ color: "#334155" }}>Entry</div>
-                  <div className="font-mono text-[9px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                  <div className="text-[7px] uppercase tracking-widest text-white">Entry</div>
+                  <div className="font-mono text-[9px] text-white">
                     ${pos.avg_entry_price?.toFixed(2)}
                   </div>
                 </div>
                 {pos.current_price != null && (
                   <div className="pt-1">
-                    <div className="text-[7px] uppercase tracking-widest" style={{ color: "#334155" }}>Now</div>
-                    <div className="font-mono text-[9px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    <div className="text-[7px] uppercase tracking-widest text-white">Now</div>
+                    <div className="font-mono text-[9px] text-white">
                       ${pos.current_price.toFixed(2)}
                     </div>
                   </div>
@@ -392,8 +392,8 @@ function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: 
       {sgov && (
         <div className="flex items-center gap-2 px-2 py-1 rounded"
           style={{ border: "1px solid rgba(71,85,105,0.20)", background: "rgba(71,85,105,0.06)" }}>
-          <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#334155" }}>SGOV</span>
-          <span className="text-[8px] italic" style={{ color: "#334155" }}>cash park</span>
+          <span className="font-mono text-[10px] w-9 shrink-0 text-white">SGOV</span>
+          <span className="text-[8px] italic text-white">cash park</span>
         </div>
       )}
     </div>
@@ -438,7 +438,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
             style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}>
             {shipName}
           </span>
-          <span className="text-[9px] text-slate-600">{callsign}</span>
+          <span className="text-[9px] text-white">{callsign}</span>
           <div className="ml-auto flex items-center gap-1.5">
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.color,
               boxShadow: `0 0 6px ${st.color}`, flexShrink: 0 }} />
@@ -480,7 +480,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
       {open && (
         <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
           onClick={e => e.stopPropagation()}>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-slate-600">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-white">
             {bot?.win_rate != null && <span>30D WR <span className="text-cyan-500">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
             {bot?.positions != null && <span>POSITIONS <span className="text-cyan-500">{bot.positions}</span></span>}
             {bot?.last_updated && <span>PING <span className="text-cyan-500">{new Date(bot.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></span>}
@@ -667,7 +667,7 @@ function ExportDropdown({
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "8px 12px 6px", fontSize: 8, letterSpacing: "0.2em", color: "#334155", fontFamily: "monospace", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ padding: "8px 12px 6px", fontSize: 8, letterSpacing: "0.2em", color: "#ffffff", fontFamily: "monospace", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
             REPORTS &amp; EXPORTS
           </div>
           {items.map((item) => (
@@ -695,7 +695,7 @@ function ExportDropdown({
                 <div style={{ fontSize: 11, fontWeight: 700, color: item.accent, fontFamily: "monospace", letterSpacing: "0.05em" }}>
                   {busy === item.id ? "Working…" : item.label}
                 </div>
-                <div style={{ fontSize: 9, color: "#475569", fontFamily: "monospace", marginTop: 1 }}>
+                <div style={{ fontSize: 9, color: "#ffffff", fontFamily: "monospace", marginTop: 1 }}>
                   {item.sub}
                 </div>
               </div>
@@ -757,7 +757,7 @@ export default function HomePage() {
         style={{ background: "rgba(3,7,18,0.92)", borderBottom: "1px solid rgba(34,211,238,0.10)", backdropFilter: "blur(8px)" }}
       >
         <div>
-          <div className="text-[8px] uppercase tracking-[0.2em] text-slate-700 mb-0.5">3-BOT FLEET · TOTAL ASSETS</div>
+          <div className="text-[8px] uppercase tracking-[0.2em] text-white mb-0.5">3-BOT FLEET · TOTAL ASSETS</div>
           <div className="flex items-baseline gap-2">
             <span className="text-[22px] font-bold tabular-nums text-white leading-none"
               style={{ textShadow: "0 0 20px #22d3ee25" }}>
@@ -784,7 +784,7 @@ export default function HomePage() {
                 background: killTripped ? "#ef4444" : "#22c55e",
                 boxShadow: killTripped ? "0 0 8px #ef4444" : "0 0 5px #22c55e55" }} />
               <span className="text-[8px] uppercase tracking-widest"
-                style={{ color: killTripped ? "#ef4444" : "#475569" }}>
+                style={{ color: killTripped ? "#ef4444" : "#ffffff" }}>
                 {killTripped ? "KS TRIPPED" : "ARMED"}
               </span>
             </div>
@@ -807,12 +807,12 @@ export default function HomePage() {
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"
-          style={{ color: "#1e3a5f" }}>
-          <span className="uppercase tracking-widest" style={{ color: pos ? "#22c55e66" : "#ef444466" }}>
+          style={{ color: "#ffffff" }}>
+          <span className="uppercase tracking-widest" style={{ color: pos ? "#22c55e" : "#ef4444" }}>
             FLEET STATUS: {pos ? "PROFITABLE" : "IN THE RED"}
           </span>
           <button className="font-bold transition-colors hover:opacity-80"
-            style={{ color: "#22d3ee66" }}
+            style={{ color: "#22d3ee" }}
             onClick={() => navigate("/stream")}>
             Full report →
           </button>

@@ -307,7 +307,13 @@ def _safe_close(engine: AlpacaEtfEngine, symbol: str, exit_reason: str,
     Sends Discord + degradation alerts on failure (C-1 pattern from bot2/Asia).
     """
     try:
-        closed = engine.close_position(symbol)
+        db_pos = next((p for p in engine.get_db_positions(bot_id) if p["symbol"] == symbol), {})
+        closed = engine.close_position(
+            symbol,
+            bot_id=bot_id,
+            stop_order_id=db_pos.get("stop_order_id"),
+            stop_price=float(db_pos["stop_price"]) if db_pos.get("stop_price") is not None else None,
+        )
         if not closed:
             raise RuntimeError("close_position() returned False/None")
         return True
@@ -393,6 +399,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
 
     live_positions = engine.get_positions()
     db_positions   = engine.get_db_positions(BOT_ID)
+    engine.reconcile_protective_stops(BOT_ID, db_positions)
 
     logger.info(
         f"EM | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
@@ -442,7 +449,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
             realised_pnl = live["unrealised_pnl_usd"] if live else None
             if _safe_close(engine, symbol, exit_reason, realised_pnl, BOT_ID):
                 engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
-            _closed_this_cycle.add(symbol)
+                _closed_this_cycle.add(symbol)
             live_positions = engine.get_positions()
             continue
 
@@ -455,7 +462,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
                 realised_pnl = live["unrealised_pnl_usd"] if live else None
                 if _safe_close(engine, symbol, trend_reason, realised_pnl, BOT_ID):
                     engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
-                _closed_this_cycle.add(symbol)
+                    _closed_this_cycle.add(symbol)
                 live_positions = engine.get_positions()
 
     # ── Entry scan (once per day, post-close window) ─────────────────────────
@@ -616,23 +623,26 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         try:
             order = engine.buy_market(symbol, shares)
             if order:
-                engine.record_open(
+                recorded = engine.record_open(
                     bot_id         = BOT_ID,
                     symbol         = symbol,
-                    shares         = shares,
+                    direction      = "long",
+                    qty            = shares,
                     entry_price    = entry_price,
-                    notional       = notional,
-                    trail_stop_pct = TRAIL_STOP_PCT,
-                    tp1_pct        = TP1_PCT,
-                    tp2_pct        = TP2_PCT,
+                    entry_atr      = cand["ctx"].get("atr"),
+                    notional_usd   = notional,
+                    stop_price     = entry_price * (1 - TRAIL_STOP_PCT),
+                    tp1_price      = entry_price * (1 + TP1_PCT),
+                    tp2_price      = entry_price * (1 + TP2_PCT),
                     min_hold_days  = MIN_HOLD_DAYS,
-                    notes=(
-                        f"EM trend | regime={cand['regime']} "
-                        f"EMA50={cand['ctx']['ema_fast']:.2f} "
-                        f"EMA200={cand['ctx']['ema_slow']:.2f} "
-                        f"vol_target={VOL_TARGET_VOL:.0%} cap={VOL_SIZE_CAP:.0%}"
-                    ),
                 )
+                engine.arm_protective_stop_after_fill(
+                    BOT_ID, symbol, entry_price * (1 - TRAIL_STOP_PCT), order["order_id"]
+                )
+                if not recorded:
+                    raise RuntimeError(
+                        f"{symbol}: entry DB record failed after broker order; protective stop armed, manual reconciliation required"
+                    )
                 logger.info(f"EM | {symbol}: order placed + DB record created ✅")
                 current_count  += 1
                 currently_held.add(symbol)

@@ -22,8 +22,12 @@ Week 4: bot7_macro_bond (db_id=7) | Week 5: bot5_defensive (db_id=4)
 from __future__ import annotations
 
 import logging
+import math
 import os
 import sys
+import threading
+import time
+import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -197,6 +201,7 @@ class AlpacaEtfEngine:
                             stop_price      NUMERIC,
                             tp1_price       NUMERIC,
                             tp2_price       NUMERIC,
+                            stop_order_id   TEXT,
                             scaled_out_tp1  BOOLEAN       DEFAULT FALSE,
                             scaled_out_tp2  BOOLEAN       DEFAULT FALSE,
                             min_hold_until  TIMESTAMPTZ,
@@ -208,6 +213,8 @@ class AlpacaEtfEngine:
                         );
                         CREATE INDEX IF NOT EXISTS idx_etf_pos_status
                             ON alpaca_etf_positions (bot_id, status, opened_at);
+                        ALTER TABLE alpaca_etf_positions
+                            ADD COLUMN IF NOT EXISTS stop_order_id TEXT;
                     """)
                 conn.commit()
             logger.info("EtfEngine | alpaca_etf_positions schema verified")
@@ -333,14 +340,61 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | buy_market failed {symbol}: {exc}")
             return None
 
-    def close_position(self, symbol: str) -> bool:
+    def close_position(
+        self,
+        symbol: str,
+        *,
+        bot_id: Optional[str] = None,
+        stop_order_id: Optional[str] = None,
+        stop_price: Optional[float] = None,
+    ) -> bool:
         """Close entire position in a symbol."""
+        if bot_id and not self.is_market_open():
+            logger.info(f"EtfEngine | Full close deferred — market closed; {symbol} stop stays active")
+            return False
+        if bot_id and self._has_pending_owned_exit(bot_id, symbol):
+            logger.warning(f"EtfEngine | Full close already pending for {symbol}; awaiting broker")
+            return False
+        if bot_id and not self._cancel_owned_stop(bot_id, symbol, stop_order_id):
+            logger.error(f"EtfEngine | Full close blocked — {symbol} stop still active")
+            return False
         try:
-            self.api.close_position(symbol)
-            logger.info(f"EtfEngine | CLOSED position: {symbol}")
-            return True
+            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+            if not live:
+                return True
+            order = self.api.submit_order(
+                symbol=symbol,
+                qty=round(abs(float(live["qty"])), 8),
+                side="sell",
+                type="market",
+                time_in_force="day",
+                client_order_id=self._new_exit_client_order_id(bot_id, symbol) if bot_id else None,
+            )
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+                if not live or abs(float(live["qty"])) < 1e-8:
+                    logger.info(f"EtfEngine | CLOSED position: {symbol}")
+                    return True
+                time.sleep(1)
+
+            # The caller must retain the DB row unless Alpaca confirms flat.
+            # Cancel an unfilled residual close before restoring stop coverage.
+            if getattr(order, "id", None) and not self._cancel_and_confirm_order(order.id):
+                logger.critical(
+                    f"EtfEngine | {symbol}: close order {order.id} still active; "
+                    "refusing overlapping replacement stop"
+                )
+                return False
+            if bot_id and stop_price is not None:
+                self.ensure_protective_stop(bot_id, symbol, stop_price)
+            logger.error(f"EtfEngine | Full close unfilled after 30s: {symbol}; stop restored")
+            return False
         except Exception as exc:
             logger.error(f"EtfEngine | Close failed {symbol}: {exc}")
+            # The broker may have accepted the sell even though the client lost
+            # the response. Do not submit an overlapping stop until that order
+            # can be resolved by the next reconciliation cycle.
             # B-6 fix: alert inside the engine so ANY caller gets the Discord ping
             # even if it forgot to check the return value.
             try:
@@ -353,24 +407,391 @@ class AlpacaEtfEngine:
                 pass
             return False
 
-    def close_partial(self, symbol: str, qty: float) -> bool:
-        """Close a specific quantity (for tiered profit-taking scale-outs).
-        Uses "day" when NYSE is open; "opg" when closed so partial exits
-        queue for next open rather than being silently rejected.
-        """
-        tif = "day" if _nyse_is_open() else "opg"
+    # ── Broker-native stop protection ─────────────────────────────────────────
+
+    @staticmethod
+    def _whole_stop_qty(position_qty: float) -> int:
+        """Alpaca only permits GTC equity stops for whole-share quantities."""
+        return math.floor(abs(float(position_qty)))
+
+    def _store_stop_order_id(self, bot_id: str, symbol: str, order_id: str) -> None:
+        """Persist the broker stop ID for reconciliation; non-fatal if DB is down."""
+        _ensure_tp()
         try:
-            self.api.submit_order(
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE alpaca_etf_positions
+                           SET stop_order_id = %s
+                         WHERE bot_id = %s
+                           AND symbol = %s
+                           AND status = 'open'
+                    """, (order_id, bot_id, symbol))
+                conn.commit()
+        except Exception as exc:
+            logger.error(f"EtfEngine | Failed to persist stop ID for {bot_id}/{symbol}: {exc}")
+
+    @staticmethod
+    def _stop_client_order_id(bot_id: str, symbol: str) -> str:
+        """Stable owner marker used to avoid touching another strategy's order."""
+        return f"etf-stop-{bot_id}-{symbol}".lower()[:48]
+
+    @staticmethod
+    def _exit_client_order_prefix(bot_id: str, symbol: str) -> str:
+        """Bot/symbol ownership prefix used to fence reconciliation during exits."""
+        return f"etf-exit-{bot_id}-{symbol}-".lower()[:36]
+
+    def _new_exit_client_order_id(self, bot_id: str, symbol: str) -> str:
+        """Unique Alpaca client ID for an exit, retaining the owner prefix."""
+        return f"{self._exit_client_order_prefix(bot_id, symbol)}{uuid.uuid4().hex[:11]}"
+
+    def _has_pending_owned_exit(self, bot_id: str, symbol: str) -> bool:
+        """Return True while an owned market exit could still reduce the position."""
+        exit_prefix = self._exit_client_order_prefix(bot_id, symbol)
+        try:
+            return any(
+                order.symbol == symbol
+                and order.side == "sell"
+                and order.type == "market"
+                and str(getattr(order, "client_order_id", "")).startswith(exit_prefix)
+                for order in self.api.list_orders(status="open", limit=100, nested=True)
+            )
+        except Exception as exc:
+            logger.error(f"EtfEngine | Exit fence query failed for {bot_id}/{symbol}: {exc}")
+            # Fail closed: do not create another sell order while order status is unknown.
+            return True
+
+    def _find_owned_stop(
+        self,
+        bot_id: str,
+        symbol: str,
+        stop_order_id: Optional[str],
+    ):
+        """Find only this bot's known stop; never adopt arbitrary sell stops."""
+        def _is_owned(order) -> bool:
+            if (
+                order.symbol != symbol
+                or order.side != "sell"
+                or order.type not in {"stop", "stop_limit", "trailing_stop"}
+            ):
+                return False
+            client_order_id = str(getattr(order, "client_order_id", ""))
+            return (
+                client_order_id == self._stop_client_order_id(bot_id, symbol)
+                or (
+                    bot_id == "bot2_spy_qqq"
+                    and client_order_id.startswith(f"etf-protect-{symbol.lower()}-")
+                )
+            )
+
+        if stop_order_id:
+            try:
+                order = self.api.get_order(stop_order_id)
+                if (
+                    str(order.status).lower() in {"new", "accepted", "pending_new"}
+                    and _is_owned(order)
+                ):
+                    return order
+                logger.error(
+                    f"EtfEngine | Recorded stop {stop_order_id} is not an owned "
+                    f"{bot_id}/{symbol} protective stop; refusing to mutate it"
+                )
+            except Exception as exc:
+                logger.warning(f"EtfEngine | Cannot read recorded stop {stop_order_id}: {exc}")
+
+        for order in self.api.list_orders(status="open", limit=100, nested=True):
+            if _is_owned(order):
+                return order
+        return None
+
+    def _cancel_owned_stop(
+        self,
+        bot_id: str,
+        symbol: str,
+        stop_order_id: Optional[str],
+    ) -> bool:
+        """Cancel and confirm cancellation of this bot's protective stop only."""
+        order = self._find_owned_stop(bot_id, symbol, stop_order_id)
+        if not order:
+            return True
+        if self._cancel_and_confirm_order(order.id):
+            logger.info(f"EtfEngine | Protective stop cancelled: {symbol} id={order.id}")
+            return True
+        logger.error(f"EtfEngine | Stop cancellation failed for {symbol}: id={order.id}")
+        return False
+
+    def _cancel_and_confirm_order(self, order_id: str, timeout_seconds: int = 5) -> bool:
+        """Cancel an order and wait for Alpaca's terminal cancellation state."""
+        try:
+            self.api.cancel_order(order_id)
+            deadline = time.monotonic() + timeout_seconds
+            while time.monotonic() < deadline:
+                refreshed = self.api.get_order(order_id)
+                if str(refreshed.status).lower() in {"canceled", "expired", "rejected"}:
+                    return True
+                time.sleep(0.25)
+            logger.error(f"EtfEngine | Order cancellation unconfirmed: id={order_id}")
+        except Exception as exc:
+            logger.error(f"EtfEngine | Order cancellation failed id={order_id}: {exc}")
+        return False
+
+    def ensure_protective_stop(
+        self,
+        bot_id: str,
+        symbol: str,
+        stop_price: float,
+        stop_order_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Create or reconcile the broker-native GTC stop for a live long ETF.
+
+        The Alpaca API rejects fractional GTC stops. The protective order therefore
+        covers the safely rounded-down whole-share portion; all future ETF entries
+        use whole-share sizing so they are fully covered.
+        """
+        if self._has_pending_owned_exit(bot_id, symbol):
+            logger.warning(
+                f"EtfEngine | {symbol}: protective-stop update deferred while owned exit is working"
+            )
+            return None
+        try:
+            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+            if not live:
+                logger.info(f"EtfEngine | {symbol}: stop pending — broker position not filled yet")
+                return None
+
+            position_qty = float(live["qty"])
+            stop_qty = self._whole_stop_qty(position_qty)
+            if stop_qty < 1:
+                logger.warning(
+                    f"EtfEngine | {symbol}: cannot place GTC stop for fractional-only "
+                    f"position qty={position_qty:.8f}"
+                )
+                return None
+
+            broker_stop = round(float(stop_price), 2)
+            if broker_stop <= 0:
+                raise ValueError(f"invalid stop price {stop_price}")
+
+            existing_stop = self._find_owned_stop(bot_id, symbol, stop_order_id)
+            if existing_stop:
+                order = existing_stop
+                order_qty = self._whole_stop_qty(float(order.qty or 0))
+                order_stop = float(getattr(order, "stop_price", 0) or 0)
+                if order.type == "stop" and order_qty == stop_qty and round(order_stop, 2) == broker_stop:
+                    self._store_stop_order_id(bot_id, symbol, order.id)
+                    logger.info(
+                        f"EtfEngine | PROTECTIVE STOP verified: {symbol} "
+                        f"qty={stop_qty} stop=${broker_stop:.2f} id={order.id}"
+                    )
+                    return order.id
+
+            # A ratcheted price or partial exit means our own stop no longer
+            # matches the live exposure. Never cancel unowned sell stops.
+            if existing_stop and not self._cancel_owned_stop(bot_id, symbol, existing_stop.id):
+                raise RuntimeError("existing protective stop cancellation was not confirmed")
+
+            order = self.api.submit_order(
+                symbol=symbol,
+                qty=stop_qty,
+                side="sell",
+                type="stop",
+                time_in_force="gtc",
+                stop_price=broker_stop,
+                client_order_id=self._stop_client_order_id(bot_id, symbol),
+            )
+            self._store_stop_order_id(bot_id, symbol, order.id)
+            residual = position_qty - stop_qty
+            residual_note = (
+                f" (fractional residual {residual:.8f} shares cannot use GTC)"
+                if residual > 0 else ""
+            )
+            logger.info(
+                f"EtfEngine | PROTECTIVE STOP PLACED: {symbol} "
+                f"qty={stop_qty} stop=${broker_stop:.2f} id={order.id}{residual_note}"
+            )
+            return order.id
+        except Exception as exc:
+            logger.error(f"EtfEngine | CRITICAL: protective stop failed for {symbol}: {exc}")
+            try:
+                from notifications.discord import notify_capital_risk
+                notify_capital_risk(
+                    f"🔴 {symbol}: protective GTC stop FAILED — position may be naked",
+                    symbol=symbol,
+                )
+            except Exception:
+                pass
+            return None
+
+    def _await_fill_and_protect(
+        self,
+        bot_id: str,
+        symbol: str,
+        stop_price: float,
+        order_id: str,
+        timeout_seconds: int = 25 * 60 * 60,
+    ) -> None:
+        """Poll a submitted DAY entry through the next session, then place its stop."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                order = self.api.get_order(order_id)
+                status = str(order.status).lower()
+                if float(getattr(order, "filled_qty", 0) or 0) > 0:
+                    self.ensure_protective_stop(bot_id, symbol, stop_price)
+                if status == "filled":
+                    return
+                if status in {"canceled", "rejected", "expired"}:
+                    logger.error(
+                        f"EtfEngine | {symbol}: entry {order_id} ended {status}; "
+                        f"no protective stop required"
+                    )
+                    return
+            except Exception as exc:
+                logger.warning(f"EtfEngine | stop-fill monitor error for {symbol}: {exc}")
+            time.sleep(5)
+        logger.error(
+            f"EtfEngine | CRITICAL: {symbol} entry {order_id} did not fill within "
+            f"{timeout_seconds}s; stop reconciliation remains pending"
+        )
+        try:
+            from notifications.discord import notify_capital_risk
+            notify_capital_risk(
+                f"🔴 {symbol}: entry fill monitor timed out — protective stop reconciliation pending",
+                symbol=symbol,
+            )
+        except Exception:
+            pass
+
+    def arm_protective_stop_after_fill(
+        self,
+        bot_id: str,
+        symbol: str,
+        stop_price: float,
+        order_id: str,
+    ) -> None:
+        """Attach a GTC stop immediately after a successful entry fill.
+
+        A market-order fill is handled synchronously when already available. For a
+        queued DAY order, a daemon monitor stays alive through the next session and
+        attaches the stop as soon as the broker reports a partial or full fill.
+        Every strategy cycle also reconciles as a restart-safe backstop.
+        """
+        try:
+            order = self.api.get_order(order_id)
+            if float(getattr(order, "filled_qty", 0) or 0) > 0:
+                self.ensure_protective_stop(bot_id, symbol, stop_price)
+            if str(order.status).lower() == "filled":
+                return
+        except Exception as exc:
+            logger.warning(f"EtfEngine | Could not read entry {order_id} for {symbol}: {exc}")
+
+        logger.info(f"EtfEngine | {symbol}: entry pending — monitoring for protective stop")
+        threading.Thread(
+            target=self._await_fill_and_protect,
+            args=(bot_id, symbol, stop_price, order_id),
+            name=f"etf-stop-{symbol}",
+            daemon=True,
+        ).start()
+
+    def reconcile_protective_stops(
+        self,
+        bot_id: str,
+        db_positions: list[dict],
+    ) -> None:
+        """Ensure every live DB-tracked long has the recorded stop at Alpaca."""
+        for position in db_positions:
+            if position.get("direction", "long") != "long":
+                continue
+            stop_price = position.get("stop_price")
+            if stop_price is None:
+                logger.error(
+                    f"EtfEngine | CRITICAL: {bot_id}/{position['symbol']} has no DB stop price"
+                )
+                continue
+            if self._has_pending_owned_exit(bot_id, position["symbol"]):
+                logger.warning(
+                    f"EtfEngine | {position['symbol']}: exit is working; stop reconciliation deferred"
+                )
+                continue
+            self.ensure_protective_stop(
+                bot_id,
+                position["symbol"],
+                float(stop_price),
+                position.get("stop_order_id"),
+            )
+
+    def close_partial(
+        self,
+        symbol: str,
+        qty: float,
+        *,
+        bot_id: Optional[str] = None,
+        stop_order_id: Optional[str] = None,
+        stop_price: Optional[float] = None,
+    ) -> bool:
+        """Close a specific quantity (for tiered profit-taking scale-outs).
+        A protected position is only scaled while the market is open so a
+        cancelled stop is never left off overnight behind a queued sell.
+        """
+        if bot_id and not self.is_market_open():
+            logger.info(f"EtfEngine | Partial close deferred — market closed; {symbol} stop stays active")
+            return False
+        if bot_id and self._has_pending_owned_exit(bot_id, symbol):
+            logger.warning(f"EtfEngine | Partial close already pending for {symbol}; awaiting broker")
+            return False
+        tif = "day"
+        if bot_id and not self._cancel_owned_stop(bot_id, symbol, stop_order_id):
+            logger.error(f"EtfEngine | Partial close blocked — {symbol} stop still active")
+            return False
+        try:
+            order = self.api.submit_order(
                 symbol=symbol,
                 qty=round(qty, 8),
                 side="sell",
                 type="market",
                 time_in_force=tif,
+                client_order_id=self._new_exit_client_order_id(bot_id, symbol) if bot_id else None,
             )
             logger.info(f"EtfEngine | PARTIAL CLOSE: {symbol} qty={qty:.4f} tif={tif}")
-            return True
+            deadline = time.monotonic() + 20
+            filled_qty = 0.0
+            while time.monotonic() < deadline:
+                refreshed = self.api.get_order(order.id)
+                filled_qty = float(getattr(refreshed, "filled_qty", 0) or 0)
+                status = str(refreshed.status).lower()
+                if status == "filled":
+                    if bot_id and stop_price is not None:
+                        self.ensure_protective_stop(bot_id, symbol, stop_price)
+                    return True
+                if status in {"canceled", "rejected", "expired"}:
+                    break
+                time.sleep(0.5)
+
+            # Never re-arm a stop while an exit remainder is still working:
+            # cancel it first, then size stop coverage to the live residual.
+            if not self._cancel_and_confirm_order(order.id):
+                logger.critical(
+                    f"EtfEngine | {symbol}: partial-exit order {order.id} still active; "
+                    "refusing overlapping replacement stop"
+                )
+                return False
+            if bot_id and stop_price is not None:
+                self.ensure_protective_stop(bot_id, symbol, stop_price)
+            if filled_qty > 0:
+                logger.warning(
+                    f"EtfEngine | Partial close {symbol} filled {filled_qty} before timeout; "
+                    f"residual reprotected"
+                )
+                return True
+            logger.error(f"EtfEngine | Partial close {symbol} unfilled; stop restored")
+            return False
         except Exception as exc:
             logger.error(f"EtfEngine | Partial close failed {symbol} qty={qty}: {exc}")
+            # A transport exception can happen after Alpaca accepted the sell.
+            # Leave reconciliation state intact and avoid overlapping sell risk.
             return False
 
     # ── Market hours ──────────────────────────────────────────────────────────
@@ -464,7 +885,7 @@ class AlpacaEtfEngine:
                                entry_price, entry_atr, notional_usd,
                                stop_price, tp1_price, tp2_price,
                                scaled_out_tp1, scaled_out_tp2,
-                               min_hold_until, status, opened_at
+                                min_hold_until, status, opened_at, stop_order_id
                         FROM alpaca_etf_positions
                         WHERE bot_id = %s AND status = 'open'
                         ORDER BY opened_at DESC
@@ -488,14 +909,15 @@ class AlpacaEtfEngine:
         tp1_price: float,
         tp2_price: float,
         min_hold_days: int,
-    ) -> None:
-        """Insert a new position record into alpaca_etf_positions."""
+    ) -> bool:
+        """Insert a new position record; return whether primary persistence succeeded."""
         _ensure_tp()
         min_hold_until = datetime.now(timezone.utc) + timedelta(days=min_hold_days)
         try:
             from db.postgres import get_conn, is_pg_available
             if not is_pg_available():
-                return
+                logger.error(f"EtfEngine | record_open unavailable for {bot_id}/{symbol}")
+                return False
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute("""
@@ -515,6 +937,7 @@ class AlpacaEtfEngine:
             logger.info(f"EtfEngine | DB: recorded open {bot_id}/{symbol}")
         except Exception as exc:
             logger.error(f"EtfEngine | record_open failed: {exc}")
+            return False
         # Mirror to trades table so /journal and reporting pick it up
         try:
             from analysis.trade_journal import log_trade as _lt
@@ -533,6 +956,7 @@ class AlpacaEtfEngine:
         except Exception as _lt_exc:
             # B-10 fix: warning→error so grep finds mirror failures.
             logger.error(f"EtfEngine | log_trade mirror failed: {_lt_exc}")
+        return True
 
     def record_close(
         self,
@@ -738,9 +1162,15 @@ class AlpacaEtfEngine:
         # Update trailing stop (ratchet upward)
         self.update_trailing_stop(bot_id, symbol, current, trail_pct)
 
-        # Re-read stop_price after update
+        # Re-read and broker-sync the ratcheted stop before any exit decision.
         fresh = self.get_db_positions(bot_id)
         db_pos_fresh = next((p for p in fresh if p["symbol"] == symbol), db_position)
+        self.ensure_protective_stop(
+            bot_id,
+            symbol,
+            float(db_pos_fresh["stop_price"]),
+            db_pos_fresh.get("stop_order_id"),
+        )
 
         # 1. Hard trailing stop (overrides min_hold)
         if self.check_stop_hit(db_pos_fresh, current):
@@ -756,7 +1186,13 @@ class AlpacaEtfEngine:
             qty = float(db_position.get("qty", 0))
             scale_qty = qty * 0.333
             if scale_qty > 0:
-                if self.close_partial(symbol, scale_qty):
+                if self.close_partial(
+                    symbol,
+                    scale_qty,
+                    bot_id=bot_id,
+                    stop_order_id=db_pos_fresh.get("stop_order_id"),
+                    stop_price=float(db_pos_fresh["stop_price"]),
+                ):
                     self.mark_scaled_out(bot_id, symbol, tier=2)
                     logger.info(f"EtfEngine | TP2 scale-out: {symbol} {scale_qty:.4f} shares")
                 else:
@@ -777,7 +1213,13 @@ class AlpacaEtfEngine:
             qty = float(db_position.get("qty", 0))
             scale_qty = qty * 0.333
             if scale_qty > 0:
-                if self.close_partial(symbol, scale_qty):
+                if self.close_partial(
+                    symbol,
+                    scale_qty,
+                    bot_id=bot_id,
+                    stop_order_id=db_pos_fresh.get("stop_order_id"),
+                    stop_price=float(db_pos_fresh["stop_price"]),
+                ):
                     self.mark_scaled_out(bot_id, symbol, tier=1)
                     logger.info(f"EtfEngine | TP1 scale-out: {symbol} {scale_qty:.4f} shares")
                 else:

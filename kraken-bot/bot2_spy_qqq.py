@@ -71,7 +71,13 @@ def _safe_close(engine: "AlpacaEtfEngine", symbol: str, exit_reason: str,
     Returns True  → Alpaca close succeeded; caller should call record_close.
     Returns False → Alpaca close failed; DB stays Active; next cycle retries.
     """
-    ok = engine.close_position(symbol)
+    db_pos = next((p for p in engine.get_db_positions(bot_id) if p["symbol"] == symbol), {})
+    ok = engine.close_position(
+        symbol,
+        bot_id=bot_id,
+        stop_order_id=db_pos.get("stop_order_id"),
+        stop_price=float(db_pos["stop_price"]) if db_pos.get("stop_price") is not None else None,
+    )
     if ok:
         return True
 
@@ -255,6 +261,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     # regardless (Alpaca queues orders for next open if market is closed)
     live_positions = engine.get_positions()
     db_positions   = engine.get_db_positions(BOT_ID)
+    engine.reconcile_protective_stops(BOT_ID, db_positions)
 
     logger.info(
         f"Bot2 | Positions: {len(live_positions)} live, {len(db_positions)} in DB"
@@ -311,7 +318,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             # C-1 fix: only record_close when broker confirmed the close.
             if _safe_close(engine, symbol, exit_reason, realised_pnl, BOT_ID):
                 engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
-            _closed_this_cycle.add(symbol)
+                _closed_this_cycle.add(symbol)
             live_positions = engine.get_positions()
             continue
 
@@ -326,7 +333,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 # C-1 fix: only record_close when broker confirmed the close.
                 if _safe_close(engine, symbol, trend_reason, realised_pnl, BOT_ID):
                     engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
-                _closed_this_cycle.add(symbol)
+                    _closed_this_cycle.add(symbol)
                 live_positions = engine.get_positions()
 
     # ── Entry scan ────────────────────────────────────────────────────────────
@@ -484,15 +491,21 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             )
             _shadow_b2(symbol, skip="vol_target_zero")
             continue
-        notional = _shares * entry_price     # whole-share notional (≤ 25% equity by construction)
-        # Safety backstop: never go below cash reserve (belt-and-suspenders)
-        notional = min(notional, equity * (1 - CASH_RESERVE))
+        # Broker-native GTC stops require whole-share quantities. Keep the entry
+        # whole-share too so the stop protects the entire future position.
+        max_affordable = int((equity * (1 - CASH_RESERVE)) / entry_price)
+        shares = min(int(_shares), max_affordable)
+        if shares <= 0:
+            logger.warning(f"Bot2 | {symbol}: no whole shares fit inside cash reserve — skipping")
+            _shadow_b2(symbol, skip="cash_reserve_whole_share")
+            continue
+        notional = shares * entry_price
 
         # Calculate stops and TPs
         stop_price = entry_price * (1 - TRAIL_STOP_PCT)
         tp1_price  = entry_price * (1 + TP1_PCT)
         tp2_price  = entry_price * (1 + TP2_PCT)
-        qty_approx = notional / entry_price  # approximate before fill
+        qty_approx = shares
 
         logger.info(
             f"Bot2 | ENTRY {symbol} LONG notional=${notional:,.0f} "
@@ -501,9 +514,9 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             f"min_hold={MIN_HOLD_DAYS}d"
         )
 
-        order = engine.place_order(symbol, "buy", notional)
+        order = engine.buy_market(symbol, shares)
         if order:
-            engine.record_open(
+            recorded = engine.record_open(
                 bot_id=BOT_ID,
                 symbol=symbol,
                 direction="long",
@@ -516,6 +529,13 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 tp2_price=tp2_price,
                 min_hold_days=MIN_HOLD_DAYS,
             )
+            engine.arm_protective_stop_after_fill(
+                BOT_ID, symbol, stop_price, order["order_id"]
+            )
+            if not recorded:
+                raise RuntimeError(
+                    f"{symbol}: entry DB record failed after broker order; protective stop armed, manual reconciliation required"
+                )
             deployed_pct += notional / equity   # track actual vol-targeted fraction
             held_symbols.add(symbol)
             live_positions = engine.get_positions()

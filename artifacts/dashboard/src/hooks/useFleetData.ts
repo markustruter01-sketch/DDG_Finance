@@ -38,6 +38,7 @@ export type FleetEquityResp = {
 };
 
 export interface LivePos {
+  bot_id?: string;
   symbol: string;
   qty: number;
   side: string;
@@ -45,6 +46,16 @@ export interface LivePos {
   current_price?: number;
   unrealized_pl: number;
   unrealized_plpc: number;
+}
+
+export interface LivePositionsResponse {
+  positions: LivePos[];
+  count: number;
+  positions_by_bot: Partial<Record<"oracle" | "spy_qqq_trend" | "jerome_macro", {
+    positions: LivePos[];
+    count: number;
+    strategy_count: number;
+  }>>;
 }
 
 export interface MarketState { regime?: string }
@@ -153,7 +164,7 @@ export function useFleetData() {
     retry: 1,
   });
 
-  const { data: livePosResp } = useQuery<{ positions: LivePos[] }>({
+  const { data: livePosResp } = useQuery<LivePositionsResponse>({
     queryKey: ["positions-live"],
     queryFn: () => fleetApi.get("/positions/live").then((r) => r.data),
     refetchInterval: 15_000,
@@ -180,8 +191,7 @@ export function useFleetData() {
   });
 
   const allPos   = livePosResp?.positions ?? [];
-  const spyPos   = allPos.filter((p) => ["SPY", "QQQ"].includes(p.symbol));
-  const otherPos = allPos.filter((p) => !["SPY", "QQQ"].includes(p.symbol));
+  const positionsByBot = livePosResp?.positions_by_bot;
   const wfMap    = new Map(
     (reportData?.walk_forward_status ?? []).map((r) => [r.bot_id, r.wf_status]),
   );
@@ -194,8 +204,7 @@ export function useFleetData() {
     jerome:  fleet?.jerome_macro,
     total:   fleet?.fleet_total,
     allPos,
-    spyPos,
-    otherPos,
+    positionsByBot,
     wfMap,
     regime:      market?.regime,
     killTripped: summary?.kill_switch?.tripped ?? summary?.kill_switch_tripped,

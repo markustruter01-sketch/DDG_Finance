@@ -319,7 +319,11 @@ const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
 
 // ── Position detail list (Rule 27: server P&L only — no client arithmetic) ────
 
-function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: string }) {
+function EtfPositionList({ positions, accent, strategyPositionCount }: {
+  positions: LivePos[];
+  accent: string;
+  strategyPositionCount: number;
+}) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const sgov = positions.find(p => p.symbol === "SGOV");
@@ -327,7 +331,7 @@ function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: 
 
   return (
     <div className="mt-2 space-y-1">
-      {real.length === 0 && !sgov && (
+      {strategyPositionCount === 0 && (
         <div className="text-[9px] italic text-white">
           In cash — no open positions
         </div>
@@ -392,8 +396,8 @@ function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: 
       {sgov && (
         <div className="flex items-center gap-2 px-2 py-1 rounded"
           style={{ border: "1px solid rgba(71,85,105,0.20)", background: "rgba(71,85,105,0.06)" }}>
-          <span className="font-mono text-[10px] w-9 shrink-0 text-white">SGOV</span>
-          <span className="text-[8px] italic text-white">cash park</span>
+          <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#94a3b8" }}>SGOV</span>
+          <span className="text-[8px] italic" style={{ color: "#94a3b8" }}>cash park</span>
         </div>
       )}
     </div>
@@ -410,11 +414,12 @@ interface ShipCardProps {
   wfStatus?:      string | null;
   accent:         string;
   livePositions?: LivePos[];
+  strategyPositionCount?: number;
   posChips?:      { symbol: string; plPct: number }[];
   entryWindow?:    EntryWindow;
 }
 
-function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, posChips = [], entryWindow }: ShipCardProps) {
+function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, strategyPositionCount, posChips = [], entryWindow }: ShipCardProps) {
   const [open, setOpen] = useState(true);
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
@@ -457,8 +462,8 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
 
         <HealthBar wfStatus={wfStatus} />
 
-        {livePositions != null
-          ? <EtfPositionList positions={livePositions} accent={accent} />
+        {livePositions != null && strategyPositionCount != null
+          ? <EtfPositionList positions={livePositions} accent={accent} strategyPositionCount={strategyPositionCount} />
           : posChips.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
               {posChips.map(p => {
@@ -482,7 +487,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
           onClick={e => e.stopPropagation()}>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-white">
             {bot?.win_rate != null && <span>30D WR <span className="text-cyan-500">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
-            {bot?.positions != null && <span>POSITIONS <span className="text-cyan-500">{bot.positions}</span></span>}
+            <span>POSITIONS <span className="text-cyan-500">{strategyPositionCount ?? "—"}</span></span>
             {bot?.last_updated && <span>PING <span className="text-cyan-500">{new Date(bot.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></span>}
           </div>
         </div>
@@ -713,7 +718,7 @@ export default function HomePage() {
   const [, navigate] = useLocation();
   const {
     oracle, spy, jerome, total,
-    spyPos, otherPos, wfMap,
+    positionsByBot, wfMap,
     regime, killTripped, lastCycle, mktOpen, entryWindows,
   } = useFleetData();
 
@@ -742,8 +747,6 @@ export default function HomePage() {
   const pnl24h    = total?.pnl_24h    ?? null;
   const pnl24hPct = total?.pnl_24h_pct ?? null;
 
-  const spyChips   = spyPos.map(p => ({ symbol: p.symbol, plPct: p.unrealized_plpc * 100 }));
-  const oraChips   = otherPos.map(p => ({ symbol: p.symbol, plPct: p.unrealized_plpc * 100 }));
   const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
 
   return (
@@ -799,11 +802,11 @@ export default function HomePage() {
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
         <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
-          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={spyPos} entryWindow={entryWindows?.spy_qqq_trend} />
+          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={positionsByBot?.spy_qqq_trend?.positions} strategyPositionCount={positionsByBot?.spy_qqq_trend?.strategy_count} entryWindow={entryWindows?.spy_qqq_trend} />
         <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
-          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={otherPos} entryWindow={entryWindows?.oracle} />
+          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={positionsByBot?.oracle?.positions} strategyPositionCount={positionsByBot?.oracle?.strategy_count} entryWindow={entryWindows?.oracle} />
         <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
-          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={[]} entryWindow={entryWindows?.jerome_macro} />
+          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={positionsByBot?.jerome_macro?.positions} strategyPositionCount={positionsByBot?.jerome_macro?.strategy_count} entryWindow={entryWindows?.jerome_macro} />
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"

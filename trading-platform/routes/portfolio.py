@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from datetime import date
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from loguru import logger
@@ -43,6 +44,70 @@ from routes._deps import (
 )
 
 portfolio_router = APIRouter()
+
+# Home-dashboard canonical live-position routing. Each ETF bot has its own
+# Alpaca account, so ticker symbols must never be used to infer ownership.
+_LIVE_POSITION_ACCOUNTS: dict[str, tuple[str, str]] = {
+    "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
+    "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
+    "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
+}
+_POSITION_DUST_QTY = 0.0001
+
+
+def _fetch_account_positions(api_key: str, secret_key: str, bot_id: str) -> list[dict[str, Any]]:
+    """Read one bot's Alpaca account and normalize it for the dashboard."""
+    from alpaca.trading.client import TradingClient
+
+    client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+    positions = client.get_all_positions()
+    return [
+        {
+            "bot_id": bot_id,
+            "symbol": p.symbol,
+            "qty": float(p.qty),
+            "side": p.side.value if getattr(p, "side", None) else "long",
+            "avg_entry_price": float(p.avg_entry_price),
+            "market_value": float(p.market_value),
+            "unrealized_pl": float(p.unrealized_pl),
+            "unrealized_plpc": float(p.unrealized_plpc),
+            "current_price": float(p.current_price),
+        }
+        for p in positions
+        # Alpaca can retain sub-share residuals after a fractional close. They
+        # cannot represent a meaningful strategy or cash-park holding.
+        if abs(float(p.qty)) >= _POSITION_DUST_QTY
+    ]
+
+
+async def _fetch_positions_by_bot() -> dict[str, dict[str, Any]]:
+    """Fetch all three broker accounts concurrently without falling back across accounts."""
+    bot_ids = list(_LIVE_POSITION_ACCOUNTS)
+    requests = []
+    for bot_id in bot_ids:
+        key_env, secret_env = _LIVE_POSITION_ACCOUNTS[bot_id]
+        api_key = os.environ.get(key_env, "")
+        secret_key = os.environ.get(secret_env, "")
+        if not api_key or not secret_key:
+            raise RuntimeError(f"Missing Alpaca credentials for {bot_id}")
+        requests.append(asyncio.to_thread(_fetch_account_positions, api_key, secret_key, bot_id))
+
+    results = await asyncio.gather(*requests, return_exceptions=True)
+    by_bot: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for bot_id, result in zip(bot_ids, results):
+        if isinstance(result, Exception):
+            errors.append(f"{bot_id}: {result}")
+            continue
+        by_bot[bot_id] = {
+            "positions": result,
+            "count": len(result),
+            "strategy_count": sum(1 for position in result if position["symbol"] != "SGOV"),
+        }
+
+    if errors:
+        raise RuntimeError("Unable to read live Alpaca positions: " + "; ".join(errors))
+    return by_bot
 
 
 @portfolio_router.get("/portfolio", tags=["Portfolio"])
@@ -135,7 +200,10 @@ def _compute_position_health(
 @portfolio_router.get("/positions/live", tags=["Portfolio"])
 async def live_positions() -> dict:
     try:
-        positions = get_positions()
+        positions_by_bot = await _fetch_positions_by_bot()
+        # Preserve the established top-level Oracle response for existing
+        # portfolio consumers. New consumers must use positions_by_bot.
+        positions = positions_by_bot["oracle"]["positions"]
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
 
@@ -186,6 +254,7 @@ async def live_positions() -> dict:
     return {
         "positions": enriched,
         "count": len(enriched),
+        "positions_by_bot": positions_by_bot,
         "allocation_run_utc": last_run.get("last_run_utc"),
     }
 

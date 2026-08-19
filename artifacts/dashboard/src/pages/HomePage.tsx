@@ -9,7 +9,7 @@ import {
   useFleetData,
   getBotStatus,
   fmtEq, fmtPct, fmtDollar,
-  type BotSlice, type BotStatus,
+  type BotSlice, type BotStatus, type LivePos,
 } from "@/hooks/useFleetData";
 import { useExportReport } from "@/hooks/use-kraken";
 import { useToast } from "@/hooks/use-toast";
@@ -249,17 +249,103 @@ const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
   IDLE:       { label: "STANDBY",  color: "#eab308" },
 };
 
-interface ShipCardProps {
-  shipName:  string;
-  callsign:  string;
-  bot:       BotSlice | undefined;
-  status:    BotStatus;
-  wfStatus?: string | null;
-  accent:    string;
-  posChips?: { symbol: string; plPct: number }[];
+// ── Position detail list (Rule 27: server P&L only — no client arithmetic) ────
+
+function EtfPositionList({ positions, accent }: { positions: LivePos[]; accent: string }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const sgov = positions.find(p => p.symbol === "SGOV");
+  const real = positions.filter(p => p.symbol !== "SGOV");
+
+  return (
+    <div className="mt-2 space-y-1">
+      {real.length === 0 && !sgov && (
+        <div className="text-[9px] italic" style={{ color: "#334155" }}>
+          In cash — no open positions
+        </div>
+      )}
+      {real.map(pos => {
+        const isLong = pos.qty > 0 || pos.side === "long";
+        const plPct  = pos.unrealized_plpc * 100;
+        const plUsd  = pos.unrealized_pl;
+        const isUp   = plPct >= 0;
+        const isOpen = expanded === pos.symbol;
+        const plClr  = isUp ? "#4ade80" : "#f87171";
+
+        return (
+          <div
+            key={pos.symbol}
+            className="cursor-pointer rounded"
+            style={{ background: `${accent}0c`, border: `1px solid ${accent}20` }}
+            onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : pos.symbol); }}
+          >
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <span className="font-bold font-mono text-[10px] text-white w-9 shrink-0">{pos.symbol}</span>
+              {isLong ? (
+                <span className="text-[7px] font-bold px-1 py-0.5 rounded-sm border shrink-0"
+                  style={{ color: "#4ade80", borderColor: "rgba(74,222,128,0.30)", background: "rgba(74,222,128,0.10)" }}>
+                  LONG
+                </span>
+              ) : (
+                <span className="text-[7px] font-bold px-1 py-0.5 rounded-sm border shrink-0"
+                  style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.40)", background: "rgba(248,113,113,0.12)" }}>
+                  SHORT
+                </span>
+              )}
+              <span className="flex-1" />
+              <span className="font-mono text-[10px] font-semibold tabular-nums" style={{ color: plClr }}>
+                {isUp ? "+" : ""}{plPct.toFixed(1)}%
+              </span>
+              <span className="font-mono text-[10px] tabular-nums ml-1" style={{ color: `${plClr}99` }}>
+                {plUsd >= 0 ? "+$" : "-$"}{Math.abs(plUsd).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {isOpen && (
+              <div className="flex gap-4 px-2 pb-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="pt-1">
+                  <div className="text-[7px] uppercase tracking-widest" style={{ color: "#334155" }}>Entry</div>
+                  <div className="font-mono text-[9px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                    ${pos.avg_entry_price?.toFixed(2)}
+                  </div>
+                </div>
+                {pos.current_price != null && (
+                  <div className="pt-1">
+                    <div className="text-[7px] uppercase tracking-widest" style={{ color: "#334155" }}>Now</div>
+                    <div className="font-mono text-[9px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+                      ${pos.current_price.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {sgov && (
+        <div className="flex items-center gap-2 px-2 py-1 rounded"
+          style={{ border: "1px solid rgba(71,85,105,0.20)", background: "rgba(71,85,105,0.06)" }}>
+          <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#334155" }}>SGOV</span>
+          <span className="text-[8px] italic" style={{ color: "#334155" }}>cash park</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, posChips = [] }: ShipCardProps) {
+// ── Ship card ─────────────────────────────────────────────────────────────────
+
+interface ShipCardProps {
+  shipName:       string;
+  callsign:       string;
+  bot:            BotSlice | undefined;
+  status:         BotStatus;
+  wfStatus?:      string | null;
+  accent:         string;
+  livePositions?: LivePos[];
+  posChips?:      { symbol: string; plPct: number }[];
+}
+
+function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, posChips = [] }: ShipCardProps) {
   const [open, setOpen] = useState(false);
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
@@ -302,19 +388,22 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, posChips 
 
         <HealthBar wfStatus={wfStatus} />
 
-        {posChips.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
-            {posChips.map(p => {
-              const c = p.plPct >= 0 ? `${accent}cc` : "#f87171cc";
-              return (
-                <span key={p.symbol} className="text-[9px] px-1.5 py-0.5 rounded"
-                  style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
-                  {p.symbol} {p.plPct >= 0 ? "+" : ""}{p.plPct.toFixed(1)}%
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {livePositions != null
+          ? <EtfPositionList positions={livePositions} accent={accent} />
+          : posChips.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+              {posChips.map(p => {
+                const c = p.plPct >= 0 ? `${accent}cc` : "#f87171cc";
+                return (
+                  <span key={p.symbol} className="text-[9px] px-1.5 py-0.5 rounded"
+                    style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
+                    {p.symbol} {p.plPct >= 0 ? "+" : ""}{p.plPct.toFixed(1)}%
+                  </span>
+                );
+              })}
+            </div>
+          )
+        }
       </div>
 
       {open && (
@@ -639,11 +728,11 @@ export default function HomePage() {
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
         <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
-          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" posChips={spyChips} />
+          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={spyPos} />
         <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
-          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" posChips={oraChips} />
+          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={otherPos} />
         <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
-          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" posChips={[]} />
+          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={[]} />
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"

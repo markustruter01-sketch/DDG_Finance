@@ -18,3 +18,4 @@
 - [ARC 2 walk-forward validation](arc2-walk-forward.md) — nightly WF job at 17:30 ET; Arc-0 filters; Phase K/L schema; oracle floor=-0.153, spy floor=-1.889; jerome/buck DISQUALIFIED.
 - [ARC 4 data model cleanup](arc4-data-model.md) — reconciliation_events table + is_recon_tracking column replace LIKE 'RECON-%' hack; shadow_signals ledger wired into all 4 bots.
 - [ARC 3 fail-closed safety pattern](arc3-fail-closed.md) — all 6 Bucket-C silent failures fixed; alert_critical() in discord.py is the direct-webhook path for capital alerts.
+- [ETF broker stop lifecycle](etf-broker-stop-lifecycle.md) — entry/exit stop ownership and order-state rules that prevent naked or overlapping ETF sells.

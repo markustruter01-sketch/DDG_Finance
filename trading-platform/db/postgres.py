@@ -19,6 +19,7 @@ Tables managed here
   performance_snapshots
   vault_ledger
   ratchet_stops
+  alpaca_etf_positions
 """
 
 from __future__ import annotations
@@ -199,6 +200,33 @@ CREATE TABLE IF NOT EXISTS position_entry_times (
     entry_ts     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     entry_price  DOUBLE PRECISION
 );
+
+-- ETF execution ledger. stop_order_id is the owned broker-native GTC stop
+-- reference for the open position; it must remain part of the canonical schema.
+CREATE TABLE IF NOT EXISTS alpaca_etf_positions (
+    id              BIGSERIAL     PRIMARY KEY,
+    bot_id          TEXT          NOT NULL,
+    symbol          TEXT          NOT NULL,
+    direction       TEXT          NOT NULL DEFAULT 'long',
+    qty             NUMERIC       NOT NULL,
+    entry_price     NUMERIC       NOT NULL,
+    entry_atr       NUMERIC,
+    notional_usd    NUMERIC       NOT NULL,
+    stop_price      NUMERIC,
+    tp1_price       NUMERIC,
+    tp2_price       NUMERIC,
+    stop_order_id   TEXT,
+    scaled_out_tp1  BOOLEAN       DEFAULT FALSE,
+    scaled_out_tp2  BOOLEAN       DEFAULT FALSE,
+    min_hold_until  TIMESTAMPTZ,
+    status          TEXT          NOT NULL DEFAULT 'open',
+    opened_at       TIMESTAMPTZ   DEFAULT NOW(),
+    closed_at       TIMESTAMPTZ,
+    exit_reason     TEXT,
+    realised_pnl    NUMERIC
+);
+CREATE INDEX IF NOT EXISTS idx_etf_pos_status
+    ON alpaca_etf_positions (bot_id, status, opened_at);
 
 -- Equity snapshots (time-series portfolio value for equity curve chart)
 CREATE TABLE IF NOT EXISTS equity_snapshots (

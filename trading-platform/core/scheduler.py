@@ -46,6 +46,10 @@ _scheduler: AsyncIOScheduler | None = None
 _auto_trading_enabled: bool = True
 _last_reset_date: date | None = None
 
+def _is_published_deployment() -> bool:
+    """True only in a Replit published deployment, never in a dev workflow."""
+    return os.environ.get("REPLIT_DEPLOYMENT") == "1"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ARCHITECTURAL NOTE — KRAKEN BOT PROCESS ISOLATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -195,32 +199,37 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: shadow_signal_retention (daily 18:00 ET)")
 
-    # ── Deploy hash check: nightly at 18:30 ET ───────────────────────────────
-    scheduler.add_job(
-        func=_deploy_hash_check,
-        trigger=CronTrigger(
-            hour=18,
-            minute=30,
-            timezone="America/New_York",
-        ),
-        id="deploy_hash_check_nightly",
-        name="Nightly Deploy Hash Verification",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
-    logger.info("Scheduler | Registered: deploy_hash_check_nightly (daily 18:30 ET)")
+    # ── Deploy hash check: published deployments only ──────────────────────
+    # Development workflows run against a mutable Git checkout. Replit can
+    # checkpoint edits after a process starts, making a Git-HEAD comparison
+    # produce a false stale-code alert even though Uvicorn has reloaded code.
+    if _is_published_deployment():
+        scheduler.add_job(
+            func=_deploy_hash_check,
+            trigger=CronTrigger(
+                hour=18,
+                minute=30,
+                timezone="America/New_York",
+            ),
+            id="deploy_hash_check_nightly",
+            name="Nightly Deploy Hash Verification",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+        logger.info("Scheduler | Registered: deploy_hash_check_nightly (daily 18:30 ET)")
 
-    # ── Deploy hash check: 60s after startup (one-shot) ───────────────────
-    _startup_check_dt = datetime.now(_et) + timedelta(seconds=60)
-    scheduler.add_job(
-        func=_deploy_hash_check,
-        trigger=DateTrigger(run_date=_startup_check_dt),
-        id="deploy_hash_check_startup",
-        name="60s Post-Startup Deploy Hash Check",
-        replace_existing=True,
-        misfire_grace_time=120,
-    )
-    logger.info(f"Scheduler | Registered: deploy_hash_check_startup (one-shot at {_startup_check_dt.isoformat()})")
+        _startup_check_dt = datetime.now(_et) + timedelta(seconds=60)
+        scheduler.add_job(
+            func=_deploy_hash_check,
+            trigger=DateTrigger(run_date=_startup_check_dt),
+            id="deploy_hash_check_startup",
+            name="60s Post-Startup Deploy Hash Check",
+            replace_existing=True,
+            misfire_grace_time=120,
+        )
+        logger.info(f"Scheduler | Registered: deploy_hash_check_startup (one-shot at {_startup_check_dt.isoformat()})")
+    else:
+        logger.info("Scheduler | Deploy hash checks skipped outside published deployment")
 
     # ── Job 7: fleet equity snapshot — nightly at 19:00 ET ───────────────────
     scheduler.add_job(
@@ -248,6 +257,10 @@ async def _deploy_hash_check() -> None:
     current repo HEAD. Alert via Discord if they differ — the service is
     running stale code and needs a restart.
     """
+    if not _is_published_deployment():
+        logger.debug("Scheduler | deploy_hash_check skipped outside published deployment")
+        return
+
     try:
         import subprocess as _sp
         latest = _sp.check_output(

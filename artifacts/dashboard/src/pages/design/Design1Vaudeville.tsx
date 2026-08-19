@@ -1,209 +1,44 @@
-/**
- * Design 1 — STOOGES VAUDEVILLE
- * Warm stage-lighting palette · Bot performer cards · Applause / pie-in-face P&L
- */
-import { useState } from "react";
-import { useFleetData, getBotStatus, fmtEq, fmtPct, fmtDollar, type BotSlice, type BotStatus } from "@/hooks/useFleetData";
-
-const THEMES = [
-  { n: 1, label: "🎭 VAUDEVILLE" },
-  { n: 2, label: "💻 TERMINAL"  },
-  { n: 3, label: "🚀 MISSION"   },
-  { n: 4, label: "🕹️ ARCADE"    },
-  { n: 5, label: "🛸 FLEET"     },
-];
-
-function DesignNav({ current }: { current: number }) {
-  return (
-    <div className="sticky top-0 z-50 flex items-center gap-1 px-3 py-2 overflow-x-auto" style={{ background: "#000" }}>
-      {THEMES.map((t) => (
-        <a
-          key={t.n}
-          href={`/design/${t.n}`}
-          className="shrink-0 text-[9px] font-bold px-2 py-1 rounded whitespace-nowrap"
-          style={{
-            background: current === t.n ? "#92400e" : "transparent",
-            color: current === t.n ? "#fef3c7" : "#78716c",
-          }}
-        >
-          {t.label}
-        </a>
-      ))}
-      <a href="/" className="ml-auto shrink-0 text-[9px] text-stone-600">← Home</a>
-    </div>
-  );
-}
-
-const STATUSES: Record<BotStatus, { emoji: string; label: string; color: string }> = {
-  LIVE:       { emoji: "🎬", label: "ON STAGE",    color: "#86efac" },
-  MKT_CLOSED: { emoji: "🌙", label: "DARK NIGHT",  color: "#a8a29e" },
-  DOWN:       { emoji: "💥", label: "BOTCHED",     color: "#fca5a5" },
-  IDLE:       { emoji: "😴", label: "SITTING OUT", color: "#fde68a" },
-};
-
-const REGIME_LABEL: Record<string, { emoji: string; label: string }> = {
-  BULL:   { emoji: "🎺", label: "BULL MARKET"  },
-  BEAR:   { emoji: "💀", label: "BEAR HOUSE"   },
-  CRISIS: { emoji: "🚨", label: "PANIC SCENE"  },
-};
-
-interface VBotProps {
-  emoji:    string;
-  name:     string;
-  role:     string;
-  bot:      BotSlice | undefined;
-  status:   BotStatus;
-  wfStatus?: string | null;
-  accent:   string;
-}
-
-function VBotCard({ emoji, name, role, bot, status, wfStatus, accent }: VBotProps) {
-  const [open, setOpen] = useState(false);
-  const st = STATUSES[status];
-  const pnl    = bot?.pnl     ?? 0;
-  const pnlPct = bot?.pnl_pct ?? 0;
-  const positive = pnl >= 0;
-
-  return (
-    <div
-      className="rounded-2xl border-2 overflow-hidden cursor-pointer select-none"
-      style={{
-        background:  "rgba(28,15,5,0.95)",
-        borderColor: open ? accent : "#78350f",
-        boxShadow:   `0 4px 20px rgba(0,0,0,0.5)`,
-      }}
-      onClick={() => setOpen(v => !v)}
-    >
-      {/* Stage spotlight stripe */}
-      <div style={{ height: 3, background: `linear-gradient(90deg, ${accent}, #78350f 60%, transparent)` }} />
-
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <span className="text-4xl leading-none">{emoji}</span>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[16px] font-black text-amber-100">{name}</span>
-              <span className="text-[9px] uppercase tracking-widest text-amber-700">{role}</span>
-              <span
-                className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                style={{ color: st.color, background: `${st.color}20` }}
-              >
-                {st.emoji} {st.label}
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-[20px] font-black text-amber-50 tabular-nums">{fmtEq(bot?.equity ?? 0)}</span>
-              <span className="text-[13px] font-semibold tabular-nums" style={{ color: positive ? "#86efac" : "#fca5a5" }}>
-                {fmtPct(pnlPct)}
-              </span>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            <div className="text-[18px]">{positive ? "👏" : "🥧"}</div>
-            <div className="text-[10px] font-semibold tabular-nums mt-0.5" style={{ color: positive ? "#86efac" : "#fca5a5" }}>
-              {fmtDollar(pnl)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {open && (
-        <div className="px-4 pb-4" style={{ borderTop: "1px solid #78350f" }} onClick={e => e.stopPropagation()}>
-          <div className="mt-3 flex gap-3 text-[10px] text-amber-800 flex-wrap">
-            {bot?.win_rate != null && <span>WR <span className="text-amber-400">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
-            {bot?.last_updated && <span>Updated <span className="text-amber-500">{new Date(bot.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></span>}
-            {wfStatus && <span>WF Walk-fwd <span className="text-amber-300">{wfStatus}</span></span>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+import { useFleetData } from "@/hooks/useFleetData";
+import { AnimatedStyle, DesignNav, FleetTotals, getBotRows, PositionChips } from "./DesignShared";
 
 export default function Design1Vaudeville() {
-  const { oracle, spy, jerome, total, wfMap, regime, killTripped, mktOpen } = useFleetData();
-
-  const spyStatus    = getBotStatus(spy,    mktOpen, false);
-  const oraStatus    = getBotStatus(oracle, mktOpen, false);
-  const jerStatus    = getBotStatus(jerome, mktOpen, false);
-
-  const fleetEq  = total?.equity  ?? null;
-  const fleetPnl = total?.pnl     ?? null;
-  const fleetPct = total?.pnl_pct ?? null;
-  const positive = (fleetPnl ?? 0) >= 0;
-  const rl = REGIME_LABEL[regime ?? ""] ?? REGIME_LABEL["BULL"];
-
+  const data = useFleetData();
+  const rows = getBotRows(data);
   return (
-    <div className="min-h-screen font-mono" style={{ background: "linear-gradient(180deg, #1c0f05 0%, #12090200 100%)" }}>
-      <DesignNav current={1} />
-
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 py-4 flex-wrap"
-        style={{ borderBottom: "2px solid #78350f", background: "#1c0f05" }}
-      >
-        <div>
-          <div className="text-[10px] uppercase tracking-widest text-amber-700 mb-0.5">STOOGE THEATRE · FLEET</div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[24px] font-black text-amber-100 tabular-nums">{fleetEq != null ? fmtEq(fleetEq) : "—"}</span>
-            {fleetPnl != null && (
-              <span className="text-[14px] font-semibold tabular-nums" style={{ color: positive ? "#86efac" : "#fca5a5" }}>
-                {fmtDollar(fleetPnl)} ({fmtPct(fleetPct ?? 0)})
-              </span>
-            )}
-          </div>
+    <main className="relative min-h-screen overflow-hidden bg-[#071126] font-sans text-white">
+      <AnimatedStyle>{`
+        @keyframes d1float { 0%,100%{transform:translate3d(0,0,0) rotate(-3deg)} 50%{transform:translate3d(0,-18px,0) rotate(3deg)} }
+        @keyframes d1spin { to{transform:rotate(360deg)} }
+        @keyframes d1pulse { 0%,100%{opacity:.35;transform:scale(.92)} 50%{opacity:.8;transform:scale(1.08)} }
+      `}</AnimatedStyle>
+      <div className="pointer-events-none absolute -left-28 top-24 h-80 w-80 rounded-full bg-fuchsia-500/25 blur-3xl" style={{ animation: "d1pulse 6s ease-in-out infinite" }} />
+      <div className="pointer-events-none absolute -right-20 top-1/3 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl" style={{ animation: "d1pulse 7s ease-in-out infinite reverse" }} />
+      <DesignNav current={1} mode="ORBITAL SOCIAL CLUB" />
+      <section className="relative mx-auto max-w-2xl px-5 pb-14 pt-10">
+        <div className="relative mx-auto mb-8 flex h-56 w-56 items-center justify-center">
+          <div className="absolute inset-0 rounded-full border border-cyan-200/20" style={{ animation: "d1spin 18s linear infinite" }} />
+          <div className="absolute inset-7 rounded-full border border-dashed border-fuchsia-300/25" style={{ animation: "d1spin 11s linear infinite reverse" }} />
+          <div className="absolute h-28 w-28 rounded-full bg-gradient-to-br from-cyan-300 to-fuchsia-500 opacity-70 blur-xl" />
+          <div className="relative text-center"><div className="text-[10px] font-black uppercase tracking-[.3em] text-white/50">FLEET ORBIT</div><div className="mt-2 text-2xl font-black">LIVE DATA</div></div>
         </div>
-        <div className="ml-auto flex flex-col items-end gap-1">
-          <span className="text-[11px] font-bold text-amber-300">{rl.emoji} {rl.label}</span>
-          {killTripped != null && (
-            <span className="text-[9px] font-bold" style={{ color: killTripped ? "#fca5a5" : "#78716c" }}>
-              {killTripped ? "⛔ KILL SWITCH TRIPPED" : "🎬 SHOW RUNNING"}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Bot cards */}
-      <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600 }}>
-        <VBotCard emoji="🎩" name="Moe"      role="SPY/QQQ Momentum"   bot={spy}    status={spyStatus}  wfStatus={wfMap.get("spy_qqq_trend")} accent="#d97706" />
-        <VBotCard emoji="🥧" name="Larry"    role="Oracle Momentum"    bot={oracle} status={oraStatus}  wfStatus={wfMap.get("oracle")}        accent="#b45309" />
-
-        {/* Curly combined card */}
-        <div className="rounded-2xl border-2 overflow-hidden" style={{ background: "rgba(28,15,5,0.95)", borderColor: "#78350f" }}>
-          <div style={{ height: 3, background: "linear-gradient(90deg, #ef4444, #78350f 60%, transparent)" }} />
-          <div className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-3xl">🎺</span>
-              <span className="text-[15px] font-black text-amber-100">Curly</span>
-              <span className="text-[9px] text-amber-700 uppercase tracking-widest">Jerome</span>
+        <FleetTotals data={data} className="text-center" />
+        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+          {rows.map((row, i) => (
+            <div key={row.id} className="relative" style={{ animation: `d1float ${4 + i}s ease-in-out infinite`, animationDelay: `${i * -1.3}s` }}>
+              <div className="absolute -inset-1 rounded-[2rem] opacity-30 blur-xl" style={{ background: row.accent }} />
+              <div className="relative rounded-[2rem] border border-white/15 bg-white/[.09] p-4 shadow-2xl backdrop-blur-xl">
+                <div className="mb-5 flex items-center justify-between"><span className="text-3xl" style={{ color: row.accent }}>{row.icon}</span><span className="text-[9px] font-black uppercase" style={{ color: row.statusMeta.color }}>{row.statusMeta.label}</span></div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-white/50">{row.name}</div>
+                <div className="mt-1 text-2xl font-black">{row.bot ? `$${Math.round(row.bot.equity).toLocaleString()}` : "—"}</div>
+                <div className="mt-1 text-sm font-bold" style={{ color: row.bot?.pnl && row.bot.pnl >= 0 ? "#7dffb2" : "#ff9aaa" }}>{row.bot ? `${row.bot.pnl >= 0 ? "+" : ""}${(row.bot.pnl_pct * 100).toFixed(2)}%` : "SYNCING"}</div>
+                <div className="mt-4 text-[9px] text-white/40">WF {row.wf} · WR {row.bot?.win_rate == null ? "—" : `${(row.bot.win_rate * 100).toFixed(1)}%`}</div>
+                <div className="mt-3"><PositionChips positions={row.livePositions} accent={row.accent} /></div>
+              </div>
             </div>
-            {/* Sub-rows */}
-            {([
-              { label: "Curly", bot: jerome, status: jerStatus, wf: wfMap.get("jerome_macro"), isADX: false },
-            ] as const).map(({ label, bot, status, wf }) => {
-              const st = STATUSES[status];
-              const pnl = bot?.pnl ?? 0;
-              return (
-                <div key={label} className="flex items-center gap-2 py-1.5 border-b last:border-0" style={{ borderColor: "#78350f50" }}>
-                  <span className="text-[12px] w-6">{st.emoji}</span>
-                  <span className="text-[11px] text-amber-700 w-16 shrink-0">{label}</span>
-                  <span className="text-[14px] font-bold text-amber-100 tabular-nums">{fmtEq(bot?.equity ?? 0)}</span>
-                  <span className="text-[11px] tabular-nums ml-1" style={{ color: pnl >= 0 ? "#86efac" : "#fca5a5" }}>
-                    {fmtPct(bot?.pnl_pct ?? 0)}
-                  </span>
-                  {wf && <span className="text-[9px] text-amber-800 ml-auto">{wf}</span>}
-                </div>
-              );
-            })}
-          </div>
+          ))}
         </div>
-
-        {/* Footer */}
-        <div className="text-center py-3 text-[9px] text-amber-900 tracking-widest uppercase">
-          ✦ TONIGHT'S PERFORMANCE ✦
-        </div>
-      </div>
-      <div style={{ height: 96 }} />
-    </div>
+        <div className="mt-8 rounded-full border border-white/10 bg-black/20 px-4 py-3 text-center text-[10px] font-bold uppercase tracking-[.18em] text-white/45">Every bot is a planet · every position is a moon · tap a card in the live app to explore</div>
+      </section>
+    </main>
   );
 }

@@ -148,7 +148,9 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, cargo = [
 }
 
 export default function Design5SpaceFleet() {
-  const { oracle, spy, jerome, total, wfMap, allPos, spyPos, otherPos, regime, killTripped, mktOpen } = useFleetData();
+  const { oracle, spy, jerome, total, wfMap, positionsByBot, regime, killTripped, mktOpen } = useFleetData();
+  const spyPos = positionsByBot?.spy_qqq_trend?.positions ?? [];
+  const oraclePos = positionsByBot?.oracle?.positions ?? [];
 
   const spyStatus  = getBotStatus(spy,    mktOpen, false);
   const oraStatus  = getBotStatus(oracle, mktOpen, false);
@@ -232,7 +234,7 @@ export default function Design5SpaceFleet() {
           status={oraStatus}
           wfStatus={oraWF}
           accent="#a78bfa"
-          cargo={otherPos.map(p => `${p.symbol} ${(p.unrealized_plpc * 100).toFixed(1)}%`)}
+          cargo={oraclePos.map(p => `${p.symbol} ${(p.unrealized_plpc * 100).toFixed(1)}%`)}
         />
 
         {/* Curly dual ship card */}

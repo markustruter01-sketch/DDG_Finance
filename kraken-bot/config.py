@@ -32,7 +32,11 @@ BOT_PROFILES = {
         "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour; entry once/day at close)
+        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour)
+        # Runner schedules one additional full cycle at this deterministic UTC
+        # window start, so the entry scan cannot drift past its 20:30–20:59 gate.
+        "ENTRY_WINDOW_START_UTC": (20, 30),
+        "ENTRY_WINDOW_DURATION_MINUTES": 30,
         # ── Universe ──────────────────────────────────────────────────────────
         "ASIA_UNIVERSE":     ["EWY", "EWT", "INDA", "EWJ", "EWM", "VNM"],
         # ── Risk management (mirrors validated bot2/LatAm params) ─────────────
@@ -78,7 +82,10 @@ BOT_PROFILES = {
         "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour; entry once/day at close)
+        "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour)
+        # Match Asia: one runner-aligned entry cycle at 20:30 UTC daily.
+        "ENTRY_WINDOW_START_UTC": (20, 30),
+        "ENTRY_WINDOW_DURATION_MINUTES": 30,
         # ── Universe ──────────────────────────────────────────────────────────
         "EM_UNIVERSE":       ["EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR"],
         # ── Risk management ───────────────────────────────────────────────────

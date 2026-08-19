@@ -23,7 +23,7 @@ import signal
 import threading
 import importlib
 import traceback
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
 
@@ -98,6 +98,64 @@ BOTS = [
 _bot_status: dict[str, dict] = {}
 _status_lock = threading.Lock()
 _shutdown_event = threading.Event()
+
+
+def _entry_window_bounds(profile: dict[str, Any], now: datetime) -> tuple[datetime, datetime] | None:
+    """Return today's runner-aligned entry window, or None for ordinary bots."""
+    configured_start = profile.get("ENTRY_WINDOW_START_UTC")
+    if not configured_start:
+        return None
+
+    try:
+        hour, minute = configured_start
+        duration_minutes = int(profile.get("ENTRY_WINDOW_DURATION_MINUTES", 30))
+        start = now.replace(hour=int(hour), minute=int(minute), second=0, microsecond=0)
+        return start, start + timedelta(minutes=duration_minutes)
+    except (TypeError, ValueError):
+        logger.error(
+            f"[{profile.get('display_name', 'unknown')}] Invalid ENTRY_WINDOW_START_UTC "
+            f"configuration: {configured_start!r}"
+        )
+        return None
+
+
+def _next_window_aligned_cycle(
+    profile: dict[str, Any],
+    last_window_cycle_date: date | None,
+    now: datetime,
+) -> datetime | None:
+    """
+    Return the next deterministic window cycle for a regional profile.
+
+    Ordinary profiles return None and retain their free-running interval. For
+    window-aligned profiles, a normal hourly cycle before the window is followed
+    by an additional full cycle at the window start. A process that starts during
+    the window runs immediately and records that day's window cycle.
+    """
+    bounds = _entry_window_bounds(profile, now)
+    if bounds is None:
+        return None
+
+    start, end = bounds
+    if last_window_cycle_date == now.date() or now >= end:
+        return start + timedelta(days=1)
+    if now >= start:
+        return now
+    return start
+
+
+def _is_unrecorded_window_cycle(
+    profile: dict[str, Any],
+    last_window_cycle_date: date | None,
+    now: datetime,
+) -> bool:
+    """Whether this cycle starts inside the configured entry window."""
+    bounds = _entry_window_bounds(profile, now)
+    return bool(
+        bounds
+        and last_window_cycle_date != now.date()
+        and bounds[0] <= now < bounds[1]
+    )
 
 
 def _update_status(bot_id: str, **fields):
@@ -190,13 +248,21 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
 
     cycle_count = 0
     consecutive_errors = 0
+    last_window_cycle_date: date | None = None
 
     while not _shutdown_event.is_set():
         try:
             cycle_count += 1
             cycle_start = time.time()
+            cycle_started_at = datetime.now(timezone.utc)
+            if _is_unrecorded_window_cycle(profile, last_window_cycle_date, cycle_started_at):
+                last_window_cycle_date = cycle_started_at.date()
+                logger.info(
+                    f"[{bot_id}] Window-aligned entry cycle starting at "
+                    f"{cycle_started_at.strftime('%H:%M UTC')}"
+                )
             _update_status(bot_id, status="running", cycle_count=cycle_count,
-                           last_cycle_start=datetime.now(timezone.utc).isoformat())
+                           last_cycle_start=cycle_started_at.isoformat())
 
             cycle_fn(profile=profile, db_id=db_id)
 
@@ -231,6 +297,17 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
         # Exponential backoff on repeated errors (capped at 8x sleep)
         backoff_multiplier = min(2 ** min(consecutive_errors, 3), 8) if consecutive_errors else 1
         sleep_for = sleep_seconds * backoff_multiplier
+        now = datetime.now(timezone.utc)
+        next_window_cycle = _next_window_aligned_cycle(profile, last_window_cycle_date, now)
+        if next_window_cycle is not None:
+            seconds_until_window_cycle = max(0.0, (next_window_cycle - now).total_seconds())
+            if seconds_until_window_cycle < sleep_for:
+                sleep_for = seconds_until_window_cycle
+                logger.info(
+                    f"[{bot_id}] Next cycle aligned to entry window at "
+                    f"{next_window_cycle.strftime('%Y-%m-%d %H:%M UTC')} "
+                    f"(in {sleep_for:.0f}s)"
+                )
 
         # Sleep in small intervals so shutdown is responsive
         end_time = time.time() + sleep_for

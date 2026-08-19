@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import time
 from loguru import logger
+from jerome_alpaca import _nyse_is_open
 
 SGOV_SYMBOL          = "SGOV"
 PARK_THRESHOLD_USD   = 1_000.0   # minimum idle cash to bother parking
@@ -111,6 +112,13 @@ def unpark_for_entry(
     Returns approximate market_value freed (0.0 if SGOV not held or on error).
     Failure is non-fatal — entry proceeds whether or not SGOV was sold.
     """
+    if not _nyse_is_open():
+        logger.debug(
+            f"{bot_label} | SGOV unpark skipped — market closed "
+            "(entry also gated; nothing to fund after-hours)"
+        )
+        return 0.0
+
     sgov = _find_sgov(live_positions)
     if sgov is None:
         return 0.0

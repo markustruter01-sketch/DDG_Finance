@@ -9,7 +9,7 @@ import {
   useFleetData,
   getBotStatus,
   fmtEq, fmtPct, fmtDollar,
-  type BotSlice, type BotStatus, type LivePos,
+  type BotSlice, type BotStatus, type LivePos, type EntryWindow,
 } from "@/hooks/useFleetData";
 import { useExportReport } from "@/hooks/use-kraken";
 import { useToast } from "@/hooks/use-toast";
@@ -240,6 +240,74 @@ function HealthBar({ wfStatus }: { wfStatus: string | null | undefined }) {
   );
 }
 
+function formatCountdown(totalSeconds: number) {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return [hours, minutes, secs].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!entryWindow) {
+    return (
+      <div className="mt-3 text-[9px] tracking-wide text-slate-600">
+        ⏱ Window schedule syncing…
+      </div>
+    );
+  }
+
+  if (entryWindow.mode === "runner_interval") {
+    return (
+      <div
+        className="mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-bold tracking-wide text-amber-200"
+        title={`Server schedule: ${entryWindow.source}`}
+        style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.20)" }}
+      >
+        <span aria-hidden>⏱</span>
+        <span>Hourly entry scans · runner-timed</span>
+      </div>
+    );
+  }
+
+  const startsAt = Date.parse(entryWindow.window_start_utc!);
+  const endsAt = Date.parse(entryWindow.window_end_utc!);
+  const open = now >= startsAt && now < endsAt;
+  const secondsUntil = (Date.parse(entryWindow.next_window_start_utc!) - now) / 1000;
+
+  return (
+    <div
+      className="mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-bold tracking-wide"
+      title={`Server schedule: ${entryWindow.source}`}
+      style={{
+        color: open ? "#4ade80" : "#67e8f9",
+        background: open ? "rgba(34,197,94,0.10)" : "rgba(34,211,238,0.06)",
+        border: `1px solid ${open ? "rgba(74,222,128,0.32)" : "rgba(34,211,238,0.16)"}`,
+      }}
+    >
+      {open ? (
+        <>
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span>ENTRY WINDOW OPEN</span>
+        </>
+      ) : (
+        <>
+          <span aria-hidden>⏱</span>
+          <span>Next entry window in</span>
+          <span className="tabular-nums text-white">{formatCountdown(secondsUntil)}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Ship card (single bot) ────────────────────────────────────────────────────
 
 const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
@@ -343,10 +411,11 @@ interface ShipCardProps {
   accent:         string;
   livePositions?: LivePos[];
   posChips?:      { symbol: string; plPct: number }[];
+  entryWindow?:    EntryWindow;
 }
 
-function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, posChips = [] }: ShipCardProps) {
-  const [open, setOpen] = useState(false);
+function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, posChips = [], entryWindow }: ShipCardProps) {
+  const [open, setOpen] = useState(true);
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
   const pnlPct = bot?.pnl_pct ?? 0;
@@ -404,6 +473,8 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
             </div>
           )
         }
+
+        <EntryWindowCountdown entryWindow={entryWindow} />
       </div>
 
       {open && (
@@ -643,7 +714,7 @@ export default function HomePage() {
   const {
     oracle, spy, jerome, total,
     spyPos, otherPos, wfMap,
-    regime, killTripped, lastCycle, mktOpen,
+    regime, killTripped, lastCycle, mktOpen, entryWindows,
   } = useFleetData();
 
   // Warp pulse: fires whenever lastCycle changes (new data arrived)
@@ -728,11 +799,11 @@ export default function HomePage() {
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
         <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
-          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={spyPos} />
+          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={spyPos} entryWindow={entryWindows?.spy_qqq_trend} />
         <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
-          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={otherPos} />
+          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={otherPos} entryWindow={entryWindows?.oracle} />
         <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
-          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={[]} />
+          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={[]} entryWindow={entryWindows?.jerome_macro} />
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"

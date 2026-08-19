@@ -54,6 +54,23 @@ export interface StatusSummary {
   kill_switch_tripped?: boolean;
 }
 
+export interface EntryWindow {
+  label: string;
+  timezone: "UTC";
+  mode: "fixed_window" | "runner_interval";
+  is_open: boolean;
+  entry_interval_seconds?: number;
+  window_start_utc: string | null;
+  window_end_utc: string | null;
+  next_window_start_utc: string | null;
+  source: string;
+}
+
+export interface EntryWindowsResponse {
+  server_time_utc: string;
+  windows: Partial<Record<"oracle" | "spy_qqq_trend" | "jerome_macro", EntryWindow>>;
+}
+
 // ── Status logic (market-hours aware, Rule 27-safe) ──────────────────────────
 
 export type BotStatus = "LIVE" | "MKT_CLOSED" | "DOWN" | "IDLE";
@@ -154,6 +171,14 @@ export function useFleetData() {
     retry: false,
   });
 
+  const { data: entryWindowData } = useQuery<EntryWindowsResponse>({
+    queryKey: ["fleet-entry-windows"],
+    queryFn: () => fleetApi.get("/fleet/entry-windows").then((r) => r.data),
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+    retry: 1,
+  });
+
   const allPos   = livePosResp?.positions ?? [];
   const spyPos   = allPos.filter((p) => ["SPY", "QQQ"].includes(p.symbol));
   const otherPos = allPos.filter((p) => !["SPY", "QQQ"].includes(p.symbol));
@@ -175,5 +200,6 @@ export function useFleetData() {
     regime:      market?.regime,
     killTripped: summary?.kill_switch?.tripped ?? summary?.kill_switch_tripped,
     lastCycle:   fleet?.generated_at,
+    entryWindows: entryWindowData?.windows,
   };
 }

@@ -215,6 +215,24 @@ class AlpacaEtfEngine:
                             ON alpaca_etf_positions (bot_id, status, opened_at);
                         ALTER TABLE alpaca_etf_positions
                             ADD COLUMN IF NOT EXISTS stop_order_id TEXT;
+                        CREATE TABLE IF NOT EXISTS regional_scan_log (
+                            id              BIGSERIAL PRIMARY KEY,
+                            ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                            bot_id          TEXT NOT NULL,
+                            symbol          TEXT NOT NULL,
+                            regime          TEXT,
+                            should_enter    BOOLEAN,
+                            shares          NUMERIC,
+                            notional        NUMERIC,
+                            notional_pct    NUMERIC,
+                            corr_result     TEXT,
+                            final_decision  TEXT NOT NULL,
+                            drop_reason     TEXT,
+                            order_id        TEXT,
+                            order_outcome   TEXT
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_regional_scan_log_lookup
+                            ON regional_scan_log (bot_id, ts DESC, symbol);
                     """)
                 conn.commit()
             logger.info("EtfEngine | alpaca_etf_positions schema verified")
@@ -339,6 +357,139 @@ class AlpacaEtfEngine:
         except Exception as exc:
             logger.error(f"EtfEngine | buy_market failed {symbol}: {exc}")
             return None
+
+    def poll_entry_order(
+        self,
+        order_id: str,
+        *,
+        max_polls: int = 20,
+        interval_seconds: float = 3.0,
+    ) -> dict:
+        """Poll a new entry order, returning the broker's final observed fill state."""
+        terminal = {"filled", "canceled", "expired", "rejected", "done_for_day"}
+        latest = None
+        for poll_number in range(max_polls):
+            try:
+                latest = self.api.get_order(order_id)
+            except Exception as exc:
+                logger.warning(
+                    f"EtfEngine | entry status poll failed order_id={order_id} "
+                    f"poll={poll_number + 1}/{max_polls}: {exc}"
+                )
+                latest = None
+            if latest is not None:
+                status = str(getattr(latest, "status", "")).lower()
+                if status == "filled" or status in terminal - {"filled"}:
+                    break
+            if poll_number < max_polls - 1:
+                time.sleep(interval_seconds)
+
+        if latest is None:
+            try:
+                latest = self.api.get_order(order_id)
+            except Exception as exc:
+                logger.error(f"EtfEngine | final entry status fetch failed {order_id}: {exc}")
+                return {
+                    "order_id": order_id,
+                    "status": "unknown",
+                    "filled_qty": 0.0,
+                    "filled_avg_price": None,
+                }
+
+        status = str(getattr(latest, "status", "")).lower()
+        filled_qty = float(getattr(latest, "filled_qty", 0) or 0)
+        filled_avg_price = getattr(latest, "filled_avg_price", None)
+        return {
+            "order_id": order_id,
+            "status": status,
+            "filled_qty": filled_qty,
+            "filled_avg_price": (
+                float(filled_avg_price) if filled_avg_price is not None else None
+            ),
+            "raw_order": latest,
+        }
+
+    def cancel_order(self, order_id: str) -> bool:
+        """Cancel an entry order, returning whether the broker request succeeded."""
+        try:
+            self.api.cancel_order(order_id)
+            return True
+        except Exception as exc:
+            logger.error(f"EtfEngine | cancel order failed {order_id}: {exc}")
+            return False
+
+    def record_scan_decision(
+        self,
+        *,
+        bot_id: str,
+        symbol: str,
+        regime: Optional[str],
+        should_enter: bool,
+        shares: float,
+        notional: Optional[float],
+        notional_pct: Optional[float],
+        corr_result: Optional[str],
+        final_decision: str,
+        drop_reason: Optional[str],
+    ) -> Optional[int]:
+        """Persist one auditable regional scan decision."""
+        _ensure_tp()
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return None
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO regional_scan_log
+                            (bot_id, symbol, regime, should_enter, shares,
+                             notional, notional_pct, corr_result,
+                             final_decision, drop_reason)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        RETURNING id
+                        """,
+                        (
+                            bot_id, symbol, regime, should_enter, shares,
+                            notional, notional_pct, corr_result,
+                            final_decision, drop_reason,
+                        ),
+                    )
+                    row = cur.fetchone()
+                conn.commit()
+            return int(row[0]) if row else None
+        except Exception as exc:
+            logger.error(f"EtfEngine | scan log insert failed for {bot_id}/{symbol}: {exc}")
+            return None
+
+    def record_scan_outcome(
+        self,
+        scan_id: Optional[int],
+        *,
+        order_id: Optional[str],
+        order_outcome: str,
+    ) -> None:
+        """Attach the final broker outcome to a candidate scan record."""
+        if scan_id is None:
+            return
+        _ensure_tp()
+        try:
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE regional_scan_log
+                           SET order_id=%s, order_outcome=%s
+                         WHERE id=%s
+                        """,
+                        (order_id, order_outcome, scan_id),
+                    )
+                conn.commit()
+        except Exception as exc:
+            logger.error(f"EtfEngine | scan outcome update failed id={scan_id}: {exc}")
 
     def close_position(
         self,

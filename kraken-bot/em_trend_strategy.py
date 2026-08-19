@@ -37,7 +37,7 @@ Wired into runner.py:
     ("jerome_macro", "em_trend_strategy", "run_em_cycle")
 
 Called every LOOP_SLEEP_SECONDS (3600s = hourly).
-Entry gate: fires in a window after NYSE close (20:30–21:00 UTC = ~4:30–5 PM ET).
+Entry gate: fires in a window before NYSE close (19:40–20:00 UTC = ~3:40–4 PM ET).
 Exit management runs every cycle.
 
 CORR CAP NOTE: unlike latam_trend_strategy (which excluded within-universe ETFs),
@@ -91,16 +91,16 @@ VOL_SIZE_CAP      = 0.25    # hard cap 25%
 MIN_HOLD_DAYS     = 5
 MAX_DEPLOYMENT    = 0.80    # never deploy more than 80% of equity
 CASH_RESERVE      = 0.20    # minimum 20% cash always
-MAX_POSITIONS     = 4       # 8-ETF universe; high-vol frontier names trim naturally
+MAX_POSITIONS     = 3       # 8-ETF universe; preserve cash headroom
 
 # TP targets for tiered scale-out (from entry price — mirrors bot2 / Asia)
 TP1_PCT = 0.06   # +6%  → scale out 33%
 TP2_PCT = 0.12   # +12% → scale out another 33%
 
-# Entry gate: fire once per day in the post-close window 20:30–21:00 UTC
-ENTRY_HOUR_UTC  = 20
-ENTRY_MIN_START = 30
-ENTRY_MIN_END   = 60      # 20:30–20:59 UTC = ~4:30–5 PM ET
+# Entry gate: fire once per day in the pre-close window 19:40–20:00 UTC
+ENTRY_HOUR_UTC  = 19
+ENTRY_MIN_START = 40
+ENTRY_MIN_END   = 60      # 19:40–19:59 UTC = ~3:40–4 PM ET
 
 # Once-per-day gate state
 _last_entry_scan_date: Optional[date] = None
@@ -347,7 +347,7 @@ def _safe_close(engine: AlpacaEtfEngine, symbol: str, exit_reason: str,
 # ── Entry gate ────────────────────────────────────────────────────────────────
 
 def _in_entry_window(now: Optional[datetime] = None) -> bool:
-    """True if we are in the post-close entry window AND haven't entered today."""
+    """True if we are in the pre-close entry window AND haven't entered today."""
     global _last_entry_scan_date
     if now is None:
         now = datetime.now(timezone.utc)
@@ -465,7 +465,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
                     _closed_this_cycle.add(symbol)
                 live_positions = engine.get_positions()
 
-    # ── Entry scan (once per day, post-close window) ─────────────────────────
+    # ── Entry scan (once per day, pre-close window) ──────────────────────────
     live_positions = engine.get_positions()
 
     # Empty-response guard: skip entry if Alpaca returns [] but DB has open rows
@@ -493,7 +493,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         logger.info("EM | Outside entry window — exit-only cycle complete")
         return
 
-    logger.info("EM | === ENTRY SCAN (post-close window) ===")
+    logger.info("EM | === ENTRY SCAN (pre-close window) ===")
     _last_entry_scan_date = datetime.now(timezone.utc).date()
 
     # Position cap
@@ -522,14 +522,41 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
 
     candidates: list[dict] = []
 
+    def _log_scan(
+        symbol: str,
+        *,
+        regime: Optional[str],
+        should_enter: bool,
+        shares: float = 0,
+        notional: Optional[float] = None,
+        notional_pct: Optional[float] = None,
+        corr_result: Optional[str] = None,
+        final_decision: str = "DROPPED",
+        drop_reason: Optional[str] = None,
+    ) -> Optional[int]:
+        return engine.record_scan_decision(
+            bot_id=BOT_ID,
+            symbol=symbol,
+            regime=regime,
+            should_enter=should_enter,
+            shares=shares,
+            notional=notional,
+            notional_pct=notional_pct,
+            corr_result=corr_result,
+            final_decision=final_decision,
+            drop_reason=drop_reason,
+        )
+
     for symbol in UNIVERSE:
         if symbol in currently_held:
             logger.info(f"EM | {symbol}: already held — skip")
+            _log_scan(symbol, regime="HELD", should_enter=False, drop_reason="SHOULD_ENTER")
             continue
 
         if current_count >= MAX_POSITIONS:
             logger.info(f"EM | Max positions ({MAX_POSITIONS}) reached — skip remaining")
-            break
+            _log_scan(symbol, regime=None, should_enter=False, drop_reason="DEPLOYMENT")
+            continue
 
         # ── Stage 1A: Per-ETF regional regime gate ────────────────────────
         regime_info = _regional_regime(symbol)
@@ -539,6 +566,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
                 f"EM | {symbol}: regime={regime} — blocked "
                 f"(EMA50<EMA200 or CRISIS) [{regime_info.get('source', '?')}]"
             )
+            _log_scan(symbol, regime=regime, should_enter=False, drop_reason="REGIME")
             continue
         logger.info(f"EM | {symbol}: regime={regime} ✓")
 
@@ -546,6 +574,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         should_enter, ctx = _should_enter(symbol)
         if not should_enter:
             logger.info(f"EM | {symbol}: no entry signal")
+            _log_scan(symbol, regime=regime, should_enter=False, drop_reason="SHOULD_ENTER")
             continue
 
         entry_price = ctx["current_price"]
@@ -556,6 +585,9 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
             logger.warning(
                 f"EM | {symbol}: vol_scaled_size returned {shares} — "
                 f"fail-CLOSED or too small, skipping"
+            )
+            _log_scan(
+                symbol, regime=regime, should_enter=True, drop_reason="VOL_SIZE"
             )
             continue
 
@@ -568,6 +600,11 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
                 f"EM | {symbol}: notional cap override "
                 f"({notional_pct:.1%} > {VOL_SIZE_CAP:.0%}) — skipping"
             )
+            _log_scan(
+                symbol, regime=regime, should_enter=True, shares=shares,
+                notional=notional, notional_pct=notional_pct,
+                drop_reason="NOTIONAL_CAP",
+            )
             continue
 
         # Deployment headroom check
@@ -575,6 +612,11 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
             logger.info(
                 f"EM | {symbol}: would exceed MAX_DEPLOYMENT "
                 f"({deployed_pct:.1%}+{notional_pct:.1%}>{MAX_DEPLOYMENT:.0%}) — skip"
+            )
+            _log_scan(
+                symbol, regime=regime, should_enter=True, shares=shares,
+                notional=notional, notional_pct=notional_pct,
+                drop_reason="DEPLOYMENT",
             )
             continue
 
@@ -584,12 +626,27 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         allowed, reason = _corr_cap_check(symbol, all_held_for_corr)
         if not allowed:
             logger.info(f"EM | {symbol}: corr_cap blocked — {reason}")
+            _log_scan(
+                symbol, regime=regime, should_enter=True, shares=shares,
+                notional=notional, notional_pct=notional_pct,
+                corr_result=reason, drop_reason="CORR_CAP",
+            )
             continue
 
         logger.info(
             f"EM | {symbol}: CANDIDATE ✓ — "
             f"regime={regime} signal=BULL shares={shares} "
             f"notional=${notional:,.0f} ({notional_pct:.1%})"
+        )
+        scan_id = _log_scan(
+            symbol,
+            regime=regime,
+            should_enter=True,
+            shares=shares,
+            notional=notional,
+            notional_pct=notional_pct,
+            corr_result="allowed",
+            final_decision="CANDIDATE",
         )
         candidates.append({
             "symbol":      symbol,
@@ -598,6 +655,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
             "entry_price": entry_price,
             "regime":      regime,
             "ctx":         ctx,
+            "scan_id":     scan_id,
         })
 
     # Sort by price momentum (strongest uptrend first; simple proxy: price vs EMA50)
@@ -614,6 +672,7 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         shares      = cand["shares"]
         notional    = cand["notional"]
         entry_price = cand["entry_price"]
+        scan_id     = cand.get("scan_id")
 
         logger.info(
             f"EM | ENTERING {symbol}: {shares} shares @ "
@@ -623,35 +682,109 @@ def run_em_cycle(profile: dict, db_id: int) -> None:
         try:
             order = engine.buy_market(symbol, shares)
             if order:
-                recorded = engine.record_open(
-                    bot_id         = BOT_ID,
-                    symbol         = symbol,
-                    direction      = "long",
-                    qty            = shares,
-                    entry_price    = entry_price,
-                    entry_atr      = cand["ctx"].get("atr"),
-                    notional_usd   = notional,
-                    stop_price     = entry_price * (1 - TRAIL_STOP_PCT),
-                    tp1_price      = entry_price * (1 + TP1_PCT),
-                    tp2_price      = entry_price * (1 + TP2_PCT),
-                    min_hold_days  = MIN_HOLD_DAYS,
-                )
-                engine.arm_protective_stop_after_fill(
-                    BOT_ID, symbol, entry_price * (1 - TRAIL_STOP_PCT), order["order_id"]
-                )
-                if not recorded:
-                    raise RuntimeError(
-                        f"{symbol}: entry DB record failed after broker order; protective stop armed, manual reconciliation required"
+                fill = engine.poll_entry_order(order["order_id"])
+                filled_qty = fill["filled_qty"]
+                filled_price = fill["filled_avg_price"]
+                status = fill["status"]
+
+                if status == "filled" and filled_qty > 0 and filled_price:
+                    actual_notional = filled_qty * filled_price
+                    recorded = engine.record_open(
+                        bot_id         = BOT_ID,
+                        symbol         = symbol,
+                        direction      = "long",
+                        qty            = filled_qty,
+                        entry_price    = filled_price,
+                        entry_atr      = cand["ctx"].get("atr"),
+                        notional_usd   = actual_notional,
+                        stop_price     = filled_price * (1 - TRAIL_STOP_PCT),
+                        tp1_price      = filled_price * (1 + TP1_PCT),
+                        tp2_price      = filled_price * (1 + TP2_PCT),
+                        min_hold_days  = MIN_HOLD_DAYS,
                     )
-                logger.info(f"EM | {symbol}: order placed + DB record created ✅")
-                current_count  += 1
-                currently_held.add(symbol)
-                all_held_for_corr = cross_bot_held + list(currently_held)
-                deployed_pct   += notional / equity
-                live_positions = engine.get_positions()
+                    engine.arm_protective_stop_after_fill(
+                        BOT_ID, symbol, filled_price * (1 - TRAIL_STOP_PCT),
+                        order["order_id"]
+                    )
+                    engine.record_scan_outcome(
+                        scan_id, order_id=order["order_id"], order_outcome="FILLED"
+                    )
+                    if not recorded:
+                        raise RuntimeError(
+                            f"{symbol}: entry DB record failed after broker fill; "
+                            "protective stop armed, manual reconciliation required"
+                        )
+                    logger.info(
+                        f"EM | {symbol}: FILLED qty={filled_qty} "
+                        f"@ ${filled_price:.4f} + DB record created ✅"
+                    )
+                    current_count  += 1
+                    currently_held.add(symbol)
+                    all_held_for_corr = cross_bot_held + list(currently_held)
+                    deployed_pct   += actual_notional / equity
+                    live_positions = engine.get_positions()
+                elif filled_qty > 0 and filled_price:
+                    engine.cancel_order(order["order_id"])
+                    actual_notional = filled_qty * filled_price
+                    recorded = engine.record_open(
+                        bot_id=BOT_ID, symbol=symbol, direction="long",
+                        qty=filled_qty, entry_price=filled_price,
+                        entry_atr=cand["ctx"].get("atr"),
+                        notional_usd=actual_notional,
+                        stop_price=filled_price * (1 - TRAIL_STOP_PCT),
+                        tp1_price=filled_price * (1 + TP1_PCT),
+                        tp2_price=filled_price * (1 + TP2_PCT),
+                        min_hold_days=MIN_HOLD_DAYS,
+                    )
+                    engine.record_scan_outcome(
+                        scan_id, order_id=order["order_id"], order_outcome="PARTIAL"
+                    )
+                    logger.warning(
+                        f"EM | {symbol}: PARTIAL qty={filled_qty} "
+                        f"@ ${filled_price:.4f}; remainder canceled"
+                    )
+                    if not recorded:
+                        raise RuntimeError(
+                            f"{symbol}: partial-fill DB record failed; manual reconciliation required"
+                        )
+                    engine.arm_protective_stop_after_fill(
+                        BOT_ID, symbol, filled_price * (1 - TRAIL_STOP_PCT),
+                        order["order_id"]
+                    )
+                    current_count += 1
+                    currently_held.add(symbol)
+                    all_held_for_corr = cross_bot_held + list(currently_held)
+                    deployed_pct += actual_notional / equity
+                    live_positions = engine.get_positions()
+                else:
+                    engine.cancel_order(order["order_id"])
+                    engine.record_scan_outcome(
+                        scan_id, order_id=order["order_id"], order_outcome="UNFILLED"
+                    )
+                    logger.warning(
+                        f"EM | ENTRY UNFILLED {symbol} — cancelling, no DB row"
+                    )
+                    try:
+                        from core.degradation_tracker import record_degradation
+                        record_degradation(
+                            component="jerome_macro",
+                            severity="critical",
+                            error_type="entry_order_unfilled",
+                            message=f"EM {symbol}: order {order['order_id']} "
+                                    f"status={status}; canceled without DB row",
+                        )
+                    except Exception:
+                        pass
             else:
                 logger.error(f"EM | {symbol}: buy_market() returned falsy — no DB record written")
+                engine.record_scan_outcome(
+                    scan_id, order_id=None, order_outcome="UNFILLED"
+                )
         except Exception as exc:
+            engine.record_scan_outcome(
+                scan_id, order_id=order.get("order_id") if order else None,
+                order_outcome="UNFILLED",
+            )
             logger.error(f"EM | {symbol}: entry FAILED: {exc}")
             try:
                 from notifications.discord import notify_capital_risk

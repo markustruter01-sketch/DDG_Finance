@@ -117,14 +117,27 @@ _DISPLAY_NAMES = {
 # Active bots in display order — buck_futures retired May 2026
 _ACTIVE_BOTS = ["oracle", "spy_qqq_trend", "jerome_macro"]
 
+# Dashboard/Discord use the canonical display id, while the ETF engine still
+# persists US Core positions under its leaf-strategy id.
+_ETF_LEDGER_TO_ACTIVE_BOT = {
+    "oracle": "oracle",
+    "bot2_spy_qqq": "spy_qqq_trend",
+    "jerome_macro": "jerome_macro",
+}
+
 _WARN_PCT_THRESHOLD  = -1.5   # 24h P&L worse than this triggers a warning line
 _WARN_NO_TRADE_HOURS = 48     # hours since last closed trade before warning
 
 
 def _last_trade_timestamps() -> dict[str, datetime | None]:
     """
-    Return {bot_id: last_closed_at} for active bots.
-    oracle and spy_qqq_trend from trades table; jerome_macro from jerome_positions.
+    Return {bot_id: last ETF trade activity timestamp} for active bots.
+
+    ETF bots persist their primary execution ledger in alpaca_etf_positions.
+    An opening fill is real trading activity even while the position remains
+    open, so use the newest opened_at or closed_at timestamp rather than the
+    legacy journal's closed-trades-only view.
+
     Best-effort — returns {} on any failure.
     """
     try:
@@ -136,30 +149,21 @@ def _last_trade_timestamps() -> dict[str, datetime | None]:
             with conn.cursor() as cur:
                 cur.execute("""
                     SELECT
-                        CASE asset_class
-                            WHEN 'momentum_equity' THEN 'oracle'
-                            WHEN 'momentum_etf'    THEN 'spy_qqq_trend'
-                        END AS bot_id,
-                        MAX(closed_at) AS last_close
-                    FROM trades
-                    WHERE asset_class IN ('momentum_equity', 'momentum_etf')
-                      AND status LIKE 'Closed_%'
-                      AND closed_at IS NOT NULL
-                    GROUP BY 1
-                """)
-                for row in cur.fetchall():
-                    if row[0]:
-                        result[row[0]] = row[1]
-                cur.execute("""
-                    SELECT bot_id, MAX(closed_at) AS last_close
-                    FROM jerome_positions
-                    WHERE bot_id = 'jerome_macro'
-                      AND status = 'closed'
-                      AND closed_at IS NOT NULL
+                        bot_id,
+                        MAX(
+                            CASE
+                                WHEN closed_at IS NULL THEN opened_at
+                                ELSE GREATEST(opened_at, closed_at)
+                            END
+                        ) AS last_activity
+                    FROM alpaca_etf_positions
+                    WHERE bot_id = ANY(%s)
                     GROUP BY bot_id
-                """)
+                """, (list(_ETF_LEDGER_TO_ACTIVE_BOT),))
                 for row in cur.fetchall():
-                    result[row[0]] = row[1]
+                    active_bot_id = _ETF_LEDGER_TO_ACTIVE_BOT.get(row[0])
+                    if active_bot_id:
+                        result[active_bot_id] = row[1]
         return result
     except Exception as exc:
         logger.debug(f"Discord | _last_trade_timestamps failed: {exc}")

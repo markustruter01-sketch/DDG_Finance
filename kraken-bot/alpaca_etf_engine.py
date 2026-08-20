@@ -500,6 +500,16 @@ class AlpacaEtfEngine:
         stop_price: Optional[float] = None,
     ) -> bool:
         """Close entire position in a symbol."""
+        try:
+            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+            if not live or abs(float(live["qty"])) < 1e-6:
+                logger.info(f"EtfEngine | {symbol}: position is already flat/dust")
+                return True
+        except Exception as exc:
+            raw_error = repr(exc)
+            logger.error(f"EtfEngine | Close failed {symbol}: {raw_error}")
+            self._persist_close_failure(bot_id, symbol, raw_error)
+            return False
         if bot_id and not self.is_market_open():
             logger.info(f"EtfEngine | Full close deferred — market closed; {symbol} stop stays active")
             return False
@@ -510,9 +520,6 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Full close blocked — {symbol} stop still active")
             return False
         try:
-            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
-            if not live:
-                return True
             order = self.api.submit_order(
                 symbol=symbol,
                 qty=round(abs(float(live["qty"])), 8),
@@ -542,7 +549,9 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Full close unfilled after 30s: {symbol}; stop restored")
             return False
         except Exception as exc:
-            logger.error(f"EtfEngine | Close failed {symbol}: {exc}")
+            raw_error = repr(exc)
+            logger.error(f"EtfEngine | Close failed {symbol}: {raw_error}")
+            self._persist_close_failure(bot_id, symbol, raw_error)
             # The broker may have accepted the sell even though the client lost
             # the response. Do not submit an overlapping stop until that order
             # can be resolved by the next reconciliation cycle.
@@ -557,6 +566,40 @@ class AlpacaEtfEngine:
             except Exception:
                 pass
             return False
+
+    @staticmethod
+    def _persist_close_failure(
+        bot_id: Optional[str],
+        symbol: str,
+        raw_error: str,
+    ) -> None:
+        """Persist the complete broker close error without truncation."""
+        try:
+            _ensure_tp()
+            from db.postgres import get_conn, is_pg_available
+            if not is_pg_available():
+                return
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO system_degradations
+                            (component, severity, error_type, message, detail)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            bot_id or "unknown",
+                            "critical",
+                            "close_failed",
+                            raw_error,
+                            f"symbol={symbol}",
+                        ),
+                    )
+        except Exception as db_exc:
+            logger.error(
+                f"EtfEngine | Failed to persist close error for "
+                f"{bot_id}/{symbol}: {db_exc!r}"
+            )
 
     # ── Broker-native stop protection ─────────────────────────────────────────
 
@@ -588,7 +631,7 @@ class AlpacaEtfEngine:
     @staticmethod
     def _stop_client_order_id(bot_id: str, symbol: str) -> str:
         """Stable owner marker used to avoid touching another strategy's order."""
-        return f"etf-stop-{bot_id}-{symbol}".lower()[:48]
+        return f"etf-stop-{bot_id}-{symbol}-{uuid.uuid4().hex[:10]}".lower()[:48]
 
     @staticmethod
     def _exit_client_order_prefix(bot_id: str, symbol: str) -> str:
@@ -621,17 +664,22 @@ class AlpacaEtfEngine:
         symbol: str,
         stop_order_id: Optional[str],
     ):
-        """Find only this bot's known stop; never adopt arbitrary sell stops."""
-        def _is_owned(order) -> bool:
+        """Find this bot's stop by DB identity first, then owner prefix."""
+        def _is_stop(order) -> bool:
             if (
                 order.symbol != symbol
                 or order.side != "sell"
                 or order.type not in {"stop", "stop_limit", "trailing_stop"}
             ):
                 return False
-            client_order_id = str(getattr(order, "client_order_id", ""))
+            return True
+
+        def _has_owner_prefix(order) -> bool:
+            client_order_id = str(getattr(order, "client_order_id", "")).lower()
             return (
-                client_order_id == self._stop_client_order_id(bot_id, symbol)
+                client_order_id.startswith(
+                    f"etf-stop-{bot_id}-{symbol}".lower()
+                )
                 or (
                     bot_id == "bot2_spy_qqq"
                     and client_order_id.startswith(f"etf-protect-{symbol.lower()}-")
@@ -643,18 +691,18 @@ class AlpacaEtfEngine:
                 order = self.api.get_order(stop_order_id)
                 if (
                     str(order.status).lower() in {"new", "accepted", "pending_new"}
-                    and _is_owned(order)
+                    and _is_stop(order)
                 ):
                     return order
                 logger.error(
-                    f"EtfEngine | Recorded stop {stop_order_id} is not an owned "
-                    f"{bot_id}/{symbol} protective stop; refusing to mutate it"
+                    f"EtfEngine | Recorded stop {stop_order_id} is not an active "
+                    f"{bot_id}/{symbol} sell-stop; refusing to mutate it"
                 )
             except Exception as exc:
                 logger.warning(f"EtfEngine | Cannot read recorded stop {stop_order_id}: {exc}")
 
         for order in self.api.list_orders(status="open", limit=100, nested=True):
-            if _is_owned(order):
+            if _is_stop(order) and _has_owner_prefix(order):
                 return order
         return None
 

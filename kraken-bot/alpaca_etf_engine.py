@@ -333,12 +333,12 @@ class AlpacaEtfEngine:
             return None
 
     def buy_market(self, symbol: str, shares: float) -> Optional[dict]:
-        """Place a fractional-share market buy order.
+        """Place a whole-share market buy order.
         Always uses time_in_force="day" — Alpaca rejects fractional qty orders
         with tif="opg". A pre-market DAY order queues for the 09:30 open.
         """
         tif = "day"
-        qty = round(shares, 8)
+        qty = math.floor(abs(float(shares)))
         logger.info(f"EtfEngine | Submitting BUY {symbol} qty={qty} tif={tif}")
         try:
             order = self.api.submit_order(
@@ -689,6 +689,37 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Order cancellation failed id={order_id}: {exc}")
         return False
 
+    def _wait_for_shares_free(
+        self,
+        symbol: str,
+        qty: int,
+        *,
+        attempts: int = 5,
+        interval_seconds: float = 2.0,
+    ) -> bool:
+        """Wait for broker-held shares to be released before a replacement submit."""
+        for attempt in range(attempts):
+            try:
+                position = self.api.get_position(symbol)
+                qty_available = getattr(position, "qty_available", None)
+                active_sell = any(
+                    order.symbol == symbol
+                    and str(order.side).lower() == "sell"
+                    for order in self.api.list_orders(status="open", limit=100, nested=True)
+                )
+                if not active_sell and (
+                    qty_available is None or float(qty_available) >= float(qty)
+                ):
+                    return True
+            except Exception as exc:
+                logger.warning(
+                    f"EtfEngine | {symbol}: share-release poll {attempt + 1}/{attempts} "
+                    f"failed: {exc!r}"
+                )
+            if attempt < attempts - 1:
+                time.sleep(interval_seconds)
+        return False
+
     def ensure_protective_stop(
         self,
         bot_id: str,
@@ -707,6 +738,8 @@ class AlpacaEtfEngine:
                 f"EtfEngine | {symbol}: protective-stop update deferred while owned exit is working"
             )
             return None
+        broker_stop = float(stop_price)
+        stop_qty = 0
         try:
             live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
             if not live:
@@ -722,7 +755,7 @@ class AlpacaEtfEngine:
                 )
                 return None
 
-            broker_stop = round(float(stop_price), 2)
+            broker_stop = round(broker_stop, 2)
             if broker_stop <= 0:
                 raise ValueError(f"invalid stop price {stop_price}")
 
@@ -731,18 +764,60 @@ class AlpacaEtfEngine:
                 order = existing_stop
                 order_qty = self._whole_stop_qty(float(order.qty or 0))
                 order_stop = float(getattr(order, "stop_price", 0) or 0)
-                if order.type == "stop" and order_qty == stop_qty and round(order_stop, 2) == broker_stop:
+                stop_delta = (
+                    abs(broker_stop - order_stop) / order_stop
+                    if order_stop > 0 else float("inf")
+                )
+                logger.info(
+                    f"EtfEngine | {symbol}: stop comparison "
+                    f"desired=${broker_stop:.2f} active=${order_stop:.2f} "
+                    f"delta={stop_delta:.3%}"
+                )
+                if stop_delta <= 0.005:
                     self._store_stop_order_id(bot_id, symbol, order.id)
                     logger.info(
-                        f"EtfEngine | PROTECTIVE STOP verified: {symbol} "
-                        f"qty={stop_qty} stop=${broker_stop:.2f} id={order.id}"
+                        f"EtfEngine | {symbol}: stop within 0.5% — "
+                        "leaving existing stop untouched"
                     )
                     return order.id
 
-            # A ratcheted price or partial exit means our own stop no longer
-            # matches the live exposure. Never cancel unowned sell stops.
-            if existing_stop and not self._cancel_owned_stop(bot_id, symbol, existing_stop.id):
-                raise RuntimeError("existing protective stop cancellation was not confirmed")
+            if existing_stop:
+                try:
+                    order = self.api.replace_order(
+                        existing_stop.id,
+                        qty=stop_qty,
+                        stop_price=broker_stop,
+                        time_in_force="gtc",
+                    )
+                    self._store_stop_order_id(bot_id, symbol, order.id)
+                    logger.info(
+                        f"EtfEngine | PROTECTIVE STOP REPLACED: {symbol} "
+                        f"qty={stop_qty} stop=${broker_stop:.2f} id={order.id}"
+                    )
+                    return order.id
+                except Exception as replace_exc:
+                    # Only fall back to a fresh submit when the original order
+                    # is already terminal or no longer exists at the broker.
+                    try:
+                        current = self.api.get_order(existing_stop.id)
+                        current_status = str(current.status).lower()
+                        order_gone = current_status in {
+                            "canceled", "expired", "rejected", "done_for_day"
+                        }
+                    except Exception:
+                        order_gone = True
+                    if not order_gone:
+                        raise
+                    logger.warning(
+                        f"EtfEngine | {symbol}: replace_order found terminal/missing "
+                        f"stop {existing_stop.id}; guarded fresh submit follows: "
+                        f"{replace_exc!r}"
+                    )
+                    if not self._wait_for_shares_free(symbol, stop_qty):
+                        raise RuntimeError(
+                            f"replace_order failed ({replace_exc!r}); "
+                            "shares were not released for guarded fresh submit"
+                        ) from replace_exc
 
             order = self.api.submit_order(
                 symbol=symbol,
@@ -765,11 +840,44 @@ class AlpacaEtfEngine:
             )
             return order.id
         except Exception as exc:
-            logger.error(f"EtfEngine | CRITICAL: protective stop failed for {symbol}: {exc}")
+            raw_error = repr(exc)
+            logger.error(
+                f"EtfEngine | CRITICAL: protective stop failed for {symbol}: {raw_error}"
+            )
+            try:
+                _ensure_tp()
+                from db.postgres import get_conn, is_pg_available
+                if is_pg_available():
+                    degradation_component = (
+                        "spy_qqq_trend" if bot_id == "bot2_spy_qqq" else bot_id
+                    )
+                    with get_conn() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                INSERT INTO system_degradations
+                                    (component, severity, error_type, message, detail)
+                                VALUES (%s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    degradation_component,
+                                    "critical",
+                                    "protective_stop_failed",
+                                    raw_error,
+                                    f"symbol={symbol}; stop_price={broker_stop}; "
+                                    f"qty={stop_qty}",
+                                ),
+                            )
+            except Exception as db_exc:
+                logger.error(
+                    f"EtfEngine | Failed to persist protective-stop error for "
+                    f"{bot_id}/{symbol}: {db_exc!r}"
+                )
             try:
                 from notifications.discord import notify_capital_risk
                 notify_capital_risk(
-                    f"🔴 {symbol}: protective GTC stop FAILED — position may be naked",
+                    f"🔴 {symbol}: protective GTC stop FAILED — {raw_error} "
+                    "— position may be naked",
                     symbol=symbol,
                 )
             except Exception:

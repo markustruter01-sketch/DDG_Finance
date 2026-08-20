@@ -517,8 +517,9 @@ function RegimeChip({ regime }: { regime: string | undefined }) {
 // ── Export dropdown ───────────────────────────────────────────────────────────
 
 function ExportDropdown({
-  spy, oracle, jerome, total, regime, killTripped,
+  fleet, spy, oracle, jerome, total, regime, killTripped,
 }: {
+  fleet?: Record<string, unknown>;
   spy?: BotSlice; oracle?: BotSlice; jerome?: BotSlice;
   total?: { equity?: number; pnl?: number; pnl_pct?: number };
   regime?: string; killTripped?: boolean | null;
@@ -583,7 +584,7 @@ function ExportDropdown({
   const handleCopyFleetStatus = useCallback(async () => {
     setBusy("copy");
     const lines = [
-      `3-BOT FLEET STATUS — ${new Date().toLocaleString()}`,
+      `${Object.keys(fleet ?? {}).filter(k => !["fleet_total", "generated_at", "errors"].includes(k)).length}-BOT FLEET STATUS — ${new Date().toLocaleString()}`,
       `──────────────────────────────────`,
       `FLEET TOTAL  ${fmtEq(total?.equity ?? 0)}  ${fmtPct(total?.pnl_pct ?? 0)}  ${fmtDollar(total?.pnl ?? 0)}`,
       ``,
@@ -717,7 +718,7 @@ function ExportDropdown({
 export default function HomePage() {
   const [, navigate] = useLocation();
   const {
-    oracle, spy, jerome, total,
+    fleet, oracle, spy, jerome, total,
     positionsByBot, wfMap,
     regime, killTripped, lastCycle, mktOpen, entryWindows,
   } = useFleetData();
@@ -746,6 +747,9 @@ export default function HomePage() {
   // 24h P&L from server fleet_total — no client arithmetic
   const pnl24h    = total?.pnl_24h    ?? null;
   const pnl24hPct = total?.pnl_24h_pct ?? null;
+  const activeBotCount = Object.keys(fleet ?? {}).filter(
+    k => !["fleet_total", "generated_at", "errors"].includes(k),
+  ).length;
 
   const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
 
@@ -760,7 +764,9 @@ export default function HomePage() {
         style={{ background: "rgba(3,7,18,0.92)", borderBottom: "1px solid rgba(34,211,238,0.10)", backdropFilter: "blur(8px)" }}
       >
         <div>
-          <div className="text-[8px] uppercase tracking-[0.2em] text-white mb-0.5">3-BOT FLEET · TOTAL ASSETS</div>
+          <div className="text-[8px] uppercase tracking-[0.2em] text-white mb-0.5">
+            {activeBotCount || "—"}-BOT FLEET · TOTAL ASSETS
+          </div>
           <div className="flex items-baseline gap-2">
             <span className="text-[22px] font-bold tabular-nums text-white leading-none"
               style={{ textShadow: "0 0 20px #22d3ee25" }}>
@@ -771,10 +777,14 @@ export default function HomePage() {
                 {fmtDollar(fleetPnl)} ({fmtPct(fleetPct ?? 0)})
               </span>
             )}
-            {pnl24h != null && (
+            {total && (
               <span className="text-[10px] tabular-nums ml-1" style={{ color: pnl24h >= 0 ? "#4ade8099" : "#f8717199" }}>
-                24h {pnl24h >= 0 ? "+" : ""}{fmtDollar(pnl24h)}
-                {pnl24hPct != null && ` (${pnl24hPct >= 0 ? "+" : ""}${pnl24hPct.toFixed(2)}%)`}
+                {pnl24h == null ? "24h —" : (
+                  <>
+                    24h {pnl24h >= 0 ? "+" : ""}{fmtDollar(pnl24h)}
+                    {pnl24hPct != null && ` (${pnl24hPct >= 0 ? "+" : ""}${pnl24hPct.toFixed(2)}%)`}
+                  </>
+                )}
               </span>
             )}
           </div>
@@ -793,7 +803,7 @@ export default function HomePage() {
             </div>
           )}
           <ExportDropdown
-            spy={spy} oracle={oracle} jerome={jerome}
+             fleet={fleet} spy={spy} oracle={oracle} jerome={jerome}
             total={total ?? undefined} regime={regime} killTripped={killTripped}
           />
         </div>

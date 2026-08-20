@@ -112,6 +112,34 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Learning snapshot auto-export registered (6-hour interval)")
 
+    def _record_fleet_equity_snapshots():
+        try:
+            from core.bot_state import get_all_portfolios
+            from db.postgres import insert_fleet_equity_snapshots
+            portfolios = get_all_portfolios()
+            rows = [
+                (p["bot_id"], float(p.get("equity_usd") or 0.0))
+                for p in portfolios
+                if p.get("equity_usd") is not None
+            ]
+            inserted = insert_fleet_equity_snapshots(rows)
+            logger.info(
+                f"Fleet equity snapshot | wrote {inserted}/{len(rows)} active bot rows"
+            )
+        except Exception as _e:
+            logger.warning(f"Fleet equity snapshot | Failed: {_e}")
+
+    _record_fleet_equity_snapshots()
+    scheduler.add_job(
+        func=_record_fleet_equity_snapshots,
+        trigger=_ITrigger(hours=1),
+        id="hourly_equity_snapshot",
+        name="Hourly Active-Bot Equity Snapshot",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
+
     async def _record_equity_snapshot_now():
         from db.postgres import insert_equity_snapshot
         try:

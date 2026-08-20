@@ -32,6 +32,10 @@ LEGACY_TO_CANONICAL: dict[str, str] = {
     "navigator":       "forex_gump",
 }
 
+# Only these currently active bots belong in fleet equity. If crypto bots are
+# added later, append their bot_ids to this allowlist.
+ACTIVE_BOT_IDS = {"spy_qqq_trend", "oracle", "jerome_macro"}
+
 
 def _get_conn():
     from db.postgres import get_conn
@@ -296,7 +300,11 @@ def get_all_portfolios() -> list[dict]:
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT * FROM bot_portfolio ORDER BY bot_id")
+                cur.execute(
+                    "SELECT * FROM bot_portfolio "
+                    "WHERE bot_id = ANY(%s) ORDER BY bot_id",
+                    (list(ACTIVE_BOT_IDS),),
+                )
                 cols = [desc[0] for desc in cur.description]
                 rows = cur.fetchall()
                 result = []

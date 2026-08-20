@@ -29,8 +29,8 @@ export type FleetEquityResp = {
     equity: number;
     pnl: number;
     pnl_pct: number;
-    pnl_24h: number;
-    pnl_24h_pct: number;
+    pnl_24h: number | null;
+    pnl_24h_pct: number | null;
     positions: number;
     win_rate: number | null;
   };

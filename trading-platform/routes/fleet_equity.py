@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter
 from loguru import logger
 
@@ -61,6 +61,43 @@ def _fetch_24h_pnl() -> dict[str, float]:
     except Exception as exc:
         logger.debug(f"fleet_equity | 24h pnl fetch failed: {exc}")
         return {}
+
+
+def _fetch_24h_mark_to_market(bot_ids: list[str]) -> dict[str, float | None]:
+    """Return each bot's nearest equity baseline around 24 hours ago."""
+    baselines: dict[str, float | None] = {bot_id: None for bot_id in bot_ids}
+    if not bot_ids:
+        return baselines
+    try:
+        from db.postgres import get_conn, is_pg_available
+        if not is_pg_available():
+            return baselines
+
+        target = datetime.now(timezone.utc) - timedelta(hours=24)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT DISTINCT ON (bot_id)
+                           bot_id, equity_usd
+                    FROM fleet_equity_snapshots
+                    WHERE bot_id = ANY(%s)
+                      AND snapshot_ts BETWEEN %s AND %s
+                    ORDER BY bot_id,
+                             ABS(EXTRACT(EPOCH FROM (snapshot_ts - %s)))
+                    """,
+                    (
+                        bot_ids,
+                        target - timedelta(hours=2),
+                        target + timedelta(hours=2),
+                        target,
+                    ),
+                )
+                for bot_id, equity_usd in cur.fetchall():
+                    baselines[bot_id] = float(equity_usd)
+    except Exception as exc:
+        logger.debug(f"fleet_equity | 24h mark-to-market fetch failed: {exc}")
+    return baselines
 
 
 def _fetch_win_rates() -> dict[str, tuple[int, int]]:
@@ -221,16 +258,29 @@ def _fetch_fleet_equity() -> dict:
                 data["win_rate"] = None
         result["fleet_total"]["win_rate"] = round(fleet_w / fleet_t, 4) if fleet_t > 0 else None
 
-        # Inject 24h realized P&L (best-effort — failure leaves pnl_24h=0)
-        _p24 = _fetch_24h_pnl()
+        # Inject 24h mark-to-market P&L. Missing history remains null so a
+        # real zero is not confused with insufficient snapshot history.
+        _bot_ids = [k for k in result if k not in _meta_keys]
+        _baselines = _fetch_24h_mark_to_market(_bot_ids)
+        _history_complete = all(_baselines.get(bid) is not None for bid in _bot_ids)
         fleet_24h_sum = 0.0
         for bid, data in result.items():
             if bid in _meta_keys or bid in {"generated_at", "errors"}:
                 continue
-            data["pnl_24h"] = _p24.get(bid, 0.0)
-            fleet_24h_sum += data["pnl_24h"]
-        result["fleet_total"]["pnl_24h"]     = round(fleet_24h_sum, 2)
-        result["fleet_total"]["pnl_24h_pct"] = round(fleet_24h_sum / fleet_start * 100, 4) if fleet_start else 0.0
+            baseline = _baselines.get(bid)
+            data["pnl_24h"] = (
+                round(data["equity"] - baseline, 2)
+                if baseline is not None else None
+            )
+            if data["pnl_24h"] is not None:
+                fleet_24h_sum += data["pnl_24h"]
+        result["fleet_total"]["pnl_24h"] = (
+            round(fleet_24h_sum, 2) if _history_complete else None
+        )
+        result["fleet_total"]["pnl_24h_pct"] = (
+            round(fleet_24h_sum / sum(_baselines.values()) * 100, 4)
+            if _history_complete and sum(_baselines.values()) else None
+        )
 
         result["generated_at"] = datetime.now(timezone.utc).isoformat()
         result["errors"] = []

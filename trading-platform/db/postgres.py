@@ -240,6 +240,19 @@ CREATE TABLE IF NOT EXISTS equity_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_equity_snapshots_ts ON equity_snapshots (ts DESC);
 
+-- Per-bot fleet equity snapshots used for mark-to-market 24h P&L.
+-- Kept separate from the legacy aggregate equity_snapshots table above.
+CREATE TABLE IF NOT EXISTS fleet_equity_snapshots (
+    id             BIGSERIAL PRIMARY KEY,
+    snapshot_ts    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    bot_id         TEXT NOT NULL,
+    equity_usd     NUMERIC NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_ts
+    ON fleet_equity_snapshots (snapshot_ts);
+CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_bot_ts
+    ON fleet_equity_snapshots (bot_id, snapshot_ts);
+
 -- ── System Degradation Log ─────────────────────────────────────────────────
 -- Persistent record of every detected system failure or degradation event.
 -- Written by the auto-heal monitor, HTTP middleware, and manual captures.
@@ -1581,6 +1594,26 @@ def insert_equity_snapshot(
     except Exception as exc:
         logger.error(f"DB | insert_equity_snapshot failed: {exc}")
         return False
+
+
+def insert_fleet_equity_snapshots(rows: list[tuple[str, float]]) -> int:
+    """Write one current equity snapshot for each active fleet bot."""
+    if not rows or not is_pg_available():
+        return 0
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO fleet_equity_snapshots (snapshot_ts, bot_id, equity_usd)
+                    VALUES (NOW(), %s, %s)
+                    """,
+                    [(bot_id, float(equity)) for bot_id, equity in rows],
+                )
+                return cur.rowcount
+    except Exception as exc:
+        logger.error(f"DB | insert_fleet_equity_snapshots failed: {exc}")
+        return 0
 
 
 def get_equity_curve(limit: int = 500) -> list[dict]:

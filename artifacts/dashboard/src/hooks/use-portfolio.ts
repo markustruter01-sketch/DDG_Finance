@@ -111,6 +111,8 @@ export interface BotEquity {
   stale?: boolean;
   paused?: boolean;
   win_rate?: number | null;
+  pnl_24h?: number | null;
+  pnl_24h_pct?: number | null;
   heartbeat_mins_ago?: number;
 }
 
@@ -118,7 +120,7 @@ export interface FleetEquityData {
   oracle: BotEquity;
   spy_qqq_trend: BotEquity;
   jerome_macro: BotEquity;
-  buck_futures: BotEquity;
+  buck_futures?: BotEquity;
   fleet_total: BotEquity;
   generated_at: string;
   errors: string[];

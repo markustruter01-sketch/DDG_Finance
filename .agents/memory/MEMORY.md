@@ -19,3 +19,4 @@
 - [ARC 4 data model cleanup](arc4-data-model.md) — reconciliation_events table + is_recon_tracking column replace LIKE 'RECON-%' hack; shadow_signals ledger wired into all 4 bots.
 - [ARC 3 fail-closed safety pattern](arc3-fail-closed.md) — all 6 Bucket-C silent failures fixed; alert_critical() in discord.py is the direct-webhook path for capital alerts.
 - [ETF broker stop lifecycle](etf-broker-stop-lifecycle.md) — entry/exit stop ownership and order-state rules that prevent naked or overlapping ETF sells.
+- [Fleet equity snapshot table](fleet-equity-snapshot-table.md) — per-bot mark-to-market history stays separate from the legacy aggregate equity curve table.

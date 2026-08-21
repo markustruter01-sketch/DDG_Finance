@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLocation } from "wouter";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   useFleetData,
   getBotStatus,
@@ -498,6 +499,16 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
             <span className="text-[8px] font-bold tracking-widest uppercase" style={{ color: st.color }}>
               {st.label}
             </span>
+            <button
+              type="button"
+              aria-label={`${open ? "Collapse" : "Expand"} ${shipName} card`}
+              aria-expanded={open}
+              onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+              className="ml-1 rounded-full p-1 transition-colors hover:bg-white/20 focus:outline-none focus:ring-1 focus:ring-white/60"
+              style={{ color: "#000000" }}
+            >
+              {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
           </div>
         </div>
 
@@ -510,24 +521,28 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
 
         <HealthBar wfStatus={wfStatus} />
 
-        {livePositions != null && strategyPositionCount != null
-          ? <EtfPositionList positions={livePositions} accent={accent} strategyPositionCount={strategyPositionCount} />
-          : posChips.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
-              {posChips.map(p => {
-                const c = p.plPct >= 0 ? "#16a34a" : "#000000";
-                return (
-                    <span key={p.symbol} className="home-amount-glass text-[9px] px-1.5 py-0.5 rounded"
-                    style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
-                    {p.symbol} {p.plPct >= 0 ? "+" : ""}{p.plPct.toFixed(1)}%
-                  </span>
-                );
-              })}
-            </div>
-          )
-        }
+        {open && (
+          <>
+            {livePositions != null && strategyPositionCount != null
+              ? <EtfPositionList positions={livePositions} accent={accent} strategyPositionCount={strategyPositionCount} />
+              : posChips.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                  {posChips.map(p => {
+                    const c = p.plPct >= 0 ? "#16a34a" : "#000000";
+                    return (
+                        <span key={p.symbol} className="home-amount-glass text-[9px] px-1.5 py-0.5 rounded"
+                        style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
+                        {p.symbol} {p.plPct >= 0 ? "+" : ""}{p.plPct.toFixed(1)}%
+                      </span>
+                    );
+                  })}
+                </div>
+              )
+            }
 
-        <EntryWindowCountdown entryWindow={entryWindow} />
+            <EntryWindowCountdown entryWindow={entryWindow} />
+          </>
+        )}
       </div>
 
       {open && (

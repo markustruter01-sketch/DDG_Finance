@@ -254,7 +254,7 @@ export default function StreamingPerformanceScreen() {
                 {[
                   { label: "Fleet Equity", value: fleetEquity > 0 ? `$${(fleetEquity / 1000).toFixed(0)}k` : "—", color: C.cyan },
                   { label: "Total Trades", value: fleetTrades > 0 ? String(fleetTrades) : "—", color: C.text },
-                  { label: "Win Rate", value: fleetWinRate != null ? fmtPct(fleetWinRate, 0) : "—", color: fleetWinRate != null ? (fleetWinRate >= 50 ? C.green : C.red) : C.dim },
+                  { label: "Win Rate", value: fleetWinRate != null ? fmtPct(fleetWinRate, 1) : "—", color: fleetWinRate != null ? (fleetWinRate >= 50 ? C.green : C.red) : C.dim },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ textAlign: "right" }}>
                     <div style={{ fontSize: 8, fontFamily: "monospace", color: C.dim, letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</div>

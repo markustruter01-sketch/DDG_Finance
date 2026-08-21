@@ -163,6 +163,8 @@ def check_trend_direction(
 
 # ── Alpaca wrapper ────────────────────────────────────────────────────────────
 
+CASH_PARK_SYMBOLS = frozenset({"SGOV"})
+
 class AlpacaEtfEngine:
     """
     Handles all Alpaca interactions for ETF momentum bots.
@@ -781,6 +783,9 @@ class AlpacaEtfEngine:
         covers the safely rounded-down whole-share portion; all future ETF entries
         use whole-share sizing so they are fully covered.
         """
+        if symbol in CASH_PARK_SYMBOLS:
+            logger.debug(f"EtfEngine | {symbol}: cash-park exemption — no protective stop")
+            return None
         if self._has_pending_owned_exit(bot_id, symbol):
             logger.warning(
                 f"EtfEngine | {symbol}: protective-stop update deferred while owned exit is working"
@@ -1012,20 +1017,27 @@ class AlpacaEtfEngine:
         for position in db_positions:
             if position.get("direction", "long") != "long":
                 continue
+            symbol = position.get("symbol", "")
+            if symbol in CASH_PARK_SYMBOLS:
+                logger.debug(f"EtfEngine | {symbol}: cash-park exemption — skip stop reconciliation")
+                continue
+            if math.floor(abs(float(position.get("qty", 0) or 0))) < 1:
+                logger.debug(f"EtfEngine | {symbol}: sub-1-share position — skip stop reconciliation")
+                continue
             stop_price = position.get("stop_price")
             if stop_price is None:
                 logger.error(
-                    f"EtfEngine | CRITICAL: {bot_id}/{position['symbol']} has no DB stop price"
+                    f"EtfEngine | CRITICAL: {bot_id}/{symbol} has no DB stop price"
                 )
                 continue
-            if self._has_pending_owned_exit(bot_id, position["symbol"]):
+            if self._has_pending_owned_exit(bot_id, symbol):
                 logger.warning(
-                    f"EtfEngine | {position['symbol']}: exit is working; stop reconciliation deferred"
+                    f"EtfEngine | {symbol}: exit is working; stop reconciliation deferred"
                 )
                 continue
             self.ensure_protective_stop(
                 bot_id,
-                position["symbol"],
+                symbol,
                 float(stop_price),
                 position.get("stop_order_id"),
             )

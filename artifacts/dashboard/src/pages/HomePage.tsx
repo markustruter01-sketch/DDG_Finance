@@ -337,16 +337,17 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
         </div>
       )}
       {real.map(pos => {
+        const positionKey = `${pos.bot_id ?? "unknown"}:${pos.symbol}`;
         const isLong = pos.qty > 0 || pos.side === "long";
         const plPct  = pos.unrealized_plpc * 100;
         const plUsd  = pos.unrealized_pl;
         const isUp   = plPct >= 0;
-        const isOpen = expanded === pos.symbol;
+        const isOpen = expanded === positionKey;
         const plClr  = isUp ? "#16a34a" : "#000000";
 
         return (
           <div
-            key={pos.symbol}
+            key={positionKey}
             className="cursor-pointer rounded"
              style={{
                background: `${accent}18`,
@@ -354,7 +355,7 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
                backdropFilter: "blur(20px)",
                WebkitBackdropFilter: "blur(20px)",
              }}
-            onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : pos.symbol); }}
+            onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : positionKey); }}
           >
             <div className="flex items-center gap-2 px-2 py-1.5">
               <span className="font-bold font-mono text-[10px] text-white w-9 shrink-0">{pos.symbol}</span>

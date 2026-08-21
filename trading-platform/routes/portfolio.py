@@ -52,9 +52,6 @@ _LIVE_POSITION_ACCOUNTS: dict[str, tuple[str, str]] = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
 }
-_POSITION_DUST_QTY = 0.0001
-
-
 def _fetch_account_positions(api_key: str, secret_key: str, bot_id: str) -> list[dict[str, Any]]:
     """Read one bot's Alpaca account and normalize it for the dashboard."""
     from alpaca.trading.client import TradingClient
@@ -74,9 +71,6 @@ def _fetch_account_positions(api_key: str, secret_key: str, bot_id: str) -> list
             "current_price": float(p.current_price),
         }
         for p in positions
-        # Alpaca can retain sub-share residuals after a fractional close. They
-        # cannot represent a meaningful strategy or cash-park holding.
-        if abs(float(p.qty)) >= _POSITION_DUST_QTY
     ]
 
 
@@ -201,9 +195,14 @@ def _compute_position_health(
 async def live_positions() -> dict:
     try:
         positions_by_bot = await _fetch_positions_by_bot()
-        # Preserve the established top-level Oracle response for existing
-        # portfolio consumers. New consumers must use positions_by_bot.
-        positions = positions_by_bot["oracle"]["positions"]
+        # Return the complete active fleet in the flat compatibility list.
+        # Each normalized position already carries its canonical bot_id; retain
+        # positions_by_bot as the attribution-friendly grouped response.
+        positions = [
+            position
+            for bot_data in positions_by_bot.values()
+            for position in bot_data["positions"]
+        ]
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Alpaca API error: {exc}")
 

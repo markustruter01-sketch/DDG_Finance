@@ -410,10 +410,10 @@ export function AlpacaPositionsPanel({
             )}
             <div className="px-3 pb-3 space-y-1.5">
               {longPositions.map((pos) => (
-                <AlpacaPositionCard key={pos.symbol} pos={pos} onThesisClick={onThesisClick} onEject={onEject} confirmClose={confirmClose} setConfirmClose={setConfirmClose} isClosing={isClosing} isRebalancing={isRebalancing} closingSymbol={closingSymbol} />
+                <AlpacaPositionCard key={`${pos.bot_id ?? "unknown"}-${pos.symbol}`} pos={pos} onThesisClick={onThesisClick} onEject={onEject} confirmClose={confirmClose} setConfirmClose={setConfirmClose} isClosing={isClosing} isRebalancing={isRebalancing} closingSymbol={closingSymbol} />
               ))}
               {shortPositions.map((pos) => (
-                <AlpacaPositionCard key={pos.symbol} pos={pos} onThesisClick={onThesisClick} onEject={onEject} confirmClose={confirmClose} setConfirmClose={setConfirmClose} isClosing={isClosing} isRebalancing={isRebalancing} closingSymbol={closingSymbol} />
+                <AlpacaPositionCard key={`${pos.bot_id ?? "unknown"}-${pos.symbol}`} pos={pos} onThesisClick={onThesisClick} onEject={onEject} confirmClose={confirmClose} setConfirmClose={setConfirmClose} isClosing={isClosing} isRebalancing={isRebalancing} closingSymbol={closingSymbol} />
               ))}
             </div>
           </motion.div>

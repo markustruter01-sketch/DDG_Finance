@@ -34,6 +34,7 @@ export interface PositionHealth {
 }
 
 export interface LivePosition {
+  bot_id?: string;
   symbol: string;
   qty: number;
   side: string;

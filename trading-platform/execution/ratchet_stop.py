@@ -43,6 +43,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
+
+CASH_PARK_SYMBOLS = frozenset({"SGOV"})
+
 import numpy as np
 from loguru import logger
 
@@ -661,6 +664,17 @@ def sweep_naked_positions(dry_run: bool = False) -> dict:
         symbol = pos.get("symbol", "")
         side   = pos.get("side", "long")
         qty    = float(pos.get("qty", 0))
+        stop_qty = _math.floor(abs(qty))
+
+        # SGOV is the cash-park ETF and intentionally has no protective stop.
+        # Sub-share residuals cannot receive a broker GTC stop either.
+        if symbol in CASH_PARK_SYMBOLS:
+            logger.debug(f"StopSweep | {symbol}: cash-park exemption")
+            results["skipped"].append({"symbol": symbol, "reason": "cash_park_exempt"})
+            continue
+        if stop_qty < 1:
+            results["skipped"].append({"symbol": symbol, "reason": "sub_1_share"})
+            continue
 
         # Only sweep long positions (short stop-buys are different mechanics)
         if side != "long":
@@ -673,11 +687,6 @@ def sweep_naked_positions(dry_run: bool = False) -> dict:
 
         # Position is naked — no live GTC stop-sell at broker
         naked_found += 1
-        stop_qty = _math.floor(abs(qty))
-        if stop_qty < 1:
-            logger.debug(f"StopSweep | {symbol}: sub-1-share, cannot place broker stop")
-            results["skipped"].append({"symbol": symbol, "reason": "sub_1_share"})
-            continue
 
         ratchet = get_stop(symbol)
         if ratchet is None:

@@ -23,3 +23,4 @@
 - [Kraken adaptive params retirement](kraken-adaptive-params-retirement.md) — legacy store is gone; Fleet Commander chat compatibility must fail closed without querying or recreating it.
 - [Production paginated export](production-paginated-export.md) — large prod exports need a read-only snapshot plus before/after count verification because rows can arrive mid-export.
 - [Homepage legibility treatment](homepage-legibility.md) — transparent glass stays, but mobile artwork is blurred and homepage text uses dark drop shadows for contrast.
+- [Multi-account position identity](multi-account-position-identity.md) — live position UI keys must include bot/account identity; symbols alone collide when accounts share cash-park ETFs.

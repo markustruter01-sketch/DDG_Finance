@@ -67,7 +67,7 @@ export function GlobalNav() {
               <span className="relative">
                 <Icon
                   className="h-5 w-5"
-                  style={{ color: isActive ? item.color : isHomeRoute ? "rgba(71,85,105,0.75)" : "rgba(148,163,184,0.65)" }}
+                  style={{ color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(148,163,184,0.65)" }}
                 />
                 {item.pulse && (
                   <span
@@ -83,7 +83,7 @@ export function GlobalNav() {
               <span
                 className="text-[9px] font-black tracking-widest uppercase mt-1"
                 style={{
-                  color: isActive ? item.color : isHomeRoute ? "rgba(71,85,105,0.85)" : "rgba(100,116,139,0.85)",
+                  color: isHomeRoute ? (isActive ? "#16a34a" : "#000000") : isActive ? item.color : "rgba(100,116,139,0.85)",
                 }}
               >
                 {item.label}

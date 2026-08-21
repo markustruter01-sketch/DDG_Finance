@@ -202,8 +202,8 @@ function CommsTicker({ segments }: { segments: string[] }) {
 
 const WF_CFG: Record<string, { label: string; color: string }> = {
   PASS:              { label: "PASS",   color: "#22c55e" },
-  MARGINAL:          { label: "AMBER",  color: "#f59e0b" },
-  FAIL:              { label: "FAIL",   color: "#ef4444" },
+  MARGINAL:          { label: "AMBER",  color: "#000000" },
+  FAIL:              { label: "FAIL",   color: "#000000" },
   INSUFFICIENT_DATA: { label: "INSUFF", color: "#334155" },
 };
 
@@ -221,8 +221,8 @@ function WFBadge({ status }: { status: string | null | undefined }) {
 
 const WF_HEALTH: Record<string, { pct: number; color: string; label: string }> = {
   PASS:              { pct: 100, color: "#22c55e", label: "SHIELDS 100%" },
-  MARGINAL:          { pct: 55,  color: "#f59e0b", label: "SHIELDS 55%"  },
-  FAIL:              { pct: 15,  color: "#ef4444", label: "SHIELDS 15%"  },
+  MARGINAL:          { pct: 55,  color: "#000000", label: "SHIELDS 55%"  },
+  FAIL:              { pct: 15,  color: "#000000", label: "SHIELDS 15%"  },
   INSUFFICIENT_DATA: { pct: 0,   color: "#64748b", label: "NO DATA"      },
 };
 
@@ -287,7 +287,7 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
       className="mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-bold tracking-wide"
       title={`Server schedule: ${entryWindow.source}`}
       style={{
-        color: open ? "#4ade80" : "#67e8f9",
+        color: open ? "#16a34a" : "#000000",
         background: open ? "rgba(34,197,94,0.10)" : "rgba(34,211,238,0.06)",
         border: `1px solid ${open ? "rgba(74,222,128,0.32)" : "rgba(34,211,238,0.16)"}`,
       }}
@@ -313,8 +313,8 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
 const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
   LIVE:       { label: "ONLINE",   color: "#22c55e" },
   MKT_CLOSED: { label: "DOCKED",   color: "#334155" },
-  DOWN:       { label: "DISTRESS", color: "#ef4444" },
-  IDLE:       { label: "STANDBY",  color: "#eab308" },
+  DOWN:       { label: "DISTRESS", color: "#000000" },
+  IDLE:       { label: "STANDBY",  color: "#000000" },
 };
 
 // ── Position detail list (Rule 27: server P&L only — no client arithmetic) ────
@@ -342,7 +342,7 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
         const plUsd  = pos.unrealized_pl;
         const isUp   = plPct >= 0;
         const isOpen = expanded === pos.symbol;
-        const plClr  = isUp ? "#4ade80" : "#f87171";
+        const plClr  = isUp ? "#16a34a" : "#000000";
 
         return (
           <div
@@ -360,7 +360,7 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
                 </span>
               ) : (
                 <span className="text-[7px] font-bold px-1 py-0.5 rounded-sm border shrink-0"
-                  style={{ color: "#f87171", borderColor: "rgba(248,113,113,0.40)", background: "rgba(248,113,113,0.12)" }}>
+                  style={{ color: "#000000", borderColor: "rgba(15,23,42,0.24)", background: "rgba(15,23,42,0.06)" }}>
                   SHORT
                 </span>
               )}
@@ -439,7 +439,7 @@ function elapsedStatus(iso: string | null | undefined) {
   const label = seconds < 60 ? `${seconds}s ago`
     : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
     : `${Math.floor(seconds / 3600)}h ago`;
-  const color = seconds <= 300 ? "#4ade80" : seconds <= 900 ? "#fbbf24" : "#f87171";
+  const color = seconds <= 300 ? "#16a34a" : "#000000";
   return { label: `UPDATED ${label}`, color };
 }
 
@@ -448,7 +448,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
   const pnlPct = bot?.pnl_pct ?? 0;
-  const posClr = pnl >= 0 ? "#4ade80" : "#f87171";
+  const posClr = pnl >= 0 ? "#16a34a" : "#000000";
   const freshness = elapsedStatus(bot?.last_updated);
 
   return (
@@ -458,8 +458,8 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
         background:  "rgba(255,255,255,0.12)",
         border:      `1px solid ${accent}55`,
         boxShadow:   open ? `0 14px 34px rgba(15,23,42,0.16), 0 0 28px ${accent}18` : "0 8px 20px rgba(15,23,42,0.10)",
-        backdropFilter: "blur(16px) saturate(125%)",
-        WebkitBackdropFilter: "blur(16px) saturate(125%)",
+        backdropFilter: "blur(32px) saturate(125%)",
+        WebkitBackdropFilter: "blur(32px) saturate(125%)",
       }}
       onClick={() => setOpen(v => !v)}
     >
@@ -467,7 +467,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
       <div className="px-4 pt-3 pb-3">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className="text-[10px] font-black tracking-[0.15em] uppercase"
-            style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}>
+            style={{ color: "#000000", textShadow: "none" }}>
             {shipName}
           </span>
           <span className="text-[9px] text-white">{callsign}</span>
@@ -494,7 +494,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
           : posChips.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
               {posChips.map(p => {
-                const c = p.plPct >= 0 ? `${accent}cc` : "#f87171cc";
+                const c = p.plPct >= 0 ? "#16a34a" : "#000000";
                 return (
                   <span key={p.symbol} className="text-[9px] px-1.5 py-0.5 rounded"
                     style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
@@ -515,7 +515,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-white">
             {bot?.win_rate != null && <span>30D WR <span className="text-cyan-500">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
             <span>POSITIONS <span className="text-cyan-500">{strategyPositionCount ?? "—"}</span></span>
-            <span style={{ color: freshness.color }}>{freshness.label}</span>
+            <span style={{ color: freshness.color === "#16a34a" ? "#16a34a" : "#000000" }}>{freshness.label}</span>
           </div>
         </div>
       )}
@@ -528,9 +528,9 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
 function RegimeChip({ regime }: { regime: string | undefined }) {
   if (!regime || regime === "UNKNOWN") return null;
   const cfgs: Record<string, { color: string; bg: string; border: string }> = {
-    CRISIS: { color: "#ef4444", bg: "rgba(239,68,68,0.14)",  border: "rgba(239,68,68,0.40)"  },
-    BEAR:   { color: "#f97316", bg: "rgba(249,115,22,0.14)", border: "rgba(249,115,22,0.40)" },
-    BULL:   { color: "#22c55e", bg: "rgba(34,197,94,0.12)",  border: "rgba(34,197,94,0.35)"  },
+    CRISIS: { color: "#000000", bg: "rgba(15,23,42,0.06)", border: "rgba(15,23,42,0.20)" },
+    BEAR:   { color: "#000000", bg: "rgba(15,23,42,0.06)", border: "rgba(15,23,42,0.20)" },
+    BULL:   { color: "#16a34a", bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.35)" },
   };
   const c = cfgs[regime] ?? cfgs["BULL"];
   return (
@@ -640,7 +640,7 @@ function ExportDropdown({
       label: "Export Full Report",
       sub: "quant-terminal-report-{ts}.txt",
       action: handleExportReport,
-      accent: "#22d3ee",
+      accent: "#000000",
     },
     {
       id: "brief",
@@ -648,7 +648,7 @@ function ExportDropdown({
       label: "Claude Brief",
       sub: "Paste into new Claude session",
       action: handleClaudeBrief,
-      accent: "#a78bfa",
+      accent: "#000000",
     },
     {
       id: "copy",
@@ -664,7 +664,7 @@ function ExportDropdown({
       label: "Full Stream Report",
       sub: "Live positions & analytics",
       action: () => { navigate("/stream"); setOpen(false); },
-      accent: "#f59e0b",
+      accent: "#000000",
     },
   ];
 
@@ -679,7 +679,7 @@ function ExportDropdown({
           padding: "4px 10px", borderRadius: 8,
           background: open ? "rgba(34,211,238,0.12)" : "rgba(34,211,238,0.06)",
           border: "1px solid rgba(34,211,238,0.22)",
-          color: "#22d3ee", cursor: "pointer",
+          color: "#000000", cursor: "pointer",
           transition: "all 0.15s",
         }}
       >
@@ -775,7 +775,7 @@ export default function HomePage() {
   const fleetPnl = total?.pnl     ?? null;
   const fleetPct = total?.pnl_pct ?? null;
   const pos = (fleetPnl ?? 0) >= 0;
-  const pnlColor = pos ? "#4ade80" : "#f87171";
+  const pnlColor = pos ? "#16a34a" : "#000000";
 
   // 24h P&L from server fleet_total — no client arithmetic
   const pnl24h    = total?.pnl_24h    ?? null;
@@ -784,7 +784,7 @@ export default function HomePage() {
     k => !["fleet_total", "generated_at", "errors"].includes(k),
   ).length;
 
-  const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
+  const regimeColor = regime === "BULL" ? "#16a34a" : "#000000";
 
   return (
     <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#e8eef2", position: "relative" }}>
@@ -831,7 +831,7 @@ export default function HomePage() {
             {total && (
               <div>
                 <div className="home-summary-label">LAST 24 HOURS</div>
-                <div className="home-performance-value" style={{ color: pnl24h != null && pnl24h >= 0 ? "#4ade80" : "#f87171" }}>
+                <div className="home-performance-value" style={{ color: pnl24h != null && pnl24h >= 0 ? "#16a34a" : "#000000" }}>
                   {pnl24h == null ? "—" : `${pnl24h >= 0 ? "+" : ""}${fmtDollar(pnl24h)}`}
                   {pnl24hPct != null && <span> ({pnl24hPct >= 0 ? "+" : ""}{pnl24hPct.toFixed(2)}%)</span>}
                 </div>
@@ -853,7 +853,7 @@ export default function HomePage() {
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"
           style={{ color: "#ffffff" }}>
-          <span className="uppercase tracking-widest" style={{ color: pos ? "#22c55e" : "#ef4444" }}>
+          <span className="uppercase tracking-widest" style={{ color: pos ? "#16a34a" : "#000000" }}>
             FLEET STATUS: {pos ? "PROFITABLE" : "IN THE RED"}
           </span>
           <button className="font-bold transition-colors hover:opacity-80"

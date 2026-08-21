@@ -50,6 +50,8 @@ export function GlobalNav() {
                 paddingBottom: 10,
                 paddingLeft: 14,
                 paddingRight: 14,
+                  backdropFilter: isHomeRoute ? "blur(24px)" : undefined,
+                  WebkitBackdropFilter: isHomeRoute ? "blur(24px)" : undefined,
                 ...(isActive
                   ? {
                       background: `linear-gradient(135deg, ${item.color}26, ${item.color}12)`,

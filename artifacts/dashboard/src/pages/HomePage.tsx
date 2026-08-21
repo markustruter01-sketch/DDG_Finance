@@ -208,7 +208,7 @@ const WF_CFG: Record<string, { label: string; color: string }> = {
 };
 
 function WFBadge({ status }: { status: string | null | undefined }) {
-  const b = WF_CFG[status ?? ""] ?? { label: "N/A", color: "#ffffff" };
+  const b = WF_CFG[status ?? ""] ?? { label: "N/A", color: "#000000" };
   return (
     <span className="text-[8px] font-black tracking-widest uppercase px-1.5 py-0.5 rounded border"
       style={{ color: b.color, borderColor: `${b.color}40`, background: `${b.color}12` }}>
@@ -230,7 +230,7 @@ function HealthBar({ wfStatus }: { wfStatus: string | null | undefined }) {
   const h = WF_HEALTH[wfStatus ?? ""] ?? WF_HEALTH["INSUFFICIENT_DATA"];
   return (
     <div className="flex items-center gap-2">
-      <div className="text-[8px] uppercase tracking-widest text-white shrink-0 w-14">SHIELDS</div>
+        <div className="text-[8px] uppercase tracking-widest text-white shrink-0 w-14">SHIELDS</div>
       <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(148,163,184,0.28)" }}>
         <div className="h-full rounded-full transition-all duration-700"
           style={{ width: `${h.pct}%`, background: h.color, boxShadow: `0 0 6px ${h.color}` }} />
@@ -348,7 +348,7 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
           <div
             key={pos.symbol}
             className="cursor-pointer rounded"
-            style={{ background: `${accent}0c`, border: `1px solid ${accent}20` }}
+             style={{ background: `${accent}18`, border: `1px solid ${accent}45` }}
             onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : pos.symbol); }}
           >
             <div className="flex items-center gap-2 px-2 py-1.5">
@@ -373,12 +373,12 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
               <span className="font-mono text-[10px] font-semibold tabular-nums" style={{ color: plClr }}>
                 {isUp ? "+" : ""}{plPct.toFixed(1)}%
               </span>
-              <span className="font-mono text-[10px] tabular-nums ml-1" style={{ color: `${plClr}99` }}>
+                <span className="font-mono text-[10px] tabular-nums ml-1" style={{ color: plClr }}>
                 {plUsd >= 0 ? "+$" : "-$"}{Math.abs(plUsd).toLocaleString("en-US", { maximumFractionDigits: 0 })}
               </span>
             </div>
             {isOpen && (
-              <div className="flex gap-4 px-2 pb-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div className="flex gap-4 px-2 pb-1.5" style={{ borderTop: "1px solid rgba(0,0,0,0.16)" }}>
                 <div className="pt-1">
                   <div className="text-[7px] uppercase tracking-widest text-white">Entry</div>
                   <div className="font-mono text-[9px] text-white">
@@ -409,8 +409,8 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
       {sgov && (
         <div className="flex items-center gap-2 px-2 py-1 rounded"
           style={{ border: "1px solid rgba(71,85,105,0.20)", background: "rgba(71,85,105,0.06)" }}>
-          <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#94a3b8" }}>SGOV</span>
-          <span className="text-[8px] italic" style={{ color: "#94a3b8" }}>cash park</span>
+           <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#000000" }}>SGOV</span>
+           <span className="text-[8px] italic" style={{ color: "#000000" }}>cash park</span>
         </div>
       )}
     </div>
@@ -483,7 +483,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-[22px] font-bold tabular-nums text-white leading-none">{fmtEq(bot?.equity ?? 0)}</span>
           <span className="text-[13px] font-semibold tabular-nums" style={{ color: posClr }}>{fmtPct(pnlPct)}</span>
-          <span className="text-[10px] tabular-nums" style={{ color: `${posClr}88` }}>{fmtDollar(pnl)}</span>
+           <span className="text-[10px] tabular-nums" style={{ color: posClr }}>{fmtDollar(pnl)}</span>
           <WFBadge status={wfStatus} />
         </div>
 
@@ -510,7 +510,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
       </div>
 
       {open && (
-        <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+         <div className="px-4 pb-3" style={{ borderTop: "1px solid rgba(0,0,0,0.16)" }}
           onClick={e => e.stopPropagation()}>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-white">
             {bot?.win_rate != null && <span>30D WR <span className="text-cyan-500">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
@@ -695,7 +695,7 @@ function ExportDropdown({
             background: "rgba(255,255,255,0.16)",
             border: "1px solid rgba(34,211,238,0.16)",
             boxShadow: "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,211,238,0.08)",
-            backdropFilter: "blur(12px)",
+            backdropFilter: "blur(24px)",
             zIndex: 100,
             overflow: "hidden",
           }}

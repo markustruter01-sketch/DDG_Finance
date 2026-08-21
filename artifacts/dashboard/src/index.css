@@ -371,6 +371,8 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
+    filter: blur(7px);
+    transform: scale(1.04);
     background-image:
       linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.10)),
       url("/mobile-home-background.jpeg");
@@ -419,6 +421,31 @@
 
 .mobile-home-shell {
   color: #172033;
+}
+
+.mobile-home-shell,
+.mobile-home-shell * {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.36) !important;
+}
+
+.mobile-home-shell .text-\[7px\] {
+  font-size: 9px !important;
+}
+
+.mobile-home-shell .text-\[8px\] {
+  font-size: 10px !important;
+}
+
+.mobile-home-shell .text-\[9px\] {
+  font-size: 10px !important;
+}
+
+.mobile-home-shell .text-amber-200 {
+  color: #000000 !important;
+}
+
+.mobile-home-shell .home-performance-value span {
+  opacity: 1;
 }
 
 .mobile-home-shell .text-white {

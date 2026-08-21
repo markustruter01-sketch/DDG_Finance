@@ -438,13 +438,15 @@ interface ShipCardProps {
 }
 
 function elapsedStatus(iso: string | null | undefined) {
-  if (!iso) return { label: "LAST SEEN —", color: "#64748b" };
-  const age = Math.max(0, Date.now() - new Date(iso).getTime());
+  if (!iso) return { label: "UPDATED —", color: "#64748b" };
+  const timestamp = new Date(iso).getTime();
+  if (!Number.isFinite(timestamp)) return { label: "UPDATED —", color: "#64748b" };
+  const age = Math.max(0, Date.now() - timestamp);
   const seconds = Math.floor(age / 1000);
   const label = seconds < 60 ? `${seconds}s ago`
     : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
     : `${Math.floor(seconds / 3600)}h ago`;
-  const color = seconds <= 300 ? "#16a34a" : "#000000";
+  const color = seconds < 900 ? "#16a34a" : seconds <= 3600 ? "#d97706" : "#dc2626";
   return { label: `UPDATED ${label}`, color };
 }
 

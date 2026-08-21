@@ -9,6 +9,7 @@ from loguru import logger
 fleet_equity_router = APIRouter()
 
 _STARTING = 100_000.0
+ACTIVE_BOT_IDS = {"oracle", "spy_qqq_trend", "jerome_macro"}
 _CACHE_TTL = 30  # seconds
 
 _cache: dict = {"data": None, "ts": 0.0}
@@ -165,7 +166,11 @@ def _fetch_fleet_equity() -> dict:
     """
     try:
         from core.bot_state import get_all_portfolios
-        portfolios = get_all_portfolios()  # 9 rows in one query
+        portfolios = [
+            portfolio
+            for portfolio in get_all_portfolios()
+            if portfolio.get("bot_id") in ACTIVE_BOT_IDS
+        ]
 
         if not portfolios:
             raise RuntimeError("bot_portfolio returned empty — falling back")
@@ -225,7 +230,7 @@ def _fetch_fleet_equity() -> dict:
 
         # Fleet totals
         _meta_keys = {"fleet_total", "generated_at", "errors"}
-        _bot_vals  = [v for k, v in result.items() if k not in _meta_keys]
+        _bot_vals  = [v for k, v in result.items() if k in ACTIVE_BOT_IDS]
 
         fleet_eq      = sum(b["equity"]    for b in _bot_vals)
         fleet_start   = sum(b["starting"]  for b in _bot_vals)

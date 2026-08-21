@@ -175,7 +175,7 @@ function CommsTicker({ segments }: { segments: string[] }) {
         overflow: "hidden",
         borderTop:    "1px solid rgba(34,211,238,0.10)",
         borderBottom: "1px solid rgba(34,211,238,0.10)",
-        background: "rgba(3,7,18,0.85)",
+        background: "rgba(255,255,255,0.78)",
         backdropFilter: "blur(4px)",
         padding: "6px 0",
       }}
@@ -455,9 +455,9 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
     <div
       className="rounded-2xl overflow-hidden cursor-pointer select-none transition-shadow duration-300"
       style={{
-        background:  "rgba(8,12,24,0.75)",
-        border:      `1px solid ${accent}35`,
-        boxShadow:   open ? `0 0 30px ${accent}18, 0 0 60px ${accent}08` : "none",
+        background:  "rgba(255,255,255,0.76)",
+        border:      `1px solid ${accent}55`,
+        boxShadow:   open ? `0 14px 34px rgba(15,23,42,0.16), 0 0 28px ${accent}18` : "0 8px 20px rgba(15,23,42,0.10)",
         backdropFilter: "blur(16px) saturate(125%)",
         WebkitBackdropFilter: "blur(16px) saturate(125%)",
       }}
@@ -692,7 +692,7 @@ function ExportDropdown({
           style={{
             position: "absolute", top: "calc(100% + 6px)", right: 0,
             minWidth: 240, borderRadius: 12,
-            background: "rgba(6,10,22,0.98)",
+            background: "rgba(255,255,255,0.88)",
             border: "1px solid rgba(34,211,238,0.16)",
             boxShadow: "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(34,211,238,0.08)",
             backdropFilter: "blur(12px)",
@@ -787,7 +787,7 @@ export default function HomePage() {
   const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
 
   return (
-    <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#030712", position: "relative" }}>
+    <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#e8eef2", position: "relative" }}>
       <StyleTag />
       <div className="mobile-home-background" aria-hidden="true" />
       <Starfield warp={warp} />

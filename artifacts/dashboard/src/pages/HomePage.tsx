@@ -364,6 +364,11 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
                   SHORT
                 </span>
               )}
+              {pos.market_value != null && (
+                <span className="font-mono text-[8px] tabular-nums text-white/70 whitespace-nowrap">
+                  SIZE ${pos.market_value.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                </span>
+              )}
               <span className="flex-1" />
               <span className="font-mono text-[10px] font-semibold tabular-nums" style={{ color: plClr }}>
                 {isUp ? "+" : ""}{plPct.toFixed(1)}%
@@ -380,6 +385,14 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
                     ${pos.avg_entry_price?.toFixed(2)}
                   </div>
                 </div>
+                {pos.market_value != null && (
+                  <div className="pt-1">
+                    <div className="text-[7px] uppercase tracking-widest text-white">Size</div>
+                    <div className="font-mono text-[9px] text-white">
+                      ${pos.market_value.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                    </div>
+                  </div>
+                )}
                 {pos.current_price != null && (
                   <div className="pt-1">
                     <div className="text-[7px] uppercase tracking-widest text-white">Now</div>

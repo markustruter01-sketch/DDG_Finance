@@ -43,6 +43,7 @@ export interface LivePos {
   qty: number;
   side: string;
   avg_entry_price: number;
+  market_value?: number;
   current_price?: number;
   unrealized_pl: number;
   unrealized_plpc: number;

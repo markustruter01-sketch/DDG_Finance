@@ -46,7 +46,7 @@ BOT_PROFILES = {
         # ── Risk management: proposed consolidated starting hypothesis ─────
         "MAX_POSITIONS":     6,
         "VOL_TARGET":        0.12,
-        "VOL_CAP":           0.25,
+        "VOL_CAP":           0.13,
         "TRAIL_STOP_PCT":    0.08,
         "TP1_PCT":           0.06,
         "TP2_PCT":           0.12,

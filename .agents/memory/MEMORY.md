@@ -21,3 +21,4 @@
 - [ETF broker stop lifecycle](etf-broker-stop-lifecycle.md) — entry/exit stop ownership and order-state rules that prevent naked or overlapping ETF sells.
 - [Fleet equity snapshot table](fleet-equity-snapshot-table.md) — per-bot mark-to-market history stays separate from the legacy aggregate equity curve table.
 - [Kraken adaptive params retirement](kraken-adaptive-params-retirement.md) — legacy store is gone; Fleet Commander chat compatibility must fail closed without querying or recreating it.
+- [Production paginated export](production-paginated-export.md) — large prod exports need a read-only snapshot plus before/after count verification because rows can arrive mid-export.

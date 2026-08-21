@@ -22,12 +22,12 @@ GLOBAL_EMERGENCY_STOP = False
 
 BOT_PROFILES = {
     "oracle": {
-        # Stage 3B (2026-08-07): oracle stock-scanner retired; slot repurposed to
-        # Asia-Pacific ETF trend strategy (EWY/EWT/INDA/EWJ/EWM/VNM).
-        "display_name":      "Asia-Pacific",
+        # Phase 3: Bot 1 is the single global ETF trend account. Regional
+        # attribution is retained by the durable per-symbol scan ledger.
+        "display_name":      "Global ETF Trend",
         "db_id":             5,
-        "strategy_type":     "etf_trend_asia",
-        "strategy_label":    "Asia-Pacific ETF Trend (EWY/EWT/INDA/EWJ/EWM/VNM)",
+        "strategy_type":     "etf_trend_global",
+        "strategy_label":    "Global ETF Trend (US + Asia-Pacific + Emerging Markets)",
         # ── Alpaca account (oracle's dedicated paper account) ──────────────────
         "ALPACA_API_KEY":    os.environ.get("ALPACA_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_SECRET_KEY", ""),
@@ -38,9 +38,13 @@ BOT_PROFILES = {
         "ENTRY_WINDOW_START_UTC": (19, 40),
         "ENTRY_WINDOW_DURATION_MINUTES": 20,
         # ── Universe ──────────────────────────────────────────────────────────
-        "ASIA_UNIVERSE":     ["EWY", "EWT", "INDA", "EWJ", "EWM", "VNM"],
-        # ── Risk management (mirrors validated bot2/LatAm params) ─────────────
-        "MAX_POSITIONS":     4,        # 6-ETF universe; max 3–4 concurrent
+        "GLOBAL_UNIVERSE":   [
+            "SPY", "QQQ",
+            "EWY", "EWT", "INDA", "EWJ", "EWM", "VNM",
+            "EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR",
+        ],
+        # ── Risk management: proposed consolidated starting hypothesis ─────
+        "MAX_POSITIONS":     6,
         "VOL_TARGET":        0.12,
         "VOL_CAP":           0.25,
         "TRAIL_STOP_PCT":    0.08,
@@ -48,7 +52,9 @@ BOT_PROFILES = {
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    0.80,
-        "BOT_PAUSED":        False,
+        # Enable only after migrate_global_etf.py reports all three accounts
+        # flat, reconciled, and free of orphaned protective orders.
+        "BOT_PAUSED":        True,
     },
     "davy-jones": {
         "display_name": "Davy Jones' Portfolio",
@@ -86,7 +92,7 @@ BOT_PROFILES = {
         # Match Asia: one runner-aligned entry cycle at 19:40 UTC daily.
         "ENTRY_WINDOW_START_UTC": (19, 40),
         "ENTRY_WINDOW_DURATION_MINUTES": 20,
-        # ── Universe ──────────────────────────────────────────────────────────
+        # ── Reserved account for Phase 3 Bot 3; not activated by this task ───
         "EM_UNIVERSE":       ["EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR"],
         # ── Risk management ───────────────────────────────────────────────────
         "MAX_POSITIONS":     3,        # 8-ETF basket; preserve cash headroom
@@ -97,7 +103,8 @@ BOT_PROFILES = {
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    0.80,
-        "BOT_PAUSED":        False,
+        # Reserved for Phase 3 Bot 3; activation follows separate validation.
+        "BOT_PAUSED":        True,
     },
     "calypso": {
         "display_name": "Calypso's Tide",
@@ -199,7 +206,8 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
-        "BOT_PAUSED":        False,
+        # Reserved for Phase 3 Bot 2; activation follows separate validation.
+        "BOT_PAUSED":        True,
     },
 
     # ── buck_futures — RETIRED (Stage 5 merge, 2026-08-11) ────────────────────

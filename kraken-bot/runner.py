@@ -82,13 +82,13 @@ except ImportError:
     _bs_write_portfolio = lambda *a, **k: None  # noqa: E731
     _portfolio_write_ok = False
 
-# Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name)
+# Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name).
+# Phase 3 migration keeps the reserved accounts paused in config.py; only the
+# consolidated Bot 1 path may be enabled after the migration utility passes.
 BOTS = [
-    # Final 3-bot fleet (Stage 5 merge, 2026-08-11):
-    #   US Core  (bot2_spy_qqq) → BB account     (3d743bc5)
-    #   Asia     (oracle)       → Oracle account  (caa2a89b)
-    #   EM       (jerome_macro) → Jerome account  (6da42513)
-    # LatAm + Frontier merged into a single EM bot on one account; no account sharing.
+    # Consolidated Bot 1: US Core + Asia-Pacific + Emerging Markets.
+    # bot2_spy_qqq and jerome_macro remain registered for their future
+    # validation runs, but are paused until their accounts are reset.
     ("oracle",        "asia_trend_strategy", "run_asia_cycle"),
     ("jerome_macro",  "em_trend_strategy",   "run_em_cycle"),
     ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),

@@ -56,7 +56,13 @@ from alpaca_etf_engine import (  # noqa: E402
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-UNIVERSE          = ["EWY", "EWT", "INDA", "EWJ", "EWM", "VNM"]
+# Bot 1 is now one global ETF strategy. Keep the regional ordering stable so
+# scan logs preserve attribution while the account is consolidated.
+UNIVERSE          = [
+    "SPY", "QQQ",
+    "EWY", "EWT", "INDA", "EWJ", "EWM", "VNM",
+    "EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR",
+]
 BOT_ID            = "oracle"              # frozen — never change
 
 EMA_FAST          = 50
@@ -68,7 +74,7 @@ VOL_SIZE_CAP      = 0.25    # hard cap 25%
 MIN_HOLD_DAYS     = 5
 MAX_DEPLOYMENT    = 0.80    # never deploy more than 80% of equity
 CASH_RESERVE      = 0.20    # minimum 20% cash always
-MAX_POSITIONS     = 4       # 6-ETF universe; max 3–4 concurrent
+MAX_POSITIONS     = 6       # 16-ETF universe; sizing hypothesis pending OOS
 
 # TP targets for tiered scale-out (from entry price — mirrors bot2 / LatAm)
 TP1_PCT = 0.06   # +6%  → scale out 33%
@@ -534,12 +540,12 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
 
     for symbol in UNIVERSE:
         if symbol in currently_held:
-            logger.info(f"Asia | {symbol}: already held — skip")
+            logger.info(f"Global ETF | {symbol}: already held — skip")
             _log_scan(symbol, regime="HELD", should_enter=False, drop_reason="SHOULD_ENTER")
             continue
 
         if current_count >= MAX_POSITIONS:
-            logger.info(f"Asia | Max positions ({MAX_POSITIONS}) reached — skip remaining")
+            logger.info(f"Global ETF | Max positions ({MAX_POSITIONS}) reached — skip remaining")
             _log_scan(symbol, regime=None, should_enter=False, drop_reason="DEPLOYMENT")
             continue
 
@@ -548,17 +554,17 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         regime      = regime_info.get("regime", "CRISIS")
         if regime in ("BEAR", "CRISIS"):
             logger.info(
-                f"Asia | {symbol}: regime={regime} — blocked "
+                f"Global ETF | {symbol}: regime={regime} — blocked "
                 f"(EMA50<EMA200 or CRISIS) [{regime_info.get('source', '?')}]"
             )
             _log_scan(symbol, regime=regime, should_enter=False, drop_reason="REGIME")
             continue
-        logger.info(f"Asia | {symbol}: regime={regime} ✓")
+        logger.info(f"Global ETF | {symbol}: regime={regime} ✓")
 
         # ── Entry signal ─────────────────────────────────────────────────
         should_enter, ctx = _should_enter(symbol)
         if not should_enter:
-            logger.info(f"Asia | {symbol}: no entry signal")
+            logger.info(f"Global ETF | {symbol}: no entry signal")
             _log_scan(symbol, regime=regime, should_enter=False, drop_reason="SHOULD_ENTER")
             continue
 
@@ -568,7 +574,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         shares = _vol_scaled_size(equity, symbol, entry_price)
         if shares <= 0:
             logger.warning(
-                f"Asia | {symbol}: vol_scaled_size returned {shares} — "
+                f"Global ETF | {symbol}: vol_scaled_size returned {shares} — "
                 f"fail-CLOSED or too small, skipping"
             )
             _log_scan(
@@ -582,7 +588,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         # Hard cap pre-flight (double-check)
         if notional_pct > VOL_SIZE_CAP:
             logger.warning(
-                f"Asia | {symbol}: notional cap override "
+                f"Global ETF | {symbol}: notional cap override "
                 f"({notional_pct:.1%} > {VOL_SIZE_CAP:.0%}) — skipping"
             )
             _log_scan(
@@ -595,7 +601,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         # Deployment headroom check
         if deployed_pct + notional_pct > MAX_DEPLOYMENT:
             logger.info(
-                f"Asia | {symbol}: would exceed MAX_DEPLOYMENT "
+                f"Global ETF | {symbol}: would exceed MAX_DEPLOYMENT "
                 f"({deployed_pct:.1%}+{notional_pct:.1%}>{MAX_DEPLOYMENT:.0%}) — skip"
             )
             _log_scan(

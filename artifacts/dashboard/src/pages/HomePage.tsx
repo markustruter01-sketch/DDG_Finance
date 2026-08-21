@@ -375,10 +375,10 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
                 </span>
               )}
               <span className="flex-1" />
-              <span className="font-mono text-[10px] font-semibold tabular-nums" style={{ color: plClr }}>
+              <span className="home-amount-glass font-mono text-[10px] font-semibold tabular-nums" style={{ color: plClr }}>
                 {isUp ? "+" : ""}{plPct.toFixed(1)}%
               </span>
-                <span className="font-mono text-[10px] tabular-nums ml-1" style={{ color: plClr }}>
+                <span className="home-amount-glass font-mono text-[10px] tabular-nums ml-1" style={{ color: plClr }}>
                 {plUsd >= 0 ? "+$" : "-$"}{Math.abs(plUsd).toLocaleString("en-US", { maximumFractionDigits: 0 })}
               </span>
             </div>
@@ -489,8 +489,8 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
 
         <div className="flex items-baseline gap-2 mb-2">
           <span className="text-[22px] font-bold tabular-nums text-white leading-none">{fmtEq(bot?.equity ?? 0)}</span>
-          <span className="text-[13px] font-semibold tabular-nums" style={{ color: posClr }}>{fmtPct(pnlPct)}</span>
-           <span className="text-[10px] tabular-nums" style={{ color: posClr }}>{fmtDollar(pnl)}</span>
+          <span className="home-amount-glass text-[13px] font-semibold tabular-nums" style={{ color: posClr }}>{fmtPct(pnlPct)}</span>
+           <span className="home-amount-glass text-[10px] tabular-nums" style={{ color: posClr }}>{fmtDollar(pnl)}</span>
           <WFBadge status={wfStatus} />
         </div>
 
@@ -503,7 +503,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
               {posChips.map(p => {
                 const c = p.plPct >= 0 ? "#16a34a" : "#000000";
                 return (
-                  <span key={p.symbol} className="text-[9px] px-1.5 py-0.5 rounded"
+                    <span key={p.symbol} className="home-amount-glass text-[9px] px-1.5 py-0.5 rounded"
                     style={{ background: `${accent}12`, color: c, border: `1px solid ${accent}22` }}>
                     {p.symbol} {p.plPct >= 0 ? "+" : ""}{p.plPct.toFixed(1)}%
                   </span>
@@ -830,7 +830,7 @@ export default function HomePage() {
             {fleetPnl != null && (
               <div>
                 <div className="home-summary-label">ALL-TIME P&amp;L</div>
-                <div className="home-performance-value" style={{ color: pnlColor }}>
+                <div className="home-performance-value home-amount-glass" style={{ color: pnlColor }}>
                   {fmtDollar(fleetPnl)} <span>({fmtPct(fleetPct ?? 0)})</span>
                 </div>
               </div>
@@ -838,7 +838,7 @@ export default function HomePage() {
             {total && (
               <div>
                 <div className="home-summary-label">LAST 24 HOURS</div>
-                <div className="home-performance-value" style={{ color: pnl24h != null && pnl24h >= 0 ? "#16a34a" : "#000000" }}>
+                <div className="home-performance-value home-amount-glass" style={{ color: pnl24h != null && pnl24h >= 0 ? "#16a34a" : "#000000" }}>
                   {pnl24h == null ? "—" : `${pnl24h >= 0 ? "+" : ""}${fmtDollar(pnl24h)}`}
                   {pnl24hPct != null && <span> ({pnl24hPct >= 0 ? "+" : ""}{pnl24hPct.toFixed(2)}%)</span>}
                 </div>

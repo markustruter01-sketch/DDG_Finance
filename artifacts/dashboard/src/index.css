@@ -241,8 +241,8 @@
   border-bottom: 1px solid rgba(100, 116, 139, 0.22);
   background: rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 36px rgba(15, 23, 42, 0.14);
-  backdrop-filter: blur(7.84px) saturate(140%);
-  -webkit-backdrop-filter: blur(7.84px) saturate(140%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
 }
 
 .home-command-topline,
@@ -363,6 +363,18 @@
 .home-performance-value span {
   opacity: 0.64;
   font-weight: 600;
+}
+
+/* Small glass backplates keep P&L changes legible over the desert artwork. */
+.home-amount-glass {
+  display: inline-block;
+  padding: 1px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
 }
 
 @media (max-width: 767px) {

@@ -455,9 +455,11 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
     <div
       className="rounded-2xl overflow-hidden cursor-pointer select-none transition-shadow duration-300"
       style={{
-        background:  "rgba(8,12,24,0.97)",
+        background:  "rgba(8,12,24,0.75)",
         border:      `1px solid ${accent}35`,
         boxShadow:   open ? `0 0 30px ${accent}18, 0 0 60px ${accent}08` : "none",
+        backdropFilter: "blur(16px) saturate(125%)",
+        WebkitBackdropFilter: "blur(16px) saturate(125%)",
       }}
       onClick={() => setOpen(v => !v)}
     >
@@ -791,55 +793,53 @@ export default function HomePage() {
       <Starfield warp={warp} />
 
       {/* ── Header ── */}
-      <div
-        className="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 flex-wrap"
-        style={{ background: "rgba(3,7,18,0.92)", borderBottom: "1px solid rgba(34,211,238,0.10)", backdropFilter: "blur(8px)" }}
-      >
-        <div>
-          <div className="text-[8px] uppercase tracking-[0.2em] text-white mb-0.5">
-            {activeBotCount || "—"}-BOT FLEET · TOTAL ASSETS
+      <header className="home-command-header">
+        <div className="home-command-topline">
+          <div className="home-brand">
+            <div className="home-brand-mark" aria-hidden="true">✦</div>
+            <div>
+              <div className="home-brand-kicker">TRADING PLATFORM</div>
+              <div className="home-brand-title">FLEET COMMAND</div>
+            </div>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[22px] font-bold tabular-nums text-white leading-none"
-              style={{ textShadow: "0 0 20px #22d3ee25" }}>
-              {fleetEq != null ? fmtEq(fleetEq) : "—"}
-            </span>
+          <div className="home-header-actions">
+            <div className="home-live-state">
+              <span className={`home-live-dot ${killTripped ? "is-alert" : ""}`} />
+              <span>{killTripped ? "KILL SWITCH" : "SYSTEM ARMED"}</span>
+            </div>
+            <RegimeChip regime={regime} />
+            <ExportDropdown
+              fleet={fleet} spy={spy} oracle={oracle} jerome={jerome}
+              total={total ?? undefined} regime={regime} killTripped={killTripped}
+            />
+          </div>
+        </div>
+        <div className="home-command-summary">
+          <div>
+            <div className="home-summary-label">{activeBotCount || "—"}-BOT FLEET <span>·</span> TOTAL ASSETS</div>
+            <div className="home-equity-value">{fleetEq != null ? fmtEq(fleetEq) : "—"}</div>
+          </div>
+          <div className="home-performance-grid">
             {fleetPnl != null && (
-              <span className="text-[13px] font-semibold tabular-nums" style={{ color: pnlColor }}>
-                {fmtDollar(fleetPnl)} ({fmtPct(fleetPct ?? 0)})
-              </span>
+              <div>
+                <div className="home-summary-label">ALL-TIME P&amp;L</div>
+                <div className="home-performance-value" style={{ color: pnlColor }}>
+                  {fmtDollar(fleetPnl)} <span>({fmtPct(fleetPct ?? 0)})</span>
+                </div>
+              </div>
             )}
             {total && (
-              <span className="text-[10px] tabular-nums ml-1" style={{ color: pnl24h != null && pnl24h >= 0 ? "#4ade8099" : "#f8717199" }}>
-                {pnl24h == null ? "24h —" : (
-                  <>
-                    24h {pnl24h >= 0 ? "+" : ""}{fmtDollar(pnl24h)}
-                    {pnl24hPct != null && ` (${pnl24hPct >= 0 ? "+" : ""}${pnl24hPct.toFixed(2)}%)`}
-                  </>
-                )}
-              </span>
+              <div>
+                <div className="home-summary-label">LAST 24 HOURS</div>
+                <div className="home-performance-value" style={{ color: pnl24h != null && pnl24h >= 0 ? "#4ade80" : "#f87171" }}>
+                  {pnl24h == null ? "—" : `${pnl24h >= 0 ? "+" : ""}${fmtDollar(pnl24h)}`}
+                  {pnl24hPct != null && <span> ({pnl24hPct >= 0 ? "+" : ""}{pnl24hPct.toFixed(2)}%)</span>}
+                </div>
+              </div>
             )}
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2 flex-wrap">
-          <RegimeChip regime={regime} />
-          {killTripped != null && (
-            <div className="flex items-center gap-1.5">
-              <div style={{ width: 7, height: 7, borderRadius: "50%",
-                background: killTripped ? "#ef4444" : "#22c55e",
-                boxShadow: killTripped ? "0 0 8px #ef4444" : "0 0 5px #22c55e55" }} />
-              <span className="text-[8px] uppercase tracking-widest"
-                style={{ color: killTripped ? "#ef4444" : "#ffffff" }}>
-                {killTripped ? "KS TRIPPED" : "ARMED"}
-              </span>
-            </div>
-          )}
-          <ExportDropdown
-             fleet={fleet} spy={spy} oracle={oracle} jerome={jerome}
-            total={total ?? undefined} regime={regime} killTripped={killTripped}
-          />
-        </div>
-      </div>
+      </header>
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>

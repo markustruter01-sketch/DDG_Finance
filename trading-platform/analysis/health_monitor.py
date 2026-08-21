@@ -99,25 +99,8 @@ def _scalar(sql: str, params: tuple = (), default=None):
 
 
 def _ensure_table() -> None:
-    ddl = """
-    CREATE TABLE IF NOT EXISTS kraken_health_snapshots (
-        id             BIGSERIAL PRIMARY KEY,
-        bot_id         TEXT NOT NULL,
-        checked_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        overall_score  INTEGER NOT NULL,
-        overall_status TEXT NOT NULL,
-        metrics        JSONB NOT NULL DEFAULT '{}',
-        recommendations JSONB NOT NULL DEFAULT '[]'
-    );
-    CREATE INDEX IF NOT EXISTS idx_kraken_health_bot ON kraken_health_snapshots (bot_id, checked_at DESC);
-    """
-    try:
-        with _pg_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(ddl)
-            conn.commit()
-    except Exception as exc:
-        logger.warning(f"HealthMonitor | _ensure_table failed: {exc}")
+    # Health snapshots were retired with the scheduled health-monitor job.
+    return
 
 
 # ── scoring helpers ─────────────────────────────────────────────────────────

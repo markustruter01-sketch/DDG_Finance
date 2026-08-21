@@ -147,27 +147,9 @@ async def lifespan(app: FastAPI):
             alpaca_eq = float(acct.get("equity", 0))
         except Exception:
             alpaca_eq = 0.0
-        try:
-            import psycopg2 as _pg2eq, os as _oseq
-            _dburlq = _oseq.environ.get("DATABASE_URL")
-            kraken_eq = 0.0  # Kraken bots run in a separate process — equity read from kraken_heartbeat DB table
-            if _dburlq:
-                _eqconn = _pg2eq.connect(_dburlq)
-                try:
-                    with _eqconn.cursor() as _eqcur:
-                        _eqcur.execute(
-                            "SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat "
-                            "WHERE id IN (1, 2, 3, 4)"
-                        )
-                        _eqrow = _eqcur.fetchone()
-                        if _eqrow:
-                            kraken_eq = float(_eqrow[0] or 0)
-                finally:
-                    _eqconn.close()
-        except Exception:
-            kraken_eq = 0.0
-        # Apex Predator (Bot #5) is included in kraken_eq (id=4 above).
-        # The options pool no longer exists; report options_equity as 0.
+        # Legacy Kraken/Forex pools were retired.  Fleet equity is sourced from
+        # the canonical bot portfolio/fleet-equity path.
+        kraken_eq = 0.0
         options_eq = 0.0
         forex_eq = 0.0
         try:
@@ -279,56 +261,6 @@ async def lifespan(app: FastAPI):
         )
     logger.info(f"Fleet Commander registered — {len(_fc_schedule)} daily audit runs scheduled")
 
-    # ── Stage 4: Strategy Health Monitor — 4:00 AM UTC daily ──────────────────
-    def _health_monitor_run():
-        try:
-            from analysis.health_monitor import run_all_bots
-            results = run_all_bots()
-            for bid, res in results.items():
-                status = res.get("overall_status", "ERROR")
-                score  = res.get("overall_score", 0)
-                logger.info(f"HealthMonitor | {bid}: status={status} score={score}/100")
-        except Exception as _hme:
-            logger.warning(f"HealthMonitor | Scheduled run failed (non-fatal): {_hme}")
-
-    scheduler.add_job(
-        func=_health_monitor_run,
-        trigger=_CronTrigger(hour=4, minute=0, timezone="UTC"),
-        id="kraken_health_monitor",
-        name="Strategy Health Monitor (4:00 AM UTC)",
-        replace_existing=True,
-        misfire_grace_time=1800,
-    )
-    logger.info("HealthMonitor | Registered: kraken_health_monitor (4:00 AM UTC daily)")
-
-    # ── Stage 5: Walk-Forward Optimiser — Sunday 2:00 AM UTC weekly ────────────
-    def _walk_forward_run():
-        try:
-            from analysis.walk_forward import run_all_bots as _wfo_run_all
-            results = _wfo_run_all()
-            for bid, res in results.items():
-                if "error" in res:
-                    logger.error(f"WFO | {bid}: {res['error']}")
-                else:
-                    logger.info(
-                        f"WFO | {bid}: {res.get('total_trades',0)} trades | "
-                        f"{res.get('windows_analysed',0)} windows | "
-                        f"confidence={res.get('overall_confidence','?')} | "
-                        f"stability={res.get('stability_score',0)}/100"
-                    )
-        except Exception as _wfe:
-            logger.warning(f"WFO | Scheduled run failed (non-fatal): {_wfe}")
-
-    scheduler.add_job(
-        func=_walk_forward_run,
-        trigger=_CronTrigger(day_of_week="sun", hour=2, minute=0, timezone="UTC"),
-        id="kraken_walk_forward_optimizer",
-        name="Walk-Forward Parameter Optimiser (Sun 2:00 AM UTC)",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("WFO | Registered: kraken_walk_forward_optimizer (Sunday 2:00 AM UTC)")
-
     # ── Stage 6: OHLCV Data Ingest — run on startup if historical_prices is empty ──
     try:
         from analysis.ingest_kraken_ohlcv import needs_ingest, run_ingest
@@ -389,40 +321,6 @@ async def lifespan(app: FastAPI):
             logger.info("OHLCV | historical_prices already populated — skipping startup ingest")
     except Exception as _ohlcv_err:
         logger.warning(f"OHLCV | Startup ingest check failed (non-fatal): {_ohlcv_err}")
-
-    # ── Stage 6: True Price-Based Historical Backtest — Sunday 2:30 AM UTC ────
-    # Runs 30 minutes after the Walk-Forward Optimiser to use fresh WFO data.
-    # Now uses OHLCV-based simulation instead of P&L replay.
-    from analysis.backtester_kraken import run_all_bots as _bt_run_all
-
-    async def _backtest_run():
-        import asyncio
-        try:
-            logger.info("Backtest | Scheduled TRUE price-based backtest starting …")
-            results = await asyncio.get_event_loop().run_in_executor(None, _bt_run_all)
-            for bid, r in results.items():
-                if "error" in r:
-                    logger.warning(f"Backtest | {bid}: {r['error']}")
-                else:
-                    logger.info(
-                        f"Backtest | {bid}: {r.get('sim_trades', r.get('n_trades', 0))} simulated trades | "
-                        f"WR={r.get('baseline_wr', 0)*100:.1f}% "
-                        f"PF={r.get('baseline_pf', 0):.2f} "
-                        f"net={r.get('baseline_net_pct', 0):+.2f}% "
-                        f"Sharpe={r.get('sharpe_ratio', 0):.2f}"
-                    )
-        except Exception as _bte:
-            logger.warning(f"Backtest | Scheduled run failed (non-fatal): {_bte}")
-
-    scheduler.add_job(
-        func=_backtest_run,
-        trigger=_CronTrigger(day_of_week="sun", hour=2, minute=30, timezone="UTC"),
-        id="kraken_historical_backtest",
-        name="True Price-Based Backtester (Sun 2:30 AM UTC)",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("Backtest | Registered: kraken_historical_backtest (Sunday 2:30 AM UTC) — TRUE price-based")
 
     # ── Audit fix M4: Nightly retention sweep (3:15 AM UTC) ──────────────────
     # Tables grow forever without this. Defaults: 90-day window for high-volume

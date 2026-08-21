@@ -323,83 +323,6 @@ CREATE TABLE IF NOT EXISTS hardcoded_rules (
 );
 CREATE INDEX IF NOT EXISTS idx_hardcoded_rules_active ON hardcoded_rules (active, regime);
 
--- ── Kraken Bot PostgreSQL State ────────────────────────────────────────────
--- Single-row heartbeat (id=1) upserted by the bot every cycle.
--- The auto-heal monitor reads last_updated here; no JSON file parsing needed.
-CREATE TABLE IF NOT EXISTS kraken_heartbeat (
-    id              INTEGER PRIMARY KEY,
-    bot_id          TEXT             DEFAULT 'davy-jones',
-    status          TEXT    NOT NULL DEFAULT 'not_started',
-    cycle_count     INTEGER NOT NULL DEFAULT 0,
-    equity_usd      DOUBLE PRECISION NOT NULL DEFAULT 0,
-    position_count  INTEGER NOT NULL DEFAULT 0,
-    paper_trading   BOOLEAN NOT NULL DEFAULT TRUE,
-    bot_paused      BOOLEAN NOT NULL DEFAULT FALSE,
-    circuit_breaker JSONB,
-    error           TEXT,
-    last_updated    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Per-bot portfolio state, keyed by canonical bot_id.
-CREATE TABLE IF NOT EXISTS kraken_portfolio (
-    id                   INTEGER PRIMARY KEY,
-    starting_balance_usd DOUBLE PRECISION NOT NULL DEFAULT 100000,
-    cash_usd             DOUBLE PRECISION NOT NULL DEFAULT 100000,
-    positions            JSONB NOT NULL DEFAULT '{}'
-);
-
--- Append-only trade history for Davy Jones' Portfolio paper trades.
-CREATE TABLE IF NOT EXISTS kraken_trades (
-    id          BIGSERIAL PRIMARY KEY,
-    symbol      TEXT             NOT NULL,
-    side        TEXT             NOT NULL,
-    entry_price DOUBLE PRECISION NOT NULL,
-    exit_price  DOUBLE PRECISION NOT NULL,
-    pnl_pct     DOUBLE PRECISION NOT NULL,
-    pnl_usd     DOUBLE PRECISION NOT NULL,
-    fees_usd    DOUBLE PRECISION,
-    reason      TEXT,
-    closed_at   TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
-    paper       BOOLEAN          NOT NULL DEFAULT TRUE,
-    order_id    TEXT,
-    bot_id      TEXT             DEFAULT 'davy-jones'
-);
-CREATE INDEX IF NOT EXISTS idx_kraken_trades_closed_at ON kraken_trades (closed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id);
--- Audit fix H4: prevent duplicate inserts on retry. Partial index — only
--- enforced when order_id IS NOT NULL so legacy paper rows w/o order_id
--- remain valid.
--- Pre-index dedupe: collapse any pre-existing (bot_id, order_id) duplicates
--- (keep the lowest id) so unique-index creation can't fail on legacy data.
-DELETE FROM kraken_trades a
- USING kraken_trades b
- WHERE a.order_id IS NOT NULL
-   AND a.bot_id = b.bot_id
-   AND a.order_id = b.order_id
-   AND a.id > b.id;
-CREATE UNIQUE INDEX IF NOT EXISTS uq_kraken_trades_bot_order
-    ON kraken_trades (bot_id, order_id) WHERE order_id IS NOT NULL;
-
--- ── Oracle Scan Log ─────────────────────────────────────────────────────────
--- Persists a diagnostic row every time the Oracle momentum scan runs.
--- Each row captures how many tickers passed each filter stage so operators
--- can diagnose zero-signal cycles without trawling server logs.
-CREATE TABLE IF NOT EXISTS oracle_scan_log (
-    id              BIGSERIAL PRIMARY KEY,
-    ts              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    universe_loaded INTEGER NOT NULL DEFAULT 0,
-    with_data       INTEGER NOT NULL DEFAULT 0,
-    passed_score    INTEGER NOT NULL DEFAULT 0,
-    passed_rsi      INTEGER NOT NULL DEFAULT 0,
-    passed_ema      INTEGER NOT NULL DEFAULT 0,
-    long_signals    INTEGER NOT NULL DEFAULT 0,
-    short_signals   INTEGER NOT NULL DEFAULT 0,
-    top5_long       JSONB,
-    top5_short      JSONB,
-    scan_note       TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_oracle_scan_log_ts ON oracle_scan_log (ts DESC);
-
 -- Fleet Commander chat history (Gemini-powered fleet management).
 CREATE TABLE IF NOT EXISTS fleet_commander_chat (
     id          TEXT PRIMARY KEY,
@@ -428,21 +351,6 @@ CREATE INDEX IF NOT EXISTS idx_capital_injections_bot
 -- index so DELETE WHERE timeframe='1h' AND timestamp<... doesn't full-scan.
 CREATE INDEX IF NOT EXISTS idx_historical_prices_tf_ts
     ON historical_prices (timeframe, "timestamp");
-
--- VPIN rejection log (persistent record of VPIN-blocked entries)
-CREATE TABLE IF NOT EXISTS vpin_rejections (
-    id          BIGSERIAL PRIMARY KEY,
-    ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    bot_id      TEXT NOT NULL,
-    pair        TEXT NOT NULL,
-    vpin_value  DOUBLE PRECISION NOT NULL,
-    threshold   DOUBLE PRECISION NOT NULL,
-    direction   TEXT NOT NULL,
-    price       DOUBLE PRECISION NOT NULL,
-    reason      TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_vpin_rejections_ts ON vpin_rejections (ts DESC);
-CREATE INDEX IF NOT EXISTS idx_vpin_rejections_bot ON vpin_rejections (bot_id);
 
 -- Oracle Profit Reserve ledger (non-invested cash buffer — 15% of winning trade profits)
 CREATE TABLE IF NOT EXISTS oracle_profit_reserve (
@@ -478,18 +386,6 @@ CREATE TABLE IF NOT EXISTS kraken_wfo_results (
     summary             TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_kraken_wfo_bot ON kraken_wfo_results (bot_id, run_at DESC);
-
--- Stage 4: Strategy Health Monitor snapshots (one row per bot per daily run)
-CREATE TABLE IF NOT EXISTS kraken_health_snapshots (
-    id              BIGSERIAL PRIMARY KEY,
-    bot_id          TEXT NOT NULL,
-    checked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    overall_score   INTEGER NOT NULL,
-    overall_status  TEXT NOT NULL,
-    metrics         JSONB NOT NULL DEFAULT '{}',
-    recommendations JSONB NOT NULL DEFAULT '[]'
-);
-CREATE INDEX IF NOT EXISTS idx_kraken_health_bot ON kraken_health_snapshots (bot_id, checked_at DESC);
 
 -- Stage 6 (True Backtester): Historical OHLCV price data
 -- Pairs: BTC/USD, ETH/USD, SOL/USD, ADA/USD, AVAX/USD
@@ -574,45 +470,6 @@ VALUES
   ('spy_qqq_trend',   100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE),
   ('jerome_macro',    100000, 100000, 100000, '[]'::jsonb, 'alpaca_api',   FALSE)
 ON CONFLICT (bot_id) DO NOTHING;
-
--- Listing dedup table — persists seen exchange:asset keys across restarts
--- so crypto-signals doesn't re-inject the full CoinGecko catalogue on restart.
-CREATE TABLE IF NOT EXISTS listing_dedup (
-    key        TEXT PRIMARY KEY,
-    first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- ── Momentum bots (Phase 3C) ────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS momentum_universe (
-    refresh_ts      TIMESTAMPTZ NOT NULL,
-    symbol          TEXT        NOT NULL,
-    market_cap_usd  NUMERIC,
-    binance_pair    TEXT        NOT NULL,
-    PRIMARY KEY (refresh_ts, symbol)
-);
-CREATE INDEX IF NOT EXISTS idx_momentum_universe_refresh
-    ON momentum_universe (refresh_ts);
-
-CREATE TABLE IF NOT EXISTS momentum_bot_trades (
-    id                BIGSERIAL PRIMARY KEY,
-    bot_id            TEXT        NOT NULL,
-    symbol            TEXT        NOT NULL,
-    direction         TEXT        NOT NULL,
-    qty               NUMERIC     NOT NULL,
-    entry_price       NUMERIC     NOT NULL,
-    exit_price        NUMERIC,
-    realised_pnl_usd  NUMERIC,
-    entry_reason      TEXT,
-    exit_reason       TEXT,
-    opened_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    closed_at         TIMESTAMPTZ,
-    ema20_at_entry    NUMERIC,
-    ema50_at_entry    NUMERIC,
-    adx_at_entry      NUMERIC,
-    status            TEXT        NOT NULL DEFAULT 'open'
-);
-CREATE INDEX IF NOT EXISTS idx_momentum_bot_trades_bot_status
-    ON momentum_bot_trades (bot_id, status);
 
 -- ── Market State Engine (MSE) ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS market_state (
@@ -851,25 +708,11 @@ def ensure_schema() -> None:
                       ('spy_qqq_trend',       FALSE, '', 0, NULL),
                       ('jerome_macro',        FALSE, '', 0, NULL),
 
-                      ('forex_gump',          TRUE,  'Exit logic broken — 43 stuck open positions', 0, NULL),
-                      ('kraken_trend',        TRUE,  'Strategy broken — -$4,200 net, 34% WR over 32 trades', 0, NULL)
                     ON CONFLICT (bot_id) DO NOTHING;
                 """)
         logger.info("DB | bots_state seed complete")
     except Exception as exc:
         logger.warning(f"DB | bots_state seed failed (non-fatal): {exc}")
-
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("ALTER TABLE kraken_trades ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id)")
-                cur.execute("ALTER TABLE kraken_heartbeat ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
-                cur.execute("ALTER TABLE kraken_heartbeat DROP CONSTRAINT IF EXISTS kraken_heartbeat_id_check")
-                cur.execute("ALTER TABLE kraken_portfolio DROP CONSTRAINT IF EXISTS kraken_portfolio_id_check")
-        logger.info("DB | Kraken multi-bot migrations applied")
-    except Exception as exc:
-        logger.error(f"DB | Kraken multi-bot migration failed (non-fatal): {exc}")
 
     # One-time cleanup — remove retired bots from bot_portfolio.
     # These got re-inserted at some point despite earlier removal.
@@ -1520,26 +1363,11 @@ def get_hardcoded_rules(regime: str | None = None) -> list[dict]:
 
 def get_kraken_equity() -> float:
     """
-    Return combined equity for the 3 original Kraken swing bots only
-    (Davy Jones id=1, Blackbeard id=2, Calypso id=3).
-    Poseidon (id=7) and Kraken Current (id=8) have their own dedicated
-    equity columns in equity_snapshots — do NOT include them here or
-    the total_equity will double-count them.
+    Legacy Kraken equity is retired.  Fleet equity is now sourced from the
+    canonical bot portfolio/fleet-equity path, so this compatibility helper
+    must not query the removed heartbeat table.
     """
-    if not is_pg_available():
-        return 0.0
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat "
-                    "WHERE id IN (1, 2, 3)"
-                )
-                row = cur.fetchone()
-                return float(row[0]) if row else 0.0
-    except Exception as exc:
-        logger.error(f"DB | get_kraken_equity failed: {exc}")
-        return 0.0
+    return 0.0
 
 
 # ── Equity snapshots ───────────────────────────────────────────────────────

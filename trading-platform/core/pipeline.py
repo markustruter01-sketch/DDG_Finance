@@ -1396,34 +1396,6 @@ async def _run_pipeline_inner(
     except Exception as _te_exc:
         logger.warning(f"Pipeline | Time-exit check failed (non-fatal): {_te_exc}")
 
-    # ── Algorithmic Short Scanner ─────────────────────────────────────────────
-    # Runs after execute_allocations. Only active in Bear/RISK-OFF regime.
-    # Non-fatal: existing positions and LLM allocations are unaffected if scanner fails.
-    if not crypto_only:
-        try:
-            from execution.short_scanner import run_scan as _run_short_scan
-            _regime_for_scan = (
-                allocation.regime
-                if isinstance(allocation, RegimeAnalysisOutput)
-                else "Crypto"
-            )
-            _scan_result = _run_short_scan(
-                regime=_regime_for_scan,
-                allocation=allocation if isinstance(allocation, RegimeAnalysisOutput) else None,
-                dry_run=dry_run,
-            )
-            result["short_scanner"] = _scan_result
-            if _scan_result.get("activated"):
-                logger.info(
-                    f"Pipeline | Short scanner: "
-                    f"entries={len(_scan_result.get('entries', []))} "
-                    f"exits={len(_scan_result.get('exits', []))} "
-                    f"exposure={_scan_result.get('short_exposure_pct', 0):.1f}%"
-                )
-        except Exception as _ss_exc:
-            logger.warning(f"Pipeline | Short scanner failed (non-fatal): {_ss_exc}")
-            result.setdefault("errors", []).append(f"Short scanner error: {_ss_exc}")
-
     # ── Regime Sync File ──────────────────────────────────────────────────────
     # Write market_regime.json so the Kraken bot and short scanner can read
     # the current EQUITY regime.  Crypto-only cycles must NOT overwrite this

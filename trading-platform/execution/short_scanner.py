@@ -84,16 +84,6 @@ def _load_short_state() -> None:
             return
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS algo_short_positions (
-                        symbol TEXT PRIMARY KEY,
-                        entry_price DOUBLE PRECISION NOT NULL,
-                        qty INTEGER NOT NULL,
-                        best_price DOUBLE PRECISION NOT NULL,
-                        entered_at TEXT NOT NULL,
-                        order_id TEXT
-                    )
-                """)
                 cur.execute("SELECT symbol, entry_price, qty, best_price, entered_at, order_id FROM algo_short_positions")
                 rows = cur.fetchall()
                 for row in rows:

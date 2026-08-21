@@ -1,4 +1,4 @@
-"""Kraken bot routes: bots, status, fleet-summary, commentary, auto-trading, performance."""
+"""Retired Kraken bot routes plus preserved OHLCV/backtest analytics routes."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from routes._deps import (
 from core.metrics import win_rate as _win_rate, profit_factor as _profit_factor, WIN_THRESHOLD as _WIN_THRESHOLD
 
 kraken_router = APIRouter()
+kraken_analytics_router = APIRouter()
 
 _KRAKEN_TICKER_URL = "https://api.kraken.com/0/public/Ticker"
 _TICKER_FETCH_TIMEOUT = 3.0  # seconds
@@ -865,7 +866,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
 
 # ── Stage 6: OHLCV Data Ingestion Endpoints ────────────────────────────────────
 
-@kraken_router.get("/kraken/ohlcv/status", tags=["Kraken Analytics"])
+@kraken_analytics_router.get("/kraken/ohlcv/status", tags=["Kraken Analytics"])
 async def kraken_ohlcv_status() -> dict:
     """
     Return current OHLCV data coverage per pair and timeframe.
@@ -890,7 +891,7 @@ async def kraken_ohlcv_status() -> dict:
         return {"status": "error", "error": str(exc)}
 
 
-@kraken_router.post("/kraken/ohlcv/ingest", tags=["Kraken Analytics"])
+@kraken_analytics_router.post("/kraken/ohlcv/ingest", tags=["Kraken Analytics"])
 async def kraken_ohlcv_ingest(
     pairs: list[str] | None = None,
     timeframes: list[str] | None = None,
@@ -952,7 +953,7 @@ async def kraken_ohlcv_ingest(
 
 # ── Stage 6: True Price Backtest Endpoints ────────────────────────────────────
 
-@kraken_router.post("/kraken/backtest/run", tags=["Kraken Analytics"])
+@kraken_analytics_router.post("/kraken/backtest/run", tags=["Kraken Analytics"])
 async def kraken_backtest_run(bot_id: str | None = None) -> dict:
     """
     Trigger the true price-based backtester immediately.
@@ -1006,7 +1007,7 @@ async def kraken_backtest_run(bot_id: str | None = None) -> dict:
         return {"status": "error", "error": str(exc)}
 
 
-@kraken_router.get("/kraken/backtest/results", tags=["Kraken Analytics"])
+@kraken_analytics_router.get("/kraken/backtest/results", tags=["Kraken Analytics"])
 async def kraken_backtest_results(bot_id: str | None = None) -> dict:
     """
     Return the most recent backtest results for all bots (or one specific bot).

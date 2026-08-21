@@ -200,42 +200,6 @@ async def get_micro_auditor_history() -> dict:
 
 
 
-@admin_router.get("/admin/oracle/scan-log", tags=["Admin"])
-async def get_oracle_scan_log(limit: int = 20) -> dict:
-    """
-    Return the last N oracle_scan_log rows — one row per momentum scan cycle.
-    Shows per-filter-stage counts to diagnose zero-signal cycles.
-    """
-    try:
-        from db.postgres import get_conn, is_pg_available
-        if not is_pg_available():
-            return {"status": "unavailable", "rows": [], "count": 0}
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT
-                        id, ts AT TIME ZONE 'UTC' AS ts,
-                        universe_loaded, with_data, passed_score,
-                        passed_rsi, passed_ema, long_signals, short_signals,
-                        top5_long, top5_short, scan_note
-                    FROM oracle_scan_log
-                    ORDER BY ts DESC
-                    LIMIT %s
-                    """,
-                    (min(limit, 200),),
-                )
-                cols = [desc[0] for desc in cur.description]
-                rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-                for row in rows:
-                    if row.get("ts"):
-                        row["ts"] = str(row["ts"])
-        return {"status": "ok", "rows": rows, "count": len(rows)}
-    except Exception as exc:
-        logger.error(f"Admin | oracle scan-log query failed: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
 @admin_router.post("/admin/micro-auditor/run", tags=["Admin"])
 async def trigger_micro_auditor(background_tasks: BackgroundTasks) -> dict:
     from analysis.micro_auditor import run_micro_audit

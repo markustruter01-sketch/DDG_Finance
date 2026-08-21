@@ -460,21 +460,6 @@ async def force_rebalance() -> dict:
     }
 
 
-@control_router.post("/rebalance/kraken-paper-only", tags=["Control"])
-async def liquidate_kraken_paper_only() -> dict:
-    """Close all Kraken paper positions (davy-jones/blackbeard/calypso/apex-predator)
-    WITHOUT touching Oracle (Alpaca), forex, or triggering run_pipeline.
-    Safe to call post-deploy to clear orphaned legacy positions before activating new bots."""
-    logger.warning("Rebalance | kraken-paper-only — closing Kraken paper positions only")
-    kraken_result = _liquidate_kraken_positions()
-    logger.info(
-        f"Rebalance | kraken-paper-only complete — "
-        f"Kraken closed {len(kraken_result.get('closed', []))}, "
-        f"errors {len(kraken_result.get('errors', []))}"
-    )
-    return {"status": "ok", "kraken": kraken_result}
-
-
 @control_router.post("/rebalance/{symbol}", tags=["Control"])
 async def force_close_single(symbol: str) -> dict:
     sym = symbol.upper()

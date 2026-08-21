@@ -111,21 +111,6 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     # ── END one-time cleanup ──────────────────────────────────────────────────
 
     scheduler.add_job(
-        func=_intraday_cycle,
-        trigger=CronTrigger(
-            day_of_week="mon-fri",
-            hour="9-15",
-            minute="1,16,31,46",
-            timezone="America/New_York",
-        ),
-        id="intraday_cycle",
-        name="15-Min Analysis & Execution Cycle",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    logger.info("Scheduler | Registered: intraday_cycle (Mon–Fri every 15 min, 09:01–15:46 ET)")
-
-    scheduler.add_job(
         func=_evening_postmortem,
         trigger=CronTrigger(
             day_of_week="mon-fri",
@@ -730,18 +715,8 @@ async def _snapshot_fleet_equity() -> None:
 
 
 def _fetch_fleet_equity_total() -> float:
-    """Sum all heartbeat equity values as a quick fleet total."""
-    try:
-        from db.postgres import get_conn, is_pg_available
-        if not is_pg_available():
-            return 0.0
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
-                row = cur.fetchone()
-        return float(row[0]) if row else 0.0
-    except Exception:
-        return 0.0
+    """Legacy heartbeat equity is retired; fleet equity has its own SSoT."""
+    return 0.0
 
 
 # Make _json importable inside the module-level function

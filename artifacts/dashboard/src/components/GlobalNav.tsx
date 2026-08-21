@@ -58,7 +58,7 @@ export function GlobalNav() {
                       transform: "translateY(-1px) scale(1.04)",
                     }
                   : {
-                      background: isHomeRoute ? "rgba(255,255,255,0.78)" : "rgba(15, 23, 42, 0.80)",
+                      background: isHomeRoute ? "rgba(255,255,255,0.12)" : "rgba(15, 23, 42, 0.80)",
                       border: isHomeRoute ? "1px solid rgba(100,116,139,0.20)" : "1px solid rgba(255,255,255,0.075)",
                       boxShadow: isHomeRoute ? "0 8px 24px rgba(15,23,42,0.16)" : "0 4px 16px rgba(0,0,0,0.50), 0 1px 0 rgba(255,255,255,0.04) inset",
                     }),

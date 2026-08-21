@@ -239,7 +239,7 @@
   z-index: 20;
   padding: 14px 18px 16px;
   border-bottom: 1px solid rgba(100, 116, 139, 0.22);
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 36px rgba(15, 23, 42, 0.14);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
@@ -372,7 +372,7 @@
     z-index: 0;
     pointer-events: none;
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.42)),
+      linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.10)),
       url("/mobile-home-background.jpeg");
     background-size: cover;
     background-position: center;

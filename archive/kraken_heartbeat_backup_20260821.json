@@ -1,0 +1,37 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "kraken_heartbeat",
+  "development_row_count": 1,
+  "production_row_count": 1,
+  "columns": [
+    "id",
+    "status",
+    "cycle_count",
+    "equity_usd",
+    "position_count",
+    "paper_trading",
+    "bot_paused",
+    "circuit_breaker",
+    "error",
+    "last_updated",
+    "bot_id",
+    "force_refresh"
+  ],
+  "rows": [
+    {
+      "id": 6,
+      "status": "running",
+      "cycle_count": 0,
+      "equity_usd": 99799.08,
+      "position_count": 0,
+      "paper_trading": true,
+      "bot_paused": false,
+      "circuit_breaker": null,
+      "error": null,
+      "last_updated": "2026-05-28T03:49:45.253891+00:00",
+      "bot_id": "navigator",
+      "force_refresh": false
+    }
+  ]
+}

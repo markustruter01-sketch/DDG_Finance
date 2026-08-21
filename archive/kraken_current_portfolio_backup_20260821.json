@@ -1,0 +1,25 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "kraken_current_portfolio",
+  "development_row_count": 1,
+  "production_row_count": 0,
+  "columns": [
+    "id",
+    "bot_id",
+    "equity_usd",
+    "cash_usd",
+    "open_positions",
+    "updated_at"
+  ],
+  "rows": [
+    {
+      "id": 8,
+      "bot_id": "kraken-current",
+      "equity_usd": 100127.55,
+      "cash_usd": 100127.55,
+      "open_positions": 0,
+      "updated_at": "2026-05-10T23:08:49.055652+00:00"
+    }
+  ]
+}

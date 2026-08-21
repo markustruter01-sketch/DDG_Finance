@@ -1,0 +1,29 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "forex_portfolio",
+  "development_row_count": 1,
+  "production_row_count": 1,
+  "columns": [
+    "id",
+    "bot_id",
+    "starting_balance_usd",
+    "cash_usd",
+    "positions",
+    "hwm_usd",
+    "vault_total_usd",
+    "last_sweep_date"
+  ],
+  "rows": [
+    {
+      "id": 10,
+      "bot_id": "navigator",
+      "starting_balance_usd": 100000,
+      "cash_usd": 99799.07752379312,
+      "positions": {},
+      "hwm_usd": 100000,
+      "vault_total_usd": 0,
+      "last_sweep_date": null
+    }
+  ]
+}

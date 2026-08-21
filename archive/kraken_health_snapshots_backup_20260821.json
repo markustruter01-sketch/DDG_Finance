@@ -1,0 +1,3409 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "kraken_health_snapshots",
+  "development_row_count": 63,
+  "production_row_count": 384,
+  "columns": [
+    "id",
+    "bot_id",
+    "checked_at",
+    "overall_score",
+    "overall_status",
+    "metrics",
+    "recommendations"
+  ],
+  "rows": [
+    {
+      "id": 13,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-18T04:00:00.055262+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 15,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-18T04:00:00.062529+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 14,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-18T04:00:00.059595+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 16,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-18T04:00:00.069961+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 23,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-19T04:00:00.068504+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 25,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-19T04:00:00.078412+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 24,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-19T04:00:00.070951+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 26,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-19T04:00:00.079049+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 30,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-22T04:00:00.184189+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 31,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-22T04:00:00.204776+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 35,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-23T04:00:00.236924+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 36,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-23T04:00:00.243143+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 40,
+      "bot_id": "poseidon",
+      "checked_at": "2026-04-29T04:00:00.158046+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 41,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-04-29T04:00:00.168831+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 45,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-01T04:00:00.850012+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 46,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-01T04:00:00.858671+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 50,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-02T04:00:00.269139+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 51,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-02T04:00:00.275076+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 55,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-03T04:00:00.729399+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 56,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-03T04:00:00.736949+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 57,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-13T04:00:00.110955+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 58,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-13T04:00:00.262817+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 59,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-13T04:00:00.28518+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 60,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-13T04:00:00.297046+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 61,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-13T04:00:00.307827+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 62,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-14T04:00:00.010805+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 63,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-14T04:00:00.093457+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 64,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-14T04:00:00.10384+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 65,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-14T04:00:00.115387+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 66,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-14T04:00:00.127719+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 67,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-17T04:00:00.010604+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 68,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-17T04:00:00.098642+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 69,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-17T04:00:00.108003+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 70,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-17T04:00:00.119221+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 71,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-17T04:00:00.131987+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 72,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-19T04:00:00.13063+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 73,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-19T04:00:00.233269+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 74,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-19T04:00:00.247858+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 75,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-19T04:00:00.262611+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 76,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-19T04:00:00.276699+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 77,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-20T04:00:00.158549+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 78,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-20T04:00:00.24091+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 79,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-20T04:00:00.25192+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 80,
+      "bot_id": "poseidon",
+      "checked_at": "2026-05-20T04:00:00.275245+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 81,
+      "bot_id": "kraken-current",
+      "checked_at": "2026-05-20T04:00:00.287941+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 82,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-28T04:00:00.152388+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 83,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-28T04:00:00.202642+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 84,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-28T04:00:00.211461+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 85,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-05-30T04:00:00.159612+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 86,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-05-30T04:00:00.184353+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 87,
+      "bot_id": "calypso",
+      "checked_at": "2026-05-30T04:00:00.19329+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 88,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-06-04T04:00:00.325776+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 89,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-06-04T04:00:00.698683+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 90,
+      "bot_id": "calypso",
+      "checked_at": "2026-06-04T04:00:00.842469+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 91,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-07-16T04:00:00.594879+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 92,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-07-16T04:00:00.762598+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 93,
+      "bot_id": "calypso",
+      "checked_at": "2026-07-16T04:00:00.774452+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 94,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-08-15T04:00:00.452221+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 95,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-08-15T04:00:00.469451+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 96,
+      "bot_id": "calypso",
+      "checked_at": "2026-08-15T04:00:00.47751+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 97,
+      "bot_id": "davy-jones",
+      "checked_at": "2026-08-17T04:00:00.153137+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 98,
+      "bot_id": "blackbeard",
+      "checked_at": "2026-08-17T04:00:00.278711+00:00",
+      "overall_score": 70,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "DD=0.0%  current=$102,447.71  peak=$100,000.00"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    },
+    {
+      "id": 99,
+      "bot_id": "calypso",
+      "checked_at": "2026-08-17T04:00:00.289046+00:00",
+      "overall_score": 60,
+      "overall_status": "WARNING",
+      "metrics": {
+        "loss_streak": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "0 consecutive loss(es) from most recent trade"
+        },
+        "fee_efficiency": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades)"
+        },
+        "equity_drawdown": {
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Portfolio data unavailable"
+        },
+        "recent_win_rate": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 3 minimum)"
+        },
+        "recent_profit_factor": {
+          "n": 0,
+          "score": 50,
+          "value": null,
+          "status": "WARNING",
+          "details": "Insufficient data (0 trades < 5 minimum)"
+        },
+        "symbol_concentration": {
+          "score": 100,
+          "value": 0,
+          "status": "HEALTHY",
+          "details": "No losing trades in last 30 days"
+        }
+      },
+      "recommendations": [
+        "Win rate declining — review entry signal quality; consider tightening z-score.",
+        "Profit factor below neutral — consider tighter take-profit or looser stop-loss.",
+        "Drawdown elevated — regime multiplier should be reducing sizes automatically.",
+        "Fee drag elevated — increase MIN_NET_PROFIT_PCT or MIN_POSITION_USD."
+      ]
+    }
+  ]
+}

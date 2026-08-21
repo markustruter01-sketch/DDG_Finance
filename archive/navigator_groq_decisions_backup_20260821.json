@@ -1,0 +1,9 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "navigator_groq_decisions",
+  "development_row_count": 0,
+  "production_row_count": 5,
+  "columns": [],
+  "rows": []
+}

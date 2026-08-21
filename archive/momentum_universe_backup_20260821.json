@@ -1,0 +1,615 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "momentum_universe",
+  "development_row_count": 100,
+  "production_row_count": 100,
+  "columns": [
+    "refresh_ts",
+    "symbol",
+    "market_cap_usd",
+    "binance_pair"
+  ],
+  "rows": [
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "BTC",
+      "market_cap_usd": 1535240194522,
+      "binance_pair": "BTC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "ETH",
+      "market_cap_usd": 254903940086,
+      "binance_pair": "ETH/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDT",
+      "market_cap_usd": 189482579405,
+      "binance_pair": "USDT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "BNB",
+      "market_cap_usd": 88412128139,
+      "binance_pair": "BNB/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "XRP",
+      "market_cap_usd": 83894447300,
+      "binance_pair": "XRP/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDC",
+      "market_cap_usd": 76460511346,
+      "binance_pair": "USDC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "SOL",
+      "market_cap_usd": 49748962103,
+      "binance_pair": "SOL/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "TRX",
+      "market_cap_usd": 34283122648,
+      "binance_pair": "TRX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "FIGR_HELOC",
+      "market_cap_usd": 18627042084,
+      "binance_pair": "FIGR_HELOC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "DOGE",
+      "market_cap_usd": 15950067966,
+      "binance_pair": "DOGE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "HYPE",
+      "market_cap_usd": 13756600571,
+      "binance_pair": "HYPE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDS",
+      "market_cap_usd": 11135148475,
+      "binance_pair": "USDS/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "ZEC",
+      "market_cap_usd": 10640178303,
+      "binance_pair": "ZEC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "LEO",
+      "market_cap_usd": 9170069343,
+      "binance_pair": "LEO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "ADA",
+      "market_cap_usd": 9148204801,
+      "binance_pair": "ADA/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "XMR",
+      "market_cap_usd": 7137324894,
+      "binance_pair": "XMR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "BCH",
+      "market_cap_usd": 7123277891,
+      "binance_pair": "BCH/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "LINK",
+      "market_cap_usd": 6975197635,
+      "binance_pair": "LINK/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "WBT",
+      "market_cap_usd": 6689729367,
+      "binance_pair": "WBT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "CC",
+      "market_cap_usd": 6171108293,
+      "binance_pair": "CC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "XLM",
+      "market_cap_usd": 4935795764,
+      "binance_pair": "XLM/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "TON",
+      "market_cap_usd": 4906066817,
+      "binance_pair": "TON/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USD1",
+      "market_cap_usd": 4781822388,
+      "binance_pair": "USD1/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDE",
+      "market_cap_usd": 4442988091,
+      "binance_pair": "USDE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "DAI",
+      "market_cap_usd": 4346935861,
+      "binance_pair": "DAI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "SUI",
+      "market_cap_usd": 4305946127,
+      "binance_pair": "SUI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "LTC",
+      "market_cap_usd": 4141006868,
+      "binance_pair": "LTC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "AVAX",
+      "market_cap_usd": 4078366185,
+      "binance_pair": "AVAX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "HBAR",
+      "market_cap_usd": 3910547678,
+      "binance_pair": "HBAR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "M",
+      "market_cap_usd": 3743500079,
+      "binance_pair": "M/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "RAIN",
+      "market_cap_usd": 3624195483,
+      "binance_pair": "RAIN/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "PYUSD",
+      "market_cap_usd": 3613529340,
+      "binance_pair": "PYUSD/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "SHIB",
+      "market_cap_usd": 3356575929,
+      "binance_pair": "SHIB/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "CRO",
+      "market_cap_usd": 3115724348,
+      "binance_pair": "CRO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "NEAR",
+      "market_cap_usd": 3099268047,
+      "binance_pair": "NEAR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USYC",
+      "market_cap_usd": 2999355049,
+      "binance_pair": "USYC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDG",
+      "market_cap_usd": 2747579571,
+      "binance_pair": "USDG/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "TAO",
+      "market_cap_usd": 2720485864,
+      "binance_pair": "TAO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "XAUT",
+      "market_cap_usd": 2669250118,
+      "binance_pair": "XAUT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "BUIDL",
+      "market_cap_usd": 2511778553,
+      "binance_pair": "BUIDL/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "UNI",
+      "market_cap_usd": 2207399492,
+      "binance_pair": "UNI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "DOT",
+      "market_cap_usd": 2200836492,
+      "binance_pair": "DOT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "MNT",
+      "market_cap_usd": 2180685722,
+      "binance_pair": "MNT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDY",
+      "market_cap_usd": 2152751702,
+      "binance_pair": "USDY/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "PAXG",
+      "market_cap_usd": 2121198011,
+      "binance_pair": "PAXG/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "ONDO",
+      "market_cap_usd": 2043777584,
+      "binance_pair": "ONDO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "WLFI",
+      "market_cap_usd": 1985246465,
+      "binance_pair": "WLFI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "HTX",
+      "market_cap_usd": 1809008558,
+      "binance_pair": "HTX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "USDF",
+      "market_cap_usd": 1779190941,
+      "binance_pair": "USDF/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-18T00:00:00+00:00",
+      "symbol": "ASTER",
+      "market_cap_usd": 1760750210,
+      "binance_pair": "ASTER/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "BTC",
+      "market_cap_usd": 1521456500563,
+      "binance_pair": "BTC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "ETH",
+      "market_cap_usd": 250111685609,
+      "binance_pair": "ETH/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDT",
+      "market_cap_usd": 189376190980,
+      "binance_pair": "USDT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "BNB",
+      "market_cap_usd": 88411937778,
+      "binance_pair": "BNB/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "XRP",
+      "market_cap_usd": 82323985938,
+      "binance_pair": "XRP/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDC",
+      "market_cap_usd": 76530795774,
+      "binance_pair": "USDC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "SOL",
+      "market_cap_usd": 48443920061,
+      "binance_pair": "SOL/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "TRX",
+      "market_cap_usd": 35512172051,
+      "binance_pair": "TRX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "FIGR_HELOC",
+      "market_cap_usd": 18545954496,
+      "binance_pair": "FIGR_HELOC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "DOGE",
+      "market_cap_usd": 15580370666,
+      "binance_pair": "DOGE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "HYPE",
+      "market_cap_usd": 13182076641,
+      "binance_pair": "HYPE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDS",
+      "market_cap_usd": 11134649066,
+      "binance_pair": "USDS/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "ZEC",
+      "market_cap_usd": 9811571279,
+      "binance_pair": "ZEC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "LEO",
+      "market_cap_usd": 9206997115,
+      "binance_pair": "LEO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "ADA",
+      "market_cap_usd": 8891198527,
+      "binance_pair": "ADA/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "RAIN",
+      "market_cap_usd": 7242984743,
+      "binance_pair": "RAIN/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "XMR",
+      "market_cap_usd": 6997953273,
+      "binance_pair": "XMR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "BCH",
+      "market_cap_usd": 6917848726,
+      "binance_pair": "BCH/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "LINK",
+      "market_cap_usd": 6820655654,
+      "binance_pair": "LINK/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "WBT",
+      "market_cap_usd": 6611625489,
+      "binance_pair": "WBT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "CC",
+      "market_cap_usd": 6054886397,
+      "binance_pair": "CC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "TON",
+      "market_cap_usd": 5274426737,
+      "binance_pair": "TON/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "XLM",
+      "market_cap_usd": 4947492691,
+      "binance_pair": "XLM/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USD1",
+      "market_cap_usd": 4758602994,
+      "binance_pair": "USD1/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDE",
+      "market_cap_usd": 4446454904,
+      "binance_pair": "USDE/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "DAI",
+      "market_cap_usd": 4371144222,
+      "binance_pair": "DAI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "SUI",
+      "market_cap_usd": 4021578564,
+      "binance_pair": "SUI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "LTC",
+      "market_cap_usd": 4012330576,
+      "binance_pair": "LTC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "AVAX",
+      "market_cap_usd": 3958129304,
+      "binance_pair": "AVAX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "M",
+      "market_cap_usd": 3804283359,
+      "binance_pair": "M/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "HBAR",
+      "market_cap_usd": 3761305375,
+      "binance_pair": "HBAR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "PYUSD",
+      "market_cap_usd": 3493200420,
+      "binance_pair": "PYUSD/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "NEAR",
+      "market_cap_usd": 3420157527,
+      "binance_pair": "NEAR/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "SHIB",
+      "market_cap_usd": 3253314910,
+      "binance_pair": "SHIB/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "CRO",
+      "market_cap_usd": 3029320124,
+      "binance_pair": "CRO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USYC",
+      "market_cap_usd": 2995932640,
+      "binance_pair": "USYC/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDG",
+      "market_cap_usd": 2730348820,
+      "binance_pair": "USDG/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "TAO",
+      "market_cap_usd": 2695431528,
+      "binance_pair": "TAO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "XAUT",
+      "market_cap_usd": 2665016644,
+      "binance_pair": "XAUT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "BUIDL",
+      "market_cap_usd": 2487654577,
+      "binance_pair": "BUIDL/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "USDY",
+      "market_cap_usd": 2142541367,
+      "binance_pair": "USDY/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "PAXG",
+      "market_cap_usd": 2116989846,
+      "binance_pair": "PAXG/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "DOT",
+      "market_cap_usd": 2107961322,
+      "binance_pair": "DOT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "MNT",
+      "market_cap_usd": 2103709541,
+      "binance_pair": "MNT/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "UNI",
+      "market_cap_usd": 2068622212,
+      "binance_pair": "UNI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "ONDO",
+      "market_cap_usd": 1993806601,
+      "binance_pair": "ONDO/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "OKB",
+      "market_cap_usd": 1908295041,
+      "binance_pair": "OKB/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "HTX",
+      "market_cap_usd": 1829306294,
+      "binance_pair": "HTX/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "WLFI",
+      "market_cap_usd": 1803140877,
+      "binance_pair": "WLFI/USDT"
+    },
+    {
+      "refresh_ts": "2026-05-25T00:00:00+00:00",
+      "symbol": "RLUSD",
+      "market_cap_usd": 1766232766,
+      "binance_pair": "RLUSD/USDT"
+    }
+  ]
+}

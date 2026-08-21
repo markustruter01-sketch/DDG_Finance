@@ -1,0 +1,3389 @@
+{
+  "source": "development database export",
+  "captured_at": "2026-08-21",
+  "table": "listing_dedup",
+  "development_row_count": 844,
+  "production_row_count": 1576,
+  "columns": [
+    "key",
+    "first_seen"
+  ],
+  "rows": [
+    {
+      "key": "coingecko:agentbounty-token",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:bankrize-everything",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:dulus-ai",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:jurassic-finance",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:manifesting",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:optimistic-general-intelligence",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:pitch-world-cup",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:spacex4200",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:versa-2",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coingecko:vexor-terminal",
+      "first_seen": "2026-05-18T23:24:53.61344+00:00"
+    },
+    {
+      "key": "coinbase:KAIO",
+      "first_seen": "2026-05-19T22:45:49.386915+00:00"
+    },
+    {
+      "key": "coinbase:JASMY",
+      "first_seen": "2026-05-19T22:45:49.488266+00:00"
+    },
+    {
+      "key": "coinbase:KERNEL",
+      "first_seen": "2026-05-19T22:45:49.546446+00:00"
+    },
+    {
+      "key": "coinbase:1INCH",
+      "first_seen": "2026-05-19T22:45:49.596456+00:00"
+    },
+    {
+      "key": "coinbase:QNT",
+      "first_seen": "2026-05-19T22:45:49.65064+00:00"
+    },
+    {
+      "key": "coinbase:EURC",
+      "first_seen": "2026-05-19T22:45:49.705575+00:00"
+    },
+    {
+      "key": "coinbase:FET",
+      "first_seen": "2026-05-19T22:45:49.754899+00:00"
+    },
+    {
+      "key": "coinbase:STRK",
+      "first_seen": "2026-05-19T22:45:49.808102+00:00"
+    },
+    {
+      "key": "coinbase:APE",
+      "first_seen": "2026-05-19T22:45:49.852168+00:00"
+    },
+    {
+      "key": "coinbase:INJ",
+      "first_seen": "2026-05-19T22:45:49.904362+00:00"
+    },
+    {
+      "key": "coinbase:ZEC",
+      "first_seen": "2026-05-19T22:45:49.958075+00:00"
+    },
+    {
+      "key": "coinbase:RSR",
+      "first_seen": "2026-05-19T22:45:50.015114+00:00"
+    },
+    {
+      "key": "coinbase:BONK",
+      "first_seen": "2026-05-19T22:45:50.062715+00:00"
+    },
+    {
+      "key": "coinbase:XYO",
+      "first_seen": "2026-05-19T22:45:50.121221+00:00"
+    },
+    {
+      "key": "coinbase:MEZO",
+      "first_seen": "2026-05-19T22:45:50.167519+00:00"
+    },
+    {
+      "key": "coinbase:ATOM",
+      "first_seen": "2026-05-19T22:45:50.226046+00:00"
+    },
+    {
+      "key": "coinbase:BAND",
+      "first_seen": "2026-05-19T22:45:50.2766+00:00"
+    },
+    {
+      "key": "coinbase:ZKP",
+      "first_seen": "2026-05-19T22:45:50.33012+00:00"
+    },
+    {
+      "key": "coinbase:RENDER",
+      "first_seen": "2026-05-19T22:45:50.381495+00:00"
+    },
+    {
+      "key": "coinbase:OP",
+      "first_seen": "2026-05-19T22:45:50.440018+00:00"
+    },
+    {
+      "key": "coinbase:WLD",
+      "first_seen": "2026-05-19T22:45:50.482198+00:00"
+    },
+    {
+      "key": "coinbase:DEEP",
+      "first_seen": "2026-05-19T22:45:50.529423+00:00"
+    },
+    {
+      "key": "coinbase:AXL",
+      "first_seen": "2026-05-19T22:45:50.575517+00:00"
+    },
+    {
+      "key": "coinbase:SUSHI",
+      "first_seen": "2026-05-19T22:46:47.370675+00:00"
+    },
+    {
+      "key": "coinbase:SPK",
+      "first_seen": "2026-05-19T22:46:49.38521+00:00"
+    },
+    {
+      "key": "coinbase:AAVE",
+      "first_seen": "2026-05-19T22:46:49.501446+00:00"
+    },
+    {
+      "key": "coinbase:ICP",
+      "first_seen": "2026-05-19T22:46:49.642219+00:00"
+    },
+    {
+      "key": "coinbase:FUN1",
+      "first_seen": "2026-05-19T22:46:49.880138+00:00"
+    },
+    {
+      "key": "coinbase:LA",
+      "first_seen": "2026-05-19T22:46:49.928546+00:00"
+    },
+    {
+      "key": "coinbase:KARRAT",
+      "first_seen": "2026-05-19T22:46:49.971613+00:00"
+    },
+    {
+      "key": "coinbase:CTSI",
+      "first_seen": "2026-05-19T22:46:50.022333+00:00"
+    },
+    {
+      "key": "coinbase:PAXG",
+      "first_seen": "2026-05-19T22:46:50.070872+00:00"
+    },
+    {
+      "key": "coinbase:ROBO",
+      "first_seen": "2026-05-19T22:46:50.123266+00:00"
+    },
+    {
+      "key": "coinbase:RPL",
+      "first_seen": "2026-05-19T22:46:50.173112+00:00"
+    },
+    {
+      "key": "coinbase:USD1",
+      "first_seen": "2026-05-19T22:46:50.22537+00:00"
+    },
+    {
+      "key": "coinbase:OPG",
+      "first_seen": "2026-05-19T22:46:50.277245+00:00"
+    },
+    {
+      "key": "coinbase:ADA",
+      "first_seen": "2026-05-19T22:46:50.323037+00:00"
+    },
+    {
+      "key": "coinbase:LSETH",
+      "first_seen": "2026-05-19T22:46:50.373404+00:00"
+    },
+    {
+      "key": "coinbase:IOTX",
+      "first_seen": "2026-05-19T22:46:50.418192+00:00"
+    },
+    {
+      "key": "coinbase:TRB",
+      "first_seen": "2026-05-19T22:46:50.468085+00:00"
+    },
+    {
+      "key": "coinbase:IMU",
+      "first_seen": "2026-05-19T22:46:50.518564+00:00"
+    },
+    {
+      "key": "coinbase:POLS",
+      "first_seen": "2026-05-19T22:46:50.572819+00:00"
+    },
+    {
+      "key": "coinbase:AURORA",
+      "first_seen": "2026-05-19T22:46:50.614158+00:00"
+    },
+    {
+      "key": "coinbase:SXT",
+      "first_seen": "2026-05-19T22:46:50.657442+00:00"
+    },
+    {
+      "key": "coinbase:ATH",
+      "first_seen": "2026-05-19T22:46:50.703983+00:00"
+    },
+    {
+      "key": "coinbase:MINA",
+      "first_seen": "2026-05-19T22:46:50.759533+00:00"
+    },
+    {
+      "key": "coinbase:BTC",
+      "first_seen": "2026-05-19T22:46:50.812022+00:00"
+    },
+    {
+      "key": "coinbase:IP",
+      "first_seen": "2026-05-19T22:47:47.41576+00:00"
+    },
+    {
+      "key": "coinbase:AVAX",
+      "first_seen": "2026-05-19T22:47:49.343173+00:00"
+    },
+    {
+      "key": "coinbase:OMNI",
+      "first_seen": "2026-05-19T22:47:49.57014+00:00"
+    },
+    {
+      "key": "coinbase:WAXL",
+      "first_seen": "2026-05-19T22:47:49.70116+00:00"
+    },
+    {
+      "key": "coinbase:LRDS",
+      "first_seen": "2026-05-19T22:47:49.811585+00:00"
+    },
+    {
+      "key": "coinbase:INV",
+      "first_seen": "2026-05-19T22:47:49.93735+00:00"
+    },
+    {
+      "key": "coinbase:CLANKER",
+      "first_seen": "2026-05-19T22:47:50.069004+00:00"
+    },
+    {
+      "key": "coinbase:BILL",
+      "first_seen": "2026-05-19T22:47:50.126457+00:00"
+    },
+    {
+      "key": "coinbase:TREE",
+      "first_seen": "2026-05-19T22:47:50.173019+00:00"
+    },
+    {
+      "key": "coinbase:GHST",
+      "first_seen": "2026-05-19T22:47:50.218406+00:00"
+    },
+    {
+      "key": "coinbase:CTX",
+      "first_seen": "2026-05-19T22:47:50.268015+00:00"
+    },
+    {
+      "key": "coinbase:MAGIC",
+      "first_seen": "2026-05-19T22:47:50.31963+00:00"
+    },
+    {
+      "key": "coinbase:ZRO",
+      "first_seen": "2026-05-19T22:47:50.377369+00:00"
+    },
+    {
+      "key": "coinbase:FIGHT",
+      "first_seen": "2026-05-19T22:47:50.420221+00:00"
+    },
+    {
+      "key": "coinbase:XTZ",
+      "first_seen": "2026-05-19T22:47:50.462086+00:00"
+    },
+    {
+      "key": "coinbase:XCN",
+      "first_seen": "2026-05-19T22:47:50.521155+00:00"
+    },
+    {
+      "key": "coinbase:ETH",
+      "first_seen": "2026-05-19T22:47:50.586841+00:00"
+    },
+    {
+      "key": "coinbase:TGBP",
+      "first_seen": "2026-05-19T22:47:50.635991+00:00"
+    },
+    {
+      "key": "coinbase:AKT",
+      "first_seen": "2026-05-19T22:47:50.688749+00:00"
+    },
+    {
+      "key": "coinbase:ZKC",
+      "first_seen": "2026-05-19T22:47:50.733446+00:00"
+    },
+    {
+      "key": "coinbase:SAFE",
+      "first_seen": "2026-05-19T22:47:50.777847+00:00"
+    },
+    {
+      "key": "coinbase:AUDIO",
+      "first_seen": "2026-05-19T22:47:50.825402+00:00"
+    },
+    {
+      "key": "coinbase:LINK",
+      "first_seen": "2026-05-19T22:47:50.86815+00:00"
+    },
+    {
+      "key": "coinbase:AUDD",
+      "first_seen": "2026-05-19T22:47:50.913153+00:00"
+    },
+    {
+      "key": "coinbase:CFG",
+      "first_seen": "2026-05-19T22:47:50.962403+00:00"
+    },
+    {
+      "key": "coinbase:VIRTUAL",
+      "first_seen": "2026-05-19T22:48:47.473303+00:00"
+    },
+    {
+      "key": "coinbase:GRT",
+      "first_seen": "2026-05-19T22:48:49.399461+00:00"
+    },
+    {
+      "key": "coinbase:VTHO",
+      "first_seen": "2026-05-19T22:48:49.55316+00:00"
+    },
+    {
+      "key": "coinbase:SUPER",
+      "first_seen": "2026-05-19T22:48:49.674034+00:00"
+    },
+    {
+      "key": "coinbase:GNO",
+      "first_seen": "2026-05-19T22:48:49.805672+00:00"
+    },
+    {
+      "key": "coinbase:RLS",
+      "first_seen": "2026-05-19T22:48:50.017006+00:00"
+    },
+    {
+      "key": "coinbase:ZORA",
+      "first_seen": "2026-05-19T22:48:50.159522+00:00"
+    },
+    {
+      "key": "coinbase:STG",
+      "first_seen": "2026-05-19T22:48:50.284347+00:00"
+    },
+    {
+      "key": "coinbase:POL",
+      "first_seen": "2026-05-19T22:48:50.397806+00:00"
+    },
+    {
+      "key": "coinbase:L3",
+      "first_seen": "2026-05-19T22:48:50.568074+00:00"
+    },
+    {
+      "key": "coinbase:LIGHTER",
+      "first_seen": "2026-05-19T22:48:50.615184+00:00"
+    },
+    {
+      "key": "coinbase:ARPA",
+      "first_seen": "2026-05-19T22:48:50.656856+00:00"
+    },
+    {
+      "key": "coinbase:ZAMA",
+      "first_seen": "2026-05-19T22:48:50.703752+00:00"
+    },
+    {
+      "key": "coinbase:SHPING",
+      "first_seen": "2026-05-19T22:48:50.746968+00:00"
+    },
+    {
+      "key": "coinbase:SEI",
+      "first_seen": "2026-05-19T22:48:50.806396+00:00"
+    },
+    {
+      "key": "coinbase:AERO",
+      "first_seen": "2026-05-19T22:48:50.854996+00:00"
+    },
+    {
+      "key": "coinbase:EUL",
+      "first_seen": "2026-05-19T22:48:50.907185+00:00"
+    },
+    {
+      "key": "coinbase:ORCA",
+      "first_seen": "2026-05-19T22:48:50.952864+00:00"
+    },
+    {
+      "key": "coinbase:COOKIE",
+      "first_seen": "2026-05-19T22:48:50.996611+00:00"
+    },
+    {
+      "key": "coinbase:GODS",
+      "first_seen": "2026-05-19T22:48:51.048922+00:00"
+    },
+    {
+      "key": "coinbase:CHZ",
+      "first_seen": "2026-05-19T22:48:51.101998+00:00"
+    },
+    {
+      "key": "coinbase:FLOKI",
+      "first_seen": "2026-05-19T22:48:51.156707+00:00"
+    },
+    {
+      "key": "coinbase:PLUME",
+      "first_seen": "2026-05-19T22:48:51.206256+00:00"
+    },
+    {
+      "key": "coinbase:SUP",
+      "first_seen": "2026-05-19T22:48:51.257873+00:00"
+    },
+    {
+      "key": "coinbase:ZEN",
+      "first_seen": "2026-05-19T22:48:51.32343+00:00"
+    },
+    {
+      "key": "coinbase:IMX",
+      "first_seen": "2026-05-19T22:49:47.526614+00:00"
+    },
+    {
+      "key": "coinbase:AIOZ",
+      "first_seen": "2026-05-19T22:49:49.443253+00:00"
+    },
+    {
+      "key": "coinbase:TNSR",
+      "first_seen": "2026-05-19T22:49:49.58508+00:00"
+    },
+    {
+      "key": "coinbase:ESP",
+      "first_seen": "2026-05-19T22:49:49.718435+00:00"
+    },
+    {
+      "key": "coinbase:ALT",
+      "first_seen": "2026-05-19T22:49:49.848848+00:00"
+    },
+    {
+      "key": "coinbase:GLM",
+      "first_seen": "2026-05-19T22:49:49.962791+00:00"
+    },
+    {
+      "key": "coinbase:GFI",
+      "first_seen": "2026-05-19T22:49:50.215785+00:00"
+    },
+    {
+      "key": "coinbase:HIGH",
+      "first_seen": "2026-05-19T22:49:50.26966+00:00"
+    },
+    {
+      "key": "coinbase:TROLL",
+      "first_seen": "2026-05-19T22:49:50.386633+00:00"
+    },
+    {
+      "key": "coinbase:TURBO",
+      "first_seen": "2026-05-19T22:49:50.586055+00:00"
+    },
+    {
+      "key": "coinbase:HNT",
+      "first_seen": "2026-05-19T22:49:50.704685+00:00"
+    },
+    {
+      "key": "coinbase:RAY",
+      "first_seen": "2026-05-19T22:49:50.832185+00:00"
+    },
+    {
+      "key": "coinbase:DEGEN",
+      "first_seen": "2026-05-19T22:49:50.951022+00:00"
+    },
+    {
+      "key": "coinbase:WELL",
+      "first_seen": "2026-05-19T22:49:50.9981+00:00"
+    },
+    {
+      "key": "coinbase:IRYS",
+      "first_seen": "2026-05-19T22:49:51.053304+00:00"
+    },
+    {
+      "key": "coinbase:TRAC",
+      "first_seen": "2026-05-19T22:49:51.102359+00:00"
+    },
+    {
+      "key": "coinbase:CHECK",
+      "first_seen": "2026-05-19T22:49:51.149713+00:00"
+    },
+    {
+      "key": "coinbase:DIA",
+      "first_seen": "2026-05-19T22:49:51.202473+00:00"
+    },
+    {
+      "key": "coinbase:ILV",
+      "first_seen": "2026-05-19T22:49:51.247598+00:00"
+    },
+    {
+      "key": "coinbase:PENDLE",
+      "first_seen": "2026-05-19T22:49:51.302665+00:00"
+    },
+    {
+      "key": "coinbase:DEXT",
+      "first_seen": "2026-05-19T22:49:51.351331+00:00"
+    },
+    {
+      "key": "coinbase:BICO",
+      "first_seen": "2026-05-19T22:49:51.396417+00:00"
+    },
+    {
+      "key": "coinbase:DOLO",
+      "first_seen": "2026-05-19T22:49:51.444808+00:00"
+    },
+    {
+      "key": "coinbase:SOL",
+      "first_seen": "2026-05-19T22:49:51.492916+00:00"
+    },
+    {
+      "key": "coinbase:PROVE",
+      "first_seen": "2026-05-19T22:49:51.543045+00:00"
+    },
+    {
+      "key": "coinbase:BNT",
+      "first_seen": "2026-05-19T22:50:47.578619+00:00"
+    },
+    {
+      "key": "coinbase:JUPITER",
+      "first_seen": "2026-05-19T22:50:49.502717+00:00"
+    },
+    {
+      "key": "coinbase:XRP",
+      "first_seen": "2026-05-19T22:50:49.62788+00:00"
+    },
+    {
+      "key": "coinbase:JTO",
+      "first_seen": "2026-05-19T22:50:49.76969+00:00"
+    },
+    {
+      "key": "coinbase:ICNT",
+      "first_seen": "2026-05-19T22:50:49.900584+00:00"
+    },
+    {
+      "key": "coinbase:BCH",
+      "first_seen": "2026-05-19T22:50:50.009082+00:00"
+    },
+    {
+      "key": "coinbase:USDT",
+      "first_seen": "2026-05-19T22:50:50.017094+00:00"
+    },
+    {
+      "key": "coinbase:SPX",
+      "first_seen": "2026-05-19T22:50:50.171352+00:00"
+    },
+    {
+      "key": "coinbase:SHIB",
+      "first_seen": "2026-05-19T22:50:50.311757+00:00"
+    },
+    {
+      "key": "coinbase:SHDW",
+      "first_seen": "2026-05-19T22:50:50.514273+00:00"
+    },
+    {
+      "key": "coinbase:XSGD",
+      "first_seen": "2026-05-19T22:50:50.662391+00:00"
+    },
+    {
+      "key": "coinbase:CAKE",
+      "first_seen": "2026-05-19T22:50:50.776965+00:00"
+    },
+    {
+      "key": "coinbase:ZRX",
+      "first_seen": "2026-05-19T22:50:50.892565+00:00"
+    },
+    {
+      "key": "coinbase:DOT",
+      "first_seen": "2026-05-19T22:50:50.999492+00:00"
+    },
+    {
+      "key": "coinbase:FORTH",
+      "first_seen": "2026-05-19T22:50:51.043745+00:00"
+    },
+    {
+      "key": "coinbase:VET",
+      "first_seen": "2026-05-19T22:50:51.091209+00:00"
+    },
+    {
+      "key": "coinbase:SKY",
+      "first_seen": "2026-05-19T22:50:51.14235+00:00"
+    },
+    {
+      "key": "coinbase:PAX",
+      "first_seen": "2026-05-19T22:50:51.189618+00:00"
+    },
+    {
+      "key": "coinbase:WLFI",
+      "first_seen": "2026-05-19T22:50:51.24191+00:00"
+    },
+    {
+      "key": "coinbase:NEWT",
+      "first_seen": "2026-05-19T22:50:51.287312+00:00"
+    },
+    {
+      "key": "coinbase:PERP",
+      "first_seen": "2026-05-19T22:50:51.331209+00:00"
+    },
+    {
+      "key": "coinbase:TAO",
+      "first_seen": "2026-05-19T22:50:51.371431+00:00"
+    },
+    {
+      "key": "coinbase:TIA",
+      "first_seen": "2026-05-19T22:50:51.427752+00:00"
+    },
+    {
+      "key": "coinbase:LCX",
+      "first_seen": "2026-05-19T22:50:51.473116+00:00"
+    },
+    {
+      "key": "coinbase:BIGTIME",
+      "first_seen": "2026-05-19T22:50:51.523796+00:00"
+    },
+    {
+      "key": "coinbase:SAPIEN",
+      "first_seen": "2026-05-19T22:50:51.57289+00:00"
+    },
+    {
+      "key": "coinbase:KAITO",
+      "first_seen": "2026-05-19T22:51:47.623572+00:00"
+    },
+    {
+      "key": "coinbase:HYPE",
+      "first_seen": "2026-05-19T22:51:49.550959+00:00"
+    },
+    {
+      "key": "coinbase:00",
+      "first_seen": "2026-05-19T22:51:49.680048+00:00"
+    },
+    {
+      "key": "coinbase:CVC",
+      "first_seen": "2026-05-19T22:51:49.816571+00:00"
+    },
+    {
+      "key": "coinbase:WET",
+      "first_seen": "2026-05-19T22:51:49.94786+00:00"
+    },
+    {
+      "key": "coinbase:METIS",
+      "first_seen": "2026-05-19T22:51:50.05924+00:00"
+    },
+    {
+      "key": "coinbase:MEGA",
+      "first_seen": "2026-05-19T22:51:50.213131+00:00"
+    },
+    {
+      "key": "coinbase:GST",
+      "first_seen": "2026-05-19T22:51:50.361674+00:00"
+    },
+    {
+      "key": "coinbase:VELO",
+      "first_seen": "2026-05-19T22:51:50.489625+00:00"
+    },
+    {
+      "key": "coinbase:APT",
+      "first_seen": "2026-05-19T22:51:50.695003+00:00"
+    },
+    {
+      "key": "coinbase:MAMO",
+      "first_seen": "2026-05-19T22:51:50.844611+00:00"
+    },
+    {
+      "key": "coinbase:PROS",
+      "first_seen": "2026-05-19T22:51:50.967053+00:00"
+    },
+    {
+      "key": "coinbase:RECALL",
+      "first_seen": "2026-05-19T22:51:51.091246+00:00"
+    },
+    {
+      "key": "coinbase:WAL",
+      "first_seen": "2026-05-19T22:51:51.220017+00:00"
+    },
+    {
+      "key": "coinbase:TOWNS",
+      "first_seen": "2026-05-19T22:51:51.262419+00:00"
+    },
+    {
+      "key": "coinbase:API3",
+      "first_seen": "2026-05-19T22:51:51.308504+00:00"
+    },
+    {
+      "key": "coinbase:MOODENG",
+      "first_seen": "2026-05-19T22:51:51.36345+00:00"
+    },
+    {
+      "key": "coinbase:ALEO",
+      "first_seen": "2026-05-19T22:51:51.411698+00:00"
+    },
+    {
+      "key": "coinbase:STORJ",
+      "first_seen": "2026-05-19T22:51:51.454448+00:00"
+    },
+    {
+      "key": "coinbase:LTC",
+      "first_seen": "2026-05-19T22:51:51.497589+00:00"
+    },
+    {
+      "key": "coinbase:REZ",
+      "first_seen": "2026-05-19T22:51:51.542925+00:00"
+    },
+    {
+      "key": "coinbase:LMTS",
+      "first_seen": "2026-05-19T22:51:51.583061+00:00"
+    },
+    {
+      "key": "coinbase:SPA",
+      "first_seen": "2026-05-19T22:51:51.629725+00:00"
+    },
+    {
+      "key": "coinbase:BOBBOB",
+      "first_seen": "2026-05-19T22:51:51.676547+00:00"
+    },
+    {
+      "key": "coinbase:SUKU",
+      "first_seen": "2026-05-19T22:51:51.724064+00:00"
+    },
+    {
+      "key": "coinbase:MANTLE",
+      "first_seen": "2026-05-19T22:52:47.667972+00:00"
+    },
+    {
+      "key": "coinbase:XAN",
+      "first_seen": "2026-05-19T22:52:49.600067+00:00"
+    },
+    {
+      "key": "coinbase:AERGO",
+      "first_seen": "2026-05-19T22:52:49.768181+00:00"
+    },
+    {
+      "key": "coinbase:SIGN",
+      "first_seen": "2026-05-19T22:52:49.867132+00:00"
+    },
+    {
+      "key": "coinbase:AGLD",
+      "first_seen": "2026-05-19T22:52:49.994784+00:00"
+    },
+    {
+      "key": "coinbase:T",
+      "first_seen": "2026-05-19T22:52:50.111506+00:00"
+    },
+    {
+      "key": "coinbase:ARKM",
+      "first_seen": "2026-05-19T22:52:50.265073+00:00"
+    },
+    {
+      "key": "coinbase:S",
+      "first_seen": "2026-05-19T22:52:50.421353+00:00"
+    },
+    {
+      "key": "coinbase:PENGU",
+      "first_seen": "2026-05-19T22:52:50.537352+00:00"
+    },
+    {
+      "key": "coinbase:STX",
+      "first_seen": "2026-05-19T22:52:50.752403+00:00"
+    },
+    {
+      "key": "coinbase:ACH",
+      "first_seen": "2026-05-19T22:52:50.884686+00:00"
+    },
+    {
+      "key": "coinbase:MASK",
+      "first_seen": "2026-05-19T22:52:51.113259+00:00"
+    },
+    {
+      "key": "coinbase:ERA",
+      "first_seen": "2026-05-19T22:52:51.235617+00:00"
+    },
+    {
+      "key": "coinbase:LPT",
+      "first_seen": "2026-05-19T22:52:51.284412+00:00"
+    },
+    {
+      "key": "coinbase:IDEX",
+      "first_seen": "2026-05-19T22:52:51.329376+00:00"
+    },
+    {
+      "key": "coinbase:CVX",
+      "first_seen": "2026-05-19T22:52:51.377965+00:00"
+    },
+    {
+      "key": "coinbase:OPN",
+      "first_seen": "2026-05-19T22:52:51.440014+00:00"
+    },
+    {
+      "key": "coinbase:EDGE",
+      "first_seen": "2026-05-19T22:52:51.482948+00:00"
+    },
+    {
+      "key": "coinbase:BLAST",
+      "first_seen": "2026-05-19T22:52:51.529364+00:00"
+    },
+    {
+      "key": "coinbase:FIL",
+      "first_seen": "2026-05-19T22:52:51.582775+00:00"
+    },
+    {
+      "key": "coinbase:FORT",
+      "first_seen": "2026-05-19T22:52:51.639141+00:00"
+    },
+    {
+      "key": "coinbase:KTA",
+      "first_seen": "2026-05-19T22:52:51.686791+00:00"
+    },
+    {
+      "key": "coinbase:HFT",
+      "first_seen": "2026-05-19T22:52:51.738169+00:00"
+    },
+    {
+      "key": "coinbase:2Z",
+      "first_seen": "2026-05-19T22:52:51.799316+00:00"
+    },
+    {
+      "key": "coinbase:PRO",
+      "first_seen": "2026-05-19T22:53:47.714356+00:00"
+    },
+    {
+      "key": "coinbase:ASTER",
+      "first_seen": "2026-05-19T22:53:49.644279+00:00"
+    },
+    {
+      "key": "coinbase:FIDA",
+      "first_seen": "2026-05-19T22:53:49.815717+00:00"
+    },
+    {
+      "key": "coinbase:MNDE",
+      "first_seen": "2026-05-19T22:53:49.921473+00:00"
+    },
+    {
+      "key": "coinbase:LQTY",
+      "first_seen": "2026-05-19T22:53:50.048472+00:00"
+    },
+    {
+      "key": "coinbase:MANA",
+      "first_seen": "2026-05-19T22:53:50.154106+00:00"
+    },
+    {
+      "key": "coinbase:BEAM",
+      "first_seen": "2026-05-19T22:53:50.316041+00:00"
+    },
+    {
+      "key": "coinbase:TRUMP",
+      "first_seen": "2026-05-19T22:53:50.468505+00:00"
+    },
+    {
+      "key": "coinbase:EIGEN",
+      "first_seen": "2026-05-19T22:53:50.582828+00:00"
+    },
+    {
+      "key": "coinbase:VVV",
+      "first_seen": "2026-05-19T22:53:50.794596+00:00"
+    },
+    {
+      "key": "coinbase:NKN",
+      "first_seen": "2026-05-19T22:53:50.90841+00:00"
+    },
+    {
+      "key": "coinbase:ETC",
+      "first_seen": "2026-05-19T22:53:51.044412+00:00"
+    },
+    {
+      "key": "coinbase:PUNDIX",
+      "first_seen": "2026-05-19T22:53:51.190931+00:00"
+    },
+    {
+      "key": "coinbase:BERA",
+      "first_seen": "2026-05-19T22:53:51.24591+00:00"
+    },
+    {
+      "key": "coinbase:BARD",
+      "first_seen": "2026-05-19T22:53:51.289946+00:00"
+    },
+    {
+      "key": "coinbase:HOME",
+      "first_seen": "2026-05-19T22:53:51.332062+00:00"
+    },
+    {
+      "key": "coinbase:SQD",
+      "first_seen": "2026-05-19T22:53:51.374627+00:00"
+    },
+    {
+      "key": "coinbase:CHIP",
+      "first_seen": "2026-05-19T22:53:51.472722+00:00"
+    },
+    {
+      "key": "coinbase:SENT",
+      "first_seen": "2026-05-19T22:53:51.524615+00:00"
+    },
+    {
+      "key": "coinbase:CELR",
+      "first_seen": "2026-05-19T22:53:51.570224+00:00"
+    },
+    {
+      "key": "coinbase:RLC",
+      "first_seen": "2026-05-19T22:53:51.617922+00:00"
+    },
+    {
+      "key": "coinbase:RSC",
+      "first_seen": "2026-05-19T22:53:51.65966+00:00"
+    },
+    {
+      "key": "coinbase:KMNO",
+      "first_seen": "2026-05-19T22:53:51.703427+00:00"
+    },
+    {
+      "key": "coinbase:NOM",
+      "first_seen": "2026-05-19T22:53:51.750004+00:00"
+    },
+    {
+      "key": "coinbase:THQ",
+      "first_seen": "2026-05-19T22:53:51.799321+00:00"
+    },
+    {
+      "key": "coinbase:TRUST",
+      "first_seen": "2026-05-19T22:54:47.774432+00:00"
+    },
+    {
+      "key": "coinbase:WCT",
+      "first_seen": "2026-05-19T22:54:49.702447+00:00"
+    },
+    {
+      "key": "coinbase:SWFTC",
+      "first_seen": "2026-05-19T22:54:49.866458+00:00"
+    },
+    {
+      "key": "coinbase:PIRATE",
+      "first_seen": "2026-05-19T22:54:49.977171+00:00"
+    },
+    {
+      "key": "coinbase:BIO",
+      "first_seen": "2026-05-19T22:54:50.094726+00:00"
+    },
+    {
+      "key": "coinbase:W",
+      "first_seen": "2026-05-19T22:54:50.214943+00:00"
+    },
+    {
+      "key": "coinbase:UNI",
+      "first_seen": "2026-05-19T22:54:50.367178+00:00"
+    },
+    {
+      "key": "coinbase:HONEY",
+      "first_seen": "2026-05-19T22:54:50.510304+00:00"
+    },
+    {
+      "key": "coinbase:MDT",
+      "first_seen": "2026-05-19T22:54:50.718621+00:00"
+    },
+    {
+      "key": "coinbase:WIF",
+      "first_seen": "2026-05-19T22:54:50.839217+00:00"
+    },
+    {
+      "key": "coinbase:COMP",
+      "first_seen": "2026-05-19T22:54:50.966592+00:00"
+    },
+    {
+      "key": "coinbase:MORPHO",
+      "first_seen": "2026-05-19T22:54:51.014751+00:00"
+    },
+    {
+      "key": "coinbase:DOGINME",
+      "first_seen": "2026-05-19T22:54:51.137962+00:00"
+    },
+    {
+      "key": "coinbase:BIRB",
+      "first_seen": "2026-05-19T22:54:51.28986+00:00"
+    },
+    {
+      "key": "coinbase:ROSE",
+      "first_seen": "2026-05-19T22:54:51.334314+00:00"
+    },
+    {
+      "key": "coinbase:BAL",
+      "first_seen": "2026-05-19T22:54:51.386756+00:00"
+    },
+    {
+      "key": "coinbase:COW",
+      "first_seen": "2026-05-19T22:54:51.435291+00:00"
+    },
+    {
+      "key": "coinbase:FLOCK",
+      "first_seen": "2026-05-19T22:54:51.486999+00:00"
+    },
+    {
+      "key": "coinbase:AST",
+      "first_seen": "2026-05-19T22:54:51.535687+00:00"
+    },
+    {
+      "key": "coinbase:GWEI",
+      "first_seen": "2026-05-19T22:54:51.584453+00:00"
+    },
+    {
+      "key": "coinbase:PLU",
+      "first_seen": "2026-05-19T22:54:51.633792+00:00"
+    },
+    {
+      "key": "coinbase:ARB",
+      "first_seen": "2026-05-19T22:54:51.674248+00:00"
+    },
+    {
+      "key": "coinbase:BLUR",
+      "first_seen": "2026-05-19T22:54:51.722419+00:00"
+    },
+    {
+      "key": "coinbase:SPELL",
+      "first_seen": "2026-05-19T22:54:51.771293+00:00"
+    },
+    {
+      "key": "coinbase:POWR",
+      "first_seen": "2026-05-19T22:54:51.818075+00:00"
+    },
+    {
+      "key": "coinbase:FOX",
+      "first_seen": "2026-05-19T22:55:47.836244+00:00"
+    },
+    {
+      "key": "coinbase:FAI",
+      "first_seen": "2026-05-19T22:55:49.74904+00:00"
+    },
+    {
+      "key": "coinbase:PROMPT",
+      "first_seen": "2026-05-19T22:55:49.911266+00:00"
+    },
+    {
+      "key": "coinbase:COTI",
+      "first_seen": "2026-05-19T22:55:50.017898+00:00"
+    },
+    {
+      "key": "coinbase:USELESS",
+      "first_seen": "2026-05-19T22:55:50.153435+00:00"
+    },
+    {
+      "key": "coinbase:TOSHI",
+      "first_seen": "2026-05-19T22:55:50.260105+00:00"
+    },
+    {
+      "key": "coinbase:DNT",
+      "first_seen": "2026-05-19T22:55:50.417424+00:00"
+    },
+    {
+      "key": "coinbase:DRIFT",
+      "first_seen": "2026-05-19T22:55:50.560886+00:00"
+    },
+    {
+      "key": "coinbase:RAVE",
+      "first_seen": "2026-05-19T22:55:50.678212+00:00"
+    },
+    {
+      "key": "coinbase:GMT",
+      "first_seen": "2026-05-19T22:55:50.909793+00:00"
+    },
+    {
+      "key": "coinbase:RARE",
+      "first_seen": "2026-05-19T22:55:51.023763+00:00"
+    },
+    {
+      "key": "coinbase:XLM",
+      "first_seen": "2026-05-19T22:55:51.067724+00:00"
+    },
+    {
+      "key": "coinbase:KSM",
+      "first_seen": "2026-05-19T22:55:51.193468+00:00"
+    },
+    {
+      "key": "coinbase:PRIME",
+      "first_seen": "2026-05-19T22:55:51.343079+00:00"
+    },
+    {
+      "key": "coinbase:SKL",
+      "first_seen": "2026-05-19T22:55:51.38553+00:00"
+    },
+    {
+      "key": "coinbase:LAYER",
+      "first_seen": "2026-05-19T22:55:51.4345+00:00"
+    },
+    {
+      "key": "coinbase:XPL",
+      "first_seen": "2026-05-19T22:55:51.476021+00:00"
+    },
+    {
+      "key": "coinbase:FARM",
+      "first_seen": "2026-05-19T22:55:51.527351+00:00"
+    },
+    {
+      "key": "coinbase:ENA",
+      "first_seen": "2026-05-19T22:55:51.576775+00:00"
+    },
+    {
+      "key": "coinbase:SKR",
+      "first_seen": "2026-05-19T22:55:51.625592+00:00"
+    },
+    {
+      "key": "coinbase:WRON",
+      "first_seen": "2026-05-19T22:55:51.671767+00:00"
+    },
+    {
+      "key": "coinbase:G",
+      "first_seen": "2026-05-19T22:55:51.717284+00:00"
+    },
+    {
+      "key": "coinbase:ETHFI",
+      "first_seen": "2026-05-19T22:55:51.767919+00:00"
+    },
+    {
+      "key": "coinbase:B3",
+      "first_seen": "2026-05-19T22:55:51.811892+00:00"
+    },
+    {
+      "key": "coinbase:ANKR",
+      "first_seen": "2026-05-19T22:55:51.858591+00:00"
+    },
+    {
+      "key": "coinbase:DASH",
+      "first_seen": "2026-05-19T22:56:47.938055+00:00"
+    },
+    {
+      "key": "coinbase:NEAR",
+      "first_seen": "2026-05-19T22:56:49.793587+00:00"
+    },
+    {
+      "key": "coinbase:RNBW",
+      "first_seen": "2026-05-19T22:56:49.965051+00:00"
+    },
+    {
+      "key": "coinbase:TRIA",
+      "first_seen": "2026-05-19T22:56:50.066386+00:00"
+    },
+    {
+      "key": "coinbase:INDEX",
+      "first_seen": "2026-05-19T22:56:50.195428+00:00"
+    },
+    {
+      "key": "coinbase:YB",
+      "first_seen": "2026-05-19T22:56:50.309133+00:00"
+    },
+    {
+      "key": "coinbase:HYPER",
+      "first_seen": "2026-05-19T22:56:50.468251+00:00"
+    },
+    {
+      "key": "coinbase:UMA",
+      "first_seen": "2026-05-19T22:56:50.619612+00:00"
+    },
+    {
+      "key": "coinbase:AUCTION",
+      "first_seen": "2026-05-19T22:56:50.792931+00:00"
+    },
+    {
+      "key": "coinbase:BLEND",
+      "first_seen": "2026-05-19T22:56:50.928624+00:00"
+    },
+    {
+      "key": "coinbase:VARA",
+      "first_seen": "2026-05-19T22:56:51.044833+00:00"
+    },
+    {
+      "key": "coinbase:AVT",
+      "first_seen": "2026-05-19T22:56:51.091637+00:00"
+    },
+    {
+      "key": "coinbase:POND",
+      "first_seen": "2026-05-19T22:56:51.243591+00:00"
+    },
+    {
+      "key": "coinbase:DIEM",
+      "first_seen": "2026-05-19T22:56:51.386775+00:00"
+    },
+    {
+      "key": "coinbase:GTC",
+      "first_seen": "2026-05-19T22:56:51.429784+00:00"
+    },
+    {
+      "key": "coinbase:ME",
+      "first_seen": "2026-05-19T22:56:51.479195+00:00"
+    },
+    {
+      "key": "coinbase:FLR",
+      "first_seen": "2026-05-19T22:56:51.532752+00:00"
+    },
+    {
+      "key": "coinbase:BLZ",
+      "first_seen": "2026-05-19T22:56:51.576599+00:00"
+    },
+    {
+      "key": "coinbase:ZETA",
+      "first_seen": "2026-05-19T22:56:51.623773+00:00"
+    },
+    {
+      "key": "coinbase:POPCAT",
+      "first_seen": "2026-05-19T22:56:51.66962+00:00"
+    },
+    {
+      "key": "coinbase:UP",
+      "first_seen": "2026-05-19T22:56:51.7147+00:00"
+    },
+    {
+      "key": "coinbase:SNX",
+      "first_seen": "2026-05-19T22:56:51.762554+00:00"
+    },
+    {
+      "key": "coinbase:TON",
+      "first_seen": "2026-05-19T22:56:51.806835+00:00"
+    },
+    {
+      "key": "coinbase:BASED1",
+      "first_seen": "2026-05-19T22:56:51.862563+00:00"
+    },
+    {
+      "key": "coinbase:ELSA",
+      "first_seen": "2026-05-19T22:56:51.90953+00:00"
+    },
+    {
+      "key": "coinbase:PNUT",
+      "first_seen": "2026-05-19T22:57:47.915982+00:00"
+    },
+    {
+      "key": "coinbase:AXS",
+      "first_seen": "2026-05-19T22:57:49.852919+00:00"
+    },
+    {
+      "key": "coinbase:KAVA",
+      "first_seen": "2026-05-19T22:57:50.019056+00:00"
+    },
+    {
+      "key": "coinbase:AMP",
+      "first_seen": "2026-05-19T22:57:50.117021+00:00"
+    },
+    {
+      "key": "coinbase:NCT",
+      "first_seen": "2026-05-19T22:57:50.254044+00:00"
+    },
+    {
+      "key": "coinbase:ALGO",
+      "first_seen": "2026-05-19T22:57:50.323097+00:00"
+    },
+    {
+      "key": "coinbase:ALICE",
+      "first_seen": "2026-05-19T22:57:50.520908+00:00"
+    },
+    {
+      "key": "coinbase:KAT",
+      "first_seen": "2026-05-19T22:57:50.657328+00:00"
+    },
+    {
+      "key": "coinbase:ASM",
+      "first_seen": "2026-05-19T22:57:50.856245+00:00"
+    },
+    {
+      "key": "coinbase:ALEPH",
+      "first_seen": "2026-05-19T22:57:50.962974+00:00"
+    },
+    {
+      "key": "coinbase:FIS",
+      "first_seen": "2026-05-19T22:57:51.097211+00:00"
+    },
+    {
+      "key": "coinbase:COSMOSDYDX",
+      "first_seen": "2026-05-19T22:57:51.21426+00:00"
+    },
+    {
+      "key": "coinbase:PNG",
+      "first_seen": "2026-05-19T22:57:51.336762+00:00"
+    },
+    {
+      "key": "coinbase:SAND",
+      "first_seen": "2026-05-19T22:57:51.455966+00:00"
+    },
+    {
+      "key": "coinbase:DOGE",
+      "first_seen": "2026-05-19T22:57:51.509316+00:00"
+    },
+    {
+      "key": "coinbase:FARTCOIN",
+      "first_seen": "2026-05-19T22:57:51.552102+00:00"
+    },
+    {
+      "key": "coinbase:OXT",
+      "first_seen": "2026-05-19T22:57:51.606223+00:00"
+    },
+    {
+      "key": "coinbase:KEYCAT",
+      "first_seen": "2026-05-19T22:57:51.660006+00:00"
+    },
+    {
+      "key": "coinbase:KITE",
+      "first_seen": "2026-05-19T22:57:51.71199+00:00"
+    },
+    {
+      "key": "coinbase:ALLO",
+      "first_seen": "2026-05-19T22:57:51.760535+00:00"
+    },
+    {
+      "key": "coinbase:BTRST",
+      "first_seen": "2026-05-19T22:57:51.801203+00:00"
+    },
+    {
+      "key": "coinbase:KRL",
+      "first_seen": "2026-05-19T22:57:51.846279+00:00"
+    },
+    {
+      "key": "coinbase:OCEAN",
+      "first_seen": "2026-05-19T22:57:51.888392+00:00"
+    },
+    {
+      "key": "coinbase:HBAR",
+      "first_seen": "2026-05-19T22:57:51.929715+00:00"
+    },
+    {
+      "key": "coinbase:NOICE",
+      "first_seen": "2026-05-19T22:57:51.973342+00:00"
+    },
+    {
+      "key": "coinbase:CORECHAIN",
+      "first_seen": "2026-05-19T22:58:47.975436+00:00"
+    },
+    {
+      "key": "coinbase:MATH",
+      "first_seen": "2026-05-19T22:58:49.908019+00:00"
+    },
+    {
+      "key": "coinbase:NMR",
+      "first_seen": "2026-05-19T22:58:50.066566+00:00"
+    },
+    {
+      "key": "coinbase:RARI",
+      "first_seen": "2026-05-19T22:58:50.166013+00:00"
+    },
+    {
+      "key": "coinbase:ABT",
+      "first_seen": "2026-05-19T22:58:50.311302+00:00"
+    },
+    {
+      "key": "coinbase:ACX",
+      "first_seen": "2026-05-19T22:58:50.364704+00:00"
+    },
+    {
+      "key": "coinbase:AZTEC",
+      "first_seen": "2026-05-19T22:58:50.565278+00:00"
+    },
+    {
+      "key": "coinbase:LINEA",
+      "first_seen": "2026-05-19T22:58:50.664647+00:00"
+    },
+    {
+      "key": "coinbase:PYTH",
+      "first_seen": "2026-05-19T22:58:50.900282+00:00"
+    },
+    {
+      "key": "coinbase:BNB",
+      "first_seen": "2026-05-19T22:58:51.00299+00:00"
+    },
+    {
+      "key": "coinbase:FLUID",
+      "first_seen": "2026-05-19T22:58:51.131141+00:00"
+    },
+    {
+      "key": "coinbase:AWE",
+      "first_seen": "2026-05-19T22:58:51.270955+00:00"
+    },
+    {
+      "key": "coinbase:OSMO",
+      "first_seen": "2026-05-19T22:58:51.397385+00:00"
+    },
+    {
+      "key": "coinbase:QI",
+      "first_seen": "2026-05-19T22:58:51.506977+00:00"
+    },
+    {
+      "key": "coinbase:MON",
+      "first_seen": "2026-05-19T22:58:51.555781+00:00"
+    },
+    {
+      "key": "coinbase:CRO",
+      "first_seen": "2026-05-19T22:58:51.596633+00:00"
+    },
+    {
+      "key": "coinbase:IO",
+      "first_seen": "2026-05-19T22:58:51.646314+00:00"
+    },
+    {
+      "key": "coinbase:AVNT",
+      "first_seen": "2026-05-19T22:58:51.697217+00:00"
+    },
+    {
+      "key": "coinbase:LDO",
+      "first_seen": "2026-05-19T22:58:51.743405+00:00"
+    },
+    {
+      "key": "coinbase:ENS",
+      "first_seen": "2026-05-19T22:58:51.794209+00:00"
+    },
+    {
+      "key": "coinbase:MPLX",
+      "first_seen": "2026-05-19T22:58:51.843843+00:00"
+    },
+    {
+      "key": "coinbase:DOOD",
+      "first_seen": "2026-05-19T22:58:51.893088+00:00"
+    },
+    {
+      "key": "coinbase:SD",
+      "first_seen": "2026-05-19T22:58:51.941386+00:00"
+    },
+    {
+      "key": "coinbase:ALCX",
+      "first_seen": "2026-05-19T22:58:51.987148+00:00"
+    },
+    {
+      "key": "coinbase:ZETACHAIN",
+      "first_seen": "2026-05-19T22:58:52.033503+00:00"
+    },
+    {
+      "key": "coinbase:FLOW",
+      "first_seen": "2026-05-19T22:59:48.015727+00:00"
+    },
+    {
+      "key": "coinbase:PRCL",
+      "first_seen": "2026-05-19T22:59:49.945898+00:00"
+    },
+    {
+      "key": "coinbase:NEON",
+      "first_seen": "2026-05-19T22:59:50.109356+00:00"
+    },
+    {
+      "key": "coinbase:DIMO",
+      "first_seen": "2026-05-19T22:59:50.219251+00:00"
+    },
+    {
+      "key": "coinbase:A8",
+      "first_seen": "2026-05-19T22:59:50.345306+00:00"
+    },
+    {
+      "key": "coinbase:BNKR",
+      "first_seen": "2026-05-19T22:59:50.394952+00:00"
+    },
+    {
+      "key": "coinbase:YFI",
+      "first_seen": "2026-05-19T22:59:50.624505+00:00"
+    },
+    {
+      "key": "coinbase:OGN",
+      "first_seen": "2026-05-19T22:59:50.668462+00:00"
+    },
+    {
+      "key": "coinbase:REQ",
+      "first_seen": "2026-05-19T22:59:50.952633+00:00"
+    },
+    {
+      "key": "coinbase:INX",
+      "first_seen": "2026-05-19T22:59:51.086714+00:00"
+    },
+    {
+      "key": "coinbase:GIGA",
+      "first_seen": "2026-05-19T22:59:51.211302+00:00"
+    },
+    {
+      "key": "coinbase:EGLD",
+      "first_seen": "2026-05-19T22:59:51.325653+00:00"
+    },
+    {
+      "key": "coinbase:LRC",
+      "first_seen": "2026-05-19T22:59:51.472849+00:00"
+    },
+    {
+      "key": "coinbase:ZK",
+      "first_seen": "2026-05-19T22:59:51.530313+00:00"
+    },
+    {
+      "key": "coinbase:BADGER",
+      "first_seen": "2026-05-19T22:59:51.579919+00:00"
+    },
+    {
+      "key": "coinbase:PUMP",
+      "first_seen": "2026-05-19T22:59:51.630017+00:00"
+    },
+    {
+      "key": "coinbase:SYRUP",
+      "first_seen": "2026-05-19T22:59:51.675462+00:00"
+    },
+    {
+      "key": "coinbase:MOG",
+      "first_seen": "2026-05-19T22:59:51.757423+00:00"
+    },
+    {
+      "key": "coinbase:RED",
+      "first_seen": "2026-05-19T22:59:51.806438+00:00"
+    },
+    {
+      "key": "coinbase:USDS",
+      "first_seen": "2026-05-19T22:59:51.858116+00:00"
+    },
+    {
+      "key": "coinbase:BOBA",
+      "first_seen": "2026-05-19T22:59:51.899059+00:00"
+    },
+    {
+      "key": "coinbase:SUI",
+      "first_seen": "2026-05-19T22:59:51.94752+00:00"
+    },
+    {
+      "key": "coinbase:MET",
+      "first_seen": "2026-05-19T22:59:52.043503+00:00"
+    },
+    {
+      "key": "coinbase:APR",
+      "first_seen": "2026-05-19T22:59:52.092837+00:00"
+    },
+    {
+      "key": "coinbase:SYND",
+      "first_seen": "2026-05-19T22:59:52.167635+00:00"
+    },
+    {
+      "key": "coinbase:CRV",
+      "first_seen": "2026-05-19T23:00:48.077951+00:00"
+    },
+    {
+      "key": "coinbase:BAT",
+      "first_seen": "2026-05-19T23:00:50.005417+00:00"
+    },
+    {
+      "key": "coinbase:EDGEX",
+      "first_seen": "2026-05-19T23:00:50.162333+00:00"
+    },
+    {
+      "key": "coinbase:ONDO",
+      "first_seen": "2026-05-19T23:00:50.265343+00:00"
+    },
+    {
+      "key": "coinbase:RAD",
+      "first_seen": "2026-05-19T23:00:50.407144+00:00"
+    },
+    {
+      "key": "coinbase:HOPR",
+      "first_seen": "2026-05-19T23:00:50.452308+00:00"
+    },
+    {
+      "key": "coinbase:PYR",
+      "first_seen": "2026-05-19T23:00:50.664852+00:00"
+    },
+    {
+      "key": "coinbase:WMTX",
+      "first_seen": "2026-05-19T23:00:50.707431+00:00"
+    },
+    {
+      "key": "coinbase:CGLD",
+      "first_seen": "2026-05-19T23:00:50.995695+00:00"
+    },
+    {
+      "key": "coinbase:SWELL",
+      "first_seen": "2026-05-19T23:00:51.12691+00:00"
+    },
+    {
+      "key": "coinbase:AI",
+      "first_seen": "2026-05-19T23:00:51.273186+00:00"
+    },
+    {
+      "key": "coinbase:CBETH",
+      "first_seen": "2026-05-19T23:00:51.395412+00:00"
+    },
+    {
+      "key": "coinbase:JITOSOL",
+      "first_seen": "2026-05-19T23:00:51.524793+00:00"
+    },
+    {
+      "key": "coinbase:VOXEL",
+      "first_seen": "2026-05-19T23:00:51.568644+00:00"
+    },
+    {
+      "key": "coinbase:PRL",
+      "first_seen": "2026-05-19T23:00:51.616538+00:00"
+    },
+    {
+      "key": "coinbase:ELA",
+      "first_seen": "2026-05-19T23:00:51.664755+00:00"
+    },
+    {
+      "key": "coinbase:DBR",
+      "first_seen": "2026-05-19T23:00:51.717561+00:00"
+    },
+    {
+      "key": "coinbase:BREV",
+      "first_seen": "2026-05-19T23:00:51.766829+00:00"
+    },
+    {
+      "key": "coinbase:MSOL",
+      "first_seen": "2026-05-19T23:00:51.812555+00:00"
+    },
+    {
+      "key": "coinbase:ACS",
+      "first_seen": "2026-05-19T23:00:51.855816+00:00"
+    },
+    {
+      "key": "coinbase:MLN",
+      "first_seen": "2026-05-19T23:00:51.952639+00:00"
+    },
+    {
+      "key": "coinbase:KNC",
+      "first_seen": "2026-05-19T23:00:51.995627+00:00"
+    },
+    {
+      "key": "coinbase:C98",
+      "first_seen": "2026-05-19T23:00:52.052595+00:00"
+    },
+    {
+      "key": "binance:BTC",
+      "first_seen": "2026-05-19T23:00:52.106271+00:00"
+    },
+    {
+      "key": "binance:ETH",
+      "first_seen": "2026-05-19T23:00:52.217776+00:00"
+    },
+    {
+      "key": "binance:BNB",
+      "first_seen": "2026-05-19T23:01:48.121788+00:00"
+    },
+    {
+      "key": "binance:NEO",
+      "first_seen": "2026-05-19T23:01:50.047349+00:00"
+    },
+    {
+      "key": "binance:LTC",
+      "first_seen": "2026-05-19T23:01:50.210658+00:00"
+    },
+    {
+      "key": "binance:QTUM",
+      "first_seen": "2026-05-19T23:01:50.317124+00:00"
+    },
+    {
+      "key": "binance:ADA",
+      "first_seen": "2026-05-19T23:01:50.448706+00:00"
+    },
+    {
+      "key": "binance:XRP",
+      "first_seen": "2026-05-19T23:01:50.496247+00:00"
+    },
+    {
+      "key": "binance:TUSD",
+      "first_seen": "2026-05-19T23:01:50.505304+00:00"
+    },
+    {
+      "key": "binance:IOTA",
+      "first_seen": "2026-05-19T23:01:50.721002+00:00"
+    },
+    {
+      "key": "binance:XLM",
+      "first_seen": "2026-05-19T23:01:50.774734+00:00"
+    },
+    {
+      "key": "binance:ONT",
+      "first_seen": "2026-05-19T23:01:51.062712+00:00"
+    },
+    {
+      "key": "binance:TRX",
+      "first_seen": "2026-05-19T23:01:51.183763+00:00"
+    },
+    {
+      "key": "binance:ETC",
+      "first_seen": "2026-05-19T23:01:51.310154+00:00"
+    },
+    {
+      "key": "binance:ICX",
+      "first_seen": "2026-05-19T23:01:51.439718+00:00"
+    },
+    {
+      "key": "binance:VET",
+      "first_seen": "2026-05-19T23:01:51.56192+00:00"
+    },
+    {
+      "key": "binance:USDC",
+      "first_seen": "2026-05-19T23:01:51.572137+00:00"
+    },
+    {
+      "key": "binance:LINK",
+      "first_seen": "2026-05-19T23:01:51.614811+00:00"
+    },
+    {
+      "key": "binance:ONG",
+      "first_seen": "2026-05-19T23:01:51.671212+00:00"
+    },
+    {
+      "key": "binance:HOT",
+      "first_seen": "2026-05-19T23:01:51.715828+00:00"
+    },
+    {
+      "key": "binance:ZIL",
+      "first_seen": "2026-05-19T23:01:51.762235+00:00"
+    },
+    {
+      "key": "binance:ZRX",
+      "first_seen": "2026-05-19T23:01:51.811322+00:00"
+    },
+    {
+      "key": "binance:FET",
+      "first_seen": "2026-05-19T23:01:51.864923+00:00"
+    },
+    {
+      "key": "binance:BAT",
+      "first_seen": "2026-05-19T23:01:51.906302+00:00"
+    },
+    {
+      "key": "binance:ZEC",
+      "first_seen": "2026-05-19T23:01:52.014136+00:00"
+    },
+    {
+      "key": "binance:IOST",
+      "first_seen": "2026-05-19T23:01:52.059622+00:00"
+    },
+    {
+      "key": "binance:CELR",
+      "first_seen": "2026-05-19T23:01:52.105491+00:00"
+    },
+    {
+      "key": "binance:DASH",
+      "first_seen": "2026-05-19T23:01:52.155874+00:00"
+    },
+    {
+      "key": "binance:THETA",
+      "first_seen": "2026-05-19T23:01:52.262846+00:00"
+    },
+    {
+      "key": "binance:ENJ",
+      "first_seen": "2026-05-19T23:02:48.17295+00:00"
+    },
+    {
+      "key": "binance:ATOM",
+      "first_seen": "2026-05-19T23:02:50.099428+00:00"
+    },
+    {
+      "key": "binance:TFUEL",
+      "first_seen": "2026-05-19T23:02:50.26728+00:00"
+    },
+    {
+      "key": "binance:ONE",
+      "first_seen": "2026-05-19T23:02:50.364036+00:00"
+    },
+    {
+      "key": "binance:ALGO",
+      "first_seen": "2026-05-19T23:02:50.496379+00:00"
+    },
+    {
+      "key": "binance:DOGE",
+      "first_seen": "2026-05-19T23:02:50.541664+00:00"
+    },
+    {
+      "key": "binance:DUSK",
+      "first_seen": "2026-05-19T23:02:50.860425+00:00"
+    },
+    {
+      "key": "binance:ANKR",
+      "first_seen": "2026-05-19T23:02:51.008315+00:00"
+    },
+    {
+      "key": "binance:WIN",
+      "first_seen": "2026-05-19T23:02:51.133914+00:00"
+    },
+    {
+      "key": "binance:COS",
+      "first_seen": "2026-05-19T23:02:51.253042+00:00"
+    },
+    {
+      "key": "binance:MTL",
+      "first_seen": "2026-05-19T23:02:51.374082+00:00"
+    },
+    {
+      "key": "binance:CVC",
+      "first_seen": "2026-05-19T23:02:51.419238+00:00"
+    },
+    {
+      "key": "binance:CHZ",
+      "first_seen": "2026-05-19T23:02:51.540623+00:00"
+    },
+    {
+      "key": "binance:BAND",
+      "first_seen": "2026-05-19T23:02:51.666999+00:00"
+    },
+    {
+      "key": "binance:XTZ",
+      "first_seen": "2026-05-19T23:02:51.719954+00:00"
+    },
+    {
+      "key": "binance:RVN",
+      "first_seen": "2026-05-19T23:02:51.76633+00:00"
+    },
+    {
+      "key": "binance:HBAR",
+      "first_seen": "2026-05-19T23:02:51.811662+00:00"
+    },
+    {
+      "key": "binance:STX",
+      "first_seen": "2026-05-19T23:02:51.952496+00:00"
+    },
+    {
+      "key": "binance:KAVA",
+      "first_seen": "2026-05-19T23:02:51.996616+00:00"
+    },
+    {
+      "key": "binance:ARPA",
+      "first_seen": "2026-05-19T23:02:52.049281+00:00"
+    },
+    {
+      "key": "binance:IOTX",
+      "first_seen": "2026-05-19T23:02:52.100888+00:00"
+    },
+    {
+      "key": "binance:RLC",
+      "first_seen": "2026-05-19T23:02:52.148705+00:00"
+    },
+    {
+      "key": "binance:BCH",
+      "first_seen": "2026-05-19T23:02:52.193988+00:00"
+    },
+    {
+      "key": "binance:FTT",
+      "first_seen": "2026-05-19T23:02:52.238664+00:00"
+    },
+    {
+      "key": "binance:EUR",
+      "first_seen": "2026-05-19T23:02:52.300871+00:00"
+    },
+    {
+      "key": "binance:OGN",
+      "first_seen": "2026-05-19T23:03:48.229912+00:00"
+    },
+    {
+      "key": "binance:LSK",
+      "first_seen": "2026-05-19T23:03:50.154901+00:00"
+    },
+    {
+      "key": "binance:BNT",
+      "first_seen": "2026-05-19T23:03:50.316719+00:00"
+    },
+    {
+      "key": "binance:MBL",
+      "first_seen": "2026-05-19T23:03:50.416127+00:00"
+    },
+    {
+      "key": "binance:COTI",
+      "first_seen": "2026-05-19T23:03:50.551362+00:00"
+    },
+    {
+      "key": "binance:SOL",
+      "first_seen": "2026-05-19T23:03:50.599623+00:00"
+    },
+    {
+      "key": "binance:CTSI",
+      "first_seen": "2026-05-19T23:03:50.91367+00:00"
+    },
+    {
+      "key": "binance:HIVE",
+      "first_seen": "2026-05-19T23:03:50.958798+00:00"
+    },
+    {
+      "key": "binance:CHR",
+      "first_seen": "2026-05-19T23:03:51.186801+00:00"
+    },
+    {
+      "key": "binance:ARDR",
+      "first_seen": "2026-05-19T23:03:51.302052+00:00"
+    },
+    {
+      "key": "binance:KNC",
+      "first_seen": "2026-05-19T23:03:51.432083+00:00"
+    },
+    {
+      "key": "binance:COMP",
+      "first_seen": "2026-05-19T23:03:51.561396+00:00"
+    },
+    {
+      "key": "binance:SC",
+      "first_seen": "2026-05-19T23:03:51.610969+00:00"
+    },
+    {
+      "key": "binance:ZEN",
+      "first_seen": "2026-05-19T23:03:51.723642+00:00"
+    },
+    {
+      "key": "binance:SNX",
+      "first_seen": "2026-05-19T23:03:51.775538+00:00"
+    },
+    {
+      "key": "binance:VTHO",
+      "first_seen": "2026-05-19T23:03:51.829704+00:00"
+    },
+    {
+      "key": "binance:DGB",
+      "first_seen": "2026-05-19T23:03:51.879413+00:00"
+    },
+    {
+      "key": "binance:DCR",
+      "first_seen": "2026-05-19T23:03:52.006406+00:00"
+    },
+    {
+      "key": "binance:STORJ",
+      "first_seen": "2026-05-19T23:03:52.056964+00:00"
+    },
+    {
+      "key": "binance:MANA",
+      "first_seen": "2026-05-19T23:03:52.112017+00:00"
+    },
+    {
+      "key": "binance:YFI",
+      "first_seen": "2026-05-19T23:03:52.162411+00:00"
+    },
+    {
+      "key": "binance:JST",
+      "first_seen": "2026-05-19T23:03:52.206171+00:00"
+    },
+    {
+      "key": "binance:CRV",
+      "first_seen": "2026-05-19T23:03:52.254189+00:00"
+    },
+    {
+      "key": "binance:SAND",
+      "first_seen": "2026-05-19T23:03:52.303903+00:00"
+    },
+    {
+      "key": "binance:NMR",
+      "first_seen": "2026-05-19T23:03:52.353606+00:00"
+    },
+    {
+      "key": "binance:DOT",
+      "first_seen": "2026-05-19T23:04:48.266319+00:00"
+    },
+    {
+      "key": "binance:LUNA",
+      "first_seen": "2026-05-19T23:04:50.194572+00:00"
+    },
+    {
+      "key": "binance:RSR",
+      "first_seen": "2026-05-19T23:04:50.367209+00:00"
+    },
+    {
+      "key": "binance:PAXG",
+      "first_seen": "2026-05-19T23:04:50.470367+00:00"
+    },
+    {
+      "key": "binance:TRB",
+      "first_seen": "2026-05-19T23:04:50.597015+00:00"
+    },
+    {
+      "key": "binance:SUSHI",
+      "first_seen": "2026-05-19T23:04:50.645778+00:00"
+    },
+    {
+      "key": "binance:KSM",
+      "first_seen": "2026-05-19T23:04:50.872288+00:00"
+    },
+    {
+      "key": "binance:EGLD",
+      "first_seen": "2026-05-19T23:04:51.096446+00:00"
+    },
+    {
+      "key": "binance:DIA",
+      "first_seen": "2026-05-19T23:04:51.232556+00:00"
+    },
+    {
+      "key": "binance:RUNE",
+      "first_seen": "2026-05-19T23:04:51.33751+00:00"
+    },
+    {
+      "key": "binance:UMA",
+      "first_seen": "2026-05-19T23:04:51.45187+00:00"
+    },
+    {
+      "key": "binance:BEL",
+      "first_seen": "2026-05-19T23:04:51.578087+00:00"
+    },
+    {
+      "key": "binance:UNI",
+      "first_seen": "2026-05-19T23:04:51.64703+00:00"
+    },
+    {
+      "key": "binance:SUN",
+      "first_seen": "2026-05-19T23:04:51.764361+00:00"
+    },
+    {
+      "key": "binance:AVAX",
+      "first_seen": "2026-05-19T23:04:51.812212+00:00"
+    },
+    {
+      "key": "binance:XVS",
+      "first_seen": "2026-05-19T23:04:51.860803+00:00"
+    },
+    {
+      "key": "binance:AAVE",
+      "first_seen": "2026-05-19T23:04:51.919997+00:00"
+    },
+    {
+      "key": "binance:NEAR",
+      "first_seen": "2026-05-19T23:04:52.058571+00:00"
+    },
+    {
+      "key": "binance:FIL",
+      "first_seen": "2026-05-19T23:04:52.103583+00:00"
+    },
+    {
+      "key": "binance:INJ",
+      "first_seen": "2026-05-19T23:04:52.156557+00:00"
+    },
+    {
+      "key": "binance:AUDIO",
+      "first_seen": "2026-05-19T23:04:52.203126+00:00"
+    },
+    {
+      "key": "binance:CTK",
+      "first_seen": "2026-05-19T23:04:52.249451+00:00"
+    },
+    {
+      "key": "binance:AXS",
+      "first_seen": "2026-05-19T23:04:52.299176+00:00"
+    },
+    {
+      "key": "binance:STRAX",
+      "first_seen": "2026-05-19T23:04:52.359278+00:00"
+    },
+    {
+      "key": "binance:ROSE",
+      "first_seen": "2026-05-19T23:04:52.405675+00:00"
+    },
+    {
+      "key": "binance:AVA",
+      "first_seen": "2026-05-19T23:05:48.339412+00:00"
+    },
+    {
+      "key": "binance:SKL",
+      "first_seen": "2026-05-19T23:05:50.246763+00:00"
+    },
+    {
+      "key": "binance:GRT",
+      "first_seen": "2026-05-19T23:05:50.420469+00:00"
+    },
+    {
+      "key": "binance:JUV",
+      "first_seen": "2026-05-19T23:05:50.465537+00:00"
+    },
+    {
+      "key": "binance:PSG",
+      "first_seen": "2026-05-19T23:05:50.646574+00:00"
+    },
+    {
+      "key": "binance:1INCH",
+      "first_seen": "2026-05-19T23:05:50.690634+00:00"
+    },
+    {
+      "key": "binance:OG",
+      "first_seen": "2026-05-19T23:05:50.918635+00:00"
+    },
+    {
+      "key": "binance:ATM",
+      "first_seen": "2026-05-19T23:05:51.140675+00:00"
+    },
+    {
+      "key": "binance:ASR",
+      "first_seen": "2026-05-19T23:05:51.276956+00:00"
+    },
+    {
+      "key": "binance:CELO",
+      "first_seen": "2026-05-19T23:05:51.381534+00:00"
+    },
+    {
+      "key": "binance:RIF",
+      "first_seen": "2026-05-19T23:05:51.505864+00:00"
+    },
+    {
+      "key": "binance:CKB",
+      "first_seen": "2026-05-19T23:05:51.635419+00:00"
+    },
+    {
+      "key": "binance:TWT",
+      "first_seen": "2026-05-19T23:05:51.688075+00:00"
+    },
+    {
+      "key": "binance:SFP",
+      "first_seen": "2026-05-19T23:05:51.815707+00:00"
+    },
+    {
+      "key": "binance:DODO",
+      "first_seen": "2026-05-19T23:05:51.866091+00:00"
+    },
+    {
+      "key": "binance:CAKE",
+      "first_seen": "2026-05-19T23:05:51.912433+00:00"
+    },
+    {
+      "key": "binance:ACM",
+      "first_seen": "2026-05-19T23:05:51.965733+00:00"
+    },
+    {
+      "key": "binance:POND",
+      "first_seen": "2026-05-19T23:05:52.107964+00:00"
+    },
+    {
+      "key": "binance:ALICE",
+      "first_seen": "2026-05-19T23:05:52.15368+00:00"
+    },
+    {
+      "key": "binance:SUPER",
+      "first_seen": "2026-05-19T23:05:52.201076+00:00"
+    },
+    {
+      "key": "binance:CFX",
+      "first_seen": "2026-05-19T23:05:52.248583+00:00"
+    },
+    {
+      "key": "binance:TKO",
+      "first_seen": "2026-05-19T23:05:52.299139+00:00"
+    },
+    {
+      "key": "binance:PUNDIX",
+      "first_seen": "2026-05-19T23:05:52.351309+00:00"
+    },
+    {
+      "key": "binance:TLM",
+      "first_seen": "2026-05-19T23:05:52.397809+00:00"
+    },
+    {
+      "key": "binance:BAR",
+      "first_seen": "2026-05-19T23:05:52.438945+00:00"
+    },
+    {
+      "key": "binance:SLP",
+      "first_seen": "2026-05-19T23:06:48.378268+00:00"
+    },
+    {
+      "key": "binance:SHIB",
+      "first_seen": "2026-05-19T23:06:50.299949+00:00"
+    },
+    {
+      "key": "binance:ICP",
+      "first_seen": "2026-05-19T23:06:50.460302+00:00"
+    },
+    {
+      "key": "binance:AR",
+      "first_seen": "2026-05-19T23:06:50.517803+00:00"
+    },
+    {
+      "key": "binance:MASK",
+      "first_seen": "2026-05-19T23:06:50.699011+00:00"
+    },
+    {
+      "key": "binance:LPT",
+      "first_seen": "2026-05-19T23:06:50.837155+00:00"
+    },
+    {
+      "key": "binance:XVG",
+      "first_seen": "2026-05-19T23:06:50.970981+00:00"
+    },
+    {
+      "key": "binance:ATA",
+      "first_seen": "2026-05-19T23:06:51.197926+00:00"
+    },
+    {
+      "key": "binance:GTC",
+      "first_seen": "2026-05-19T23:06:51.309981+00:00"
+    },
+    {
+      "key": "binance:PHA",
+      "first_seen": "2026-05-19T23:06:51.431639+00:00"
+    },
+    {
+      "key": "binance:MLN",
+      "first_seen": "2026-05-19T23:06:51.539448+00:00"
+    },
+    {
+      "key": "binance:DEXE",
+      "first_seen": "2026-05-19T23:06:51.584705+00:00"
+    },
+    {
+      "key": "binance:C98",
+      "first_seen": "2026-05-19T23:06:51.733996+00:00"
+    },
+    {
+      "key": "binance:QNT",
+      "first_seen": "2026-05-19T23:06:51.88208+00:00"
+    },
+    {
+      "key": "binance:FLOW",
+      "first_seen": "2026-05-19T23:06:51.92992+00:00"
+    },
+    {
+      "key": "binance:MINA",
+      "first_seen": "2026-05-19T23:06:51.978548+00:00"
+    },
+    {
+      "key": "binance:RAY",
+      "first_seen": "2026-05-19T23:06:52.021675+00:00"
+    },
+    {
+      "key": "binance:FARM",
+      "first_seen": "2026-05-19T23:06:52.15123+00:00"
+    },
+    {
+      "key": "binance:QUICK",
+      "first_seen": "2026-05-19T23:06:52.19668+00:00"
+    },
+    {
+      "key": "binance:MBOX",
+      "first_seen": "2026-05-19T23:06:52.243637+00:00"
+    },
+    {
+      "key": "binance:REQ",
+      "first_seen": "2026-05-19T23:06:52.296852+00:00"
+    },
+    {
+      "key": "binance:WAXP",
+      "first_seen": "2026-05-19T23:06:52.355555+00:00"
+    },
+    {
+      "key": "binance:GNO",
+      "first_seen": "2026-05-19T23:06:52.400167+00:00"
+    },
+    {
+      "key": "binance:XEC",
+      "first_seen": "2026-05-19T23:06:52.451446+00:00"
+    },
+    {
+      "key": "binance:DYDX",
+      "first_seen": "2026-05-19T23:06:52.498601+00:00"
+    },
+    {
+      "key": "binance:USDP",
+      "first_seen": "2026-05-19T23:07:48.418646+00:00"
+    },
+    {
+      "key": "binance:GALA",
+      "first_seen": "2026-05-19T23:07:50.357931+00:00"
+    },
+    {
+      "key": "binance:ILV",
+      "first_seen": "2026-05-19T23:07:50.516666+00:00"
+    },
+    {
+      "key": "binance:YGG",
+      "first_seen": "2026-05-19T23:07:50.564445+00:00"
+    },
+    {
+      "key": "binance:SYS",
+      "first_seen": "2026-05-19T23:07:50.755702+00:00"
+    },
+    {
+      "key": "binance:FIDA",
+      "first_seen": "2026-05-19T23:07:50.79852+00:00"
+    },
+    {
+      "key": "binance:AGLD",
+      "first_seen": "2026-05-19T23:07:51.099203+00:00"
+    },
+    {
+      "key": "binance:RARE",
+      "first_seen": "2026-05-19T23:07:51.344332+00:00"
+    },
+    {
+      "key": "binance:LAZIO",
+      "first_seen": "2026-05-19T23:07:51.442538+00:00"
+    },
+    {
+      "key": "binance:ADX",
+      "first_seen": "2026-05-19T23:07:51.566568+00:00"
+    },
+    {
+      "key": "binance:AUCTION",
+      "first_seen": "2026-05-19T23:07:51.695439+00:00"
+    },
+    {
+      "key": "binance:MOVR",
+      "first_seen": "2026-05-19T23:07:51.887773+00:00"
+    },
+    {
+      "key": "binance:CITY",
+      "first_seen": "2026-05-19T23:07:51.931212+00:00"
+    },
+    {
+      "key": "binance:ENS",
+      "first_seen": "2026-05-19T23:07:51.974828+00:00"
+    },
+    {
+      "key": "binance:QI",
+      "first_seen": "2026-05-19T23:07:52.018744+00:00"
+    },
+    {
+      "key": "binance:PORTO",
+      "first_seen": "2026-05-19T23:07:52.07377+00:00"
+    },
+    {
+      "key": "binance:POWR",
+      "first_seen": "2026-05-19T23:07:52.205033+00:00"
+    },
+    {
+      "key": "binance:JASMY",
+      "first_seen": "2026-05-19T23:07:52.248286+00:00"
+    },
+    {
+      "key": "binance:AMP",
+      "first_seen": "2026-05-19T23:07:52.293605+00:00"
+    },
+    {
+      "key": "binance:PYR",
+      "first_seen": "2026-05-19T23:07:52.338632+00:00"
+    },
+    {
+      "key": "binance:ALCX",
+      "first_seen": "2026-05-19T23:07:52.386225+00:00"
+    },
+    {
+      "key": "binance:SANTOS",
+      "first_seen": "2026-05-19T23:07:52.442115+00:00"
+    },
+    {
+      "key": "binance:BICO",
+      "first_seen": "2026-05-19T23:07:52.488856+00:00"
+    },
+    {
+      "key": "binance:FLUX",
+      "first_seen": "2026-05-19T23:07:52.536304+00:00"
+    },
+    {
+      "key": "binance:HIGH",
+      "first_seen": "2026-05-19T23:08:48.466089+00:00"
+    },
+    {
+      "key": "binance:CVX",
+      "first_seen": "2026-05-19T23:08:50.399291+00:00"
+    },
+    {
+      "key": "binance:PEOPLE",
+      "first_seen": "2026-05-19T23:08:50.569626+00:00"
+    },
+    {
+      "key": "binance:SPELL",
+      "first_seen": "2026-05-19T23:08:50.622767+00:00"
+    },
+    {
+      "key": "binance:JOE",
+      "first_seen": "2026-05-19T23:08:50.800719+00:00"
+    },
+    {
+      "key": "binance:ACH",
+      "first_seen": "2026-05-19T23:08:50.855312+00:00"
+    },
+    {
+      "key": "binance:IMX",
+      "first_seen": "2026-05-19T23:08:51.072334+00:00"
+    },
+    {
+      "key": "binance:GLMR",
+      "first_seen": "2026-05-19T23:08:51.282832+00:00"
+    },
+    {
+      "key": "binance:SCRT",
+      "first_seen": "2026-05-19T23:08:51.41485+00:00"
+    },
+    {
+      "key": "binance:API3",
+      "first_seen": "2026-05-19T23:08:51.5364+00:00"
+    },
+    {
+      "key": "binance:BTTC",
+      "first_seen": "2026-05-19T23:08:51.586784+00:00"
+    },
+    {
+      "key": "binance:XNO",
+      "first_seen": "2026-05-19T23:08:51.635312+00:00"
+    },
+    {
+      "key": "binance:WOO",
+      "first_seen": "2026-05-19T23:08:52.021008+00:00"
+    },
+    {
+      "key": "binance:ALPINE",
+      "first_seen": "2026-05-19T23:08:52.133869+00:00"
+    },
+    {
+      "key": "binance:T",
+      "first_seen": "2026-05-19T23:08:52.18018+00:00"
+    },
+    {
+      "key": "binance:ASTR",
+      "first_seen": "2026-05-19T23:08:52.242593+00:00"
+    },
+    {
+      "key": "binance:GMT",
+      "first_seen": "2026-05-19T23:08:52.28545+00:00"
+    },
+    {
+      "key": "binance:APE",
+      "first_seen": "2026-05-19T23:08:52.327596+00:00"
+    },
+    {
+      "key": "binance:STEEM",
+      "first_seen": "2026-05-19T23:08:52.376162+00:00"
+    },
+    {
+      "key": "binance:NEXO",
+      "first_seen": "2026-05-19T23:08:52.430935+00:00"
+    },
+    {
+      "key": "binance:LDO",
+      "first_seen": "2026-05-19T23:08:52.479463+00:00"
+    },
+    {
+      "key": "binance:OP",
+      "first_seen": "2026-05-19T23:08:52.528648+00:00"
+    },
+    {
+      "key": "binance:STG",
+      "first_seen": "2026-05-19T23:08:52.575456+00:00"
+    },
+    {
+      "key": "binance:LUNC",
+      "first_seen": "2026-05-19T23:08:52.656511+00:00"
+    },
+    {
+      "key": "binance:GMX",
+      "first_seen": "2026-05-19T23:08:52.710768+00:00"
+    },
+    {
+      "key": "binance:POLYX",
+      "first_seen": "2026-05-19T23:09:48.521321+00:00"
+    },
+    {
+      "key": "binance:APT",
+      "first_seen": "2026-05-19T23:09:50.451527+00:00"
+    },
+    {
+      "key": "binance:OSMO",
+      "first_seen": "2026-05-19T23:09:50.617697+00:00"
+    },
+    {
+      "key": "binance:HFT",
+      "first_seen": "2026-05-19T23:09:50.664982+00:00"
+    },
+    {
+      "key": "binance:PHB",
+      "first_seen": "2026-05-19T23:09:50.848418+00:00"
+    },
+    {
+      "key": "binance:MAGIC",
+      "first_seen": "2026-05-19T23:09:50.90009+00:00"
+    },
+    {
+      "key": "binance:RPL",
+      "first_seen": "2026-05-19T23:09:51.118315+00:00"
+    },
+    {
+      "key": "binance:GNS",
+      "first_seen": "2026-05-19T23:09:51.258408+00:00"
+    },
+    {
+      "key": "binance:SYN",
+      "first_seen": "2026-05-19T23:09:51.380216+00:00"
+    },
+    {
+      "key": "binance:SSV",
+      "first_seen": "2026-05-19T23:09:51.51718+00:00"
+    },
+    {
+      "key": "binance:LQTY",
+      "first_seen": "2026-05-19T23:09:51.63632+00:00"
+    },
+    {
+      "key": "binance:USTC",
+      "first_seen": "2026-05-19T23:09:51.681299+00:00"
+    },
+    {
+      "key": "binance:GAS",
+      "first_seen": "2026-05-19T23:09:51.990381+00:00"
+    },
+    {
+      "key": "binance:GLM",
+      "first_seen": "2026-05-19T23:09:52.130873+00:00"
+    },
+    {
+      "key": "binance:PROM",
+      "first_seen": "2026-05-19T23:09:52.231116+00:00"
+    },
+    {
+      "key": "binance:QKC",
+      "first_seen": "2026-05-19T23:09:52.360664+00:00"
+    },
+    {
+      "key": "binance:ID",
+      "first_seen": "2026-05-19T23:09:52.405002+00:00"
+    },
+    {
+      "key": "binance:ARB",
+      "first_seen": "2026-05-19T23:09:52.557321+00:00"
+    },
+    {
+      "key": "binance:WBTC",
+      "first_seen": "2026-05-19T23:09:52.686682+00:00"
+    },
+    {
+      "key": "binance:EDU",
+      "first_seen": "2026-05-19T23:09:52.809229+00:00"
+    },
+    {
+      "key": "binance:SUI",
+      "first_seen": "2026-05-19T23:09:52.856179+00:00"
+    },
+    {
+      "key": "binance:PEPE",
+      "first_seen": "2026-05-19T23:09:52.899605+00:00"
+    },
+    {
+      "key": "binance:FLOKI",
+      "first_seen": "2026-05-19T23:09:52.944004+00:00"
+    },
+    {
+      "key": "binance:MAV",
+      "first_seen": "2026-05-19T23:09:52.986412+00:00"
+    },
+    {
+      "key": "binance:PENDLE",
+      "first_seen": "2026-05-19T23:09:53.029208+00:00"
+    },
+    {
+      "key": "binance:ARKM",
+      "first_seen": "2026-05-19T23:10:48.581563+00:00"
+    },
+    {
+      "key": "binance:WBETH",
+      "first_seen": "2026-05-19T23:10:50.501559+00:00"
+    },
+    {
+      "key": "binance:WLD",
+      "first_seen": "2026-05-19T23:10:50.666414+00:00"
+    },
+    {
+      "key": "binance:FDUSD",
+      "first_seen": "2026-05-19T23:10:50.676267+00:00"
+    },
+    {
+      "key": "binance:SEI",
+      "first_seen": "2026-05-19T23:10:50.728081+00:00"
+    },
+    {
+      "key": "binance:CYBER",
+      "first_seen": "2026-05-19T23:10:50.898947+00:00"
+    },
+    {
+      "key": "binance:ARK",
+      "first_seen": "2026-05-19T23:10:50.950941+00:00"
+    },
+    {
+      "key": "binance:IQ",
+      "first_seen": "2026-05-19T23:10:51.178856+00:00"
+    },
+    {
+      "key": "binance:TIA",
+      "first_seen": "2026-05-19T23:10:51.298709+00:00"
+    },
+    {
+      "key": "binance:MEME",
+      "first_seen": "2026-05-19T23:10:51.431028+00:00"
+    },
+    {
+      "key": "binance:ORDI",
+      "first_seen": "2026-05-19T23:10:51.568553+00:00"
+    },
+    {
+      "key": "binance:BEAMX",
+      "first_seen": "2026-05-19T23:10:51.688226+00:00"
+    },
+    {
+      "key": "binance:PIVX",
+      "first_seen": "2026-05-19T23:10:51.74298+00:00"
+    },
+    {
+      "key": "binance:VIC",
+      "first_seen": "2026-05-19T23:10:52.040549+00:00"
+    },
+    {
+      "key": "binance:BLUR",
+      "first_seen": "2026-05-19T23:10:52.173093+00:00"
+    },
+    {
+      "key": "binance:VANRY",
+      "first_seen": "2026-05-19T23:10:52.374262+00:00"
+    },
+    {
+      "key": "binance:AEUR",
+      "first_seen": "2026-05-19T23:10:52.509765+00:00"
+    },
+    {
+      "key": "binance:JTO",
+      "first_seen": "2026-05-19T23:10:52.562423+00:00"
+    },
+    {
+      "key": "binance:1000SATS",
+      "first_seen": "2026-05-19T23:10:52.680929+00:00"
+    },
+    {
+      "key": "binance:BONK",
+      "first_seen": "2026-05-19T23:10:52.733193+00:00"
+    },
+    {
+      "key": "binance:ACE",
+      "first_seen": "2026-05-19T23:10:52.853501+00:00"
+    },
+    {
+      "key": "binance:NFP",
+      "first_seen": "2026-05-19T23:10:52.974618+00:00"
+    },
+    {
+      "key": "binance:AI",
+      "first_seen": "2026-05-19T23:10:53.01968+00:00"
+    },
+    {
+      "key": "binance:XAI",
+      "first_seen": "2026-05-19T23:10:53.067286+00:00"
+    },
+    {
+      "key": "binance:MANTA",
+      "first_seen": "2026-05-19T23:10:53.120139+00:00"
+    },
+    {
+      "key": "binance:ALT",
+      "first_seen": "2026-05-19T23:10:53.167105+00:00"
+    },
+    {
+      "key": "binance:JUP",
+      "first_seen": "2026-05-19T23:11:48.621874+00:00"
+    },
+    {
+      "key": "binance:PYTH",
+      "first_seen": "2026-05-19T23:11:50.551603+00:00"
+    },
+    {
+      "key": "binance:RONIN",
+      "first_seen": "2026-05-19T23:11:50.717047+00:00"
+    },
+    {
+      "key": "binance:DYM",
+      "first_seen": "2026-05-19T23:11:50.759465+00:00"
+    },
+    {
+      "key": "binance:PIXEL",
+      "first_seen": "2026-05-19T23:11:50.956373+00:00"
+    },
+    {
+      "key": "binance:STRK",
+      "first_seen": "2026-05-19T23:11:51.00937+00:00"
+    },
+    {
+      "key": "binance:AXL",
+      "first_seen": "2026-05-19T23:11:51.349027+00:00"
+    },
+    {
+      "key": "binance:WIF",
+      "first_seen": "2026-05-19T23:11:51.474901+00:00"
+    },
+    {
+      "key": "binance:METIS",
+      "first_seen": "2026-05-19T23:11:51.622906+00:00"
+    },
+    {
+      "key": "binance:AEVO",
+      "first_seen": "2026-05-19T23:11:51.736382+00:00"
+    },
+    {
+      "key": "binance:BOME",
+      "first_seen": "2026-05-19T23:11:51.888185+00:00"
+    },
+    {
+      "key": "binance:ETHFI",
+      "first_seen": "2026-05-19T23:11:52.169282+00:00"
+    },
+    {
+      "key": "binance:ENA",
+      "first_seen": "2026-05-19T23:11:52.280776+00:00"
+    },
+    {
+      "key": "binance:W",
+      "first_seen": "2026-05-19T23:11:52.405031+00:00"
+    },
+    {
+      "key": "binance:TNSR",
+      "first_seen": "2026-05-19T23:11:52.458737+00:00"
+    },
+    {
+      "key": "binance:SAGA",
+      "first_seen": "2026-05-19T23:11:52.617598+00:00"
+    },
+    {
+      "key": "binance:TAO",
+      "first_seen": "2026-05-19T23:11:52.66831+00:00"
+    },
+    {
+      "key": "binance:REZ",
+      "first_seen": "2026-05-19T23:11:52.789165+00:00"
+    },
+    {
+      "key": "binance:BB",
+      "first_seen": "2026-05-19T23:11:52.834546+00:00"
+    },
+    {
+      "key": "binance:NOT",
+      "first_seen": "2026-05-19T23:11:52.952303+00:00"
+    },
+    {
+      "key": "binance:IO",
+      "first_seen": "2026-05-19T23:11:53.073828+00:00"
+    },
+    {
+      "key": "binance:ZK",
+      "first_seen": "2026-05-19T23:11:53.126715+00:00"
+    },
+    {
+      "key": "binance:LISTA",
+      "first_seen": "2026-05-19T23:11:53.178613+00:00"
+    },
+    {
+      "key": "binance:ZRO",
+      "first_seen": "2026-05-19T23:11:53.316881+00:00"
+    },
+    {
+      "key": "binance:G",
+      "first_seen": "2026-05-19T23:12:48.673074+00:00"
+    },
+    {
+      "key": "binance:BANANA",
+      "first_seen": "2026-05-19T23:12:50.604851+00:00"
+    },
+    {
+      "key": "binance:RENDER",
+      "first_seen": "2026-05-19T23:12:50.773471+00:00"
+    },
+    {
+      "key": "binance:TON",
+      "first_seen": "2026-05-19T23:12:50.822936+00:00"
+    },
+    {
+      "key": "binance:DOGS",
+      "first_seen": "2026-05-19T23:12:51.000127+00:00"
+    },
+    {
+      "key": "binance:EURI",
+      "first_seen": "2026-05-19T23:12:51.049293+00:00"
+    },
+    {
+      "key": "binance:POL",
+      "first_seen": "2026-05-19T23:12:51.27136+00:00"
+    },
+    {
+      "key": "binance:NEIRO",
+      "first_seen": "2026-05-19T23:12:51.39628+00:00"
+    },
+    {
+      "key": "binance:TURBO",
+      "first_seen": "2026-05-19T23:12:51.531131+00:00"
+    },
+    {
+      "key": "binance:1MBABYDOGE",
+      "first_seen": "2026-05-19T23:12:51.662187+00:00"
+    },
+    {
+      "key": "binance:CATI",
+      "first_seen": "2026-05-19T23:12:51.787254+00:00"
+    },
+    {
+      "key": "binance:HMSTR",
+      "first_seen": "2026-05-19T23:12:51.839562+00:00"
+    },
+    {
+      "key": "binance:EIGEN",
+      "first_seen": "2026-05-19T23:12:52.227252+00:00"
+    },
+    {
+      "key": "binance:SCR",
+      "first_seen": "2026-05-19T23:12:52.363765+00:00"
+    },
+    {
+      "key": "binance:BNSOL",
+      "first_seen": "2026-05-19T23:12:52.40447+00:00"
+    },
+    {
+      "key": "binance:LUMIA",
+      "first_seen": "2026-05-19T23:12:52.501403+00:00"
+    },
+    {
+      "key": "binance:KAIA",
+      "first_seen": "2026-05-19T23:12:52.737224+00:00"
+    },
+    {
+      "key": "binance:COW",
+      "first_seen": "2026-05-19T23:12:52.857608+00:00"
+    },
+    {
+      "key": "binance:CETUS",
+      "first_seen": "2026-05-19T23:12:52.984187+00:00"
+    },
+    {
+      "key": "binance:PNUT",
+      "first_seen": "2026-05-19T23:12:53.029946+00:00"
+    },
+    {
+      "key": "binance:ACT",
+      "first_seen": "2026-05-19T23:12:53.081088+00:00"
+    },
+    {
+      "key": "binance:USUAL",
+      "first_seen": "2026-05-19T23:12:53.128371+00:00"
+    },
+    {
+      "key": "binance:THE",
+      "first_seen": "2026-05-19T23:12:53.172274+00:00"
+    },
+    {
+      "key": "binance:ACX",
+      "first_seen": "2026-05-19T23:12:53.214418+00:00"
+    },
+    {
+      "key": "binance:ORCA",
+      "first_seen": "2026-05-19T23:12:53.371992+00:00"
+    },
+    {
+      "key": "binance:MOVE",
+      "first_seen": "2026-05-19T23:13:48.724271+00:00"
+    },
+    {
+      "key": "binance:ME",
+      "first_seen": "2026-05-19T23:13:50.649904+00:00"
+    },
+    {
+      "key": "binance:VELODROME",
+      "first_seen": "2026-05-19T23:13:50.78133+00:00"
+    },
+    {
+      "key": "binance:VANA",
+      "first_seen": "2026-05-19T23:13:50.83004+00:00"
+    },
+    {
+      "key": "binance:1000CAT",
+      "first_seen": "2026-05-19T23:13:51.05623+00:00"
+    },
+    {
+      "key": "binance:PENGU",
+      "first_seen": "2026-05-19T23:13:51.119864+00:00"
+    },
+    {
+      "key": "binance:BIO",
+      "first_seen": "2026-05-19T23:13:51.326051+00:00"
+    },
+    {
+      "key": "binance:D",
+      "first_seen": "2026-05-19T23:13:51.443832+00:00"
+    },
+    {
+      "key": "binance:AIXBT",
+      "first_seen": "2026-05-19T23:13:51.579178+00:00"
+    },
+    {
+      "key": "binance:CGPT",
+      "first_seen": "2026-05-19T23:13:51.716056+00:00"
+    },
+    {
+      "key": "binance:COOKIE",
+      "first_seen": "2026-05-19T23:13:51.832872+00:00"
+    },
+    {
+      "key": "binance:S",
+      "first_seen": "2026-05-19T23:13:51.900804+00:00"
+    },
+    {
+      "key": "binance:SOLV",
+      "first_seen": "2026-05-19T23:13:52.19545+00:00"
+    },
+    {
+      "key": "binance:TRUMP",
+      "first_seen": "2026-05-19T23:13:52.324337+00:00"
+    },
+    {
+      "key": "binance:ANIME",
+      "first_seen": "2026-05-19T23:13:52.466763+00:00"
+    },
+    {
+      "key": "binance:BERA",
+      "first_seen": "2026-05-19T23:13:52.521443+00:00"
+    },
+    {
+      "key": "binance:1000CHEEMS",
+      "first_seen": "2026-05-19T23:13:52.801258+00:00"
+    },
+    {
+      "key": "binance:TST",
+      "first_seen": "2026-05-19T23:13:52.934773+00:00"
+    },
+    {
+      "key": "binance:LAYER",
+      "first_seen": "2026-05-19T23:13:53.063445+00:00"
+    },
+    {
+      "key": "binance:HEI",
+      "first_seen": "2026-05-19T23:13:53.183906+00:00"
+    },
+    {
+      "key": "binance:KAITO",
+      "first_seen": "2026-05-19T23:13:53.308427+00:00"
+    },
+    {
+      "key": "binance:SHELL",
+      "first_seen": "2026-05-19T23:13:53.45763+00:00"
+    },
+    {
+      "key": "binance:RED",
+      "first_seen": "2026-05-19T23:13:53.508361+00:00"
+    },
+    {
+      "key": "binance:GPS",
+      "first_seen": "2026-05-19T23:13:53.57088+00:00"
+    },
+    {
+      "key": "binance:EPIC",
+      "first_seen": "2026-05-19T23:13:53.622022+00:00"
+    },
+    {
+      "key": "binance:BMT",
+      "first_seen": "2026-05-19T23:14:48.782363+00:00"
+    },
+    {
+      "key": "binance:FORM",
+      "first_seen": "2026-05-19T23:14:50.702634+00:00"
+    },
+    {
+      "key": "binance:XUSD",
+      "first_seen": "2026-05-19T23:14:50.837035+00:00"
+    },
+    {
+      "key": "binance:NIL",
+      "first_seen": "2026-05-19T23:14:50.885328+00:00"
+    },
+    {
+      "key": "binance:PARTI",
+      "first_seen": "2026-05-19T23:14:51.098337+00:00"
+    },
+    {
+      "key": "binance:MUBARAK",
+      "first_seen": "2026-05-19T23:14:51.147605+00:00"
+    },
+    {
+      "key": "binance:TUT",
+      "first_seen": "2026-05-19T23:14:51.380313+00:00"
+    },
+    {
+      "key": "binance:BANANAS31",
+      "first_seen": "2026-05-19T23:14:51.49744+00:00"
+    },
+    {
+      "key": "binance:GUN",
+      "first_seen": "2026-05-19T23:14:51.636962+00:00"
+    },
+    {
+      "key": "binance:BABY",
+      "first_seen": "2026-05-19T23:14:51.761763+00:00"
+    },
+    {
+      "key": "binance:ONDO",
+      "first_seen": "2026-05-19T23:14:51.881056+00:00"
+    },
+    {
+      "key": "binance:BIGTIME",
+      "first_seen": "2026-05-19T23:14:51.932773+00:00"
+    },
+    {
+      "key": "binance:VIRTUAL",
+      "first_seen": "2026-05-19T23:14:52.243112+00:00"
+    },
+    {
+      "key": "binance:KERNEL",
+      "first_seen": "2026-05-19T23:14:52.3742+00:00"
+    },
+    {
+      "key": "binance:WCT",
+      "first_seen": "2026-05-19T23:14:52.523213+00:00"
+    },
+    {
+      "key": "binance:HYPER",
+      "first_seen": "2026-05-19T23:14:52.580505+00:00"
+    },
+    {
+      "key": "binance:INIT",
+      "first_seen": "2026-05-19T23:14:52.770136+00:00"
+    },
+    {
+      "key": "binance:SIGN",
+      "first_seen": "2026-05-19T23:14:52.901396+00:00"
+    },
+    {
+      "key": "binance:STO",
+      "first_seen": "2026-05-19T23:14:53.033594+00:00"
+    },
+    {
+      "key": "binance:SYRUP",
+      "first_seen": "2026-05-19T23:14:53.133891+00:00"
+    },
+    {
+      "key": "binance:KMNO",
+      "first_seen": "2026-05-19T23:14:53.28091+00:00"
+    },
+    {
+      "key": "binance:SXT",
+      "first_seen": "2026-05-19T23:14:53.596897+00:00"
+    },
+    {
+      "key": "binance:NXPC",
+      "first_seen": "2026-05-19T23:14:53.731752+00:00"
+    },
+    {
+      "key": "binance:AWE",
+      "first_seen": "2026-05-19T23:14:53.861216+00:00"
+    },
+    {
+      "key": "binance:HAEDAL",
+      "first_seen": "2026-05-19T23:14:53.989098+00:00"
+    },
+    {
+      "key": "binance:USD1",
+      "first_seen": "2026-05-19T23:15:48.920053+00:00"
+    },
+    {
+      "key": "binance:HUMA",
+      "first_seen": "2026-05-19T23:15:50.87074+00:00"
+    },
+    {
+      "key": "binance:A",
+      "first_seen": "2026-05-19T23:15:51.031772+00:00"
+    },
+    {
+      "key": "binance:SOPH",
+      "first_seen": "2026-05-19T23:15:51.171303+00:00"
+    },
+    {
+      "key": "binance:RESOLV",
+      "first_seen": "2026-05-19T23:15:51.288471+00:00"
+    },
+    {
+      "key": "binance:HOME",
+      "first_seen": "2026-05-19T23:15:51.351569+00:00"
+    },
+    {
+      "key": "binance:SPK",
+      "first_seen": "2026-05-19T23:15:51.407696+00:00"
+    },
+    {
+      "key": "binance:NEWT",
+      "first_seen": "2026-05-19T23:15:51.561445+00:00"
+    },
+    {
+      "key": "binance:SAHARA",
+      "first_seen": "2026-05-19T23:15:51.692359+00:00"
+    },
+    {
+      "key": "binance:LA",
+      "first_seen": "2026-05-19T23:15:51.814865+00:00"
+    },
+    {
+      "key": "binance:ERA",
+      "first_seen": "2026-05-19T23:15:51.93754+00:00"
+    },
+    {
+      "key": "binance:C",
+      "first_seen": "2026-05-19T23:15:51.99079+00:00"
+    },
+    {
+      "key": "binance:TREE",
+      "first_seen": "2026-05-19T23:15:52.300625+00:00"
+    },
+    {
+      "key": "binance:TOWNS",
+      "first_seen": "2026-05-19T23:15:52.432562+00:00"
+    },
+    {
+      "key": "binance:PROVE",
+      "first_seen": "2026-05-19T23:15:52.557246+00:00"
+    },
+    {
+      "key": "binance:BFUSD",
+      "first_seen": "2026-05-19T23:15:52.614444+00:00"
+    },
+    {
+      "key": "binance:PLUME",
+      "first_seen": "2026-05-19T23:15:52.812243+00:00"
+    },
+    {
+      "key": "binance:DOLO",
+      "first_seen": "2026-05-19T23:15:52.95203+00:00"
+    },
+    {
+      "key": "binance:MITO",
+      "first_seen": "2026-05-19T23:15:53.089427+00:00"
+    },
+    {
+      "key": "binance:WLFI",
+      "first_seen": "2026-05-19T23:15:53.154619+00:00"
+    },
+    {
+      "key": "binance:SOMI",
+      "first_seen": "2026-05-19T23:15:53.342118+00:00"
+    },
+    {
+      "key": "binance:OPEN",
+      "first_seen": "2026-05-19T23:15:53.553553+00:00"
+    },
+    {
+      "key": "binance:USDE",
+      "first_seen": "2026-05-19T23:15:53.698263+00:00"
+    },
+    {
+      "key": "binance:LINEA",
+      "first_seen": "2026-05-19T23:15:53.833772+00:00"
+    },
+    {
+      "key": "binance:HOLO",
+      "first_seen": "2026-05-19T23:15:53.958235+00:00"
+    },
+    {
+      "key": "binance:PUMP",
+      "first_seen": "2026-05-19T23:16:48.878387+00:00"
+    },
+    {
+      "key": "binance:AVNT",
+      "first_seen": "2026-05-19T23:16:50.800858+00:00"
+    },
+    {
+      "key": "binance:ZKC",
+      "first_seen": "2026-05-19T23:16:51.082808+00:00"
+    },
+    {
+      "key": "binance:SKY",
+      "first_seen": "2026-05-19T23:16:51.201924+00:00"
+    },
+    {
+      "key": "binance:BARD",
+      "first_seen": "2026-05-19T23:16:51.333435+00:00"
+    },
+    {
+      "key": "binance:0G",
+      "first_seen": "2026-05-19T23:16:51.454217+00:00"
+    },
+    {
+      "key": "binance:HEMI",
+      "first_seen": "2026-05-19T23:16:51.581438+00:00"
+    },
+    {
+      "key": "binance:XPL",
+      "first_seen": "2026-05-19T23:16:51.626934+00:00"
+    },
+    {
+      "key": "binance:MIRA",
+      "first_seen": "2026-05-19T23:16:51.735974+00:00"
+    },
+    {
+      "key": "binance:FF",
+      "first_seen": "2026-05-19T23:16:51.878303+00:00"
+    },
+    {
+      "key": "binance:EDEN",
+      "first_seen": "2026-05-19T23:16:51.981177+00:00"
+    },
+    {
+      "key": "binance:NOM",
+      "first_seen": "2026-05-19T23:16:52.027098+00:00"
+    },
+    {
+      "key": "binance:2Z",
+      "first_seen": "2026-05-19T23:16:52.340866+00:00"
+    },
+    {
+      "key": "binance:MORPHO",
+      "first_seen": "2026-05-19T23:16:52.484911+00:00"
+    },
+    {
+      "key": "binance:ASTER",
+      "first_seen": "2026-05-19T23:16:52.613551+00:00"
+    },
+    {
+      "key": "binance:WAL",
+      "first_seen": "2026-05-19T23:16:52.664083+00:00"
+    },
+    {
+      "key": "binance:EUL",
+      "first_seen": "2026-05-19T23:16:52.864949+00:00"
+    },
+    {
+      "key": "binance:ENSO",
+      "first_seen": "2026-05-19T23:16:52.997765+00:00"
+    },
+    {
+      "key": "binance:YB",
+      "first_seen": "2026-05-19T23:16:53.137651+00:00"
+    },
+    {
+      "key": "binance:ZBT",
+      "first_seen": "2026-05-19T23:16:53.187709+00:00"
+    },
+    {
+      "key": "binance:TURTLE",
+      "first_seen": "2026-05-19T23:16:53.37603+00:00"
+    },
+    {
+      "key": "binance:GIGGLE",
+      "first_seen": "2026-05-19T23:16:53.611087+00:00"
+    },
+    {
+      "key": "binance:F",
+      "first_seen": "2026-05-19T23:16:53.748667+00:00"
+    },
+    {
+      "key": "binance:KITE",
+      "first_seen": "2026-05-19T23:16:53.881343+00:00"
+    },
+    {
+      "key": "binance:MMT",
+      "first_seen": "2026-05-19T23:16:54.017692+00:00"
+    },
+    {
+      "key": "binance:SAPIEN",
+      "first_seen": "2026-05-19T23:17:48.923197+00:00"
+    },
+    {
+      "key": "binance:ALLO",
+      "first_seen": "2026-05-19T23:17:50.85+00:00"
+    },
+    {
+      "key": "binance:BANK",
+      "first_seen": "2026-05-19T23:17:51.030201+00:00"
+    },
+    {
+      "key": "binance:MET",
+      "first_seen": "2026-05-19T23:17:51.181989+00:00"
+    },
+    {
+      "key": "binance:AT",
+      "first_seen": "2026-05-19T23:17:51.303365+00:00"
+    },
+    {
+      "key": "binance:KGST",
+      "first_seen": "2026-05-19T23:17:51.519345+00:00"
+    },
+    {
+      "key": "binance:BREV",
+      "first_seen": "2026-05-19T23:17:51.659815+00:00"
+    },
+    {
+      "key": "binance:币安人生",
+      "first_seen": "2026-05-19T23:17:51.787285+00:00"
+    },
+    {
+      "key": "binance:ZKP",
+      "first_seen": "2026-05-19T23:17:51.90616+00:00"
+    },
+    {
+      "key": "binance:U",
+      "first_seen": "2026-05-19T23:17:52.035615+00:00"
+    },
+    {
+      "key": "binance:FRAX",
+      "first_seen": "2026-05-19T23:17:52.08368+00:00"
+    },
+    {
+      "key": "binance:FOGO",
+      "first_seen": "2026-05-19T23:17:52.13014+00:00"
+    },
+    {
+      "key": "binance:RLUSD",
+      "first_seen": "2026-05-19T23:17:52.396126+00:00"
+    },
+    {
+      "key": "binance:SENT",
+      "first_seen": "2026-05-19T23:17:52.530708+00:00"
+    },
+    {
+      "key": "binance:ZAMA",
+      "first_seen": "2026-05-19T23:17:52.659728+00:00"
+    },
+    {
+      "key": "binance:ESP",
+      "first_seen": "2026-05-19T23:17:52.709123+00:00"
+    },
+    {
+      "key": "binance:MANTRA",
+      "first_seen": "2026-05-19T23:17:52.92127+00:00"
+    },
+    {
+      "key": "binance:ROBO",
+      "first_seen": "2026-05-19T23:17:53.048396+00:00"
+    },
+    {
+      "key": "binance:OPN",
+      "first_seen": "2026-05-19T23:17:53.18125+00:00"
+    },
+    {
+      "key": "binance:NIGHT",
+      "first_seen": "2026-05-19T23:17:53.228349+00:00"
+    },
+    {
+      "key": "binance:CFG",
+      "first_seen": "2026-05-19T23:17:53.433029+00:00"
+    },
+    {
+      "key": "binance:KAT",
+      "first_seen": "2026-05-19T23:17:53.660126+00:00"
+    },
+    {
+      "key": "binance:XAUT",
+      "first_seen": "2026-05-19T23:17:53.795092+00:00"
+    },
+    {
+      "key": "binance:USDS",
+      "first_seen": "2026-05-19T23:17:53.927199+00:00"
+    },
+    {
+      "key": "binance:CHIP",
+      "first_seen": "2026-05-19T23:17:54.060002+00:00"
+    },
+    {
+      "key": "binance:MEGA",
+      "first_seen": "2026-05-19T23:18:48.980092+00:00"
+    },
+    {
+      "key": "binance:AIGENSYN",
+      "first_seen": "2026-05-19T23:18:50.906691+00:00"
+    },
+    {
+      "key": "binance:RAD",
+      "first_seen": "2026-05-19T23:34:08.475257+00:00"
+    },
+    {
+      "key": "binance:PORTAL",
+      "first_seen": "2026-05-19T23:34:08.607314+00:00"
+    },
+    {
+      "key": "coinbase:PEPE",
+      "first_seen": "2026-05-20T11:59:29.864202+00:00"
+    },
+    {
+      "key": "coinbase:NEX",
+      "first_seen": "2026-05-20T13:10:26.383664+00:00"
+    },
+    {
+      "key": "binance:OPG",
+      "first_seen": "2026-05-23T23:36:08.404568+00:00"
+    },
+    {
+      "key": "binance:GENIUS",
+      "first_seen": "2026-05-24T00:43:10.843107+00:00"
+    },
+    {
+      "key": "coinbase:CTR",
+      "first_seen": "2026-05-26T21:38:01.282422+00:00"
+    },
+    {
+      "key": "coinbase:DRV",
+      "first_seen": "2026-05-26T21:38:01.505196+00:00"
+    },
+    {
+      "key": "coinbase:META",
+      "first_seen": "2026-05-26T21:38:01.644328+00:00"
+    }
+  ]
+}

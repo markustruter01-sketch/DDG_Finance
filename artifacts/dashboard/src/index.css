@@ -237,7 +237,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: 14px 18px 16px;
+  padding: 10px 16px 11px;
   border-bottom: 1px solid rgba(100, 116, 139, 0.22);
   background: rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 36px rgba(15, 23, 42, 0.14);
@@ -262,6 +262,7 @@
 
 .home-brand {
   gap: 10px;
+  min-width: 0;
 }
 
 .home-brand-mark {
@@ -380,40 +381,69 @@
   }
 
   .home-command-header {
-    padding: 12px 16px 14px;
+    padding: 8px 12px 10px;
   }
 
   .home-command-topline {
-    align-items: flex-start;
+    align-items: center;
+    gap: 8px;
   }
 
   .home-header-actions {
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    min-width: 0;
   }
 
   .home-header-actions .home-live-state {
-    order: 3;
-    width: 100%;
-    justify-content: center;
+    order: initial;
+    width: auto;
+    justify-content: initial;
+    padding: 4px 6px;
+    font-size: 7px;
+    letter-spacing: 0.07em;
   }
 
   .home-command-summary {
-    display: block;
-    margin-top: 15px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    margin-top: 9px;
   }
 
   .home-performance-grid {
     justify-content: flex-start;
-    gap: 24px;
-    margin-top: 13px;
+    gap: 10px;
+    margin-top: 0;
+    min-width: 0;
   }
 
-  .home-brand-title {
+  .home-brand {
+    gap: 7px;
+  }
+
+  .home-brand-mark {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
     font-size: 12px;
   }
 
+  .home-brand-kicker,
+  .home-summary-label {
+    font-size: 7px;
+  }
+
+  .home-brand-title {
+    font-size: 11px;
+  }
+
   .home-equity-value {
-    font-size: 28px;
+    font-size: 24px;
+  }
+
+  .home-performance-value {
+    font-size: 10px;
   }
 }
 

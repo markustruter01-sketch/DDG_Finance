@@ -441,7 +441,9 @@ def run_health_check(bot_id: str) -> dict[str, Any]:
     _persist(bot_id, overall_score, overall_status, metrics, recommendations)
 
     # Adaptive params bridge: auto-tighten params on CRITICAL
-    bridge_actions = _apply_adaptive_bridge(bot_id, metrics, overall_status)
+    # The legacy Kraken adaptive-parameter bridge was retired with the
+    # cryptocurrency fleet. Health scoring remains active and database-backed.
+    bridge_actions: list[str] = []
     if bridge_actions:
         result["adaptive_bridge_actions"] = bridge_actions
 
@@ -476,104 +478,9 @@ def _persist(bot_id: str, overall_score: int, overall_status: str,
 
 def _apply_adaptive_bridge(bot_id: str, metrics: dict[str, dict], overall_status: str) -> list[str]:
     """
-    Health monitor → adaptive params bridge.
-    When a bot's health check returns CRITICAL on key metrics, automatically
-    tighten the corresponding adaptive params in kraken_adaptive_params.
-    Only applied to the 3 kraken bots that use the adaptive params table.
-    Returns a list of actions taken.
+    Compatibility no-op for callers from the retired crypto fleet.
     """
-    ADAPTIVE_BOTS = {"davy-jones", "blackbeard", "calypso"}
-    if bot_id not in ADAPTIVE_BOTS or overall_status != "CRITICAL":
-        return []
-
-    # Load current params
-    try:
-        with _pg_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT params FROM kraken_adaptive_params WHERE bot_id = %s",
-                    (bot_id,)
-                )
-                row = cur.fetchone()
-        if not row or not row[0]:
-            return []
-        import json as _json_br
-        params = dict(row[0]) if isinstance(row[0], dict) else _json_br.loads(row[0])
-    except Exception as exc:
-        logger.warning(f"HealthMonitor | AdaptiveBridge | Could not load params for {bot_id}: {exc}")
-        return []
-
-    actions: list[str] = []
-    changed = False
-
-    wr_status = metrics.get("recent_win_rate", {}).get("status", "HEALTHY")
-    pf_status = metrics.get("recent_profit_factor", {}).get("status", "HEALTHY")
-
-    # Win rate CRITICAL → tighten entry threshold (+0.15 to ZSCORE_ENTRY, cap at 2.5)
-    if wr_status == "CRITICAL" and "ZSCORE_ENTRY" in params:
-        old = params["ZSCORE_ENTRY"]
-        params["ZSCORE_ENTRY"] = round(min(2.5, old + 0.15), 4)
-        if params["ZSCORE_ENTRY"] != old:
-            actions.append(
-                f"HealthMonitor: win_rate CRITICAL — auto-tightened ZSCORE_ENTRY "
-                f"{old:.2f}→{params['ZSCORE_ENTRY']:.2f}"
-            )
-            changed = True
-
-    # Profit factor CRITICAL → raise minimum net profit floor (+0.002, cap at 0.03)
-    if pf_status == "CRITICAL" and "MIN_NET_PROFIT_PCT" in params:
-        old = params["MIN_NET_PROFIT_PCT"]
-        params["MIN_NET_PROFIT_PCT"] = round(min(0.03, old + 0.002), 6)
-        if params["MIN_NET_PROFIT_PCT"] != old:
-            actions.append(
-                f"HealthMonitor: profit_factor CRITICAL — auto-tightened MIN_NET_PROFIT_PCT "
-                f"{old*100:.3f}%→{params['MIN_NET_PROFIT_PCT']*100:.3f}%"
-            )
-            changed = True
-
-    if not changed:
-        return []
-
-    # Build reason strings for the reasons JSONB column
-    # actions already contain full reason text ("HealthMonitor auto-tighten: ...")
-    reason_entries = list(actions)
-
-    # Write back params AND reasons
-    try:
-        with _pg_conn() as conn:
-            with conn.cursor() as cur:
-                import json as _json_br2
-                # Load current reasons (may be null or a list)
-                cur.execute(
-                    "SELECT reasons FROM kraken_adaptive_params WHERE bot_id = %s",
-                    (bot_id,)
-                )
-                _reasons_row = cur.fetchone()
-                existing_reasons = []
-                if _reasons_row and _reasons_row[0]:
-                    _r = _reasons_row[0]
-                    existing_reasons = list(_r) if isinstance(_r, (list, tuple)) else []
-                # Prepend new reasons, keep most recent 20
-                updated_reasons = (reason_entries + existing_reasons)[:20]
-
-                cur.execute(
-                    """
-                    UPDATE kraken_adaptive_params
-                    SET params = %s, reasons = %s, adapted_at = NOW()
-                    WHERE bot_id = %s
-                    """,
-                    (_json_br2.dumps(params), _json_br2.dumps(updated_reasons), bot_id)
-                )
-            conn.commit()
-        logger.info(
-            f"HealthMonitor | AdaptiveBridge | {bot_id}: applied {len(actions)} tightening(s): "
-            + " | ".join(actions)
-        )
-    except Exception as exc:
-        logger.warning(f"HealthMonitor | AdaptiveBridge | Failed to write params for {bot_id}: {exc}")
-        return []
-
-    return actions
+    return []
 
 
 def run_all_bots() -> dict[str, dict]:

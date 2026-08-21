@@ -16,9 +16,9 @@ Parameters that adapt:
 All parameters stay within ±40% of their factory defaults and always above the
 minimum fee floor so the bot never exits at a guaranteed loss.
 
-PRIMARY STATE: PostgreSQL kraken_adaptive_params table (single-row, id=1 UPSERT).
-FALLBACK LOAD: adaptive_params.json — read ONCE at startup migration only, then
-               the file is no longer written or read in the primary code path.
+This legacy crypto-bot parameter adapter is retained for compatibility, but its
+database persistence was retired with the old Kraken fleet. It now falls back
+to factory defaults without querying or writing a removed table.
 """
 
 import json
@@ -32,120 +32,20 @@ logger = logging.getLogger("kraken_adaptive")
 # ── PostgreSQL helpers ────────────────────────────────────────────────────────
 
 def _pg_save(payload: dict) -> None:
-    """Upsert adaptive params into kraken_adaptive_params (keyed by bot's db_id)."""
-    try:
-        from config import BOT_DB_ID, BOT_ID
-        import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
-        if not db_url:
-            return
-        conn = psycopg2.connect(db_url)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO kraken_adaptive_params
-                        (id, bot_id, params, metrics, reasons, adapted_at, lookback_n)
-                    VALUES (%s, %s, %s, %s, %s, NOW(), %s)
-                    ON CONFLICT (id) DO UPDATE SET
-                        bot_id     = EXCLUDED.bot_id,
-                        params     = EXCLUDED.params,
-                        metrics    = EXCLUDED.metrics,
-                        reasons    = EXCLUDED.reasons,
-                        adapted_at = NOW(),
-                        lookback_n = EXCLUDED.lookback_n
-                    """,
-                    (
-                        BOT_DB_ID,
-                        BOT_ID,
-                        json.dumps(payload.get("params", {})),
-                        json.dumps(payload.get("metrics")),
-                        json.dumps(payload.get("reasons", {})),
-                        payload.get("lookback_n", 0),
-                    ),
-                )
-            conn.commit()
-        finally:
-            conn.close()
-    except Exception as exc:
-        logger.debug(f"Adaptive | pg_save skipped: {exc}")
+    """Retired persistence hook; intentionally does not access PostgreSQL."""
+    logger.debug("Adaptive | persistence disabled for retired Kraken adapter")
 
 
 def _pg_load() -> dict | None:
-    """Load adaptive params from kraken_adaptive_params (keyed by bot's db_id)."""
-    try:
-        from config import BOT_DB_ID
-        import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
-        if not db_url:
-            return None
-        conn = psycopg2.connect(db_url)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT params, metrics, lookback_n
-                    FROM   kraken_adaptive_params
-                    WHERE  id = %s
-                    """,
-                    (BOT_DB_ID,)
-                )
-                row = cur.fetchone()
-        finally:
-            conn.close()
-        if not row:
-            return None
-        params  = row[0] if isinstance(row[0], dict) else json.loads(row[0] or "{}")
-        metrics = row[1] if isinstance(row[1], dict) else json.loads(row[1] or "{}")
-        n = (metrics or {}).get("n", row[2] or 0)
-        if n == 0:
-            return None
-        logger.info(f"Adaptive | Loaded params from PostgreSQL (n={n})")
-        return params
-    except Exception as exc:
-        logger.debug(f"Adaptive | pg_load skipped: {exc}")
-        return None
+    """Retired persistence hook; factory defaults are the only source."""
+    return None
 
 
 def migrate_adaptive_from_json(params_file: "str | Path") -> None:
     """
-    One-time bootstrap: seed kraken_adaptive_params from adaptive_params.json
-    if the DB row is missing and the file exists.  Called once at bot startup.
+    Retired compatibility hook; no migration is performed.
     """
-    params_file = Path(params_file)
-    if not params_file.exists():
-        return
-    from config import BOT_DB_ID
-    try:
-        import psycopg2
-        db_url = os.environ.get("DATABASE_URL")
-        if not db_url:
-            return
-        conn = psycopg2.connect(db_url)
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT lookback_n FROM kraken_adaptive_params WHERE id = %s", (BOT_DB_ID,))
-                existing = cur.fetchone()
-        finally:
-            conn.close()
-        if existing and existing[0] and existing[0] > 0:
-            logger.debug("Adaptive | migrate_adaptive_from_json: DB row exists — skipping")
-            return
-    except Exception:
-        return
-    # Seed from JSON
-    try:
-        data = json.loads(params_file.read_text())
-        payload = {
-            "params":    data.get("params", {}),
-            "metrics":   data.get("metrics"),
-            "reasons":   data.get("reasons", {}),
-            "lookback_n": (data.get("metrics") or {}).get("n", 0),
-        }
-        _pg_save(payload)
-        logger.info(f"Adaptive | Migrated adaptive params from {params_file} to PostgreSQL")
-    except Exception as exc:
-        logger.warning(f"Adaptive | migrate_adaptive_from_json failed: {exc}")
+    return
 
 # ── Defaults (loaded from bot profile in config.py) ──────────────────────────
 from config import ZSCORE_ENTRY as _CFG_ZE, STOP_LOSS_PCT as _CFG_SL
@@ -357,8 +257,7 @@ def _apply_rules(params: dict, m: dict) -> None:
 def _load_persisted() -> dict | None:
     """
     Load previously adapted params from PostgreSQL only.
-    PRIMARY (and only) source: kraken_adaptive_params (id=1).
-    Returns None if no row exists or DB is unavailable — caller falls back to factory defaults.
+    Returns None so callers use factory defaults.
     """
     return _pg_load()
 

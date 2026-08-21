@@ -2,14 +2,13 @@
 db.py — PostgreSQL access layer for Kraken bots (multi-bot).
 
 Supports multiple bot instances via bot_id / db_id parameters.
-Each bot gets its own row in heartbeat/portfolio/adaptive_params (keyed by integer id)
+Each bot gets its own row in heartbeat/portfolio (keyed by integer id)
 and its own trades in kraken_trades (filtered by bot_id text column).
 
 Tables:
   kraken_heartbeat      — one row per bot (id=1 davy-jones, id=2 blackbeard, id=3 calypso)
   kraken_portfolio      — one row per bot
   kraken_trades         — append-only, filtered by bot_id column
-  kraken_adaptive_params — one row per bot
 """
 
 from __future__ import annotations
@@ -90,15 +89,6 @@ DELETE FROM kraken_trades a
 CREATE UNIQUE INDEX IF NOT EXISTS uq_kraken_trades_bot_order
     ON kraken_trades (bot_id, order_id) WHERE order_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
-    id          INTEGER PRIMARY KEY,
-    bot_id      TEXT NOT NULL DEFAULT 'davy-jones',
-    params      JSONB NOT NULL DEFAULT '{}',
-    metrics     JSONB,
-    reasons     JSONB,
-    adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    lookback_n  INTEGER NOT NULL DEFAULT 0
-);
 """
 
 _MIGRATION_SQL = """
@@ -138,14 +128,6 @@ BEGIN
         EXCEPTION WHEN OTHERS THEN NULL;
         END;
     END IF;
-    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname LIKE '%kraken_adaptive_params%check%' OR
-               (conrelid = 'kraken_adaptive_params'::regclass AND contype = 'c')) THEN
-        BEGIN
-            ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check;
-        EXCEPTION WHEN OTHERS THEN NULL;
-        END;
-    END IF;
-
     -- Add bot_id columns if missing
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_heartbeat' AND column_name='bot_id') THEN
         ALTER TABLE kraken_heartbeat ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
@@ -156,10 +138,6 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='bot_id') THEN
         ALTER TABLE kraken_trades ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_adaptive_params' AND column_name='bot_id') THEN
-        ALTER TABLE kraken_adaptive_params ADD COLUMN bot_id TEXT NOT NULL DEFAULT 'davy-jones';
-    END IF;
-
     -- Stage 1: Add regime_at_entry and entry_zscore to kraken_trades
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='kraken_trades' AND column_name='regime_at_entry') THEN
         ALTER TABLE kraken_trades ADD COLUMN regime_at_entry TEXT DEFAULT 'Unknown';

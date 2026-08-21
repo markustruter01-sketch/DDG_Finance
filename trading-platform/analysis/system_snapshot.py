@@ -332,18 +332,6 @@ def collect_live_data() -> str:
                     ORDER BY failure_count DESC LIMIT 30
                 """, parts, _rules)
 
-                def _params(rows: list, out: list) -> None:
-                    if not rows:
-                        return
-                    out.append("\n=== ADAPTIVE PARAMETERS (CURRENT) ===")
-                    for p in rows:
-                        pd = p[1] if isinstance(p[1], dict) else json.loads(p[1] or "{}")
-                        out.append(f"  id={p[0]} adapted_at={str(p[3])[:19]} params={json.dumps(pd)}")
-
-                _run_query(cur, "kraken_adaptive_params",
-                    "SELECT id, params, metrics, adapted_at FROM kraken_adaptive_params ORDER BY id",
-                    parts, _params)
-
     except Exception as exc:
         parts.append(f"\n[Live data connection error: {exc}]")
         logger.warning(f"SystemSnapshot | live data connection failed: {exc}")

@@ -125,21 +125,9 @@ async def pair_learning():
 
     fleet_symbols = sorted(unique_symbols.values(), key=lambda x: (not x["any_paused"], -(x.get("avg_hurst") or 0)))
 
-    # Adaptive parameters per bot (self-tuning)
-    adaptive_rows = _pg_query("""
-        SELECT bot_id, params, metrics, reasons, adapted_at, lookback_n
-        FROM kraken_adaptive_params ORDER BY bot_id
-    """)
+    # Retired Kraken adaptive-parameter store. Keep the response key so older
+    # dashboard clients continue to render pair-learning data.
     adaptive_params = []
-    for a in adaptive_rows:
-        adaptive_params.append({
-            "bot_id": a["bot_id"],
-            "params": a["params"] or {},
-            "metrics": a["metrics"] or {},
-            "reasons": a["reasons"] or {},
-            "adapted_at": str(a["adapted_at"]) if a["adapted_at"] else None,
-            "lookback_n": int(a["lookback_n"] or 0),
-        })
 
     # Recent trades feed (last 20 across all 3 bots)
     recent_trades = _pg_query("""

@@ -100,7 +100,6 @@ _SOURCE_FILES: list[str] = [
     "kraken-bot/logic.py",
     "kraken-bot/microstructure.py",
     "kraken-bot/vpin_adaptive.py",
-    "kraken-bot/adaptive_params.py",
     "kraken-bot/paper_engine.py",
     "kraken-bot/scalp_strategies.py",
     "kraken-bot/swing_strategies.py",

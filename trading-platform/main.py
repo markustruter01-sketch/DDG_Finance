@@ -191,46 +191,9 @@ async def lifespan(app: FastAPI):
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")
 
-    def _forex_navigator_cycle():
-        try:
-            fx = _get_forex_engine()
-            if fx:
-                fx.run_cycle()
-            else:
-                logger.warning("Forex Navigator | Engine not loaded — skipping cycle")
-        except Exception as _fxe:
-            logger.warning(f"Forex Navigator | Scheduled cycle failed: {_fxe}")
-
-    _FOREX_ENGINE_DIR = os.path.join(_REPO_ROOT, "forex-engine")
-    if _FOREX_ENGINE_DIR not in sys.path:
-        sys.path.append(_FOREX_ENGINE_DIR)
-
-    try:
-        import importlib.util as _ilu
-        _fx_db_spec = _ilu.spec_from_file_location("forex_db", os.path.join(_FOREX_ENGINE_DIR, "forex_nav_db.py"))
-        _fx_db_mod = _ilu.module_from_spec(_fx_db_spec)
-        _fx_db_spec.loader.exec_module(_fx_db_mod)
-        _fx_db_mod.ensure_schema()
-        _fx_db_mod.ensure_vault_table()
-        logger.info("Forex DB | Schema bootstrapped from trading-api lifespan")
-    except Exception as _fxdb_err:
-        logger.warning(f"Forex DB | Bootstrap failed (non-fatal): {_fxdb_err}")
-
-    # FOREX NAVIGATOR DISABLED 2026-05-28 — forex shelved (2 backtests, both NO-GO).
-    # Navigator slot repurposed as Buck Futures (kraken-bot/buck_futures_strategy.py).
-    # Leaving _forex_navigator_cycle and forex-engine code on disk as a parachute.
-    # import pytz as _pytz
-    # _et_tz = _pytz.timezone("America/New_York")
-    # scheduler.add_job(
-    #     func=_forex_navigator_cycle,
-    #     trigger=_ITrigger(hours=4),
-    #     id="forex_navigator",
-    #     name="Forex Navigator 4h Cycle",
-    #     replace_existing=True,
-    #     misfire_grace_time=600,
-    #     next_run_time=__import__("datetime").datetime.now(_et_tz),
-    # )
-    # logger.info("Forex Navigator registered (4-hour interval, first run immediate)")
+    # FOREX NAVIGATOR is retired. Its engine code remains on disk as a
+    # preservation parachute, but trading-api startup must not bootstrap or
+    # resurrect its retired PostgreSQL tables.
 
     try:
         from notifications.alert_manager import start_alert_scheduler
@@ -333,7 +296,6 @@ async def lifespan(app: FastAPI):
         plans = [
             ("equity_snapshots",     "ts",        90),
             ("system_degradations",  "ts",        90),
-            ("oracle_scan_log",      "ts",        90),
             # historical_prices: keep daily candles (1d) ~3y, hourly ~90d via
             # delete-by-timeframe so the backtester still has a long lookback.
             # Hourly bars churn most; daily bars rarely.

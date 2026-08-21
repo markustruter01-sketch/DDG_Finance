@@ -205,8 +205,8 @@ export function useRealCelebrations() {
   }, [journal, livePositions, fxPositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
-    const totalWins = 0;
-    const totalTrades = 0;
+    const totalWins = journal?.summary?.wins ?? 0;
+    const totalTrades = journal?.summary?.total ?? 0;
     const canonicalWinRate = fleetEquity?.fleet_total?.win_rate;
     return {
       totalPnl:    0,

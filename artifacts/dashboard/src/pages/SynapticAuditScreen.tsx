@@ -11,7 +11,7 @@ export default function SynapticAuditScreen() {
 
   useEffect(() => {
     const pulseInterval = setInterval(() => {
-      setActiveFormula(Math.floor(Math.random() * 4));
+      setActiveFormula(Math.floor(Math.random() * 2));
       setTimeout(() => setActiveFormula(null), 1500);
     }, 3500);
     return () => clearInterval(pulseInterval);
@@ -299,7 +299,7 @@ export default function SynapticAuditScreen() {
               {f.equation}
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[9px] text-slate-400 font-mono font-medium">{f.vars}</span>
+               <span className="text-[9px] text-slate-400 font-mono font-medium">Live /performance/risk-metrics</span>
               <span className={`text-[10px] font-bold font-mono ${activeFormula === i ? "text-cyan-200" : "text-cyan-300"}`}>
                 {f.result}
               </span>

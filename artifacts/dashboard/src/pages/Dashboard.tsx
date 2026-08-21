@@ -1524,12 +1524,7 @@ function AllClosedTradesSection() {
         </span>
         <span className="text-emerald-400/70">{wins}W</span>
         <span className="text-red-400/70">{total - wins}L</span>
-        <span className={cn(
-          "font-semibold",
-          total > 0 && wins / total >= 0.5 ? "text-emerald-400" : "text-red-400"
-        )}>
-          {total > 0 ? ((wins / total) * 100).toFixed(1) : "0.0"}% WR
-        </span>
+        <span className="text-muted-foreground/50">closed-trade slice</span>
         <span className="ml-auto text-muted-foreground/40">latest {MAX_TRADES} · page {safePage}/{totalPages}</span>
       </div>
 

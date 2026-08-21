@@ -79,9 +79,6 @@ export function WeeklyReviewPanel() {
   const oracleWinCount = oracleWins?.count ?? 0;
   const oracleLossCount = oracleLosses?.count ?? 0;
   const oracleWeekPnl = (oracleWins?.total_pnl ?? 0) + (oracleLosses?.total_pnl ?? 0);
-  const oracleWinRate = oracleWinCount + oracleLossCount > 0
-    ? (oracleWinCount / (oracleWinCount + oracleLossCount) * 100).toFixed(0)
-    : null;
 
   const systemOk = pausedCount === 0 && staleCount === 0 && criticals === 0;
   const systemWarn = pausedCount > 0 || staleCount > 0;
@@ -235,17 +232,6 @@ export function WeeklyReviewPanel() {
                   <div className="text-lg font-mono font-bold text-red-400">{oracleLossCount}</div>
                   <div className="text-[9px] text-muted-foreground">losses</div>
                 </div>
-                {oracleWinRate && (
-                  <>
-                    <div className="text-muted-foreground/30 text-lg">·</div>
-                    <div className="text-center">
-                      <div className={cn("text-lg font-mono font-bold",
-                        Number(oracleWinRate) >= 50 ? "text-emerald-400" : "text-amber-400"
-                      )}>{oracleWinRate}%</div>
-                      <div className="text-[9px] text-muted-foreground">win rate</div>
-                    </div>
-                  </>
-                )}
               </div>
               <div className={cn("text-right", oracleWeekPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
                 <div className="text-sm font-mono font-bold">

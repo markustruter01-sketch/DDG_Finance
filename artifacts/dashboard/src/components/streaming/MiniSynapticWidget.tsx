@@ -23,7 +23,7 @@ export function MiniSynapticWidget() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      setActiveFormula(Math.floor(Math.random() * 4));
+       setActiveFormula(Math.floor(Math.random() * formulas.length));
       setTimeout(() => setActiveFormula(null), 1400);
     }, 3200);
     return () => clearInterval(id);

@@ -458,8 +458,8 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
         background:  "rgba(255,255,255,0.12)",
         border:      `1px solid ${accent}55`,
         boxShadow:   open ? `0 14px 34px rgba(15,23,42,0.16), 0 0 28px ${accent}18` : "0 8px 20px rgba(15,23,42,0.10)",
-        backdropFilter: "blur(11.2px) saturate(125%)",
-        WebkitBackdropFilter: "blur(11.2px) saturate(125%)",
+        backdropFilter: "blur(7.84px) saturate(125%)",
+        WebkitBackdropFilter: "blur(7.84px) saturate(125%)",
       }}
       onClick={() => setOpen(v => !v)}
     >

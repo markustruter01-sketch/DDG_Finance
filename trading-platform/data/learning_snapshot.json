@@ -1,5 +1,5 @@
 {
-  "exported_at": "2026-08-19T20:10:12.937938+00:00",
+  "exported_at": "2026-08-21T20:10:13.907943+00:00",
   "llm_learnings": [
     {
       "insight_text": "Both BTC/USD and ETH/USD have negative momentum on the 6-month signal, and given the extreme fear in the market, it's best to preserve capital in SGOV.",
@@ -253,49 +253,5 @@
       "confirmed_count": 1,
       "confidence_score": 0.33
     }
-  ],
-  "kraken_adaptive_params": {
-    "params": {
-      "ZSCORE_ENTRY": 1.0,
-      "ZSCORE_EXIT": 0.45,
-      "STOP_LOSS_PCT": 0.02,
-      "TRAIL_PCT": 0.03,
-      "MIN_NET_PROFIT_PCT": 0.008
-    },
-    "defaults": {
-      "ZSCORE_ENTRY": 1.0,
-      "ZSCORE_EXIT": 0.45,
-      "STOP_LOSS_PCT": 0.015,
-      "TRAIL_PCT": 0.03,
-      "MIN_NET_PROFIT_PCT": 0.008
-    },
-    "bounds": {
-      "ZSCORE_ENTRY": [
-        0.7,
-        1.5
-      ],
-      "ZSCORE_EXIT": [
-        0.2,
-        0.6
-      ],
-      "STOP_LOSS_PCT": [
-        0.008,
-        0.04
-      ],
-      "TRAIL_PCT": [
-        0.03,
-        0.1
-      ],
-      "MIN_NET_PROFIT_PCT": [
-        0.006,
-        0.02
-      ]
-    },
-    "reasons": {},
-    "metrics": {
-      "n": 0
-    },
-    "adapted_at": "2026-03-31T08:36:19.183687+00:00",
-    "lookback_n": 0
-  }
+  ]
 }

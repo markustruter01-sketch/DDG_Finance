@@ -43,10 +43,17 @@ async def get_ai_impact_timeline():
                 interventions.append(d)
 
             cur.execute("""
-                SELECT ts, alpaca_equity, kraken_equity, options_equity,
-                       forex_equity, total_equity, regime
-                FROM equity_snapshots
-                ORDER BY ts ASC
+                SELECT snapshot_ts AS ts,
+                       NULL::DOUBLE PRECISION AS alpaca_equity,
+                       NULL::DOUBLE PRECISION AS kraken_equity,
+                       NULL::DOUBLE PRECISION AS options_equity,
+                       NULL::DOUBLE PRECISION AS forex_equity,
+                       SUM(equity_usd)::DOUBLE PRECISION AS total_equity,
+                       NULL::TEXT AS regime
+                FROM fleet_equity_snapshots
+                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                GROUP BY snapshot_ts
+                ORDER BY snapshot_ts ASC
             """)
             eq_cols = [d[0] for d in cur.description]
             equity_curve = []

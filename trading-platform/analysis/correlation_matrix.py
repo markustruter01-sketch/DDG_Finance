@@ -86,22 +86,17 @@ def compute_correlation_matrix() -> dict:
         from db.postgres import get_conn
 
     bots = {
-        "alpaca": "alpaca_equity",
-        "kraken": "kraken_equity",
-        "options": "COALESCE(options_equity, 0)",
-        "forex": "COALESCE(forex_equity, 0)",
+        "oracle": "oracle",
+        "spy_qqq_trend": "spy_qqq_trend",
+        "jerome_macro": "jerome_macro",
     }
 
-    columns = ", ".join(
-        f"{col} AS {name}" for name, col in bots.items()
-    )
-
     query = f"""
-        SELECT
-            DATE(ts) AS day,
-            {columns}
-        FROM equity_snapshots
-        WHERE ts > NOW() - INTERVAL '{ROLLING_WINDOW_DAYS} days'
+        SELECT DATE(snapshot_ts) AS day, bot_id, AVG(equity_usd)::DOUBLE PRECISION
+        FROM fleet_equity_snapshots
+        WHERE snapshot_ts > NOW() - INTERVAL '{ROLLING_WINDOW_DAYS} days'
+          AND bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+        GROUP BY DATE(snapshot_ts), bot_id
         ORDER BY day ASC
     """
 
@@ -123,7 +118,8 @@ def compute_correlation_matrix() -> dict:
 
         for row in rows:
             day = row[0]
-            vals = {name: row[i + 1] for i, name in enumerate(bots)}
+            vals = {name: None for name in bots}
+            vals[row[1]] = row[2]
 
             if prev_day is not None and day != prev_day:
                 for b in bots:

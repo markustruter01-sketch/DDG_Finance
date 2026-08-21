@@ -31,7 +31,6 @@ from loguru import logger
 
 from analysis.analyzer import run_analysis_cycle, get_regime_fallback, emergency_regime_check
 from analysis.schemas import RegimeAnalysisOutput, CryptoAnalysisOutput
-from db.postgres import insert_equity_snapshot, get_kraken_equity
 from analysis.post_mortem import run_post_mortem
 from execution.executor import execute_allocations
 from execution.kill_switch import (
@@ -1459,35 +1458,6 @@ async def _run_pipeline_inner(
     except Exception as _corr_exc:
         logger.warning(f"Pipeline | Correlation matrix failed (non-fatal): {_corr_exc}")
         _eq_crypto_corr = 0.0
-
-    # ── Equity snapshot ─────────────────────────────────────────────────────
-    # Write a time-series equity point to PostgreSQL for the equity curve chart.
-    # Kraken equity is read from the authoritative kraken_heartbeat DB table.
-    try:
-        kraken_equity = get_kraken_equity()
-        alpaca_equity = float(exec_result.get("equity", 0.0) or 0.0)
-        regime = _state.get("last_regime")
-        options_eq = 0.0  # Options engine retired; Apex Predator now runs as Kraken crypto momentum
-        forex_eq = 0.0
-        try:
-            from routes._deps import _get_forex_engine as _gfx_snap
-            _fx_snap = _gfx_snap()
-            if _fx_snap:
-                _fx_val = float(_fx_snap.get_state().get("paper_equity", 0))
-                if _fx_val > 0:
-                    forex_eq = _fx_val
-        except Exception:
-            pass
-        insert_equity_snapshot(
-            alpaca_equity=alpaca_equity,
-            kraken_equity=kraken_equity,
-            regime=regime,
-            source="pipeline",
-            options_equity=options_eq,
-            forex_equity=forex_eq,
-        )
-    except Exception as _snap_exc:
-        logger.warning(f"Pipeline | Equity snapshot write failed (non-fatal): {_snap_exc}")
 
     # ── Oracle: dual-write to bot_portfolio (Stage 2) ─────────────────────────
     try:

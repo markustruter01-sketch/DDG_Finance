@@ -36,23 +36,28 @@ PLATFORM OVERVIEW
         with get_conn() as conn:
             with conn.cursor() as cur:
 
-                # Fleet equity
+                # Canonical fleet equity
                 cur.execute("""
-                    SELECT alpaca_equity, kraken_equity, forex_equity,
-                           total_equity, ts
-                    FROM equity_snapshots ORDER BY ts DESC LIMIT 1
+                    SELECT
+                        SUM(equity_usd)::DOUBLE PRECISION AS total_equity,
+                        MAX(snapshot_ts) AS ts
+                    FROM fleet_equity_snapshots
+                    WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                      AND snapshot_ts = (
+                          SELECT MAX(snapshot_ts)
+                          FROM fleet_equity_snapshots
+                          WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                      )
                 """)
                 eq = cur.fetchone()
                 if eq:
                     def _fmt(v): return f"${v:>10,.2f}" if v is not None else "       N/A"
-                    total = eq[3] or 0
+                    total = eq[0] or 0
                     from core.fleet_capital import fleet_starting_capital as _fsc_cc
                     _sc_cc = _fsc_cc()
-                    sections.append(f"""FLEET EQUITY (as of {str(eq[4])[:19]} UTC)
-- Oracle (Alpaca):     {_fmt(eq[0])}
-- Kraken fleet:        {_fmt(eq[1])}
-- Navigator (Forex):   {_fmt(eq[2])}
-- TOTAL:               {_fmt(eq[3])} (started ${_sc_cc:,.0f})
+                    sections.append(f"""FLEET EQUITY (as of {str(eq[1])[:19]} UTC)
+- Active bot fleet:    {_fmt(total)}
+- TOTAL:               {_fmt(total)} (started ${_sc_cc:,.0f})
 - P&L:                 ${total-_sc_cc:>+10,.2f} ({(total-_sc_cc)/_sc_cc*100:+.2f}%)
 """)
 

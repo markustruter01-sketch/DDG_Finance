@@ -192,8 +192,8 @@ def _check_recent_profit_factor(bot_id: str) -> dict:
 def _check_equity_drawdown(bot_id: str) -> dict:
     """
     Drawdown = (peak_equity - current_equity) / peak_equity.
-    Uses kraken_portfolio for current equity and equity_snapshots for peak.
-    Falls back to kraken_portfolio only if equity_snapshots is empty.
+    Uses kraken_portfolio for current equity and canonical fleet snapshots for peak.
+    Falls back to kraken_portfolio starting balance if no fleet history exists.
     """
     current_eq = _scalar(
         "SELECT cash_usd + COALESCE((SELECT SUM((value->>'size_usd')::float) FROM jsonb_each(positions)), 0) FROM kraken_portfolio WHERE bot_id = %s",
@@ -209,9 +209,8 @@ def _check_equity_drawdown(bot_id: str) -> dict:
     peak_eq = _scalar(
         """
         SELECT MAX(equity_usd)
-        FROM   equity_snapshots
-        WHERE  source = 'kraken'
-          AND  bot_id = %s
+        FROM   fleet_equity_snapshots
+        WHERE  bot_id = %s
         """,
         (bot_id,),
         default=None,

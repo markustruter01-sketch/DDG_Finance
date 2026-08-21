@@ -984,22 +984,30 @@ async def fleet_weekly_review():
             row = cur.fetchone()
             result["math_audit_criticals"] = int(row[0]) if row else 0
 
-            # 6 — Oracle + Navigator equity from equity_snapshots
+            # 6 — Current canonical fleet equity
             cur.execute("""
-                SELECT alpaca_equity, forex_equity
-                FROM equity_snapshots
-                ORDER BY ts DESC LIMIT 1
+                SELECT
+                    COALESCE(SUM(equity_usd), 0),
+                    COALESCE(SUM(equity_usd) FILTER (WHERE bot_id = 'oracle'), 0)
+                FROM fleet_equity_snapshots
+                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                  AND snapshot_ts = (
+                      SELECT MAX(snapshot_ts)
+                      FROM fleet_equity_snapshots
+                      WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                  )
             """)
             eq_row = cur.fetchone()
-            oracle_eq = float(eq_row[0]) if eq_row and eq_row[0] else 0.0
-            nav_eq    = float(eq_row[1]) if eq_row and eq_row[1] else 0.0
+            total_eq  = float(eq_row[0]) if eq_row and eq_row[0] else 0.0
+            oracle_eq = float(eq_row[1]) if eq_row and eq_row[1] else 0.0
+            nav_eq    = 0.0
 
     # Fleet equity summary (oracle_eq / nav_eq captured inside cursor block above)
     kraken_eq = sum(
         b["equity_usd"] for b in result["fleet_heartbeat"]
         if b["bot_id"] not in ("navigator",)
     )
-    total_eq = oracle_eq + nav_eq + kraken_eq
+    kraken_eq = max(0.0, total_eq - oracle_eq)
     from core.fleet_capital import fleet_starting_capital
     _sc = fleet_starting_capital()
     result["fleet_summary"] = {

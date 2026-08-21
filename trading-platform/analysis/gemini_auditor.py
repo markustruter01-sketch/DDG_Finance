@@ -352,11 +352,17 @@ def _fetch_audit_data(since: datetime) -> dict[str, Any]:
                 # ── Equity curve ────────────────────────────────────────────
                 cur.execute(
                     """
-                    SELECT ts, alpaca_equity, kraken_equity, total_equity,
-                           regime, source
-                    FROM equity_snapshots
-                    WHERE ts >= %s
-                    ORDER BY ts ASC
+                    SELECT snapshot_ts AS ts,
+                           NULL::DOUBLE PRECISION AS alpaca_equity,
+                           NULL::DOUBLE PRECISION AS kraken_equity,
+                           SUM(equity_usd)::DOUBLE PRECISION AS total_equity,
+                           NULL::TEXT AS regime,
+                           'fleet_equity_snapshots'::TEXT AS source
+                    FROM fleet_equity_snapshots
+                    WHERE snapshot_ts >= %s
+                      AND bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                    GROUP BY snapshot_ts
+                    ORDER BY snapshot_ts ASC
                     LIMIT 500
                     """,
                     (since_str,),

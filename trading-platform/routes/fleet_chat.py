@@ -296,11 +296,20 @@ async def _get_fleet_context() -> str:
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT total_equity, alpaca_equity, kraken_equity,
-                              COALESCE(options_equity, 0) AS options_equity,
-                              COALESCE(forex_equity, 0) AS forex_equity, ts,
-                              COALESCE(source, 'pipeline') AS source
-                       FROM equity_snapshots ORDER BY ts DESC LIMIT 1"""
+                    """SELECT SUM(equity_usd)::DOUBLE PRECISION AS total_equity,
+                              NULL::DOUBLE PRECISION AS alpaca_equity,
+                              NULL::DOUBLE PRECISION AS kraken_equity,
+                              NULL::DOUBLE PRECISION AS options_equity,
+                              NULL::DOUBLE PRECISION AS forex_equity,
+                              MAX(snapshot_ts) AS ts,
+                              'fleet_equity_snapshots'::TEXT AS source
+                       FROM fleet_equity_snapshots
+                       WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                         AND snapshot_ts = (
+                             SELECT MAX(snapshot_ts)
+                             FROM fleet_equity_snapshots
+                             WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                         )"""
                 )
                 row = cur.fetchone()
                 if row:

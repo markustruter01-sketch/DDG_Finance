@@ -421,7 +421,17 @@ def _record_intervention(result: FleetCommanderResponse, generated_at: datetime)
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT total_equity FROM equity_snapshots WHERE ts <= %s ORDER BY ts DESC LIMIT 1",
+                """
+                SELECT COALESCE(SUM(equity_usd), 0)
+                FROM fleet_equity_snapshots
+                WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                  AND snapshot_ts = (
+                      SELECT MAX(snapshot_ts)
+                      FROM fleet_equity_snapshots
+                      WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                        AND snapshot_ts <= %s
+                  )
+                """,
                 (generated_at,)
             )
             eq_row = cur.fetchone()

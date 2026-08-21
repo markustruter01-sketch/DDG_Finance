@@ -229,19 +229,7 @@ CREATE INDEX IF NOT EXISTS idx_etf_pos_status
     ON alpaca_etf_positions (bot_id, status, opened_at);
 
 -- Equity snapshots (time-series portfolio value for equity curve chart)
-CREATE TABLE IF NOT EXISTS equity_snapshots (
-    id             BIGSERIAL PRIMARY KEY,
-    ts             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    alpaca_equity  DOUBLE PRECISION NOT NULL,
-    kraken_equity  DOUBLE PRECISION NOT NULL DEFAULT 0,
-    total_equity   DOUBLE PRECISION NOT NULL,
-    regime         TEXT,
-    source         TEXT NOT NULL DEFAULT 'pipeline'
-);
-CREATE INDEX IF NOT EXISTS idx_equity_snapshots_ts ON equity_snapshots (ts DESC);
-
 -- Per-bot fleet equity snapshots used for mark-to-market 24h P&L.
--- Kept separate from the legacy aggregate equity_snapshots table above.
 CREATE TABLE IF NOT EXISTS fleet_equity_snapshots (
     id             BIGSERIAL PRIMARY KEY,
     snapshot_ts    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -542,8 +530,6 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS time_in_trade_hours  DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS exit_reason          TEXT;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISION;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
-ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS options_equity        DOUBLE PRECISION NOT NULL DEFAULT 0;
-ALTER TABLE equity_snapshots ADD COLUMN IF NOT EXISTS forex_equity          DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS is_recon_tracking    BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS recon_event_id       BIGINT;
 """
@@ -1372,45 +1358,6 @@ def get_kraken_equity() -> float:
 
 # ── Equity snapshots ───────────────────────────────────────────────────────
 
-def insert_equity_snapshot(
-    alpaca_equity: float,
-    kraken_equity: float = 0.0,
-    regime: str | None = None,
-    source: str = "pipeline",
-    options_equity: float = 0.0,
-    forex_equity: float = 0.0,
-) -> bool:
-    """
-    Insert a portfolio equity snapshot for the equity curve chart.
-    Returns True on success, False if PostgreSQL is unavailable or write fails.
-    """
-    if not is_pg_available():
-        return False
-    total = alpaca_equity + kraken_equity + options_equity + forex_equity
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO equity_snapshots
-                        (alpaca_equity, kraken_equity, options_equity, forex_equity,
-                         total_equity, regime, source)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (alpaca_equity, kraken_equity, options_equity, forex_equity,
-                     total, regime, source),
-                )
-        logger.debug(
-            f"DB | Equity snapshot: alpaca={alpaca_equity:.2f} kraken={kraken_equity:.2f} "
-            f"options={options_equity:.2f} forex={forex_equity:.2f} "
-            f"total={total:.2f} regime={regime} source={source}"
-        )
-        return True
-    except Exception as exc:
-        logger.error(f"DB | insert_equity_snapshot failed: {exc}")
-        return False
-
-
 def insert_fleet_equity_snapshots(rows: list[tuple[str, float]]) -> int:
     """Write one current equity snapshot for each active fleet bot."""
     if not rows or not is_pg_available():
@@ -1432,10 +1379,7 @@ def insert_fleet_equity_snapshots(rows: list[tuple[str, float]]) -> int:
 
 
 def get_equity_curve(limit: int = 500) -> list[dict]:
-    """
-    Return the last `limit` equity snapshots sorted ascending by timestamp
-    (oldest first, so charts render left-to-right in chronological order).
-    """
+    """Return canonical active-bot fleet equity snapshots oldest first."""
     if not is_pg_available():
         return []
     try:
@@ -1443,20 +1387,21 @@ def get_equity_curve(limit: int = 500) -> list[dict]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT id, ts AT TIME ZONE 'UTC' AS ts,
-                           alpaca_equity, kraken_equity,
-                           COALESCE(options_equity, 0) AS options_equity,
-                           COALESCE(forex_equity, 0) AS forex_equity,
-                           total_equity, regime, source
-                    FROM equity_snapshots
-                    ORDER BY ts DESC
+                    SELECT MIN(id) AS id,
+                           snapshot_ts AT TIME ZONE 'UTC' AS ts,
+                           SUM(equity_usd)::DOUBLE PRECISION AS total_equity,
+                           NULL::TEXT AS regime,
+                           'fleet_equity_snapshots'::TEXT AS source
+                    FROM fleet_equity_snapshots
+                    WHERE bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
+                    GROUP BY snapshot_ts
+                    ORDER BY snapshot_ts DESC
                     LIMIT %s
                     """,
                     (limit,),
                 )
                 rows = cur.fetchall()
-        cols = ["id", "ts", "alpaca_equity", "kraken_equity", "options_equity", "forex_equity",
-                "total_equity", "regime", "source"]
+        cols = ["id", "ts", "total_equity", "regime", "source"]
         result = []
         for row in reversed(rows):
             d = dict(zip(cols, row))

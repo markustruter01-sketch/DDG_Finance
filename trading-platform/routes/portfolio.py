@@ -1008,11 +1008,12 @@ async def equity_curve(limit: int = 90) -> dict:
     from db.postgres import get_equity_curve as _get_eq_curve
     rows = _get_eq_curve(limit=limit)
     if rows and len(rows) >= 2:
-        return {"curve": rows, "count": len(rows), "source": "equity_snapshots"}
-    synthetic = _build_synthetic_equity_curve()
-    if synthetic:
-        return {"curve": synthetic[-limit:], "count": len(synthetic[-limit:]), "source": "synthetic_from_trades"}
-    return {"curve": [], "count": 0, "source": "no_data"}
+        return {"curve": rows, "count": len(rows), "source": "fleet_equity_snapshots"}
+    return {
+        "curve": [],
+        "count": len(rows),
+        "source": "insufficient_history",
+    }
 
 
 

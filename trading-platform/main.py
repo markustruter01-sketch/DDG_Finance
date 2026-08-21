@@ -140,54 +140,6 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Hourly equity snapshot job registered (active bots, every 1 hour)")
 
-    async def _record_equity_snapshot_now():
-        from db.postgres import insert_equity_snapshot
-        try:
-            acct = get_account()
-            alpaca_eq = float(acct.get("equity", 0))
-        except Exception:
-            alpaca_eq = 0.0
-        # Legacy Kraken/Forex pools were retired.  Fleet equity is sourced from
-        # the canonical bot portfolio/fleet-equity path.
-        kraken_eq = 0.0
-        options_eq = 0.0
-        forex_eq = 0.0
-        try:
-            fx = _get_forex_engine()
-            if fx:
-                fx_state = fx.get_state()
-                forex_eq = float(fx_state.get("paper_equity", 0)) or 0.0
-        except Exception:
-            forex_eq = 0.0
-        insert_equity_snapshot(
-            alpaca_eq, kraken_eq, "LIVE", "hourly_heartbeat",
-            options_equity=options_eq, forex_equity=forex_eq,
-        )
-
-    def _equity_heartbeat_sync():
-        import asyncio as _aio
-        try:
-            _aio.run(_record_equity_snapshot_now())
-            logger.info("Equity Heartbeat | snapshot written")
-        except Exception as _e:
-            logger.warning(f"Equity Heartbeat | Failed: {_e}")
-
-    try:
-        await _record_equity_snapshot_now()
-        logger.info("Equity Curve | Startup snapshot written")
-    except Exception as _ese:
-        logger.warning(f"Equity Curve | Startup snapshot failed (non-fatal): {_ese}")
-
-    scheduler.add_job(
-        func=_equity_heartbeat_sync,
-        trigger=_ITrigger(minutes=15),
-        id="equity_curve_heartbeat",
-        name="Equity Curve 15-min Heartbeat",
-        replace_existing=True,
-        misfire_grace_time=300,
-    )
-    logger.info("Equity curve heartbeat registered (15-min interval)")
-
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     logger.info("Apex Predator options engine removed — Bot #5 now runs as crypto momentum scalper via Kraken pool")
 
@@ -294,7 +246,6 @@ async def lifespan(app: FastAPI):
             return
         # (table, ts_column, retention_days) — kept conservative
         plans = [
-            ("equity_snapshots",     "ts",        90),
             ("system_degradations",  "ts",        90),
             # historical_prices: keep daily candles (1d) ~3y, hourly ~90d via
             # delete-by-timeframe so the backtester still has a long lookback.

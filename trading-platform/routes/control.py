@@ -332,47 +332,6 @@ async def manual_postmortem() -> dict:
         logger.error(f"Kraken journal sync failed: {_ksync_exc}")
         postmortem_result["kraken_journal_sync"] = {"error": str(_ksync_exc), "imported": 0}
 
-    try:
-        from db.postgres import insert_equity_snapshot as _ins_snap, is_pg_available as _pg_ok
-        if _pg_ok():
-            _k_equity = 0.0
-            try:
-                import psycopg2 as _pg2pm
-                _dburlpm = os.environ.get("DATABASE_URL")
-                if _dburlpm:
-                    _pmconn = _pg2pm.connect(_dburlpm)
-                    try:
-                        with _pmconn.cursor() as _pmc:
-                            _pmc.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM kraken_heartbeat")
-                            _pmrow = _pmc.fetchone()
-                            if _pmrow:
-                                _k_equity = float(_pmrow[0] or 0)
-                    finally:
-                        _pmconn.close()
-            except Exception:
-                pass
-            try:
-                from execution.broker import get_account as _ga2
-                _a_equity = float(_ga2().get("equity", 0) or 0)
-            except Exception:
-                _a_equity = 0.0
-            _o_equity = 0.0  # Options engine retired; Apex Predator now runs as Kraken crypto momentum
-            _f_equity = 0.0
-            try:
-                from routes._deps import _get_forex_engine as _gfx_pm
-                _fx_pm = _gfx_pm()
-                if _fx_pm:
-                    _f_equity = float(_fx_pm.get_state().get("paper_equity", 0))
-            except Exception:
-                pass
-            _ins_snap(
-                alpaca_equity=_a_equity, kraken_equity=_k_equity, source="postmortem",
-                options_equity=_o_equity, forex_equity=_f_equity,
-            )
-            logger.info(f"Postmortem equity snapshot: alpaca={_a_equity:.2f} kraken={_k_equity:.2f} options={_o_equity:.2f} forex={_f_equity:.2f}")
-    except Exception as _snap2_exc:
-        logger.warning(f"Postmortem equity snapshot failed (non-fatal): {_snap2_exc}")
-
     return postmortem_result
 
 

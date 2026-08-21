@@ -147,6 +147,94 @@ async def system_health_architecture() -> dict:
     now = _time.time()
     nodes: dict[str, dict] = {}
 
+    # Phase 2 contract: this endpoint is a live architecture model, not a
+    # historical inventory. Keep retired broker/strategy checks out of the
+    # model entirely so they cannot create false degraded states.
+    active_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
+    try:
+        from core.bot_state import get_all_portfolios
+        portfolios = {
+            p.get("bot_id"): p
+            for p in get_all_portfolios()
+            if p.get("bot_id") in active_ids
+        }
+    except Exception:
+        portfolios = {}
+
+    for bot_id, label in (
+        ("oracle", "Oracle / US Core"),
+        ("spy_qqq_trend", "SPY/QQQ Trend"),
+        ("jerome_macro", "Jerome Macro"),
+    ):
+        portfolio = portfolios.get(bot_id)
+        paused = bool(portfolio and portfolio.get("paused"))
+        stale = bool(portfolio and portfolio.get("stale"))
+        nodes[f"bot_{bot_id}"] = {
+            "label": label,
+            "level": "yellow" if paused or stale or not portfolio else "green",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": (
+                "Active Alpaca ETF bot"
+                + (" · paused" if paused else "")
+                + (" · stale heartbeat" if stale else "")
+            ),
+        }
+
+    try:
+        jobs = get_job_status()
+        last = get_last_run()
+        scheduler_level = "red" if last.get("last_run_status") in ("error", "execution_failed") else "green"
+        scheduler_detail = f"{len(jobs)}/{EXPECTED_JOB_COUNT} jobs · last: {last.get('last_run_status', 'never')}"
+    except Exception as exc:
+        scheduler_level, scheduler_detail = "red", str(exc)[:80]
+    nodes["scheduler"] = {"label": "Scheduler", "level": scheduler_level, "latency_ms": None, "data_age_s": None, "detail": scheduler_detail}
+
+    try:
+        t0 = _time.time()
+        account = get_account()
+        latency = round((_time.time() - t0) * 1000)
+        nodes["alpaca_api"] = {
+            "label": "Alpaca API",
+            "level": "red" if latency > 1000 else "green",
+            "latency_ms": latency,
+            "data_age_s": 0,
+            "detail": f"Equity ${float(account['equity']):,.2f}",
+        }
+    except Exception as exc:
+        nodes["alpaca_api"] = {"label": "Alpaca API", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        nodes["database"] = {"label": "Database", "level": "green", "latency_ms": None, "data_age_s": 0, "detail": "PostgreSQL reachable"}
+    except Exception as exc:
+        nodes["database"] = {"label": "Database", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    try:
+        from notifications.discord import is_configured as discord_configured
+        discord_ok = bool(discord_configured())
+        nodes["discord_alerts"] = {
+            "label": "Discord Alerts",
+            "level": "green" if discord_ok else "yellow",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": "Webhook configured" if discord_ok else "Webhook not configured",
+        }
+    except Exception as exc:
+        nodes["discord_alerts"] = {"label": "Discord Alerts", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+
+    for key, label, detail in (
+        ("llm_gemini", "Gemini", "Analysis and critique"),
+        ("llm_claude", "Claude", "Reports and post-mortems"),
+        ("llm_groq", "Groq", "Regime and commentary"),
+    ):
+        nodes[key] = {"label": label, "level": "green", "latency_ms": None, "data_age_s": None, "detail": detail}
+
+    return {"timestamp": now, "nodes": nodes}
+
     try:
         jobs = get_job_status()
         last = get_last_run()

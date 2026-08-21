@@ -116,8 +116,10 @@ export default function StreamingPerformanceScreen() {
   const marketFG = sg?.market_fear_greed?.value;
   const regime   = st?.groq?.regime ?? "—";
 
-  /* Bot matrix: drive from registry (correct 8 bots), not stale fleet-summary */
-  const registryBots = registry?.bots ?? [];
+  /* Bot matrix: only the canonical active Alpaca ETF fleet. */
+  const registryBots = (registry?.bots ?? []).filter((bot) =>
+    ["oracle", "spy_qqq_trend", "jerome_macro"].includes(bot.id),
+  );
 
   /* Fleet equity lookup by bot ID */
   const fleetEqByBotId: Record<string, { equity: number; pnl: number; positions: number } | undefined> = fleetEq ? {

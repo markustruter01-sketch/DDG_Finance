@@ -680,18 +680,26 @@ async def _snapshot_fleet_equity() -> None:
 
         with get_conn() as conn:
             with conn.cursor() as cur:
-                # Sum all non-stale bots (updated within 25 min)
+                # Match /fleet/equity exactly: retired portfolio rows must
+                # never contribute a phantom allocation to the sparkline.
+                active_bot_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
                 cur.execute("""
                     SELECT COALESCE(SUM(equity_usd), 0)
                     FROM bot_portfolio
-                    WHERE last_updated > NOW() - INTERVAL '25 minutes'
-                """)
+                    WHERE bot_id IN (%s, %s, %s)
+                      AND last_updated > NOW() - INTERVAL '25 minutes'
+                """, active_bot_ids)
                 row = cur.fetchone()
                 total = float(row[0]) if row else 0.0
 
-                # Fall back to all bots if no recent heartbeat (weekend, market closed)
+                # Fall back to the same active set if no recent heartbeat
+                # (weekend, market closed).
                 if total == 0:
-                    cur.execute("SELECT COALESCE(SUM(equity_usd), 0) FROM bot_portfolio")
+                    cur.execute("""
+                        SELECT COALESCE(SUM(equity_usd), 0)
+                        FROM bot_portfolio
+                        WHERE bot_id IN (%s, %s, %s)
+                    """, active_bot_ids)
                     row = cur.fetchone()
                     total = float(row[0]) if row else 0.0
 

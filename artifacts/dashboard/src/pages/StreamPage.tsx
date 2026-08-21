@@ -5,12 +5,14 @@ import StreamingBotsScreen from "@/pages/StreamingBotsScreen";
 import StreamingHealthScreen from "@/pages/StreamingHealthScreen";
 import StreamingPerformanceScreen from "@/pages/StreamingPerformanceScreen";
 import StreamingArchitectureScreen from "@/pages/StreamingArchitectureScreen";
+import StreamingLearningScreen from "@/pages/StreamingLearningScreen";
+import StreamingOrbScreen from "@/pages/StreamingOrbScreen";
 import { ClippyAssistant } from "@/components/streaming/ClippyAssistant";
 import { StreamHeaderBar } from "@/components/streaming/StreamHeaderBar";
 
-type SubPage = "a" | "b" | "c" | "d" | "g" | "h";
+type SubPage = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 
-const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "g", "h"];
+const SUB_PAGES: SubPage[] = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 function nextPage(current: SubPage): SubPage {
   const idx = SUB_PAGES.indexOf(current);
@@ -42,8 +44,7 @@ function parseUrlParams(): { autoCycle: boolean | null; intervalSeconds: number 
     }
 
     let subPage: SubPage | null = null;
-    if (subParam === "b" || subParam === "c" || subParam === "d" || subParam === "g" || subParam === "h") subPage = subParam;
-    else if (subParam === "a") subPage = "a";
+    if (["a", "b", "c", "d", "e", "f", "g", "h"].includes(subParam ?? "")) subPage = subParam as SubPage;
 
     return { autoCycle, intervalSeconds, subPage };
   } catch {
@@ -210,6 +211,24 @@ export default function StreamPage() {
       progressGlow: "rgba(251,146,60,0.65)",
     },
     {
+      id: "e",
+      label: "Learning",
+      activeGrad: "linear-gradient(135deg, rgba(168,85,247,0.28), rgba(236,72,153,0.15))",
+      activeColor: "#d8b4fe",
+      activeBorder: "rgba(168,85,247,0.4)",
+      progressGrad: "linear-gradient(90deg, #a855f7, #ec4899)",
+      progressGlow: "rgba(168,85,247,0.6)",
+    },
+    {
+      id: "f",
+      label: "ORB",
+      activeGrad: "linear-gradient(135deg, rgba(14,165,233,0.25), rgba(16,185,129,0.15))",
+      activeColor: "#67e8f9",
+      activeBorder: "rgba(14,165,233,0.4)",
+      progressGrad: "linear-gradient(90deg, #0ea5e9, #10b981)",
+      progressGlow: "rgba(14,165,233,0.6)",
+    },
+    {
       id: "h",
       label: "Architecture",
       activeGrad: "linear-gradient(135deg, rgba(99,102,241,0.28), rgba(34,211,238,0.15))",
@@ -329,6 +348,12 @@ export default function StreamPage() {
         </div>
         <div style={{ display: active === "d" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingHealthScreen />
+        </div>
+        <div style={{ display: active === "e" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingLearningScreen />
+        </div>
+        <div style={{ display: active === "f" ? "block" : "none", position: "absolute", inset: 0 }}>
+          <StreamingOrbScreen />
         </div>
         <div style={{ display: active === "g" ? "block" : "none", position: "absolute", inset: 0 }}>
           <StreamingPerformanceScreen />

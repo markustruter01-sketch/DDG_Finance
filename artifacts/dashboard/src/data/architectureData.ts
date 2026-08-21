@@ -13,7 +13,7 @@ const db = (id: string, label: string, row: number): ArchNode => ({ id, label, s
 
 export const NODES: ArchNode[] = [
   bot("bot_oracle", "Oracle / US Core", 0, "#a78bfa", "Momentum and risk-managed ETF execution for the US Core allocation."),
-  bot("bot_spy_qqq", "SPY/QQQ Trend", 1, "#22d3ee", "Trend-following ETF execution for the Asia-Pacific allocation."),
+  bot("bot_spy_qqq", "SPY/QQQ Trend", 1, "#22d3ee", "Trend-following execution for the SPY and QQQ ETF allocation."),
   bot("bot_jerome", "Jerome Macro", 2, "#fb923c", "Macro ETF execution for the Emerging Markets allocation."),
   api("api_runner", "Bot Runner", 0, "Runs the three active Alpaca ETF strategy loops and writes portfolio heartbeats."),
   api("api_trading", "Trading API", 1, "FastAPI service for fleet control, positions, performance, health, audit, and analysis."),

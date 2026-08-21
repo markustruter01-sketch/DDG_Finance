@@ -785,8 +785,9 @@ export default function HomePage() {
   const regimeColor = regime === "CRISIS" ? "#ef4444" : regime === "BEAR" ? "#f97316" : "#22c55e";
 
   return (
-    <div className="min-h-screen font-mono text-white" style={{ background: "#030712", position: "relative" }}>
+    <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#030712", position: "relative" }}>
       <StyleTag />
+      <div className="mobile-home-background" aria-hidden="true" />
       <Starfield warp={warp} />
 
       {/* ── Header ── */}

@@ -228,6 +228,27 @@
   }
 }
 
+/* The desert artwork is intentionally scoped to phone-sized home screens. */
+.mobile-home-background {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .mobile-home-background {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(3, 7, 18, 0.48), rgba(3, 7, 18, 0.72)),
+      url("/mobile-home-background.jpeg");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
+
 @layer utilities {
   .glass-panel {
     @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-xl;

@@ -5,7 +5,7 @@
  */
 import { useMemo } from "react";
 import {
-  AreaChart, Area, ResponsiveContainer, Tooltip, YAxis,
+  AreaChart, Area, ResponsiveContainer, Tooltip, YAxis, CartesianGrid,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
@@ -38,9 +38,16 @@ function SparkTooltip({ active, payload }: any) {
   const d = payload[0]?.payload as HistoryPoint;
   return (
     <div style={{
-      background: "rgba(6,10,22,0.95)", border: "1px solid rgba(34,211,238,0.18)",
-      borderRadius: 6, padding: "4px 8px", fontSize: 10, fontFamily: "monospace",
-      color: "#94a3b8",
+      background: "rgba(15,23,42,0.78)",
+      border: "1px solid rgba(34,211,238,0.30)",
+      borderRadius: 10,
+      padding: "7px 10px",
+      fontSize: 10,
+      fontFamily: "monospace",
+      color: "rgba(255,255,255,0.70)",
+      backdropFilter: "blur(18px)",
+      WebkitBackdropFilter: "blur(18px)",
+      boxShadow: "0 12px 30px rgba(15,23,42,0.20)",
     }}>
       <div style={{ color: "#22d3ee", fontWeight: 700 }}>{fmtK(d.total_equity)}</div>
       <div>{d.date}</div>
@@ -75,45 +82,49 @@ export default function FleetSparkline() {
 
   return (
     <div style={{
-      marginTop: 8,
-      borderRadius: 12,
-      background: "rgba(6,10,22,0.6)",
-      border: "1px solid rgba(34,211,238,0.08)",
-      padding: "12px 14px 8px",
+      marginTop: 10,
+      borderRadius: 18,
+      background: "linear-gradient(135deg, rgba(255,255,255,0.16), rgba(148,163,184,0.08))",
+      border: "1px solid rgba(255,255,255,0.24)",
+      padding: "14px 14px 11px",
+      backdropFilter: "blur(18px) saturate(125%)",
+      WebkitBackdropFilter: "blur(18px) saturate(125%)",
+      boxShadow: "0 16px 34px rgba(15,23,42,0.14), inset 0 1px 0 rgba(255,255,255,0.20)",
+      overflow: "hidden",
     }}>
       {/* Header row */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 8, letterSpacing: "0.2em", color: "#334155", fontFamily: "monospace", textTransform: "uppercase" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 8, letterSpacing: "0.2em", color: "rgba(15,23,42,0.68)", fontFamily: "monospace", textTransform: "uppercase", fontWeight: 700 }}>
           FLEET EQUITY · SINCE INCEPTION
         </span>
         {latest != null && (
-          <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 700, color: "#22d3ee" }}>
+          <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 800, color: "#0891b2", textShadow: "0 1px 10px rgba(34,211,238,0.24)" }}>
             {fmtK(latest)}
           </span>
         )}
         {pctChange != null && (
           <span style={{
             fontSize: 9, fontFamily: "monospace",
-            color: positive ? "#4ade80" : "#f87171",
+            color: positive ? "#15803d" : "#b91c1c",
           }}>
             {positive ? "+" : ""}{pctChange.toFixed(2)}% all-time
           </span>
         )}
         {history.length === 0 && !isLoading && (
-          <span style={{ fontSize: 9, fontFamily: "monospace", color: "#334155" }}>
-            no history yet — first snapshot tonight
+          <span style={{ fontSize: 9, fontFamily: "monospace", color: "rgba(15,23,42,0.60)" }}>
+            no history yet · first snapshot pending
           </span>
         )}
       </div>
 
       {/* Sparkline */}
       {history.length > 0 ? (
-        <div style={{ height: 52, marginLeft: -4 }}>
+        <div style={{ height: 112, margin: "0 -4px" }}>
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={history} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}>
+            <AreaChart data={history} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor={lineColor} stopOpacity={0.18} />
+                  <stop offset="0%"   stopColor={lineColor} stopOpacity={0.28} />
                   <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
                 </linearGradient>
                 <filter id="sparkGlow">
@@ -125,6 +136,7 @@ export default function FleetSparkline() {
                 </filter>
               </defs>
               <YAxis domain={[minVal - pad, maxVal + pad]} hide />
+              <CartesianGrid vertical={false} stroke="rgba(15,23,42,0.10)" strokeDasharray="3 5" />
               <Tooltip content={<SparkTooltip />} />
               <Area
                 type="monotone"
@@ -140,10 +152,20 @@ export default function FleetSparkline() {
           </ResponsiveContainer>
         </div>
       ) : (
-        <div style={{ height: 52, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{
+          height: 112,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 12,
+          background: "linear-gradient(135deg, rgba(15,23,42,0.10), rgba(255,255,255,0.05))",
+          border: "1px solid rgba(15,23,42,0.10)",
+        }}>
           <div style={{
-            width: "80%", height: 1,
-            background: "linear-gradient(to right, transparent, rgba(34,211,238,0.12), transparent)",
+            width: "76%",
+            height: 1,
+            background: "linear-gradient(to right, transparent, rgba(8,145,178,0.52), transparent)",
+            boxShadow: "0 0 16px rgba(34,211,238,0.35)",
           }} />
         </div>
       )}

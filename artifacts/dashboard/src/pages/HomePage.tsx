@@ -16,7 +16,6 @@ import { useExportReport } from "@/hooks/use-report";
 import { useToast } from "@/hooks/use-toast";
 import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
-import WorldMapWidget from "@/components/WorldMapWidget";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -902,8 +901,6 @@ export default function HomePage() {
         {/* ── Life-of-platform equity sparkline ── */}
         <FleetSparkline />
 
-        {/* ── Pulsing capital deployment map ── */}
-        <WorldMapWidget />
       </div>
 
       <div style={{ height: 96 }} />

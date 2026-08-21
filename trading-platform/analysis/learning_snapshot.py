@@ -4,9 +4,9 @@ Learning Snapshot — cross-deploy knowledge persistence
 Solves the "learning stays in dev" problem.
 
 On every deploy, the production database starts empty.  This module:
-  1. export_snapshot()  — writes all llm_learnings rows +  Kraken adaptive
-                          params to  data/learning_snapshot.json  (committed
-                          to the repo so it travels with every deploy).
+  1. export_snapshot()  — writes all llm_learnings rows to
+                          data/learning_snapshot.json (committed to the repo
+                          so it travels with every deploy).
   2. seed_from_snapshot() — called at startup.  If llm_learnings is empty,
                             seeds from the snapshot so production always starts
                             with accumulated dev knowledge, not from zero.
@@ -38,7 +38,6 @@ def export_snapshot() -> dict[str, Any]:
     snapshot: dict[str, Any] = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "llm_learnings": [],
-        "kraken_adaptive_params": None,
     }
 
     # ── 1. LLM learnings ──────────────────────────────────────────────────────
@@ -77,19 +76,7 @@ def export_snapshot() -> dict[str, Any]:
     except Exception as exc:
         logger.warning(f"Learning Snapshot | llm_learnings export failed: {exc}")
 
-    # ── 2. Kraken adaptive params (from JSON file) ────────────────────────────
-    try:
-        import pathlib as _pl
-        kraken_params_path = (
-            pathlib.Path(__file__).parent.parent.parent / "kraken-bot" / "adaptive_params.json"
-        )
-        if kraken_params_path.exists():
-            snapshot["kraken_adaptive_params"] = json.loads(kraken_params_path.read_text())
-            logger.info("Learning Snapshot | Exported Kraken adaptive_params")
-    except Exception as exc:
-        logger.warning(f"Learning Snapshot | kraken_adaptive_params export failed: {exc}")
-
-    # ── 3. Write to disk ──────────────────────────────────────────────────────
+    # ── 2. Write to disk ──────────────────────────────────────────────────────
     try:
         _SNAPSHOT_PATH.write_text(json.dumps(snapshot, indent=2, default=str))
         logger.success(
@@ -102,7 +89,6 @@ def export_snapshot() -> dict[str, Any]:
     return {
         "status": "ok",
         "llm_learnings_count": len(snapshot["llm_learnings"]),
-        "kraken_params_exported": snapshot["kraken_adaptive_params"] is not None,
         "path": str(_SNAPSHOT_PATH),
         "exported_at": snapshot["exported_at"],
     }
@@ -119,7 +105,6 @@ def seed_from_snapshot() -> dict[str, Any]:
     result = {
         "seeded": False,
         "rows_inserted": 0,
-        "kraken_params_restored": False,
         "reason": "",
     }
 
@@ -201,26 +186,6 @@ def seed_from_snapshot() -> dict[str, Any]:
         logger.error(f"Learning Snapshot | Seed insert failed: {exc}")
         return result
 
-    # ── Restore Kraken params if file is still at defaults ────────────────────
-    try:
-        kraken_params_path = (
-            pathlib.Path(__file__).parent.parent.parent / "kraken-bot" / "adaptive_params.json"
-        )
-        snap_params = snapshot.get("kraken_adaptive_params")
-        if snap_params and kraken_params_path.exists():
-            current = json.loads(kraken_params_path.read_text())
-            snap_n = snap_params.get("metrics", {}).get("n", 0)
-            current_n = current.get("metrics", {}).get("n", 0)
-            if snap_n > current_n:
-                kraken_params_path.write_text(json.dumps(snap_params, indent=2))
-                result["kraken_params_restored"] = True
-                logger.success(
-                    f"Learning Snapshot | Restored Kraken adaptive_params "
-                    f"(snapshot n={snap_n} > current n={current_n})"
-                )
-    except Exception as exc:
-        logger.warning(f"Learning Snapshot | Kraken params restore failed: {exc}")
-
     return result
 
 
@@ -242,10 +207,6 @@ def get_snapshot_info() -> dict[str, Any]:
             "exists":                True,
             "exported_at":           snapshot.get("exported_at"),
             "llm_learnings_count":   len(snapshot.get("llm_learnings", [])),
-            "has_kraken_params":     snapshot.get("kraken_adaptive_params") is not None,
-            "kraken_params_n":       (
-                snapshot.get("kraken_adaptive_params", {}) or {}
-            ).get("metrics", {}).get("n", 0),
             "file_size_bytes":       file_size,
             "path":                  str(_SNAPSHOT_PATH),
         }

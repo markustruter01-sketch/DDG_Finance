@@ -42,6 +42,15 @@ FEE_FLOOR = FEE_PCT * 2 + 0.001
 
 _VETO_FILE = Path(__file__).parent.parent / "logs" / "veto_conditions.json"
 
+# Compatibility identifiers used by the retired Fleet Commander chat route.
+# They remain available so the route can fail closed without touching a removed
+# database table.
+BOT_ID_TO_DB_ID = {
+    "davy_jones": 1,
+    "blackbeard": 2,
+    "calypso": 3,
+}
+
 
 def _clamp(name: str, value: float) -> float:
     lo, hi = BOUNDS[name]
@@ -55,6 +64,19 @@ def _limit_step(current: float, target: float, param_name: str) -> float:
         return _clamp(param_name, target)
     direction = 1 if diff > 0 else -1
     return _clamp(param_name, round(current + direction * step, 6))
+
+
+def _load_current_kraken_params(db_id: int) -> dict[str, float] | None:
+    """Retired compatibility hook; the old Kraken parameter store is gone."""
+    return None
+
+
+def _write_kraken_params(db_id: int, bot_id_str: str, params: dict, reasoning: str) -> bool:
+    """Retired compatibility hook; never writes a removed table."""
+    logger.warning(
+        f"FleetEnforcer | Retired Kraken parameter write skipped for {bot_id_str}"
+    )
+    return False
 
 
 def _write_veto_conditions(vetoed_tickers: list[str], conditions: list[dict],

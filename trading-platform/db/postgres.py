@@ -380,17 +380,6 @@ DELETE FROM kraken_trades a
 CREATE UNIQUE INDEX IF NOT EXISTS uq_kraken_trades_bot_order
     ON kraken_trades (bot_id, order_id) WHERE order_id IS NOT NULL;
 
--- Multi-bot adaptive params upserted by adaptive_params.py every adaptation cycle.
-CREATE TABLE IF NOT EXISTS kraken_adaptive_params (
-    id          INTEGER PRIMARY KEY,
-    bot_id      TEXT,
-    params      JSONB NOT NULL DEFAULT '{}',
-    metrics     JSONB,
-    reasons     JSONB,
-    adapted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    lookback_n  INTEGER NOT NULL DEFAULT 0
-);
-
 -- ── Oracle Scan Log ─────────────────────────────────────────────────────────
 -- Persists a diagnostic row every time the Oracle momentum scan runs.
 -- Each row captures how many tickers passed each filter stage so operators
@@ -875,8 +864,6 @@ def ensure_schema() -> None:
             with conn.cursor() as cur:
                 cur.execute("ALTER TABLE kraken_trades ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_kraken_trades_bot_id ON kraken_trades (bot_id)")
-                cur.execute("ALTER TABLE kraken_adaptive_params DROP CONSTRAINT IF EXISTS kraken_adaptive_params_id_check")
-                cur.execute("ALTER TABLE kraken_adaptive_params ADD COLUMN IF NOT EXISTS bot_id TEXT")
                 cur.execute("ALTER TABLE kraken_heartbeat ADD COLUMN IF NOT EXISTS bot_id TEXT DEFAULT 'davy-jones'")
                 cur.execute("ALTER TABLE kraken_heartbeat DROP CONSTRAINT IF EXISTS kraken_heartbeat_id_check")
                 cur.execute("ALTER TABLE kraken_portfolio DROP CONSTRAINT IF EXISTS kraken_portfolio_id_check")

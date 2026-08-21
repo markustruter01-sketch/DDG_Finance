@@ -348,7 +348,7 @@ def _run_fleet_commander_locked() -> dict[str, Any]:
 
     # DISABLED — GEMINI PARAMETER ENFORCEMENT REMOVED
     # The Fleet Commander may observe, summarise, and flag anomalies but must
-    # never write to kraken_adaptive_params or any parameter store.
+    # never write to a retired parameter store or any parameter store.
     # Parameters are only changed by direct manual instruction from the operator.
     # from analysis.fleet_enforcer import enforce_fleet_recommendations
     # enforcement = enforce_fleet_recommendations(result)

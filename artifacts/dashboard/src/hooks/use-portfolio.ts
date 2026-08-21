@@ -226,7 +226,7 @@ export function useBotRegistry() {
   });
 }
 
-// ── Sparkline + World Map ─────────────────────────────────────────────────────
+// ── Fleet equity history ───────────────────────────────────────────────────────
 
 export interface FleetHistoryPoint { date: string; total_equity: number }
 export interface FleetHistoryResponse { history: FleetHistoryPoint[] }
@@ -241,18 +241,3 @@ export function useFleetHistory() {
   });
 }
 
-export interface RegionStatus {
-  oracle:        boolean;
-  spy_qqq_trend: boolean;
-  jerome_macro:  boolean;
-}
-
-export function useRegionStatus() {
-  return useQuery<RegionStatus>({
-    queryKey: ["fleet-region-status"],
-    queryFn: async () => (await api.get("/fleet/region-status")).data,
-    staleTime: 30_000,
-    refetchInterval: useVisibleInterval(60_000),
-    retry: 1,
-  });
-}

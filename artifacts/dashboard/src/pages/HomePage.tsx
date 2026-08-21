@@ -348,7 +348,12 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
           <div
             key={pos.symbol}
             className="cursor-pointer rounded"
-             style={{ background: `${accent}18`, border: `1px solid ${accent}45` }}
+             style={{
+               background: `${accent}18`,
+               border: `1px solid ${accent}45`,
+               backdropFilter: "blur(20px)",
+               WebkitBackdropFilter: "blur(20px)",
+             }}
             onClick={e => { e.stopPropagation(); setExpanded(isOpen ? null : pos.symbol); }}
           >
             <div className="flex items-center gap-2 px-2 py-1.5">

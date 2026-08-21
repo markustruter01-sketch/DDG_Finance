@@ -1,23 +1,25 @@
 import { useEffect, useState } from "react";
-
-const FORMULAS = [
-  { label: "Sharpe",  equation: "S=(Rp-Rf)/σp",  result: "1.63"   },
-  { label: "Kelly",   equation: "f*=(bp-q)/b",    result: "13.8%"  },
-  { label: "VaR",     equation: "VaR=μ-zσ√t",    result: "$4,820" },
-  { label: "Sortino", equation: "S=(Rp-MAR)/σd",  result: "2.12"   },
-];
+import { useRiskMetrics } from "@/hooks/use-trading";
 
 const BOX_W = 252;
 const BOX_H = 108;
 const BOX_Y = 100;
 
-// Four boxes evenly spaced with 16px gaps, starting at x=0
-// Box centres: 126, 394, 662, 930  (total span 0–1056)
-const INPUT_NODES_X = [126, 394, 662, 930];
+const INPUT_NODES_X = [270, 810];
 const TITLE_X = 528;
 
 export function MiniSynapticWidget() {
   const [activeFormula, setActiveFormula] = useState<number | null>(null);
+  const riskMetrics = useRiskMetrics();
+  const riskValue = (value: number | null | undefined) => {
+    if (riskMetrics.isLoading) return "loading…";
+    if (riskMetrics.isError) return "unavailable";
+    return value != null ? value.toFixed(3) : "—";
+  };
+  const formulas = [
+    { label: "Sharpe", equation: "S=(Rp-Rf)/σp", result: riskValue(riskMetrics.data?.sharpe_ratio) },
+    { label: "Sortino", equation: "S=(Rp-MAR)/σd", result: riskValue(riskMetrics.data?.sortino_ratio) },
+  ];
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -56,7 +58,7 @@ export function MiniSynapticWidget() {
         </text>
 
         {/* ── FORMULA BOXES ── */}
-        {FORMULAS.map((f, i) => {
+       {formulas.map((f, i) => {
           const cx = INPUT_NODES_X[i];
           const bx = cx - BOX_W / 2;
           const isActive = activeFormula === i;

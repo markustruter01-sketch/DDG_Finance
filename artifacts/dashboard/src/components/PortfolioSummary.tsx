@@ -83,9 +83,8 @@ export function CombinedPortfolioSummary() {
     fleetEq?.jerome_macro?.pnl ?? 0,
   ].reduce((a, b) => a + b, 0);
   const krakenTrades      = fleetSummary?.total_trades ?? kraken?.paper_summary?.total_trades ?? 0;
-  const krakenWins        = fleetSummary?.total_wins ?? kraken?.paper_summary?.win_count ?? 0;
   const krakenStart       = fleetSummary?.total_starting_usd ?? 600_000;
-  const krakenWinRate     = krakenTrades > 0 ? (krakenWins / krakenTrades) * 100 : null;
+   const fleetWinRate      = fleetEq?.fleet_total?.win_rate != null ? fleetEq.fleet_total.win_rate * 100 : null;
   const krakenPnlPct      = krakenStart > 0 ? (krakenPnl / krakenStart) * 100 : 0;
 
 
@@ -223,8 +222,8 @@ export function CombinedPortfolioSummary() {
             </Card>
             <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-cyan-500/15 transition-all duration-500">
               <CardContent className="p-3 sm:p-4">
-                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">Win Rate<Trophy className="h-3 w-3 text-yellow-400/50" /></div>
-                {(krakenReady || fleetSummary) && krakenWinRate !== null ? (<><div className="fluid-metric font-mono font-bold text-white tracking-tight">{krakenWinRate.toFixed(0)}<span className="text-xs text-muted-foreground font-normal">%</span></div><div className="text-[10px] text-muted-foreground mt-1.5">{krakenWins}W · {krakenTrades - krakenWins}L · {krakenTrades} total</div></>) : (<><div className="fluid-metric font-mono font-bold text-muted-foreground/30">—</div><div className="text-[10px] text-muted-foreground/40 mt-1.5">No trades yet</div></>)}
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1">Fleet Win Rate<Trophy className="h-3 w-3 text-yellow-400/50" /></div>
+                {fleetWinRate !== null ? (<><div className="fluid-metric font-mono font-bold text-white tracking-tight">{fleetWinRate.toFixed(1)}<span className="text-xs text-muted-foreground font-normal">%</span></div><div className="text-[10px] text-muted-foreground mt-1.5">Canonical /fleet/equity</div></>) : (<><div className="fluid-metric font-mono font-bold text-muted-foreground/30">—</div><div className="text-[10px] text-muted-foreground/40 mt-1.5">Unavailable</div></>)}
               </CardContent>
             </Card>
           </div>

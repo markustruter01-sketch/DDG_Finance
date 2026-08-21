@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import {
   useForexState, useForexPositions, useForexTrades, useForexVault,
   useToggleForexBot, useForexManualScan,
+  useFleetEquity,
   type ForexVaultSweep,
 } from "@/hooks/use-trading";
 import { Card, CardContent } from "@/components/ui";
@@ -17,14 +18,14 @@ export function ForexSection() {
   const { data: fxVault } = useForexVault();
   const toggleBot = useToggleForexBot();
   const manualScan = useForexManualScan();
+  const { data: fleetEquity } = useFleetEquity();
 
   const paused = fxState?.paused ?? false;
   const paperMode = fxState?.paper_mode ?? true;
   const totalEquity = fxState?.total_equity ?? 100000;
   const totalPnl = fxState?.total_pnl ?? 0;
   const totalTrades = fxState?.total_trades ?? 0;
-  const totalWins = fxState?.total_wins ?? 0;
-  const winRate = totalTrades > 0 ? (totalWins / totalTrades * 100) : 0;
+  const fleetWinRate = fleetEquity?.fleet_total?.win_rate != null ? fleetEquity.fleet_total.win_rate * 100 : null;
   const cycleCount = fxState?.cycle_count ?? 0;
   const usdBias = fxState?.usd_bias ?? "NEUTRAL";
   const newsBlackout = fxState?.news_blackout ?? false;
@@ -136,9 +137,9 @@ export function ForexSection() {
         </Card>
         <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/15 transition-all">
           <CardContent className="p-3">
-            <div className="text-[10px] font-medium text-muted-foreground mb-1">Win Rate</div>
-            <div className="text-sm font-mono font-bold text-white">{totalTrades > 0 ? `${winRate.toFixed(0)}%` : "—"}</div>
-            <div className="text-[9px] text-muted-foreground/50 mt-1">{totalWins}W · {totalTrades - totalWins}L</div>
+            <div className="text-[10px] font-medium text-muted-foreground mb-1">Fleet Win Rate</div>
+            <div className="text-sm font-mono font-bold text-white">{fleetWinRate != null ? `${fleetWinRate.toFixed(1)}%` : "—"}</div>
+            <div className="text-[9px] text-muted-foreground/50 mt-1">Canonical /fleet/equity</div>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-slate-900 to-slate-950 border-white/5 hover:border-teal-500/15 transition-all">

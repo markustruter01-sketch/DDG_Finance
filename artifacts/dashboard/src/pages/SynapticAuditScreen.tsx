@@ -1,45 +1,11 @@
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, CheckCircle2, ActivitySquare, TrendingUp, Shield, BarChart2, Percent } from "lucide-react";
-import { useMathAuditSummary, useMathAuditRecent } from "@/hooks/use-trading";
-
-const FORMULAS = [
-  {
-    id: "sharpe",
-    label: "Sharpe Ratio",
-    equation: "S = (Rp − Rf) / σp",
-    vars: "Rp=18.4%  Rf=5.2%  σp=8.1%",
-    result: "→ 1.63",
-    icon: <TrendingUp className="w-3 h-3" />,
-  },
-  {
-    id: "kelly",
-    label: "Kelly Criterion",
-    equation: "f* = (bp − q) / b",
-    vars: "b=2.1  p=0.54  q=0.46",
-    result: "→ 13.8%",
-    icon: <BarChart2 className="w-3 h-3" />,
-  },
-  {
-    id: "var",
-    label: "Value at Risk",
-    equation: "VaR = μ − zσ√t",
-    vars: "μ=$312  z=1.65  σ=$91",
-    result: "→ $4,820",
-    icon: <Shield className="w-3 h-3" />,
-  },
-  {
-    id: "sortino",
-    label: "Sortino Ratio",
-    equation: "S = (Rp − MAR) / σd",
-    vars: "Rp=18.4%  MAR=8%  σd=4.9%",
-    result: "→ 2.12",
-    icon: <Percent className="w-3 h-3" />,
-  },
-];
+import { Activity, AlertTriangle, CheckCircle2, ActivitySquare, TrendingUp, Percent } from "lucide-react";
+import { useMathAuditSummary, useMathAuditRecent, useRiskMetrics } from "@/hooks/use-trading";
 
 export default function SynapticAuditScreen() {
   const { data: summary } = useMathAuditSummary(24);
   const { data: recentData } = useMathAuditRecent(10, "ALL");
+  const riskMetrics = useRiskMetrics();
 
   const [activeFormula, setActiveFormula] = useState<number | null>(null);
 
@@ -61,14 +27,21 @@ export default function SynapticAuditScreen() {
   const hasError = (summary?.fail ?? 0) > 0;
 
   const events = recentData?.rows?.slice(0, 8) ?? [];
+  const riskValue = (value: number | null | undefined) => {
+    if (riskMetrics.isLoading) return "loading…";
+    if (riskMetrics.isError) return "unavailable";
+    return value != null ? value.toFixed(3) : "—";
+  };
+  const FORMULAS = [
+    { id: "sharpe", label: "Sharpe Ratio", equation: "S = (Rp − Rf) / σp", result: riskValue(riskMetrics.data?.sharpe_ratio), icon: <TrendingUp className="w-3 h-3" /> },
+    { id: "sortino", label: "Sortino Ratio", equation: "S = (Rp − MAR) / σd", result: riskValue(riskMetrics.data?.sortino_ratio), icon: <Percent className="w-3 h-3" /> },
+  ];
 
   const TILE_BOTTOM = 178;
 
   const INPUT_NODES = [
-    { x: 188, y: 230 },
-    { x: 484, y: 230 },
-    { x: 780, y: 230 },
-    { x: 1076, y: 230 },
+    { x: 400, y: 230 },
+    { x: 880, y: 230 },
   ];
   const HIDDEN1 = [
     { x: 300, y: 370 },
@@ -96,11 +69,6 @@ export default function SynapticAuditScreen() {
     [INPUT_NODES[1], HIDDEN1[0]],
     [INPUT_NODES[1], HIDDEN1[1]],
     [INPUT_NODES[1], HIDDEN1[2]],
-    [INPUT_NODES[2], HIDDEN1[1]],
-    [INPUT_NODES[2], HIDDEN1[2]],
-    [INPUT_NODES[2], HIDDEN1[3]],
-    [INPUT_NODES[3], HIDDEN1[2]],
-    [INPUT_NODES[3], HIDDEN1[3]],
     [HIDDEN1[0], HIDDEN2[0]],
     [HIDDEN1[0], HIDDEN2[1]],
     [HIDDEN1[1], HIDDEN2[0]],

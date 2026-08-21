@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useJournal,
-  useLivePositions, useForexPositions, useOptionsState, useForexState,
+  useLivePositions, useForexPositions, useFleetEquity,
 } from "@/hooks/use-trading";
 import { playTradeWin, playExplosion } from "./sounds";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -107,8 +107,7 @@ export function useRealCelebrations() {
   const journal = journalQuery.data;
   const { data: livePositions } = useLivePositions();
   const { data: fxPositions } = useForexPositions();
-  const { data: optState } = useOptionsState();
-  const { data: fxState } = useForexState();
+  const { data: fleetEquity } = useFleetEquity();
 
   const [explosion, setExplosion] = useState<CelebrationTrade | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
@@ -206,21 +205,16 @@ export function useRealCelebrations() {
   }, [journal, livePositions, fxPositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
-    const alpacaWins  = journal?.summary?.wins ?? 0;
-    const alpacaTotal = journal?.summary?.total ?? 0;
-    const optWins     = optState?.total_wins ?? 0;
-    const optTotal    = optState?.total_trades ?? 0;
-    const fxWins      = fxState?.total_wins ?? 0;
-    const fxTotal     = fxState?.total_trades ?? 0;
-    const totalWins   = alpacaWins + optWins + fxWins;
-    const totalTrades = alpacaTotal + optTotal + fxTotal;
+    const totalWins = 0;
+    const totalTrades = 0;
+    const canonicalWinRate = fleetEquity?.fleet_total?.win_rate;
     return {
       totalPnl:    0,
       totalTrades,
       totalWins,
-      winRate: totalTrades > 0 ? (totalWins / totalTrades) * 100 : 0,
+      winRate: canonicalWinRate != null ? canonicalWinRate * 100 : 0,
     };
-  }, [journal, optState, fxState]);
+  }, [fleetEquity]);
 
   const triggerExplosion = useCallback((entry: RealTradeEntry) => {
     const trade: CelebrationTrade = {

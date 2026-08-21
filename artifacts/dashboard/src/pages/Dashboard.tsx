@@ -4,7 +4,6 @@ import { SafeSection } from "@/components/ErrorBoundary";
 import {
   useStatusSummary,
   useLivePositions, useKrakenStatus,
-  useKrakenFleetSummary, useForexState,
   usePortfolio, useJournal, useEquityCurve,
   useMathAuditSummary, useMathAuditRecent, useWeeklyReview, useReviewFlags,
   useFleetEquity,
@@ -399,8 +398,6 @@ function PositionChangeNotifier() {
 
 function FleetKPISummary() {
   const { data: summary } = useStatusSummary();
-  const { data: fleetSummary } = useKrakenFleetSummary();
-  const { data: forexState } = useForexState();
   const { data: journal } = useJournal();
   const { data: fleetEquity } = useFleetEquity();
   const { data: registry } = useBotRegistry();
@@ -411,17 +408,7 @@ function FleetKPISummary() {
   const fleetBaseline = getFleetStartingCapital(registry, fleetEquity);
   const fleetBotCount = getFleetBotCount(registry, fleetEquity);
 
-  const alpacaWins = journal?.summary?.wins ?? 0;
-  const alpacaTotal = journal?.summary?.total ?? 0;
-  // Use fleet-summary totals for the Kraken family — this includes all 4 bots:
-  // Davy Jones, Blackbeard, Poseidon (#7), and Kraken Current (#8).
-  const krakenWins = fleetSummary?.total_wins ?? 0;
-  const krakenTotal = fleetSummary?.total_trades ?? 0;
-  const forexWins = forexState?.total_wins ?? 0;
-  const forexTotal = forexState?.total_trades ?? 0;
-  const totalWins = alpacaWins + krakenWins + forexWins;
-  const totalTrades = alpacaTotal + krakenTotal + forexTotal;
-  const combinedWinRate = totalTrades > 0 ? (totalWins / totalTrades) * 100 : null;
+  const fleetWinRate = fleetEquity?.fleet_total?.win_rate ?? null;
 
   // Derive active count from the same registry/fleet-equity source as the denominator
   // so numerator and denominator are always consistent and can never diverge.
@@ -460,11 +447,11 @@ function FleetKPISummary() {
     },
     {
       label: "Fleet Win Rate",
-      value: combinedWinRate != null ? `${combinedWinRate.toFixed(1)}%` : "—",
-      sub: `${totalWins}W / ${totalTrades - totalWins}L across all bots`,
+      value: fleetWinRate != null ? `${(fleetWinRate * 100).toFixed(1)}%` : "—",
+      sub: "Canonical /fleet/equity rate",
       icon: <Percent className="h-4 w-4 text-amber-400" />,
-      accent: combinedWinRate != null && combinedWinRate >= 50 ? "border-amber-500/20 bg-amber-500/5" : "border-red-500/20 bg-red-500/5",
-      valueColor: combinedWinRate != null && combinedWinRate >= 50 ? "text-amber-400" : "text-red-400",
+      accent: fleetWinRate != null && fleetWinRate >= 0.5 ? "border-amber-500/20 bg-amber-500/5" : "border-red-500/20 bg-red-500/5",
+      valueColor: fleetWinRate != null && fleetWinRate >= 0.5 ? "text-amber-400" : "text-red-400",
     },
     {
       label: "Active Bots",

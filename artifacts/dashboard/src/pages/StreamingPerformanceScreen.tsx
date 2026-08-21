@@ -133,14 +133,13 @@ export default function StreamingPerformanceScreen() {
   const fleetEquity = fleetEq?.fleet_total?.equity ?? 0;
   const fleetPnL    = fleetEq?.fleet_total?.pnl ?? 0;
 
-  /* Fleet trade stats from journal — the only table with real closed-trade records */
+  /* Fleet win rate comes from the canonical fleet equity source. */
   const fleetTrades  = j?.summary.total ?? 0;
   const fleetWins    = j?.summary.wins  ?? 0;
-  const fleetWinRate = fleetTrades > 0 ? (fleetWins / fleetTrades) * 100 : null;
+  const fleetWinRate = fleetEq?.fleet_total?.win_rate != null ? fleetEq.fleet_total.win_rate * 100 : null;
 
-  /* overall win rate — attribution returns 0-100 already */
-  const overallWinRate = at?.overall.win_rate ?? null;
-  const totalTrades    = j?.summary.total ?? 0;
+  /* Distinct metric: attribution's all-time per-trade rate, server-computed. */
+  const attributionWinRate = at?.overall.win_rate ?? null;
 
   /* ── sub-components ──────────────────────────────────────── */
 
@@ -334,7 +333,7 @@ export default function StreamingPerformanceScreen() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
               {[
                 { label: "Total Trades", value: fleetTrades > 0 ? String(fleetTrades) : "—", color: C.text },
-                { label: "Win Rate",     value: fleetWinRate != null ? `${fleetWinRate.toFixed(0)}%` : "—", color: fleetWinRate != null ? (fleetWinRate >= 50 ? C.green : C.red) : C.dim },
+                { label: "All-time per-trade win rate (attribution)", value: attributionWinRate != null ? `${attributionWinRate.toFixed(0)}%` : "—", color: attributionWinRate != null ? (attributionWinRate >= 50 ? C.green : C.red) : C.dim },
                 { label: "Total Wins",   value: fleetTrades > 0 ? String(fleetWins) : "—", color: C.green },
                 { label: "Avg P&L",      value: at?.overall.avg_pnl_pct != null ? `${at.overall.avg_pnl_pct > 0 ? "+" : ""}${at.overall.avg_pnl_pct.toFixed(1)}%` : (j?.summary.avg_pnl != null ? `${j.summary.avg_pnl > 0 ? "+" : ""}${j.summary.avg_pnl.toFixed(1)}%` : "—"), color: pnlColor(at?.overall.avg_pnl_pct ?? j?.summary.avg_pnl) },
               ].map(({ label, value, color }) => (

@@ -40,14 +40,21 @@ def test_inventory_excludes_unrelated_positions():
     assert [p["symbol"] for p in snapshot["positions"]] == ["SPY", "SGOV"]
 
 
-def test_flatten_refuses_position_without_protective_stop():
+def test_flatten_refuses_position_without_covered_protective_stop():
     client = SimpleNamespace(
         get_clock=lambda: SimpleNamespace(is_open=True),
         get_open_position=lambda symbol: SimpleNamespace(qty="2"),
     )
     snapshot = {
-        "positions": [{"symbol": "SPY", "qty": 2.0}],
-        "open_orders": [],
+        "positions": [{"symbol": "SPY", "qty": 2.987862516}],
+        "open_orders": [{
+            "id": "legacy-stop",
+            "symbol": "SPY",
+            "side": "sell",
+            "type": "stop",
+            "qty": 1.0,
+            "stop_price": 700.0,
+        }],
     }
-    with pytest.raises(migration.MigrationError, match="refusing naked flatten"):
+    with pytest.raises(migration.MigrationError, match="floor\\(position_qty\\)=2"):
         migration.flatten_account(client, snapshot)

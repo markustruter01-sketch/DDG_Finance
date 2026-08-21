@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 import uuid
@@ -100,6 +101,7 @@ def inventory(client: TradingClient) -> dict[str, Any]:
                 "side": _value(o.side),
                 "type": _value(o.type),
                 "client_order_id": str(getattr(o, "client_order_id", "") or ""),
+                "qty": float(o.qty),
                 "stop_price": (
                     float(o.stop_price)
                     if getattr(o, "stop_price", None) is not None
@@ -176,13 +178,24 @@ def flatten_account(client: TradingClient, snapshot: dict[str, Any]) -> None:
         if symbol in IGNORED_SYMBOLS:
             continue
         qty = abs(float(position["qty"]))
+        floor_qty = math.floor(qty)
         symbol_orders = [o for o in snapshot["open_orders"] if o["symbol"] == symbol]
         stops = [o for o in symbol_orders if o["side"] == "sell" and o["type"] in {
             "stop", "stop_limit", "trailing_stop"
         }]
-        if not stops:
-            raise MigrationError(f"refusing naked flatten: no protective stop for {symbol}")
-        stop_price = next((o["stop_price"] for o in stops if o["stop_price"]), None)
+        covered_stops = [
+            o for o in stops
+            if float(o.get("qty", 0) or 0) >= floor_qty
+        ]
+        if not covered_stops:
+            raise MigrationError(
+                f"refusing naked flatten: no protective stop covering "
+                f"floor(position_qty)={floor_qty} for {symbol}"
+            )
+        stop_price = next(
+            (o["stop_price"] for o in covered_stops if o["stop_price"]),
+            None,
+        )
         try:
             for order in symbol_orders:
                 _wait_cancelled(client, order["id"])

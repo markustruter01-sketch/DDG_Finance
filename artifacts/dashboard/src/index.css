@@ -439,6 +439,11 @@
   color: #0e7490 !important;
 }
 
+.mobile-home-shell .text-slate-500,
+.mobile-home-shell .text-slate-400 {
+  color: #64748b !important;
+}
+
 @layer utilities {
   .glass-panel {
     @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-xl;

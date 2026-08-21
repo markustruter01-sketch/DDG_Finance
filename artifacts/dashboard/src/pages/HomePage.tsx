@@ -204,7 +204,7 @@ const WF_CFG: Record<string, { label: string; color: string }> = {
   PASS:              { label: "PASS",   color: "#22c55e" },
   MARGINAL:          { label: "AMBER",  color: "#f59e0b" },
   FAIL:              { label: "FAIL",   color: "#ef4444" },
-  INSUFFICIENT_DATA: { label: "INSUFF", color: "#ffffff" },
+  INSUFFICIENT_DATA: { label: "INSUFF", color: "#334155" },
 };
 
 function WFBadge({ status }: { status: string | null | undefined }) {
@@ -223,7 +223,7 @@ const WF_HEALTH: Record<string, { pct: number; color: string; label: string }> =
   PASS:              { pct: 100, color: "#22c55e", label: "SHIELDS 100%" },
   MARGINAL:          { pct: 55,  color: "#f59e0b", label: "SHIELDS 55%"  },
   FAIL:              { pct: 15,  color: "#ef4444", label: "SHIELDS 15%"  },
-  INSUFFICIENT_DATA: { pct: 0,   color: "#ffffff", label: "NO DATA"      },
+  INSUFFICIENT_DATA: { pct: 0,   color: "#64748b", label: "NO DATA"      },
 };
 
 function HealthBar({ wfStatus }: { wfStatus: string | null | undefined }) {
@@ -231,7 +231,7 @@ function HealthBar({ wfStatus }: { wfStatus: string | null | undefined }) {
   return (
     <div className="flex items-center gap-2">
       <div className="text-[8px] uppercase tracking-widest text-white shrink-0 w-14">SHIELDS</div>
-      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#0f172a" }}>
+      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(148,163,184,0.28)" }}>
         <div className="h-full rounded-full transition-all duration-700"
           style={{ width: `${h.pct}%`, background: h.color, boxShadow: `0 0 6px ${h.color}` }} />
       </div>
@@ -312,7 +312,7 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
 
 const STATUS_SHIP: Record<BotStatus, { label: string; color: string }> = {
   LIVE:       { label: "ONLINE",   color: "#22c55e" },
-  MKT_CLOSED: { label: "DOCKED",   color: "#ffffff" },
+  MKT_CLOSED: { label: "DOCKED",   color: "#334155" },
   DOWN:       { label: "DISTRESS", color: "#ef4444" },
   IDLE:       { label: "STANDBY",  color: "#eab308" },
 };
@@ -700,7 +700,7 @@ function ExportDropdown({
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "8px 12px 6px", fontSize: 8, letterSpacing: "0.2em", color: "#ffffff", fontFamily: "monospace", textTransform: "uppercase", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ padding: "8px 12px 6px", fontSize: 8, letterSpacing: "0.2em", color: "#334155", fontFamily: "monospace", textTransform: "uppercase", borderBottom: "1px solid rgba(100,116,139,0.16)" }}>
             REPORTS &amp; EXPORTS
           </div>
           {items.map((item) => (
@@ -728,7 +728,7 @@ function ExportDropdown({
                 <div style={{ fontSize: 11, fontWeight: 700, color: item.accent, fontFamily: "monospace", letterSpacing: "0.05em" }}>
                   {busy === item.id ? "Working…" : item.label}
                 </div>
-                <div style={{ fontSize: 9, color: "#ffffff", fontFamily: "monospace", marginTop: 1 }}>
+                <div style={{ fontSize: 9, color: "#64748b", fontFamily: "monospace", marginTop: 1 }}>
                   {item.sub}
                 </div>
               </div>

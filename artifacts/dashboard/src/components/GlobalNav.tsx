@@ -22,10 +22,11 @@ const NAV_ITEMS = [
 
 export function GlobalNav() {
   const [location, navigate] = useLocation();
+  const isHomeRoute = location === "/" || location === "" || location === "/home";
 
   return (
     <nav
-      className="fixed bottom-5 left-1/2 z-[9999] pointer-events-none"
+      className={`fixed bottom-5 left-1/2 z-[9999] pointer-events-none ${isHomeRoute ? "home-global-nav" : ""}`}
       style={{ transform: "translateX(-50%)" }}
     >
       <div
@@ -57,16 +58,16 @@ export function GlobalNav() {
                       transform: "translateY(-1px) scale(1.04)",
                     }
                   : {
-                      background: "rgba(15, 23, 42, 0.80)",
-                      border: "1px solid rgba(255,255,255,0.075)",
-                      boxShadow: "0 4px 16px rgba(0,0,0,0.50), 0 1px 0 rgba(255,255,255,0.04) inset",
+                      background: isHomeRoute ? "rgba(255,255,255,0.78)" : "rgba(15, 23, 42, 0.80)",
+                      border: isHomeRoute ? "1px solid rgba(100,116,139,0.20)" : "1px solid rgba(255,255,255,0.075)",
+                      boxShadow: isHomeRoute ? "0 8px 24px rgba(15,23,42,0.16)" : "0 4px 16px rgba(0,0,0,0.50), 0 1px 0 rgba(255,255,255,0.04) inset",
                     }),
               }}
             >
               <span className="relative">
                 <Icon
                   className="h-5 w-5"
-                  style={{ color: isActive ? item.color : "rgba(148,163,184,0.65)" }}
+                  style={{ color: isActive ? item.color : isHomeRoute ? "rgba(71,85,105,0.75)" : "rgba(148,163,184,0.65)" }}
                 />
                 {item.pulse && (
                   <span
@@ -82,7 +83,7 @@ export function GlobalNav() {
               <span
                 className="text-[9px] font-black tracking-widest uppercase mt-1"
                 style={{
-                  color: isActive ? item.color : "rgba(100,116,139,0.85)",
+                  color: isActive ? item.color : isHomeRoute ? "rgba(71,85,105,0.85)" : "rgba(100,116,139,0.85)",
                 }}
               >
                 {item.label}

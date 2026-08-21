@@ -466,7 +466,7 @@ function elapsedStatus(iso: string | null | undefined) {
 }
 
 function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, strategyPositionCount, posChips = [], entryWindow }: ShipCardProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
   const pnlPct = bot?.pnl_pct ?? 0;

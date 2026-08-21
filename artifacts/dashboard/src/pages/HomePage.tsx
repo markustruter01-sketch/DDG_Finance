@@ -413,10 +413,23 @@ function EtfPositionList({ positions, accent, strategyPositionCount }: {
         );
       })}
       {sgov && (
-        <div className="flex items-center gap-2 px-2 py-1 rounded"
+        <div className="rounded px-2 py-1.5"
           style={{ border: "1px solid rgba(71,85,105,0.20)", background: "rgba(71,85,105,0.06)" }}>
-           <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#000000" }}>SGOV</span>
-           <span className="text-[8px] italic" style={{ color: "#000000" }}>cash park</span>
+           <div className="flex items-center gap-2">
+             <span className="font-mono text-[10px] w-9 shrink-0" style={{ color: "#000000" }}>SGOV</span>
+             <span className="text-[8px] italic" style={{ color: "#000000" }}>cash park</span>
+             <span className="flex-1" />
+             <span className="font-mono text-[9px] tabular-nums" style={{ color: "#000000" }}>
+               HELD ${sgov.market_value?.toLocaleString("en-US", { maximumFractionDigits: 0 }) ?? "—"}
+             </span>
+           </div>
+           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 pl-11 text-[7px] uppercase tracking-wider" style={{ color: "#334155" }}>
+             <span>
+               Broker P&amp;L {sgov.unrealized_plpc >= 0 ? "+" : ""}{(sgov.unrealized_plpc * 100).toFixed(2)}%
+               {" "}({sgov.unrealized_pl >= 0 ? "+" : "-"}${Math.abs(sgov.unrealized_pl).toLocaleString("en-US", { maximumFractionDigits: 2 })})
+             </span>
+             <span>Interest return — unavailable from broker activity</span>
+           </div>
         </div>
       )}
     </div>

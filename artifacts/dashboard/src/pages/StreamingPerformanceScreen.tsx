@@ -2,7 +2,6 @@ import {
   useRiskMetrics,
   useJournal,
   useAttribution,
-  useKrakenFleetSummary,
   useSentiment,
   useStatusSummary,
   useVault,
@@ -99,7 +98,6 @@ export default function StreamingPerformanceScreen() {
   const risk    = useRiskMetrics();
   const journal = useJournal();
   const attr    = useAttribution();
-  const fleet   = useKrakenFleetSummary();
   const sent    = useSentiment();
   const status  = useStatusSummary();
   const vaultData    = useVault();
@@ -108,7 +106,6 @@ export default function StreamingPerformanceScreen() {
   const rm  = risk.data;
   const j   = journal.data;
   const at  = attr.data;
-  const fl  = fleet.data;
   const sg  = sent.data;
   const st  = status.data;
   const totalVaulted = vaultData.data?.total_vaulted_usd ?? null;

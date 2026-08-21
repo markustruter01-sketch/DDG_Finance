@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   useStatusSummary, useJournal, usePerformanceHistory,
-  useForexState, useFleetEquity, useBotRegistry,
+  useFleetEquity, useBotRegistry,
 } from "@/hooks/use-trading";
 import { MiniSparkline } from "@/lib/dashboard-shared";
 import { getFleetBotCount } from "@/lib/fleet-capital";
@@ -13,7 +13,6 @@ export function FleetPerformanceHero() {
   const { data: registry }     = useBotRegistry();
   const { data: journal }      = useJournal();
   const { data: perfHistory }  = usePerformanceHistory();
-  const { data: fxState }      = useForexState();
 
   const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
 
@@ -52,15 +51,8 @@ export function FleetPerformanceHero() {
       : [0];
     lines.push({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
 
-    const fxPnl    = fxState?.total_pnl ?? 0;
-    const fxEquity = fxState?.total_equity ?? 1;
-    const fxPct    = fxEquity > 0 ? (fxPnl / fxEquity) * 100 : 0;
-    if (fxPct !== 0) {
-      lines.push({ id: "forex", name: "Navigator", icon: "🧭", accent: "#14b8a6", curve: [0, fxPct * 0.5, fxPct] });
-    }
-
     return lines;
-  }, [perfHistory, fxState]);
+  }, [perfHistory]);
 
   const botCount = getFleetBotCount(registry, fleetEq);
   const totalTrades = alpacaTotal;
@@ -70,7 +62,7 @@ export function FleetPerformanceHero() {
       label: "Fleet Equity",
       value: formatCurrency(grandTotal),
       color: "text-white",
-      sub: `${botCount} bots · 4 capital pools`,
+      sub: `${botCount} active Alpaca ETF bots`,
     },
     {
       label: "Total Trades",

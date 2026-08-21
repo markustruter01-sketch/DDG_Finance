@@ -11,7 +11,7 @@ import {
   fmtEq, fmtPct, fmtDollar,
   type BotSlice, type BotStatus, type LivePos, type EntryWindow,
 } from "@/hooks/useFleetData";
-import { useExportReport } from "@/hooks/use-kraken";
+import { useExportReport } from "@/hooks/use-report";
 import { useToast } from "@/hooks/use-toast";
 import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
@@ -432,12 +432,24 @@ interface ShipCardProps {
   entryWindow?:    EntryWindow;
 }
 
+function elapsedStatus(iso: string | null | undefined) {
+  if (!iso) return { label: "LAST SEEN —", color: "#64748b" };
+  const age = Math.max(0, Date.now() - new Date(iso).getTime());
+  const seconds = Math.floor(age / 1000);
+  const label = seconds < 60 ? `${seconds}s ago`
+    : seconds < 3600 ? `${Math.floor(seconds / 60)}m ago`
+    : `${Math.floor(seconds / 3600)}h ago`;
+  const color = seconds <= 300 ? "#4ade80" : seconds <= 900 ? "#fbbf24" : "#f87171";
+  return { label: `UPDATED ${label}`, color };
+}
+
 function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, strategyPositionCount, posChips = [], entryWindow }: ShipCardProps) {
   const [open, setOpen] = useState(true);
   const st     = STATUS_SHIP[status];
   const pnl    = bot?.pnl     ?? 0;
   const pnlPct = bot?.pnl_pct ?? 0;
   const posClr = pnl >= 0 ? "#4ade80" : "#f87171";
+  const freshness = elapsedStatus(bot?.last_updated);
 
   return (
     <div
@@ -501,7 +513,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-white">
             {bot?.win_rate != null && <span>30D WR <span className="text-cyan-500">{(bot.win_rate * 100).toFixed(1)}%</span></span>}
             <span>POSITIONS <span className="text-cyan-500">{strategyPositionCount ?? "—"}</span></span>
-            {bot?.last_updated && <span>PING <span className="text-cyan-500">{new Date(bot.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></span>}
+            <span style={{ color: freshness.color }}>{freshness.label}</span>
           </div>
         </div>
       )}
@@ -738,6 +750,7 @@ export default function HomePage() {
 
   // Warp pulse: fires whenever lastCycle changes (new data arrived)
   const [warp, setWarp] = useState(false);
+  const [, setClock] = useState(Date.now());
   const prevCycle = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!lastCycle || lastCycle === prevCycle.current) return;
@@ -746,6 +759,11 @@ export default function HomePage() {
     const t = setTimeout(() => setWarp(false), 800);
     return () => clearTimeout(t);
   }, [lastCycle]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const spyStatus    = getBotStatus(spy,    mktOpen, false);
   const oraStatus    = getBotStatus(oracle, mktOpen, false);
@@ -791,7 +809,7 @@ export default function HomePage() {
               </span>
             )}
             {total && (
-              <span className="text-[10px] tabular-nums ml-1" style={{ color: pnl24h >= 0 ? "#4ade8099" : "#f8717199" }}>
+              <span className="text-[10px] tabular-nums ml-1" style={{ color: pnl24h != null && pnl24h >= 0 ? "#4ade8099" : "#f8717199" }}>
                 {pnl24h == null ? "24h —" : (
                   <>
                     24h {pnl24h >= 0 ? "+" : ""}{fmtDollar(pnl24h)}

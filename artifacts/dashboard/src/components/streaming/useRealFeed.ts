@@ -1,8 +1,5 @@
 import { useMemo, useRef, useEffect } from "react";
-import {
-  useJournal, useOptionsState, useForexState,
-  useLivePositions, useForexPositions, useFleetEquity,
-} from "@/hooks/use-trading";
+import { useJournal, useLivePositions, useFleetEquity } from "@/hooks/use-trading";
 import { emitTradePulse } from "./tradePulseEvents";
 import { getBotIdentity } from "@/lib/bot-identity";
 
@@ -46,9 +43,6 @@ export function useRealFeed(maxTrades = 20) {
   const journalQuery = useJournal();
   const journal = journalQuery.data;
   const { data: livePositions } = useLivePositions();
-  const { data: fxPositions }   = useForexPositions();
-  const { data: optState }      = useOptionsState();
-  const { data: fxState }       = useForexState();
   // Fleet equity provides server-computed win rates and P&L — no client arithmetic.
   const { data: fleetEq }       = useFleetEquity();
 
@@ -118,19 +112,8 @@ export function useRealFeed(maxTrades = 20) {
         winRate: fleetEq?.oracle?.win_rate ?? undefined,
       });
     }
-    if (fxState) {
-      const _fx = getBotIdentity("forex_gump");
-      stats.push({
-        name: _fx.displayName, icon: _fx.icon,
-        totalPnl: 0,
-        totalPnlPct: 0,
-        wins: fxState.total_wins ?? 0,
-        losses: (fxState.total_trades ?? 0) - (fxState.total_wins ?? 0),
-        trades: fxState.total_trades ?? 0,
-      });
-    }
     return stats.sort((a, b) => b.totalPnl - a.totalPnl || b.totalPnlPct - a.totalPnlPct);
-  }, [journal, fxState]);
+  }, [journal, fleetEq]);
 
   const totalTrades = wins + losses;
 
@@ -162,7 +145,6 @@ export function useRealFeed(maxTrades = 20) {
   const openPositions: OpenPosition[] = useMemo(() => {
     const all: OpenPosition[] = [];
     const _oracle = getBotIdentity("oracle");
-    const _fx     = getBotIdentity("forex_gump");
 
     if (livePositions?.positions) {
       for (const p of livePositions.positions) {
@@ -178,26 +160,8 @@ export function useRealFeed(maxTrades = 20) {
       }
     }
 
-    if (fxPositions?.positions) {
-      for (const p of fxPositions.positions) {
-        const pnlPct = p.size_usd > 0 ? (p.unrealized_pnl_usd / p.size_usd) * 100 : 0;
-        all.push({
-          id: `nav-${p.pair}`,
-          bot: _fx.displayName, icon: _fx.icon,
-          symbol: p.pair.replace("_", "/"),
-          side: p.direction,
-          pnlPct,
-          pnlUsd: p.unrealized_pnl_usd,
-          sizeUsd: p.size_usd,
-        });
-      }
-    }
-
     return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
-  }, [livePositions, fxPositions]);
-
-  // suppress unused — optState kept for future use
-  void optState;
+  }, [livePositions]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());
   const initialized  = useRef(false);

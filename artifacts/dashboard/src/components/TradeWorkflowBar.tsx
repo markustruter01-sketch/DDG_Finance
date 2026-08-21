@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { Loader2, Power, FileText, X, Anchor, Activity } from "lucide-react";
+import { Loader2, Power, FileText, X, Activity } from "lucide-react";
 import {
   useLatestAllocation, usePlatformStatus, useToggleAutoTrading,
-  useKrakenAutoTrading, useToggleKrakenAutoTrading,
 } from "@/hooks/use-trading";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -44,15 +43,13 @@ function ConvictionRing({ value }: { value: number }) {
   );
 }
 
-type ConfirmKind = "alpaca-enable" | "alpaca-disable" | "kraken-pause" | "kraken-resume" | null;
+type ConfirmKind = "alpaca-enable" | "alpaca-disable" | null;
 
 export function TradeWorkflowBar() {
   const { toast } = useToast();
   const { data: allocation } = useLatestAllocation();
   const { data: status } = usePlatformStatus();
   const toggleAutoTrading = useToggleAutoTrading();
-  const { data: krakenControl } = useKrakenAutoTrading();
-  const toggleKrakenBot = useToggleKrakenAutoTrading();
 
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
   const [whitepaperOpen, setWhitepaperOpen] = useState(false);
@@ -68,7 +65,6 @@ export function TradeWorkflowBar() {
   }, [whitepaperOpen, closeWhitepaper]);
 
   const autoTradingEnabled = status?.auto_trading ?? false;
-  const krakenPaused = krakenControl?.bot_paused ?? false;
 
   const avgConviction = useMemo(() => {
     if (!allocation?.allocation) return null;
@@ -90,15 +86,6 @@ export function TradeWorkflowBar() {
             ? "The autonomous system is now active — runs every 15 min during market hours."
             : "All scheduled trading paused. Manual operations still available.",
         });
-      } else if (kind === "kraken-pause" || kind === "kraken-resume") {
-        const pausing = kind === "kraken-pause";
-        await toggleKrakenBot.mutateAsync(pausing);
-        toast({
-          title: pausing ? "Kraken Bot Paused" : "Kraken Bot Resumed",
-          description: pausing
-            ? "SPY/QQQ Trend will skip signal processing each cycle. The workflow stays running."
-            : "SPY/QQQ Trend is active and will evaluate signals each cycle.",
-        });
       }
     } catch (err: any) {
       toast({ variant: "destructive", title: "Toggle Failed", description: err.message });
@@ -117,18 +104,6 @@ export function TradeWorkflowBar() {
       body: "This pauses all automated trading. No scheduled analysis or executions will run until you re-enable it. Kill switch and manual controls remain active.",
       btnLabel: "Yes, Disable",
       danger: true,
-    },
-    "kraken-pause": {
-      title: "Pause SPY/QQQ Trend Bot?",
-      body: "The Kraken bot workflow stays running but will skip signal processing each cycle. Open positions remain open and are still tracked. Resume at any time.",
-      btnLabel: "Yes, Pause",
-      danger: true,
-    },
-    "kraken-resume": {
-      title: "Resume SPY/QQQ Trend Bot?",
-      body: "The Kraken bot will resume evaluating mean-reversion + RSI signals every cycle. It will trade according to its configured strategy.",
-      btnLabel: "Yes, Resume",
-      danger: false,
     },
   };
 
@@ -185,28 +160,6 @@ export function TradeWorkflowBar() {
           <span>{autoTradingEnabled ? "Alpaca ON" : "Alpaca OFF"}</span>
           {autoTradingEnabled && (
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          )}
-        </button>
-
-        {/* ── Kraken Bot toggle ── */}
-        <button
-          onClick={() => setConfirmKind(krakenPaused ? "kraken-resume" : "kraken-pause")}
-          disabled={toggleKrakenBot.isPending}
-          className={cn(
-            "relative group flex items-center gap-2.5 px-5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-[0.98] overflow-hidden border",
-            !krakenPaused
-              ? "bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-500/50"
-              : "bg-slate-800/60 border-white/10 text-muted-foreground hover:text-white hover:border-white/20"
-          )}
-        >
-          {toggleKrakenBot.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Anchor className={cn("h-4 w-4", !krakenPaused && "drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]")} />
-          )}
-          <span>{krakenPaused ? "Kraken OFF" : "Kraken ON"}</span>
-          {!krakenPaused && (
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
           )}
         </button>
 

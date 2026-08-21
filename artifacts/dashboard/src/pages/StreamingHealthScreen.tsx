@@ -60,14 +60,14 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
 
 const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server }> = {
   platform_core:  { x: 400, y: 80,  icon: Server },
-  equity_manager: { x: 140, y: 230, icon: Shield },
+  bot_oracle:     { x: 140, y: 230, icon: Target },
+  bot_spy_qqq:    { x: 400, y: 230, icon: Target },
+  bot_jerome:     { x: 660, y: 230, icon: Target },
   alpaca_api:     { x: 140, y: 400, icon: Wifi },
-  kraken_api:     { x: 400, y: 230, icon: Anchor },
-  options_bot:    { x: 660, y: 230, icon: Target },
-  forex_bot:      { x: 660, y: 400, icon: Globe },
   data_pipeline:  { x: 400, y: 400, icon: Database },
-  rag_engine:     { x: 140, y: 530, icon: Brain },
-  alert_system:   { x: 660, y: 530, icon: Bell },
+  alert_system:   { x: 660, y: 400, icon: Bell },
+  equity_manager: { x: 140, y: 530, icon: Shield },
+  analysis_layer: { x: 660, y: 530, icon: Brain },
 };
 
 const NODE_W = 170;
@@ -76,39 +76,28 @@ const NODE_H = 86;
 type WireSpec = { from: string; to: string; bend?: "h-first" | "v-first" };
 
 const WIRES: WireSpec[] = [
-  { from: "platform_core",  to: "equity_manager", bend: "v-first" },
-  { from: "platform_core",  to: "kraken_api",     bend: "v-first" },
-  { from: "platform_core",  to: "options_bot",    bend: "v-first" },
-  { from: "equity_manager", to: "alpaca_api",     bend: "v-first" },
-  { from: "kraken_api",     to: "data_pipeline",  bend: "v-first" },
-  { from: "options_bot",    to: "forex_bot",      bend: "v-first" },
-  { from: "data_pipeline",  to: "rag_engine",     bend: "h-first" },
-  { from: "data_pipeline",  to: "forex_bot",      bend: "h-first" },
+  { from: "platform_core",  to: "bot_oracle",     bend: "v-first" },
+  { from: "platform_core",  to: "bot_spy_qqq",    bend: "v-first" },
+  { from: "platform_core",  to: "bot_jerome",     bend: "v-first" },
+  { from: "bot_oracle",     to: "alpaca_api",     bend: "v-first" },
+  { from: "bot_spy_qqq",    to: "data_pipeline",  bend: "v-first" },
+  { from: "bot_jerome",     to: "alert_system",   bend: "v-first" },
+  { from: "data_pipeline",  to: "equity_manager", bend: "h-first" },
+  { from: "data_pipeline",  to: "analysis_layer", bend: "h-first" },
   { from: "data_pipeline",  to: "alert_system",   bend: "h-first" },
-  { from: "rag_engine",     to: "alpaca_api",     bend: "v-first" },
+  { from: "equity_manager", to: "alpaca_api",     bend: "v-first" },
 ];
 
 const COMPONENT_LABELS: Record<string, string> = {
   platform_core: "Platform Core",
   data_pipeline: "Data Pipeline",
-  kraken_api: "Kraken Bot",
+  bot_oracle: "Oracle / US Core",
+  bot_spy_qqq: "SPY/QQQ Trend",
+  bot_jerome: "Jerome Macro",
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
-  rag_engine: "RAG Learning Engine",
-  options_bot: "Options Engine",
-  forex_bot: "Forex Gump",
+  analysis_layer: "Analysis Layer",
   alert_system: "Alert System",
-  kraken_davy_jones: "SPY/QQQ Trend",
-  kraken_blackbeard: "Jerome",
-  kraken_poseidon: "Poseidon",
-  kraken_kraken_current: "Kraken Current",
-};
-
-const BOT_DISPLAY: Record<string, string> = {
-  kraken_davy_jones: "SPY/QQQ Trend",
-  kraken_blackbeard: "Jerome",
-  kraken_poseidon: "Poseidon",
-  kraken_kraken_current: "Kraken Current",
 };
 
 function GlowingWire({ x1, y1, x2, y2, bend, level, id }: { x1: number; y1: number; x2: number; y2: number; bend: "h-first" | "v-first"; level: Level; id: string }) {
@@ -220,9 +209,7 @@ function ArchitectureNode({ nodeKey, health }: { nodeKey: string; health: NodeHe
 
 /* ── Per-Bot Fleet Strip ──────────────────────────────────────────────────── */
 function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
-  const perBotNodes = Object.entries(nodes).filter(
-    ([k]) => k.startsWith("kraken_") && k !== "kraken_api"
-  );
+  const perBotNodes = Object.entries(nodes).filter(([k]) => ["bot_oracle", "bot_spy_qqq", "bot_jerome"].includes(k));
   if (perBotNodes.length === 0) return null;
 
   return (
@@ -230,7 +217,7 @@ function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
       <div className="flex items-center gap-2 px-5 py-1.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
         <Anchor className="h-2.5 w-2.5" style={{ color: "rgba(148,163,184,0.35)" }} />
         <span className="text-[7px] font-mono uppercase tracking-widest font-semibold" style={{ color: "rgba(148,163,184,0.35)" }}>
-          Kraken Bot Fleet
+          Active Alpaca ETF Fleet
         </span>
         <span className="ml-auto text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>
           {perBotNodes.filter(([, n]) => n.level === "green").length}/{perBotNodes.length} healthy
@@ -239,7 +226,7 @@ function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
       <div className="flex items-center gap-2 px-5 py-2 flex-wrap">
         {perBotNodes.map(([key, node]) => {
           const colors = LEVEL_COLORS[node.level];
-          const botLabel = BOT_DISPLAY[key] ?? key.replace("kraken_", "").replace(/_/g, " ");
+          const botLabel = COMPONENT_LABELS[key] ?? key;
           return (
             <div key={key} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg"
               style={{

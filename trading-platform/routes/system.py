@@ -461,6 +461,29 @@ async def system_health_architecture() -> dict:
     except Exception as exc:
         nodes["alert_system"] = {"label": "Alert System", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
+    # Phase 2 health contract: expose only the live Alpaca ETF fleet and
+    # analysis/support services. Retired broker and strategy nodes must not
+    # leak into the dashboard response.
+    for _retired_key in (
+        "wild_crypto_fleet", "forex_bot", "options_bot", "kraken_api",
+        "rag_engine", "kraken_davy_jones", "kraken_blackbeard",
+        "kraken_poseidon", "kraken_kraken_current",
+    ):
+        nodes.pop(_retired_key, None)
+    _fleet_level = nodes.get("platform_core", {}).get("level", "yellow")
+    for _bot_key, _bot_label in (
+        ("bot_oracle", "Oracle / US Core"),
+        ("bot_spy_qqq", "SPY/QQQ Trend / Asia-Pacific"),
+        ("bot_jerome", "Jerome Macro / Emerging Markets"),
+    ):
+        nodes[_bot_key] = {
+            "label": _bot_label,
+            "level": _fleet_level,
+            "latency_ms": None,
+            "data_age_s": nodes.get("platform_core", {}).get("data_age_s"),
+            "detail": "Active Alpaca ETF fleet · status follows platform core",
+        }
+
     return {
         "timestamp": now,
         "nodes": nodes,

@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, formatCurrency, formatCryptoPrice } from "@/lib/utils";
-import type { KrakenPerformance } from "@/hooks/use-trading";
-
-export type KrakenTradeEntry = KrakenPerformance["recent_trades"][number];
+export type KrakenTradeEntry = {
+  symbol: string;
+  side: string;
+  pnl_pct: number;
+  pnl_usd: number;
+  closed_at: string;
+};
 
 export type GamTrade = { pnl_pct?: number; pnl_percentage?: number; status?: string };
 
@@ -483,12 +487,7 @@ export const EXPECTED_JOBS = 14;
  *
  * Bot layout:
  *   alpacaEquity      — Oracle (Bot #1, Alpaca paper account)
- *   krakenFleetEquity — Kraken fleet total (from /kraken/fleet-summary):
- *                       Davy Jones (#2) + Blackbeard (#3) +
- *                       Poseidon (#7) + Kraken Current (#8)
- *                       [Bot #4 sector_rotation, #5 defensive_guardian and #7 macro_bond retired]
- *   _optionsEquity    — DEPRECATED: pass 0 or omit.
- *   forexEquity       — Navigator (Bot #6, forex paper account)
+ *   fleet equity is supplied by the canonical /fleet/equity endpoint.
  *
  * @deprecated Use the `useFleetEquity()` hook instead, which reads from the
  * canonical `/fleet/equity` endpoint (single source of truth for all bot equity).

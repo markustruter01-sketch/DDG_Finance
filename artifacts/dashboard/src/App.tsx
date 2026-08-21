@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/HomePage";
-import Dashboard from "@/pages/Dashboard";
 import StreamPage from "@/pages/StreamPage";
 import Design1Vaudeville from "@/pages/design/Design1Vaudeville";
 import Design2Terminal from "@/pages/design/Design2Terminal";

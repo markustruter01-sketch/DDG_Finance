@@ -3,7 +3,4 @@ export * from "./use-portfolio";
 export * from "./use-performance";
 export * from "./use-journal";
 export * from "./use-auditor";
-export * from "./use-kraken";
-export * from "./use-options";
-export * from "./use-forex";
 export * from "./use-alerts";

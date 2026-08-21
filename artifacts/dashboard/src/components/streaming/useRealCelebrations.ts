@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useJournal,
-  useLivePositions, useForexPositions, useFleetEquity,
+  useLivePositions, useFleetEquity,
 } from "@/hooks/use-trading";
 import { playTradeWin, playExplosion } from "./sounds";
 import { getBotIdentity } from "@/lib/bot-identity";
@@ -106,7 +106,6 @@ export function useRealCelebrations() {
   const journalQuery = useJournal();
   const journal = journalQuery.data;
   const { data: livePositions } = useLivePositions();
-  const { data: fxPositions } = useForexPositions();
   const { data: fleetEquity } = useFleetEquity();
 
   const [explosion, setExplosion] = useState<CelebrationTrade | null>(null);
@@ -121,7 +120,6 @@ export function useRealCelebrations() {
     const losses: RealTradeEntry[] = [];
 
     const _oracle = getBotIdentity("oracle");
-    const _fx = getBotIdentity("forex_gump");
 
     if (journal?.trades) {
       for (const t of journal.trades) {
@@ -129,11 +127,9 @@ export function useRealCelebrations() {
         const isLoss = t.status === "Closed_Loss";
         if (!isWin && !isLoss) continue;
         const pnl = Math.abs(t.pnl_percentage * 100);
-        const isKraken = t.source === "kraken" || t.trade_id?.startsWith("kraken-") || t.trade_id?.startsWith("KRK-");
         const isForex = t.asset_class === "forex" || t.source === "forex";
-        const isOptions = t.asset_class === "options" || t.source === "options";
-        let _id = _oracle;
-        if (isForex) { _id = _fx; }
+        if (isForex) continue;
+        const _id = _oracle;
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
         const entry: RealTradeEntry = { bot: _id.displayName, icon: _id.icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
         if (isWin) wins.push(entry);
@@ -151,27 +147,18 @@ export function useRealCelebrations() {
       }
     }
 
-    if (fxPositions?.positions) {
-      for (const p of fxPositions.positions) {
-        const isWin = p.unrealized_pnl_usd > 0;
-        const pnlUsd = Math.abs(p.unrealized_pnl_usd);
-        if (pnlUsd < 0.01) continue;
-        const arr = isWin ? wins : losses;
-        arr.push({ bot: _fx.displayName, icon: _fx.icon, symbol: p.pair.replace("_", "/"), pnlUsd, isWin, source: "forex-open" });
-      }
-    }
 
     if (wins.length === 0) {
       wins.push(
         { bot: _oracle.displayName, icon: _oracle.icon, symbol: "SPY",     pnlUsd: 12.50, isWin: true, source: "placeholder" },
         { bot: _oracle.displayName, icon: _oracle.icon, symbol: "QQQ",     pnlUsd: 24.80, isWin: true, source: "placeholder" },
-        { bot: _fx.displayName,     icon: _fx.icon,     symbol: "EUR/USD", pnlUsd: 8.30,  isWin: true, source: "placeholder" },
+        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "GLD",     pnlUsd: 8.30,  isWin: true, source: "placeholder" },
         { bot: _oracle.displayName, icon: _oracle.icon, symbol: "NVDA",    pnlUsd: 15.60, isWin: true, source: "placeholder" },
       );
     }
     if (losses.length === 0) {
       losses.push(
-        { bot: _fx.displayName,     icon: _fx.icon,     symbol: "GBP/USD", pnlUsd: 6.40, isWin: false, source: "placeholder" },
+        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "XLF",     pnlUsd: 6.40, isWin: false, source: "placeholder" },
         { bot: _oracle.displayName, icon: _oracle.icon, symbol: "XLK",     pnlUsd: 4.20, isWin: false, source: "placeholder" },
       );
     }
@@ -202,7 +189,7 @@ export function useRealCelebrations() {
     while (li < losses.length) combined.push(losses[li++]);
 
     return combined;
-  }, [journal, livePositions, fxPositions]);
+  }, [journal, livePositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
     const totalWins = journal?.summary?.wins ?? 0;

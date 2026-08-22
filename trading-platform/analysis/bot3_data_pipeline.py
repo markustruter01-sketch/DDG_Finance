@@ -252,12 +252,13 @@ def integrity_report() -> bool:
                     "null_count": null_count,
                     "calendar_gaps": len(missing),
                 }
+                expected_first_date = min(expected).isoformat() if expected else None
                 print(
                     f"{item['symbol']} | {item['row_count']} | {item['first_date']} | "
                     f"{item['last_date']} | {item['null_count']} | {item['calendar_gaps']}"
                 )
                 if (
-                    item["first_date"] != START_DATE.isoformat()
+                    item["first_date"] != expected_first_date
                     or item["row_count"] < 1300
                     or item["null_count"] != 0
                     or missing

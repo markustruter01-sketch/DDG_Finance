@@ -263,7 +263,7 @@ export default function SynapticAuditScreen() {
       </svg>
 
       {/* Header */}
-      <header className="absolute top-0 left-0 right-0 h-[60px] px-6 z-30 flex items-center border-b border-cyan-900/30 bg-[#020617]/70 backdrop-blur-md">
+      <header className="absolute top-0 left-0 right-0 h-[60px] px-6 z-30 flex items-center border-b border-cyan-900/30 bg-[#020617]/70 backdrop-blur-md" style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
         <div className="flex items-center gap-3">
           <div className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -338,7 +338,7 @@ export default function SynapticAuditScreen() {
       </div>
 
       {/* Bottom event stream */}
-      <div className="absolute bottom-0 left-0 right-0 h-[100px] z-30 px-6 flex flex-col justify-center border-t border-cyan-900/30 bg-[#020617]/80 backdrop-blur-md">
+      <div className="absolute bottom-0 left-0 right-0 h-[100px] z-30 px-6 flex flex-col justify-center border-t border-cyan-900/30 bg-[#020617]/80 backdrop-blur-md" style={{ backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)" }}>
         <h3 className="text-[9px] uppercase tracking-widest text-cyan-700 mb-2.5 font-semibold">Live Event Stream</h3>
         <div className="flex items-center gap-3 overflow-hidden">
           {events.length > 0

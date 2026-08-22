@@ -13,6 +13,8 @@ export function GlobalHUD() {
         gap: 24,
         background: "linear-gradient(90deg, rgba(15,23,42,0.98), rgba(30,41,59,0.96))",
         borderBottom: "1px solid rgba(99,102,241,0.18)",
+         backdropFilter: "blur(20px)",
+         WebkitBackdropFilter: "blur(20px)",
       }}
     >
       {/* Welcome text */}

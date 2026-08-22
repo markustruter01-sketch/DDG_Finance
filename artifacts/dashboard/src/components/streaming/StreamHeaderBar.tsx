@@ -112,8 +112,10 @@ export function StreamHeaderBar() {
       className="w-full shrink-0 flex items-stretch font-mono"
       style={{
         height: 52,
-        background: "#000000",
+        background: "rgba(0,0,0,0.82)",
         borderBottom: "1px solid rgba(34,211,238,0.12)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
         zIndex: 30,
       }}
     >

@@ -15,6 +15,7 @@ const api  = axios.create({ baseURL: BASE });
 
 interface HistoryPoint { date: string; total_equity: number }
 interface HistoryResponse { history: HistoryPoint[] }
+interface FleetEquityResponse { fleet_total?: { starting?: number | null } }
 
 function useFleetHistory() {
   return useQuery<HistoryResponse>({
@@ -22,6 +23,16 @@ function useFleetHistory() {
     queryFn:  async () => (await api.get("/fleet/equity-history")).data,
     staleTime: 300_000,
     refetchInterval: 600_000,
+    retry: 1,
+  });
+}
+
+function useFleetStartingCapital() {
+  return useQuery<FleetEquityResponse>({
+    queryKey: ["fleet-equity"],
+    queryFn: async () => (await api.get("/fleet/equity")).data,
+    staleTime: 10_000,
+    refetchInterval: 15_000,
     retry: 1,
   });
 }
@@ -57,16 +68,19 @@ function SparkTooltip({ active, payload }: any) {
 
 export default function FleetSparkline() {
   const { data, isLoading } = useFleetHistory();
+  const { data: fleet } = useFleetStartingCapital();
   const history = data?.history ?? [];
+  const startingCapital = fleet?.fleet_total?.starting;
 
-  // Compute all-time % change relative to first data point
+  // Compute all-time % change against canonical fleet starting capital.
   const { pctChange, positive } = useMemo(() => {
-    if (history.length < 2) return { pctChange: null, positive: true };
-    const first = history[0].total_equity;
-    const last  = history[history.length - 1].total_equity;
-    const pct   = ((last - first) / first) * 100;
+    if (startingCapital == null || startingCapital <= 0 || history.length === 0) {
+      return { pctChange: null, positive: true };
+    }
+    const last = history[history.length - 1].total_equity;
+    const pct = ((last - startingCapital) / startingCapital) * 100;
     return { pctChange: pct, positive: pct >= 0 };
-  }, [history]);
+  }, [history, startingCapital]);
 
   const lineColor   = positive ? "#22d3ee" : "#f87171";
   const fillStart   = positive ? "rgba(34,211,238,0.15)" : "rgba(248,113,113,0.10)";

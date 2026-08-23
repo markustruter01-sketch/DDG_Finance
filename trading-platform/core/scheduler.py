@@ -719,48 +719,98 @@ def _fetch_benchmark_closes() -> dict:
     return results
 
 
-async def _snapshot_fleet_equity() -> None:
+async def _snapshot_fleet_equity(*, dry_run: bool = False) -> dict[str, object]:
     """
     Job 7 — fires daily at 19:00 ET.
     Writes one fleet_equity_history row (date, total_equity) for the sparkline.
-    Uses bot_portfolio as source of truth (same as /fleet/equity route).
+    Uses all three active bot_portfolio rows as the source of truth (same as
+    /fleet/equity route). Stale rows remain valid last-known equity.
     ON CONFLICT DO UPDATE keeps the latest value for each calendar date.
     """
     logger.info("Scheduler | JOB STARTING: nightly_fleet_equity_snapshot")
+    active_bot_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
     try:
         from db.postgres import get_conn, is_pg_available
         if not is_pg_available():
             logger.warning("Scheduler | fleet_equity_snapshot: PG unavailable — skip")
-            return
+            return {"status": "skipped", "reason": "database_unavailable"}
 
         with get_conn() as conn:
             with conn.cursor() as cur:
-                # Match /fleet/equity exactly: retired portfolio rows must
-                # never contribute a phantom allocation to the sparkline.
-                active_bot_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
                 cur.execute("""
-                    SELECT COALESCE(SUM(equity_usd), 0)
+                    SELECT bot_id, equity_usd, last_updated
                     FROM bot_portfolio
                     WHERE bot_id IN (%s, %s, %s)
-                      AND last_updated > NOW() - INTERVAL '25 minutes'
                 """, active_bot_ids)
-                row = cur.fetchone()
-                total = float(row[0]) if row else 0.0
+                portfolio_rows = cur.fetchall()
 
-                # Fall back to the same active set if no recent heartbeat
-                # (weekend, market closed).
-                if total == 0:
-                    cur.execute("""
-                        SELECT COALESCE(SUM(equity_usd), 0)
-                        FROM bot_portfolio
-                        WHERE bot_id IN (%s, %s, %s)
-                    """, active_bot_ids)
-                    row = cur.fetchone()
-                    total = float(row[0]) if row else 0.0
+            contributed = len(portfolio_rows)
+            if contributed < len(active_bot_ids):
+                missing = sorted(set(active_bot_ids) - {row[0] for row in portfolio_rows})
+                logger.error(
+                    "Scheduler | fleet_equity_snapshot: refusing partial total — "
+                    f"found {contributed}/{len(active_bot_ids)} active bots; missing={missing}"
+                )
+                return {
+                    "status": "skipped",
+                    "reason": "incomplete_active_bot_rows",
+                    "bot_count": contributed,
+                    "missing": missing,
+                }
+
+            total = sum(float(row[1] or 0.0) for row in portfolio_rows)
+            stale_bots = [
+                row[0] for row in portfolio_rows
+                if row[2] is None or (datetime.now(row[2].tzinfo) - row[2]).total_seconds() > 25 * 60
+            ]
+
+            # Compare against the canonical route before writing. A divergence
+            # this large means the history row would poison the chart.
+            try:
+                from routes.fleet_equity import _fetch_fleet_equity
+                canonical = _fetch_fleet_equity()["fleet_total"]["equity"]
+            except Exception as exc:
+                logger.critical(
+                    f"Scheduler | fleet_equity_snapshot: canonical comparison failed — {exc}; refusing write"
+                )
+                return {"status": "skipped", "reason": "canonical_comparison_failed", "bot_count": contributed}
+
+            divergence_pct = abs(total - float(canonical)) / float(canonical) * 100 if canonical else 0.0
+            if divergence_pct > 5:
+                logger.critical(
+                    "Scheduler | fleet_equity_snapshot: refusing write — "
+                    f"computed=${total:,.2f}, canonical=${float(canonical):,.2f}, "
+                    f"divergence={divergence_pct:.2f}%"
+                )
+                return {
+                    "status": "skipped",
+                    "reason": "canonical_divergence",
+                    "bot_count": contributed,
+                    "computed_total": round(total, 2),
+                    "canonical_total": round(float(canonical), 2),
+                    "divergence_pct": round(divergence_pct, 4),
+                }
+
+            result = {
+                "status": "dry_run" if dry_run else "written",
+                "bot_count": contributed,
+                "total_equity": round(total, 2),
+                "canonical_total": round(float(canonical), 2),
+                "stale_bots": stale_bots,
+                "snapshot_date": str(date.today()),
+            }
+            logger.info(
+                "Scheduler | fleet_equity_snapshot: "
+                f"{'would write' if dry_run else 'writing'} ${total:,.2f} "
+                f"from {contributed}/{len(active_bot_ids)} bots; stale={stale_bots or 'none'}"
+            )
+
+            if dry_run:
+                return result
 
             if total <= 0:
                 logger.warning(f"Scheduler | fleet_equity_snapshot: total=${total:,.2f} — skip (zero equity)")
-                return
+                return {"status": "skipped", "reason": "zero_equity", "bot_count": contributed}
 
             with conn.cursor() as cur:
                 cur.execute("""
@@ -773,8 +823,10 @@ async def _snapshot_fleet_equity() -> None:
             conn.commit()
 
         logger.info(f"Scheduler | fleet_equity_snapshot complete — ${total:,.2f} saved for {__import__('datetime').date.today()}")
+        return result
     except Exception as exc:
         logger.error(f"Scheduler | fleet_equity_snapshot FAILED: {exc}")
+        return {"status": "error", "reason": str(exc)}
 
 
 def _fetch_fleet_equity_total() -> float:

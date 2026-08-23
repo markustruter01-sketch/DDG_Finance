@@ -824,6 +824,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#e8eef2", position: "relative" }}>
       <StyleTag />
+      <div className="desktop-home-background" aria-hidden="true" />
       <div className="mobile-home-background" aria-hidden="true" />
       <Starfield warp={warp} />
 

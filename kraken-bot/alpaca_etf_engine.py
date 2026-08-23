@@ -1299,11 +1299,14 @@ class AlpacaEtfEngine:
                             exit_reason  = %s,
                             realised_pnl = %s
                         WHERE bot_id = %s AND symbol = %s AND status = 'open'
+                        RETURNING id
                     """, (exit_reason, realised_pnl, bot_id, symbol))
+                    closed_row = cur.fetchone()
                 conn.commit()
             logger.info(f"EtfEngine | DB: recorded close {bot_id}/{symbol} — {exit_reason}")
         except Exception as exc:
             logger.error(f"EtfEngine | record_close failed: {exc}")
+            closed_row = None
         # Mirror close to trades table
         try:
             from db.postgres import get_conn as _gc

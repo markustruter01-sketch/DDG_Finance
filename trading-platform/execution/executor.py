@@ -667,6 +667,7 @@ def _close_stale_positions(
                         realized_pnl=round(realized_usd, 2),
                         exit_reason="algo_cover",
                         time_in_trade_hours=round(_hours, 2) if _hours else None,
+                        bot_id="oracle",
                     )
                     logger.info(
                         f"Trade journal | Recorded close for {symbol}: "

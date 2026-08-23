@@ -481,6 +481,13 @@ def _backfill_from_trade_history() -> None:
 def init_vault_db() -> None:
     if _use_pg():
         _ensure_pg_schema()
+        # Additive per-bot vault schema. This does not seed accounts, migrate
+        # legacy balances, or activate the new vault.
+        try:
+            from execution.per_bot_vault import ensure_schema as _ensure_per_bot_schema
+            _ensure_per_bot_schema()
+        except Exception as exc:
+            logger.warning(f"PerBotVault | schema ensure failed (non-fatal): {exc}")
         logger.debug("Vault | vault_ledger table ensured (PostgreSQL)")
         _migrate_sqlite_to_pg()
         _backfill_from_trade_history()

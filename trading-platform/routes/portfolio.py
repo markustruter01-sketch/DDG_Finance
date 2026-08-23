@@ -598,6 +598,27 @@ async def vault_state() -> dict:
     return {"initialised": True, "vaulted_24h": round(vaulted_24h, 2), **state}
 
 
+@portfolio_router.get("/vault/per-bot", tags=["Vault"])
+async def per_bot_vault_report(bot_id: str | None = None) -> dict:
+    """Separate per-bot reporting; the legacy /vault contract is unchanged."""
+    from execution.per_bot_vault import get_vault_report
+    return get_vault_report(bot_id)
+
+
+@portfolio_router.get("/vault/per-bot/seed-preview", tags=["Vault"])
+async def per_bot_vault_seed_preview() -> dict:
+    """Preview 5% seeds from current equity without creating accounts."""
+    from execution.per_bot_vault import seed_preview
+    return {"enabled": False, "seed_rate": 0.05, "bots": seed_preview()}
+
+
+@portfolio_router.get("/vault/per-bot/verification", tags=["Vault"])
+async def per_bot_vault_verification() -> dict:
+    """Deterministic accounting checks; no broker or runner interaction."""
+    from execution.per_bot_vault import verification_report
+    return verification_report()
+
+
 @portfolio_router.get("/vault/history", tags=["Vault"])
 async def vault_history(days: int = 90) -> dict:
     """Return daily vault growth snapshots derived from trade history."""

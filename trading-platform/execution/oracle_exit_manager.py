@@ -595,6 +595,7 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
                     exit_reason=exit_reason,
                     time_in_trade_hours=float(exit_info.get("hours_held") or 0) or None,
                     close_price=float(pos.get("current_price") or 0) or None,
+                    bot_id="oracle",
                 )
                 # Profit reserve sweep (15% of winning trades)
                 if raw_pnl > 0:

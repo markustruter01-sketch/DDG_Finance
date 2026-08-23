@@ -184,6 +184,50 @@ CREATE TABLE IF NOT EXISTS vault_ledger (
     da_adjustment         DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
+-- Per-bot profit vault (additive, inactive until explicitly enabled).
+-- This is deliberately separate from the retired global JEPQ/HWM ledger above.
+CREATE TABLE IF NOT EXISTS per_bot_vault_accounts (
+    bot_id                  TEXT PRIMARY KEY,
+    activation_enabled      BOOLEAN NOT NULL DEFAULT FALSE,
+    activation_equity       NUMERIC,
+    seed_amount             NUMERIC NOT NULL DEFAULT 0,
+    trading_capital         NUMERIC,
+    sgov_qty                NUMERIC NOT NULL DEFAULT 0,
+    qqq_qty                 NUMERIC NOT NULL DEFAULT 0,
+    cash_usd                NUMERIC NOT NULL DEFAULT 0,
+    cumulative_contributions NUMERIC NOT NULL DEFAULT 0,
+    last_rebalance_date     DATE,
+    activated_at             TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS per_bot_vault_contributions (
+    id              BIGSERIAL PRIMARY KEY,
+    bot_id          TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+    source_trade_id TEXT NOT NULL,
+    realized_profit NUMERIC NOT NULL,
+    skim_amount     NUMERIC NOT NULL,
+    sgov_allocated  NUMERIC NOT NULL DEFAULT 0,
+    qqq_allocated   NUMERIC NOT NULL DEFAULT 0,
+    cash_accrued    NUMERIC NOT NULL DEFAULT 0,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (bot_id, source_trade_id)
+);
+CREATE INDEX IF NOT EXISTS idx_per_bot_vault_contrib_bot_ts
+    ON per_bot_vault_contributions (bot_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS per_bot_vault_value_history (
+    id                       BIGSERIAL PRIMARY KEY,
+    bot_id                   TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+    recorded_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    trading_capital          NUMERIC NOT NULL,
+    cumulative_contributions NUMERIC NOT NULL,
+    vault_value              NUMERIC NOT NULL,
+    vault_return_pct         NUMERIC NOT NULL DEFAULT 0,
+    combined_total           NUMERIC NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_per_bot_vault_history_bot_ts
+    ON per_bot_vault_value_history (bot_id, recorded_at DESC);
+
 -- Ratchet stops
 CREATE TABLE IF NOT EXISTS ratchet_stops (
     symbol        TEXT PRIMARY KEY,

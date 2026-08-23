@@ -347,6 +347,8 @@ def _record_trade_close(row_id: int, exit_reason: str) -> None:
                     SET status = 'closed', closed_at = NOW(), exit_reason = %s
                     WHERE id = %s
                 """, (exit_reason, row_id))
+                # The reconciler supplies realized P&L later. This hook is
+                # intentionally deferred until that canonical write has data.
         logger.info(f"Jerome v2 | DB: recorded CLOSE id={row_id} reason={exit_reason}")
     except Exception as exc:
         # B-8 fix: broker close is DONE but DB record failed — row stays 'open'.
@@ -804,6 +806,18 @@ def _reconcile_jerome_pnl(alpaca: "JeromeAlpaca") -> None:
                                 SET realised_pnl_usd = %s
                                 WHERE id = %s AND realised_pnl_usd IS NULL
                             """, (row_pnl, row_id))
+                            if cur.rowcount > 0 and row_pnl > 0:
+                                try:
+                                    from execution.per_bot_vault import record_profitable_close
+                                    record_profitable_close(
+                                        bot_id="jerome_macro",
+                                        source_trade_id=f"jerome_position:{row_id}",
+                                        realized_profit=row_pnl,
+                                    )
+                                except Exception as vault_exc:
+                                    logger.error(
+                                        f"Jerome v2 | per-bot vault hook failed for id={row_id}: {vault_exc}"
+                                    )
                             logger.info(
                                 f"Jerome v2 | Reconciler: {sym} id={row_id} "
                                 f"pnl=${row_pnl:+.2f} "

@@ -295,6 +295,7 @@ def close_trade(
     exit_reason: str | None = None,
     time_in_trade_hours: float | None = None,
     close_price: float | None = None,
+    bot_id: str | None = None,
 ) -> None:
     """
     Comprehensive trade closure.  Records all RAG-phase fields alongside the
@@ -321,11 +322,12 @@ def close_trade(
             with conn.cursor() as cur:
                 # Fetch intended_price for slippage computation
                 cur.execute(
-                    "SELECT intended_price FROM trades WHERE trade_id = %s",
+                    "SELECT intended_price, asset_class FROM trades WHERE trade_id = %s",
                     (trade_id,),
                 )
                 row = cur.fetchone()
                 intended = row[0] if row else None
+                asset_class = row[1] if row else None
                 slip = None
                 if intended and close_price and intended > 0:
                     slip = (close_price - intended) / intended * 100
@@ -351,12 +353,27 @@ def close_trade(
                 f"Trade journal | Closed {trade_id} → {status} "
                 f"({pnl_percentage:+.2f}%) via {exit_reason or 'unknown'}"
             )
+            resolved_bot = bot_id or {
+                "momentum_equity": "oracle",
+                "momentum_etf": "spy_qqq_trend",
+            }.get(asset_class)
+            if resolved_bot and realized_pnl is not None:
+                try:
+                    from execution.per_bot_vault import record_profitable_close
+                    record_profitable_close(
+                        bot_id=resolved_bot,
+                        source_trade_id=trade_id,
+                        realized_profit=float(realized_pnl),
+                    )
+                except Exception as exc:
+                    logger.error(f"Trade journal | per-bot vault hook failed for {trade_id}: {exc}")
     else:
         with _sqlite_conn() as conn:
             row = conn.execute(
-                "SELECT intended_price FROM trades WHERE trade_id = ?", (trade_id,)
+                "SELECT intended_price, asset_class FROM trades WHERE trade_id = ?", (trade_id,)
             ).fetchone()
             intended = row["intended_price"] if row else None
+            asset_class = row["asset_class"] if row else None
             slip = None
             if intended and close_price and intended > 0:
                 slip = (close_price - intended) / intended * 100
@@ -379,6 +396,20 @@ def close_trade(
                     f"Trade journal | Closed {trade_id} → {status} "
                     f"({pnl_percentage:+.2f}%) via {exit_reason or 'unknown'}"
                 )
+                resolved_bot = bot_id or {
+                    "momentum_equity": "oracle",
+                    "momentum_etf": "spy_qqq_trend",
+                }.get(asset_class)
+                if resolved_bot and realized_pnl is not None:
+                    try:
+                        from execution.per_bot_vault import record_profitable_close
+                        record_profitable_close(
+                            bot_id=resolved_bot,
+                            source_trade_id=trade_id,
+                            realized_profit=float(realized_pnl),
+                        )
+                    except Exception as exc:
+                        logger.error(f"Trade journal | per-bot vault hook failed for {trade_id}: {exc}")
 
 
 # ── log_post_mortem ────────────────────────────────────────────────────────

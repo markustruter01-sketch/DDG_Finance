@@ -29,6 +29,9 @@ ASSETS = ("BTC", "ETH", "GLD", "SLV")
 CRYPTO = {"BTC", "ETH"}
 TARGET_WEIGHT = 0.25
 REBALANCE_BAND = 0.05
+VOL_LOOKBACK = 60
+WEIGHT_FLOOR = 0.10
+WEIGHT_CAP = 0.40
 CRYPTO_STOP_PCT = 0.25
 METAL_STOP_PCT = 0.10
 STARTING_EQUITY = 100_000.0
@@ -100,6 +103,53 @@ def _period_key(day: date, frequency: str) -> tuple[int, int]:
     return day.year, (day.month - 1) // 3
 
 
+def _bounded_inverse_vol_weights(
+    prices: dict[str, dict[date, Bar]],
+    day: date,
+) -> dict[str, float]:
+    raw: dict[str, float] = {}
+    for asset in ASSETS:
+        closes = [
+            bar.close for bar_day, bar in sorted(prices[asset].items())
+            if bar_day < day
+        ][-VOL_LOOKBACK - 1:]
+        returns = [
+            closes[index] / closes[index - 1] - 1
+            for index in range(1, len(closes))
+        ]
+        volatility = stdev(returns) * math.sqrt(252) if len(returns) > 1 else 0.0
+        if volatility <= 0:
+            return {asset_name: TARGET_WEIGHT for asset_name in ASSETS}
+        raw[asset] = 1.0 / volatility
+    total = sum(raw.values())
+    weights = {asset: raw[asset] / total for asset in ASSETS}
+    # Project onto the simplex with the locked floor and cap. Repeatedly
+    # redistribute only the mass of assets outside either bound.
+    fixed: dict[str, float] = {}
+    free = set(ASSETS)
+    remaining = 1.0
+    while free:
+        changed = False
+        for asset in tuple(free):
+            candidate = weights[asset] / sum(weights[name] for name in free) * remaining
+            if candidate < WEIGHT_FLOOR:
+                fixed[asset] = WEIGHT_FLOOR
+                remaining -= WEIGHT_FLOOR
+                free.remove(asset)
+                changed = True
+            elif candidate > WEIGHT_CAP:
+                fixed[asset] = WEIGHT_CAP
+                remaining -= WEIGHT_CAP
+                free.remove(asset)
+                changed = True
+        if not changed:
+            break
+    denominator = sum(weights[name] for name in free)
+    for asset in free:
+        fixed[asset] = remaining * weights[asset] / denominator if denominator else TARGET_WEIGHT
+    return fixed
+
+
 def _metrics(curve: list[float], turnover: float, rebalance_events: int) -> dict[str, Any]:
     returns = [
         curve[index] / curve[index - 1] - 1
@@ -136,6 +186,7 @@ def _run_rebalanced(
     start: date,
     end: date,
     frequency: str,
+    report_targets: bool = False,
 ) -> Run:
     common_start = max(min(prices[asset]) for asset in ASSETS)
     days = sorted(
@@ -154,6 +205,8 @@ def _run_rebalanced(
     asset_stats = {
         asset: {
             "pnl": 0.0,
+            "target_weight_sum": 0.0,
+            "target_weight_count": 0,
             "times_rebalanced_into": 0,
             "times_rebalanced_out_of": 0,
             "stop_fires": 0,
@@ -183,6 +236,21 @@ def _run_rebalanced(
         period = _period_key(day, frequency)
         is_rebalance_day = period != last_period
         if is_rebalance_day:
+            target_weights = (
+                {asset: TARGET_WEIGHT for asset in ASSETS}
+                if day == first_day
+                else _bounded_inverse_vol_weights(prices, day)
+            )
+            for asset in ASSETS:
+                asset_stats[asset]["target_weight_sum"] += target_weights[asset]
+                asset_stats[asset]["target_weight_count"] += 1
+            if report_targets:
+                print(
+                    f"TARGET_WEIGHTS | {day} | "
+                    + " | ".join(
+                        f"{asset}={target_weights[asset]:.2%}" for asset in ASSETS
+                    )
+                )
             open_marks = {
                 asset: (
                     bars[asset].open
@@ -206,7 +274,10 @@ def _run_rebalanced(
             )
             if day == first_day or needs_rebalance:
                 # Sell overweight positions and stopped positions first.
-                target_values = {asset: equity_at_open * TARGET_WEIGHT for asset in ASSETS}
+                target_values = {
+                    asset: equity_at_open * target_weights[asset]
+                    for asset in ASSETS
+                }
                 for asset in ASSETS:
                     holding = holdings[asset]
                     price = open_marks[asset]
@@ -320,12 +391,15 @@ def _print_parameters() -> None:
     print("TARGET_WEIGHTS=25%, 25%, 25%, 25%")
     print("INVESTMENT=always invested; no cash gate; no trend gate; no weakness exits")
     print("REBALANCE=quarterly locked choice; only when position drift exceeds 5 percentage points")
+    print("WEIGHTING=inverse volatility; trailing 60-day realized volatility; normalized 1/vol")
+    print("WEIGHT_BOUNDS=10% floor; 40% cap; bounded weights sum to 100%")
     print("SENSITIVITY=quarterly, annual, monthly; sensitivity only, no retuning")
     print("CATASTROPHE_STOPS=crypto stop_limit 25%; GLD/SLV GTC 10%")
     print("STOP_POLICY=stops are protection only; stopped assets re-enter at next scheduled rebalance")
     print("SESSIONS=BTC/ETH 24/7; GLD/SLV US equity sessions; missing marks carry forward")
     print("IDLE_CASH=minimal residual only; no strategy cash gate")
     print("STARTING_EQUITY=$100,000 per window")
+    print("COLD_START=equal weight on first available common session; no prior 60-day bars exist")
 
 
 def main() -> int:
@@ -341,7 +415,13 @@ def main() -> int:
     print("\nPER-WINDOW RESULTS")
     for name, start, end in WINDOWS:
         for frequency in FREQUENCIES:
-            run = _run_rebalanced(prices, start, end, frequency)
+            run = _run_rebalanced(
+                prices,
+                start,
+                end,
+                frequency,
+                report_targets=frequency == "quarterly",
+            )
             all_runs[frequency].append(run)
             m = run.metrics
             print(
@@ -366,12 +446,19 @@ def main() -> int:
     for asset in ASSETS:
         combined = {
             "return_contribution": sum(run.asset[asset]["return_contribution"] for run in selected),
+            "average_target_weight": (
+                sum(run.asset[asset]["target_weight_sum"] for run in selected)
+                / sum(run.asset[asset]["target_weight_count"] for run in selected)
+                if sum(run.asset[asset]["target_weight_count"] for run in selected)
+                else TARGET_WEIGHT
+            ),
             "times_rebalanced_into": sum(run.asset[asset]["times_rebalanced_into"] for run in selected),
             "times_rebalanced_out_of": sum(run.asset[asset]["times_rebalanced_out_of"] for run in selected),
             "stop_fires": sum(run.asset[asset]["stop_fires"] for run in selected),
         }
         print(
-            f"{asset} | return_contribution={combined['return_contribution']:+.2%} | "
+            f"{asset} | average_target_weight={combined['average_target_weight']:.2%} | "
+            f"return_contribution={combined['return_contribution']:+.2%} | "
             f"times_rebalanced_into={combined['times_rebalanced_into']} | "
             f"times_rebalanced_out_of={combined['times_rebalanced_out_of']} | "
             f"stop_fires={combined['stop_fires']}"
@@ -404,6 +491,17 @@ def main() -> int:
     print(
         f"QUARTERLY_REBALANCED | pooled Sharpe={quarterly['sharpe']:+.3f} | "
         f"return={quarterly['total_return']:+.2%}"
+    )
+    print("\nDIRECT COMPARISON — POOLED")
+    print("strategy | Sharpe | return | maxDD")
+    print("EMA50/200 trend gate | +0.700 | +78.85% | 21.61%")
+    print("EMA100/300 trend gate | +0.498 | +49.75% | 22.56%")
+    print(f"plain buy-and-hold | {buy_hold['sharpe']:+.3f} | {buy_hold['total_return']:+.2%} | {buy_hold['max_drawdown']:.2%}")
+    print("quarterly rebalanced equal-weight | +0.798 | +349.97% | 43.17%")
+    print(f"quarterly rebalanced vol-weighted | {quarterly['sharpe']:+.3f} | {quarterly['total_return']:+.2%} | {quarterly['max_drawdown']:.2%}")
+    print(
+        f"VOL_WEIGHTING_SHARPE_DELTA_VS_EQUAL={quarterly['sharpe'] - 0.798:+.3f} | "
+        + ("BEAT" if quarterly["sharpe"] > 0.798 else "DID_NOT_BEAT")
     )
 
     print("\nCONTROL 3 — REBALANCE FREQUENCY")

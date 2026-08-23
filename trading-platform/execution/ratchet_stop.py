@@ -646,6 +646,10 @@ def sweep_naked_positions(dry_run: bool = False) -> dict:
 
     try:
         live_positions = get_positions()
+        # The broker position is aggregate; remove explicitly tracked vault
+        # quantity before strategy stop coverage is evaluated.
+        from execution.per_bot_vault import filter_strategy_positions
+        live_positions = filter_strategy_positions("oracle", live_positions)
         open_orders    = get_open_orders()
     except Exception as exc:
         logger.error(f"StopSweep | Cannot fetch broker data: {exc}")

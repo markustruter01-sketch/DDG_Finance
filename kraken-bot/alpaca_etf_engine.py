@@ -301,6 +301,11 @@ class AlpacaEtfEngine:
             })
         return result
 
+    def get_strategy_positions(self, bot_id: str) -> list[dict]:
+        """Live positions with explicitly owned per-bot vault quantity removed."""
+        from execution.per_bot_vault import filter_strategy_positions
+        return filter_strategy_positions(bot_id, self.get_positions())
+
     # ── Orders ────────────────────────────────────────────────────────────────
 
     def place_order(
@@ -503,6 +508,14 @@ class AlpacaEtfEngine:
     ) -> bool:
         """Close entire position in a symbol."""
         try:
+            if bot_id:
+                from execution.per_bot_vault import get_vault_owned_quantities
+                if get_vault_owned_quantities(bot_id).get(symbol.upper(), 0.0) > 0:
+                    logger.error(
+                        f"EtfEngine | Refusing to close mixed vault symbol {bot_id}/{symbol}; "
+                        "vault quantity must not be sold by strategy"
+                    )
+                    return False
             live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
             if not live or abs(float(live["qty"])) < 1e-6:
                 logger.info(f"EtfEngine | {symbol}: position is already flat/dust")

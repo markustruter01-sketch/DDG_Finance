@@ -25,3 +25,4 @@
 - [Homepage legibility treatment](homepage-legibility.md) — transparent glass stays, but mobile artwork is blurred and homepage text uses dark drop shadows for contrast.
 - [Multi-account position identity](multi-account-position-identity.md) — live position UI keys must include bot/account identity; symbols alone collide when accounts share cash-park ETFs.
 - [NYSE validation calendar](nyse-validation-calendar.md) — equity integrity checks must account for standard and exceptional exchange closures.
+- [Alpaca vault position separation](alpaca-vault-position-separation.md) — client order IDs do not split net same-symbol positions; track vault ownership and guard strategy closes.

@@ -231,6 +231,41 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: nightly_fleet_equity_snapshot (daily 19:00 ET)")
 
+    # Per-bot vault jobs are fail-closed by PER_BOT_VAULT_ENABLED. They are
+    # registered in development so the schedule is visible, but do nothing
+    # while the vault remains inactive.
+    scheduler.add_job(
+        func=_per_bot_vault_deployment,
+        trigger=CronTrigger(
+            day_of_week="mon-fri",
+            hour="9-15",
+            minute="*/15",
+            timezone="America/New_York",
+        ),
+        id="per_bot_vault_deployment",
+        name="Per-Bot Vault Deployment (market hours)",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Scheduler | Registered: per_bot_vault_deployment (15 min, fail-closed)")
+
+    scheduler.add_job(
+        func=_per_bot_vault_quarterly_rebalance,
+        trigger=CronTrigger(
+            month="1,4,7,10",
+            day="1-7",
+            day_of_week="mon-fri",
+            hour=9,
+            minute=45,
+            timezone="America/New_York",
+        ),
+        id="per_bot_vault_quarterly_rebalance",
+        name="Per-Bot Vault Quarterly 50/50 Rebalance",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler | Registered: per_bot_vault_quarterly_rebalance (quarterly, fail-closed)")
+
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
@@ -566,6 +601,26 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
+
+
+async def _per_bot_vault_deployment() -> None:
+    """Deploy only tagged vault cash; inactive mode performs no DB/order work."""
+    try:
+        from execution.per_bot_vault import run_deployment_cycle
+        result = await asyncio.to_thread(run_deployment_cycle, market_open=is_market_open())
+        logger.info(f"Scheduler | per_bot_vault_deployment: {result.get('status')}")
+    except Exception as exc:
+        logger.error(f"Scheduler | per_bot_vault_deployment FAILED: {exc}")
+
+
+async def _per_bot_vault_quarterly_rebalance() -> None:
+    """Quarterly planner restricted to per_bot_vault_holdings."""
+    try:
+        from execution.per_bot_vault import run_quarterly_rebalance
+        result = await asyncio.to_thread(run_quarterly_rebalance, market_open=is_market_open())
+        logger.info(f"Scheduler | per_bot_vault_quarterly_rebalance: {result.get('status')}")
+    except Exception as exc:
+        logger.error(f"Scheduler | per_bot_vault_quarterly_rebalance FAILED: {exc}")
 
 
 async def _nightly_walk_forward() -> None:

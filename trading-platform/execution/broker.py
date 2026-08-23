@@ -139,6 +139,23 @@ def get_order(order_id: str) -> dict:
     }
 
 
+# ── Vault/strategy ownership guard ─────────────────────────────────────────
+
+def _assert_oracle_strategy_position_only(ticker: str) -> None:
+    """Refuse aggregate closes when a vault-owned quantity shares the symbol."""
+    try:
+        from execution.per_bot_vault import get_vault_owned_quantities
+        symbol = ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+        if get_vault_owned_quantities("oracle").get(symbol.upper(), 0.0) > 0:
+            raise RuntimeError(
+                f"Refusing to close {ticker}: aggregate account includes vault-owned quantity"
+            )
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        logger.warning(f"Broker | vault ownership guard unavailable for {ticker}: {exc}")
+
+
 # ── Order placement ────────────────────────────────────────────────────────
 
 @alpaca_retry
@@ -289,6 +306,7 @@ def close_position(ticker: str) -> dict:
     Use close_position_gtc() for emergency / after-hours closures.
     """
     symbol = ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+    _assert_oracle_strategy_position_only(ticker)
     logger.warning(f"Broker | Closing position (day): {ticker} (symbol={symbol})")
     try:
         order: Order = _client().close_position(symbol)
@@ -315,6 +333,7 @@ def close_position_gtc(ticker: str) -> dict:
     """
     is_crypto = is_crypto_pair(ticker)
     symbol    = ticker.replace("/", "") if is_crypto else ticker
+    _assert_oracle_strategy_position_only(ticker)
 
     # Fetch current qty from Alpaca so we can close the exact fractional amount
     position: Position = _client().get_open_position(symbol)

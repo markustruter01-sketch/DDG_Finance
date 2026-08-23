@@ -259,7 +259,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     # Market open check — this bot only acts after market closes (4:30 PM ET)
     # We allow running regardless of market open status — exits need to go through
     # regardless (Alpaca queues orders for next open if market is closed)
-    live_positions = engine.get_positions()
+    live_positions = engine.get_strategy_positions(BOT_ID)
     db_positions   = engine.get_db_positions(BOT_ID)
     engine.reconcile_protective_stops(BOT_ID, db_positions)
 
@@ -319,7 +319,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
             if _safe_close(engine, symbol, exit_reason, realised_pnl, BOT_ID):
                 engine.record_close(BOT_ID, symbol, exit_reason, realised_pnl)
                 _closed_this_cycle.add(symbol)
-            live_positions = engine.get_positions()
+            live_positions = engine.get_strategy_positions(BOT_ID)
             continue
 
         # 2. Trend-based exit (after min-hold check)
@@ -334,10 +334,10 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 if _safe_close(engine, symbol, trend_reason, realised_pnl, BOT_ID):
                     engine.record_close(BOT_ID, symbol, trend_reason, realised_pnl)
                     _closed_this_cycle.add(symbol)
-                live_positions = engine.get_positions()
+                live_positions = engine.get_strategy_positions(BOT_ID)
 
     # ── Entry scan ────────────────────────────────────────────────────────────
-    live_positions = engine.get_positions()
+    live_positions = engine.get_strategy_positions(BOT_ID)
 
     # FIX #1 — Empty-response guard (prevents Jul-7-style double-buy).
     # If Alpaca returns [] but the DB has open rows, the broker API is likely
@@ -437,7 +437,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     if _entry_scan_ok and not _crisis_gate:
         try:
             from sgov_parking import unpark_for_entry as _sgov_unpark
-            _all_pos_with_sgov = engine.get_positions()
+            _all_pos_with_sgov = engine.get_strategy_positions(BOT_ID)
             if any(p["symbol"] == "SGOV" for p in _all_pos_with_sgov):
                 _freed = _sgov_unpark(engine, "Bot2", _all_pos_with_sgov)
                 if _freed > 0:
@@ -538,7 +538,7 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
                 )
             deployed_pct += notional / equity   # track actual vol-targeted fraction
             held_symbols.add(symbol)
-            live_positions = engine.get_positions()
+            live_positions = engine.get_strategy_positions(BOT_ID)
             _shadow_b2(
                 symbol, executed=True, price=entry_price,
                 score=ctx.get("adx"),
@@ -552,12 +552,12 @@ def run_bot2_cycle(profile: dict, db_id: int) -> None:
     try:
         from sgov_parking import park_idle_cash as _sgov_park
         _park_acct = engine.get_account()
-        _sgov_park(engine, "Bot2", engine.get_positions(), _park_acct["cash"])
+        _sgov_park(engine, "Bot2", engine.get_strategy_positions(BOT_ID), _park_acct["cash"])
     except Exception as _park_exc:
         logger.debug(f"Bot2 | SGOV park error (non-fatal): {_park_exc}")
 
     # ── Portfolio heartbeat ────────────────────────────────────────────────────
-    live_positions = engine.get_positions()
+    live_positions = engine.get_strategy_positions(BOT_ID)
     try:
         from core.bot_state import write_portfolio as _write_portfolio
         _write_portfolio(

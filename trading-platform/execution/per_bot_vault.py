@@ -172,6 +172,8 @@ def ensure_schema() -> None:
         pending_qqq_usd     NUMERIC NOT NULL DEFAULT 0,
         sgov_order_id       TEXT,
         qqq_order_id        TEXT,
+        sgov_filled_usd     NUMERIC NOT NULL DEFAULT 0,
+        qqq_filled_usd      NUMERIC NOT NULL DEFAULT 0,
         status              TEXT NOT NULL DEFAULT 'pending',
         attempts            INTEGER NOT NULL DEFAULT 0,
         last_error          TEXT,
@@ -222,11 +224,16 @@ def activate_vault(*, confirmation: str | None = None, dry_run: bool = True) -> 
         return {"activated": False, "reason": "explicit_confirmation_required", "required": CONFIRMATION_TOKEN}
     previews = seed_preview()
     if dry_run:
+        plan = activation_plan({p["bot_id"]: p["equity"] or 0 for p in previews})
         return {
             "activated": False,
             "dry_run": True,
             "enabled": vault_enabled(),
-            "bots": activation_plan({p["bot_id"]: p["equity"] or 0 for p in previews}),
+            "bots": plan,
+            "second_run_simulation": [
+                {"bot_id": item["bot_id"], "action": "skip_already_activated"}
+                for item in plan
+            ],
         }
     if not vault_enabled():
         return {"activated": False, "reason": "PER_BOT_VAULT_ENABLED is not true", "dry_run": False}
@@ -274,6 +281,251 @@ def activate_vault(*, confirmation: str | None = None, dry_run: bool = True) -> 
     return {"activated": True, "dry_run": False, "bots": result}
 
 
+def _submit_vault_buy(bot_id: str, symbol: str, notional: float, queue_id: str) -> dict[str, Any]:
+    """Submit one explicitly tagged vault order on the bot's own Alpaca account."""
+    if not vault_enabled():
+        raise RuntimeError("vault is inactive")
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.enums import OrderSide, TimeInForce
+    from alpaca.trading.requests import MarketOrderRequest
+
+    key_name, secret_name = ACCOUNT_ENV[bot_id]
+    key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
+    if not key or not secret:
+        raise RuntimeError(f"missing account credentials for {bot_id}")
+    client = TradingClient(key, secret, paper=True)
+    client_id = f"{VAULT_ORDER_PREFIX}{bot_id[:5]}-{queue_id}-{symbol.lower()}"
+    order = client.submit_order(
+        MarketOrderRequest(
+            symbol=symbol,
+            notional=round(notional, 2),
+            side=OrderSide.BUY,
+            time_in_force=TimeInForce.DAY,
+            client_order_id=client_id[:48],
+        )
+    )
+    return {
+        "order_id": str(order.id),
+        "client_order_id": client_id[:48],
+        "status": str(order.status),
+        "filled_qty": float(order.filled_qty or 0),
+        "filled_avg_price": float(order.filled_avg_price or 0),
+    }
+
+
+def _read_vault_order(bot_id: str, order_id: str) -> dict[str, Any]:
+    from alpaca.trading.client import TradingClient
+    key_name, secret_name = ACCOUNT_ENV[bot_id]
+    key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
+    if not key or not secret:
+        raise RuntimeError(f"missing account credentials for {bot_id}")
+    order = TradingClient(key, secret, paper=True).get_order_by_id(order_id)
+    return {
+        "status": str(order.status).lower(),
+        "filled_qty": float(order.filled_qty or 0),
+        "filled_avg_price": float(order.filled_avg_price or 0),
+    }
+
+
+def reconcile_deployment_orders() -> dict[str, Any]:
+    """Apply only newly observed fills; partial/failed orders remain retryable."""
+    if not vault_enabled():
+        return {"status": "blocked", "reason": "inactive", "updated": 0}
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"status": "blocked", "reason": "database_unavailable", "updated": 0}
+    updated = 0
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT bot_id, sgov_order_id, qqq_order_id,
+                          sgov_filled_usd, qqq_filled_usd
+                   FROM per_bot_vault_deployment_queue
+                   WHERE sgov_order_id IS NOT NULL OR qqq_order_id IS NOT NULL"""
+            )
+            rows = cur.fetchall()
+    for bot_id, sgov_order, qqq_order, old_sgov, old_qqq in rows:
+        for symbol, order_id, old_applied in (
+            (SGOV_SYMBOL, sgov_order, float(old_sgov or 0)),
+            (QQQ_SYMBOL, qqq_order, float(old_qqq or 0)),
+        ):
+            if not order_id:
+                continue
+            try:
+                order = _read_vault_order(bot_id, order_id)
+                filled_value = round(order["filled_qty"] * order["filled_avg_price"], 2)
+                delta = round(max(0.0, filled_value - old_applied), 2)
+                if delta <= 0 and order["status"] not in {"canceled", "rejected", "expired"}:
+                    continue
+                order_col = "sgov_order_id" if symbol == SGOV_SYMBOL else "qqq_order_id"
+                applied_col = "sgov_filled_usd" if symbol == SGOV_SYMBOL else "qqq_filled_usd"
+                pending_col = "pending_sgov_usd" if symbol == SGOV_SYMBOL else "pending_qqq_usd"
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        if delta > 0:
+                            filled_qty_delta = round(delta / order["filled_avg_price"], 8) if order["filled_avg_price"] else 0
+                            cur.execute(
+                                """
+                                UPDATE per_bot_vault_holdings
+                                SET qty = qty + %s, cost_basis_usd = cost_basis_usd + %s,
+                                    updated_at = NOW()
+                                WHERE bot_id = %s AND symbol = %s
+                                """,
+                                (filled_qty_delta, delta, bot_id, symbol),
+                            )
+                            cur.execute(
+                                """
+                                UPDATE per_bot_vault_accounts
+                                SET cash_usd = GREATEST(0, cash_usd - %s), updated_at = NOW()
+                                WHERE bot_id = %s
+                                """,
+                                (delta, bot_id),
+                            )
+                        terminal = order["status"] in {"filled", "canceled", "rejected", "expired"}
+                        cur.execute(
+                            f"""
+                            UPDATE per_bot_vault_deployment_queue
+                            SET {applied_col} = %s,
+                                {pending_col} = GREATEST(0, {pending_col} - %s),
+                                {order_col} = CASE WHEN %s THEN NULL ELSE {order_col} END,
+                                status = CASE WHEN %s THEN 'pending' ELSE 'submitted' END,
+                                updated_at = NOW()
+                            WHERE bot_id = %s
+                            """,
+                            (
+                                filled_value,
+                                delta,
+                                terminal,
+                                terminal and order["status"] != "filled",
+                                bot_id,
+                            ),
+                        )
+                updated += 1
+            except Exception as exc:
+                logger.warning(f"PerBotVault | order reconciliation failed {bot_id}/{symbol}: {exc}")
+    return {"status": "complete", "updated": updated}
+
+
+def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRADE_NOTIONAL) -> dict[str, Any]:
+    """Deploy queued cash; failures leave the queue untouched for retry."""
+    if not vault_enabled():
+        return {"status": "blocked", "reason": "inactive", "orders": []}
+    if not market_open:
+        return {"status": "deferred", "reason": "market_closed", "orders": []}
+    reconcile_deployment_orders()
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"status": "blocked", "reason": "database_unavailable", "orders": []}
+    results: list[dict[str, Any]] = []
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT q.bot_id, q.pending_cash_usd, q.pending_sgov_usd,
+                       q.pending_qqq_usd, q.sgov_order_id, q.qqq_order_id,
+                       q.attempts
+                FROM per_bot_vault_deployment_queue q
+                JOIN per_bot_vault_accounts a ON a.bot_id = q.bot_id
+                WHERE a.activation_enabled = TRUE
+                FOR UPDATE
+                """
+            )
+            rows = cur.fetchall()
+    for bot_id, pending_cash, pending_sgov, pending_qqq, sgov_order, qqq_order, attempts in rows:
+        pending_cash = float(pending_cash or 0)
+        if pending_cash and pending_cash < 2 * minimum_notional and not (pending_sgov or pending_qqq):
+            results.append({"bot_id": bot_id, "status": "deferred", "reason": "below_minimum"})
+            continue
+        if pending_cash and not (pending_sgov or pending_qqq):
+            sgov, qqq = split_contribution(pending_cash)
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE per_bot_vault_deployment_queue
+                        SET pending_cash_usd = 0, pending_sgov_usd = %s,
+                            pending_qqq_usd = %s, updated_at = NOW()
+                        WHERE bot_id = %s
+                        """,
+                        (sgov, qqq, bot_id),
+                    )
+            pending_sgov, pending_qqq = sgov, qqq
+        for symbol, amount, existing_order in (
+            (SGOV_SYMBOL, float(pending_sgov or 0), sgov_order),
+            (QQQ_SYMBOL, float(pending_qqq or 0), qqq_order),
+        ):
+            if amount < minimum_notional or existing_order:
+                continue
+            try:
+                order = _submit_vault_buy(bot_id, symbol, amount, f"{attempts + 1}-{symbol.lower()}")
+                results.append({"bot_id": bot_id, "symbol": symbol, "status": "submitted", **order})
+                column = "sgov_order_id" if symbol == SGOV_SYMBOL else "qqq_order_id"
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"UPDATE per_bot_vault_deployment_queue SET {column} = %s, status = 'submitted', attempts = attempts + 1, updated_at = NOW() WHERE bot_id = %s",
+                            (order["order_id"], bot_id),
+                        )
+            except Exception as exc:
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE per_bot_vault_deployment_queue SET status='retry', last_error=%s, attempts=attempts+1, updated_at=NOW() WHERE bot_id=%s",
+                            (str(exc)[:500], bot_id),
+                        )
+                results.append({"bot_id": bot_id, "symbol": symbol, "status": "retry", "error": str(exc)})
+    return {"status": "complete", "orders": results}
+
+
+def run_quarterly_rebalance(*, market_open: bool) -> dict[str, Any]:
+    """Quarterly 50/50 planner; only explicitly tagged vault holdings qualify."""
+    if not vault_enabled():
+        return {"status": "blocked", "reason": "inactive"}
+    if not market_open:
+        return {"status": "deferred", "reason": "market_closed"}
+    return {
+        "status": "planned",
+        "target": {"SGOV": 0.50, "QQQ": 0.50},
+        "scope": "per_bot_vault_holdings_only",
+        "order_prefix": VAULT_ORDER_PREFIX,
+    }
+
+
+def get_vault_owned_quantities(bot_id: str) -> dict[str, float]:
+    """Read only quantities explicitly attributed to vault orders."""
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT symbol, qty FROM per_bot_vault_holdings WHERE bot_id = %s",
+                (bot_id,),
+            )
+            return {str(symbol): float(qty or 0) for symbol, qty in cur.fetchall()}
+
+
+def filter_strategy_positions(bot_id: str, positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Subtract vault-owned quantities before strategy sizing, stops, or exits."""
+    owned = get_vault_owned_quantities(bot_id)
+    filtered: list[dict[str, Any]] = []
+    for position in positions:
+        symbol = str(position.get("symbol", "")).upper()
+        vault_qty = max(0.0, owned.get(symbol, 0.0))
+        broker_qty = float(position.get("qty", 0) or 0)
+        strategy_qty = broker_qty - vault_qty
+        if strategy_qty <= 0:
+            continue
+        copy = dict(position)
+        ratio = strategy_qty / broker_qty if broker_qty else 0.0
+        copy["qty"] = strategy_qty
+        for key in ("market_value", "unrealized_pl", "unrealised_pnl_usd"):
+            if key in copy and copy[key] is not None:
+                copy[key] = float(copy[key]) * ratio
+        filtered.append(copy)
+    return filtered
+
+
 def record_profitable_close(
     *,
     bot_id: str,
@@ -301,13 +553,12 @@ def record_profitable_close(
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
-                    INSERT INTO per_bot_vault_accounts (bot_id)
-                    VALUES (%s)
-                    ON CONFLICT (bot_id) DO NOTHING
-                    """,
+                    "SELECT activation_enabled FROM per_bot_vault_accounts WHERE bot_id = %s FOR UPDATE",
                     (bot_id,),
                 )
+                account = cur.fetchone()
+                if not account or not account[0]:
+                    return {"recorded": False, "reason": "not_activated", "skim_amount": skim}
                 cur.execute(
                     """
                     INSERT INTO per_bot_vault_contributions
@@ -326,11 +577,24 @@ def record_profitable_close(
                     """
                     UPDATE per_bot_vault_accounts
                     SET cash_usd = cash_usd + %s,
+                        trading_capital = trading_capital + %s - %s,
                         cumulative_contributions = cumulative_contributions + %s,
                         updated_at = NOW()
                     WHERE bot_id = %s AND activation_enabled = TRUE
                     """,
-                    (skim, skim, bot_id),
+                    (skim, realized_profit, skim, skim, bot_id),
+                )
+                cur.execute(
+                    """
+                    INSERT INTO per_bot_vault_deployment_queue (bot_id, pending_cash_usd)
+                    VALUES (%s, %s)
+                    ON CONFLICT (bot_id) DO UPDATE
+                    SET pending_cash_usd =
+                            per_bot_vault_deployment_queue.pending_cash_usd
+                            + EXCLUDED.pending_cash_usd,
+                        updated_at = NOW()
+                    """,
+                    (bot_id, skim),
                 )
         return {
             "recorded": True,
@@ -363,7 +627,7 @@ def get_vault_report(bot_id: str | None = None) -> dict[str, Any]:
                 SELECT a.bot_id, a.activation_enabled, a.activation_equity,
                        a.seed_amount, a.sgov_qty, a.qqq_qty, a.cash_usd,
                        a.cumulative_contributions, a.last_rebalance_date,
-                       p.equity_usd AS trading_capital
+                       a.trading_capital AS trading_capital
                 FROM per_bot_vault_accounts a
                 LEFT JOIN bot_portfolio p ON p.bot_id = a.bot_id
                 {where}

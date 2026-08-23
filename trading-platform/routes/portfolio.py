@@ -619,6 +619,16 @@ async def per_bot_vault_verification() -> dict:
     return verification_report()
 
 
+@portfolio_router.post("/vault/per-bot/activate", tags=["Vault"])
+async def per_bot_vault_activate(
+    confirmation: str | None = None,
+    dry_run: bool = True,
+) -> dict:
+    """Explicit activation command; defaults to a no-write simulation."""
+    from execution.per_bot_vault import activate_vault
+    return activate_vault(confirmation=confirmation, dry_run=dry_run)
+
+
 @portfolio_router.get("/vault/history", tags=["Vault"])
 async def vault_history(days: int = 90) -> dict:
     """Return daily vault growth snapshots derived from trade history."""

@@ -227,6 +227,28 @@ CREATE TABLE IF NOT EXISTS per_bot_vault_value_history (
 );
 CREATE INDEX IF NOT EXISTS idx_per_bot_vault_history_bot_ts
     ON per_bot_vault_value_history (bot_id, recorded_at DESC);
+CREATE TABLE IF NOT EXISTS per_bot_vault_deployment_queue (
+    bot_id           TEXT PRIMARY KEY REFERENCES per_bot_vault_accounts(bot_id),
+    pending_cash_usd NUMERIC NOT NULL DEFAULT 0,
+    pending_sgov_usd NUMERIC NOT NULL DEFAULT 0,
+    pending_qqq_usd  NUMERIC NOT NULL DEFAULT 0,
+    sgov_order_id    TEXT,
+    qqq_order_id     TEXT,
+    sgov_filled_usd  NUMERIC NOT NULL DEFAULT 0,
+    qqq_filled_usd   NUMERIC NOT NULL DEFAULT 0,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS per_bot_vault_holdings (
+    bot_id         TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+    symbol         TEXT NOT NULL CHECK (symbol IN ('SGOV', 'QQQ')),
+    qty            NUMERIC NOT NULL DEFAULT 0,
+    cost_basis_usd NUMERIC NOT NULL DEFAULT 0,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (bot_id, symbol)
+);
 
 -- Ratchet stops
 CREATE TABLE IF NOT EXISTS ratchet_stops (

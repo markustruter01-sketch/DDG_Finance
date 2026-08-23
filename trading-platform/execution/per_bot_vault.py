@@ -18,8 +18,8 @@ ACTIVE_BOT_IDS = ("oracle", "spy_qqq_trend", "jerome_macro")
 SKIM_RATE = 0.20
 SEED_RATE = 0.05
 MIN_TRADE_NOTIONAL = 1.0
-SGOV_SYMBOL = "SGOV"
-QQQ_SYMBOL = "QQQ"
+VAULT_BIL_SYMBOL = "BIL"
+VAULT_VOO_SYMBOL = "VOO"
 CONFIRMATION_TOKEN = "ACTIVATE_PER_BOT_VAULT"
 VAULT_ORDER_PREFIX = "PBV-"
 ACCOUNT_ENV = {
@@ -40,7 +40,7 @@ def calculate_skim(realized_profit: float) -> float:
 
 
 def split_contribution(skim_amount: float) -> tuple[float, float]:
-    """Split a contribution equally between SGOV and QQQ."""
+    """Split a contribution equally between BIL and VOO."""
     half = round(max(0.0, float(skim_amount)) / 2.0, 2)
     return half, round(max(0.0, float(skim_amount)) - half, 2)
 
@@ -58,8 +58,8 @@ def deployment_plan(
         return {"action": "deferred", "reason": "market_closed"}
     if float(vault_value) < float(minimum_notional):
         return {"action": "deferred", "reason": "below_minimum", "minimum_notional": minimum_notional}
-    sgov, qqq = split_contribution(vault_value)
-    return {"action": "planned", "sgov_notional": sgov, "qqq_notional": qqq}
+    bil, voo = split_contribution(vault_value)
+    return {"action": "planned", "bil_notional": bil, "voo_notional": voo}
 
 
 def rebalance_due(last_rebalance: date | None, as_of: date | None = None) -> bool:
@@ -102,13 +102,13 @@ def worked_example() -> dict[str, float]:
     starting = 100.0
     profit = 10.0
     skim = calculate_skim(profit)
-    sgov, qqq = split_contribution(skim)
+    bil, voo = split_contribution(skim)
     return {
         "starting_trading_capital": starting,
         "profit": profit,
         "skim": skim,
-        "sgov_allocated": sgov,
-        "qqq_allocated": qqq,
+        "bil_allocated": bil,
+        "voo_allocated": voo,
         "trading_capital_after_skim": starting + profit - skim,
     }
 
@@ -130,8 +130,8 @@ def ensure_schema() -> None:
         activation_equity NUMERIC,
         seed_amount NUMERIC NOT NULL DEFAULT 0,
         trading_capital NUMERIC,
-        sgov_qty NUMERIC NOT NULL DEFAULT 0,
-        qqq_qty NUMERIC NOT NULL DEFAULT 0,
+        bil_qty NUMERIC NOT NULL DEFAULT 0,
+        voo_qty NUMERIC NOT NULL DEFAULT 0,
         cash_usd NUMERIC NOT NULL DEFAULT 0,
         cumulative_contributions NUMERIC NOT NULL DEFAULT 0,
         last_rebalance_date DATE,
@@ -145,8 +145,8 @@ def ensure_schema() -> None:
         source_trade_id TEXT NOT NULL,
         realized_profit NUMERIC NOT NULL,
         skim_amount NUMERIC NOT NULL,
-        sgov_allocated NUMERIC NOT NULL DEFAULT 0,
-        qqq_allocated NUMERIC NOT NULL DEFAULT 0,
+        bil_allocated NUMERIC NOT NULL DEFAULT 0,
+        voo_allocated NUMERIC NOT NULL DEFAULT 0,
         cash_accrued NUMERIC NOT NULL DEFAULT 0,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (bot_id, source_trade_id)
@@ -168,12 +168,12 @@ def ensure_schema() -> None:
     CREATE TABLE IF NOT EXISTS per_bot_vault_deployment_queue (
         bot_id              TEXT PRIMARY KEY REFERENCES per_bot_vault_accounts(bot_id),
         pending_cash_usd    NUMERIC NOT NULL DEFAULT 0,
-        pending_sgov_usd    NUMERIC NOT NULL DEFAULT 0,
-        pending_qqq_usd     NUMERIC NOT NULL DEFAULT 0,
-        sgov_order_id       TEXT,
-        qqq_order_id        TEXT,
-        sgov_filled_usd     NUMERIC NOT NULL DEFAULT 0,
-        qqq_filled_usd      NUMERIC NOT NULL DEFAULT 0,
+        pending_bil_usd     NUMERIC NOT NULL DEFAULT 0,
+        pending_voo_usd     NUMERIC NOT NULL DEFAULT 0,
+        bil_order_id        TEXT,
+        voo_order_id        TEXT,
+        bil_filled_usd      NUMERIC NOT NULL DEFAULT 0,
+        voo_filled_usd      NUMERIC NOT NULL DEFAULT 0,
         status              TEXT NOT NULL DEFAULT 'pending',
         attempts            INTEGER NOT NULL DEFAULT 0,
         last_error          TEXT,
@@ -181,7 +181,7 @@ def ensure_schema() -> None:
     );
     CREATE TABLE IF NOT EXISTS per_bot_vault_holdings (
         bot_id              TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
-        symbol              TEXT NOT NULL CHECK (symbol IN ('SGOV', 'QQQ')),
+        symbol              TEXT NOT NULL CHECK (symbol IN ('BIL', 'VOO')),
         qty                 NUMERIC NOT NULL DEFAULT 0,
         cost_basis_usd      NUMERIC NOT NULL DEFAULT 0,
         updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -275,7 +275,7 @@ def activate_vault(*, confirmation: str | None = None, dry_run: bool = True) -> 
                     VALUES (%s, %s)
                     ON CONFLICT (bot_id, symbol) DO NOTHING
                     """,
-                    [(bot_id, SGOV_SYMBOL), (bot_id, QQQ_SYMBOL)],
+             [(bot_id, VAULT_BIL_SYMBOL), (bot_id, VAULT_VOO_SYMBOL)],
                 )
                 result.append({"bot_id": bot_id, "action": "activated", "seed": seed})
     return {"activated": True, "dry_run": False, "bots": result}
@@ -338,16 +338,16 @@ def reconcile_deployment_orders() -> dict[str, Any]:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                """SELECT bot_id, sgov_order_id, qqq_order_id,
-                          sgov_filled_usd, qqq_filled_usd
+                """SELECT bot_id, bil_order_id, voo_order_id,
+                          bil_filled_usd, voo_filled_usd
                    FROM per_bot_vault_deployment_queue
-                   WHERE sgov_order_id IS NOT NULL OR qqq_order_id IS NOT NULL"""
+                   WHERE bil_order_id IS NOT NULL OR voo_order_id IS NOT NULL"""
             )
             rows = cur.fetchall()
-    for bot_id, sgov_order, qqq_order, old_sgov, old_qqq in rows:
+    for bot_id, bil_order, voo_order, old_bil, old_voo in rows:
         for symbol, order_id, old_applied in (
-            (SGOV_SYMBOL, sgov_order, float(old_sgov or 0)),
-            (QQQ_SYMBOL, qqq_order, float(old_qqq or 0)),
+            (VAULT_BIL_SYMBOL, bil_order, float(old_bil or 0)),
+            (VAULT_VOO_SYMBOL, voo_order, float(old_voo or 0)),
         ):
             if not order_id:
                 continue
@@ -357,9 +357,9 @@ def reconcile_deployment_orders() -> dict[str, Any]:
                 delta = round(max(0.0, filled_value - old_applied), 2)
                 if delta <= 0 and order["status"] not in {"canceled", "rejected", "expired"}:
                     continue
-                order_col = "sgov_order_id" if symbol == SGOV_SYMBOL else "qqq_order_id"
-                applied_col = "sgov_filled_usd" if symbol == SGOV_SYMBOL else "qqq_filled_usd"
-                pending_col = "pending_sgov_usd" if symbol == SGOV_SYMBOL else "pending_qqq_usd"
+                order_col = "bil_order_id" if symbol == VAULT_BIL_SYMBOL else "voo_order_id"
+                applied_col = "bil_filled_usd" if symbol == VAULT_BIL_SYMBOL else "voo_filled_usd"
+                pending_col = "pending_bil_usd" if symbol == VAULT_BIL_SYMBOL else "pending_voo_usd"
                 with get_conn() as conn:
                     with conn.cursor() as cur:
                         if delta > 0:
@@ -421,8 +421,8 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT q.bot_id, q.pending_cash_usd, q.pending_sgov_usd,
-                       q.pending_qqq_usd, q.sgov_order_id, q.qqq_order_id,
+                SELECT q.bot_id, q.pending_cash_usd, q.pending_bil_usd,
+                       q.pending_voo_usd, q.bil_order_id, q.voo_order_id,
                        q.attempts
                 FROM per_bot_vault_deployment_queue q
                 JOIN per_bot_vault_accounts a ON a.bot_id = q.bot_id
@@ -431,35 +431,35 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
                 """
             )
             rows = cur.fetchall()
-    for bot_id, pending_cash, pending_sgov, pending_qqq, sgov_order, qqq_order, attempts in rows:
+    for bot_id, pending_cash, pending_bil, pending_voo, bil_order, voo_order, attempts in rows:
         pending_cash = float(pending_cash or 0)
-        if pending_cash and pending_cash < 2 * minimum_notional and not (pending_sgov or pending_qqq):
+        if pending_cash and pending_cash < 2 * minimum_notional and not (pending_bil or pending_voo):
             results.append({"bot_id": bot_id, "status": "deferred", "reason": "below_minimum"})
             continue
-        if pending_cash and not (pending_sgov or pending_qqq):
-            sgov, qqq = split_contribution(pending_cash)
+        if pending_cash and not (pending_bil or pending_voo):
+            bil, voo = split_contribution(pending_cash)
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
                         UPDATE per_bot_vault_deployment_queue
-                        SET pending_cash_usd = 0, pending_sgov_usd = %s,
-                            pending_qqq_usd = %s, updated_at = NOW()
+                        SET pending_cash_usd = 0, pending_bil_usd = %s,
+                            pending_voo_usd = %s, updated_at = NOW()
                         WHERE bot_id = %s
                         """,
-                        (sgov, qqq, bot_id),
+                        (bil, voo, bot_id),
                     )
-            pending_sgov, pending_qqq = sgov, qqq
+            pending_bil, pending_voo = bil, voo
         for symbol, amount, existing_order in (
-            (SGOV_SYMBOL, float(pending_sgov or 0), sgov_order),
-            (QQQ_SYMBOL, float(pending_qqq or 0), qqq_order),
+            (VAULT_BIL_SYMBOL, float(pending_bil or 0), bil_order),
+            (VAULT_VOO_SYMBOL, float(pending_voo or 0), voo_order),
         ):
             if amount < minimum_notional or existing_order:
                 continue
             try:
                 order = _submit_vault_buy(bot_id, symbol, amount, f"{attempts + 1}-{symbol.lower()}")
                 results.append({"bot_id": bot_id, "symbol": symbol, "status": "submitted", **order})
-                column = "sgov_order_id" if symbol == SGOV_SYMBOL else "qqq_order_id"
+                column = "bil_order_id" if symbol == VAULT_BIL_SYMBOL else "voo_order_id"
                 with get_conn() as conn:
                     with conn.cursor() as cur:
                         cur.execute(
@@ -485,45 +485,10 @@ def run_quarterly_rebalance(*, market_open: bool) -> dict[str, Any]:
         return {"status": "deferred", "reason": "market_closed"}
     return {
         "status": "planned",
-        "target": {"SGOV": 0.50, "QQQ": 0.50},
+        "target": {"BIL": 0.50, "VOO": 0.50},
         "scope": "per_bot_vault_holdings_only",
         "order_prefix": VAULT_ORDER_PREFIX,
     }
-
-
-def get_vault_owned_quantities(bot_id: str) -> dict[str, float]:
-    """Read only quantities explicitly attributed to vault orders."""
-    from db.postgres import get_conn, is_pg_available
-    if not is_pg_available():
-        return {}
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT symbol, qty FROM per_bot_vault_holdings WHERE bot_id = %s",
-                (bot_id,),
-            )
-            return {str(symbol): float(qty or 0) for symbol, qty in cur.fetchall()}
-
-
-def filter_strategy_positions(bot_id: str, positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Subtract vault-owned quantities before strategy sizing, stops, or exits."""
-    owned = get_vault_owned_quantities(bot_id)
-    filtered: list[dict[str, Any]] = []
-    for position in positions:
-        symbol = str(position.get("symbol", "")).upper()
-        vault_qty = max(0.0, owned.get(symbol, 0.0))
-        broker_qty = float(position.get("qty", 0) or 0)
-        strategy_qty = broker_qty - vault_qty
-        if strategy_qty <= 0:
-            continue
-        copy = dict(position)
-        ratio = strategy_qty / broker_qty if broker_qty else 0.0
-        copy["qty"] = strategy_qty
-        for key in ("market_value", "unrealized_pl", "unrealised_pnl_usd"):
-            if key in copy and copy[key] is not None:
-                copy[key] = float(copy[key]) * ratio
-        filtered.append(copy)
-    return filtered
 
 
 def record_profitable_close(
@@ -548,7 +513,7 @@ def record_profitable_close(
 
     if not is_pg_available():
         return {"recorded": False, "reason": "database_unavailable", "skim_amount": skim}
-    sgov, qqq = split_contribution(skim)
+    bil, voo = split_contribution(skim)
     try:
         with get_conn() as conn:
             with conn.cursor() as cur:
@@ -563,12 +528,12 @@ def record_profitable_close(
                     """
                     INSERT INTO per_bot_vault_contributions
                         (bot_id, source_trade_id, realized_profit, skim_amount,
-                         sgov_allocated, qqq_allocated, cash_accrued)
+                         bil_allocated, voo_allocated, cash_accrued)
                     VALUES (%s, %s, %s, %s, %s, %s, 0)
                     ON CONFLICT (bot_id, source_trade_id) DO NOTHING
                     RETURNING id
                     """,
-                    (bot_id, source_trade_id, realized_profit, skim, sgov, qqq),
+                    (bot_id, source_trade_id, realized_profit, skim, bil, voo),
                 )
                 inserted = cur.fetchone()
                 if not inserted:
@@ -602,8 +567,8 @@ def record_profitable_close(
             "source_trade_id": source_trade_id,
             "realized_profit": round(float(realized_profit), 2),
             "skim_amount": skim,
-            "sgov_allocated": sgov,
-            "qqq_allocated": qqq,
+            "bil_allocated": bil,
+            "voo_allocated": voo,
             "cash_accrued": skim,
         }
     except Exception as exc:
@@ -625,7 +590,7 @@ def get_vault_report(bot_id: str | None = None) -> dict[str, Any]:
             cur.execute(
                 f"""
                 SELECT a.bot_id, a.activation_enabled, a.activation_equity,
-                       a.seed_amount, a.sgov_qty, a.qqq_qty, a.cash_usd,
+                       a.seed_amount, a.bil_qty, a.voo_qty, a.cash_usd,
                        a.cumulative_contributions, a.last_rebalance_date,
                        a.trading_capital AS trading_capital
                 FROM per_bot_vault_accounts a
@@ -652,8 +617,8 @@ def get_vault_report(bot_id: str | None = None) -> dict[str, Any]:
             "vault_value": round(vault_value, 2),
             "vault_return_pct": round((vault_value / contributions - 1) * 100, 4) if contributions else 0.0,
             "combined_total": round(trading + vault_value, 2),
-            "sgov_qty": float(row["sgov_qty"] or 0),
-            "qqq_qty": float(row["qqq_qty"] or 0),
+            "bil_qty": float(row["bil_qty"] or 0),
+            "voo_qty": float(row["voo_qty"] or 0),
             "cash_usd": round(cash, 2),
             "last_rebalance_date": row["last_rebalance_date"].isoformat() if row["last_rebalance_date"] else None,
         })

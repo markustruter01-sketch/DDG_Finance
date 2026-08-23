@@ -433,8 +433,6 @@ def run_oracle_exit_checks(
     try:
         from execution.broker import get_positions
         all_positions = get_positions()
-        from execution.per_bot_vault import filter_strategy_positions
-        all_positions = filter_strategy_positions("oracle", all_positions)
     except Exception as exc:
         logger.error(f"ExitManager | Cannot fetch positions: {exc}")
         return exits

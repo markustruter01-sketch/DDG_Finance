@@ -131,10 +131,7 @@ def execute_allocations(
     raw_cash = acct["cash"]
     max_position_usd = round(equity * MAX_POSITION_PCT, 2)
 
-    from execution.per_bot_vault import filter_strategy_positions
-    current_positions = {
-        p["symbol"]: p for p in filter_strategy_positions("oracle", get_positions())
-    }
+    current_positions = {p["symbol"]: p for p in get_positions()}
     logger.info(f"Current open positions: {list(current_positions.keys()) or 'none'}")
 
     # DB-backed active ticker guard — prevents duplicate positions when Alpaca

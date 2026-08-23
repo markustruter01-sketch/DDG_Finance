@@ -31,8 +31,10 @@ from typing import Any
 import requests
 
 _ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT / "trading-platform") not in sys.path:
-    sys.path.insert(0, str(_ROOT / "trading-platform"))
+_TRADING_PLATFORM = str(_ROOT / "trading-platform")
+if _TRADING_PLATFORM in sys.path:
+    sys.path.remove(_TRADING_PLATFORM)
+sys.path.insert(0, _TRADING_PLATFORM)
 
 from db.postgres import get_conn  # noqa: E402
 

@@ -29,9 +29,9 @@ from db.postgres import get_conn  # noqa: E402
 ASSETS = ("BTC", "ETH", "GLD", "SLV")
 CRYPTO = {"BTC", "ETH"}
 STARTING_EQUITY = 100_000.0
-EMA_FAST = 50
-EMA_SLOW = 200
-MIN_HOLD_DAYS = 5
+EMA_FAST = 100
+EMA_SLOW = 300
+MIN_HOLD_DAYS = 20
 ENTRY_CAP_PCT = 0.25
 VOL_LOOKBACK = 20
 TARGET_VOL_ANNUAL = 0.20
@@ -367,7 +367,8 @@ def main() -> int:
         ("METAL_STOP_PCT", METAL_STOP_PCT), ("STARTING_EQUITY", STARTING_EQUITY),
     ):
         print(f"{name}={value}")
-    print("TREND_ENTRY=close > EMA50 > EMA200; TREND_EXIT=after min hold, close < EMA50 or EMA50 < EMA200")
+    print(f"TREND_ENTRY=close > EMA{EMA_FAST} > EMA{EMA_SLOW}; "
+          f"TREND_EXIT=after min hold, close < EMA{EMA_FAST} or EMA{EMA_FAST} < EMA{EMA_SLOW}")
     print("SIZING=volatility-scaled within 25% entry cap; NO trimming; NO deployment ceiling; idle capital=SGOV")
     print("WALK_FORWARD=prior window is audit-only; parameters remain locked and are never refit or retuned")
     print("STOPS=crypto stop_limit catastrophe backstop 25%; GLD/SLV whole-share GTC stop 10%; software fallback checked")
@@ -385,6 +386,15 @@ def main() -> int:
     print("\nPER-WINDOW RESULTS")
     for index, (name, start, end) in enumerate(WINDOWS):
         train = WINDOWS[index - 1][0] if index else "NONE (initial window; no prior data)"
+        warmup = {
+            asset: sum(1 for bar in prices[asset] if bar.day < start)
+            for asset in ASSETS
+        }
+        print(
+            f"WARMUP | {name} | pre_window_bars="
+            + ", ".join(f"{asset}={warmup[asset]}" for asset in ASSETS)
+            + f" | EMA{EMA_SLOW}_required={EMA_SLOW}"
+        )
         result, asset_data = _run_window(prices, start, end)
         results.append(result)
         for asset in ASSETS:
@@ -427,6 +437,28 @@ def main() -> int:
         "VERDICT | "
         + ("trend gating beats buy-and-hold risk-adjusted" if pooled["sharpe"] > buy_hold_pooled["sharpe"]
            else "trend gating does NOT beat buy-and-hold risk-adjusted")
+    )
+
+    print("\nCOMPARISON TO FIRST RUN")
+    print("metric | EMA50/200 hold5 | EMA100/300 hold20")
+    print(f"pooled Sharpe | +0.700 | {pooled['sharpe']:+.3f}")
+    print(f"return | +78.85% | {pooled['total_return']:+.2%}")
+    print(f"maxDD | 21.61% | {pooled['max_drawdown']:.2%}")
+    print(f"total trades | 122 | {sum(result['trade_count'] for result in results)}")
+    print(
+        f"average % time in cash | 42.00% | "
+        f"{mean(result['cash_time_pct'] for result in results):.2%}"
+    )
+    sharpe_delta = pooled["sharpe"] - 0.700
+    return_delta = pooled["total_return"] - 0.7885
+    cash_delta = mean(result["cash_time_pct"] for result in results) - 0.42
+    print(
+        f"SLOWER_GATE_EFFECT | Sharpe {sharpe_delta:+.3f} | return {return_delta:+.2%} | "
+        f"average cash {cash_delta:+.2%}"
+    )
+    print(
+        "SLOWER_GATE_VERDICT | "
+        + ("improved the locked first run" if sharpe_delta > 0 else "did NOT improve the locked first run")
     )
     _bot1_control()
 

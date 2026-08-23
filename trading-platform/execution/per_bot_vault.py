@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import date, datetime, timezone
+from uuid import uuid4
 from typing import Any
 
 from loguru import logger
@@ -19,6 +20,13 @@ SEED_RATE = 0.05
 MIN_TRADE_NOTIONAL = 1.0
 SGOV_SYMBOL = "SGOV"
 QQQ_SYMBOL = "QQQ"
+CONFIRMATION_TOKEN = "ACTIVATE_PER_BOT_VAULT"
+VAULT_ORDER_PREFIX = "PBV-"
+ACCOUNT_ENV = {
+    "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
+    "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
+    "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
+}
 
 
 def vault_enabled() -> bool:
@@ -62,6 +70,24 @@ def rebalance_due(last_rebalance: date | None, as_of: date | None = None) -> boo
     return (today.year, (today.month - 1) // 3) > (
         last_rebalance.year, (last_rebalance.month - 1) // 3
     )
+
+
+def activation_plan(
+    equities: dict[str, float],
+    existing_activated: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Pure activation preview. It never creates rows or contacts a broker."""
+    existing = existing_activated or set()
+    return [
+        {
+            "bot_id": bot_id,
+            "equity": round(float(equities.get(bot_id, 0)), 2),
+            "seed": round(float(equities.get(bot_id, 0)) * SEED_RATE, 2),
+            "trading_capital": round(float(equities.get(bot_id, 0)) * (1 - SEED_RATE), 2),
+            "action": "skip_already_activated" if bot_id in existing else "would_activate",
+        }
+        for bot_id in ACTIVE_BOT_IDS
+    ]
 
 
 def trading_return_pct(trading_capital: float, activation_equity: float) -> float:
@@ -139,6 +165,26 @@ def ensure_schema() -> None:
     );
     CREATE INDEX IF NOT EXISTS idx_per_bot_vault_history_bot_ts
         ON per_bot_vault_value_history (bot_id, recorded_at DESC);
+    CREATE TABLE IF NOT EXISTS per_bot_vault_deployment_queue (
+        bot_id              TEXT PRIMARY KEY REFERENCES per_bot_vault_accounts(bot_id),
+        pending_cash_usd    NUMERIC NOT NULL DEFAULT 0,
+        pending_sgov_usd    NUMERIC NOT NULL DEFAULT 0,
+        pending_qqq_usd     NUMERIC NOT NULL DEFAULT 0,
+        sgov_order_id       TEXT,
+        qqq_order_id        TEXT,
+        status              TEXT NOT NULL DEFAULT 'pending',
+        attempts            INTEGER NOT NULL DEFAULT 0,
+        last_error          TEXT,
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS per_bot_vault_holdings (
+        bot_id              TEXT NOT NULL REFERENCES per_bot_vault_accounts(bot_id),
+        symbol              TEXT NOT NULL CHECK (symbol IN ('SGOV', 'QQQ')),
+        qty                 NUMERIC NOT NULL DEFAULT 0,
+        cost_basis_usd      NUMERIC NOT NULL DEFAULT 0,
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (bot_id, symbol)
+    );
     """
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -168,6 +214,64 @@ def seed_preview() -> list[dict[str, Any]]:
         }
         for bot_id in ACTIVE_BOT_IDS
     ]
+
+
+def activate_vault(*, confirmation: str | None = None, dry_run: bool = True) -> dict[str, Any]:
+    """Explicit activation command; refuses without token and stays disabled by default."""
+    if confirmation != CONFIRMATION_TOKEN:
+        return {"activated": False, "reason": "explicit_confirmation_required", "required": CONFIRMATION_TOKEN}
+    previews = seed_preview()
+    if dry_run:
+        return {
+            "activated": False,
+            "dry_run": True,
+            "enabled": vault_enabled(),
+            "bots": activation_plan({p["bot_id"]: p["equity"] or 0 for p in previews}),
+        }
+    if not vault_enabled():
+        return {"activated": False, "reason": "PER_BOT_VAULT_ENABLED is not true", "dry_run": False}
+    from db.postgres import get_conn, is_pg_available
+    if not is_pg_available():
+        return {"activated": False, "reason": "database_unavailable"}
+    result: list[dict[str, Any]] = []
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for item in previews:
+                bot_id, equity = item["bot_id"], float(item["equity"] or 0)
+                seed = round(equity * SEED_RATE, 2)
+                cur.execute(
+                    """
+                    INSERT INTO per_bot_vault_accounts
+                        (bot_id, activation_enabled, activation_equity, seed_amount,
+                         trading_capital, cash_usd, activated_at)
+                    VALUES (%s, TRUE, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (bot_id) DO NOTHING
+                    RETURNING bot_id
+                    """,
+                    (bot_id, equity, seed, equity - seed, seed),
+                )
+                created = cur.fetchone()
+                if not created:
+                    result.append({"bot_id": bot_id, "action": "skipped_already_activated"})
+                    continue
+                cur.execute(
+                    """
+                    INSERT INTO per_bot_vault_deployment_queue (bot_id, pending_cash_usd)
+                    VALUES (%s, %s)
+                    ON CONFLICT (bot_id) DO NOTHING
+                    """,
+                    (bot_id, seed),
+                )
+                cur.executemany(
+                    """
+                    INSERT INTO per_bot_vault_holdings (bot_id, symbol)
+                    VALUES (%s, %s)
+                    ON CONFLICT (bot_id, symbol) DO NOTHING
+                    """,
+                    [(bot_id, SGOV_SYMBOL), (bot_id, QQQ_SYMBOL)],
+                )
+                result.append({"bot_id": bot_id, "action": "activated", "seed": seed})
+    return {"activated": True, "dry_run": False, "bots": result}
 
 
 def record_profitable_close(

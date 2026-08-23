@@ -376,7 +376,10 @@ def main() -> int:
     prices = _load_prices()
     results: list[dict[str, Any]] = []
     full_asset_data: dict[str, dict[str, Any]] = {
-        asset: {"trades": [], "held_days": 0, "entry_count": 0, "stop_fires": 0, "total_days": 0}
+        asset: {
+            "trades": [], "held_days": 0, "entry_count": 0, "stop_fires": 0,
+            "total_days": 0, "max_drawdown": 0.0,
+        }
         for asset in ASSETS
     }
     print("\nPER-WINDOW RESULTS")
@@ -389,6 +392,9 @@ def main() -> int:
                 full_asset_data[asset][key].extend(asset_data[asset][key])
             for key in ("held_days", "entry_count", "stop_fires"):
                 full_asset_data[asset][key] += asset_data[asset][key]
+            full_asset_data[asset]["max_drawdown"] = max(
+                full_asset_data[asset]["max_drawdown"], asset_data[asset]["max_drawdown"]
+            )
             full_asset_data[asset]["total_days"] += (end - start).days + 1
         print(
             f"{name} | train={train} | Sharpe={result['sharpe']:+.3f} | Sortino={result['sortino']:+.3f} | "
@@ -407,7 +413,7 @@ def main() -> int:
         held_pct = data["held_days"] / data["total_days"] if data["total_days"] else 0.0
         contribution = sum(trade["pnl"] for trade in trades) / STARTING_EQUITY
         print(
-            f"{asset} | return_contribution={contribution:+.2%} | maxDD=see window portfolio attribution unavailable "
+            f"{asset} | return_contribution={contribution:+.2%} | maxDD={data['max_drawdown']:.2%} "
             f"| trades={len(trades)} | gate_held={held_pct:.2%} | gate_cash={1-held_pct:.2%} | "
             f"stops_fired={data['stop_fires']}"
         )
@@ -434,7 +440,7 @@ def main() -> int:
     for label, passed in checks:
         print(f"{label}: {'PASS' if passed else 'FAIL/UNAVAILABLE'}")
     print("\nSAFETY")
-    print("orders_placed=0 | runner_started=0 | existing_EP​OL_GREK_TUR_touched=0")
+    print("orders_placed=0 | runner_started=0 | existing_EPOL_GREK_TUR_touched=0")
     print("bot1_touched=0 | bot2_touched=0 | ETF_fleet_touched=0 | migration_utility_touched=0 | published=0")
     return 0
 

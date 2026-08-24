@@ -4,7 +4,7 @@ asia_trend_strategy.py — Asia-Pacific ETF trend-following strategy.
 Takes over the oracle slot (Stage 3B). Uses the same shared validated trend
 engine as bot2_spy_qqq and latam_trend_strategy (EMA50/200 + TP scale-outs +
 trailing stop + 3-day exit) with all three Stage 1 risk modules wired:
-  - vol_scaled_size  (target_vol=0.12, hard cap 25%)
+  - vol_scaled_size  (target_vol=0.12, profile-derived position cap)
   - regional_regime  (per-ETF on each Asia ETF's own price history)
   - corr_cap_check   (cross-bot AND within-Asia — EWY/EWT are both
                       semiconductor plays; ρ>0.75 blocks the weaker one)
@@ -70,11 +70,8 @@ EMA_SLOW          = 200
 TRAIL_STOP_PCT    = 0.08
 MAX_3DAY_DROP_PCT = 0.05
 VOL_TARGET_VOL    = 0.12    # 12% annualised vol per position
-VOL_SIZE_CAP      = 0.25    # hard cap 25%
 MIN_HOLD_DAYS     = 5
-MAX_DEPLOYMENT    = 0.80    # never deploy more than 80% of equity
 CASH_RESERVE      = 0.20    # minimum 20% cash always
-MAX_POSITIONS     = 6       # 16-ETF universe; sizing hypothesis pending OOS
 
 # TP targets for tiered scale-out (from entry price — mirrors bot2 / LatAm)
 TP1_PCT = 0.06   # +6%  → scale out 33%
@@ -120,13 +117,24 @@ except Exception as _cc_err:
     def _fetch_price_history(tickers, days=90): return {}            # type: ignore[misc]
 
 
-def _vol_scaled_size(equity: float, etf: str, price: float) -> int:
+def _vol_scaled_size(
+    equity: float,
+    etf: str,
+    price: float,
+    vol_cap: float,
+) -> int:
     """Wrapper: returns 0 (fail-CLOSED) if module unavailable or any error."""
     if not _VOL_TARGETING_OK:
         return 0
     try:
-        return _vol_scaled_size_real(equity, etf, price,
-                                     target_vol=VOL_TARGET_VOL)
+        raw_shares = _vol_scaled_size_real(
+            equity,
+            etf,
+            price,
+            target_vol=VOL_TARGET_VOL,
+        )
+        cap_shares = int((equity * vol_cap) / price)
+        return min(raw_shares, cap_shares)
     except Exception as exc:
         logger.error(f"Asia | vol_scaled_size({etf}) error: {exc}")
         return 0
@@ -351,6 +359,9 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     Runs every LOOP_SLEEP_SECONDS (3600 = hourly); entry gate fires once/day at close.
     """
     global _last_entry_scan_date
+    vol_cap = float(profile.get("VOL_CAP", profile.get("VOL_SIZE_CAP", 0.13)))
+    max_positions = int(profile.get("MAX_POSITIONS", 6))
+    max_deployment = float(profile.get("MAX_DEPLOYMENT", 0.80))
 
     # Pause guard — always first
     if profile.get("BOT_PAUSED", False):
@@ -500,9 +511,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     # Deployment guard
     deployed_notional = sum(p.get("market_value", 0) for p in live_positions)
     deployed_pct      = deployed_notional / equity if equity > 0 else 1.0
-    if deployed_pct >= MAX_DEPLOYMENT:
+    planned_deployment_pct = deployed_pct
+    if deployed_pct >= max_deployment:
         logger.info(
-            f"Asia | Deployment cap reached: {deployed_pct:.1%} >= {MAX_DEPLOYMENT:.0%} — "
+            f"Asia | Deployment cap reached: {deployed_pct:.1%} >= {max_deployment:.0%} — "
             f"skipping entry scan"
         )
         return
@@ -544,8 +556,8 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
             _log_scan(symbol, regime="HELD", should_enter=False, drop_reason="SHOULD_ENTER")
             continue
 
-        if current_count >= MAX_POSITIONS:
-            logger.info(f"Global ETF | Max positions ({MAX_POSITIONS}) reached — skip remaining")
+        if current_count >= max_positions:
+            logger.info(f"Global ETF | Max positions ({max_positions}) reached — skip remaining")
             _log_scan(symbol, regime=None, should_enter=False, drop_reason="DEPLOYMENT")
             continue
 
@@ -571,7 +583,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         entry_price = ctx["current_price"]
 
         # ── Stage 1B: Vol-scaled size ────────────────────────────────────
-        shares = _vol_scaled_size(equity, symbol, entry_price)
+        shares = _vol_scaled_size(equity, symbol, entry_price, vol_cap)
         if shares <= 0:
             logger.warning(
                 f"Global ETF | {symbol}: vol_scaled_size returned {shares} — "
@@ -586,10 +598,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
         notional_pct = notional / equity if equity > 0 else 1.0
 
         # Hard cap pre-flight (double-check)
-        if notional_pct > VOL_SIZE_CAP:
+        if notional_pct > vol_cap:
             logger.warning(
                 f"Global ETF | {symbol}: notional cap override "
-                f"({notional_pct:.1%} > {VOL_SIZE_CAP:.0%}) — skipping"
+                f"({notional_pct:.1%} > {vol_cap:.0%}) — skipping"
             )
             _log_scan(
                 symbol, regime=regime, should_enter=True, shares=shares,
@@ -599,10 +611,10 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
             continue
 
         # Deployment headroom check
-        if deployed_pct + notional_pct > MAX_DEPLOYMENT:
+        if planned_deployment_pct + notional_pct > max_deployment:
             logger.info(
                 f"Global ETF | {symbol}: would exceed MAX_DEPLOYMENT "
-                f"({deployed_pct:.1%}+{notional_pct:.1%}>{MAX_DEPLOYMENT:.0%}) — skip"
+                f"({planned_deployment_pct:.1%}+{notional_pct:.1%}>{max_deployment:.0%}) — skip"
             )
             _log_scan(
                 symbol, regime=regime, should_enter=True, shares=shares,
@@ -654,6 +666,7 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
             "ctx":         ctx,
             "scan_id":     scan_id,
         })
+        planned_deployment_pct += notional_pct
 
     # Sort by price momentum (strongest uptrend first; simple proxy: price vs EMA50)
     candidates.sort(
@@ -672,13 +685,38 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
             logger.debug(f"Asia | SGOV unpark error (non-fatal): {_up_exc}")
 
     for cand in candidates:
-        if current_count >= MAX_POSITIONS:
+        if current_count >= max_positions:
             break
         symbol      = cand["symbol"]
         shares      = cand["shares"]
         notional    = cand["notional"]
         entry_price = cand["entry_price"]
         scan_id     = cand.get("scan_id")
+
+        fresh_account = engine.get_account()
+        fresh_equity = float(fresh_account["equity"])
+        fresh_cash = float(fresh_account["cash"])
+        fresh_long_market_value = float(
+            fresh_account.get("long_market_value", 0.0)
+        )
+        projected_long_market_value = fresh_long_market_value + notional
+        projected_cash = fresh_cash - notional
+        if (
+            projected_cash < 0
+            or projected_long_market_value > fresh_equity
+            or projected_long_market_value / fresh_equity > max_deployment
+        ):
+            logger.critical(
+                "Asia | HARD MARGIN/DEPLOYMENT GUARD — refusing order | "
+                f"{symbol}: projected_cash=${projected_cash:,.2f}, "
+                f"projected_long_market_value="
+                f"${projected_long_market_value:,.2f}, "
+                f"equity=${fresh_equity:,.2f}, "
+                f"projected_deployed="
+                f"{projected_long_market_value / fresh_equity:.1%}, "
+                f"max_deployment={max_deployment:.1%}"
+            )
+            continue
 
         logger.info(
             f"Asia | ENTERING {symbol}: {shares} shares @ "

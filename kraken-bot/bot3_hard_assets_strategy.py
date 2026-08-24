@@ -23,12 +23,14 @@ import math
 import os
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from statistics import stdev
 from typing import Any
 
 import requests
+import psycopg2
 
 _ROOT = Path(__file__).resolve().parents[1]
 _TRADING_PLATFORM = str(_ROOT / "trading-platform")
@@ -36,7 +38,21 @@ if _TRADING_PLATFORM in sys.path:
     sys.path.remove(_TRADING_PLATFORM)
 sys.path.insert(0, _TRADING_PLATFORM)
 
-from db.postgres import get_conn  # noqa: E402
+@contextmanager
+def get_conn():
+    """Bot 3 always uses the authoritative production database."""
+    dsn = os.environ.get("NEON_DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("Bot 3 requires NEON_DATABASE_URL; refusing dev fallback")
+    conn = psycopg2.connect(dsn)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 logger = logging.getLogger("bot3.hard_assets")
 

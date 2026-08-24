@@ -55,6 +55,10 @@ class MigrationError(RuntimeError):
     """Raised when the migration cannot prove a safe next action."""
 
 
+class _SkipPosition(MigrationError):
+    """Protective stop cancellation was not confirmed; skip this symbol."""
+
+
 def _value(value: Any) -> str:
     return str(getattr(value, "value", value)).lower()
 
@@ -229,6 +233,44 @@ def flatten_account(
             )
         stop_price = next((o["stop_price"] for o in covered_stops if o["stop_price"]), None)
         try:
+            for order in symbol_orders:
+                print(
+                    json.dumps({
+                        "event": "STOP_CANCEL_REQUESTED",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                        "account": account_label,
+                        "symbol": symbol,
+                        "order_id": order["id"],
+                    }),
+                    flush=True,
+                )
+                try:
+                    _wait_cancelled(client, order["id"])
+                except Exception as cancel_exc:
+                    print(
+                        json.dumps({
+                            "event": "STOP_CANCEL_FAILED_SKIP_POSITION",
+                            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                            "account": account_label,
+                            "symbol": symbol,
+                            "order_id": order["id"],
+                            "error": str(cancel_exc),
+                        }),
+                        flush=True,
+                    )
+                    # Never sell while broker protection is not confirmed
+                    # canceled. Leave the position for the next symbol.
+                    raise _SkipPosition() from cancel_exc
+                print(
+                    json.dumps({
+                        "event": "STOP_CANCEL_CONFIRMED",
+                        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                        "account": account_label,
+                        "symbol": symbol,
+                        "order_id": order["id"],
+                    }),
+                    flush=True,
+                )
             sell = client.submit_order(
                 order_data=MarketOrderRequest(
                     symbol=symbol,
@@ -253,8 +295,8 @@ def flatten_account(
                 }),
                 flush=True,
             )
-            for order in symbol_orders:
-                _wait_cancelled(client, order["id"])
+        except _SkipPosition:
+            continue
         except Exception:
             # The original protective stop is deliberately still live until
             # the sell is confirmed and the position is flat. If the sell

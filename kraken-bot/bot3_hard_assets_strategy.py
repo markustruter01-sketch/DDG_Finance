@@ -103,7 +103,12 @@ CREATE INDEX IF NOT EXISTS idx_bot3_decision_log_cycle
 """
 
 def _canonical_symbol(symbol: str) -> str:
-    return "BTC/USD" if symbol.replace("/", "") == "BTCUSD" else symbol
+    compact = symbol.replace("/", "")
+    if compact == "BTCUSD":
+        return "BTC/USD"
+    if compact == "ETHUSD":
+        return "ETH/USD"
+    return symbol
 
 
 def _log_decision(
@@ -372,8 +377,13 @@ def _strategy_positions() -> list[dict[str, Any]]:
             ]
 
 
-def _record_open(fill: dict[str, Any], stop_price: float, stop_order_id: str | None) -> None:
-    qty = float(fill.get("filled_qty") or 0)
+def _record_open(
+    fill: dict[str, Any],
+    broker_qty: float,
+    stop_price: float,
+    stop_order_id: str | None,
+) -> None:
+    qty = float(broker_qty)
     entry = float(fill.get("filled_avg_price") or 0)
     if qty <= 0 or entry <= 0:
         raise RuntimeError("record_open requires a confirmed positive fill")
@@ -460,7 +470,7 @@ def _remember_stop(symbol: str, stop_order_id: str) -> None:
             cur.execute(
                 """
                 UPDATE bot3_positions
-                SET stop_order_id=%s, updated_at=NOW()
+                SET stop_order_id=%s
                 WHERE bot_id=%s AND symbol=%s AND status='open'
                 """,
                 (stop_order_id, BOT_ID, symbol),
@@ -521,11 +531,10 @@ def _software_backstop(
                 reason="US equity market closed",
             )
             continue
-        order = client.submit(
-            symbol, "sell",
-            math.floor(position["qty"]) if symbol in METALS else position["qty"],
-            "market",
-        )
+        broker_qty = _broker_position_qty(client, symbol)
+        if broker_qty <= 0:
+            continue
+        order = client.submit(symbol, "sell", broker_qty, "market")
         _log_decision(
             cycle_id, "SOFTWARE_BACKSTOP_SELL", symbol=symbol,
             reason="protective stop breached without active sell order",
@@ -555,7 +564,14 @@ def _place_confirmed_entry(
             order_id=order["id"], outcome=status,
         )
         return fill
-    broker_qty = _broker_position_qty(client, symbol) or filled_qty
+    broker_qty = _settled_broker_position_qty(client, symbol)
+    if broker_qty is None:
+        logger.critical(
+            "Bot 3 | position did not settle after fill; flattening without guessing | "
+            f"symbol={symbol}"
+        )
+        _flatten_position(client, symbol)
+        raise RuntimeError(f"Bot 3 aborted: unsettled position for {symbol}")
     stop_price = filled_price * (
         1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
     )
@@ -573,24 +589,16 @@ def _place_confirmed_entry(
                 "Bot 3 | protective stop retry failed; flattening immediately | "
                 f"symbol={symbol} qty={broker_qty} error={second_exc}"
             )
-            flatten_qty = _broker_position_qty(client, symbol)
-            if flatten_qty > 0:
-                flatten = client.submit(symbol, "sell", flatten_qty, "market")
-                flatten_fill = client.wait_for_fill(flatten["id"])
-                if _broker_position_qty(client, symbol) >= 1e-9:
-                    raise RuntimeError(
-                        f"Bot 3 could not confirm flat after stop failure for {symbol}"
-                    )
-                logger.critical(
-                    "Bot 3 | protective stop failure recovered by confirmed flatten | "
-                    f"symbol={symbol} flatten_order={flatten['id']} "
-                    f"status={flatten_fill.get('status')}"
-                )
+            _flatten_position(client, symbol)
+            logger.critical(
+                "Bot 3 | protective stop failure recovered by confirmed flatten | "
+                f"symbol={symbol}"
+            )
             raise RuntimeError(
                 f"Bot 3 aborted after stop failure for {symbol}: {second_exc}"
             ) from second_exc
-    recorded_fill = {**fill, "symbol": _canonical_symbol(symbol), "filled_qty": broker_qty}
-    _record_open(recorded_fill, stop_price, stop_order.get("id"))
+    recorded_fill = {**fill, "symbol": _canonical_symbol(symbol)}
+    _record_open(recorded_fill, broker_qty, stop_price, stop_order.get("id"))
     _log_decision(
         cycle_id, "ENTRY_FILLED", symbol=symbol, planned_qty=qty,
         current_price=filled_price, order_id=order["id"], outcome="FILLED",
@@ -717,11 +725,11 @@ def run_bot3_cycle(
         if item["side"] == "buy":
             _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
         else:
-            client.submit(
-                item["symbol"], "sell",
-                math.floor(item["qty"]) if item["symbol"] in METALS else item["qty"],
-                "market",
-            )
+            symbol = _canonical_symbol(item["symbol"])
+            broker_qty = _broker_position_qty(client, symbol)
+            sell_qty = min(float(item["qty"]), broker_qty)
+            if sell_qty > 0:
+                client.submit(symbol, "sell", sell_qty, "market")
         orders += 1
     return {
         "status": "complete",

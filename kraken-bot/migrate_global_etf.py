@@ -435,7 +435,9 @@ def main() -> int:
             flatten_account(client, snapshot, spec.label)
             final = inventory(client)
             residual = [
-                p for p in final["positions"] if p["symbol"] not in IGNORED_SYMBOLS
+                p for p in final["positions"]
+                if abs(float(p.get("qty", 0) or 0)) >= 1e-6
+                and p["symbol"] not in IGNORED_SYMBOLS
             ]
             if residual or final["open_orders"]:
                 raise MigrationError(f"{spec.label} is not clean after flatten")

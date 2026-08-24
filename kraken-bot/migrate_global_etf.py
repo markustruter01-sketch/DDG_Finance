@@ -143,6 +143,32 @@ def _wait_flat(client: TradingClient, symbol: str, timeout: float = 30) -> None:
     raise MigrationError(f"position did not become flat: {symbol}")
 
 
+def _wait_sell_filled(
+    client: TradingClient,
+    order_id: str,
+    symbol: str,
+    timeout: float = 30,
+) -> Any:
+    """Require a broker-confirmed filled sell before proceeding."""
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        last = client.get_order_by_id(order_id)
+        status = _value(last.status)
+        if status == "filled":
+            _wait_flat(client, symbol, timeout=max(1.0, deadline - time.monotonic()))
+            return last
+        if status in {"canceled", "cancelled", "rejected", "expired"}:
+            raise MigrationError(
+                f"sell not filled for {symbol}: broker status={status}"
+            )
+        time.sleep(1)
+    raise MigrationError(
+        f"sell fill not confirmed for {symbol}: broker status="
+        f"{_value(getattr(last, 'status', 'unknown'))}"
+    )
+
+
 def _restore_stop(
     client: TradingClient,
     symbol: str,
@@ -167,15 +193,26 @@ def _restore_stop(
     )
 
 
-def flatten_account(client: TradingClient, snapshot: dict[str, Any]) -> None:
+def flatten_account(
+    client: TradingClient,
+    snapshot: dict[str, Any],
+    account_label: str,
+) -> None:
     """Flatten target ETF positions with stop cancellation and fill fences."""
     clock = client.get_clock()
     if not bool(clock.is_open):
         raise MigrationError("market is closed; controlled flatten deferred")
 
-    for position in snapshot["positions"]:
+    positions = [
+        position for position in snapshot["positions"]
+        if position["symbol"] != "SGOV" or account_label == "bot1_global"
+    ]
+    positions.sort(key=lambda position: position["symbol"] == "SGOV")
+    for position in positions:
         symbol = position["symbol"]
-        if symbol in IGNORED_SYMBOLS:
+        if symbol in IGNORED_SYMBOLS and not (
+            symbol == "SGOV" and account_label == "bot1_global"
+        ):
             continue
         qty = abs(float(position["qty"]))
         floor_qty = math.floor(qty)
@@ -183,23 +220,15 @@ def flatten_account(client: TradingClient, snapshot: dict[str, Any]) -> None:
         stops = [o for o in symbol_orders if o["side"] == "sell" and o["type"] in {
             "stop", "stop_limit", "trailing_stop"
         }]
-        covered_stops = [
-            o for o in stops
-            if float(o.get("qty", 0) or 0) >= floor_qty
-        ]
-        if not covered_stops:
+        covered_stops = [o for o in stops if float(o.get("qty", 0) or 0) >= floor_qty]
+        if symbol != "SGOV" and not covered_stops:
             raise MigrationError(
                 f"refusing naked flatten: no protective stop covering "
                 f"floor(position_qty)={floor_qty} for {symbol}"
             )
-        stop_price = next(
-            (o["stop_price"] for o in covered_stops if o["stop_price"]),
-            None,
-        )
+        stop_price = next((o["stop_price"] for o in covered_stops if o["stop_price"]), None)
         try:
-            for order in symbol_orders:
-                _wait_cancelled(client, order["id"])
-            client.submit_order(
+            sell = client.submit_order(
                 order_data=MarketOrderRequest(
                     symbol=symbol,
                     qty=qty,
@@ -208,14 +237,67 @@ def flatten_account(client: TradingClient, snapshot: dict[str, Any]) -> None:
                     client_order_id=f"etf-migration-exit-{symbol.lower()}-{uuid.uuid4().hex[:12]}",
                 )
             )
-            _wait_flat(client, symbol)
+            sell_id = str(sell.id)
+            filled = _wait_sell_filled(client, sell_id, symbol)
+            print(
+                json.dumps({
+                    "event": "FILL_CONFIRMED",
+                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    "account": account_label,
+                    "symbol": symbol,
+                    "order_id": sell_id,
+                    "status": _value(filled.status),
+                    "filled_qty": float(filled.filled_qty),
+                    "filled_avg_price": float(filled.filled_avg_price),
+                }),
+                flush=True,
+            )
+            for order in symbol_orders:
+                _wait_cancelled(client, order["id"])
         except Exception:
+            # The original protective stop is deliberately still live until
+            # the sell is confirmed and the position is flat. If the sell
+            # failed, retain it; restore only if the broker no longer reports
+            # any covered protective order.
             try:
                 current = client.get_open_position(symbol)
-                _restore_stop(client, symbol, float(current.qty), stop_price)
+                active_orders = client.get_orders(
+                    filter=GetOrdersRequest(
+                        status=QueryOrderStatus.OPEN,
+                        nested=True,
+                        limit=100,
+                    )
+                )
+                still_covered = any(
+                    str(o.symbol) == symbol
+                    and _is_stop(o)
+                    and float(o.qty or 0) >= math.floor(abs(float(current.qty)))
+                    for o in active_orders
+                )
+                if not still_covered:
+                    _restore_stop(client, symbol, float(current.qty), stop_price)
+                    print(
+                        json.dumps({
+                            "event": "PROTECTION_RESTORED",
+                            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                            "account": account_label,
+                            "symbol": symbol,
+                        }),
+                        flush=True,
+                    )
+                else:
+                    print(
+                        json.dumps({
+                            "event": "PROTECTION_RETAINED",
+                            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                            "account": account_label,
+                            "symbol": symbol,
+                        }),
+                        flush=True,
+                    )
             except Exception as restore_exc:
                 raise MigrationError(
-                    f"{symbol} exit failed and stop restoration failed: {restore_exc}"
+                    f"{symbol} exit failed and stop restoration check failed: {restore_exc}"
                 ) from restore_exc
             raise
 
@@ -305,7 +387,7 @@ def main() -> int:
         snapshot = inventory(client)
         print(json.dumps({"account": spec.label, **snapshot}, sort_keys=True))
         if args.execute:
-            flatten_account(client, snapshot)
+            flatten_account(client, snapshot, spec.label)
             final = inventory(client)
             residual = [
                 p for p in final["positions"] if p["symbol"] not in IGNORED_SYMBOLS

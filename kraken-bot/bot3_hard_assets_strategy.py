@@ -56,6 +56,7 @@ METAL_STOP_PCT = 0.10
 EQUITY_SESSION_OPEN = time(9, 30)
 EQUITY_SESSION_CLOSE = time(16, 0)
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
+ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 PRICE_TABLES = {
     "BTC/USD": ("crypto_historical_prices", "BTC"),
     "ETH/USD": ("crypto_historical_prices", "ETH"),
@@ -261,6 +262,13 @@ class AlpacaBot3:
         response.raise_for_status()
         return response.json() if response.content else None
 
+    def _data_request(self, method: str, path: str, **kwargs: Any) -> Any:
+        response = self.session.request(
+            method, ALPACA_DATA_BASE_URL + path, timeout=20, **kwargs
+        )
+        response.raise_for_status()
+        return response.json() if response.content else None
+
     def account(self) -> dict[str, float]:
         raw = self._request("GET", "/v2/account")
         return {key: float(raw[key]) for key in ("equity", "cash", "buying_power")}
@@ -284,17 +292,19 @@ class AlpacaBot3:
     def latest_prices(self) -> dict[str, float]:
         prices: dict[str, float] = {}
         for symbol in METALS:
-            quote = self._request("GET", f"/v2/stocks/{symbol}/quotes/latest").get("quote", {})
+            quote = self._data_request(
+                "GET", f"/v2/stocks/{symbol}/quotes/latest"
+            ).get("quote", {})
             bid, ask = float(quote.get("bp") or 0), float(quote.get("ap") or 0)
             if bid <= 0 and ask <= 0:
                 raise RuntimeError(f"Bot 3 missing Alpaca quote for {symbol}")
             prices[symbol] = (bid + ask) / 2 if bid > 0 and ask > 0 else max(bid, ask)
-        crypto_quotes = self._request(
+        crypto_quotes = self._data_request(
             "GET",
             "/v1beta3/crypto/us/latest/quotes",
             params={"symbols": ",".join(sorted(CRYPTO))},
         )
-        for symbol, quote in (crypto_quotes or {}).items():
+        for symbol, quote in (crypto_quotes or {}).get("quotes", crypto_quotes or {}).items():
             bid, ask = float(quote.get("bp") or 0), float(quote.get("ap") or 0)
             if bid <= 0 and ask <= 0:
                 raise RuntimeError(f"Bot 3 missing Alpaca quote for {symbol}")
@@ -309,7 +319,11 @@ class AlpacaBot3:
             "side": side,
             "type": order_type,
             "qty": str(qty),
-            "time_in_force": "gtc" if order_type in ("stop", "stop_limit") else "day",
+            "time_in_force": (
+                "gtc"
+                if symbol in CRYPTO or order_type in ("stop", "stop_limit")
+                else "day"
+            ),
             "client_order_id": _client_id("order", symbol),
             **extra,
         }
@@ -535,7 +549,11 @@ def _plan_orders(
     return plan
 
 
-def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None = None) -> dict[str, Any]:
+def run_bot3_cycle(
+    profile: dict[str, Any] | None = None,
+    now: datetime | None = None,
+    db_id: int | None = None,
+) -> dict[str, Any]:
     """Live cycle. The first executable branch is the permanent build pause."""
     if BOT_PAUSED:
         logger.info("Bot 3 | BOT_PAUSED=True — no client, account read, or order activity")

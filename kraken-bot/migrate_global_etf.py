@@ -15,6 +15,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from alpaca.trading.client import TradingClient
@@ -317,7 +318,9 @@ def reset_active_ledgers(final_snapshots: dict[str, dict[str, Any]]) -> None:
     because this safety command does not infer fills from market value; the
     migration operator can reconcile exact fill prices separately.
     """
-    dsn = os.environ.get("DATABASE_URL")
+    # The live broker migration must reset the production ledger. DATABASE_URL
+    # is the development database in this workspace; Neon is production.
+    dsn = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
         raise MigrationError("DATABASE_URL is required for ledger reset")
     try:

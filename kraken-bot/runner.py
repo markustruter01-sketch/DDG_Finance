@@ -90,7 +90,10 @@ BOTS = [
     # bot2_spy_qqq and jerome_macro remain registered for their future
     # validation runs, but are paused until their accounts are reset.
     ("oracle",        "asia_trend_strategy", "run_asia_cycle"),
-    ("jerome_macro",  "em_trend_strategy",   "run_em_cycle"),
+    # Bot 3 wiring only: the leaf module remains permanently paused until
+    # explicit activation. It owns the same reserved Jerome profile/account
+    # but ignores the legacy EM universe and vault symbols.
+    ("jerome_macro",  "bot3_hard_assets_strategy", "run_bot3_cycle"),
     ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),
 ]
 

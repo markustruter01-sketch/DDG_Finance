@@ -490,8 +490,18 @@ def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None =
     cycle_id = uuid.uuid4().hex
     ensure_bot3_tables()
     client = AlpacaBot3(
-        profile.get("ALPACA_JEROME_API_KEY") or os.environ.get("ALPACA_JEROME_API_KEY", ""),
-        profile.get("ALPACA_JEROME_SECRET_KEY") or os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
+        (
+            profile.get("ALPACA_JEROME_API_KEY")
+            or profile.get("ALPACA_API_KEY")
+            or os.environ.get("ALPACA_JEROME_API_KEY")
+            or os.environ.get("ALPACA_API_KEY", "")
+        ),
+        (
+            profile.get("ALPACA_JEROME_SECRET_KEY")
+            or profile.get("ALPACA_SECRET_KEY")
+            or os.environ.get("ALPACA_JEROME_SECRET_KEY")
+            or os.environ.get("ALPACA_SECRET_KEY", "")
+        ),
         profile.get("ALPACA_BASE_URL", ALPACA_BASE_URL),
     )
     account = client.account()
@@ -501,6 +511,7 @@ def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None =
         if position["symbol"] in ASSETS and position["symbol"] not in VAULT_SYMBOLS
     ]
     db_positions = {position["symbol"]: position for position in _strategy_positions()}
+    initial_entry = not live_positions and not db_positions
     positions = []
     for live in live_positions:
         stored = db_positions.get(live["symbol"], {})
@@ -518,11 +529,15 @@ def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None =
         })
     _log_decision(cycle_id, "CYCLE_START", context={"equity": account["equity"]})
     _software_backstop(client, positions, cycle_id, _nyse_session_open(now))
-    if not _quarterly_rebalance_date(now):
-        _log_decision(cycle_id, "NO_REBALANCE", reason="not first trading week of quarter")
+    if not initial_entry and not _quarterly_rebalance_date(now):
+        _log_decision(cycle_id, "NO_REBALANCE", reason="not first trading day of quarter")
         return {"status": "complete", "orders": 0, "reason": "not_quarterly_date"}
     if not _nyse_session_open(now):
-        _log_decision(cycle_id, "REBALANCE_DEFERRED", reason="US equity market closed")
+        _log_decision(
+            cycle_id,
+            "INITIAL_ENTRY_DEFERRED" if initial_entry else "REBALANCE_DEFERRED",
+            reason="US equity market closed",
+        )
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
     closes = _load_recent_closes()
     targets, volatility = inverse_vol_targets(closes)
@@ -541,6 +556,7 @@ def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None =
     return {
         "status": "complete",
         "orders": orders,
+        "reason": "initial_entry" if initial_entry else "quarterly_rebalance",
         "targets": targets,
         "volatility": volatility,
     }
@@ -576,13 +592,15 @@ def print_module() -> None:
     print("WEIGHTING=inverse volatility, trailing 60 observations, floor 10%, cap 40%")
     print("REBALANCE=first trading day of Jan/Apr/Jul/Oct, 5pp drift band")
     print("SESSION_POLICY=defer entire rebalance while US equity session is closed")
+    print("INITIAL_ENTRY=empty Bot 3 account bypasses quarterly date and establishes targets on the next open US equity session")
+    print("SCHEDULED_REBALANCE=non-empty account only rebalances on first trading day of quarter")
     print("VAULT_POLICY=ignore BIL/VOO vault holdings; neither is in strategy universe")
     print("STOP_POLICY=crypto stop_limit 25%; metals whole-share GTC stop 10%")
     print("FILL_POLICY=record_open only after confirmed fill; stop armed after fill")
     print("STOP_ID_POLICY=unique UUID suffix on every stop submit")
     print("SOFTWARE_BACKSTOP=market sell if breached stop has no active sell order")
     print("UNPAUSE=only after migration confirms Bot 3 account flat/reconciled and EPOL/GREK/TUR untouched; then explicitly edit BOT_PAUSED=False")
-    print("RUNNER=not wired by this build; wiring/restart remains a separate authorized step")
+    print("RUNNER=registered as jerome_macro -> bot3_hard_assets_strategy.run_bot3_cycle; runner not started")
 
 
 def main() -> int:

@@ -1,6 +1,6 @@
 """Bot 3 hard-assets sleeve.
 
-This module is deliberately built paused.  It is not imported by runner.py and
+This module is deliberately built paused.  It is registered by runner.py but
 does not start a workflow.  ``run_bot3_cycle`` returns before constructing an
 Alpaca client while BOT_PAUSED is true.  The ``--dry-run`` path uses only the
 already validated development price tables and an explicitly supplied empty
@@ -161,7 +161,17 @@ def _eastern():
 
 def _quarterly_rebalance_date(now: datetime) -> bool:
     eastern = now.astimezone(_eastern())
-    return eastern.month in (1, 4, 7, 10) and eastern.day <= 7 and eastern.weekday() < 5
+    if eastern.month not in (1, 4, 7, 10) or eastern.day > 7:
+        return False
+    if eastern.weekday() >= 5:
+        return False
+    try:
+        import holidays
+        if eastern.date() in set(holidays.NYSE(years=eastern.year).keys()):
+            return False
+    except ImportError:
+        pass
+    return True
 
 
 def _load_recent_closes() -> dict[str, list[float]]:
@@ -373,6 +383,52 @@ def _arm_stop(client: AlpacaBot3, symbol: str, qty: float, entry_price: float) -
     )
 
 
+def _remember_stop(symbol: str, stop_order_id: str) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE bot3_positions
+                SET stop_order_id=%s, updated_at=NOW()
+                WHERE bot_id=%s AND symbol=%s AND status='open'
+                """,
+                (stop_order_id, BOT_ID, symbol),
+            )
+
+
+def _maintain_protective_stops(
+    client: AlpacaBot3,
+    positions: list[dict[str, Any]],
+    cycle_id: str,
+    equity_session_open: bool,
+) -> None:
+    """Re-arm a missing protective stop before checking the software backstop."""
+    open_orders = client.open_orders()
+    open_sell_symbols = {
+        order.get("symbol") for order in open_orders if order.get("side") == "sell"
+    }
+    for position in positions:
+        symbol = position["symbol"]
+        if symbol in open_sell_symbols:
+            continue
+        if symbol in METALS and not equity_session_open:
+            _log_decision(
+                cycle_id, "PROTECTIVE_STOP_DEFERRED", symbol=symbol,
+                reason="US equity market closed",
+            )
+            continue
+        stop_order = _arm_stop(
+            client, symbol, position["qty"], position["entry_price"]
+        )
+        stop_id = stop_order.get("id")
+        if stop_id:
+            _remember_stop(symbol, stop_id)
+        _log_decision(
+            cycle_id, "PROTECTIVE_STOP_REARMED", symbol=symbol,
+            order_id=stop_id, outcome=stop_order.get("status", "submitted"),
+        )
+
+
 def _software_backstop(
     client: AlpacaBot3,
     positions: list[dict[str, Any]],
@@ -528,7 +584,9 @@ def run_bot3_cycle(profile: dict[str, Any] | None = None, now: datetime | None =
             "stop_order_id": stored.get("stop_order_id"),
         })
     _log_decision(cycle_id, "CYCLE_START", context={"equity": account["equity"]})
-    _software_backstop(client, positions, cycle_id, _nyse_session_open(now))
+    equity_session_open = _nyse_session_open(now)
+    _maintain_protective_stops(client, positions, cycle_id, equity_session_open)
+    _software_backstop(client, positions, cycle_id, equity_session_open)
     if not initial_entry and not _quarterly_rebalance_date(now):
         _log_decision(cycle_id, "NO_REBALANCE", reason="not first trading day of quarter")
         return {"status": "complete", "orders": 0, "reason": "not_quarterly_date"}

@@ -32,3 +32,4 @@ packages = ["libxcrypt"]
 [userenv]
 
 [userenv.shared]
+PER_BOT_VAULT_ENABLED = "true"

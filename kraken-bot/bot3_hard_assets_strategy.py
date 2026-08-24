@@ -102,6 +102,9 @@ CREATE INDEX IF NOT EXISTS idx_bot3_decision_log_cycle
     ON bot3_decision_log (bot_id, ts DESC, cycle_id);
 """
 
+def _canonical_symbol(symbol: str) -> str:
+    return "BTC/USD" if symbol.replace("/", "") == "BTCUSD" else symbol
+
 
 def _log_decision(
     cycle_id: str,
@@ -259,6 +262,11 @@ class AlpacaBot3:
 
     def _request(self, method: str, path: str, **kwargs: Any) -> Any:
         response = self.session.request(method, self.base_url + path, timeout=20, **kwargs)
+        if not response.ok:
+            raise requests.HTTPError(
+                f"{response.status_code} {response.reason}: {response.text}",
+                response=response,
+            )
         response.raise_for_status()
         return response.json() if response.content else None
 
@@ -278,7 +286,7 @@ class AlpacaBot3:
         result = []
         for position in raw:
             result.append({
-                "symbol": position["symbol"],
+                "symbol": _canonical_symbol(position["symbol"]),
                 "qty": float(position["qty"]),
                 "entry_price": float(position["avg_entry_price"]),
                 "current_price": float(position["current_price"]),
@@ -287,7 +295,10 @@ class AlpacaBot3:
         return result
 
     def open_orders(self) -> list[dict[str, Any]]:
-        return self._request("GET", "/v2/orders", params={"status": "open", "limit": 500}) or []
+        orders = self._request("GET", "/v2/orders", params={"status": "open", "limit": 500}) or []
+        for order in orders:
+            order["symbol"] = _canonical_symbol(order["symbol"])
+        return orders
 
     def latest_prices(self) -> dict[str, float]:
         prices: dict[str, float] = {}
@@ -354,7 +365,7 @@ def _strategy_positions() -> list[dict[str, Any]]:
             )
             return [
                 {
-                    "symbol": row[0], "qty": row[1], "entry_price": row[2],
+                    "symbol": _canonical_symbol(row[0]), "qty": row[1], "entry_price": row[2],
                     "notional_usd": row[3], "stop_price": row[4], "stop_order_id": row[5],
                 }
                 for row in cur.fetchall()
@@ -394,6 +405,14 @@ def _arm_stop(client: AlpacaBot3, symbol: str, qty: float, entry_price: float) -
     return client.submit(
         symbol, "sell", whole_qty, "stop",
         stop_price=round(stop_price, 2),
+    )
+
+def _broker_position_qty(client: AlpacaBot3, symbol: str) -> float:
+    canonical = _canonical_symbol(symbol)
+    return sum(
+        float(position["qty"])
+        for position in client.positions()
+        if _canonical_symbol(position["symbol"]) == canonical
     )
 
 
@@ -498,11 +517,42 @@ def _place_confirmed_entry(
             order_id=order["id"], outcome=status,
         )
         return fill
-    stop_order = _arm_stop(client, symbol, filled_qty, filled_price)
+    broker_qty = _broker_position_qty(client, symbol) or filled_qty
     stop_price = filled_price * (
         1.0 - CRYPTO_STOP_PCT if symbol in CRYPTO else 1.0 - METAL_STOP_PCT
     )
-    _record_open(fill, stop_price, stop_order.get("id"))
+    try:
+        stop_order = _arm_stop(client, symbol, broker_qty, filled_price)
+    except Exception as first_exc:
+        logger.critical(
+            "Bot 3 | protective stop failed after fill; retrying once | "
+            f"symbol={symbol} qty={broker_qty} error={first_exc}"
+        )
+        try:
+            stop_order = _arm_stop(client, symbol, broker_qty, filled_price)
+        except Exception as second_exc:
+            logger.critical(
+                "Bot 3 | protective stop retry failed; flattening immediately | "
+                f"symbol={symbol} qty={broker_qty} error={second_exc}"
+            )
+            flatten_qty = _broker_position_qty(client, symbol)
+            if flatten_qty > 0:
+                flatten = client.submit(symbol, "sell", flatten_qty, "market")
+                flatten_fill = client.wait_for_fill(flatten["id"])
+                if _broker_position_qty(client, symbol) >= 1e-9:
+                    raise RuntimeError(
+                        f"Bot 3 could not confirm flat after stop failure for {symbol}"
+                    )
+                logger.critical(
+                    "Bot 3 | protective stop failure recovered by confirmed flatten | "
+                    f"symbol={symbol} flatten_order={flatten['id']} "
+                    f"status={flatten_fill.get('status')}"
+                )
+            raise RuntimeError(
+                f"Bot 3 aborted after stop failure for {symbol}: {second_exc}"
+            ) from second_exc
+    recorded_fill = {**fill, "symbol": _canonical_symbol(symbol), "filled_qty": broker_qty}
+    _record_open(recorded_fill, stop_price, stop_order.get("id"))
     _log_decision(
         cycle_id, "ENTRY_FILLED", symbol=symbol, planned_qty=qty,
         current_price=filled_price, order_id=order["id"], outcome="FILLED",
@@ -519,7 +569,9 @@ def _plan_orders(
     current_prices: dict[str, float],
 ) -> list[dict[str, Any]]:
     equity = account["equity"]
-    position_by_symbol = {position["symbol"]: position for position in positions}
+    position_by_symbol = {
+        _canonical_symbol(position["symbol"]): position for position in positions
+    }
     plan = []
     for symbol in ASSETS:
         position = position_by_symbol.get(symbol)
@@ -582,10 +634,14 @@ def run_bot3_cycle(
     raw_positions = client.positions()
     live_positions = [
         position for position in raw_positions
-        if position["symbol"] in ASSETS and position["symbol"] not in VAULT_SYMBOLS
+        if _canonical_symbol(position["symbol"]) in ASSETS
+        and _canonical_symbol(position["symbol"]) not in VAULT_SYMBOLS
     ]
     db_positions = {position["symbol"]: position for position in _strategy_positions()}
     initial_entry = not live_positions and not db_positions
+    partial_entry = bool(live_positions) and {
+        _canonical_symbol(position["symbol"]) for position in live_positions
+    } != set(ASSETS)
     positions = []
     for live in live_positions:
         stored = db_positions.get(live["symbol"], {})
@@ -605,7 +661,7 @@ def run_bot3_cycle(
     equity_session_open = _nyse_session_open(now)
     _maintain_protective_stops(client, positions, cycle_id, equity_session_open)
     _software_backstop(client, positions, cycle_id, equity_session_open)
-    if not initial_entry and not _quarterly_rebalance_date(now):
+    if not initial_entry and not partial_entry and not _quarterly_rebalance_date(now):
         _log_decision(cycle_id, "NO_REBALANCE", reason="not first trading day of quarter")
         return {"status": "complete", "orders": 0, "reason": "not_quarterly_date"}
     if not _nyse_session_open(now):
@@ -632,7 +688,11 @@ def run_bot3_cycle(
     return {
         "status": "complete",
         "orders": orders,
-        "reason": "initial_entry" if initial_entry else "quarterly_rebalance",
+        "reason": (
+            "initial_entry" if initial_entry
+            else "partial_entry_recovery" if partial_entry
+            else "quarterly_rebalance"
+        ),
         "targets": targets,
         "volatility": volatility,
     }

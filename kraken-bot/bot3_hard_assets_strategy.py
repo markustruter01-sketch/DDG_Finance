@@ -41,7 +41,7 @@ from db.postgres import get_conn  # noqa: E402
 logger = logging.getLogger("bot3.hard_assets")
 
 BOT_ID = "jerome_macro"
-BOT_PAUSED = True
+BOT_PAUSED = False
 ASSETS = ("BTC/USD", "ETH/USD", "GLD", "SLV")
 CRYPTO = frozenset({"BTC/USD", "ETH/USD"})
 METALS = frozenset({"GLD", "SLV"})

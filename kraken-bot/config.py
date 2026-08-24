@@ -54,7 +54,7 @@ BOT_PROFILES = {
         "MAX_DEPLOYMENT":    0.80,
         # Enable only after migrate_global_etf.py reports all three accounts
         # flat, reconciled, and free of orphaned protective orders.
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
     "davy-jones": {
         "display_name": "Davy Jones' Portfolio",

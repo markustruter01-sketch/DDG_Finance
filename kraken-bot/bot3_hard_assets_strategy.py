@@ -415,6 +415,44 @@ def _broker_position_qty(client: AlpacaBot3, symbol: str) -> float:
         if _canonical_symbol(position["symbol"]) == canonical
     )
 
+def _settled_broker_position_qty(
+    client: AlpacaBot3, symbol: str, attempts: int = 10
+) -> float | None:
+    import time as _time
+    previous: float | None = None
+    for attempt in range(attempts):
+        current = _broker_position_qty(client, symbol)
+        if current > 0 and previous is not None and math.isclose(
+            current, previous, rel_tol=0.0, abs_tol=1e-12
+        ):
+            return current
+        previous = current if current > 0 else None
+        if attempt < attempts - 1:
+            _time.sleep(1)
+    return None
+
+def _cancel_symbol_orders(client: AlpacaBot3, symbol: str) -> None:
+    canonical = _canonical_symbol(symbol)
+    for order in client.open_orders():
+        if _canonical_symbol(order.get("symbol", "")) == canonical:
+            client._request("DELETE", f"/v2/orders/{order['id']}")
+
+def _flatten_position(client: AlpacaBot3, symbol: str) -> None:
+    _cancel_symbol_orders(client, symbol)
+    for attempt in range(2):
+        current_qty = _broker_position_qty(client, symbol)
+        if current_qty <= 0:
+            return
+        sell = client.submit(symbol, "sell", current_qty, "market")
+        client.wait_for_fill(sell["id"])
+        if _broker_position_qty(client, symbol) <= 1e-9:
+            return
+        logger.critical(
+            "Bot 3 | flatten not confirmed; retrying | "
+            f"symbol={symbol} attempt={attempt + 1}"
+        )
+    raise RuntimeError(f"Bot 3 could not confirm flat for {symbol}")
+
 
 def _remember_stop(symbol: str, stop_order_id: str) -> None:
     with get_conn() as conn:

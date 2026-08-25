@@ -269,6 +269,24 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                 return {"status": "skipped", "reason": "missing_bots", "missing": missing}
 
             now = datetime.now(timezone.utc)
+            cur.execute(
+                """
+                SELECT recorded_at::date, spy_close
+                  FROM market_state
+                 WHERE spy_close IS NOT NULL
+                   AND recorded_at::date <= %s
+                 GROUP BY recorded_at::date, spy_close
+                 ORDER BY recorded_at::date DESC, MAX(recorded_at) DESC
+                 LIMIT 2
+                """,
+                (snapshot_date,),
+            )
+            benchmark_rows = cur.fetchall()
+            benchmark_return = None
+            if len(benchmark_rows) >= 2 and benchmark_rows[1][1]:
+                benchmark_return = (
+                    float(benchmark_rows[0][1]) / float(benchmark_rows[1][1])
+                ) - 1
             output = []
             for bot_id, equity, cash, positions, last_updated in rows:
                 stale = (
@@ -316,7 +334,7 @@ def snapshot_daily_returns(*, snapshot_date: date | None = None) -> dict[str, An
                     """,
                     (
                         snapshot_date, bot_id, equity_open, equity_close,
-                        daily_return, cash, held, deployed_pct, None,
+                        daily_return, cash, held, deployed_pct, benchmark_return,
                     ),
                 )
                 output.append(

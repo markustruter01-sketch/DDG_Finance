@@ -23,54 +23,53 @@ def _make_budget(tokens_used: int, daily_budget: int = 100_000, daily_cap: int =
     fake_settings.groq_daily_token_budget = daily_budget
     fake_settings.groq_commentary_daily_cap = daily_cap
 
-    # Import the module fresh each call to avoid cross-test state leakage.
-    if "analysis.groq_budget" in sys.modules:
-        del sys.modules["analysis.groq_budget"]
-
+    # Reuse the package module so patch("analysis.groq_budget.settings", ...)
+    # patches the same globals used by the class methods.  Each test still gets
+    # a fresh, manually initialised instance, so counters cannot leak.
     with patch.dict("sys.modules", {"core.config": MagicMock(settings=fake_settings)}):
         gb_mod = importlib.import_module("analysis.groq_budget")
-        gb = gb_mod.GroqBudget.__new__(gb_mod.GroqBudget)
-        gb._lock = threading.Lock()
-        gb._reset_day = gb_mod.GroqBudget._today_utc()
-        gb._tokens_used = tokens_used
-        gb._regime_calls = 0
-        gb._crypto_calls = 0
-        gb._last_regime_call_at = 0.0
-        gb._commentary_calls = {}
-        gb._budget_warned = set()
-        return gb, fake_settings
+    gb = gb_mod.GroqBudget.__new__(gb_mod.GroqBudget)
+    gb._lock = threading.Lock()
+    gb._reset_day = gb_mod.GroqBudget._today_utc()
+    gb._tokens_used = tokens_used
+    gb._regime_calls = 0
+    gb._crypto_calls = 0
+    gb._last_regime_call_at = 0.0
+    gb._commentary_calls = {}
+    gb._budget_warned = set()
+    return gb, fake_settings, gb_mod
 
 
 class TestForceBypassRespectsBudget(unittest.TestCase):
     def test_force_true_blocked_at_zero_budget(self):
         """force=True must NOT bypass the check when remaining tokens == 0."""
-        gb, settings = _make_budget(tokens_used=100_000, daily_budget=100_000)
-        with patch("analysis.groq_budget.settings", settings):
+        gb, settings, module = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        with patch.object(module, "settings", settings):
             result = gb.can_call_commentary("alpaca", force=True)
         self.assertFalse(result, "force=True should NOT allow calls when budget is fully exhausted")
 
     def test_force_true_allowed_when_budget_remains(self):
         """force=True bypasses the daily call cap when budget has tokens left."""
-        gb, settings = _make_budget(tokens_used=0, daily_budget=100_000, daily_cap=1)
-        with patch("analysis.groq_budget.settings", settings):
+        gb, settings, module = _make_budget(tokens_used=0, daily_budget=100_000, daily_cap=1)
+        with patch.object(module, "settings", settings):
             gb._commentary_calls["alpaca"] = 1  # already hit the cap once
             result = gb.can_call_commentary("alpaca", force=True)
         self.assertTrue(result, "force=True should bypass daily call cap when budget remains")
 
     def test_budget_exhausted_flag_accurate(self):
         """budget_exhausted() returns True iff tokens_used >= daily_budget."""
-        gb_full, s1 = _make_budget(tokens_used=100_000, daily_budget=100_000)
-        gb_part, s2 = _make_budget(tokens_used=50_000,  daily_budget=100_000)
+        gb_full, s1, module = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        gb_part, s2, _ = _make_budget(tokens_used=50_000,  daily_budget=100_000)
 
-        with patch("analysis.groq_budget.settings", s1):
+        with patch.object(module, "settings", s1):
             self.assertTrue(gb_full.budget_exhausted())
-        with patch("analysis.groq_budget.settings", s2):
+        with patch.object(module, "settings", s2):
             self.assertFalse(gb_part.budget_exhausted())
 
     def test_cap_reached_does_not_set_budget_exhausted(self):
         """Hitting daily call cap should NOT make budget_exhausted() return True."""
-        gb, settings = _make_budget(tokens_used=1_000, daily_budget=100_000, daily_cap=5)
-        with patch("analysis.groq_budget.settings", settings):
+        gb, settings, module = _make_budget(tokens_used=1_000, daily_budget=100_000, daily_cap=5)
+        with patch.object(module, "settings", settings):
             gb._commentary_calls["kraken"] = 5  # cap reached, budget fine
             can_call = gb.can_call_commentary("kraken", force=False)
             exhausted = gb.budget_exhausted()
@@ -79,8 +78,8 @@ class TestForceBypassRespectsBudget(unittest.TestCase):
 
     def test_one_shot_warning_per_endpoint(self):
         """Budget-exhausted warning state is recorded exactly once per endpoint."""
-        gb, settings = _make_budget(tokens_used=100_000, daily_budget=100_000)
-        with patch("analysis.groq_budget.settings", settings):
+        gb, settings, module = _make_budget(tokens_used=100_000, daily_budget=100_000)
+        with patch.object(module, "settings", settings):
             self.assertNotIn("alpaca", gb._budget_warned)
             gb.can_call_commentary("alpaca", force=True)
             self.assertIn("alpaca", gb._budget_warned, "_budget_warned should record endpoint after first call")

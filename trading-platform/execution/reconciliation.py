@@ -10,9 +10,11 @@ from loguru import logger
 
 from core.kill_switch import ACCOUNT_ENV, ACTIVE_BOTS, DUST_QTY, MAX_DEPLOYMENT
 from config.settings import settings
+from core.bot_registry import resolve_bot_id
 
 
 def _client_for(bot_id: str):
+    bot_id = resolve_bot_id(bot_id)
     from alpaca.trading.client import TradingClient
     key_name, secret_name = ACCOUNT_ENV[bot_id]
     key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
@@ -41,6 +43,7 @@ def _positions(client) -> list[dict[str, Any]]:
 
 
 def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
+    bot_id = resolve_bot_id(bot_id)
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -55,6 +58,7 @@ def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
 
 
 def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    bot_id = resolve_bot_id(bot_id)
     b = {str(p.get("symbol", "")).replace("/", ""): abs(float(p.get("qty") or 0)) for p in broker if abs(float(p.get("qty") or 0)) >= DUST_QTY}
     l = {str(p.get("symbol", "")).replace("/", ""): abs(float(p.get("qty") or 0)) for p in ledger if abs(float(p.get("qty") or 0)) >= DUST_QTY}
     results = []
@@ -70,6 +74,7 @@ def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str
 
 def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Compare live order IDs with the durable stop/order ledger."""
+    bot_id = resolve_bot_id(bot_id)
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
@@ -106,6 +111,7 @@ def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[st
 
 
 def _stale_portfolio(bot_id: str) -> list[dict[str, Any]]:
+    bot_id = resolve_bot_id(bot_id)
     try:
         from db.postgres import get_conn
         with get_conn() as conn:

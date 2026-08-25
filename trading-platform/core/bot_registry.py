@@ -66,7 +66,13 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         db_id=None,
         status="active",
         display_order=1,
-        legacy_aliases=(),
+        legacy_aliases=(
+            "bot1_global",
+            "asia_trend_strategy",
+            "davy-jones",
+            "davy_jones",
+            "Davy Jones",
+        ),
         trading_hours="nyse_only",
         cycle_minutes=15,
         color="purple",
@@ -83,7 +89,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         db_id=1,
         status="active",
         display_order=2,
-        legacy_aliases=("davy-jones", "davy_jones", "Davy Jones", "bot2_spy_qqq"),
+        legacy_aliases=("bot2_spy_qqq",),
         trading_hours="nyse_only",
         cycle_minutes=60,
         color="amber",
@@ -100,7 +106,7 @@ BOT_REGISTRY: dict[str, BotEntry] = {
         db_id=2,
         status="active",
         display_order=3,
-        legacy_aliases=("blackbeard", "Blackbeard"),
+        legacy_aliases=("bot3_reserved", "blackbeard", "Blackbeard"),
         trading_hours="macro_cycle",
         cycle_minutes=240,
         color="red",
@@ -167,6 +173,14 @@ def normalise_bot_id(any_id: str) -> Optional[str]:
     """Map any input id (canonical or legacy alias) to canonical id."""
     bot = bot_by_id(any_id)
     return bot.id if bot else None
+
+
+def resolve_bot_id(any_id: str) -> str:
+    """Resolve a known bot id or alias, failing closed for unknown values."""
+    canonical = normalise_bot_id(any_id)
+    if canonical is None:
+        raise ValueError(f"Unknown bot identifier: {any_id!r}")
+    return canonical
 
 def display_name(any_id: str) -> str:
     """Get display name. Returns the input unchanged if unknown (safe fallback)."""

@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from core import kill_switch as ks
+from core import bot_state
+from core.bot_registry import normalise_bot_id
 
 
 def setup_function():
@@ -121,3 +123,71 @@ def test_reset_requires_exact_confirmation_when_latched():
         ks.reset()
     ks.reset(confirmation_token=ks.RESET_CONFIRMATION)
     assert ks.is_tripped() is False
+
+
+@pytest.mark.parametrize(
+    ("alias", "canonical"),
+    [
+        ("oracle", "oracle"),
+        ("bot1_global", "oracle"),
+        ("asia_trend_strategy", "oracle"),
+        ("davy-jones", "oracle"),
+        ("bot2_spy_qqq", "spy_qqq_trend"),
+        ("spy_qqq_trend", "spy_qqq_trend"),
+        ("bot3_reserved", "jerome_macro"),
+        ("blackbeard", "jerome_macro"),
+    ],
+)
+def test_all_stage_2b_aliases_resolve_to_canonical_ids(alias, canonical):
+    assert normalise_bot_id(alias) == canonical
+
+
+class _PauseCursor:
+    description = [("paused",)]
+
+    def __init__(self, paused):
+        self.paused = paused
+        self.params = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, _query, params):
+        self.params = params
+
+    def fetchone(self):
+        return (self.paused,)
+
+
+class _PauseConnection:
+    def __init__(self, paused):
+        self.cursor_instance = _PauseCursor(paused)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def cursor(self):
+        return self.cursor_instance
+
+
+@pytest.mark.parametrize(
+    ("alias", "canonical"),
+    [
+        ("bot1_global", "oracle"),
+        ("davy-jones", "oracle"),
+        ("bot2_spy_qqq", "spy_qqq_trend"),
+        ("bot3_reserved", "jerome_macro"),
+        ("blackbeard", "jerome_macro"),
+    ],
+)
+def test_pause_lookup_by_any_alias_uses_same_canonical_row(monkeypatch, alias, canonical):
+    connection = _PauseConnection(True)
+    monkeypatch.setattr(bot_state, "_get_conn", lambda: connection)
+    assert bot_state.is_paused(alias) is True
+    assert connection.cursor_instance.params == (canonical,)

@@ -22,19 +22,16 @@ _TP = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _TP not in sys.path:
     sys.path.insert(0, _TP)
 
-# ── Legacy BOT_ID env-var → canonical registry ID ─────────────────────────
-LEGACY_TO_CANONICAL: dict[str, str] = {
-    "davy-jones":      "spy_qqq_trend",
-    "bot2_spy_qqq":    "spy_qqq_trend",
-    "blackbeard":      "jerome_macro",
-    "bot3_blackbeard": "jerome_macro",
-
-    "navigator":       "forex_gump",
-}
+from core.bot_registry import normalise_bot_id
 
 # Only these currently active bots belong in fleet equity. If crypto bots are
 # added later, append their bot_ids to this allowlist.
 ACTIVE_BOT_IDS = {"spy_qqq_trend", "oracle", "jerome_macro"}
+
+
+def _canonical(bot_id: str) -> str:
+    """Resolve legacy identifiers without allowing unknown DB keys."""
+    return normalise_bot_id(bot_id) or bot_id
 
 
 def _get_conn():
@@ -51,6 +48,7 @@ def write_heartbeat(
     error: str = "",
 ) -> None:
     """Write heartbeat to bots_state. Non-fatal — never raises."""
+    bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -78,6 +76,7 @@ def write_heartbeat(
 def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> None:
     """Update only last_heartbeat, status, and error_message — never touches equity_usd.
     Used by runner.py which has no access to equity (leaf cycle fns return None)."""
+    bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -97,6 +96,7 @@ def touch_heartbeat(bot_id: str, status: str = "running", error: str = "") -> No
 
 def is_paused(bot_id: str) -> bool:
     """Check if a bot is paused. Falls back to False if row missing or DB unavailable."""
+    bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -113,6 +113,7 @@ def is_paused(bot_id: str) -> bool:
 
 def set_paused(bot_id: str, paused: bool, reason: str = "") -> None:
     """Pause or unpause a bot in bots_state."""
+    bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -132,6 +133,7 @@ def set_paused(bot_id: str, paused: bool, reason: str = "") -> None:
 
 def get_bot_state(bot_id: str) -> dict:
     """Return full bots_state row for a bot as a dict. Returns {} if not found."""
+    bot_id = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -180,7 +182,7 @@ def get_portfolio(bot_id: str) -> dict:
     """Read portfolio for a bot. Returns dict with keys:
     bot_id, starting_usd, cash_usd, equity_usd, positions, updated_at, metadata.
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
-    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    canonical = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -205,7 +207,7 @@ def get_portfolio(bot_id: str) -> dict:
 def touch_portfolio(bot_id: str) -> None:
     """Touch last_updated only — no equity/cash change. Called on market-closed
     pipeline cycles so oracle heartbeat stays fresh without overwriting live data."""
-    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    canonical = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -226,7 +228,7 @@ def write_portfolio(
     """UPSERT portfolio state. Called by bot at end of every cycle.
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
     import json as _json
-    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    canonical = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -256,7 +258,7 @@ def add_position(bot_id: str, position: dict) -> None:
     """Append a position to bot's positions array (atomic jsonb append).
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
     import json as _json
-    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    canonical = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:
@@ -275,7 +277,7 @@ def add_position(bot_id: str, position: dict) -> None:
 def remove_position(bot_id: str, symbol: str) -> None:
     """Remove a position by symbol from bot's positions array (atomic filter).
     Resolves legacy BOT_ID env-var values via LEGACY_TO_CANONICAL first."""
-    canonical = LEGACY_TO_CANONICAL.get(bot_id, bot_id)
+    canonical = _canonical(bot_id)
     try:
         with _get_conn() as conn:
             with conn.cursor() as cur:

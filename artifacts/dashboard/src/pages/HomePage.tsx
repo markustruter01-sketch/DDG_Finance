@@ -16,6 +16,7 @@ import { useExportReport } from "@/hooks/use-report";
 import { useToast } from "@/hooks/use-toast";
 import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
+import ObservatoryHome from "@/components/ObservatoryHome";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -785,6 +786,25 @@ export default function HomePage() {
     regime, killTripped, lastCycle, mktOpen, entryWindows,
   } = useFleetData();
 
+  // Observatory is intentionally limited to pointer-capable desktop browsers and
+  // iPads.  Android (including large Android phones) keeps the established mobile
+  // command surface.  Re-evaluate on rotation and resize rather than user-agent
+  // sniffing alone.
+  const [showObservatory, setShowObservatory] = useState(false);
+  useEffect(() => {
+    const classify = () => {
+      const ua = navigator.userAgent;
+      const android = /Android/i.test(ua);
+      const ipad = /iPad/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const desktop = !android && window.innerWidth >= 768 && (window.matchMedia?.("(pointer: fine)").matches ?? true);
+      setShowObservatory(ipad || desktop);
+    };
+    classify();
+    window.addEventListener("resize", classify);
+    window.addEventListener("orientationchange", classify);
+    return () => { window.removeEventListener("resize", classify); window.removeEventListener("orientationchange", classify); };
+  }, []);
+
   // Warp pulse: fires whenever lastCycle changes (new data arrived)
   const [warp, setWarp] = useState(false);
   const [, setClock] = useState(Date.now());
@@ -820,6 +840,8 @@ export default function HomePage() {
   ).length;
 
   const regimeColor = regime === "BULL" ? "#16a34a" : "#000000";
+
+  if (showObservatory) return <ObservatoryHome />;
 
   return (
     <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#e8eef2", position: "relative" }}>

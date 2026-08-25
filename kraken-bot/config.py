@@ -74,12 +74,11 @@ BOT_PROFILES = {
         # ── Risk management ───────────────────────────────────────────────────
         "MAX_POSITIONS":     3,        # 8-ETF basket; preserve cash headroom
         "VOL_TARGET":        0.12,
-        "VOL_CAP":           0.25,
         "TRAIL_STOP_PCT":    0.08,
         "TP1_PCT":           0.06,
         "TP2_PCT":           0.12,
         "MIN_HOLD_DAYS":     5,
-        "MAX_DEPLOYMENT":    0.80,
+        "MAX_DEPLOYMENT":    1.00,
         # Reserved for Phase 3 Bot 3; activation follows separate validation.
         "BOT_PAUSED":        False,
     },

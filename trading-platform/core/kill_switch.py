@@ -16,6 +16,7 @@ from loguru import logger
 
 from config.settings import settings
 from core.symbols import canonical_symbol, same_symbol
+from core.bot_config import load_bot_profiles
 
 DUST_QTY = 1e-6
 MISSING_STOP_SECONDS = 60.0
@@ -27,7 +28,11 @@ ACCOUNT_ENV = {
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
 }
-MAX_DEPLOYMENT = {"oracle": 0.80, "spy_qqq_trend": 0.80, "jerome_macro": 1.00}
+MAX_DEPLOYMENT = {
+    bot_id: float(profile["MAX_DEPLOYMENT"])
+    for bot_id, profile in load_bot_profiles().items()
+    if bot_id in ACTIVE_BOTS
+}
 
 _state: dict[str, Any] = {
     "tripped": False,

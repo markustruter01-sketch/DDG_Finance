@@ -2,24 +2,21 @@ import type { FleetEquityData, BotRegistryResponse } from "@/hooks/use-trading";
 
 const META_KEYS = new Set(["fleet_total", "generated_at", "errors"]);
 
-const DEFAULT_STARTING = 800_000;
-const DEFAULT_BOT_COUNT = 8;
-
 export function getFleetStartingCapital(
   registry?: BotRegistryResponse,
   fleetEq?: FleetEquityData
-): number {
+): number | null {
   if (registry) return registry.fleet_starting_capital;
   if (fleetEq?.fleet_total?.starting) return fleetEq.fleet_total.starting;
-  return DEFAULT_STARTING;
+  return null;
 }
 
 export function getFleetBotCount(
   registry?: BotRegistryResponse,
   _fleetEq?: FleetEquityData
-): number {
+): number | null {
   if (registry) return registry.fleet_bot_count;
-  return DEFAULT_BOT_COUNT;
+  return null;
 }
 
 export function formatCapitalShort(amount: number): string {

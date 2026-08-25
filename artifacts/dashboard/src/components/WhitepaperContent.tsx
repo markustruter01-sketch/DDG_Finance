@@ -540,7 +540,7 @@ export function WhitepaperContent() {
             <li><Mono>entry_filter(side)</Mono>: VPIN ≥ 0.80 hard block → OFI directional gate</li>
             <li>RSI confirmation: RSI &lt; 40 for long entry</li>
             <li>Z-Score gate: Z &lt; −1.5 for long entry</li>
-            <li>MAX_POSITIONS = 3: no new entry if 3 already open</li>
+            <li>Legacy Kraken strategy limit: MAX_POSITIONS = 3</li>
             <li>Cash reserve check: sufficient balance available</li>
           </ol>
         </SubSection>

@@ -7,25 +7,18 @@ the dashboard can render a countdown without duplicating trading-time arithmetic
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
-import importlib.util
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
 from loguru import logger
+from core.bot_config import load_bot_profiles
 
 router = APIRouter()
 
 
 def _load_bot_profiles() -> dict[str, dict[str, Any]]:
-    """Load the runner's config module so reporting has one source of truth."""
-    config_path = Path(__file__).resolve().parents[2] / "kraken-bot" / "config.py"
-    spec = importlib.util.spec_from_file_location("_entry_window_bot_config", config_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load bot config from {config_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.BOT_PROFILES
+    """Compatibility wrapper for the shared runner config loader."""
+    return load_bot_profiles()
 
 
 def _profile_window(profile: dict[str, Any]) -> tuple[time, time]:

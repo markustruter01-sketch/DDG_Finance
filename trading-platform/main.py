@@ -87,6 +87,8 @@ async def lifespan(app: FastAPI):
 
     _load_commentary_caches()
     logger.info("Commentary caches loaded from disk")
+    from routes.entry_windows import assert_entry_window_alignment
+    assert_entry_window_alignment()
 
     scheduler = get_scheduler()
     scheduler.start()

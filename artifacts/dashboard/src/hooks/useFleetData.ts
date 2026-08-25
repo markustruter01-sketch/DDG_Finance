@@ -69,7 +69,7 @@ export interface StatusSummary {
 export interface EntryWindow {
   label: string;
   timezone: "UTC";
-  mode: "fixed_window" | "runner_interval";
+  mode: "fixed_window" | "runner_interval" | "event_driven";
   is_open: boolean;
   entry_interval_seconds?: number;
   window_start_utc: string | null;

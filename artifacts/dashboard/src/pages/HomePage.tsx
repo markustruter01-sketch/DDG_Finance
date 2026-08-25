@@ -278,6 +278,19 @@ function EntryWindowCountdown({ entryWindow }: { entryWindow?: EntryWindow }) {
     );
   }
 
+  if (entryWindow.mode === "event_driven") {
+    return (
+      <div
+        className="mt-3 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[9px] font-bold tracking-wide text-amber-200"
+        title={`Server schedule: ${entryWindow.source}`}
+        style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.20)" }}
+      >
+        <span aria-hidden>◌</span>
+        <span>Event-driven rebalancing · no daily window</span>
+      </div>
+    );
+  }
+
   const startsAt = Date.parse(entryWindow.window_start_utc!);
   const endsAt = Date.parse(entryWindow.window_end_utc!);
   const open = now >= startsAt && now < endsAt;

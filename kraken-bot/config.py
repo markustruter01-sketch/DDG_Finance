@@ -69,10 +69,7 @@ BOT_PROFILES = {
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "LOOP_SLEEP_SECONDS": 3600,    # hourly cycle (exits every hour)
-        # Match Asia: one runner-aligned entry cycle at 19:40 UTC daily.
-        "ENTRY_WINDOW_START_UTC": (19, 40),
-        "ENTRY_WINDOW_DURATION_MINUTES": 20,
-        # ── Reserved account for Phase 3 Bot 3; not activated by this task ───
+        # ── Bot 3 is event-driven; it has no fixed daily entry window ───
         "EM_UNIVERSE":       ["EWZ", "EWW", "ECH", "EEM", "EZA", "EPOL", "GREK", "TUR"],
         # ── Risk management ───────────────────────────────────────────────────
         "MAX_POSITIONS":     3,        # 8-ETF basket; preserve cash headroom

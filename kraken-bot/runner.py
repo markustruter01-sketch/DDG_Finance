@@ -113,6 +113,12 @@ _status_lock = threading.Lock()
 _shutdown_event = threading.Event()
 _pause_alignment_ok = True
 
+try:
+    from core.bot_liveness import write_cycle as _write_cycle_liveness
+except Exception as _live_exc:
+    logger.critical(f"Runner | liveness layer unavailable: {_live_exc}")
+    _write_cycle_liveness = None
+
 
 def _assert_pause_alignment() -> bool:
     """Require module, profile, and canonical DB pause sources to agree."""
@@ -276,6 +282,32 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
         return False
 
 
+def _record_cycle_liveness(
+    bot_id: str,
+    cycle_started_at: datetime,
+    cycle_ended_at: datetime,
+    cycle_count: int,
+    status: str,
+    *,
+    success: bool = False,
+    consecutive_failures: int = 0,
+    last_error: str | None = None,
+) -> None:
+    if _write_cycle_liveness is None:
+        logger.critical(f"[{bot_id}] liveness write unavailable; durable cycle state is blind")
+        return
+    _write_cycle_liveness(
+        bot_id,
+        cycle_start=cycle_started_at,
+        cycle_end=cycle_ended_at,
+        cycle_count=cycle_count,
+        status=status,
+        success=success,
+        consecutive_failures=consecutive_failures,
+        last_error=last_error,
+    )
+
+
 def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
     """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
     logger.info(f"[{bot_id}] Thread starting...")
@@ -340,6 +372,10 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     pause_source="profile" if profile_paused else "database",
                     consecutive_errors=0,
                 )
+                _record_cycle_liveness(
+                    bot_id, cycle_started_at, datetime.now(timezone.utc), cycle_count,
+                    "paused", consecutive_failures=0,
+                )
                 if _heartbeat_ok:
                     try:
                         _bs_touch(
@@ -358,6 +394,10 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                                last_cycle_end=datetime.now(timezone.utc).isoformat(),
                                error=None, consecutive_errors=0)
                 consecutive_errors = 0
+                _record_cycle_liveness(
+                    bot_id, cycle_started_at, datetime.now(timezone.utc), cycle_count,
+                    "success", success=True,
+                )
 
                 if _heartbeat_ok:
                     try:
@@ -374,6 +414,15 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
             logger.error(f"[{bot_id}] Cycle {cycle_count} failed (consecutive={consecutive_errors}): {exc}\n{tb}")
             _update_status(bot_id, status="error", error=str(exc),
                            consecutive_errors=consecutive_errors)
+            _record_cycle_liveness(
+                bot_id,
+                cycle_started_at if "cycle_started_at" in locals() else datetime.now(timezone.utc),
+                datetime.now(timezone.utc),
+                cycle_count,
+                "error",
+                consecutive_failures=consecutive_errors,
+                last_error=str(exc),
+            )
             if consecutive_errors >= FAILURE_ALERT_EVERY and consecutive_errors % FAILURE_ALERT_EVERY == 0:
                 failure_message = (
                     f"{bot_id} has failed {consecutive_errors} consecutive cycles. "

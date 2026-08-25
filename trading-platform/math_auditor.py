@@ -185,8 +185,8 @@ def _log_result(
         else:
             status, severity = "PASS", "INFO"
     else:
-        status = "PASS" if "insufficient_data" in notes.lower() else "WARN"
-        severity = "INFO" if status == "PASS" else "WARNING"
+        status = "WARN"
+        severity = "WARNING"
         notes += " [one or both values unavailable — cannot compare]"
 
     # Caller may override the computed status (e.g. FAIL → WARN for legacy positions)

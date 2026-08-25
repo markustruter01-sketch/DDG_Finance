@@ -169,15 +169,17 @@ def build_stage_8_live_synthesis(prior_stage_summaries: dict[str, str] | None = 
 # Live data collector
 # ---------------------------------------------------------------------------
 
-def _run_query(cur: Any, label: str, sql: str, parts: list[str], handler: Any) -> None:
+def _run_query(cur: Any, label: str, sql: str, parts: list[str], handler: Any) -> bool:
     """Execute a single DB query with isolated error handling."""
     try:
         cur.execute(sql)
         rows = cur.fetchall()
         handler(rows, parts)
+        return True
     except Exception as exc:
         parts.append(f"\n[{label} query failed: {exc}]")
         logger.warning(f"SystemSnapshot | {label} query failed: {exc}")
+        return False
 
 
 def collect_live_data() -> str:
@@ -189,11 +191,12 @@ def collect_live_data() -> str:
     Each DB query has its own error boundary.
     """
     parts: list[str] = []
+    query_failures = 0
 
     try:
         from db.postgres import get_conn, is_pg_available
         if not is_pg_available():
-            parts.append("[DB unavailable — live data omitted]")
+            parts.append("[HEALTH=UNKNOWN] DB unavailable — live data omitted")
             return "\n".join(parts)
 
         with get_conn() as conn:
@@ -211,7 +214,7 @@ def collect_live_data() -> str:
                             f"total_pnl=${pnl:.2f} avg=${avg:.2f} best=${best:.2f} worst=${worst:.2f}"
                         )
 
-                _run_query(cur, "bot_pnl_summary", """
+                query_failures += not _run_query(cur, "bot_pnl_summary", """
                     SELECT bot_id, COUNT(*) as total_trades,
                            COUNT(*) FILTER (WHERE pnl_usd > 0) as wins,
                            COUNT(*) FILTER (WHERE pnl_usd <= 0) as losses,
@@ -242,6 +245,7 @@ def collect_live_data() -> str:
                         parts.append(f"\n=== LAST 200 TRADES PER BOT ({len(trades)} total records) ===")
                         parts.append(json.dumps(trades, indent=2, default=str))
                 except Exception as exc:
+                    query_failures += 1
                     parts.append(f"\n[kraken_trades per-bot query failed: {exc}]")
                     logger.warning(f"SystemSnapshot | kraken_trades query failed: {exc}")
 
@@ -255,7 +259,7 @@ def collect_live_data() -> str:
                             f"positions={hb[4]} cycles={hb[5]} paused={hb[6]} updated={str(hb[8])[:19]}"
                         )
 
-                _run_query(cur, "kraken_heartbeat", """
+                query_failures += not _run_query(cur, "kraken_heartbeat", """
                     SELECT id, bot_id, status, equity_usd, position_count, cycle_count,
                            bot_paused, circuit_breaker, last_updated
                     FROM kraken_heartbeat ORDER BY id
@@ -271,7 +275,7 @@ def collect_live_data() -> str:
                         if pos_data:
                             out.append(f"  positions: {json.dumps(pos_data, default=str)[:1000]}")
 
-                _run_query(cur, "kraken_portfolio",
+                query_failures += not _run_query(cur, "kraken_portfolio",
                     "SELECT id, cash_usd, positions FROM kraken_portfolio ORDER BY id",
                     parts, _portfolios)
 
@@ -285,7 +289,7 @@ def collect_live_data() -> str:
                             f"regime={t[4]} exit={t[5]}"
                         )
 
-                _run_query(cur, "alpaca_trades", """
+                query_failures += not _run_query(cur, "alpaca_trades", """
                     SELECT ticker, pnl_percentage, status, date, regime_at_entry, exit_reason
                     FROM trades WHERE status = 'Active'
                     ORDER BY date DESC LIMIT 20
@@ -299,7 +303,7 @@ def collect_live_data() -> str:
                     else:
                         out.append("\n=== ERROR/ALERT LOGS (LAST 48h) ===\n  No errors logged.")
 
-                _run_query(cur, "system_degradations", """
+                query_failures += not _run_query(cur, "system_degradations", """
                     SELECT ts, component, severity, error_type, message
                     FROM system_degradations
                     WHERE ts >= NOW() - INTERVAL '48 hours'
@@ -313,7 +317,7 @@ def collect_live_data() -> str:
                     for l in rows:
                         out.append(f"  [{l[1]}/{l[2]}] conf={l[4]:.2f} count={l[3]}: {l[0][:200]}")
 
-                _run_query(cur, "llm_learnings", """
+                query_failures += not _run_query(cur, "llm_learnings", """
                     SELECT insight_text, regime, category, confirmed_count, confidence_score
                     FROM llm_learnings WHERE confidence_score >= 0.5
                     ORDER BY confidence_score DESC, confirmed_count DESC LIMIT 30
@@ -326,15 +330,19 @@ def collect_live_data() -> str:
                     for r in rows:
                         out.append(f"  {r[0]} [{r[1]}] exit={r[2]} count={r[3]}: {r[4][:200]}")
 
-                _run_query(cur, "hardcoded_rules", """
+                query_failures += not _run_query(cur, "hardcoded_rules", """
                     SELECT ticker, regime, exit_reason, failure_count, rule_text
                     FROM hardcoded_rules WHERE active = TRUE
                     ORDER BY failure_count DESC LIMIT 30
                 """, parts, _rules)
 
     except Exception as exc:
-        parts.append(f"\n[Live data connection error: {exc}]")
+        query_failures += 1
+        parts.append(f"\n[HEALTH=UNKNOWN] Live data connection error: {exc}")
         logger.warning(f"SystemSnapshot | live data connection failed: {exc}")
+
+    if query_failures:
+        parts.insert(0, f"[HEALTH=UNKNOWN] {query_failures} live-data collection query failure(s)")
 
     try:
         from analysis.fleet_commander import get_last_fleet_audit, get_fleet_audit_history

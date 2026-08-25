@@ -291,9 +291,9 @@ def check_regime_integrity() -> AuditFinding:
     if not allocation or not regime_label:
         return AuditFinding(
             check="regime_integrity",
-            passed=True,
-            severity="INFO",
-            message="No allocation plan yet — bot has not run a full cycle",
+            passed=False,
+            severity="WARNING",
+            message="UNKNOWN: no allocation plan to audit — bot has not run a full cycle",
             details={"last_run_status": last_run.get("last_run_status")},
         )
 
@@ -403,9 +403,9 @@ def check_compliance() -> AuditFinding:
     if not allocation:
         return AuditFinding(
             check="compliance",
-            passed=True,
-            severity="INFO",
-            message="No allocation to audit — bot has not run a full cycle",
+            passed=False,
+            severity="WARNING",
+            message="UNKNOWN: no allocation to audit — bot has not run a full cycle",
         )
 
     slots = getattr(allocation, "allocations", []) or []

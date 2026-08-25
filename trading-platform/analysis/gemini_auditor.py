@@ -108,7 +108,7 @@ class _GeminiAuditResponse(BaseModel):
     @field_validator("overall_verdict")
     @classmethod
     def _valid_verdict(cls, v: str) -> str:
-        valid = {"CLEAN", "CAUTION", "HOLD"}
+        valid = {"CLEAN", "CAUTION", "HOLD", "UNKNOWN"}
         v = v.upper().strip()
         return v if v in valid else "CAUTION"
 
@@ -165,10 +165,10 @@ Rules
 -----
 • vetoed_tickers  : symbols that must NOT be traded today (use CAUTION sparingly)
 • conditions      : structured risk rules to override system defaults today
-• overall_verdict : CLEAN = all good; CAUTION = proceed with reduced size;
-                    HOLD = suspend trading until human review
+• overall_verdict : UNKNOWN = insufficient evidence; CLEAN = all good;
+                     CAUTION = proceed with reduced size; HOLD = suspend trading
 • Be specific — cite ticker names, timestamps, exact PnL values when available
-• If data is too sparse to audit, output verdict=CLEAN with empty lists
+• If data is too sparse to audit, output verdict=UNKNOWN with empty lists
 • Return ONLY the JSON object — no explanation, no code fences
 """
 
@@ -441,8 +441,8 @@ def _merge_responses(responses: list[_GeminiAuditResponse]) -> _GeminiAuditRespo
     if len(responses) == 1:
         return responses[0]
 
-    _SEVERITY = {"CLEAN": 0, "CAUTION": 1, "HOLD": 2}
-    _REVERSE  = {0: "CLEAN", 1: "CAUTION", 2: "HOLD"}
+    _SEVERITY = {"UNKNOWN": 0, "CLEAN": 1, "CAUTION": 2, "HOLD": 3}
+    _REVERSE  = {0: "UNKNOWN", 1: "CLEAN", 2: "CAUTION", 3: "HOLD"}
 
     tickers:    set[str]       = set()
     cond_keys:  set[tuple]     = set()
@@ -544,6 +544,17 @@ def run_daily_self_critic() -> dict[str, Any]:
     if not audit_data:
         logger.warning("GeminiAuditor | No data fetched from DB — skipping")
         return {"status": "skipped", "reason": "no_data"}
+
+    auditable_records = sum(
+        len(audit_data.get(key) or [])
+        for key in ("trades", "equity_curve", "degradations", "performance")
+    )
+    if auditable_records < 3:
+        logger.warning(
+            f"GeminiAuditor | Sparse audit data ({auditable_records} records) — UNKNOWN"
+        )
+        return {"status": "unknown", "reason": "insufficient_audit_data",
+                "record_count": auditable_records}
 
     # ── Sanitize context ──────────────────────────────────────────────────────
     full_context = sanitize_daily_context(audit_data)

@@ -307,6 +307,20 @@ CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_ts
 CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_bot_ts
     ON fleet_equity_snapshots (bot_id, snapshot_ts);
 
+-- Canonical runner liveness. One row per active bot, updated on every cycle.
+CREATE TABLE IF NOT EXISTS bot_cycle_health (
+    bot_id                TEXT PRIMARY KEY,
+    last_cycle_start      TIMESTAMPTZ,
+    last_cycle_end        TIMESTAMPTZ,
+    last_success_at       TIMESTAMPTZ,
+    cycle_count           INTEGER NOT NULL DEFAULT 0,
+    consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+    last_error            TEXT NOT NULL DEFAULT '',
+    status                TEXT NOT NULL DEFAULT 'unknown'
+);
+CREATE INDEX IF NOT EXISTS idx_bot_cycle_health_success
+    ON bot_cycle_health (last_success_at);
+
 -- ── System Degradation Log ─────────────────────────────────────────────────
 -- Persistent record of every detected system failure or degradation event.
 -- Written by the auto-heal monitor, HTTP middleware, and manual captures.

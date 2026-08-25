@@ -217,6 +217,11 @@ def _check_equity_drawdown(bot_id: str) -> dict:
 def _check_loss_streak(bot_id: str) -> dict:
     """Count consecutive losses starting from the most recent trade."""
     rows: list[dict] = []
+    if not rows:
+        return {
+            "score": 50, "status": "UNKNOWN", "value": None, "n": 0,
+            "details": "Insufficient data (no trades available)",
+        }
     streak = 0
     for r in rows:
         if r["pnl_usd"] <= 0:
@@ -259,9 +264,9 @@ def _check_symbol_concentration(bot_id: str) -> dict:
     rows: list[dict] = []
     if not rows:
         return {
-            "score": 100, "status": "HEALTHY",
-            "value": 0.0,
-            "details": "No losing trades in last 30 days",
+            "score": 50, "status": "UNKNOWN",
+            "value": None,
+            "details": "Insufficient data (no losing trades available)",
         }
     total_losses = sum(r["gross_loss"] for r in rows)
     top_sym      = rows[0]["symbol"]
@@ -356,6 +361,8 @@ def run_health_check(bot_id: str) -> dict[str, Any]:
     statuses = [m["status"] for m in metrics.values()]
     if "CRITICAL" in statuses:
         overall_status = "CRITICAL"
+    elif "UNKNOWN" in statuses:
+        overall_status = "UNKNOWN"
     elif "WARNING" in statuses:
         overall_status = "WARNING"
     else:
@@ -383,7 +390,7 @@ def run_health_check(bot_id: str) -> dict[str, Any]:
         result["adaptive_bridge_actions"] = bridge_actions
 
     n_critical = sum(1 for m in metrics.values() if m["status"] == "CRITICAL")
-    n_warning  = sum(1 for m in metrics.values() if m["status"] == "WARNING")
+    n_warning  = sum(1 for m in metrics.values() if m["status"] in {"WARNING", "UNKNOWN"})
     logger.info(
         f"HealthMonitor | {bot_id}: score={overall_score}/100 status={overall_status} "
         f"[{n_critical} CRITICAL, {n_warning} WARNING]"

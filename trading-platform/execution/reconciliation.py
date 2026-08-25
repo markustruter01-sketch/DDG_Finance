@@ -208,12 +208,22 @@ def collect_live_snapshot() -> dict[str, Any]:
                 fleet_hwm = float(cur.fetchone()[0] or fleet_equity)
     except Exception:
         pass
+    try:
+        from core.bot_liveness import evaluate_liveness
+        liveness_findings = evaluate_liveness()
+    except Exception as exc:
+        liveness_findings = [{
+            "trigger": "bot_cycle_health_unavailable",
+            "detail": str(exc),
+            "severity": "critical",
+        }]
     return {
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "accounts": accounts,
         "mismatches": mismatches,
         "account_findings": account_findings,
         "pause_state_disagreements": _pause_state_disagreements(),
+        "liveness_findings": liveness_findings,
         "fleet_equity": fleet_equity,
         "fleet_hwm": fleet_hwm,
     }
@@ -228,6 +238,11 @@ def reconcile(report_only: bool = False) -> dict[str, Any]:
             f"deployment:{account['bot_id']}" in acknowledgements
         )
     flags = evaluate_snapshot(snapshot)
+    # Preserve the liveness findings in the reconciliation payload even when
+    # another evaluator is replaced or mocked by a caller.
+    for finding in snapshot.get("liveness_findings", []):
+        if finding not in flags:
+            flags.append(finding)
     clean = not snapshot["mismatches"] and not flags
     public_snapshot = {
         key: [

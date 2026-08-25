@@ -458,17 +458,21 @@ def run_walk_forward_job(dry_run: bool = False) -> dict[str, dict]:
         }
         results[bot_id] = result
 
-        if status == "RED" and not dry_run:
+        if status in {"RED", "INSUFFICIENT_DATA"} and not dry_run:
             try:
                 from core.degradation_tracker import record_degradation
                 record_degradation(
                     component=f"walk_forward/{bot_id}",
-                    severity="medium",
-                    error_type="wf_red_status",
+                    severity="medium" if status == "RED" else "warning",
+                    error_type="wf_red_status" if status == "RED" else "wf_insufficient_data",
                     message=(
-                        f"{bot_id} RED: trailing-90d Sharpe "
-                        f"{m90['sharpe']:.3f} below OOS floor {oos_floor:.3f} "
-                        f"for {consecutive} day(s)"
+                        f"{bot_id} {status}: "
+                        + (
+                            f"trailing-90d Sharpe {m90['sharpe']:.3f} below OOS floor "
+                            f"{oos_floor:.3f} for {consecutive} day(s)"
+                            if status == "RED"
+                            else f"only {m90['trades_count']} trailing-90d trades; comparison unavailable"
+                        )
                     ),
                 )
             except Exception as exc:

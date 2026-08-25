@@ -154,6 +154,11 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
     for finding in snapshot.get("account_findings", []):
         triggers.append({"trigger": "missing_account", **finding})
 
+    # Liveness is collected with the live broker snapshot. Keeping it in the
+    # snapshot makes this evaluator pure and prevents synthetic/unit snapshots
+    # from silently querying a real database.
+    triggers.extend(snapshot.get("liveness_findings", []))
+
     return triggers
 
 

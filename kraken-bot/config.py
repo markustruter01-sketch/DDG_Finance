@@ -56,26 +56,6 @@ BOT_PROFILES = {
         # flat, reconciled, and free of orphaned protective orders.
         "BOT_PAUSED":        False,
     },
-    "davy-jones": {
-        "display_name": "Davy Jones' Portfolio",
-        "db_id": 1,
-        "strategy_type": "mean_reversion",
-        "strategy_label": "Conservative",
-        "BLACKLIST": ["ALGO/USD", "OP/USD", "RENDER/USD"],
-        "RSI_OVERSOLD": 40,
-        "RSI_OVERBOUGHT": 60,
-        "ZSCORE_ENTRY": 1.0,
-        "CASH_RESERVE": 0.20,
-        "MAX_POSITION_FRACTION": 0.10,
-        "STOP_LOSS_PCT": 0.015,
-        "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.82,
-        "OHLCV_TIMEFRAME": "1h",
-        "OHLCV_LIMIT": 100,
-        "LOOP_SLEEP_SECONDS": 60,
-        "LOSS_STREAK_LIMIT": 12,
-        "LOSS_STREAK_COOLDOWN_HOURS": 6,
-    },
     "jerome_macro": {
         # Stage 5 merge (2026-08-11): LatAm (EWZ/EWW/ECH) + Frontier (EEM/EZA/EPOL/GREK/TUR)
         # merged into one 8-ETF Emerging Markets bot. Resolves the two-bots-one-account
@@ -105,80 +85,6 @@ BOT_PROFILES = {
         "MAX_DEPLOYMENT":    0.80,
         # Reserved for Phase 3 Bot 3; activation follows separate validation.
         "BOT_PAUSED":        False,
-    },
-    "calypso": {
-        "display_name": "Calypso's Tide",
-        "db_id": 3,
-        "strategy_type": "mean_reversion_conservative",
-        "strategy_label": "mean_reversion_conservative",
-        "BLACKLIST": [],
-        "RSI_OVERSOLD": 35,
-        "RSI_OVERBOUGHT": 65,
-        "ZSCORE_ENTRY": 2.0,
-        "CASH_RESERVE": 0.20,
-        "MAX_POSITION_FRACTION": 0.05,
-        "MAX_POSITIONS": 6,
-        "STOP_LOSS_PCT": 0.020,
-        "ATR_STOP_MULTIPLIER": 2.0,
-        "VPIN_ENTRY_BLOCK": 0.75,
-        "OHLCV_TIMEFRAME": "1h",
-        "OHLCV_LIMIT": 100,
-        "LOOP_SLEEP_SECONDS": 60,
-        "LOSS_STREAK_LIMIT": 7,
-        "LOSS_STREAK_COOLDOWN_HOURS": 10,
-        "SWING_TP_ATR_MULT": 3.0,
-        "SWING_SL_ATR_MULT": 2.0,
-        "SWING_TRAIL_TRIGGER_ATR": 1.5,
-        "SWING_TRAIL_ATR_MULT": 1.5,
-        "SWING_MAX_HOLD_HOURS": 48,
-        "CALYPSO_TIER1_MAX": 0.10,
-        "CALYPSO_TIER2_MAX": 0.07,
-        "CALYPSO_TIER3_MAX": 0.05,
-        "TREND_EMA_FAST": 50,
-        "TREND_EMA_SLOW": 200,
-        "FLOW_VPIN_MAX": 0.75,
-        "FLOW_VOLUME_MULT": 1.5,
-        "FLOW_RSI_MIN": 40,
-        "FLOW_RSI_MAX": 60,
-    },
-    "apex-predator": {
-        "display_name": "Apex Predator",
-        "db_id": 4,
-        "strategy_type": "momentum_scalper",
-        "strategy_label": "Dual-TF Momentum Scalper",
-        "BLACKLIST": [],
-        # Top-15 Kraken pairs by liquidity
-        "SYMBOLS": [
-            "BTC/USD", "ETH/USD", "XRP/USD", "SOL/USD", "DOGE/USD",
-            "ADA/USD", "AVAX/USD", "LINK/USD", "DOT/USD", "LTC/USD",
-            "ATOM/USD", "NEAR/USD", "AAVE/USD", "BCH/USD", "UNI/USD",
-        ],
-        # Risk management
-        "RISK_FRACTION": 0.015,          # 1.5% risk per trade
-        "ATR_STOP_MULTIPLIER": 1.5,      # 1.5× ATR stop loss
-        "APEX_TP_ATR_MULT": 3.0,         # 3× ATR take-profit
-        "MAX_POSITIONS": 5,
-        "MAX_POSITION_FRACTION": 0.15,
-        "CASH_RESERVE": 0.20,
-        # Entry signal thresholds
-        "RSI_OVERSOLD": 35,              # 1h RSI crossing up from below 35 = bullish (was 45 — too tight)
-        "RSI_OVERBOUGHT": 65,            # 1h RSI crossing down from above 65 = bearish (was 55 — too tight)
-        "APEX_EMA_FAST": 20,             # 4h EMA for trend filter
-        "APEX_EMA_SLOW": 50,
-        "APEX_VOLUME_MULT": 0.75,        # volume must be 0.75× 20-bar average (lowered from 1.5× — weekend crypto volume is typically 0.1–0.8×)
-        "APEX_VPIN_BLOCK": 0.80,         # block if VPIN > 0.80 (toxic flow)
-        # Timeframes
-        "OHLCV_TIMEFRAME": "1h",         # primary candles for RSI
-        "APEX_TREND_TIMEFRAME": "4h",    # secondary candles for EMA trend
-        "OHLCV_LIMIT": 100,
-        # Loop
-        "LOOP_SLEEP_SECONDS": 3600,      # hourly cycle
-        # Loss circuit breaker
-        "LOSS_STREAK_LIMIT": 6,
-        "LOSS_STREAK_COOLDOWN_HOURS": 12,
-        # Stop params (unused by scalper path but must exist for shared reads)
-        "STOP_LOSS_PCT": 0.015,
-        "VPIN_ENTRY_BLOCK": 0.80,
     },
 
     # ── Phase 2: New Alpaca-based bots (built paused, staggered activation) ───
@@ -210,23 +116,9 @@ BOT_PROFILES = {
         "BOT_PAUSED":        True,
     },
 
-    # ── buck_futures — RETIRED (Stage 5 merge, 2026-08-11) ────────────────────
-    # Slot merged into jerome_macro (EM bot). Not dispatched by runner.py.
-    # Kept here for reference; BOT_PAUSED=True prevents accidental activation.
-    "buck_futures": {
-        "display_name":      "Frontier (RETIRED — merged into EM)",
-        "db_id":             6,
-        "strategy_type":     "etf_trend_frontier",
-        "strategy_label":    "RETIRED — merged into jerome_macro EM bot",
-        "ALPACA_API_KEY":    os.environ.get("ALPACA_JEROME_API_KEY", ""),
-        "ALPACA_SECRET_KEY": os.environ.get("ALPACA_JEROME_SECRET_KEY", ""),
-        "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
-        "LOOP_SLEEP_SECONDS": 3600,
-        "BOT_PAUSED":        True,     # permanently retired — do not activate
-    },
 }
 
-BOT_ID = os.environ.get("BOT_ID", "davy-jones")
+BOT_ID = os.environ.get("BOT_ID", "oracle")
 if BOT_ID not in BOT_PROFILES:
     print(f"ERROR: Unknown BOT_ID '{BOT_ID}'. Valid: {list(BOT_PROFILES.keys())}")
     sys.exit(1)

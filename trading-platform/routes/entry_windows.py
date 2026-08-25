@@ -35,7 +35,7 @@ ENTRY_WINDOWS = {
         "mode": "fixed_window",
         "start": time(20, 30),
         "end": time(21, 0),
-        "source": "em_trend_strategy ENTRY_HOUR_UTC / ENTRY_MIN_START / ENTRY_MIN_END",
+        "source": "server-owned fixed UTC window: 20:30–21:00",
     },
 }
 

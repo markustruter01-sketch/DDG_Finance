@@ -100,7 +100,7 @@ def _load_bot_defaults() -> dict[str, dict]:
         _orig_bot = _os.environ.get("BOT_ID")
         try:
             _sys.argv = ["config"]
-            _os.environ["BOT_ID"] = "davy-jones"
+            _os.environ["BOT_ID"] = "oracle"
             spec.loader.exec_module(mod)
         finally:
             _sys.argv = _orig_argv

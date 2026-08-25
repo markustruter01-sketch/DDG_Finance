@@ -258,7 +258,7 @@ def is_crisis() -> bool:
         return state.get("regime") == "CRISIS"
     except Exception as exc:
         # C-5 fix: fail-CLOSED — block entries rather than open them when crisis
-        # detection fails.  Matches the jerome/buck pattern (jerome_v2_strategy.py:473).
+        # detection fails.  Active strategy engines use the same fail-closed rule.
         # Transient: every call recomputes fresh; recovers automatically next cycle.
         logger.warning(
             f"MarketState | is_crisis() check failed — failing CLOSED "

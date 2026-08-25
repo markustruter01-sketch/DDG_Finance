@@ -2,7 +2,7 @@
 asia_trend_strategy.py — Asia-Pacific ETF trend-following strategy.
 
 Takes over the oracle slot (Stage 3B). Uses the same shared validated trend
-engine as bot2_spy_qqq and latam_trend_strategy (EMA50/200 + TP scale-outs +
+engine as bot2_spy_qqq (EMA50/200 + TP scale-outs +
 trailing stop + 3-day exit) with all three Stage 1 risk modules wired:
   - vol_scaled_size  (target_vol=0.12, profile-derived position cap)
   - regional_regime  (per-ETF on each Asia ETF's own price history)
@@ -20,9 +20,9 @@ Called every LOOP_SLEEP_SECONDS (3600s = hourly).
 Entry gate: fires in a window before NYSE close (19:40–20:00 UTC = ~3:40–4 PM ET).
 Exit management runs every cycle.
 
-KEY DIFFERENCE vs LatAm: corr cap includes within-Asia held ETFs (not just
-cross-bot). EWY (Korea) and EWT (Taiwan) are both semiconductor-heavy with
-ρ≈0.80 — the cap must block the weaker if both signal at the same time.
+KEY DIFFERENCE: corr cap includes within-Asia held ETFs (not just cross-bot).
+EWY (Korea) and EWT (Taiwan) are both semiconductor-heavy with ρ≈0.80 — the
+cap must block the weaker if both signal at the same time.
 """
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ VOL_TARGET_VOL    = 0.12    # 12% annualised vol per position
 MIN_HOLD_DAYS     = 5
 CASH_RESERVE      = 0.20    # minimum 20% cash always
 
-# TP targets for tiered scale-out (from entry price — mirrors bot2 / LatAm)
+# TP targets for tiered scale-out (from entry price — mirrors bot2)
 TP1_PCT = 0.06   # +6%  → scale out 33%
 TP2_PCT = 0.12   # +12% → scale out another 33%
 

@@ -117,6 +117,10 @@ def _stale_portfolio(bot_id: str) -> list[dict[str, Any]]:
         from db.postgres import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
+                cur.execute("SELECT paused FROM bots_state WHERE bot_id=%s", (bot_id,))
+                pause_row = cur.fetchone()
+                if pause_row and bool(pause_row[0]):
+                    return []
                 cur.execute("SELECT last_updated FROM bot_portfolio WHERE bot_id=%s", (bot_id,))
                 row = cur.fetchone()
         if not row or row[0] is None:

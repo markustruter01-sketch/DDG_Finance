@@ -22,7 +22,6 @@ import logging
 import math
 import os
 import sys
-import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -263,10 +262,6 @@ def inverse_vol_targets(
     return fixed, vol
 
 
-def _client_id(prefix: str, symbol: str) -> str:
-    return f"bot3-{prefix}-{symbol.replace('/', '')}-{uuid.uuid4().hex[:10]}"[:48]
-
-
 class AlpacaBot3:
     """Small direct Alpaca adapter; no shared-engine schema side effects."""
 
@@ -346,6 +341,7 @@ class AlpacaBot3:
         return prices
 
     def submit(self, symbol: str, side: str, qty: float, order_type: str, **extra: Any) -> dict[str, Any]:
+        from core.order_ids import submit_with_unique_client_order_id
         payload = {
             "symbol": symbol,
             "side": side,
@@ -356,10 +352,19 @@ class AlpacaBot3:
                 if symbol in CRYPTO or order_type in ("stop", "stop_limit")
                 else "day"
             ),
-            "client_order_id": _client_id("order", symbol),
             **extra,
         }
-        return self._request("POST", "/v2/orders", json=payload)
+        response, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: self._request(
+                "POST",
+                "/v2/orders",
+                json={**payload, "client_order_id": generated_id},
+            ),
+            f"bot3-order-{symbol.replace('/', '')}",
+        )
+        if isinstance(response, dict):
+            response.setdefault("client_order_id", client_order_id)
+        return response
 
     def wait_for_fill(self, order_id: str, attempts: int = 8) -> dict[str, Any]:
         import time as _time

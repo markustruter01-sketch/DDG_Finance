@@ -27,7 +27,6 @@ import os
 import sys
 import threading
 import time
-import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -48,6 +47,10 @@ def _ensure_tp() -> None:
     tp = _tp_path()
     if tp not in sys.path:
         sys.path.insert(0, tp)
+
+
+_ensure_tp()
+from core.order_ids import submit_with_unique_client_order_id
 
 
 # ── Yahoo Finance OHLCV fetcher ───────────────────────────────────────────────
@@ -321,12 +324,16 @@ class AlpacaEtfEngine:
         tif = "day"
         logger.info(f"EtfEngine | Submitting {side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
-            order = self.api.submit_order(
-                symbol=symbol,
-                notional=round(notional, 2),
-                side=side,
-                type="market",
-                time_in_force=tif,
+            order, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: self.api.submit_order(
+                    symbol=symbol,
+                    notional=round(notional, 2),
+                    side=side,
+                    type="market",
+                    time_in_force=tif,
+                    client_order_id=client_order_id,
+                ),
+                f"etf-{side}-{symbol}",
             )
             logger.info(
                 f"EtfEngine | ORDER PLACED: {side.upper()} {symbol} "
@@ -347,12 +354,16 @@ class AlpacaEtfEngine:
         qty = math.floor(abs(float(shares)))
         logger.info(f"EtfEngine | Submitting BUY {symbol} qty={qty} tif={tif}")
         try:
-            order = self.api.submit_order(
-                symbol=symbol,
-                qty=qty,
-                side="buy",
-                type="market",
-                time_in_force=tif,
+            order, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: self.api.submit_order(
+                    symbol=symbol,
+                    qty=qty,
+                    side="buy",
+                    type="market",
+                    time_in_force=tif,
+                    client_order_id=client_order_id,
+                ),
+                f"etf-buy-{symbol}",
             )
             logger.info(
                 f"EtfEngine | ORDER PLACED: BUY {symbol} "
@@ -526,13 +537,16 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Full close blocked — {symbol} stop still active")
             return False
         try:
-            order = self.api.submit_order(
-                symbol=symbol,
-                qty=round(abs(float(live["qty"])), 8),
-                side="sell",
-                type="market",
-                time_in_force="day",
-                client_order_id=self._new_exit_client_order_id(bot_id, symbol) if bot_id else None,
+            order, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: self.api.submit_order(
+                    symbol=symbol,
+                    qty=round(abs(float(live["qty"])), 8),
+                    side="sell",
+                    type="market",
+                    time_in_force="day",
+                    client_order_id=client_order_id,
+                ),
+                self._exit_client_order_prefix(bot_id, symbol) if bot_id else f"etf-exit-{symbol}",
             )
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
@@ -637,7 +651,9 @@ class AlpacaEtfEngine:
     @staticmethod
     def _stop_client_order_id(bot_id: str, symbol: str) -> str:
         """Stable owner marker used to avoid touching another strategy's order."""
-        return f"etf-stop-{bot_id}-{symbol}-{uuid.uuid4().hex[:10]}".lower()[:48]
+        _ensure_tp()
+        from core.order_ids import make_client_order_id
+        return make_client_order_id(f"etf-stop-{bot_id}-{symbol}")
 
     @staticmethod
     def _exit_client_order_prefix(bot_id: str, symbol: str) -> str:
@@ -646,7 +662,9 @@ class AlpacaEtfEngine:
 
     def _new_exit_client_order_id(self, bot_id: str, symbol: str) -> str:
         """Unique Alpaca client ID for an exit, retaining the owner prefix."""
-        return f"{self._exit_client_order_prefix(bot_id, symbol)}{uuid.uuid4().hex[:11]}"
+        _ensure_tp()
+        from core.order_ids import make_client_order_id
+        return make_client_order_id(self._exit_client_order_prefix(bot_id, symbol))
 
     def _has_pending_owned_exit(self, bot_id: str, symbol: str) -> bool:
         """Return True while an owned market exit could still reduce the position."""
@@ -876,14 +894,17 @@ class AlpacaEtfEngine:
                             "shares were not released for guarded fresh submit"
                         ) from replace_exc
 
-            order = self.api.submit_order(
-                symbol=symbol,
-                qty=stop_qty,
-                side="sell",
-                type="stop",
-                time_in_force="gtc",
-                stop_price=broker_stop,
-                client_order_id=self._stop_client_order_id(bot_id, symbol),
+            order, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: self.api.submit_order(
+                    symbol=symbol,
+                    qty=stop_qty,
+                    side="sell",
+                    type="stop",
+                    time_in_force="gtc",
+                    stop_price=broker_stop,
+                    client_order_id=client_order_id,
+                ),
+                f"etf-stop-{bot_id}-{symbol}",
             )
             self._store_stop_order_id(bot_id, symbol, order.id)
             residual = position_qty - stop_qty
@@ -1070,13 +1091,16 @@ class AlpacaEtfEngine:
             logger.error(f"EtfEngine | Partial close blocked — {symbol} stop still active")
             return False
         try:
-            order = self.api.submit_order(
-                symbol=symbol,
-                qty=round(qty, 8),
-                side="sell",
-                type="market",
-                time_in_force=tif,
-                client_order_id=self._new_exit_client_order_id(bot_id, symbol) if bot_id else None,
+            order, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: self.api.submit_order(
+                    symbol=symbol,
+                    qty=round(qty, 8),
+                    side="sell",
+                    type="market",
+                    time_in_force=tif,
+                    client_order_id=client_order_id,
+                ),
+                self._exit_client_order_prefix(bot_id, symbol) if bot_id else f"etf-exit-{symbol}",
             )
             logger.info(f"EtfEngine | PARTIAL CLOSE: {symbol} qty={qty:.4f} tif={tif}")
             deadline = time.monotonic() + 20

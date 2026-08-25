@@ -29,3 +29,4 @@
 - [Test baseline and module patching](test-baseline-and-module-patching.md) — module reloads can split package attributes from class globals; patch the exact module object and keep a dated suite baseline.
 - [Pause-state fail closed](pause-state-fail-closed.md) — runner must enforce both static profile and canonical DB pause state; aliases need explicit rows during identity migrations.
 - [Live deleveraging ledger sync](live-delever-ledger-sync.md) — partial sells require matching execution-ledger quantity and replacement stop ID before worker restart.
+- [Client order ID uniqueness](client-order-id-uniqueness.md) — every Alpaca submission needs a bounded per-call UUID and one duplicate-ID retry.

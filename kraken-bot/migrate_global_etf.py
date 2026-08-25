@@ -12,8 +12,8 @@ import argparse
 import json
 import math
 import os
+import sys
 import time
-import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +21,9 @@ from typing import Any
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderType, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, MarketOrderRequest, StopOrderRequest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "trading-platform"))
+from core.order_ids import submit_with_unique_client_order_id
 
 
 CONFIRMATION = "CONSOLIDATE-PAPER-ETF-ACCOUNTS"
@@ -186,15 +189,18 @@ def _restore_stop(
     whole_qty = int(abs(qty))
     if whole_qty <= 0:
         raise MigrationError(f"cannot restore stop for {symbol}: no whole shares")
-    client.submit_order(
-        order_data=StopOrderRequest(
-            symbol=symbol,
-            qty=whole_qty,
-            side=OrderSide.SELL,
-            time_in_force=TimeInForce.GTC,
-            stop_price=stop_price,
-            client_order_id=f"etf-migration-protect-{symbol.lower()}-{uuid.uuid4().hex[:10]}",
-        )
+    submit_with_unique_client_order_id(
+        lambda client_order_id: client.submit_order(
+            order_data=StopOrderRequest(
+                symbol=symbol,
+                qty=whole_qty,
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC,
+                stop_price=stop_price,
+                client_order_id=client_order_id,
+            )
+        ),
+        f"etf-migration-protect-{symbol.lower()}",
     )
 
 
@@ -271,14 +277,17 @@ def flatten_account(
                     }),
                     flush=True,
                 )
-            sell = client.submit_order(
-                order_data=MarketOrderRequest(
-                    symbol=symbol,
-                    qty=qty,
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY,
-                    client_order_id=f"etf-migration-exit-{symbol.lower()}-{uuid.uuid4().hex[:12]}",
-                )
+            sell, _ = submit_with_unique_client_order_id(
+                lambda client_order_id: client.submit_order(
+                    order_data=MarketOrderRequest(
+                        symbol=symbol,
+                        qty=qty,
+                        side=OrderSide.SELL,
+                        time_in_force=TimeInForce.DAY,
+                        client_order_id=client_order_id,
+                    )
+                ),
+                f"etf-migration-exit-{symbol.lower()}",
             )
             sell_id = str(sell.id)
             filled = _wait_sell_filled(client, sell_id, symbol)

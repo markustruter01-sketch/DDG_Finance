@@ -288,6 +288,7 @@ def _submit_vault_buy(bot_id: str, symbol: str, notional: float, queue_id: str) 
     from alpaca.trading.client import TradingClient
     from alpaca.trading.enums import OrderSide, TimeInForce
     from alpaca.trading.requests import MarketOrderRequest
+    from core.order_ids import submit_with_unique_client_order_id
 
     key_name, secret_name = ACCOUNT_ENV[bot_id]
     key, secret = os.environ.get(key_name, ""), os.environ.get(secret_name, "")
@@ -307,19 +308,21 @@ def _submit_vault_buy(bot_id: str, symbol: str, notional: float, queue_id: str) 
             "cash": cash,
             "notional": round(float(notional), 2),
         }
-    client_id = f"{VAULT_ORDER_PREFIX}{bot_id[:5]}-{queue_id}-{symbol.lower()}"
-    order = client.submit_order(
-        MarketOrderRequest(
-            symbol=symbol,
-            notional=round(notional, 2),
-            side=OrderSide.BUY,
-            time_in_force=TimeInForce.DAY,
-            client_order_id=client_id[:48],
-        )
+    order, client_id = submit_with_unique_client_order_id(
+        lambda generated_id: client.submit_order(
+            MarketOrderRequest(
+                symbol=symbol,
+                notional=round(notional, 2),
+                side=OrderSide.BUY,
+                time_in_force=TimeInForce.DAY,
+                client_order_id=generated_id,
+            )
+        ),
+        f"{VAULT_ORDER_PREFIX}{bot_id[:5]}-{queue_id}-{symbol.lower()}",
     )
     return {
         "order_id": str(order.id),
-        "client_order_id": client_id[:48],
+        "client_order_id": client_id,
         "status": str(order.status),
         "filled_qty": float(order.filled_qty or 0),
         "filled_avg_price": float(order.filled_avg_price or 0),

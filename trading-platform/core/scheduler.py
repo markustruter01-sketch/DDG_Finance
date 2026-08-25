@@ -107,6 +107,8 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         id="automated_kill_switch",
         name="Automated Kill Switch (5-minute safety check)",
         replace_existing=True,
+        max_instances=1,
+        coalesce=True,
         misfire_grace_time=120,
     )
     scheduler.add_job(

@@ -469,6 +469,33 @@ CREATE TABLE IF NOT EXISTS fleet_halt (
 );
 INSERT INTO fleet_halt (id, active) VALUES (1, FALSE) ON CONFLICT DO NOTHING;
 
+-- Automated safety and reconciliation audit tables.
+CREATE TABLE IF NOT EXISTS kill_switch_events (
+    id            BIGSERIAL PRIMARY KEY,
+    trigger       TEXT NOT NULL,
+    event_ts      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    account       TEXT,
+    snapshot      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    action_taken  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kill_switch_events_ts ON kill_switch_events (event_ts DESC);
+
+CREATE TABLE IF NOT EXISTS reconciliation_log (
+    id            BIGSERIAL PRIMARY KEY,
+    run_ts        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    clean         BOOLEAN NOT NULL,
+    flags         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    snapshot      JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE INDEX IF NOT EXISTS idx_reconciliation_log_ts ON reconciliation_log (run_ts DESC);
+
+CREATE TABLE IF NOT EXISTS kill_switch_acknowledgements (
+    condition_key       TEXT PRIMARY KEY,
+    acknowledged_until  TIMESTAMPTZ NOT NULL,
+    acknowledged_by     TEXT NOT NULL,
+    acknowledged_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS review_flags (
     id          BIGSERIAL PRIMARY KEY,
     flag_key    TEXT NOT NULL UNIQUE,

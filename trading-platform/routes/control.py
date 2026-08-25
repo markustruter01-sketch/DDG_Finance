@@ -110,6 +110,13 @@ class RunRequest(BaseModel):
 
 class KillResetRequest(BaseModel):
     opening_equity: float | None = None
+    confirmation_token: str
+
+
+class KillAcknowledgementRequest(BaseModel):
+    condition_key: str
+    acknowledged_until: str
+    acknowledged_by: str = "manual"
 
 
 class AutoTradingRequest(BaseModel):
@@ -264,8 +271,49 @@ async def trip_kill_switch() -> dict:
 @control_router.post("/kill/reset", tags=["Risk"])
 async def reset_kill_switch(request: KillResetRequest) -> dict:
     logger.info(f"Kill switch reset via API | opening_equity={request.opening_equity}")
-    ks_reset(opening_equity=request.opening_equity)
-    return {"status": "reset", "kill_switch": ks_get_state()}
+    try:
+        ks_reset(
+            opening_equity=request.opening_equity,
+            confirmation_token=request.confirmation_token,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    return {
+        "status": "reset",
+        "kill_switch": ks_get_state(),
+        "procedure": "POST /trading-api/kill/reset with confirmation_token=RESET-KILL-SWITCH",
+    }
+
+
+@control_router.get("/kill/report", tags=["Risk"])
+async def kill_switch_report() -> dict:
+    from execution.reconciliation import run_kill_switch_check
+    return await asyncio.to_thread(run_kill_switch_check, report_only=True)
+
+
+@control_router.get("/reconciliation/report", tags=["Risk"])
+async def reconciliation_report() -> dict:
+    from execution.reconciliation import reconcile
+    return await asyncio.to_thread(reconcile, report_only=True)
+
+
+@control_router.post("/kill/acknowledge", tags=["Risk"])
+async def acknowledge_kill_condition(request: KillAcknowledgementRequest) -> dict:
+    from core.kill_switch import acknowledge
+    try:
+        saved = await asyncio.to_thread(
+            acknowledge,
+            request.condition_key,
+            request.acknowledged_until,
+            request.acknowledged_by,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return {
+        "status": "acknowledged",
+        "acknowledgement": saved,
+        "expiry_behavior": "Condition is suppressed only until acknowledged_until, then alerts/trips again.",
+    }
 
 
 @control_router.post("/emergency/liquidate", tags=["Emergency"])

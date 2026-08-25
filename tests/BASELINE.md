@@ -8,7 +8,7 @@ Date: 2026-08-25
 Tracked test files: 12
 Passed test files: 12
 Failed test files: 0
-Total tests passed: 349
+Total tests passed: 359
 ```
 
 This is the known-good baseline for future comparisons.

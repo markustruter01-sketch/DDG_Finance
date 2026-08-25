@@ -33,9 +33,12 @@ class Settings(BaseSettings):
         description="Minimum LLM conviction score (0-1) required to place a trade",
     )
     kill_switch_drawdown_pct: float = Field(
-        default=0.05,
-        description="Portfolio daily drawdown % that triggers the kill switch (e.g. 0.05 = 5%)",
+        default=0.15,
+        description="Fleet drawdown fraction from high-water mark that triggers the kill switch",
     )
+    kill_switch_missing_stop_seconds: float = Field(default=60.0)
+    kill_switch_check_interval_minutes: int = Field(default=5)
+    kill_switch_portfolio_stale_hours: float = Field(default=2.0)
     total_capital_slots: int = Field(
         default=10,
         description="Total number of capital allocation slots",

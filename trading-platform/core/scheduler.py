@@ -91,6 +91,29 @@ def get_scheduler() -> AsyncIOScheduler:
 
 def _register_jobs(scheduler: AsyncIOScheduler) -> None:
 
+    # Safety monitors are read-only in DEV; published deployments enforce the
+    # same checks without ever liquidating.  Both schedules are replaceable and
+    # independent from strategy execution.
+    scheduler.add_job(
+        func=_automated_kill_switch,
+        trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
+            minutes=settings.kill_switch_check_interval_minutes
+        ),
+        id="automated_kill_switch",
+        name="Automated Kill Switch (5-minute safety check)",
+        replace_existing=True,
+        misfire_grace_time=120,
+    )
+    scheduler.add_job(
+        func=_scheduled_reconciliation,
+        trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(hours=1),
+        id="scheduled_reconciliation",
+        name="Hourly Broker/Ledger Reconciliation",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: automated_kill_switch (5 min) + scheduled_reconciliation (hourly)")
+
     # ── ONE-TIME: oracle residual cleanup (2026-08-17 09:31 ET) ──────────────
     # Stage 3B left EMR/LMT/PRU in the oracle paper account. GTC stops were
     # cancelled manually but stuck in pending_cancel over the weekend. This job
@@ -283,6 +306,37 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | daily_audit runs via postmortem chain (no fixed cron)")
     logger.info("Scheduler | crypto_cycle retired — Oracle only trades NYSE market hours")
     logger.info("Scheduler | gemini_self_critic retired — Oracle uses pure deterministic momentum")
+
+
+async def _automated_kill_switch() -> None:
+    try:
+        from execution.reconciliation import run_kill_switch_check
+        result = await asyncio.to_thread(
+            run_kill_switch_check,
+            report_only=os.environ.get("REPLIT_DEPLOYMENT") != "1",
+        )
+        logger.info(
+            f"Scheduler | automated_kill_switch: "
+            f"mode={result.get('mode', 'enforced')} "
+            f"would_trip={result.get('would_trip', result.get('tripped', False))}"
+        )
+    except Exception as exc:
+        logger.critical(f"Scheduler | automated_kill_switch FAILED: {exc}")
+
+
+async def _scheduled_reconciliation() -> None:
+    try:
+        from execution.reconciliation import reconcile
+        result = await asyncio.to_thread(
+            reconcile,
+            report_only=os.environ.get("REPLIT_DEPLOYMENT") != "1",
+        )
+        logger.info(
+            f"Scheduler | scheduled_reconciliation: "
+            f"clean={result.get('clean')} flags={len(result.get('flags', []))}"
+        )
+    except Exception as exc:
+        logger.critical(f"Scheduler | scheduled_reconciliation FAILED: {exc}")
 
 
 async def _deploy_hash_check() -> None:

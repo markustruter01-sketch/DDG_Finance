@@ -32,7 +32,8 @@ export function WeeklyReviewPanel() {
 
   const liveTotal = fleetEq?.fleet_total?.equity ?? 0;
   const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? 0;
-  const liveTotalPnlPct = (liveTotalPnl / getFleetStartingCapital(registry, fleetEq)) * 100;
+  const startingCapital = getFleetStartingCapital(registry, fleetEq);
+  const liveTotalPnlPct = startingCapital ? (liveTotalPnl / startingCapital) * 100 : null;
   const equityReady = liveTotal > 0;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
@@ -109,7 +110,7 @@ export function WeeklyReviewPanel() {
                   : "—"}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                of {formatCapitalFull(getFleetStartingCapital(registry, fleetEq))} starting
+                of {startingCapital == null ? "—" : formatCapitalFull(startingCapital)} starting
               </div>
             </div>
             <div className={cn(
@@ -131,9 +132,9 @@ export function WeeklyReviewPanel() {
           <div className="mt-3 grid grid-cols-2 gap-2">
             {[
               { label: "Oracle", val: oracleEquity, start: 100_000 },
-              { label: "ETF Fleet", val: liveTotal, start: getFleetStartingCapital(registry, fleetEq) },
+              { label: "ETF Fleet", val: liveTotal, start: startingCapital },
             ].map(({ label, val, start }) => {
-              const pnl = val != null ? val - start : null;
+              const pnl = val != null && start != null ? val - start : null;
               return (
                 <div key={label} className="rounded-lg bg-white/3 p-2">
                   <div className="text-[9px] text-muted-foreground uppercase tracking-wide">{label}</div>

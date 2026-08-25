@@ -28,10 +28,15 @@ ACCOUNT_ENV = {
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
 }
+_BOT_PROFILE_KEYS = {
+    "oracle": "oracle",
+    "spy_qqq_trend": "bot2_spy_qqq",
+    "jerome_macro": "jerome_macro",
+}
+_BOT_PROFILES = load_bot_profiles()
 MAX_DEPLOYMENT = {
-    bot_id: float(profile["MAX_DEPLOYMENT"])
-    for bot_id, profile in load_bot_profiles().items()
-    if bot_id in ACTIVE_BOTS
+    bot_id: float(_BOT_PROFILES[_BOT_PROFILE_KEYS[bot_id]]["MAX_DEPLOYMENT"])
+    for bot_id in ACTIVE_BOTS
 }
 
 _state: dict[str, Any] = {

@@ -108,6 +108,7 @@ BOT_PROFILES = {
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
+        "MAX_DEPLOYMENT":    0.80,
         # Reserved for Phase 3 Bot 2; activation follows separate validation.
         "BOT_PAUSED":        True,
     },

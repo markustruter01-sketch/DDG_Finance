@@ -52,7 +52,7 @@ export function CombinedPortfolioSummary() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Total Portfolio · {getFleetBotCount(registry, fleetEq)} active Alpaca ETF bots</span>
+        <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Total Portfolio · {getFleetBotCount(registry, fleetEq) ?? "—"} active Alpaca ETF bots</span>
         <button onClick={handleExport} disabled={exportReport.isPending} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] uppercase font-semibold bg-blue-950/50 border border-blue-800/40 text-blue-400 disabled:opacity-40">
           <FileDown className="h-3 w-3" /> Export Report
         </button>

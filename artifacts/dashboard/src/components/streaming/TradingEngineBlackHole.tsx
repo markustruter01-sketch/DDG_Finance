@@ -207,6 +207,8 @@ export function TradingEngineBlackHole() {
       setWebglFailed(true);
       return;
     }
+    const canvasElement: HTMLCanvasElement = canvas;
+    const renderingContext: WebGLRenderingContext = gl;
 
     function shader(type: number, src: string): WebGLShader {
       const s = gl!.createShader(type)!;
@@ -245,12 +247,12 @@ export function TradingEngineBlackHole() {
     function resize() {
       W = Math.floor(window.innerWidth * RES_SCALE);
       H = Math.floor(window.innerHeight * RES_SCALE);
-      canvas.width = W;
-      canvas.height = H;
-      canvas.style.width = window.innerWidth + "px";
-      canvas.style.height = window.innerHeight + "px";
-      gl.viewport(0, 0, W, H);
-      gl.uniform2f(U.uRes, W, H);
+      canvasElement.width = W;
+      canvasElement.height = H;
+      canvasElement.style.width = window.innerWidth + "px";
+      canvasElement.style.height = window.innerHeight + "px";
+      renderingContext.viewport(0, 0, W, H);
+      renderingContext.uniform2f(U.uRes, W, H);
     }
     window.addEventListener("resize", resize);
     resize();
@@ -298,12 +300,12 @@ export function TradingEngineBlackHole() {
       camTheta += (tTheta            - camTheta) * s;
       camPhi   += (tPhi + panPhi     - camPhi)   * s;
       camRadius += (tRadius - camRadius) * s;
-      gl.uniform1f(U.uTime,      now * 0.001);
-      gl.uniform1f(U.uTheta,     camTheta);
-      gl.uniform1f(U.uPhi,       camPhi);
-      gl.uniform1f(U.uRadius,    camRadius);
-      gl.uniform1f(U.uSpinScale, spinScaleRef.current);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      renderingContext.uniform1f(U.uTime,      now * 0.001);
+      renderingContext.uniform1f(U.uTheta,     camTheta);
+      renderingContext.uniform1f(U.uPhi,       camPhi);
+      renderingContext.uniform1f(U.uRadius,    camRadius);
+      renderingContext.uniform1f(U.uSpinScale, spinScaleRef.current);
+      renderingContext.drawArrays(renderingContext.TRIANGLE_STRIP, 0, 4);
     }
     rafId = requestAnimationFrame(frame);
 

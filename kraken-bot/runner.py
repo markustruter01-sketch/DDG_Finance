@@ -64,16 +64,22 @@ _cfg_mod = _ilu.module_from_spec(_cfg_spec)
 _cfg_spec.loader.exec_module(_cfg_mod)
 BOT_PROFILES = _cfg_mod.BOT_PROFILES
 
-# Heartbeat helpers — loaded after sys.path is configured so core.bot_state resolves clean.
-# touch_heartbeat updates ONLY last_heartbeat/status/error — never zeroes equity_usd.
+# Heartbeat and pause helpers — loaded after sys.path is configured so
+# core.bot_state resolves clean. touch_heartbeat updates ONLY
+# last_heartbeat/status/error — never zeroes equity_usd.
 try:
-    from core.bot_state import touch_heartbeat as _bs_touch, LEGACY_TO_CANONICAL as _bs_canonical
+    from core.bot_state import (
+        touch_heartbeat as _bs_touch,
+        is_paused as _bs_is_paused,
+    )
+    from core.bot_registry import normalise_bot_id as _bs_normalise
     _heartbeat_ok = True
 except Exception as _hb_exc:
     logger.warning(f"Runner | Could not import heartbeat helpers: {_hb_exc}")
     _heartbeat_ok = False
-    _bs_canonical: dict = {}
     _bs_touch = lambda *a, **k: None  # noqa: E731
+    _bs_is_paused = lambda *a, **k: False  # noqa: E731
+    _bs_normalise = lambda bot_id: bot_id  # noqa: E731
 
 try:
     from core.bot_state import write_portfolio as _bs_write_portfolio
@@ -195,7 +201,7 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
         acct = api.get_account()
         posns = api.list_positions()
 
-        canonical = _bs_canonical.get(bot_id, bot_id)
+        canonical = _bs_normalise(bot_id) or bot_id
 
         positions_list = [
             {
@@ -267,23 +273,48 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
             _update_status(bot_id, status="running", cycle_count=cycle_count,
                            last_cycle_start=cycle_started_at.isoformat())
 
-            cycle_fn(profile=profile, db_id=db_id)
+            # Fail closed on either pause source.  The static profile guard is
+            # retained for defense in depth, while bots_state lets the
+            # platform pause a runner without relying on a legacy alias.
+            db_paused = _bs_is_paused(bot_id) if _heartbeat_ok else False
+            profile_paused = bool(profile.get("BOT_PAUSED", False))
+            if profile_paused or db_paused:
+                logger.info(
+                    f"[{bot_id}] Paused — "
+                    f"profile={profile_paused} database={db_paused}; skipping cycle"
+                )
+                _update_status(
+                    bot_id,
+                    status="paused",
+                    pause_source="profile" if profile_paused else "database",
+                )
+                if _heartbeat_ok:
+                    try:
+                        _bs_touch(
+                            _bs_normalise(bot_id) or bot_id,
+                            status="paused",
+                            error="",
+                        )
+                    except Exception as _hb_e:
+                        logger.debug(f"[{bot_id}] paused heartbeat write failed (non-fatal): {_hb_e}")
+            else:
+                cycle_fn(profile=profile, db_id=db_id)
 
-            cycle_duration = time.time() - cycle_start
-            _update_status(bot_id, status="running",
-                           last_cycle_duration_seconds=round(cycle_duration, 2),
-                           last_cycle_end=datetime.now(timezone.utc).isoformat(),
-                           error=None)
-            consecutive_errors = 0
+                cycle_duration = time.time() - cycle_start
+                _update_status(bot_id, status="running",
+                               last_cycle_duration_seconds=round(cycle_duration, 2),
+                               last_cycle_end=datetime.now(timezone.utc).isoformat(),
+                               error=None)
+                consecutive_errors = 0
 
-            if _heartbeat_ok:
-                try:
-                    _bs_touch(_bs_canonical.get(bot_id, bot_id), status="running", error="")
-                except Exception as _hb_e:
-                    logger.debug(f"[{bot_id}] heartbeat write failed (non-fatal): {_hb_e}")
+                if _heartbeat_ok:
+                    try:
+                        _bs_touch(_bs_normalise(bot_id) or bot_id, status="running", error="")
+                    except Exception as _hb_e:
+                        logger.debug(f"[{bot_id}] heartbeat write failed (non-fatal): {_hb_e}")
 
-            # Write live Alpaca state to bot_portfolio (Stage 2 unification)
-            _write_portfolio_from_alpaca(bot_id, profile)
+                # Write live Alpaca state to bot_portfolio (Stage 2 unification)
+                _write_portfolio_from_alpaca(bot_id, profile)
 
         except Exception as exc:
             consecutive_errors += 1
@@ -293,7 +324,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                            consecutive_errors=consecutive_errors)
             if _heartbeat_ok:
                 try:
-                    _bs_touch(_bs_canonical.get(bot_id, bot_id), status="error", error=str(exc)[:200])
+                    _bs_touch(_bs_normalise(bot_id) or bot_id, status="error", error=str(exc)[:200])
                 except Exception:
                     pass
 

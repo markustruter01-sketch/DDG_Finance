@@ -84,10 +84,6 @@ QUICK_ACTIONS = {
         "label": "Reset to Defaults",
         "system": True,
     },
-    "pause_losing": {
-        "label": "Pause Losing Bots",
-        "system": True,
-    },
 }
 
 def _load_bot_defaults() -> dict[str, dict]:
@@ -505,9 +501,6 @@ async def fleet_chat(request: ChatRequest) -> dict:
         if not action:
             raise HTTPException(400, f"Unknown quick action: {request.quick_action}")
 
-        if request.quick_action == "pause_losing":
-            return await _handle_pause_losing()
-
         if request.quick_action == "reset_defaults":
             return await _handle_reset_defaults()
 
@@ -679,53 +672,6 @@ async def fleet_params() -> dict:
             "bounds": {k: {"min": v[0], "max": v[1], "step": STEPS[k]} for k, v in BOUNDS.items()},
         }
     return {"bots": result}
-
-
-async def _handle_pause_losing() -> dict:
-    if not is_pg_available():
-        return {"reply": "Database unavailable — cannot check bot performance.", "has_recommendations": False}
-
-    bot_map = [("davy-jones", "davy_jones"), ("blackbeard", "blackbeard"), ("calypso", "calypso")]
-    losing_bots = []
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                for bot_name, profile_key in bot_map:
-                    cur.execute(
-                        """SELECT COUNT(*) FILTER (WHERE pnl_usd > 0) AS wins,
-                                  COUNT(*) FILTER (WHERE pnl_usd <= 0) AS losses,
-                                  COALESCE(SUM(pnl_usd), 0) AS total_pnl
-                           FROM kraken_trades WHERE bot_id = %s
-                           AND closed_at > NOW() - INTERVAL '24 hours'""",
-                        (bot_name,),
-                    )
-                    row = cur.fetchone()
-                    if row and row[2] < 0:
-                        losing_bots.append(bot_name)
-    except Exception as exc:
-        logger.warning(f"FleetChat | pause_losing query failed: {exc}")
-
-    if not losing_bots:
-        reply = "All Kraken bots are profitable or neutral in the last 24 hours. No bots paused."
-        _save_message("user", "[Quick Action: Pause Losing Bots]", source="manual_chat")
-        _save_message("assistant", reply, source="system")
-        return {"reply": reply, "has_recommendations": False}
-
-    paused = []
-    for bid in losing_bots:
-        try:
-            from routes.kraken import kraken_toggle_auto_trading, KrakenControlRequest
-            req = KrakenControlRequest(bot_paused=True)
-            result = await kraken_toggle_auto_trading(req, bot_id=bid)
-            paused.append(bid)
-            logger.info(f"FleetChat | Paused {bid} via /kraken/auto-trading: {result}")
-        except Exception as exc:
-            logger.warning(f"FleetChat | pause {bid} failed: {exc}")
-
-    reply = f"Paused {len(paused)} losing bot(s): {', '.join(paused)}. They had negative PnL in the last 24h."
-    _save_message("user", "[Quick Action: Pause Losing Bots]", source="manual_chat")
-    _save_message("assistant", reply, source="system", metadata={"paused_bots": paused})
-    return {"reply": reply, "has_recommendations": False, "paused_bots": paused}
 
 
 async def _handle_reset_defaults() -> dict:

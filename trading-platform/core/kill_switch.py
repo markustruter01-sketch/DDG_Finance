@@ -124,6 +124,9 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
         if count >= MISMATCH_REQUIRED_CHECKS:
             triggers.append({"trigger": "broker_ledger_mismatch", **mismatch})
 
+    for disagreement in snapshot.get("pause_state_disagreements", []):
+        triggers.append({"trigger": "pause_state_disagreement", **disagreement})
+
     return triggers
 
 

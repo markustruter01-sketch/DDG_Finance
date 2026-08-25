@@ -128,6 +128,44 @@ def _stale_portfolio(bot_id: str) -> list[dict[str, Any]]:
     return []
 
 
+def _pause_state_disagreements() -> list[dict[str, Any]]:
+    """Compare runner static profiles with canonical DB pause rows."""
+    try:
+        import importlib.util
+        from pathlib import Path
+
+        config_path = Path(__file__).resolve().parents[2] / "kraken-bot" / "config.py"
+        spec = importlib.util.spec_from_file_location("_kraken_pause_config", config_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("could not load runner config")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        profiles = module.BOT_PROFILES
+
+        from db.postgres import get_conn
+        result = []
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                for bot_id in ACTIVE_BOTS:
+                    profile_id = bot_id
+                    if bot_id == "spy_qqq_trend":
+                        profile_id = "bot2_spy_qqq"
+                    static_paused = bool(profiles.get(profile_id, {}).get("BOT_PAUSED", False))
+                    cur.execute("SELECT paused FROM bots_state WHERE bot_id = %s", (bot_id,))
+                    row = cur.fetchone()
+                    database_paused = row[0] if row else None
+                    if database_paused is None or static_paused != bool(database_paused):
+                        result.append({
+                            "bot_id": bot_id,
+                            "static_paused": static_paused,
+                            "database_paused": database_paused,
+                        })
+        return result
+    except Exception as exc:
+        logger.critical(f"Reconciliation | pause-state alignment check failed: {exc}")
+        return [{"bot_id": "fleet", "kind": "pause_state_check_failed", "detail": str(exc)}]
+
+
 def collect_live_snapshot() -> dict[str, Any]:
     accounts = []
     mismatches = []
@@ -163,6 +201,7 @@ def collect_live_snapshot() -> dict[str, Any]:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "accounts": accounts,
         "mismatches": mismatches,
+        "pause_state_disagreements": _pause_state_disagreements(),
         "fleet_equity": fleet_equity,
         "fleet_hwm": fleet_hwm,
     }

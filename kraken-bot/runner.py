@@ -71,6 +71,7 @@ try:
     from core.bot_state import (
         touch_heartbeat as _bs_touch,
         is_paused as _bs_is_paused,
+        get_bot_state as _bs_get_state,
     )
     from core.bot_registry import normalise_bot_id as _bs_normalise
     _heartbeat_ok = True
@@ -79,6 +80,7 @@ except Exception as _hb_exc:
     _heartbeat_ok = False
     _bs_touch = lambda *a, **k: None  # noqa: E731
     _bs_is_paused = lambda *a, **k: False  # noqa: E731
+    _bs_get_state = lambda *a, **k: {}  # noqa: E731
     _bs_normalise = lambda bot_id: bot_id  # noqa: E731
 
 try:
@@ -107,6 +109,30 @@ BOTS = [
 _bot_status: dict[str, dict] = {}
 _status_lock = threading.Lock()
 _shutdown_event = threading.Event()
+_pause_alignment_ok = True
+
+
+def _assert_pause_alignment() -> bool:
+    """Require static runner profiles and canonical DB rows to agree."""
+    aligned = True
+    for bot_id, _, _ in BOTS:
+        profile = BOT_PROFILES.get(bot_id, {})
+        canonical = _bs_normalise(bot_id) or bot_id
+        state = _bs_get_state(canonical) if _heartbeat_ok else {}
+        static_paused = bool(profile.get("BOT_PAUSED", False))
+        database_paused = state.get("paused") if state else None
+        logger.info(
+            f"Pause alignment | bot={bot_id} canonical={canonical} "
+            f"static={static_paused} database={database_paused}"
+        )
+        if database_paused is None or static_paused != bool(database_paused):
+            aligned = False
+            logger.critical(
+                f"Pause alignment disagreement | bot={bot_id} "
+                f"static={static_paused} database={database_paused}; "
+                "runner will fail closed"
+            )
+    return aligned
 
 
 def _entry_window_bounds(profile: dict[str, Any], now: datetime) -> tuple[datetime, datetime] | None:
@@ -232,6 +258,10 @@ def _write_portfolio_from_alpaca(bot_id: str, profile: dict) -> bool:
 def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
     """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
     logger.info(f"[{bot_id}] Thread starting...")
+    if not _pause_alignment_ok:
+        logger.critical(f"[{bot_id}] Startup pause alignment failed — refusing to run")
+        _update_status(bot_id, status="paused", pause_source="alignment_assertion")
+        return
 
     # Lazy load the bot profile — BOT_PROFILES loaded at module level via importlib
     profile = BOT_PROFILES.get(bot_id)
@@ -390,6 +420,7 @@ def _shutdown_handler(signum, frame):
 
 
 def main():
+    global _pause_alignment_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
@@ -397,6 +428,8 @@ def main():
     logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
     logger.info(f"Bots: {', '.join(b[0] for b in BOTS)}")
     logger.info("=" * 60)
+    _pause_alignment_ok = _assert_pause_alignment()
+    logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
 
     # Start health server BEFORE bot threads so port binds fast
     _start_health_server()

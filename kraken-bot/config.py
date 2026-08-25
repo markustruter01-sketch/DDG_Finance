@@ -104,7 +104,7 @@ BOT_PROFILES = {
         "MIN_HOLD_DAYS":     5,
         "MAX_DEPLOYMENT":    0.80,
         # Reserved for Phase 3 Bot 3; activation follows separate validation.
-        "BOT_PAUSED":        True,
+        "BOT_PAUSED":        False,
     },
     "calypso": {
         "display_name": "Calypso's Tide",

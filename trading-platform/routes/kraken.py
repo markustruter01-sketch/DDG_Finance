@@ -217,19 +217,7 @@ async def kraken_status(bot_id: str | None = None) -> dict:
             _recompute_pnl(open_positions)
             await _enrich_stale_positions(open_positions)
 
-            with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
-                _tc.execute(
-                    """
-                    SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                           fees_usd, reason, closed_at, paper
-                    FROM   kraken_trades
-                    WHERE  bot_id = %s
-                      AND  closed_at >= NOW() - INTERVAL '30 days'
-                    ORDER  BY closed_at ASC
-                    """,
-                    (bid,)
-                )
-                _all_rows = _tc.fetchall()
+            _all_rows = []
 
             all_trades = []
             for r in _all_rows:
@@ -340,17 +328,9 @@ async def kraken_fleet_summary() -> dict:
                     if eq <= 0:
                         eq = starting
 
-                    # All-time trade count and win count (no date filter)
-                    _fsc.execute(
-                        "SELECT COUNT(*), "
-                        "SUM(CASE WHEN pnl_usd > %s THEN 1 ELSE 0 END) "
-                        "FROM kraken_trades WHERE bot_id = %s",
-                        (_WIN_THRESHOLD, _bid)
-                    )
-                    _tr = _fsc.fetchone()
-                    if _tr:
-                        trades_count = int(_tr[0] or 0)
-                        wins_count = int(_tr[1] or 0)
+                    # The retired trade source is unavailable.
+                    trades_count = 0
+                    wins_count = 0
 
                     # Total PnL = equity - starting (includes unrealized gains from open positions)
                     pnl = eq - starting
@@ -473,20 +453,6 @@ async def kraken_commentary(force: bool = False, bot_id: str | None = None) -> d
                             "open_positions":   [],
                         }
 
-                with _kcpgconn.cursor(cursor_factory=_pg2cx.RealDictCursor) as _kct:
-                    _kct.execute(
-                        """
-                        SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                               fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades WHERE bot_id = %s ORDER BY closed_at ASC
-                        """,
-                        (bid,)
-                    )
-                    for _r in _kct.fetchall():
-                        _d = dict(_r)
-                        if _d.get("closed_at"):
-                            _d["closed_at"] = _d["closed_at"].isoformat()
-                        recent_trades.append(_d)
             finally:
                 _kcpgconn.close()
         except Exception as exc:
@@ -728,7 +694,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
 
     empty: dict = {
         "bot_id":          bid,
-        "data_source":     "postgresql:kraken_trades",
+        "data_source":     "legacy trade source (retired)",
         "exchange":        "Kraken (crypto, independent from Alpaca)",
         "has_data":        False,
         "total_trades":    0,
@@ -757,24 +723,6 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
         try:
             _pgconn = _pg2.connect(_dburl)
             try:
-                with _pgconn.cursor(cursor_factory=_pg2x.RealDictCursor) as _tc:
-                    _tc.execute(
-                        """
-                        SELECT symbol, side, entry_price, exit_price, pnl_pct, pnl_usd,
-                               fees_usd, reason, closed_at, paper
-                        FROM   kraken_trades
-                        WHERE  bot_id = %s
-                          AND  closed_at >= NOW() - INTERVAL '30 days'
-                        ORDER  BY closed_at ASC
-                        """,
-                        (bid,)
-                    )
-                    for r in _tc.fetchall():
-                        d = dict(r)
-                        if d.get("closed_at"):
-                            d["closed_at"] = d["closed_at"].isoformat()
-                        trades.append(d)
-
                 with _pgconn.cursor() as _hc:
                     _hc.execute(
                         "SELECT equity_usd, cycle_count, status FROM kraken_heartbeat WHERE id = %s",
@@ -841,7 +789,7 @@ async def kraken_performance(bot_id: str | None = None) -> dict:
 
     return {
         "bot_id":          bid,
-        "data_source":     "postgresql:kraken_trades",
+        "data_source":     "legacy trade source (retired)",
         "exchange":        "Kraken (crypto, independent from Alpaca)",
         "has_data":        True,
         "total_trades":    len(strategy_only),

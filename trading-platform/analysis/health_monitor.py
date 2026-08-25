@@ -129,16 +129,7 @@ def _score_linear(value: float, healthy_thresh: float, warning_thresh: float,
 # ── individual metric checks ────────────────────────────────────────────────
 
 def _check_recent_win_rate(bot_id: str) -> dict:
-    rows = _query(
-        """
-        SELECT pnl_usd
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-        ORDER  BY closed_at DESC
-        LIMIT  %s
-        """,
-        (bot_id, LOOKBACK_N),
-    )
+    rows: list[dict] = []
     n = len(rows)
     if n < 3:
         return {
@@ -157,16 +148,7 @@ def _check_recent_win_rate(bot_id: str) -> dict:
 
 
 def _check_recent_profit_factor(bot_id: str) -> dict:
-    rows = _query(
-        """
-        SELECT pnl_usd
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-        ORDER  BY closed_at DESC
-        LIMIT  %s
-        """,
-        (bot_id, LOOKBACK_N),
-    )
+    rows: list[dict] = []
     n = len(rows)
     if n < MIN_TRADES_FOR_PF:
         return {
@@ -234,16 +216,7 @@ def _check_equity_drawdown(bot_id: str) -> dict:
 
 def _check_loss_streak(bot_id: str) -> dict:
     """Count consecutive losses starting from the most recent trade."""
-    rows = _query(
-        """
-        SELECT pnl_usd
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-        ORDER  BY closed_at DESC
-        LIMIT  30
-        """,
-        (bot_id,),
-    )
+    rows: list[dict] = []
     streak = 0
     for r in rows:
         if r["pnl_usd"] <= 0:
@@ -259,16 +232,7 @@ def _check_loss_streak(bot_id: str) -> dict:
 
 
 def _check_fee_efficiency(bot_id: str) -> dict:
-    rows = _query(
-        """
-        SELECT pnl_usd, COALESCE(fees_usd, 0) AS fees_usd
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-        ORDER  BY closed_at DESC
-        LIMIT  %s
-        """,
-        (bot_id, LOOKBACK_N),
-    )
+    rows: list[dict] = []
     n = len(rows)
     if n < 3:
         return {
@@ -292,18 +256,7 @@ def _check_fee_efficiency(bot_id: str) -> dict:
 
 def _check_symbol_concentration(bot_id: str) -> dict:
     """Largest single-symbol share of gross losses over last LOOKBACK_N trades."""
-    rows = _query(
-        """
-        SELECT symbol, SUM(ABS(pnl_usd)) AS gross_loss
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-          AND  pnl_usd < 0
-          AND  closed_at >= NOW() - INTERVAL '30 days'
-        GROUP  BY symbol
-        ORDER  BY gross_loss DESC
-        """,
-        (bot_id,),
-    )
+    rows: list[dict] = []
     if not rows:
         return {
             "score": 100, "status": "HEALTHY",

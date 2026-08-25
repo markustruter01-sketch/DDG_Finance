@@ -374,17 +374,7 @@ def run_wfo(bot_id: str) -> dict[str, Any]:
     logger.info(f"WFO | Starting walk-forward analysis for {bot_id}")
 
     # Load all closed trades
-    trades = _query(
-        """
-        SELECT symbol, side, pnl_pct, pnl_usd, fees_usd, reason,
-               regime_at_entry, closed_at
-        FROM   kraken_trades
-        WHERE  bot_id = %s
-          AND  pnl_usd IS NOT NULL
-        ORDER  BY closed_at ASC
-        """,
-        (bot_id,),
-    )
+    trades: list[dict] = []
 
     if not trades:
         logger.warning(f"WFO | {bot_id}: no trade data — skipping")

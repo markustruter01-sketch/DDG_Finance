@@ -335,13 +335,13 @@ def _migrate_sqlite_to_pg() -> None:
 # ── One-time trade-history backfill ────────────────────────────────────────
 
 _VAULT_BACKFILL_LOCK_ID  = 7_429_384_757  # distinct from SQLite migration lock
-_VAULT_BACKFILL_KEY      = "kraken_forex_backfill_v1"
+_VAULT_BACKFILL_KEY      = "forex_backfill_v1"
 
 
 def _backfill_from_trade_history() -> None:
     """
-    One-time startup backfill: add missing 20% vault contributions from all
-    profitable Kraken and Forex trades recorded in the database.
+    One-time startup backfill: add missing 20% vault contributions from
+    profitable Forex trades recorded in the database.
 
     Why this is needed
     ------------------
@@ -352,9 +352,7 @@ def _backfill_from_trade_history() -> None:
     starts fresh on every deployment, so production vault_ledger only ever
     accumulated the 4 Alpaca HWM sweeps that ran correctly from the beginning.
 
-    This function computes:
-        expected = SUM(kraken_trades.pnl_usd * 0.20 WHERE pnl_usd > 0)
-                 + SUM(forex_trades.pnl_usd  * 0.20 WHERE pnl_usd > 0)
+    This function computes the expected contribution from Forex trades.
     and adds that full amount to vault_ledger in one atomic commit.  It then
     writes the marker so it never fires again.
 
@@ -407,18 +405,12 @@ def _backfill_from_trade_history() -> None:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
-                "FROM kraken_trades WHERE pnl_usd > 0"
-            )
-            k_count, k_amount = cur.fetchone()
-
-            cur.execute(
-                "SELECT COUNT(*), COALESCE(SUM(pnl_usd * 0.20), 0.0) "
                 "FROM forex_trades WHERE pnl_usd > 0"
             )
             f_count, f_amount = cur.fetchone()
 
-        total_wins   = int(k_count or 0) + int(f_count or 0)
-        total_amount = float(k_amount or 0) + float(f_amount or 0)
+        total_wins   = int(f_count or 0)
+        total_amount = float(f_amount or 0)
 
         if total_amount <= 0:
             # Nothing to backfill — write marker so we skip cleanly on future startups.
@@ -740,57 +732,3 @@ def run_profit_sweep(current_equity: float, dry_run: bool = False) -> dict:
     except Exception as exc:
         logger.error(f"Vault | Unexpected error in run_profit_sweep: {exc}")
         return {"swept": False, "reason": f"internal_error: {exc}"}
-
-
-def record_kraken_vault_contribution(pnl_usd: float, sweep_rate: float = 0.20, source: str = "kraken_paper") -> dict:
-    """
-    Record a per-trade vault contribution.
-
-    Called after each profitable paper trade closes.  sweep_rate % of
-    each winning trade's gross PnL is earmarked for the Growth Vault (JEPQ).
-
-    The `source` parameter identifies which bot produced the profit
-    (e.g. "kraken_paper", "options_paper", "forex_paper").
-
-    No minimum threshold — every profitable trade, no matter how small,
-    has 20% recorded in the ledger.  This is pure bookkeeping; no real
-    Alpaca order is placed here, so the $1 Alpaca floor does not apply.
-
-    Returns a dict with swept=True/False and the contributed amount.
-    """
-    if pnl_usd <= 0:
-        return {"swept": False, "reason": "no_profit"}
-
-    amount = round(pnl_usd * sweep_rate, 4)
-
-    try:
-        init_vault_db()
-        state = get_vault_state()
-
-        if state is None:
-            _set_vault_state(
-                hwm=0.0,
-                total_vaulted_usd=amount,
-                total_sweeps=1,
-                last_sweep_date=str(date.today()),
-                last_sweep_amount=amount,
-            )
-        else:
-            _set_vault_state(
-                hwm=float(state["hwm"]),
-                total_vaulted_usd=float(state["total_vaulted_usd"]) + amount,
-                total_sweeps=int(state["total_sweeps"]) + 1,
-                last_sweep_date=str(date.today()),
-                last_sweep_amount=amount,
-                da_adjustment=float(state.get("da_adjustment", 0.0)),
-            )
-
-        logger.info(
-            f"Vault | {source} contribution: ${amount:.2f} "
-            f"({sweep_rate*100:.0f}% of ${pnl_usd:.2f} profit) → Growth Vault"
-        )
-        return {"swept": True, "amount": amount, "source": source}
-
-    except Exception as exc:
-        logger.error(f"Vault | {source} contribution failed: {exc}")
-        return {"swept": False, "reason": f"error: {exc}"}

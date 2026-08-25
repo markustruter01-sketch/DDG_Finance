@@ -41,22 +41,9 @@ async def pair_learning():
         ORDER BY bot_id, symbol
     """)
 
-    # Aggregate win rates from kraken_trades per bot+symbol.
-    # Threshold matches core.metrics.WIN_THRESHOLD — passed as parameter to stay in sync.
-    trade_rows = _pg_query(
-        """
-        SELECT bot_id, symbol,
-               COUNT(*) FILTER (WHERE pnl_usd > %s) AS wins,
-               COUNT(*) AS total,
-               SUM(pnl_usd) AS total_pnl,
-               MAX(closed_at) AS last_trade_at
-        FROM kraken_trades
-        WHERE closed_at IS NOT NULL
-        GROUP BY bot_id, symbol
-        ORDER BY bot_id, symbol
-        """,
-        (_WIN_THRESHOLD,)
-    )
+    # The retired trade source is unavailable; pair-learning remains usable
+    # from the independent pair-performance table.
+    trade_rows = []
 
     # Build win-rate lookup: (bot_id, symbol) -> stats
     wr_lookup: dict = {}
@@ -130,13 +117,7 @@ async def pair_learning():
     adaptive_params = []
 
     # Recent trades feed (last 20 across all 3 bots)
-    recent_trades = _pg_query("""
-        SELECT bot_id, symbol, side, pnl_usd, closed_at
-        FROM kraken_trades
-        WHERE closed_at IS NOT NULL
-        ORDER BY closed_at DESC
-        LIMIT 20
-    """)
+    recent_trades = []
     recent_trades_list = []
     for t in recent_trades:
         recent_trades_list.append({
@@ -153,11 +134,10 @@ async def pair_learning():
     total_syms = active_syms | paused_syms
 
     # Total trade count across ALL bots: Kraken trades + Alpaca journal (Oracle)
-    kraken_count_rows = _pg_query("SELECT COUNT(*) AS cnt FROM kraken_trades WHERE closed_at IS NOT NULL")
     alpaca_count_rows = _pg_query(
         "SELECT COUNT(*) AS cnt FROM trades WHERE status IN ('Closed_Win','Closed_Loss','Closed')"
     )
-    kraken_total = int(kraken_count_rows[0]["cnt"] or 0) if kraken_count_rows else 0
+    kraken_total = 0
     alpaca_total = int(alpaca_count_rows[0]["cnt"] or 0) if alpaca_count_rows else 0
     total_trade_count = kraken_total + alpaca_total
 

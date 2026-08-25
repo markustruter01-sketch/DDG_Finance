@@ -23,6 +23,7 @@ import signal
 import threading
 import importlib
 import traceback
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
@@ -106,10 +107,25 @@ BOTS = [
 ]
 
 FAILURE_ALERT_EVERY = 3
+API_LIVENESS_INTERVAL_SECONDS = 60
+API_LIVENESS_FAILURE_THRESHOLD = 3
+API_LIVENESS_TIMEOUT_SECONDS = 5
+API_HEALTH_URL = os.environ.get(
+    "TRADING_API_HEALTH_URL",
+    "http://127.0.0.1:8000/trading-api/health",
+)
 
 # Per-bot status tracker for health endpoint
 _bot_status: dict[str, dict] = {}
 _status_lock = threading.Lock()
+_api_liveness: dict[str, object] = {
+    "url": API_HEALTH_URL,
+    "status": "starting",
+    "consecutive_failures": 0,
+    "last_check_at": None,
+    "last_success_at": None,
+    "last_error": None,
+}
 _shutdown_event = threading.Event()
 _pause_alignment_ok = True
 
@@ -308,6 +324,96 @@ def _record_cycle_liveness(
     )
 
 
+def _probe_trading_api() -> None:
+    """Monitor API response health from the independent runner process."""
+    consecutive_failures = 0
+    alert_sent_for_incident = False
+
+    while not _shutdown_event.is_set():
+        checked_at = datetime.now(timezone.utc).isoformat()
+        try:
+            request = urllib.request.Request(
+                API_HEALTH_URL,
+                headers={"User-Agent": "kraken-bot-runner-api-liveness"},
+            )
+            with urllib.request.urlopen(
+                request,
+                timeout=API_LIVENESS_TIMEOUT_SECONDS,
+            ) as response:
+                body = response.read(4096).decode("utf-8", errors="replace")
+                if response.status != 200:
+                    raise RuntimeError(f"HTTP {response.status}")
+                payload = json.loads(body)
+                if payload.get("status") != "ok":
+                    raise RuntimeError(
+                        f"health status={payload.get('status', 'missing')}"
+                    )
+
+            recovered = consecutive_failures > 0
+            consecutive_failures = 0
+            with _status_lock:
+                _api_liveness.update({
+                    "status": "healthy",
+                    "consecutive_failures": 0,
+                    "last_check_at": checked_at,
+                    "last_success_at": checked_at,
+                    "last_error": None,
+                })
+            if recovered:
+                logger.warning(
+                    f"API LIVENESS RECOVERED | {API_HEALTH_URL} responded HTTP 200"
+                )
+                alert_sent_for_incident = False
+        except Exception as exc:
+            consecutive_failures += 1
+            with _status_lock:
+                _api_liveness.update({
+                    "status": "unresponsive",
+                    "consecutive_failures": consecutive_failures,
+                    "last_check_at": checked_at,
+                    "last_error": str(exc)[:300],
+                })
+            logger.error(
+                "API LIVENESS FAILURE | "
+                f"consecutive={consecutive_failures}/{API_LIVENESS_FAILURE_THRESHOLD} "
+                f"url={API_HEALTH_URL} error={exc}"
+            )
+            if (
+                consecutive_failures >= API_LIVENESS_FAILURE_THRESHOLD
+                and not alert_sent_for_incident
+            ):
+                message = (
+                    f"Trading API has failed {consecutive_failures} consecutive "
+                    f"health checks. URL: {API_HEALTH_URL}. Latest error: {exc}"
+                )
+                logger.critical(f"API LIVENESS ALERT | {message}")
+                try:
+                    from notifications.discord import alert_critical
+                    alert_critical(
+                        "Trading API unresponsive",
+                        message,
+                        fields=[
+                            {
+                                "name": "Consecutive failures",
+                                "value": str(consecutive_failures),
+                                "inline": True,
+                            },
+                            {
+                                "name": "Probe timeout",
+                                "value": f"{API_LIVENESS_TIMEOUT_SECONDS}s",
+                                "inline": True,
+                            },
+                        ],
+                    )
+                except Exception as alert_exc:
+                    logger.error(
+                        f"API liveness Discord alert failed: {alert_exc}"
+                    )
+                alert_sent_for_incident = True
+
+        _shutdown_event.wait(API_LIVENESS_INTERVAL_SECONDS)
+
+
 def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
     """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
     logger.info(f"[{bot_id}] Thread starting...")
@@ -490,6 +596,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 "uptime_seconds": int(time.time() - _start_time),
                 "bots": dict(_bot_status),
                 "bot_count": len(_bot_status),
+                "trading_api_liveness": dict(_api_liveness),
             }
         body = json.dumps(payload, default=str).encode()
         self.send_response(200)
@@ -533,6 +640,17 @@ def main():
 
     # Start health server BEFORE bot threads so port binds fast
     _start_health_server()
+    threading.Thread(
+        target=_probe_trading_api,
+        daemon=True,
+        name="trading-api-liveness",
+    ).start()
+    logger.info(
+        "Runner | Trading API liveness probe started "
+        f"(interval={API_LIVENESS_INTERVAL_SECONDS}s, "
+        f"timeout={API_LIVENESS_TIMEOUT_SECONDS}s, "
+        f"threshold={API_LIVENESS_FAILURE_THRESHOLD}, url={API_HEALTH_URL})"
+    )
 
     # Spawn one thread per bot
     threads = []

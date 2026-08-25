@@ -1,0 +1,50 @@
+{
+  "archived_at": "2026-08-25T06:31:16.101784+00:00",
+  "reason": "confirmed stale: no matching live broker position",
+  "rows": [
+    {
+      "id": 5,
+      "bot_id": "oracle",
+      "symbol": "EWT",
+      "direction": "long",
+      "qty": "222.0",
+      "entry_price": "103.38",
+      "entry_atr": "2.454677914300553",
+      "notional_usd": "22950.36",
+      "stop_price": "95.1096",
+      "tp1_price": "109.5828",
+      "tp2_price": "115.7856",
+      "scaled_out_tp1": false,
+      "scaled_out_tp2": false,
+      "min_hold_until": "2026-08-29 19:40:34.603372+00:00",
+      "status": "open",
+      "opened_at": "2026-08-24 19:40:34.603614+00:00",
+      "closed_at": null,
+      "exit_reason": null,
+      "realised_pnl": null,
+      "stop_order_id": "aa899b8e-78f0-4a28-a02e-2b4d7d567a4f"
+    },
+    {
+      "id": 6,
+      "bot_id": "oracle",
+      "symbol": "EWM",
+      "direction": "long",
+      "qty": "805.0",
+      "entry_price": "28.6",
+      "entry_atr": "0.24177012561197644",
+      "notional_usd": "23023.0",
+      "stop_price": "26.312",
+      "tp1_price": "30.316000000000003",
+      "tp2_price": "32.032000000000004",
+      "scaled_out_tp1": false,
+      "scaled_out_tp2": false,
+      "min_hold_until": "2026-08-29 19:40:38.285125+00:00",
+      "status": "open",
+      "opened_at": "2026-08-24 19:40:38.285391+00:00",
+      "closed_at": null,
+      "exit_reason": null,
+      "realised_pnl": null,
+      "stop_order_id": "a0ff7759-ff67-4bf0-b5a0-e5c0e8c5d2bb"
+    }
+  ]
+}

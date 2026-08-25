@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+.homepage-concept {
+  --ink: #eaf7f7;
+  --muted: #9bb3b7;
+  --line: rgba(201, 255, 250, 0.16);
+  --glass: rgba(10, 29, 38, 0.56);
+  --glass-strong: rgba(11, 35, 45, 0.76);
+  --cyan: #72eee4;
+  --lime: #b8f46b;
+  --amber: #ffd27a;
+  --red: #ff8c8c;
+  min-height: 100vh;
+  color: var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  background:
+    radial-gradient(ellipse at 14% 12%, rgba(154, 223, 235, 0.52), transparent 31%),
+    radial-gradient(ellipse at 88% 18%, rgba(113, 178, 190, 0.38), transparent 32%),
+    linear-gradient(180deg, #8db9c2 0%, #567d88 42%, #172e38 100%);
+  overflow: hidden;
+}
+
+.homepage-concept::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .32;
+  background:
+    radial-gradient(ellipse at 25% 70%, #173b40 0 18%, transparent 19%),
+    radial-gradient(ellipse at 47% 68%, #214b4b 0 18%, transparent 19%),
+    radial-gradient(ellipse at 75% 72%, #102f38 0 24%, transparent 25%);
+  filter: blur(10px);
+}
+
+.homepage-concept::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(255,255,255,.08), transparent 30%, rgba(4,20,29,.24));
+}
+
+.homepage-concept * { box-sizing: border-box; }
+.concept-mono { font-family: 'DM Mono', monospace; }
+.concept-glass {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(2, 16, 22, .24), inset 0 1px rgba(255,255,255,.12);
+  backdrop-filter: blur(18px) saturate(130%);
+}
+.concept-label {
+  color: var(--muted);
+  font: 500 10px 'DM Mono', monospace;
+  letter-spacing: .17em;
+  text-transform: uppercase;
+}
+.concept-number { font-family: 'DM Mono', monospace; letter-spacing: -.04em; }
+.concept-positive { color: var(--lime); }
+.concept-warning { color: var(--amber); }
+.concept-negative { color: var(--red); }
+
+@media (max-width: 1199px) {
+  .homepage-concept { overflow: auto; }
+  .desktop-only-detail { display: none !important; }
+  .concept-desktop-grid { display: block !important; }
+  .concept-bot-row { grid-template-columns: 1fr !important; }
+  .concept-shell { padding: 16px !important; }
+  .concept-header { flex-wrap: wrap; }
+}

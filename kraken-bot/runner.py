@@ -91,8 +91,8 @@ except ImportError:
     _portfolio_write_ok = False
 
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name).
-# Phase 3 migration keeps the reserved accounts paused in config.py; only the
-# consolidated Bot 1 path may be enabled after the migration utility passes.
+# Each registered strategy is checked against its profile and canonical DB row
+# before any cycle thread is allowed to start.
 BOTS = [
     # Consolidated Bot 1: US Core + Asia-Pacific + Emerging Markets.
     # bot2_spy_qqq and jerome_macro remain registered for their future
@@ -113,23 +113,42 @@ _pause_alignment_ok = True
 
 
 def _assert_pause_alignment() -> bool:
-    """Require static runner profiles and canonical DB rows to agree."""
+    """Require module, profile, and canonical DB pause sources to agree."""
     aligned = True
-    for bot_id, _, _ in BOTS:
+    for bot_id, module_name, _ in BOTS:
         profile = BOT_PROFILES.get(bot_id, {})
         canonical = _bs_normalise(bot_id) or bot_id
         state = _bs_get_state(canonical) if _heartbeat_ok else {}
         static_paused = bool(profile.get("BOT_PAUSED", False))
         database_paused = state.get("paused") if state else None
+        try:
+            strategy_module = importlib.import_module(module_name)
+            module_paused = getattr(strategy_module, "BOT_PAUSED", None)
+        except Exception as exc:
+            module_paused = None
+            aligned = False
+            logger.critical(
+                f"Pause alignment module load failed | bot={bot_id} "
+                f"module={module_name}: {exc}; runner will fail closed"
+            )
         logger.info(
             f"Pause alignment | bot={bot_id} canonical={canonical} "
-            f"static={static_paused} database={database_paused}"
+            f"module={module_paused if module_paused is not None else 'not_defined'} "
+            f"profile={static_paused} database={database_paused}"
         )
-        if database_paused is None or static_paused != bool(database_paused):
+        module_disagrees = (
+            module_paused is not None and bool(module_paused) != static_paused
+        )
+        if (
+            database_paused is None
+            or static_paused != bool(database_paused)
+            or module_disagrees
+        ):
             aligned = False
             logger.critical(
                 f"Pause alignment disagreement | bot={bot_id} "
-                f"static={static_paused} database={database_paused}; "
+                f"module={module_paused if module_paused is not None else 'not_defined'} "
+                f"profile={static_paused} database={database_paused}; "
                 "runner will fail closed"
             )
     return aligned

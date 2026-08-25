@@ -127,6 +127,9 @@ def evaluate_snapshot(snapshot: dict[str, Any], now: float | None = None) -> lis
     for disagreement in snapshot.get("pause_state_disagreements", []):
         triggers.append({"trigger": "pause_state_disagreement", **disagreement})
 
+    for finding in snapshot.get("account_findings", []):
+        triggers.append({"trigger": "missing_account", **finding})
+
     return triggers
 
 

@@ -169,9 +169,19 @@ def _pause_state_disagreements() -> list[dict[str, Any]]:
 def collect_live_snapshot() -> dict[str, Any]:
     accounts = []
     mismatches = []
+    account_findings = []
     fleet_equity = 0.0
     for bot_id in ACTIVE_BOTS:
-        client = _client_for(bot_id)
+        try:
+            client = _client_for(bot_id)
+        except Exception as exc:
+            logger.critical(f"Reconciliation | account unavailable for {bot_id}: {exc}")
+            account_findings.append({
+                "bot_id": bot_id,
+                "kind": "account_unavailable",
+                "detail": str(exc),
+            })
+            continue
         acct = client.get_account()
         positions = _positions(client)
         orders = _orders(client)
@@ -201,6 +211,7 @@ def collect_live_snapshot() -> dict[str, Any]:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "accounts": accounts,
         "mismatches": mismatches,
+        "account_findings": account_findings,
         "pause_state_disagreements": _pause_state_disagreements(),
         "fleet_equity": fleet_equity,
         "fleet_hwm": fleet_hwm,

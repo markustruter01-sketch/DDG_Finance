@@ -722,7 +722,10 @@ async def status_summary() -> dict:
     position_count = 0
     try:
         positions = get_positions()
-        position_count = len(positions) if positions else 0
+        position_count = sum(
+            1 for position in (positions or [])
+            if abs(float(position.get("qty", 0) or 0)) >= 1e-6
+        )
     except Exception:
         pass
 

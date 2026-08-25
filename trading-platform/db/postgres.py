@@ -493,8 +493,10 @@ CREATE TABLE IF NOT EXISTS kill_switch_acknowledgements (
     condition_key       TEXT PRIMARY KEY,
     acknowledged_until  TIMESTAMPTZ NOT NULL,
     acknowledged_by     TEXT NOT NULL,
+    reason              TEXT,
     acknowledged_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE kill_switch_acknowledgements ADD COLUMN IF NOT EXISTS reason TEXT;
 
 CREATE TABLE IF NOT EXISTS review_flags (
     id          BIGSERIAL PRIMARY KEY,

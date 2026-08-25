@@ -117,6 +117,7 @@ class KillAcknowledgementRequest(BaseModel):
     condition_key: str
     acknowledged_until: str
     acknowledged_by: str = "manual"
+    reason: str | None = None
 
 
 class AutoTradingRequest(BaseModel):
@@ -306,6 +307,7 @@ async def acknowledge_kill_condition(request: KillAcknowledgementRequest) -> dic
             request.condition_key,
             request.acknowledged_until,
             request.acknowledged_by,
+            request.reason,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))

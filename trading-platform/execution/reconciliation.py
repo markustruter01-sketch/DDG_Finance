@@ -195,7 +195,7 @@ def reconcile(report_only: bool = False) -> dict[str, Any]:
 
 
 def run_kill_switch_check(report_only: bool = True) -> dict[str, Any]:
-    """Run the five-minute safety check; DEV defaults to report-only."""
+    """Run the five-minute safety check; DEV and unarmed production are report-only."""
     from core.kill_switch import evaluate_snapshot, report, trip, _load_acknowledgements
     snapshot = collect_live_snapshot()
     acknowledgements = _load_acknowledgements()

@@ -42,6 +42,14 @@ def test_account_triggers(changes, expected):
     assert expected in {flag["trigger"] for flag in flags}
 
 
+def test_jerome_monitoring_cap_allows_fully_invested_strategy():
+    flags = ks.evaluate_account(
+        account(bot_id="jerome_macro", equity=100.0, long_market_value=100.0),
+        now=100.0,
+    )
+    assert "deployment" not in {flag["trigger"] for flag in flags}
+
+
 def test_missing_stop_requires_more_than_sixty_seconds():
     position = {"symbol": "ECH", "qty": 10, "side": "long"}
     snapshot = {"accounts": [account(positions=[position])], "fleet_equity": 100, "fleet_hwm": 100}

@@ -50,6 +50,11 @@ def _is_published_deployment() -> bool:
     """True only in a Replit published deployment, never in a dev workflow."""
     return os.environ.get("REPLIT_DEPLOYMENT") == "1"
 
+
+def _kill_switch_enforced() -> bool:
+    """Enforcement requires both production and explicit operator arming."""
+    return _is_published_deployment() and settings.kill_switch_armed
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ARCHITECTURAL NOTE — KRAKEN BOT PROCESS ISOLATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -313,7 +318,7 @@ async def _automated_kill_switch() -> None:
         from execution.reconciliation import run_kill_switch_check
         result = await asyncio.to_thread(
             run_kill_switch_check,
-            report_only=os.environ.get("REPLIT_DEPLOYMENT") != "1",
+            report_only=not _kill_switch_enforced(),
         )
         logger.info(
             f"Scheduler | automated_kill_switch: "
@@ -329,7 +334,7 @@ async def _scheduled_reconciliation() -> None:
         from execution.reconciliation import reconcile
         result = await asyncio.to_thread(
             reconcile,
-            report_only=os.environ.get("REPLIT_DEPLOYMENT") != "1",
+            report_only=not _kill_switch_enforced(),
         )
         logger.info(
             f"Scheduler | scheduled_reconciliation: "

@@ -26,7 +26,7 @@ ACCOUNT_ENV = {
     "spy_qqq_trend": ("ALPACA_BB_API_KEY", "ALPACA_BB_SECRET_KEY"),
     "jerome_macro": ("ALPACA_JEROME_API_KEY", "ALPACA_JEROME_SECRET_KEY"),
 }
-MAX_DEPLOYMENT = {"oracle": 0.80, "spy_qqq_trend": 0.80, "jerome_macro": 0.80}
+MAX_DEPLOYMENT = {"oracle": 0.80, "spy_qqq_trend": 0.80, "jerome_macro": 1.00}
 
 _state: dict[str, Any] = {
     "tripped": False,
@@ -228,7 +228,12 @@ def get_state() -> dict[str, Any]:
     }
 
 
-def acknowledge(condition_key: str, until: str, acknowledged_by: str = "manual") -> dict[str, Any]:
+def acknowledge(
+    condition_key: str,
+    until: str,
+    acknowledged_by: str = "manual",
+    reason: str | None = None,
+) -> dict[str, Any]:
     """Record an explicit, expiring acknowledgement for a known condition."""
     try:
         from db.postgres import get_conn
@@ -236,14 +241,20 @@ def acknowledge(condition_key: str, until: str, acknowledged_by: str = "manual")
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO kill_switch_acknowledgements "
-                    "(condition_key, acknowledged_until, acknowledged_by) "
-                    "VALUES (%s,%s,%s) "
+                    "(condition_key, acknowledged_until, acknowledged_by, reason) "
+                    "VALUES (%s,%s,%s,%s) "
                     "ON CONFLICT (condition_key) DO UPDATE SET "
                     "acknowledged_until=EXCLUDED.acknowledged_until, "
-                    "acknowledged_by=EXCLUDED.acknowledged_by, acknowledged_at=NOW()",
-                    (condition_key, until, acknowledged_by),
+                    "acknowledged_by=EXCLUDED.acknowledged_by, "
+                    "reason=EXCLUDED.reason, acknowledged_at=NOW()",
+                    (condition_key, until, acknowledged_by, reason),
                 )
-        return {"condition_key": condition_key, "acknowledged_until": until, "acknowledged_by": acknowledged_by}
+        return {
+            "condition_key": condition_key,
+            "acknowledged_until": until,
+            "acknowledged_by": acknowledged_by,
+            "reason": reason,
+        }
     except Exception as exc:
         raise RuntimeError(f"Could not save acknowledgement: {exc}") from exc
 

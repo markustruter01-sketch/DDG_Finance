@@ -58,6 +58,12 @@ def test_protective_stop_covers_position():
     assert ks.evaluate_account(account(positions=[position], orders=[stop]), now=100) == []
 
 
+def test_crypto_symbol_forms_match_for_stop_coverage():
+    position = {"symbol": "BTCUSD", "qty": 0.3, "side": "long"}
+    stop = {"symbol": "BTC/USD", "qty": 0.3, "side": "sell", "type": "stop_limit"}
+    assert ks.evaluate_account(account(positions=[position], orders=[stop]), now=100) == []
+
+
 def test_mismatch_must_persist_for_two_checks():
     snapshot = {
         "accounts": [account()],

@@ -74,11 +74,22 @@ def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[st
         from db.postgres import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT stop_order_id FROM ratchet_stops "
-                    "WHERE stop_order_id IS NOT NULL"
-                )
+                cur.execute("SELECT stop_order_id FROM ratchet_stops WHERE stop_order_id IS NOT NULL")
                 ledger_ids = {str(row[0]) for row in cur.fetchall()}
+                if bot_id == "oracle":
+                    cur.execute(
+                        "SELECT stop_order_id FROM alpaca_etf_positions "
+                        "WHERE stop_order_id IS NOT NULL"
+                    )
+                    ledger_ids.update(str(row[0]) for row in cur.fetchall())
+                if bot_id == "jerome_macro":
+                    # Bot 3's crypto/ETF stop ownership is recorded in its
+                    # dedicated ledger, not in the legacy ratchet table.
+                    cur.execute(
+                        "SELECT stop_order_id FROM bot3_positions "
+                        "WHERE stop_order_id IS NOT NULL"
+                    )
+                    ledger_ids.update(str(row[0]) for row in cur.fetchall())
         return [
             {
                 "bot_id": bot_id,

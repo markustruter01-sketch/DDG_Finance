@@ -46,8 +46,13 @@ def _is_protective(order: dict[str, Any]) -> bool:
     return order_type in {"stop", "stop_limit", "trailing_stop"} and side in {"sell", "buy"}
 
 
+def _normalize_symbol(symbol: Any) -> str:
+    """Alpaca represents crypto as both BTC/USD and BTCUSD in different APIs."""
+    return str(symbol or "").replace("/", "").replace("-", "").upper()
+
+
 def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
-    if not _is_protective(order) or str(position.get("symbol")) != str(order.get("symbol")):
+    if not _is_protective(order) or _normalize_symbol(position.get("symbol")) != _normalize_symbol(order.get("symbol")):
         return False
     position_side = str(position.get("side", "long")).lower()
     order_side = str(order.get("side", "")).lower()

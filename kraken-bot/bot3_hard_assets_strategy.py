@@ -118,12 +118,8 @@ CREATE INDEX IF NOT EXISTS idx_bot3_decision_log_cycle
 """
 
 def _canonical_symbol(symbol: str) -> str:
-    compact = symbol.replace("/", "")
-    if compact == "BTCUSD":
-        return "BTC/USD"
-    if compact == "ETHUSD":
-        return "ETH/USD"
-    return symbol
+    from core.symbols import alpaca_symbol
+    return alpaca_symbol(symbol)
 
 
 def _log_decision(

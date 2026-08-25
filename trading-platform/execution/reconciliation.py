@@ -11,6 +11,7 @@ from loguru import logger
 from core.kill_switch import ACCOUNT_ENV, ACTIVE_BOTS, DUST_QTY, MAX_DEPLOYMENT
 from config.settings import settings
 from core.bot_registry import resolve_bot_id
+from core.symbols import canonical_symbol
 
 
 def _client_for(bot_id: str):
@@ -59,8 +60,8 @@ def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
 
 def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> list[dict[str, Any]]:
     bot_id = resolve_bot_id(bot_id)
-    b = {str(p.get("symbol", "")).replace("/", ""): abs(float(p.get("qty") or 0)) for p in broker if abs(float(p.get("qty") or 0)) >= DUST_QTY}
-    l = {str(p.get("symbol", "")).replace("/", ""): abs(float(p.get("qty") or 0)) for p in ledger if abs(float(p.get("qty") or 0)) >= DUST_QTY}
+    b = {canonical_symbol(p.get("symbol")): abs(float(p.get("qty") or 0)) for p in broker if abs(float(p.get("qty") or 0)) >= DUST_QTY}
+    l = {canonical_symbol(p.get("symbol")): abs(float(p.get("qty") or 0)) for p in ledger if abs(float(p.get("qty") or 0)) >= DUST_QTY}
     results = []
     for symbol in sorted(set(b) | set(l)):
         if symbol not in b:

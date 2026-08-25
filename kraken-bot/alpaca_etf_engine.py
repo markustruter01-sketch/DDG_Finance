@@ -51,6 +51,7 @@ def _ensure_tp() -> None:
 
 _ensure_tp()
 from core.order_ids import submit_with_unique_client_order_id
+from core.symbols import same_symbol
 
 
 # ── Yahoo Finance OHLCV fetcher ───────────────────────────────────────────────
@@ -518,7 +519,7 @@ class AlpacaEtfEngine:
     ) -> bool:
         """Close entire position in a symbol."""
         try:
-            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+            live = next((p for p in self.get_positions() if same_symbol(p["symbol"], symbol)), None)
             if not live or abs(float(live["qty"])) < 1e-6:
                 logger.info(f"EtfEngine | {symbol}: position is already flat/dust")
                 return True
@@ -550,7 +551,7 @@ class AlpacaEtfEngine:
             )
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
-                live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+                live = next((p for p in self.get_positions() if same_symbol(p["symbol"], symbol)), None)
                 if not live or abs(float(live["qty"])) < 1e-8:
                     logger.info(f"EtfEngine | CLOSED position: {symbol}")
                     return True
@@ -671,7 +672,7 @@ class AlpacaEtfEngine:
         exit_prefix = self._exit_client_order_prefix(bot_id, symbol)
         try:
             return any(
-                order.symbol == symbol
+                same_symbol(order.symbol, symbol)
                 and order.side == "sell"
                 and order.type == "market"
                 and str(getattr(order, "client_order_id", "")).startswith(exit_prefix)
@@ -775,7 +776,7 @@ class AlpacaEtfEngine:
                 position = self.api.get_position(symbol)
                 qty_available = getattr(position, "qty_available", None)
                 active_sell = any(
-                    order.symbol == symbol
+                    same_symbol(order.symbol, symbol)
                     and str(order.side).lower() == "sell"
                     for order in self.api.list_orders(status="open", limit=100, nested=True)
                 )
@@ -816,7 +817,7 @@ class AlpacaEtfEngine:
         broker_stop = float(stop_price)
         stop_qty = 0
         try:
-            live = next((p for p in self.get_positions() if p["symbol"] == symbol), None)
+            live = next((p for p in self.get_positions() if same_symbol(p["symbol"], symbol)), None)
             if not live:
                 logger.info(f"EtfEngine | {symbol}: stop pending — broker position not filled yet")
                 return None
@@ -1502,7 +1503,7 @@ class AlpacaEtfEngine:
           5. Returns None (hold)
         """
         symbol = db_position["symbol"]
-        live = next((p for p in live_positions if p["symbol"] == symbol), None)
+        live = next((p for p in live_positions if same_symbol(p["symbol"], symbol)), None)
         if not live:
             return None
 
@@ -1514,7 +1515,7 @@ class AlpacaEtfEngine:
 
         # Re-read and broker-sync the ratcheted stop before any exit decision.
         fresh = self.get_db_positions(bot_id)
-        db_pos_fresh = next((p for p in fresh if p["symbol"] == symbol), db_position)
+        db_pos_fresh = next((p for p in fresh if same_symbol(p["symbol"], symbol)), db_position)
         self.ensure_protective_stop(
             bot_id,
             symbol,

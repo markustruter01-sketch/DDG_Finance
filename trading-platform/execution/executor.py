@@ -99,7 +99,8 @@ OVERHEAT_STOP_PCT       = 0.02   # 2 % stop loss below fill price
 
 
 def _normalize_symbol(ticker: str) -> str:
-    return ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
+    from core.symbols import canonical_symbol
+    return canonical_symbol(ticker)
 
 
 def _get_heat_metrics(ticker: str) -> dict:

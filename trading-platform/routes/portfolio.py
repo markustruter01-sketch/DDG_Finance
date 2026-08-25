@@ -32,6 +32,7 @@ from analysis.attribution import compute_attribution
 from data.cache import get_cache_stats
 from execution.kill_switch import get_state as ks_get_state
 from core.scheduler import get_job_status, is_auto_trading_enabled
+from core.symbols import canonical_symbol, same_symbol
 
 from routes._deps import (
     COMMENTARY_TTL_SECONDS,
@@ -96,7 +97,10 @@ async def _fetch_positions_by_bot() -> dict[str, dict[str, Any]]:
         by_bot[bot_id] = {
             "positions": result,
             "count": len(result),
-            "strategy_count": sum(1 for position in result if position["symbol"] != "SGOV"),
+            "strategy_count": sum(
+                1 for position in result
+                if not same_symbol(position["symbol"], "SGOV")
+            ),
         }
 
     if errors:
@@ -129,7 +133,13 @@ def _compute_position_health(
 
     score = 50.0
 
-    ticker_data = by_ticker_data.get(symbol, by_ticker_data.get(symbol.replace("USD", "/USD"), {}))
+    ticker_data = next(
+        (
+            data for key, data in by_ticker_data.items()
+            if same_symbol(key, symbol)
+        ),
+        {},
+    )
     mom_3 = ticker_data.get("momentum_3mo", "insufficient_data")
     mom_6 = ticker_data.get("momentum_6mo", "insufficient_data")
     if mom_3 == "positive":
@@ -159,7 +169,10 @@ def _compute_position_health(
     elif pnl_pct < -0.02:
         score -= 8
 
-    stop_data = saved_stops.get(symbol)
+    stop_data = next(
+        (data for key, data in saved_stops.items() if same_symbol(key, symbol)),
+        None,
+    )
     if stop_data:
         stop_price = stop_data.get("stop_price", 0)
         if stop_price and current_price:

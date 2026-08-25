@@ -15,6 +15,7 @@ from typing import Any, Callable
 from loguru import logger
 
 from config.settings import settings
+from core.symbols import canonical_symbol, same_symbol
 
 DUST_QTY = 1e-6
 MISSING_STOP_SECONDS = 60.0
@@ -46,13 +47,8 @@ def _is_protective(order: dict[str, Any]) -> bool:
     return order_type in {"stop", "stop_limit", "trailing_stop"} and side in {"sell", "buy"}
 
 
-def _normalize_symbol(symbol: Any) -> str:
-    """Alpaca represents crypto as both BTC/USD and BTCUSD in different APIs."""
-    return str(symbol or "").replace("/", "").replace("-", "").upper()
-
-
 def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
-    if not _is_protective(order) or _normalize_symbol(position.get("symbol")) != _normalize_symbol(order.get("symbol")):
+    if not _is_protective(order) or not same_symbol(position.get("symbol"), order.get("symbol")):
         return False
     position_side = str(position.get("side", "long")).lower()
     order_side = str(order.get("side", "")).lower()
@@ -70,7 +66,7 @@ def _vault_symbols(bot_id: str) -> set[str]:
                     "SELECT symbol FROM per_bot_vault_holdings WHERE bot_id = %s",
                     (bot_id,),
                 )
-                return {_normalize_symbol(row[0]) for row in cur.fetchall()}
+                return {canonical_symbol(row[0]) for row in cur.fetchall()}
     except Exception as exc:
         logger.warning(f"Kill switch | vault holdings lookup failed for {bot_id}: {exc}")
         return set()
@@ -104,7 +100,7 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
         if qty < DUST_QTY:
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
-        if _normalize_symbol(position.get("symbol")) in vault_symbols:
+        if canonical_symbol(position.get("symbol")) in vault_symbols:
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         covered = any(_covers(position, order) for order in account.get("orders", []))

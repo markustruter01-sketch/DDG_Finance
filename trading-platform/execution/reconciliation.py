@@ -163,8 +163,13 @@ def collect_live_snapshot() -> dict[str, Any]:
 
 
 def reconcile(report_only: bool = False) -> dict[str, Any]:
-    from core.kill_switch import evaluate_snapshot, report, trip
+    from core.kill_switch import evaluate_snapshot, report, trip, _load_acknowledgements
     snapshot = collect_live_snapshot()
+    acknowledgements = _load_acknowledgements()
+    for account in snapshot["accounts"]:
+        account["deployment_acknowledged"] = (
+            f"deployment:{account['bot_id']}" in acknowledgements
+        )
     flags = evaluate_snapshot(snapshot)
     clean = not snapshot["mismatches"] and not flags
     public_snapshot = {

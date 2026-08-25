@@ -231,6 +231,20 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info("Scheduler | Registered: nightly_fleet_equity_snapshot (daily 19:00 ET)")
 
+    scheduler.add_job(
+        func=_daily_bot_returns_snapshot,
+        trigger=CronTrigger(
+            hour=20,
+            minute=15,
+            timezone="UTC",
+        ),
+        id="daily_bot_returns_snapshot",
+        name="Daily Per-Bot Return Series (20:15 UTC)",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 UTC)")
+
     # Per-bot vault jobs are fail-closed by PER_BOT_VAULT_ENABLED. They are
     # registered in development so the schedule is visible, but do nothing
     # while the vault remains inactive.
@@ -611,6 +625,20 @@ async def _per_bot_vault_deployment() -> None:
         logger.info(f"Scheduler | per_bot_vault_deployment: {result.get('status')}")
     except Exception as exc:
         logger.error(f"Scheduler | per_bot_vault_deployment FAILED: {exc}")
+
+
+async def _daily_bot_returns_snapshot() -> None:
+    """Record all active bots without ever writing a partial fleet."""
+    try:
+        from analysis.research_ledger import (
+            ensure_research_tables,
+            snapshot_daily_returns,
+        )
+        await asyncio.to_thread(ensure_research_tables)
+        result = await asyncio.to_thread(snapshot_daily_returns)
+        logger.info(f"Scheduler | daily_bot_returns_snapshot: {result.get('status')}")
+    except Exception as exc:
+        logger.error(f"Scheduler | daily_bot_returns_snapshot FAILED: {exc}")
 
 
 async def _per_bot_vault_quarterly_rebalance() -> None:

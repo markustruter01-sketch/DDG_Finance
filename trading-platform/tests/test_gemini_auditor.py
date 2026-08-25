@@ -424,14 +424,17 @@ class TestRunDailySelfCritic(unittest.TestCase):
     def test_missing_env_var_skips(self):
         from analysis import gemini_auditor
 
-        saved = os.environ.pop("GOOGLE_GEMINI_API_KEY", None)
+        saved_google = os.environ.pop("GOOGLE_GEMINI_API_KEY", None)
+        saved_integration = os.environ.pop("AI_INTEGRATIONS_GEMINI_API_KEY", None)
         try:
             result = gemini_auditor.run_daily_self_critic()
             self.assertEqual(result["status"], "skipped")
             self.assertEqual(result["reason"], "env_vars_missing")
         finally:
-            if saved:
-                os.environ["GOOGLE_GEMINI_API_KEY"] = saved
+            if saved_google:
+                os.environ["GOOGLE_GEMINI_API_KEY"] = saved_google
+            if saved_integration:
+                os.environ["AI_INTEGRATIONS_GEMINI_API_KEY"] = saved_integration
 
     def test_invalid_gemini_json_fails_open(self):
         from analysis import gemini_auditor

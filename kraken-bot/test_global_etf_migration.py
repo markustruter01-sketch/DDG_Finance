@@ -57,4 +57,50 @@ def test_flatten_refuses_position_without_covered_protective_stop():
         }],
     }
     with pytest.raises(migration.MigrationError, match="floor\\(position_qty\\)=2"):
-        migration.flatten_account(client, snapshot)
+        migration.flatten_account(client, snapshot, "bot1_global")
+
+
+def test_flatten_cancels_and_confirms_stop_before_selling(monkeypatch):
+    events = []
+
+    client = SimpleNamespace(
+        get_clock=lambda: SimpleNamespace(is_open=True),
+        submit_order=lambda order_data: (
+            events.append("sell_submitted")
+            or SimpleNamespace(id="sell-1")
+        ),
+    )
+    snapshot = {
+        "positions": [{"symbol": "SPY", "qty": 2.0}],
+        "open_orders": [{
+            "id": "stop-1",
+            "symbol": "SPY",
+            "side": "sell",
+            "type": "stop",
+            "qty": 2.0,
+            "stop_price": 450.0,
+        }],
+    }
+
+    def cancel_and_confirm(*args, **kwargs):
+        events.extend(["stop_cancel_requested", "stop_cancel_confirmed"])
+
+    def sell_and_confirm(*args, **kwargs):
+        events.append("sell_filled")
+        return SimpleNamespace(
+            status="filled",
+            filled_qty="2",
+            filled_avg_price="500",
+        )
+
+    monkeypatch.setattr(migration, "_wait_cancelled", cancel_and_confirm)
+    monkeypatch.setattr(migration, "_wait_sell_filled", sell_and_confirm)
+
+    migration.flatten_account(client, snapshot, "bot1_global")
+
+    assert events == [
+        "stop_cancel_requested",
+        "stop_cancel_confirmed",
+        "sell_submitted",
+        "sell_filled",
+    ]

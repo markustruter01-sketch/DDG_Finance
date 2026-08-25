@@ -60,6 +60,22 @@ def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
     return order_side == expected and float(order.get("qty") or 0) + DUST_QTY >= abs(float(position.get("qty") or 0))
 
 
+def _vault_symbols(bot_id: str) -> set[str]:
+    """Return vault-owned symbols from the durable vault holdings table."""
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT symbol FROM per_bot_vault_holdings WHERE bot_id = %s",
+                    (bot_id,),
+                )
+                return {_normalize_symbol(row[0]) for row in cur.fetchall()}
+    except Exception as exc:
+        logger.warning(f"Kill switch | vault holdings lookup failed for {bot_id}: {exc}")
+        return set()
+
+
 def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[dict[str, Any]]:
     """Return trigger records for one normalized account snapshot."""
     now = _now() if now is None else now
@@ -82,9 +98,13 @@ def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[
             "detail": f"deployed={deployed_pct:.4f} max={max_deployment:.4f} tolerance=0.05",
         })
 
+    vault_symbols = _vault_symbols(bot_id)
     for position in account.get("positions", []):
         qty = abs(float(position.get("qty") or 0))
         if qty < DUST_QTY:
+            _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
+            continue
+        if _normalize_symbol(position.get("symbol")) in vault_symbols:
             _state["missing_stop_since"].pop(f"{bot_id}:{position.get('symbol')}", None)
             continue
         covered = any(_covers(position, order) for order in account.get("orders", []))

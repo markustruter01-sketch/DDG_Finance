@@ -28,3 +28,4 @@
 - [Alpaca vault position separation](alpaca-vault-position-separation.md) — client order IDs do not split net same-symbol positions; track vault ownership and guard strategy closes.
 - [Test baseline and module patching](test-baseline-and-module-patching.md) — module reloads can split package attributes from class globals; patch the exact module object and keep a dated suite baseline.
 - [Pause-state fail closed](pause-state-fail-closed.md) — runner must enforce both static profile and canonical DB pause state; aliases need explicit rows during identity migrations.
+- [Live deleveraging ledger sync](live-delever-ledger-sync.md) — partial sells require matching execution-ledger quantity and replacement stop ID before worker restart.

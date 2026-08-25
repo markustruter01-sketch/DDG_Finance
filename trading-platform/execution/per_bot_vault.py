@@ -294,6 +294,19 @@ def _submit_vault_buy(bot_id: str, symbol: str, notional: float, queue_id: str) 
     if not key or not secret:
         raise RuntimeError(f"missing account credentials for {bot_id}")
     client = TradingClient(key, secret, paper=True)
+    cash = float(client.get_account().cash or 0)
+    if cash - float(notional) < 0:
+        logger.critical(
+            f"PerBotVault | insufficient cash — skipping {bot_id}/{symbol} "
+            f"purchase=${float(notional):.2f} cash=${cash:.2f}; "
+            "leaving pending cash untouched"
+        )
+        return {
+            "status": "skipped",
+            "reason": "insufficient_cash",
+            "cash": cash,
+            "notional": round(float(notional), 2),
+        }
     client_id = f"{VAULT_ORDER_PREFIX}{bot_id[:5]}-{queue_id}-{symbol.lower()}"
     order = client.submit_order(
         MarketOrderRequest(
@@ -459,6 +472,9 @@ def run_deployment_cycle(*, market_open: bool, minimum_notional: float = MIN_TRA
             try:
                 order = _submit_vault_buy(bot_id, symbol, amount, f"{attempts + 1}-{symbol.lower()}")
                 results.append({"bot_id": bot_id, "symbol": symbol, "status": "submitted", **order})
+                if order.get("status") == "skipped":
+                    results[-1]["status"] = "skipped"
+                    continue
                 column = "bil_order_id" if symbol == VAULT_BIL_SYMBOL else "voo_order_id"
                 with get_conn() as conn:
                     with conn.cursor() as cur:

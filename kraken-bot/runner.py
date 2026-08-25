@@ -105,6 +105,8 @@ BOTS = [
     ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),
 ]
 
+FAILURE_ALERT_EVERY = 3
+
 # Per-bot status tracker for health endpoint
 _bot_status: dict[str, dict] = {}
 _status_lock = threading.Lock()
@@ -336,6 +338,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     bot_id,
                     status="paused",
                     pause_source="profile" if profile_paused else "database",
+                    consecutive_errors=0,
                 )
                 if _heartbeat_ok:
                     try:
@@ -353,7 +356,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                 _update_status(bot_id, status="running",
                                last_cycle_duration_seconds=round(cycle_duration, 2),
                                last_cycle_end=datetime.now(timezone.utc).isoformat(),
-                               error=None)
+                               error=None, consecutive_errors=0)
                 consecutive_errors = 0
 
                 if _heartbeat_ok:
@@ -371,6 +374,35 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
             logger.error(f"[{bot_id}] Cycle {cycle_count} failed (consecutive={consecutive_errors}): {exc}\n{tb}")
             _update_status(bot_id, status="error", error=str(exc),
                            consecutive_errors=consecutive_errors)
+            if consecutive_errors >= FAILURE_ALERT_EVERY and consecutive_errors % FAILURE_ALERT_EVERY == 0:
+                failure_message = (
+                    f"{bot_id} has failed {consecutive_errors} consecutive cycles. "
+                    f"Latest error: {exc}"
+                )
+                logger.critical(f"RUNNER DEGRADATION ALERT | {failure_message}")
+                try:
+                    from notifications.discord import alert_critical
+                    alert_critical(
+                        f"Bot degradation: {bot_id}",
+                        failure_message,
+                        fields=[
+                            {"name": "Bot", "value": bot_id, "inline": True},
+                            {"name": "Consecutive failures", "value": str(consecutive_errors), "inline": True},
+                        ],
+                    )
+                except Exception as alert_exc:
+                    logger.error(f"[{bot_id}] Discord degradation alert failed: {alert_exc}")
+                try:
+                    from core.degradation_tracker import record_exception
+                    record_exception(
+                        component="platform_core",
+                        severity="critical",
+                        error_type="bot_cycle_failure",
+                        message=f"{bot_id} consecutive cycle failures={consecutive_errors}",
+                        exc=exc,
+                    )
+                except Exception as degradation_exc:
+                    logger.error(f"[{bot_id}] degradation record failed: {degradation_exc}")
             if _heartbeat_ok:
                 try:
                     _bs_touch(_bs_normalise(bot_id) or bot_id, status="error", error=str(exc)[:200])

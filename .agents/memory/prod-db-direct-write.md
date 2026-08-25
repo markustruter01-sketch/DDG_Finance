@@ -6,6 +6,9 @@ description: How to write to the production PostgreSQL database from the dev env
 ## The rule
 `NEON_DATABASE_URL` in the bash/workflow process environment is the **production** Neon PostgreSQL database.
 `DATABASE_URL` (host=helium) is the **dev** database — separate instance with different data.
+Vault ownership rows are production-resident, so safety readers that classify
+vault positions must query the Neon vault table rather than trusting an empty
+dev copy.
 
 `executeSql({ environment: "production" })` reads from prod but is **read-only** (Replit enforces this).
 
@@ -28,3 +31,6 @@ Run via `bash` tool (not `code_execution` — that sandbox does NOT have access 
 The trading-api dev workflow connects to DATABASE_URL (dev DB). ensure_schema() migrations applied there do NOT touch prod. Phase J was first mistakenly applied to dev, then corrected by running psycopg2 directly against NEON_DATABASE_URL.
 
 **How to apply:** Any time you need to run a one-off SQL fix against production without deploying, use this pattern. Verify with `executeSql(environment:"production")` read before and after.
+
+**Why:** A dev-side vault lookup returned no rows even though production had the
+three active bot vaults, causing BIL/VOO to be misclassified as strategy positions.

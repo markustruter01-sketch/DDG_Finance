@@ -22,6 +22,7 @@ import logging
 import math
 import os
 import sys
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -763,12 +764,30 @@ def run_bot3_cycle(
 
 def dry_run_cycle() -> dict[str, Any]:
     """Simulate an empty post-migration account without touching Alpaca."""
-    cycle_id = "dry-run-bot3"
-    ensure_bot3_tables()
-    closes = _load_recent_closes()
+    # Exercise the same per-cycle UUID path used by live cycles without
+    # constructing a broker client or submitting any orders.
+    cycle_id = uuid.uuid4().hex
+    try:
+        closes = _load_recent_closes()
+        data_source = "validated database price tables"
+    except RuntimeError as exc:
+        # The dry-run must remain a deterministic offline harness.  Do not
+        # silently turn missing research data into live behavior: announce the
+        # synthetic fixture and never call ensure_schema or an Alpaca client.
+        logger.warning(f"Bot 3 dry-run data unavailable: {exc}; using synthetic fixture")
+        bases = {"BTC/USD": 60_000.0, "ETH/USD": 2_000.0, "GLD": 400.0, "SLV": 30.0}
+        closes = {
+            symbol: [
+                base * (1.0 + 0.0005 * ((index % 7) - 3))
+                for index in range(VOL_LOOKBACK + 1)
+            ]
+            for symbol, base in bases.items()
+        }
+        data_source = "deterministic synthetic fixture"
     targets, volatility = inverse_vol_targets(closes)
     account = {"equity": 100_000.0, "cash": 100_000.0, "buying_power": 100_000.0}
     positions: list[dict[str, Any]] = []
+    print(f"DRY_RUN_CYCLE | cycle_id={cycle_id} | data={data_source} | completed_without_exception")
     print("DRY_RUN_ACCOUNT | post-migration empty strategy account | equity=$100,000.00 | positions=0")
     print("DRY_RUN_DATE | first quarterly trading day | metal_session=open required")
     print("DRY_RUN_TARGETS | " + " | ".join(f"{symbol}={targets[symbol]:.2%}" for symbol in ASSETS))

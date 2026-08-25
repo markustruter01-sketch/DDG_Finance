@@ -53,6 +53,7 @@ from alpaca_etf_engine import (  # noqa: E402
     calculate_atr,
     _yahoo_daily_ohlcv,
 )
+from core.symbols import canonical_symbol
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -498,20 +499,35 @@ def run_asia_cycle(profile: dict, db_id: int) -> None:
     logger.info("Asia | === ENTRY SCAN (pre-close window) ===")
     _last_entry_scan_date = datetime.now(timezone.utc).date()
 
-    # Exclude SGOV cash-park from position counts, deployment math, and corr-cap.
-    # This must happen AFTER the empty-response guard so that a SGOV-only account
-    # doesn't falsely trigger the guard (Alpaca returning only SGOV ≠ API empty).
-    from sgov_parking import filter_alpha_positions as _filter_alpha
-    live_positions = _filter_alpha(live_positions)
+    # Exclude database-tagged vault holdings and dust from position counts,
+    # deployment math, and correlation-cap inputs.  This deliberately reuses
+    # the kill-switch's durable per_bot_vault_holdings lookup rather than
+    # maintaining a hardcoded BIL/VOO list in the strategy.
+    from core.kill_switch import DUST_QTY, _vault_symbols
+    vault_symbols = _vault_symbols(BOT_ID)
+    live_positions = [
+        position for position in live_positions
+        if abs(float(position.get("qty", 0) or 0)) >= DUST_QTY
+        and canonical_symbol(position.get("symbol")) not in vault_symbols
+    ]
 
     # Position cap
     current_count  = len(live_positions)
-    currently_held = {p["symbol"] for p in live_positions}
+    currently_held = {canonical_symbol(p["symbol"]) for p in live_positions}
 
     # Deployment guard
     deployed_notional = sum(p.get("market_value", 0) for p in live_positions)
     deployed_pct      = deployed_notional / equity if equity > 0 else 1.0
     planned_deployment_pct = deployed_pct
+    remaining_slots = max(0, max_positions - current_count)
+    sizing_reachable = remaining_slots > 0 and deployed_pct < max_deployment
+    logger.info(
+        f"Asia | ENTRY CONFIG | VOL_CAP={vol_cap:.2%} "
+        f"MAX_DEPLOYMENT={max_deployment:.2%} "
+        f"strategy_positions={current_count} remaining_slots={remaining_slots} "
+        f"deployment={deployed_pct:.2%} candidate_sizing_reachable={sizing_reachable} "
+        f"vault_symbols={sorted(vault_symbols)} dust_threshold={DUST_QTY:g}"
+    )
     if deployed_pct >= max_deployment:
         logger.info(
             f"Asia | Deployment cap reached: {deployed_pct:.1%} >= {max_deployment:.0%} — "

@@ -58,12 +58,16 @@ kind = "web"
   localPort = 8085
 
   [services.development]
-  run = "cd /home/runner/workspace/kraken-bot && python3 runner.py"
+  run = "env RUNNER_EXECUTION_MODE=read_only RUNNER_ENVIRONMENT=dev bash -c 'cd /home/runner/workspace/kraken-bot && exec python3 runner.py'"
 
   [services.production]
 
   [services.production.run]
-  args = ["bash", "-c", "cd kraken-bot && python3 runner.py"]
+  args = ["bash", "-c", "cd kraken-bot && exec python3 runner.py"]
+
+  [services.production.run.env]
+  RUNNER_EXECUTION_MODE = "live"
+  RUNNER_ENVIRONMENT = "published"
 
   [services.env]
   PORT = "8085"

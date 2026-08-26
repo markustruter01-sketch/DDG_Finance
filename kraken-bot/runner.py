@@ -91,6 +91,24 @@ except ImportError:
     _bs_write_portfolio = lambda *a, **k: None  # noqa: E731
     _portfolio_write_ok = False
 
+try:
+    from core.runner_lock import (
+        claim_lock as _claim_runner_lock,
+        ensure_lock_table as _ensure_runner_lock_table,
+        list_locks as _list_runner_locks,
+        refresh_lock as _refresh_runner_lock,
+        release_locks as _release_runner_locks,
+    )
+    _runner_lock_import_ok = True
+except Exception as _lock_exc:
+    logger.critical(f"Runner | ownership lock unavailable: {_lock_exc}")
+    _runner_lock_import_ok = False
+    _claim_runner_lock = None
+    _ensure_runner_lock_table = None
+    _list_runner_locks = None
+    _refresh_runner_lock = None
+    _release_runner_locks = None
+
 # Bot registry: (canonical_bot_id, leaf_module_name, leaf_function_name).
 # Each registered strategy is checked against its profile and canonical DB row
 # before any cycle thread is allowed to start.
@@ -105,6 +123,21 @@ BOTS = [
     ("jerome_macro",  "bot3_hard_assets_strategy", "run_bot3_cycle"),
     ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),
 ]
+
+RUNNER_ENVIRONMENT = os.environ.get(
+    "RUNNER_ENVIRONMENT",
+    "published" if os.environ.get("REPLIT_DEPLOYMENT") == "1" else "dev",
+)
+RUNNER_EXECUTION_MODE = os.environ.get("RUNNER_EXECUTION_MODE", "read_only").lower()
+if RUNNER_EXECUTION_MODE not in {"live", "read_only"}:
+    logger.critical(
+        f"Runner | invalid RUNNER_EXECUTION_MODE={RUNNER_EXECUTION_MODE!r}; "
+        "failing closed as read_only"
+    )
+    RUNNER_EXECUTION_MODE = "read_only"
+_runner_can_trade = RUNNER_EXECUTION_MODE == "live"
+_runner_lock_ready = False
+_owned_lock_bot_ids: set[str] = set()
 
 FAILURE_ALERT_EVERY = 3
 API_LIVENESS_INTERVAL_SECONDS = 60
@@ -128,6 +161,127 @@ _api_liveness: dict[str, object] = {
 }
 _shutdown_event = threading.Event()
 _pause_alignment_ok = True
+
+
+def _canonical_lock_bot_id(bot_id: str) -> str:
+    try:
+        return _bs_normalise(bot_id) or bot_id
+    except Exception:
+        return bot_id
+
+
+def _lock_interval_seconds(bot_id: str) -> float:
+    profile = BOT_PROFILES.get(bot_id, {})
+    return max(60.0, float(profile.get("LOOP_SLEEP_SECONDS", 3600)))
+
+
+def _log_runner_locks(prefix: str) -> None:
+    if not _runner_lock_import_ok or _list_runner_locks is None:
+        logger.critical(f"Runner lock | {prefix} | lock module unavailable")
+        return
+    try:
+        locks = _list_runner_locks()
+        if not locks:
+            logger.info(f"Runner lock | {prefix} | no lock rows")
+        for lock in locks:
+            logger.info(
+                f"Runner lock | {prefix} | bot={lock['bot_id']} "
+                f"environment={lock['environment']} pid={lock['pid']} "
+                f"heartbeat={lock['heartbeat_at']}"
+            )
+    except Exception as exc:
+        logger.critical(f"Runner lock | {prefix} | could not read locks: {exc}")
+
+
+def _prepare_runner_locks() -> bool:
+    """Claim all live bot leases before any strategy thread can trade."""
+    global _runner_lock_ready
+
+    if not _runner_lock_import_ok or _ensure_runner_lock_table is None:
+        logger.critical("Runner lock | fail closed: lock module unavailable")
+        return False
+    try:
+        table_ready = _ensure_runner_lock_table()
+    except Exception as exc:
+        logger.critical(f"Runner lock | fail closed: table bootstrap failed: {exc}")
+        return False
+    if not table_ready:
+        logger.critical("Runner lock | fail closed: PostgreSQL unavailable")
+        return False
+
+    _log_runner_locks("before-claim")
+    if not _runner_can_trade:
+        logger.warning(
+            f"Runner | execution mode={RUNNER_EXECUTION_MODE}; "
+            "this process is read-only and will not claim trading leases"
+        )
+        return True
+
+    claimed: list[str] = []
+    try:
+        for bot_id, _module_name, _fn_name in BOTS:
+            lock_bot_id = _canonical_lock_bot_id(bot_id)
+            result = _claim_runner_lock(
+                lock_bot_id,
+                RUNNER_ENVIRONMENT,
+                os.getpid(),
+                3 * _lock_interval_seconds(bot_id),
+            )
+            if not result.get("owned"):
+                holder = result.get("lock") or {}
+                logger.critical(
+                    f"Runner lock | REFUSED | bot={lock_bot_id} "
+                    f"holder_environment={holder.get('environment', 'unknown')} "
+                    f"holder_pid={holder.get('pid', 'unknown')} "
+                    f"holder_heartbeat={holder.get('heartbeat_at', 'unknown')}"
+                )
+                if _release_runner_locks is not None and claimed:
+                    _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
+                _owned_lock_bot_ids.clear()
+                return False
+            claimed.append(lock_bot_id)
+            _owned_lock_bot_ids.add(lock_bot_id)
+            lock = result.get("lock") or {}
+            logger.info(
+                f"Runner lock | CLAIMED | bot={lock_bot_id} "
+                f"environment={lock.get('environment')} pid={lock.get('pid')} "
+                f"heartbeat={lock.get('heartbeat_at')}"
+            )
+        _runner_lock_ready = True
+        _log_runner_locks("after-claim")
+        return True
+    except Exception as exc:
+        logger.critical(f"Runner lock | fail closed during claim: {exc}")
+        if _release_runner_locks is not None and claimed:
+            try:
+                _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
+            except Exception as release_exc:
+                logger.critical(f"Runner lock | release after failed claim failed: {release_exc}")
+        _owned_lock_bot_ids.clear()
+        return False
+
+
+def _refresh_bot_lock(bot_id: str) -> bool:
+    if not _runner_can_trade:
+        return True
+    if not _runner_lock_ready or _refresh_runner_lock is None:
+        logger.critical(f"[{bot_id}] Runner lock not ready — refusing to trade")
+        return False
+    lock_bot_id = _canonical_lock_bot_id(bot_id)
+    try:
+        owned = _refresh_runner_lock(
+            lock_bot_id,
+            RUNNER_ENVIRONMENT,
+            os.getpid(),
+        )
+    except Exception as exc:
+        logger.critical(f"[{bot_id}] Runner lock heartbeat failed: {exc}")
+        return False
+    if not owned:
+        logger.critical(
+            f"[{bot_id}] Runner lock ownership lost — refusing further trading"
+        )
+    return owned
 
 try:
     from core.bot_liveness import write_cycle as _write_cycle_liveness
@@ -417,6 +571,10 @@ def _probe_trading_api() -> None:
 def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
     """Per-bot thread entry point. Loops cycle function with sleep + error handling."""
     logger.info(f"[{bot_id}] Thread starting...")
+    if _runner_can_trade and _canonical_lock_bot_id(bot_id) not in _owned_lock_bot_ids:
+        logger.critical(f"[{bot_id}] Runner lock refused — strategy thread will not trade")
+        _update_status(bot_id, status="lock_refused", error="runner_lock_not_owned")
+        return
     if not _pause_alignment_ok:
         logger.critical(f"[{bot_id}] Startup pause alignment failed — refusing to run")
         _update_status(bot_id, status="paused", pause_source="alignment_assertion")
@@ -462,12 +620,26 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
             _update_status(bot_id, status="running", cycle_count=cycle_count,
                            last_cycle_start=cycle_started_at.isoformat())
 
+            if not _refresh_bot_lock(bot_id):
+                _update_status(bot_id, status="lock_lost", error="runner_lock_lost")
+                return
+
             # Fail closed on either pause source.  The static profile guard is
             # retained for defense in depth, while bots_state lets the
             # platform pause a runner without relying on a legacy alias.
             db_paused = _bs_is_paused(bot_id) if _heartbeat_ok else False
             profile_paused = bool(profile.get("BOT_PAUSED", False))
-            if profile_paused or db_paused:
+            if not _runner_can_trade:
+                logger.info(
+                    f"[{bot_id}] Read-only runner — skipping strategy cycle"
+                )
+                _update_status(
+                    bot_id,
+                    status="read_only",
+                    consecutive_errors=0,
+                    error=None,
+                )
+            elif profile_paused or db_paused:
                 logger.info(
                     f"[{bot_id}] Paused — "
                     f"profile={profile_paused} database={db_paused}; skipping cycle"
@@ -513,6 +685,10 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
 
                 # Write live Alpaca state to bot_portfolio (Stage 2 unification)
                 _write_portfolio_from_alpaca(bot_id, profile)
+
+            if not _refresh_bot_lock(bot_id):
+                _update_status(bot_id, status="lock_lost", error="runner_lock_lost")
+                return
 
         except Exception as exc:
             consecutive_errors += 1
@@ -565,6 +741,9 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                     _bs_touch(_bs_normalise(bot_id) or bot_id, status="error", error=str(exc)[:200])
                 except Exception:
                     pass
+            if _runner_can_trade and not _refresh_bot_lock(bot_id):
+                _update_status(bot_id, status="lock_lost", error="runner_lock_lost")
+                return
 
         # Exponential backoff on repeated errors (capped at 8x sleep)
         backoff_multiplier = min(2 ** min(consecutive_errors, 3), 8) if consecutive_errors else 1
@@ -596,6 +775,10 @@ class _HealthHandler(BaseHTTPRequestHandler):
             payload = {
                 "service": "kraken-bot-runner",
                 "uptime_seconds": int(time.time() - _start_time),
+                "environment": RUNNER_ENVIRONMENT,
+                "execution_mode": RUNNER_EXECUTION_MODE,
+                "lock_ready": _runner_lock_ready,
+                "owned_lock_bot_ids": sorted(_owned_lock_bot_ids),
                 "bots": dict(_bot_status),
                 "bot_count": len(_bot_status),
                 "trading_api_liveness": dict(_api_liveness),
@@ -632,6 +815,8 @@ def main():
     global _pause_alignment_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
+
+    _prepare_runner_locks()
 
     logger.info("=" * 60)
     logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
@@ -680,6 +865,12 @@ def main():
     logger.info("Runner | Shutting down all bot threads...")
     for t in threads:
         t.join(timeout=10)
+    if _runner_lock_ready and _release_runner_locks is not None:
+        try:
+            released = _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
+            logger.info(f"Runner lock | released={released} environment={RUNNER_ENVIRONMENT}")
+        except Exception as exc:
+            logger.critical(f"Runner lock | release failed: {exc}")
     logger.info("Runner | All threads stopped. Goodbye.")
 
 

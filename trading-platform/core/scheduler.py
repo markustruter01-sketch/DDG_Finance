@@ -45,6 +45,18 @@ from execution.kill_switch import reset as ks_reset, check as ks_check, is_tripp
 _scheduler: AsyncIOScheduler | None = None
 _auto_trading_enabled: bool = True
 _last_reset_date: date | None = None
+_runner_liveness_failures: int = 0
+_runner_liveness_alerted: bool = False
+RUNNER_HEALTH_URL = os.environ.get(
+    "RUNNER_HEALTH_URL",
+    "http://127.0.0.1:8085/health",
+)
+RUNNER_HEALTH_TIMEOUT_SECONDS = float(
+    os.environ.get("RUNNER_HEALTH_TIMEOUT_SECONDS", "5")
+)
+RUNNER_HEALTH_FAILURE_THRESHOLD = int(
+    os.environ.get("RUNNER_HEALTH_FAILURE_THRESHOLD", "3")
+)
 
 def _is_published_deployment() -> bool:
     """True only in a Replit published deployment, never in a dev workflow."""
@@ -120,6 +132,24 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         misfire_grace_time=600,
     )
     logger.info("Scheduler | Registered: automated_kill_switch (5 min) + scheduled_reconciliation (hourly)")
+
+    if _is_published_deployment():
+        scheduler.add_job(
+            func=_probe_runner_liveness,
+            trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
+                minutes=1
+            ),
+            id="published_runner_liveness",
+            name="Published Runner Liveness Probe",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=120,
+        )
+        logger.info(
+            f"Scheduler | Registered: published_runner_liveness (1 min, "
+            f"url={RUNNER_HEALTH_URL})"
+        )
 
     # ── ONE-TIME: oracle residual cleanup (2026-08-17 09:31 ET) ──────────────
     # Stage 3B left EMR/LMT/PRU in the oracle paper account. GTC stops were
@@ -344,6 +374,68 @@ async def _scheduled_reconciliation() -> None:
         )
     except Exception as exc:
         logger.critical(f"Scheduler | scheduled_reconciliation FAILED: {exc}")
+
+
+async def _probe_runner_liveness() -> None:
+    """Independent API-process probe for the separately hosted runner."""
+    global _runner_liveness_failures, _runner_liveness_alerted
+    try:
+        async with httpx.AsyncClient(timeout=RUNNER_HEALTH_TIMEOUT_SECONDS) as client:
+            response = await client.get(
+                RUNNER_HEALTH_URL,
+                headers={"User-Agent": "trading-api-runner-liveness"},
+            )
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            payload = response.json()
+            if payload.get("service") != "kraken-bot-runner":
+                raise RuntimeError("unexpected runner health payload")
+        recovered = _runner_liveness_failures > 0
+        _runner_liveness_failures = 0
+        if recovered:
+            logger.warning(
+                f"Scheduler | published runner liveness recovered: {RUNNER_HEALTH_URL}"
+            )
+        _runner_liveness_alerted = False
+    except Exception as exc:
+        _runner_liveness_failures += 1
+        logger.error(
+            f"Scheduler | published runner liveness failure "
+            f"{_runner_liveness_failures}/{RUNNER_HEALTH_FAILURE_THRESHOLD}: {exc}"
+        )
+        if (
+            _runner_liveness_failures >= RUNNER_HEALTH_FAILURE_THRESHOLD
+            and not _runner_liveness_alerted
+        ):
+            _runner_liveness_alerted = True
+            message = (
+                f"Published trading runner has failed "
+                f"{_runner_liveness_failures} consecutive health checks. "
+                f"URL: {RUNNER_HEALTH_URL}. Latest error: {exc}"
+            )
+            logger.critical(f"Scheduler | RUNNER LIVENESS ALERT | {message}")
+            try:
+                from notifications.discord import alert_critical
+                alert_critical(
+                    "Published trading runner unresponsive",
+                    message,
+                    fields=[
+                        {
+                            "name": "Consecutive failures",
+                            "value": str(_runner_liveness_failures),
+                            "inline": True,
+                        },
+                        {
+                            "name": "Probe timeout",
+                            "value": f"{RUNNER_HEALTH_TIMEOUT_SECONDS}s",
+                            "inline": True,
+                        },
+                    ],
+                )
+            except Exception as alert_exc:
+                logger.error(
+                    f"Scheduler | runner liveness alert failed: {alert_exc}"
+                )
 
 
 async def _deploy_hash_check() -> None:

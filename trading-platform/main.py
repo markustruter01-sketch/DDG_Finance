@@ -87,6 +87,13 @@ async def lifespan(app: FastAPI):
 
     _load_commentary_caches()
     logger.info("Commentary caches loaded from disk")
+    from core.database_authority import assert_database_authority
+    try:
+        assert_database_authority()
+        logger.info("Database authority assertion: PASS — DATABASE_URL")
+    except Exception as _db_authority_exc:
+        logger.critical(f"Database authority assertion: FAIL — {_db_authority_exc}")
+        raise
     from routes.entry_windows import assert_entry_window_alignment
     assert_entry_window_alignment()
 

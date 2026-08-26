@@ -94,12 +94,17 @@ async def _fetch_positions_by_bot() -> dict[str, dict[str, Any]]:
         if isinstance(result, Exception):
             errors.append(f"{bot_id}: {result}")
             continue
+        from core.kill_switch import _vault_symbols
+        vault_symbols = _vault_symbols(bot_id)
         by_bot[bot_id] = {
             "positions": result,
             "count": len(result),
             "strategy_count": sum(
                 1 for position in result
-                if not same_symbol(position["symbol"], "SGOV")
+                if (
+                    not same_symbol(position["symbol"], "SGOV")
+                    and canonical_symbol(position["symbol"]) not in vault_symbols
+                )
             ),
         }
 

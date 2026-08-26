@@ -609,11 +609,21 @@ def get_vault_report(bot_id: str | None = None) -> dict[str, Any]:
             cur.execute(
                 f"""
                 SELECT a.bot_id, a.activation_enabled, a.activation_equity,
-                       a.seed_amount, a.bil_qty, a.voo_qty, a.cash_usd,
+                       a.seed_amount,
+                       COALESCE(h.bil_qty, a.bil_qty) AS bil_qty,
+                       COALESCE(h.voo_qty, a.voo_qty) AS voo_qty,
+                       a.cash_usd,
                        a.cumulative_contributions, a.last_rebalance_date,
                        a.trading_capital AS trading_capital
                 FROM per_bot_vault_accounts a
                 LEFT JOIN bot_portfolio p ON p.bot_id = a.bot_id
+                LEFT JOIN (
+                    SELECT bot_id,
+                           SUM(qty) FILTER (WHERE symbol = 'BIL') AS bil_qty,
+                           SUM(qty) FILTER (WHERE symbol = 'VOO') AS voo_qty
+                    FROM per_bot_vault_holdings
+                    GROUP BY bot_id
+                ) h ON h.bot_id = a.bot_id
                 {where}
                 ORDER BY a.bot_id
                 """,

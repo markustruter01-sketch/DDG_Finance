@@ -69,15 +69,10 @@ def _covers(position: dict[str, Any], order: dict[str, Any]) -> bool:
 def _vault_symbols(bot_id: str) -> set[str]:
     """Return vault-owned symbols from the durable vault holdings table."""
     try:
-        # Vault activation/holdings are maintained in the authoritative Neon
-        # database, while the legacy platform DB may contain an empty table.
-        # Read the same durable source regardless of which DB backs the
-        # surrounding platform connection.
         import os
         import psycopg2
-        dsn = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL")
-        if not dsn:
-            raise RuntimeError("no database URL configured")
+        from core.database_authority import get_authoritative_dsn
+        dsn = get_authoritative_dsn()
         with psycopg2.connect(dsn) as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -86,8 +81,8 @@ def _vault_symbols(bot_id: str) -> set[str]:
                 )
                 return {canonical_symbol(row[0]) for row in cur.fetchall()}
     except Exception as exc:
-        logger.warning(f"Kill switch | vault holdings lookup failed for {bot_id}: {exc}")
-        return set()
+        logger.critical(f"Kill switch | vault holdings lookup failed for {bot_id}: {exc}")
+        raise
 
 
 def evaluate_account(account: dict[str, Any], now: float | None = None) -> list[dict[str, Any]]:

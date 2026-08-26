@@ -30,29 +30,18 @@ from statistics import stdev
 from typing import Any
 
 import requests
-import psycopg2
-
 _ROOT = Path(__file__).resolve().parents[1]
 _TRADING_PLATFORM = str(_ROOT / "trading-platform")
 if _TRADING_PLATFORM in sys.path:
     sys.path.remove(_TRADING_PLATFORM)
 sys.path.insert(0, _TRADING_PLATFORM)
+from db.postgres import get_conn as _platform_get_conn
 
 @contextmanager
 def get_conn():
-    """Bot 3 always uses the authoritative production database."""
-    dsn = os.environ.get("NEON_DATABASE_URL")
-    if not dsn:
-        raise RuntimeError("Bot 3 requires NEON_DATABASE_URL; refusing dev fallback")
-    conn = psycopg2.connect(dsn)
-    try:
+    """Use the platform's shared DATABASE_URL connection layer."""
+    with _platform_get_conn() as conn:
         yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
 
 logger = logging.getLogger("bot3.hard_assets")
 

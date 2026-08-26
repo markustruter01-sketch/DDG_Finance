@@ -30,3 +30,4 @@
 - [Pause-state fail closed](pause-state-fail-closed.md) — runner must enforce both static profile and canonical DB pause state; aliases need explicit rows during identity migrations.
 - [Live deleveraging ledger sync](live-delever-ledger-sync.md) — partial sells require matching execution-ledger quantity and replacement stop ID before worker restart.
 - [Client order ID uniqueness](client-order-id-uniqueness.md) — every Alpaca submission needs a bounded per-call UUID and one duplicate-ID retry.
+- [Vault DSN and holdings SSOT](vault-dsn-and-holdings-ssot.md) — runtime vault readers use DATABASE_URL and aggregate durable holdings rows, not denormalized account quantities.

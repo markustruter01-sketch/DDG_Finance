@@ -369,11 +369,8 @@ def reset_active_ledgers(final_snapshots: dict[str, dict[str, Any]]) -> None:
     because this safety command does not infer fills from market value; the
     migration operator can reconcile exact fill prices separately.
     """
-    # The live broker migration must reset the production ledger. DATABASE_URL
-    # is the development database in this workspace; Neon is production.
-    dsn = os.environ.get("NEON_DATABASE_URL") or os.environ.get("DATABASE_URL")
-    if not dsn:
-        raise MigrationError("DATABASE_URL is required for ledger reset")
+    from core.database_authority import get_authoritative_dsn
+    dsn = get_authoritative_dsn()
     try:
         import psycopg2
     except ImportError as exc:

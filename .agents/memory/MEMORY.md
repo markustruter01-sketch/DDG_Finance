@@ -32,3 +32,4 @@
 - [Client order ID uniqueness](client-order-id-uniqueness.md) — every Alpaca submission needs a bounded per-call UUID and one duplicate-ID retry.
 - [Vault DSN and holdings SSOT](vault-dsn-and-holdings-ssot.md) — runtime vault readers use DATABASE_URL and aggregate durable holdings rows, not denormalized account quantities.
 - [Current fleet monitoring](monitoring-current-fleet.md) — monitor canonical equity tables only; paused is PAUSED and empty active metrics are UNKNOWN/FAIL.
+- [Published/dev runner collision](published-dev-runner-collision.md) — the published VM also starts the runner; never run a dev runner concurrently without ownership protection.

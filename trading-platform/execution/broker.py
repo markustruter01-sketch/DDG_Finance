@@ -39,6 +39,7 @@ from loguru import logger
 from config.settings import settings
 from analysis.schemas import is_crypto_pair
 from execution.resilience import alpaca_retry
+from core.order_ids import submit_with_unique_client_order_id
 
 # ── Singleton client ────────────────────────────────────────────────────────
 _trading_client: TradingClient | None = None
@@ -155,20 +156,24 @@ def place_order(
     tif        = TimeInForce.GTC if is_crypto else TimeInForce.DAY
     symbol     = ticker.replace("/", "") if is_crypto else ticker
 
-    req = MarketOrderRequest(
-        symbol=symbol,
-        notional=round(notional_usd, 2),
-        side=order_side,
-        time_in_force=tif,
-    )
-
     logger.info(
         f"Broker | Placing {side.upper()} {ticker} ${notional_usd:,.2f} "
         f"(notional, market, TIF={tif.value})"
     )
 
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                MarketOrderRequest(
+                    symbol=symbol,
+                    notional=round(notional_usd, 2),
+                    side=order_side,
+                    time_in_force=tif,
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-entry-{ticker}",
+        )
         result = {
             "id":         str(order.id),
             "symbol":     order.symbol,
@@ -176,6 +181,7 @@ def place_order(
             "notional":   float(order.notional) if order.notional else notional_usd,
             "status":     order.status.value,
             "created_at": str(order.created_at),
+            "client_order_id": client_order_id,
         }
         logger.info(f"Broker | Order submitted: {result['id']} {ticker} status={result['status']}")
         return result
@@ -194,17 +200,21 @@ def place_stop_order(ticker: str, qty: float, stop_price: float) -> dict:
     symbol    = ticker.replace("/", "") if is_crypto else ticker
     tif       = TimeInForce.GTC
 
-    req = StopOrderRequest(
-        symbol=symbol,
-        qty=round(qty, 8),
-        side=OrderSide.SELL,
-        time_in_force=tif,
-        stop_price=round(stop_price, 2),   # Alpaca rejects sub-penny precision (code 42210000)
-    )
-
     logger.info(f"Broker | Stop-sell {ticker} qty={qty:.6f} stop=${stop_price:.4f} (GTC)")
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                StopOrderRequest(
+                    symbol=symbol,
+                    qty=round(qty, 8),
+                    side=OrderSide.SELL,
+                    time_in_force=tif,
+                    stop_price=round(stop_price, 2),
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-stop-{ticker}",
+        )
         result = {
             "id":         str(order.id),
             "symbol":     order.symbol,
@@ -212,6 +222,7 @@ def place_stop_order(ticker: str, qty: float, stop_price: float) -> dict:
             "stop_price": stop_price,
             "qty":        qty,
             "status":     order.status.value,
+            "client_order_id": client_order_id,
         }
         logger.info(f"Broker | Stop order placed: {result['id']} status={result['status']}")
         return result
@@ -284,19 +295,33 @@ def _get_latest_crypto_price(ticker: str) -> float | None:
 
 @alpaca_retry
 def close_position(ticker: str) -> dict:
-    """Close a position using Alpaca's close_position shortcut (TIF=day, equities only).
-    NOTE: day orders submitted when the market is closed are auto-cancelled by Alpaca.
-    Use close_position_gtc() for emergency / after-hours closures.
-    """
+    """Close a position with an explicitly tagged market order."""
     symbol = ticker.replace("/", "") if is_crypto_pair(ticker) else ticker
     logger.warning(f"Broker | Closing position (day): {ticker} (symbol={symbol})")
     try:
-        order: Order = _client().close_position(symbol)
+        position: Position = _client().get_open_position(symbol)
+        position_side = getattr(position.side, "value", str(position.side)).lower()
+        close_side = OrderSide.BUY if position_side == "short" else OrderSide.SELL
+        tif = TimeInForce.GTC if is_crypto_pair(ticker) else TimeInForce.DAY
+        qty = round(abs(float(position.qty)), 8)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                MarketOrderRequest(
+                    symbol=symbol,
+                    qty=qty,
+                    side=close_side,
+                    time_in_force=tif,
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-close-{ticker}",
+        )
         return {
             "id":     str(order.id),
             "symbol": order.symbol,
             "side":   order.side.value,
             "status": order.status.value,
+            "client_order_id": client_order_id,
         }
     except Exception as exc:
         logger.error(f"Broker | Failed to close {ticker}: {exc}")
@@ -320,18 +345,22 @@ def close_position_gtc(ticker: str) -> dict:
     qty = abs(float(position.qty))
 
     tif = TimeInForce.GTC  # persists over weekends / after-hours
-    req = MarketOrderRequest(
-        symbol=symbol,
-        qty=round(qty, 8),
-        side=OrderSide.SELL,
-        time_in_force=tif,
-    )
-
     logger.warning(
         f"Broker | Emergency close GTC: {ticker} qty={qty:.6f} TIF={tif.value}"
     )
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                MarketOrderRequest(
+                    symbol=symbol,
+                    qty=round(qty, 8),
+                    side=OrderSide.SELL,
+                    time_in_force=tif,
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-close-gtc-{ticker}",
+        )
         return {
             "id":     str(order.id),
             "symbol": order.symbol,
@@ -339,6 +368,7 @@ def close_position_gtc(ticker: str) -> dict:
             "qty":    qty,
             "status": order.status.value,
             "tif":    tif.value,
+            "client_order_id": client_order_id,
         }
     except Exception as exc:
         logger.error(f"Broker | GTC close failed for {ticker}: {exc}")
@@ -368,11 +398,21 @@ def cancel_order(order_id: str) -> bool:
 
 @alpaca_retry
 def close_all_positions() -> int:
+    """Close every position through the tagged explicit-order path."""
     logger.warning("Broker | Closing ALL positions (kill switch)")
-    closed = _client().close_all_positions(cancel_orders=True)
-    n = len(closed) if closed else 0
-    logger.warning(f"Broker | {n} positions closed")
-    return n
+    _client().cancel_orders()
+    positions: list[Position] = _client().get_all_positions()
+    closed = 0
+    for position in positions:
+        try:
+            close_position(position.symbol)
+            closed += 1
+        except Exception as exc:
+            logger.error(
+                f"Broker | Kill-switch close failed for {position.symbol}: {exc}"
+            )
+    logger.warning(f"Broker | {closed}/{len(positions)} positions closed")
+    return closed
 
 
 # ── Short Selling Primitives (Bear Engine v2.1) ────────────────────────────
@@ -418,15 +458,20 @@ def place_short_order(ticker: str, qty_int: int) -> dict:
     dict with id, symbol, side, qty, status.
     """
     qty = max(1, math.floor(qty_int))
-    req = MarketOrderRequest(
-        symbol=ticker,
-        qty=qty,
-        side=OrderSide.SELL_SHORT,
-        time_in_force=TimeInForce.DAY,
-    )
     logger.info(f"Broker | SHORT {ticker} qty={qty} (DAY market order)")
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                MarketOrderRequest(
+                    symbol=ticker,
+                    qty=qty,
+                    side=OrderSide.SELL_SHORT,
+                    time_in_force=TimeInForce.DAY,
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-short-{ticker}",
+        )
         result = {
             "id":         str(order.id),
             "symbol":     order.symbol,
@@ -434,6 +479,7 @@ def place_short_order(ticker: str, qty_int: int) -> dict:
             "qty":        qty,
             "status":     order.status.value,
             "created_at": str(order.created_at),
+            "client_order_id": client_order_id,
         }
         logger.info(f"Broker | Short order placed: {result['id']} {ticker} status={result['status']}")
         return result
@@ -457,15 +503,20 @@ def buy_to_cover(ticker: str, qty_int: int) -> dict:
     dict with id, symbol, side, qty, status.
     """
     qty = max(1, math.floor(qty_int))
-    req = MarketOrderRequest(
-        symbol=ticker,
-        qty=qty,
-        side=OrderSide.BUY,
-        time_in_force=TimeInForce.GTC,
-    )
     logger.info(f"Broker | BUY-TO-COVER {ticker} qty={qty} (GTC)")
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                MarketOrderRequest(
+                    symbol=ticker,
+                    qty=qty,
+                    side=OrderSide.BUY,
+                    time_in_force=TimeInForce.GTC,
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-cover-{ticker}",
+        )
         result = {
             "id":         str(order.id),
             "symbol":     order.symbol,
@@ -473,6 +524,7 @@ def buy_to_cover(ticker: str, qty_int: int) -> dict:
             "qty":        qty,
             "status":     order.status.value,
             "created_at": str(order.created_at),
+            "client_order_id": client_order_id,
         }
         logger.info(f"Broker | Cover order placed: {result['id']} {ticker} status={result['status']}")
         return result
@@ -500,16 +552,21 @@ def place_short_stop_order(ticker: str, qty_int: int, stop_price: float) -> dict
     dict with id, symbol, side, stop_price, qty, status.
     """
     qty = max(1, math.floor(qty_int))
-    req = StopOrderRequest(
-        symbol=ticker,
-        qty=qty,
-        side=OrderSide.BUY,
-        time_in_force=TimeInForce.GTC,
-        stop_price=round(stop_price, 4),
-    )
     logger.info(f"Broker | Short-stop BUY {ticker} qty={qty} stop=${stop_price:.4f} (GTC)")
     try:
-        order: Order = _client().submit_order(req)
+        order, client_order_id = submit_with_unique_client_order_id(
+            lambda generated_id: _client().submit_order(
+                StopOrderRequest(
+                    symbol=ticker,
+                    qty=qty,
+                    side=OrderSide.BUY,
+                    time_in_force=TimeInForce.GTC,
+                    stop_price=round(stop_price, 4),
+                    client_order_id=generated_id,
+                )
+            ),
+            f"broker-short-stop-{ticker}",
+        )
         result = {
             "id":         str(order.id),
             "symbol":     order.symbol,
@@ -517,6 +574,7 @@ def place_short_stop_order(ticker: str, qty_int: int, stop_price: float) -> dict
             "stop_price": stop_price,
             "qty":        qty,
             "status":     order.status.value,
+            "client_order_id": client_order_id,
         }
         logger.info(f"Broker | Short-stop order placed: {result['id']} status={result['status']}")
         return result

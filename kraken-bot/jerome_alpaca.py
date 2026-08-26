@@ -84,28 +84,53 @@ class JeromeAlpaca:
         tif = "day"
         logger.info(f"JeromeAlpaca | Submitting {alpaca_side.upper()} {symbol} notional=${notional:,.2f} tif={tif}")
         try:
-            order = self.api.submit_order(
-                symbol=symbol,
-                notional=round(notional, 2),
-                side=alpaca_side,
-                type="market",
-                time_in_force=tif,
+            from core.order_ids import submit_with_unique_client_order_id
+            order, client_order_id = submit_with_unique_client_order_id(
+                lambda generated_id: self.api.submit_order(
+                    symbol=symbol,
+                    notional=round(notional, 2),
+                    side=alpaca_side,
+                    type="market",
+                    time_in_force=tif,
+                    client_order_id=generated_id,
+                ),
+                f"jerome-entry-{symbol}",
             )
             logger.info(
                 f"JeromeAlpaca | ORDER PLACED: {side.upper()} {symbol} "
-                f"notional=${notional:,.2f} order_id={order.id}"
+                f"notional=${notional:,.2f} order_id={order.id} "
+                f"client_order_id={client_order_id}"
             )
             return {"order_id": order.id, "symbol": symbol,
-                    "side": side, "notional": notional}
+                    "side": side, "notional": notional,
+                    "client_order_id": client_order_id}
         except Exception as exc:
             logger.error(f"JeromeAlpaca | Order failed {side} {symbol}: {exc}")
             return None
 
     def close_position(self, symbol: str) -> bool:
-        """Close entire position in a symbol."""
+        """Close entire position with an explicitly tagged market order."""
         try:
-            self.api.close_position(symbol)
-            logger.info(f"JeromeAlpaca | CLOSED position: {symbol}")
+            from core.order_ids import submit_with_unique_client_order_id
+            position = self.api.get_position(symbol)
+            position_side = str(getattr(position, "side", "long")).lower()
+            close_side = "buy" if "short" in position_side else "sell"
+            qty = abs(float(position.qty))
+            _, client_order_id = submit_with_unique_client_order_id(
+                lambda generated_id: self.api.submit_order(
+                    symbol=symbol,
+                    qty=round(qty, 8),
+                    side=close_side,
+                    type="market",
+                    time_in_force="day",
+                    client_order_id=generated_id,
+                ),
+                f"jerome-exit-{symbol}",
+            )
+            logger.info(
+                f"JeromeAlpaca | CLOSED position: {symbol} "
+                f"client_order_id={client_order_id}"
+            )
             return True
         except Exception as exc:
             logger.error(f"JeromeAlpaca | Close failed {symbol}: {exc}")

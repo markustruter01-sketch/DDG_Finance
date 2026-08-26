@@ -407,7 +407,7 @@
     pointer-events: none;
     background-image:
       linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.10)),
-      url("/mobile-home-background.jpeg");
+      url("/phone-home-background.jpg");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -415,6 +415,8 @@
 
   .home-command-header {
     padding: 8px 12px 10px;
+    backdrop-filter: blur(10px) saturate(140%);
+    -webkit-backdrop-filter: blur(10px) saturate(140%);
   }
 
   .home-command-topline {

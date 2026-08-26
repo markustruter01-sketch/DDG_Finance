@@ -629,8 +629,19 @@ class AlpacaEtfEngine:
         """Alpaca only permits GTC equity stops for whole-share quantities."""
         return math.floor(abs(float(position_qty)))
 
-    def _store_stop_order_id(self, bot_id: str, symbol: str, order_id: str) -> None:
-        """Persist the broker stop ID for reconciliation; non-fatal if DB is down."""
+    def _store_stop_order_id(
+        self,
+        bot_id: str,
+        symbol: str,
+        order_id: str,
+        stop_price: Optional[float] = None,
+    ) -> None:
+        """Persist the broker stop reference for reconciliation.
+
+        ``ensure_protective_stop`` is also the restart-safe replacement path.
+        Persist both fields after every successful no-op, replacement, or fresh
+        placement so a broker-native change cannot leave stale ledger metadata.
+        """
         _ensure_tp()
         try:
             from db.postgres import get_conn, is_pg_available
@@ -638,16 +649,34 @@ class AlpacaEtfEngine:
                 return
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("""
-                        UPDATE alpaca_etf_positions
-                           SET stop_order_id = %s
-                         WHERE bot_id = %s
-                           AND symbol = %s
-                           AND status = 'open'
-                    """, (order_id, bot_id, symbol))
+                    if stop_price is None:
+                        cur.execute("""
+                            UPDATE alpaca_etf_positions
+                               SET stop_order_id = %s
+                             WHERE bot_id = %s
+                               AND symbol = %s
+                               AND status = 'open'
+                        """, (order_id, bot_id, symbol))
+                    else:
+                        cur.execute("""
+                            UPDATE alpaca_etf_positions
+                               SET stop_order_id = %s,
+                                   stop_price = %s
+                             WHERE bot_id = %s
+                               AND symbol = %s
+                               AND status = 'open'
+                        """, (order_id, stop_price, bot_id, symbol))
+                    if cur.rowcount != 1:
+                        logger.error(
+                            f"EtfEngine | Stop ledger update affected {cur.rowcount} "
+                            f"rows for {bot_id}/{symbol}"
+                        )
                 conn.commit()
         except Exception as exc:
-            logger.error(f"EtfEngine | Failed to persist stop ID for {bot_id}/{symbol}: {exc}")
+            logger.error(
+                f"EtfEngine | Failed to persist stop reference for "
+                f"{bot_id}/{symbol}: {exc}"
+            )
 
     @staticmethod
     def _stop_client_order_id(bot_id: str, symbol: str) -> str:
@@ -859,7 +888,9 @@ class AlpacaEtfEngine:
                     f"delta={stop_delta:.3%}"
                 )
                 if stop_delta <= 0.005:
-                    self._store_stop_order_id(bot_id, symbol, order.id)
+                    self._store_stop_order_id(
+                        bot_id, symbol, order.id, stop_price=order_stop
+                    )
                     logger.info(
                         f"EtfEngine | {symbol}: stop within 0.5% — "
                         "leaving existing stop untouched"
@@ -874,7 +905,9 @@ class AlpacaEtfEngine:
                         stop_price=broker_stop,
                         time_in_force="gtc",
                     )
-                    self._store_stop_order_id(bot_id, symbol, order.id)
+                    self._store_stop_order_id(
+                        bot_id, symbol, order.id, stop_price=broker_stop
+                    )
                     logger.info(
                         f"EtfEngine | PROTECTIVE STOP REPLACED: {symbol} "
                         f"qty={stop_qty} stop=${broker_stop:.2f} id={order.id}"
@@ -916,7 +949,9 @@ class AlpacaEtfEngine:
                 ),
                 f"etf-stop-{bot_id}-{symbol}",
             )
-            self._store_stop_order_id(bot_id, symbol, order.id)
+            self._store_stop_order_id(
+                bot_id, symbol, order.id, stop_price=broker_stop
+            )
             residual = position_qty - stop_qty
             residual_note = (
                 f" (fractional residual {residual:.8f} shares cannot use GTC)"

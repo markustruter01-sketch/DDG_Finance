@@ -182,14 +182,15 @@ def _restore_stop(
     symbol: str,
     qty: float,
     stop_price: float | None,
-) -> None:
+    bot_id: str | None = None,
+) -> str:
     """Restore coverage if an exit submission/fill cannot be confirmed."""
     if stop_price is None:
         raise MigrationError(f"cannot restore stop for {symbol}: no stop price")
     whole_qty = int(abs(qty))
     if whole_qty <= 0:
         raise MigrationError(f"cannot restore stop for {symbol}: no whole shares")
-    submit_with_unique_client_order_id(
+    order, _ = submit_with_unique_client_order_id(
         lambda client_order_id: client.submit_order(
             order_data=StopOrderRequest(
                 symbol=symbol,
@@ -202,6 +203,37 @@ def _restore_stop(
         ),
         f"etf-migration-protect-{symbol.lower()}",
     )
+    order_id = str(order.id)
+    if bot_id:
+        try:
+            from core.database_authority import get_authoritative_dsn
+            import psycopg2
+            with psycopg2.connect(get_authoritative_dsn()) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE alpaca_etf_positions
+                           SET stop_order_id = %s,
+                               stop_price = %s
+                         WHERE bot_id = %s
+                           AND symbol = %s
+                           AND status = 'open'
+                        """,
+                        (order_id, stop_price, bot_id, symbol),
+                    )
+                    if cur.rowcount != 1:
+                        raise MigrationError(
+                            f"restored stop ledger update affected {cur.rowcount} "
+                            f"rows for {bot_id}/{symbol}"
+                        )
+        except MigrationError:
+            raise
+        except Exception as exc:
+            raise MigrationError(
+                f"restored stop {order_id} could not be recorded for "
+                f"{bot_id}/{symbol}: {exc}"
+            ) from exc
+    return order_id
 
 
 def flatten_account(
@@ -327,7 +359,13 @@ def flatten_account(
                     for o in active_orders
                 )
                 if not still_covered:
-                    _restore_stop(client, symbol, float(current.qty), stop_price)
+                    _restore_stop(
+                        client,
+                        symbol,
+                        float(current.qty),
+                        stop_price,
+                        bot_id=LEDGER_BOTS.get(account_label),
+                    )
                     print(
                         json.dumps({
                             "event": "PROTECTION_RESTORED",

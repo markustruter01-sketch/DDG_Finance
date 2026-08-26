@@ -25,7 +25,7 @@ so it is torn down cleanly on shutdown.
 
 import asyncio
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytz
@@ -364,9 +364,14 @@ async def _automated_kill_switch() -> None:
 async def _scheduled_reconciliation() -> None:
     try:
         from execution.reconciliation import reconcile
+        cycle_id = (
+            f"reconciliation:"
+            f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
+        )
         result = await asyncio.to_thread(
             reconcile,
             report_only=not _kill_switch_enforced(),
+            cycle_id=cycle_id,
         )
         logger.info(
             f"Scheduler | scheduled_reconciliation: "

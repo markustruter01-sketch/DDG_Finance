@@ -233,9 +233,15 @@ def collect_live_snapshot() -> dict[str, Any]:
     }
 
 
-def reconcile(report_only: bool = False) -> dict[str, Any]:
+def reconcile(
+    report_only: bool = False,
+    cycle_id: str | None = None,
+) -> dict[str, Any]:
     from core.kill_switch import evaluate_snapshot, report, trip, _load_acknowledgements
     snapshot = collect_live_snapshot()
+    reconciliation_cycle_id = cycle_id or (
+        f"reconciliation:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}"
+    )
     acknowledgements = _load_acknowledgements()
     for account in snapshot["accounts"]:
         account["deployment_acknowledged"] = (
@@ -267,7 +273,42 @@ def reconcile(report_only: bool = False) -> dict[str, Any]:
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO reconciliation_log (clean, flags, snapshot) VALUES (%s,%s::jsonb,%s::jsonb)", (clean, json.dumps(flags, default=str), json.dumps(public_snapshot, default=str)))
                 if not clean:
-                    cur.execute("INSERT INTO system_degradations (component,severity,error_type,message,detail) VALUES (%s,%s,%s,%s,%s)", ("alpaca", "critical", "reconciliation_mismatch", "Broker/ledger reconciliation mismatch", json.dumps(flags, default=str)))
+                    grouped_flags: dict[tuple[str | None, str], list[dict[str, Any]]] = {}
+                    for flag in flags:
+                        raw_bot_id = flag.get("bot_id") if isinstance(flag, dict) else None
+                        if raw_bot_id:
+                            try:
+                                flag_bot_id = resolve_bot_id(str(raw_bot_id))
+                            except Exception:
+                                flag_bot_id = str(raw_bot_id)
+                        else:
+                            flag_bot_id = None
+                        flag_cycle_id = (
+                            flag.get("cycle_id")
+                            if isinstance(flag, dict) else None
+                        ) or reconciliation_cycle_id
+                        grouped_flags.setdefault(
+                            (flag_bot_id, str(flag_cycle_id)),
+                            [],
+                        ).append(flag)
+                    for (flag_bot_id, flag_cycle_id), flag_group in grouped_flags.items():
+                        cur.execute(
+                            """
+                            INSERT INTO system_degradations
+                                (component, severity, error_type, message, detail,
+                                 bot_id, cycle_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                "alpaca",
+                                "critical",
+                                "reconciliation_mismatch",
+                                "Broker/ledger reconciliation mismatch",
+                                json.dumps(flag_group, default=str),
+                                flag_bot_id,
+                                flag_cycle_id,
+                            ),
+                        )
     except Exception as exc:
         logger.critical(f"Reconciliation | persistence failed: {exc}")
     if not report_only and flags:

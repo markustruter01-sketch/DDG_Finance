@@ -671,11 +671,15 @@ class AlpacaEtfEngine:
         """Return True while an owned market exit could still reduce the position."""
         exit_prefix = self._exit_client_order_prefix(bot_id, symbol)
         try:
+            from core.order_ids import client_order_id_matches_prefix
             return any(
                 same_symbol(order.symbol, symbol)
                 and order.side == "sell"
                 and order.type == "market"
-                and str(getattr(order, "client_order_id", "")).startswith(exit_prefix)
+                and client_order_id_matches_prefix(
+                    getattr(order, "client_order_id", ""),
+                    exit_prefix,
+                )
                 for order in self.api.list_orders(status="open", limit=100, nested=True)
             )
         except Exception as exc:
@@ -701,13 +705,18 @@ class AlpacaEtfEngine:
 
         def _has_owner_prefix(order) -> bool:
             client_order_id = str(getattr(order, "client_order_id", "")).lower()
+            from core.order_ids import client_order_id_matches_prefix
             return (
-                client_order_id.startswith(
-                    f"etf-stop-{bot_id}-{symbol}".lower()
+                client_order_id_matches_prefix(
+                    client_order_id,
+                    f"etf-stop-{bot_id}-{symbol}",
                 )
                 or (
                     bot_id == "bot2_spy_qqq"
-                    and client_order_id.startswith(f"etf-protect-{symbol.lower()}-")
+                    and client_order_id_matches_prefix(
+                        client_order_id,
+                        f"etf-protect-{symbol}",
+                    )
                 )
             )
 

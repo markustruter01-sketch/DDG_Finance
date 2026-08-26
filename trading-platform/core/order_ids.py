@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -14,13 +15,40 @@ _logger = logging.getLogger(__name__)
 _ResultT = TypeVar("_ResultT")
 
 
-def make_client_order_id(prefix: str) -> str:
-    """Return a bounded, per-call unique Alpaca client order ID."""
-    suffix = uuid.uuid4().hex[:_UUID_FRAGMENT_LENGTH]
+def client_order_id_environment_tag() -> str:
+    """Return the short, fail-closed environment component for new IDs."""
+    environment = os.environ.get("RUNNER_ENVIRONMENT", "").strip().lower()
+    return {
+        "published": "pub",
+        "dev": "dev",
+    }.get(environment, "unk")
+
+
+def _bounded_prefix(prefix: str, environment_tag: str | None) -> str:
     prefix_text = str(prefix).strip().lower().strip("-")
-    max_prefix_length = ALPACA_CLIENT_ORDER_ID_MAX_LENGTH - len(suffix) - 1
-    bounded_prefix = prefix_text[:max_prefix_length]
+    if environment_tag:
+        prefix_text = f"{environment_tag}-{prefix_text}".strip("-")
+    max_prefix_length = ALPACA_CLIENT_ORDER_ID_MAX_LENGTH - _UUID_FRAGMENT_LENGTH - 1
+    return prefix_text[:max_prefix_length]
+
+
+def make_client_order_id(prefix: str) -> str:
+    """Return a bounded, tagged, per-call unique Alpaca client order ID."""
+    suffix = uuid.uuid4().hex[:_UUID_FRAGMENT_LENGTH]
+    bounded_prefix = _bounded_prefix(prefix, client_order_id_environment_tag())
     return f"{bounded_prefix}-{suffix}"
+
+
+def client_order_id_matches_prefix(client_order_id: str, prefix: str) -> bool:
+    """Match current tagged IDs while retaining ownership of legacy IDs."""
+    normalized_id = str(client_order_id or "").strip().lower()
+    current_prefix = _bounded_prefix(prefix, client_order_id_environment_tag())
+    if normalized_id.startswith(f"{current_prefix}-"):
+        return True
+    # Existing broker orders predate environment tagging. Keep them discoverable
+    # so stop/exit reconciliation does not create overlapping protection.
+    legacy_prefix = _bounded_prefix(prefix, None)
+    return normalized_id.startswith(f"{legacy_prefix}-")
 
 
 def is_duplicate_client_order_id_error(exc: BaseException) -> bool:

@@ -2,9 +2,47 @@ import pytest
 
 from core.order_ids import (
     ALPACA_CLIENT_ORDER_ID_MAX_LENGTH,
+    client_order_id_matches_prefix,
     make_client_order_id,
     submit_with_unique_client_order_id,
 )
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected_tag"),
+    (("published", "pub"), ("dev", "dev"), (None, "unk")),
+)
+def test_environment_tag_is_present_and_bounded(monkeypatch, environment, expected_tag):
+    if environment is None:
+        monkeypatch.delenv("RUNNER_ENVIRONMENT", raising=False)
+    else:
+        monkeypatch.setenv("RUNNER_ENVIRONMENT", environment)
+
+    generated = make_client_order_id("x" * 500)
+
+    assert generated.startswith(f"{expected_tag}-")
+    assert len(generated) <= ALPACA_CLIENT_ORDER_ID_MAX_LENGTH
+
+
+def test_longest_environment_tagged_id_fits_alpaca_limit(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "published")
+
+    generated = make_client_order_id("x" * 500)
+
+    assert len(generated) == ALPACA_CLIENT_ORDER_ID_MAX_LENGTH
+
+
+def test_tagged_and_legacy_prefixes_remain_matchable(monkeypatch):
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "dev")
+
+    assert client_order_id_matches_prefix(
+        make_client_order_id("etf-stop-oracle-SPY"),
+        "etf-stop-oracle-SPY",
+    )
+    assert client_order_id_matches_prefix(
+        "etf-stop-oracle-spy-1234567890abcdef",
+        "etf-stop-oracle-SPY",
+    )
 
 
 def test_identical_prefixes_get_distinct_ids():

@@ -555,6 +555,8 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
                         error_type="bot_cycle_failure",
                         message=f"{bot_id} consecutive cycle failures={consecutive_errors}",
                         exc=exc,
+                        bot_id=bot_id,
+                        cycle_id=f"{bot_id}:{cycle_count}",
                     )
                 except Exception as degradation_exc:
                     logger.error(f"[{bot_id}] degradation record failed: {degradation_exc}")

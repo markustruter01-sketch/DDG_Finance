@@ -42,12 +42,6 @@ _BOT_CFG: dict[str, dict] = {
         "table":                  "jerome_positions",
         "bot_id":                 "jerome_macro",
     },
-    "buck_futures": {
-        "strategy":               "Buck Futures commodity clone of Jerome v2",
-        "evaluation_window_start": "2026-05-29",
-        "table":                  "jerome_positions",
-        "bot_id":                 "buck_futures",
-    },
 }
 
 # ── Maths helpers ──────────────────────────────────────────────────────────────

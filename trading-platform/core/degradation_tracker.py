@@ -93,6 +93,8 @@ def record_degradation(
     error_type: str,
     message: str,
     detail: Optional[str] = None,
+    bot_id: Optional[str] = None,
+    cycle_id: Optional[str] = None,
 ) -> bool:
     """
     Persist a degradation event.
@@ -114,10 +116,11 @@ def record_degradation(
                 cur.execute(
                     """
                     INSERT INTO system_degradations
-                        (component, severity, error_type, message, detail)
-                    VALUES (%s, %s, %s, %s, %s)
+                        (component, severity, error_type, message, detail, bot_id, cycle_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (component, severity, error_type, message[:500], detail[:2000] if detail else None),
+                    (component, severity, error_type, message[:500],
+                     detail[:2000] if detail else None, bot_id, cycle_id),
                 )
         logger.debug(f"[DEGRADATION] Recorded: [{severity}] {component}/{error_type} — {message[:80]}")
         return True
@@ -132,10 +135,15 @@ def record_exception(
     error_type: str,
     message: str,
     exc: Exception,
+    bot_id: Optional[str] = None,
+    cycle_id: Optional[str] = None,
 ) -> bool:
     """Convenience wrapper that captures the traceback as detail."""
     detail = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    return record_degradation(component, severity, error_type, message, detail=detail[:2000])
+    return record_degradation(
+        component, severity, error_type, message, detail=detail[:2000],
+        bot_id=bot_id, cycle_id=cycle_id,
+    )
 
 
 def mark_resolved(component: str, error_type: str) -> None:
@@ -209,7 +217,8 @@ def get_recent_events(
                 cur.execute(
                     f"""
                     SELECT id, ts AT TIME ZONE 'UTC' AS ts,
-                           component, severity, error_type, message, detail, resolved_at
+                           component, severity, error_type, message, detail,
+                           bot_id, cycle_id, resolved_at
                     FROM system_degradations
                     WHERE {where}
                     ORDER BY ts DESC
@@ -219,7 +228,8 @@ def get_recent_events(
                 )
                 rows = cur.fetchall()
 
-        cols = ["id", "ts", "component", "severity", "error_type", "message", "detail", "resolved_at"]
+        cols = ["id", "ts", "component", "severity", "error_type", "message",
+                "detail", "bot_id", "cycle_id", "resolved_at"]
         result = []
         for row in rows:
             d = dict(zip(cols, row))

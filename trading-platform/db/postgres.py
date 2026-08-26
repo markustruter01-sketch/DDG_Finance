@@ -332,8 +332,12 @@ CREATE TABLE IF NOT EXISTS system_degradations (
     error_type   TEXT NOT NULL,   -- stale | analysis_failed | rate_limit | 500 | connection | etc.
     message      TEXT NOT NULL,
     detail       TEXT,            -- extra context (stack trace excerpt, endpoint, etc.)
+    bot_id       TEXT,
+    cycle_id     TEXT,
     resolved_at  TIMESTAMPTZ      -- filled in when a subsequent heal cycle succeeds
 );
+ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS bot_id TEXT;
+ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS cycle_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_sys_deg_ts        ON system_degradations (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_sys_deg_component ON system_degradations (component, ts DESC);
 

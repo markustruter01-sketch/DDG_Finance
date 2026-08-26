@@ -9,7 +9,7 @@ Status classifications:
   AMBER            below floor for < 60 consecutive job-run days
   RED              below floor for >= 60 consecutive job-run days
   INSUFFICIENT_DATA < 10 closed trades in trailing 90d (no comparison made)
-  DISQUALIFIED     no OOS envelope registered (jerome_macro / buck_futures)
+  DISQUALIFIED     no OOS envelope registered
 
 Pre-registered human protocol (surfaced in report/Discord — NOT auto-executed):
   RED for 60d  → halve position sizing pending review
@@ -75,18 +75,6 @@ _OOS_ENVELOPE: dict[str, dict] = {
         "disqualified":        False,
         "disqualified_reason": None,
     },
-    "buck_futures": {
-        # Stage 5 merge (2026-08-11): buck_futures slot retired — merged into
-        # jerome_macro EM bot. Envelope voided; DISQUALIFIED so arc2 ignores it.
-        "pooled_sharpe":       None,
-        "worst_window_sharpe": None,
-        "worst_window":        None,
-        "best_window_sharpe":  None,
-        "worst_window_maxdd":  None,
-        "oos_run_date":        None,
-        "disqualified":        True,
-        "disqualified_reason": "Slot retired — merged into jerome_macro EM bot (Stage 5, 2026-08-11)",
-    },
 }
 
 # ── Strategy params (as-of OOS run — drift from these fires a banner) ─────────
@@ -136,7 +124,6 @@ _STRATEGY_PARAMS: dict[str, dict] = {
         "seeded_sharpe_floor": 0.74,
         "note": "Blended Phase-1 floor (LatAm 0.71 + Frontier 0.77); re-run OOS after 90d",
     },
-    "buck_futures": {"disqualified": True, "retired": "merged into jerome_macro EM bot"},
 }
 
 
@@ -162,12 +149,6 @@ _ARC0: dict[str, str] = {
         AND (exit_reason IS DISTINCT FROM 'multi_lot_primary_closed')
     """,
     "jerome_macro": """
-        AND status           = 'closed'
-        AND realised_pnl_usd IS NOT NULL
-        AND opened_at        >= '2026-08-11 00:00:00+00'
-    """,
-    # buck_futures retired — no live trades expected under this bot_id going forward
-    "buck_futures": """
         AND status           = 'closed'
         AND realised_pnl_usd IS NOT NULL
         AND opened_at        >= '2026-08-11 00:00:00+00'
@@ -214,7 +195,7 @@ def _fetch_closed_trades(bot_id: str, days_back: int) -> list[tuple[datetime, fl
                         ORDER  BY closed_at
                     """, (cutoff,))
 
-                elif bot_id in ("jerome_macro", "buck_futures"):
+                elif bot_id == "jerome_macro":
                     cur.execute(f"""
                         SELECT closed_at, realised_pnl_usd::float
                         FROM   jerome_positions
@@ -399,7 +380,7 @@ def _classify(m90: dict, envelope: dict, consecutive: int) -> str:
 
 # ── Main job ──────────────────────────────────────────────────────────────────
 
-_BOT_IDS = ["oracle", "spy_qqq_trend", "jerome_macro", "buck_futures"]
+_BOT_IDS = ["oracle", "spy_qqq_trend", "jerome_macro"]
 
 
 def run_walk_forward_job(dry_run: bool = False) -> dict[str, dict]:

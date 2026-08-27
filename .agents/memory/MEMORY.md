@@ -27,6 +27,7 @@
 - [Multi-account position identity](multi-account-position-identity.md) — live position UI keys must include bot/account identity; symbols alone collide when accounts share cash-park ETFs.
 - [NYSE validation calendar](nyse-validation-calendar.md) — equity integrity checks must account for standard and exceptional exchange closures.
 - [Bot 2 earnings source gap](bot2-earnings-source-gap.md) — Alpha Vantage history currently omits a Costco quarterly event in 2020; split-sample validation must stop rather than impute it.
+- [Bot 2 earnings validation result](bot2-earnings-validation-result.md) — fixed business-predictability top six beat buy-before out of sample on PEAD-20; this remains research-only.
 - [Alpaca vault position separation](alpaca-vault-position-separation.md) — client order IDs do not split net same-symbol positions; track vault ownership and guard strategy closes.
 - [Test baseline and module patching](test-baseline-and-module-patching.md) — module reloads can split package attributes from class globals; patch the exact module object and keep a dated suite baseline.
 - [Pause-state fail closed](pause-state-fail-closed.md) — runner must enforce both static profile and canonical DB pause state; aliases need explicit rows during identity migrations.

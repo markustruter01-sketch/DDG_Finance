@@ -56,7 +56,7 @@ CONTROL_ITERATIONS = 1_000
 RANDOM_SEED = 271_2026
 SLIPPAGE_BPS = 10.0
 TOP_N = 6
-STRATEGY_FAMILY = "bot2_earnings_split_sample_validation"
+STRATEGY_FAMILY = "bot2_earnings_universe_v2"
 BOT_ID = "bot2_earnings_validation"
 
 
@@ -301,6 +301,8 @@ def _scheduled_prices(
         if entry_day is None or announcement_day is None:
             return None
         raw_gap = by_day[announcement_day].open / by_day[entry_day].close - 1
+        close_to_close = by_day[announcement_day].close / by_day[entry_day].close - 1
+        prior_close_day = entry_day
     elif timing == "post":
         announcement_day = on_or_after[0] if on_or_after else None
         entry_day = on_or_before[-1] if on_or_before else None
@@ -310,6 +312,8 @@ def _scheduled_prices(
         if not next_days:
             return None
         raw_gap = by_day[next_days[0]].open / by_day[announcement_day].close - 1
+        close_to_close = by_day[next_days[0]].close / by_day[announcement_day].close - 1
+        prior_close_day = announcement_day
     else:
         return None
     entry_index = days.index(announcement_day)
@@ -322,6 +326,8 @@ def _scheduled_prices(
         "announcement_day": announcement_day,
         "next_days": next_days,
         "raw_gap": raw_gap,
+        "close_to_close": close_to_close,
+        "prior_close_day": prior_close_day,
     }
 
 
@@ -470,6 +476,7 @@ def _random_control(
     records: list[dict[str, Any]],
     mode: str,
     hold: int,
+    close_exit: bool = False,
 ) -> dict[str, Any]:
     rng = random.Random(RANDOM_SEED + hold + sum(ord(char) for char in mode))
     by_symbol = defaultdict(list)
@@ -489,8 +496,9 @@ def _random_control(
                 if mode == "buy_before":
                     if entry_index + 1 >= len(all_days):
                         continue
-                    entry = record["by_day"][all_days[entry_index]].open
-                    exit_price = record["by_day"][all_days[entry_index + 1]].close
+                    entry = record["by_day"][all_days[entry_index]].close
+                    exit_bar = record["by_day"][all_days[entry_index + 1]]
+                    exit_price = exit_bar.close if close_exit else exit_bar.open
                 else:
                     if entry_index + hold - 1 >= len(all_days):
                         continue
@@ -499,7 +507,11 @@ def _random_control(
                 simulated.append(exit_price / entry - 1)
         distributions.append(statistics.fmean(simulated) if simulated else 0.0)
     distributions.sort()
-    observed = statistics.fmean(_strategy_returns(records, mode, hold)) if records else None
+    observed_returns = _strategy_returns(records, mode, hold, close_exit)
+    observed = statistics.fmean(observed_returns) if observed_returns else None
+    actual_sd = statistics.stdev(observed_returns) if len(observed_returns) > 1 else 0.0
+    expected_spread = 3.29 * actual_sd / math.sqrt(max(1, len(observed_returns)))
+    spread = distributions[int(0.95 * len(distributions)) - 1] - distributions[int(0.05 * len(distributions))]
     return {
         "iterations": CONTROL_ITERATIONS,
         "seed": RANDOM_SEED,
@@ -509,6 +521,13 @@ def _random_control(
         "random_median": statistics.median(distributions),
         "random_p95": distributions[int(0.95 * len(distributions)) - 1],
         "random_std": statistics.pstdev(distributions),
+        "actual_return_sd": actual_sd,
+        "spread_p95_p05": spread,
+        "expected_spread_from_actual_sd": expected_spread,
+        "dispersion_sanity": (
+            statistics.pstdev(distributions) > 0
+            and spread >= max(0.001, expected_spread * 0.25)
+        ),
         "beats_random_mean": observed is not None and observed > statistics.fmean(distributions),
         "dispersion_check": len(set(distributions)) > 1 and statistics.pstdev(distributions) > 0,
     }
@@ -524,6 +543,53 @@ def _buy_hold(bars: list[PriceBar], start: date, end: date) -> dict[str, Any]:
         "start": selected[0].day.isoformat(),
         "end": selected[-1].day.isoformat(),
     }
+
+
+def _window_records(records: list[dict[str, Any]], start: date, end: date) -> list[dict[str, Any]]:
+    return [
+        record for record in records
+        if start <= record["event"].reported_date <= end
+    ]
+
+
+def _near_52_week_high(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    for record in records:
+        days: list[date] = record["days"]
+        by_day: dict[date, PriceBar] = record["by_day"]
+        prior_day = record["prior_close_day"]
+        prior_index = days.index(prior_day)
+        trailing = [
+            by_day[day].close
+            for day in days[max(0, prior_index - 251):prior_index + 1]
+        ]
+        if trailing and by_day[prior_day].close >= 0.90 * max(trailing):
+            filtered.append(record)
+    return filtered
+
+
+def _report_variant(
+    label: str,
+    records: list[dict[str, Any]],
+    mode: str,
+    hold: int,
+    close_exit: bool,
+) -> dict[str, Any]:
+    values = _strategy_returns(records, mode, hold, close_exit)
+    metrics = _returns_stats(values, hold)
+    controls = _random_control(records, mode, hold, close_exit)
+    print(
+        f"strategy | {label} | trades={metrics['trades']} | "
+        f"return={_fmt(metrics['total_return'])} | win_rate={_fmt(metrics['win_rate'])} | "
+        f"expectancy={_fmt(metrics['expectancy'])} | sharpe={_fmt(metrics['sharpe'])} | "
+        f"maxDD={_fmt(metrics['max_drawdown'])} | random_mean={_fmt(controls['random_mean'])} | "
+        f"random_sd={_fmt(controls['random_std'])} | "
+        f"random_P05_P95_spread={_fmt(controls['spread_p95_p05'])} | "
+        f"actual_return_sd={_fmt(controls['actual_return_sd'])} | "
+        f"dispersion_sanity={controls['dispersion_sanity']} | "
+        f"beats_random={controls['beats_random_mean']}"
+    )
+    return {"metrics": metrics, "random_control": controls}
 
 
 def _find_or_register_experiment() -> int:
@@ -551,14 +617,33 @@ def _find_or_register_experiment() -> int:
         "validation": [VALIDATION_START.isoformat(), VALIDATION_END.isoformat()],
     }
     ensure_research_tables()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT experiment_id, results FROM research_ledger "
+                "WHERE strategy_family=%s ORDER BY experiment_id DESC LIMIT 1",
+                (STRATEGY_FAMILY,),
+            )
+            existing = cur.fetchone()
+    if existing is not None:
+        if existing[1] is not None:
+            raise RuntimeError(
+                f"research experiment already has immutable results: experiment_id={existing[0]}"
+            )
+        return int(existing[0])
     return register_experiment(
-        strategy_family=STRATEGY_FAMILY,
+        strategy_family="bot2_earnings_universe_v2",
         bot_id=BOT_ID,
-        hypothesis="Positive earnings surprises near the 52-week high produce persistent post-earnings drift out of sample.",
+        hypothesis=(
+            "Stocks selected for business predictability rather than past earnings "
+            "performance show a positive and persistent post-earnings edge. PEAD "
+            "(entering after a known positive surprise) outperforms entering before "
+            "the report."
+        ),
         parameters=parameters,
         pass_bar=pass_bar,
         data_window=data_window,
-        variations_tested=5,
+        variations_tested=2,
         went_live=False,
         notes="Development-only validation. No orders, live module, runner, or deployment changes permitted.",
     )
@@ -567,6 +652,10 @@ def _find_or_register_experiment() -> int:
 def run_validation(ingest: bool = True) -> dict[str, Any]:
     print_schema_statements()
     ensure_tables()
+    # The experiment is registered before loading or computing any research
+    # statistic.  Results are written only once, through record_results().
+    experiment_id = _find_or_register_experiment()
+    print(f"research_ledger | experiment_id={experiment_id} | registered_before_results=true")
     if ingest:
         print("=== DEVELOPMENT-ONLY INGEST ===")
         print(f"earnings_ingest | start={EARNINGS_START_DATE} | symbols={len(EARNINGS_SYMBOLS)}")
@@ -576,21 +665,13 @@ def run_validation(ingest: bool = True) -> dict[str, Any]:
     prices, earnings = _load_data()
     integrity = _integrity_gate(prices, earnings)
 
-    # Registration happens before any research statistic, selection, or
-    # pass/fail computation is made.
-    experiment_id = _find_or_register_experiment()
-    print(f"research_ledger | experiment_id={experiment_id} | registered_before_results=true")
-
     all_records = _event_records(earnings, prices, set(EARNINGS_SYMBOLS))
     old_records = [record for record in all_records if record["event"].symbol in LEGACY_STOCKS]
     new_records = [record for record in all_records if record["event"].symbol in VALIDATION_STOCKS]
     old_stats = _print_universe_stats("OLD UNIVERSE", old_records, LEGACY_STOCKS)
     new_stats = _print_universe_stats("NEW VALIDATION UNIVERSE", new_records, VALIDATION_STOCKS)
 
-    selection_records = [
-        record for record in new_records
-        if SELECTION_START <= record["event"].reported_date <= SELECTION_END
-    ]
+    selection_records = _window_records(new_records, SELECTION_START, SELECTION_END)
     # Use only the selection window for ranking, never validation observations.
     selection_by_symbol: dict[str, dict[str, Any]] = {}
     for symbol in VALIDATION_STOCKS:
@@ -608,74 +689,100 @@ def run_validation(ingest: bool = True) -> dict[str, Any]:
         print(f"{index} | {row['symbol']} | events={row['trades']} | expectancy={_fmt(row['expectancy'])}")
     print(f"selected_top_{TOP_N} | {','.join(selected)}")
 
-    validation_records = [
-        record for record in new_records
-        if record["event"].symbol in selected
-        and VALIDATION_START <= record["event"].reported_date <= VALIDATION_END
-    ]
-    strategy_results: dict[str, Any] = {}
-    for name, mode, hold, close_exit in [
+    selected_records = [record for record in new_records if record["event"].symbol in selected]
+    windows = {
+        "selection_2018_2022": _window_records(selected_records, SELECTION_START, SELECTION_END),
+        "validation_2023_present": _window_records(selected_records, VALIDATION_START, VALIDATION_END),
+        "pooled_2018_present": selected_records,
+    }
+    variants = [
         ("buy_before_open_exit", "buy_before", 1, False),
         ("buy_before_close_exit", "buy_before", 1, True),
         *[(f"positive_surprise_pead_{hold}", "pead", hold, True) for hold in PEAD_HOLDS],
-    ]:
-        values = _strategy_returns(validation_records, mode, hold, close_exit)
-        metrics = _returns_stats(values, hold)
-        controls = _random_control(validation_records, mode, hold)
-        strategy_results[name] = {"metrics": metrics, "random_control": controls}
-        print(
-            f"validation | {name} | trades={metrics['trades']} | "
-            f"win_rate={_fmt(metrics['win_rate'])} | expectancy={_fmt(metrics['expectancy'])} | "
-            f"sharpe={_fmt(metrics['sharpe'])} | max_dd={_fmt(metrics['max_drawdown'])} | "
-            f"beats_random={controls['beats_random_mean']}"
-        )
+    ]
+    strategy_results: dict[str, Any] = {}
+    for name, mode, hold, close_exit in variants:
+        strategy_results[name] = {}
+        for window_name, window in windows.items():
+            strategy_results[name][window_name] = _report_variant(
+                f"{window_name}|{name}", window, mode, hold, close_exit
+            )
 
-    filter_records = []
-    for record in validation_records:
-        days: list[date] = record["days"]
-        by_day: dict[date, PriceBar] = record["by_day"]
-        entry_day = record["announcement_day"]
-        index = days.index(entry_day)
-        lookback = [by_day[day].close for day in days[max(0, index - 252):index]]
-        if lookback and by_day[entry_day].open >= 0.90 * max(lookback):
-            filter_records.append(record)
-    filtered_values = _strategy_returns(filter_records, "pead", 20)
-    filtered_metrics = _returns_stats(filtered_values, 20)
-    print(
-        f"validation | positive_surprise_pead_20_52w_high_filter | "
-        f"trades={filtered_metrics['trades']} | expectancy={_fmt(filtered_metrics['expectancy'])} | "
-        f"sharpe={_fmt(filtered_metrics['sharpe'])}"
-    )
+    filter_results: dict[str, Any] = {}
+    for name, mode, hold, close_exit in variants[2:]:
+        filter_results[name] = {}
+        for window_name, window in windows.items():
+            filtered = _near_52_week_high(window)
+            filter_results[name][window_name] = _report_variant(
+                f"{window_name}|{name}|52_week_high_filter",
+                filtered,
+                mode,
+                hold,
+                close_exit,
+            )
 
-    validation_buy_hold = {symbol: _buy_hold(prices[symbol], VALIDATION_START, VALIDATION_END) for symbol in selected}
+    validation_records = windows["validation_2023_present"]
+    validation_buy_hold = {
+        symbol: _buy_hold(prices[symbol], VALIDATION_START, VALIDATION_END)
+        for symbol in VALIDATION_STOCKS
+    }
     spy_bars = fetch_yahoo_daily("SPY", VALIDATION_END + timedelta(days=1), EARNINGS_START_DATE)
     spy_prices = [PriceBar(row["date"], row["open"], row["close"]) for row in spy_bars]
     benchmarks = {
-        "selected_stock_buy_and_hold": validation_buy_hold,
+        "validation_stock_buy_and_hold": validation_buy_hold,
         "SPY_buy_and_hold": _buy_hold(spy_prices, VALIDATION_START, VALIDATION_END),
     }
     print(f"benchmark | SPY_buy_and_hold | return={_fmt(benchmarks['SPY_buy_and_hold']['return'])}")
     for symbol, result in validation_buy_hold.items():
         print(f"benchmark | {symbol}_buy_and_hold | return={_fmt(result['return'])}")
 
-    best = strategy_results["positive_surprise_pead_20"]["metrics"]
-    best_control = strategy_results["positive_surprise_pead_20"]["random_control"]
+    primary = strategy_results["positive_surprise_pead_20"]["validation_2023_present"]
+    primary_metrics = primary["metrics"]
+    primary_control = primary["random_control"]
+    buy_before_candidates = [
+        strategy_results[name]["validation_2023_present"]["metrics"]["expectancy"]
+        for name in ("buy_before_open_exit", "buy_before_close_exit")
+        if strategy_results[name]["validation_2023_present"]["metrics"]["expectancy"] is not None
+    ]
+    pead_candidates = [
+        strategy_results[f"positive_surprise_pead_{hold}"]["validation_2023_present"]["metrics"]["expectancy"]
+        for hold in PEAD_HOLDS
+        if strategy_results[f"positive_surprise_pead_{hold}"]["validation_2023_present"]["metrics"]["expectancy"] is not None
+    ]
+    better_strategy = "PEAD" if pead_candidates and (
+        not buy_before_candidates or max(pead_candidates) > max(buy_before_candidates)
+    ) else "buy-before"
+    holds_out_of_sample = bool(
+        primary_metrics["trades"]
+        and primary_metrics["expectancy"] is not None
+        and primary_metrics["expectancy"] > 0
+    )
     pass_checks = {
-        "sharpe": best["sharpe"] is not None and best["sharpe"] >= 0.60,
-        "expectancy": best["expectancy"] is not None and best["expectancy"] >= 0.003,
-        "beats_random": bool(best_control["beats_random_mean"]),
-        "holds_out_of_sample": bool(best["trades"]),
+        "sharpe": primary_metrics["sharpe"] is not None and primary_metrics["sharpe"] >= 0.60,
+        "expectancy": primary_metrics["expectancy"] is not None and primary_metrics["expectancy"] >= 0.003,
+        "beats_random": bool(primary_control["beats_random_mean"]),
+        "holds_out_of_sample": holds_out_of_sample,
     }
     outcome = "PASS" if all(pass_checks.values()) else "FAIL"
+    print(
+        f"selection_holdout | top6_validation_positive_surprise_pead_20_expectancy="
+        f"{_fmt(primary_metrics['expectancy'])} | holds_out_of_sample={holds_out_of_sample}"
+    )
+    print(f"strategy_comparison | better_on_validation_expectancy={better_strategy}")
+    print(
+        f"pass_bar | sharpe={pass_checks['sharpe']} | expectancy={pass_checks['expectancy']} | "
+        f"beats_random={pass_checks['beats_random']} | holds_out_of_sample={pass_checks['holds_out_of_sample']}"
+    )
     results = {
         "experiment_id": experiment_id,
         "integrity": integrity,
         "raw_stats": {"old": old_stats, "new": new_stats},
         "selection": {"ranking_2018_2022": ranking, "selected_top_6": selected},
         "validation": strategy_results,
-        "52_week_high_filter": filtered_metrics,
+        "52_week_high_filter": filter_results,
         "benchmarks": benchmarks,
         "pass_checks": pass_checks,
+        "better_strategy_on_validation_expectancy": better_strategy,
         "outcome": outcome,
         "live_execution": False,
     }

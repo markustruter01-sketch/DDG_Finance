@@ -1,0 +1,2569 @@
+{
+  "changes": [
+    {
+      "added": "",
+      "date": "2026-06-30",
+      "removed": "CAG"
+    },
+    {
+      "added": "HONA",
+      "date": "2026-06-29",
+      "removed": ""
+    },
+    {
+      "added": "MRVL",
+      "date": "2026-06-22",
+      "removed": "POOL"
+    },
+    {
+      "added": "FLEX",
+      "date": "2026-06-22",
+      "removed": "CPB"
+    },
+    {
+      "added": "",
+      "date": "2026-06-02",
+      "removed": "EPAM"
+    },
+    {
+      "added": "FDXF",
+      "date": "2026-06-01",
+      "removed": ""
+    },
+    {
+      "added": "VEEV",
+      "date": "2026-05-07",
+      "removed": "CTRA"
+    },
+    {
+      "added": "CASY",
+      "date": "2026-04-09",
+      "removed": "HOLX"
+    },
+    {
+      "added": "VRT",
+      "date": "2026-03-23",
+      "removed": "MTCH"
+    },
+    {
+      "added": "LITE",
+      "date": "2026-03-23",
+      "removed": "MOH"
+    },
+    {
+      "added": "COHR",
+      "date": "2026-03-23",
+      "removed": "LW"
+    },
+    {
+      "added": "SATS",
+      "date": "2026-03-23",
+      "removed": "PAYC"
+    },
+    {
+      "added": "CIEN",
+      "date": "2026-02-09",
+      "removed": "DAY"
+    },
+    {
+      "added": "CRH",
+      "date": "2025-12-22",
+      "removed": "LKQ"
+    },
+    {
+      "added": "CVNA",
+      "date": "2025-12-22",
+      "removed": "SOLS"
+    },
+    {
+      "added": "FIX",
+      "date": "2025-12-22",
+      "removed": "MHK"
+    },
+    {
+      "added": "ARES",
+      "date": "2025-12-11",
+      "removed": "K"
+    },
+    {
+      "added": "SNDK",
+      "date": "2025-11-28",
+      "removed": "IPG"
+    },
+    {
+      "added": "",
+      "date": "2025-11-04",
+      "removed": "EMN"
+    },
+    {
+      "added": "Q",
+      "date": "2025-11-03",
+      "removed": ""
+    },
+    {
+      "added": "",
+      "date": "2025-10-31",
+      "removed": "KMX"
+    },
+    {
+      "added": "SOLS",
+      "date": "2025-10-30",
+      "removed": ""
+    },
+    {
+      "added": "EME",
+      "date": "2025-09-22",
+      "removed": "ENPH"
+    },
+    {
+      "added": "HOOD",
+      "date": "2025-09-22",
+      "removed": "CZR"
+    },
+    {
+      "added": "APP",
+      "date": "2025-09-22",
+      "removed": "MKTX"
+    },
+    {
+      "added": "IBKR",
+      "date": "2025-08-28",
+      "removed": "WBA"
+    },
+    {
+      "added": "XYZ",
+      "date": "2025-07-23",
+      "removed": "HES"
+    },
+    {
+      "added": "TTD",
+      "date": "2025-07-18",
+      "removed": "ANSS"
+    },
+    {
+      "added": "DDOG",
+      "date": "2025-07-09",
+      "removed": "JNPR"
+    },
+    {
+      "added": "COIN",
+      "date": "2025-05-19",
+      "removed": "DFS"
+    },
+    {
+      "added": "DASH",
+      "date": "2025-03-24",
+      "removed": "BWA"
+    },
+    {
+      "added": "TKO",
+      "date": "2025-03-24",
+      "removed": "TFX"
+    },
+    {
+      "added": "WSM",
+      "date": "2025-03-24",
+      "removed": "CE"
+    },
+    {
+      "added": "EXE",
+      "date": "2025-03-24",
+      "removed": "FMC"
+    },
+    {
+      "added": "APO",
+      "date": "2024-12-23",
+      "removed": "QRVO"
+    },
+    {
+      "added": "WDAY",
+      "date": "2024-12-23",
+      "removed": "AMTM"
+    },
+    {
+      "added": "LII",
+      "date": "2024-12-23",
+      "removed": "CTLT"
+    },
+    {
+      "added": "TPL",
+      "date": "2024-11-26",
+      "removed": "MRO"
+    },
+    {
+      "added": "",
+      "date": "2024-10-01",
+      "removed": "BBWI"
+    },
+    {
+      "added": "AMTM",
+      "date": "2024-09-30",
+      "removed": ""
+    },
+    {
+      "added": "PLTR",
+      "date": "2024-09-23",
+      "removed": "AAL"
+    },
+    {
+      "added": "DELL",
+      "date": "2024-09-23",
+      "removed": "ETSY"
+    },
+    {
+      "added": "ERIE",
+      "date": "2024-09-23",
+      "removed": "BIO"
+    },
+    {
+      "added": "KKR",
+      "date": "2024-06-24",
+      "removed": "RHI"
+    },
+    {
+      "added": "CRWD",
+      "date": "2024-06-24",
+      "removed": "CMA"
+    },
+    {
+      "added": "GDDY",
+      "date": "2024-06-24",
+      "removed": "ILMN"
+    },
+    {
+      "added": "VST",
+      "date": "2024-05-08",
+      "removed": "PXD"
+    },
+    {
+      "added": "",
+      "date": "2024-04-03",
+      "removed": "XRAY"
+    },
+    {
+      "added": "",
+      "date": "2024-04-03",
+      "removed": "VFC"
+    },
+    {
+      "added": "GEV",
+      "date": "2024-04-02",
+      "removed": ""
+    },
+    {
+      "added": "SOLV",
+      "date": "2024-04-01",
+      "removed": ""
+    },
+    {
+      "added": "SMCI",
+      "date": "2024-03-18",
+      "removed": "WHR"
+    },
+    {
+      "added": "DECK",
+      "date": "2024-03-18",
+      "removed": "ZION"
+    },
+    {
+      "added": "UBER",
+      "date": "2023-12-18",
+      "removed": "SEE"
+    },
+    {
+      "added": "JBL",
+      "date": "2023-12-18",
+      "removed": "ALK"
+    },
+    {
+      "added": "BLDR",
+      "date": "2023-12-18",
+      "removed": "SEDG"
+    },
+    {
+      "added": "HUBB",
+      "date": "2023-10-18",
+      "removed": "OGN"
+    },
+    {
+      "added": "LULU",
+      "date": "2023-10-18",
+      "removed": "ATVI"
+    },
+    {
+      "added": "",
+      "date": "2023-10-03",
+      "removed": "DXC"
+    },
+    {
+      "added": "VLTO",
+      "date": "2023-10-02",
+      "removed": ""
+    },
+    {
+      "added": "BX",
+      "date": "2023-09-18",
+      "removed": "LNC"
+    },
+    {
+      "added": "ABNB",
+      "date": "2023-09-18",
+      "removed": "NWL"
+    },
+    {
+      "added": "KVUE",
+      "date": "2023-08-25",
+      "removed": "AAP"
+    },
+    {
+      "added": "EG",
+      "date": "2023-07-10",
+      "removed": "RE"
+    },
+    {
+      "added": "PANW",
+      "date": "2023-06-20",
+      "removed": "DISH"
+    },
+    {
+      "added": "AXON",
+      "date": "2023-05-04",
+      "removed": "FRC"
+    },
+    {
+      "added": "FICO",
+      "date": "2023-03-20",
+      "removed": "LUMN"
+    },
+    {
+      "added": "BG",
+      "date": "2023-03-15",
+      "removed": "SBNY"
+    },
+    {
+      "added": "PODD",
+      "date": "2023-03-15",
+      "removed": "SIVB"
+    },
+    {
+      "added": "",
+      "date": "2023-01-05",
+      "removed": "VNO"
+    },
+    {
+      "added": "GEHC",
+      "date": "2023-01-04",
+      "removed": ""
+    },
+    {
+      "added": "STLD",
+      "date": "2022-12-22",
+      "removed": "ABMD"
+    },
+    {
+      "added": "FSLR",
+      "date": "2022-12-19",
+      "removed": "FBHS"
+    },
+    {
+      "added": "",
+      "date": "2022-12-19",
+      "removed": "MBC"
+    },
+    {
+      "added": "MBC",
+      "date": "2022-12-15",
+      "removed": ""
+    },
+    {
+      "added": "ACGL",
+      "date": "2022-11-01",
+      "removed": "TWTR"
+    },
+    {
+      "added": "TRGP",
+      "date": "2022-10-12",
+      "removed": "NLSN"
+    },
+    {
+      "added": "PCG",
+      "date": "2022-10-03",
+      "removed": "CTXS"
+    },
+    {
+      "added": "EQT",
+      "date": "2022-10-03",
+      "removed": "DRE"
+    },
+    {
+      "added": "CSGP",
+      "date": "2022-09-19",
+      "removed": "PVH"
+    },
+    {
+      "added": "INVH",
+      "date": "2022-09-19",
+      "removed": "PENN"
+    },
+    {
+      "added": "",
+      "date": "2022-06-21",
+      "removed": "UA"
+    },
+    {
+      "added": "KDP",
+      "date": "2022-06-21",
+      "removed": "UAA"
+    },
+    {
+      "added": "ON",
+      "date": "2022-06-21",
+      "removed": "IPGP"
+    },
+    {
+      "added": "VICI",
+      "date": "2022-06-08",
+      "removed": "CERN"
+    },
+    {
+      "added": "WBD",
+      "date": "2022-04-11",
+      "removed": "DISCA"
+    },
+    {
+      "added": "",
+      "date": "2022-04-11",
+      "removed": "DISCK"
+    },
+    {
+      "added": "CPT",
+      "date": "2022-04-04",
+      "removed": "PBCT"
+    },
+    {
+      "added": "MOH",
+      "date": "2022-03-02",
+      "removed": "INFO"
+    },
+    {
+      "added": "NDSN",
+      "date": "2022-02-15",
+      "removed": "XLNX"
+    },
+    {
+      "added": "",
+      "date": "2022-02-03",
+      "removed": "GPS"
+    },
+    {
+      "added": "CEG",
+      "date": "2022-02-02",
+      "removed": ""
+    },
+    {
+      "added": "SBNY",
+      "date": "2021-12-20",
+      "removed": "LEG"
+    },
+    {
+      "added": "SEDG",
+      "date": "2021-12-20",
+      "removed": "HBI"
+    },
+    {
+      "added": "FDS",
+      "date": "2021-12-20",
+      "removed": "WU"
+    },
+    {
+      "added": "EPAM",
+      "date": "2021-12-14",
+      "removed": "KSU"
+    },
+    {
+      "added": "MTCH",
+      "date": "2021-09-20",
+      "removed": "PRGO"
+    },
+    {
+      "added": "CDAY",
+      "date": "2021-09-20",
+      "removed": "UNM"
+    },
+    {
+      "added": "BRO",
+      "date": "2021-09-20",
+      "removed": "NOV"
+    },
+    {
+      "added": "TECH",
+      "date": "2021-08-30",
+      "removed": "MXIM"
+    },
+    {
+      "added": "MRNA",
+      "date": "2021-07-21",
+      "removed": "ALXN"
+    },
+    {
+      "added": "",
+      "date": "2021-06-04",
+      "removed": "HFC"
+    },
+    {
+      "added": "OGN",
+      "date": "2021-06-03",
+      "removed": ""
+    },
+    {
+      "added": "CRL",
+      "date": "2021-05-14",
+      "removed": "FLIR"
+    },
+    {
+      "added": "PTC",
+      "date": "2021-04-20",
+      "removed": "VAR"
+    },
+    {
+      "added": "NXPI",
+      "date": "2021-03-22",
+      "removed": "FLS"
+    },
+    {
+      "added": "PENN",
+      "date": "2021-03-22",
+      "removed": "SLG"
+    },
+    {
+      "added": "GNRC",
+      "date": "2021-03-22",
+      "removed": "XRX"
+    },
+    {
+      "added": "CZR",
+      "date": "2021-03-22",
+      "removed": "VNT"
+    },
+    {
+      "added": "MPWR",
+      "date": "2021-02-12",
+      "removed": "FTI"
+    },
+    {
+      "added": "TRMB",
+      "date": "2021-01-21",
+      "removed": "CXO"
+    },
+    {
+      "added": "ENPH",
+      "date": "2021-01-07",
+      "removed": "TIF"
+    },
+    {
+      "added": "TSLA",
+      "date": "2020-12-21",
+      "removed": "AIV"
+    },
+    {
+      "added": "",
+      "date": "2020-10-12",
+      "removed": "NBL"
+    },
+    {
+      "added": "VNT",
+      "date": "2020-10-09",
+      "removed": ""
+    },
+    {
+      "added": "POOL",
+      "date": "2020-10-07",
+      "removed": "ETFC"
+    },
+    {
+      "added": "ETSY",
+      "date": "2020-09-21",
+      "removed": "HRB"
+    },
+    {
+      "added": "TER",
+      "date": "2020-09-21",
+      "removed": "COTY"
+    },
+    {
+      "added": "CTLT",
+      "date": "2020-09-21",
+      "removed": "KSS"
+    },
+    {
+      "added": "BIO",
+      "date": "2020-06-22",
+      "removed": "ADS"
+    },
+    {
+      "added": "TDY",
+      "date": "2020-06-22",
+      "removed": "HOG"
+    },
+    {
+      "added": "TYL",
+      "date": "2020-06-22",
+      "removed": "JWN"
+    },
+    {
+      "added": "WST",
+      "date": "2020-05-22",
+      "removed": "HP"
+    },
+    {
+      "added": "DPZ",
+      "date": "2020-05-12",
+      "removed": "CPRI"
+    },
+    {
+      "added": "DXCM",
+      "date": "2020-05-12",
+      "removed": "AGN"
+    },
+    {
+      "added": "",
+      "date": "2020-04-06",
+      "removed": "M"
+    },
+    {
+      "added": "",
+      "date": "2020-04-06",
+      "removed": "RTN"
+    },
+    {
+      "added": "OTIS",
+      "date": "2020-04-03",
+      "removed": ""
+    },
+    {
+      "added": "CARR",
+      "date": "2020-04-03",
+      "removed": ""
+    },
+    {
+      "added": "HWM",
+      "date": "2020-04-01",
+      "removed": "ARNC"
+    },
+    {
+      "added": "IR",
+      "date": "2020-03-02",
+      "removed": "XEC"
+    },
+    {
+      "added": "PAYC",
+      "date": "2020-01-28",
+      "removed": "WCG"
+    },
+    {
+      "added": "LYV",
+      "date": "2019-12-23",
+      "removed": "AMG"
+    },
+    {
+      "added": "ZBRA",
+      "date": "2019-12-23",
+      "removed": "TRIP"
+    },
+    {
+      "added": "STE",
+      "date": "2019-12-23",
+      "removed": "MAC"
+    },
+    {
+      "added": "ODFL",
+      "date": "2019-12-09",
+      "removed": "STI"
+    },
+    {
+      "added": "WRB",
+      "date": "2019-12-05",
+      "removed": "VIAB"
+    },
+    {
+      "added": "NOW",
+      "date": "2019-11-21",
+      "removed": "CELG"
+    },
+    {
+      "added": "LVS",
+      "date": "2019-10-03",
+      "removed": "NKTR"
+    },
+    {
+      "added": "NVR",
+      "date": "2019-09-26",
+      "removed": "JEF"
+    },
+    {
+      "added": "CDW",
+      "date": "2019-09-23",
+      "removed": "TSS"
+    },
+    {
+      "added": "LDOS",
+      "date": "2019-08-09",
+      "removed": "APC"
+    },
+    {
+      "added": "IEX",
+      "date": "2019-08-09",
+      "removed": "FL"
+    },
+    {
+      "added": "TMUS",
+      "date": "2019-07-15",
+      "removed": "RHT"
+    },
+    {
+      "added": "MKTX",
+      "date": "2019-07-01",
+      "removed": "LLL"
+    },
+    {
+      "added": "AMCR",
+      "date": "2019-06-11",
+      "removed": "BMS"
+    },
+    {
+      "added": "BMS",
+      "date": "2019-06-07",
+      "removed": "MAT"
+    },
+    {
+      "added": "DD",
+      "date": "2019-06-03",
+      "removed": "DWDP"
+    },
+    {
+      "added": "CTVA",
+      "date": "2019-06-03",
+      "removed": "FLR"
+    },
+    {
+      "added": "DOW",
+      "date": "2019-04-02",
+      "removed": "BHF"
+    },
+    {
+      "added": "FOXA",
+      "date": "2019-03-19",
+      "removed": "FOXA"
+    },
+    {
+      "added": "FOX",
+      "date": "2019-03-19",
+      "removed": "FOX"
+    },
+    {
+      "added": "WAB",
+      "date": "2019-02-27",
+      "removed": "GT"
+    },
+    {
+      "added": "ATO",
+      "date": "2019-02-15",
+      "removed": "NFX"
+    },
+    {
+      "added": "TFX",
+      "date": "2019-01-18",
+      "removed": "PCG"
+    },
+    {
+      "added": "FRC",
+      "date": "2019-01-02",
+      "removed": "SCG"
+    },
+    {
+      "added": "CE",
+      "date": "2018-12-24",
+      "removed": "ESRX"
+    },
+    {
+      "added": "LW",
+      "date": "2018-12-03",
+      "removed": "COL"
+    },
+    {
+      "added": "MXIM",
+      "date": "2018-12-03",
+      "removed": "AET"
+    },
+    {
+      "added": "FANG",
+      "date": "2018-12-03",
+      "removed": "SRCL"
+    },
+    {
+      "added": "JKHY",
+      "date": "2018-11-13",
+      "removed": "EQT"
+    },
+    {
+      "added": "KEYS",
+      "date": "2018-11-06",
+      "removed": "CA"
+    },
+    {
+      "added": "FTNT",
+      "date": "2018-10-11",
+      "removed": "EVHC"
+    },
+    {
+      "added": "ROL",
+      "date": "2018-10-01",
+      "removed": "ANDV"
+    },
+    {
+      "added": "WCG",
+      "date": "2018-09-14",
+      "removed": "XL"
+    },
+    {
+      "added": "ANET",
+      "date": "2018-08-28",
+      "removed": "GGP"
+    },
+    {
+      "added": "CPRT",
+      "date": "2018-07-02",
+      "removed": "DPS"
+    },
+    {
+      "added": "FLT",
+      "date": "2018-06-20",
+      "removed": "TWX"
+    },
+    {
+      "added": "BR",
+      "date": "2018-06-18",
+      "removed": "RRC"
+    },
+    {
+      "added": "HFC",
+      "date": "2018-06-18",
+      "removed": "AYI"
+    },
+    {
+      "added": "TWTR",
+      "date": "2018-06-07",
+      "removed": "MON"
+    },
+    {
+      "added": "EVRG",
+      "date": "2018-06-05",
+      "removed": "NAVI"
+    },
+    {
+      "added": "ABMD",
+      "date": "2018-05-31",
+      "removed": "WYN"
+    },
+    {
+      "added": "MSCI",
+      "date": "2018-04-04",
+      "removed": "CSRA"
+    },
+    {
+      "added": "TTWO",
+      "date": "2018-03-19",
+      "removed": "SIG"
+    },
+    {
+      "added": "SIVB",
+      "date": "2018-03-19",
+      "removed": "PDCO"
+    },
+    {
+      "added": "NKTR",
+      "date": "2018-03-19",
+      "removed": "CHK"
+    },
+    {
+      "added": "IPGP",
+      "date": "2018-03-07",
+      "removed": "SNI"
+    },
+    {
+      "added": "HII",
+      "date": "2018-01-03",
+      "removed": "BCR"
+    },
+    {
+      "added": "NCLH",
+      "date": "2017-10-13",
+      "removed": "LVLT"
+    },
+    {
+      "added": "CDNS",
+      "date": "2017-09-18",
+      "removed": "SPLS"
+    },
+    {
+      "added": "DWDP",
+      "date": "2017-09-01",
+      "removed": "DOW"
+    },
+    {
+      "added": "SBAC",
+      "date": "2017-09-01",
+      "removed": "DD"
+    },
+    {
+      "added": "Q",
+      "date": "2017-08-29",
+      "removed": "WFM"
+    },
+    {
+      "added": "BHF",
+      "date": "2017-08-08",
+      "removed": "AN"
+    },
+    {
+      "added": "DRE",
+      "date": "2017-07-26",
+      "removed": "RIG"
+    },
+    {
+      "added": "AOS",
+      "date": "2017-07-26",
+      "removed": "BBBY"
+    },
+    {
+      "added": "PKG",
+      "date": "2017-07-26",
+      "removed": "MUR"
+    },
+    {
+      "added": "RMD",
+      "date": "2017-07-26",
+      "removed": "MNK"
+    },
+    {
+      "added": "MGM",
+      "date": "2017-07-26",
+      "removed": "RAI"
+    },
+    {
+      "added": "BKR",
+      "date": "2017-07-07",
+      "removed": "BHI"
+    },
+    {
+      "added": "HLT",
+      "date": "2017-06-19",
+      "removed": "YHOO"
+    },
+    {
+      "added": "ALGN",
+      "date": "2017-06-19",
+      "removed": "TDC"
+    },
+    {
+      "added": "ANSS",
+      "date": "2017-06-19",
+      "removed": "R"
+    },
+    {
+      "added": "RE",
+      "date": "2017-06-19",
+      "removed": "MJN"
+    },
+    {
+      "added": "INFO",
+      "date": "2017-06-02",
+      "removed": "TGNA"
+    },
+    {
+      "added": "IT",
+      "date": "2017-04-05",
+      "removed": "DNB"
+    },
+    {
+      "added": "DXC",
+      "date": "2017-04-04",
+      "removed": "SWN"
+    },
+    {
+      "added": "AMD",
+      "date": "2017-03-20",
+      "removed": "URBN"
+    },
+    {
+      "added": "RJF",
+      "date": "2017-03-20",
+      "removed": "FTR"
+    },
+    {
+      "added": "ARE",
+      "date": "2017-03-20",
+      "removed": "FSLR"
+    },
+    {
+      "added": "SNPS",
+      "date": "2017-03-16",
+      "removed": "HAR"
+    },
+    {
+      "added": "DISH",
+      "date": "2017-03-13",
+      "removed": "LLTC"
+    },
+    {
+      "added": "REG",
+      "date": "2017-03-02",
+      "removed": "ENDP"
+    },
+    {
+      "added": "CBOE",
+      "date": "2017-03-01",
+      "removed": "PBI"
+    },
+    {
+      "added": "INCY",
+      "date": "2017-02-28",
+      "removed": "SE"
+    },
+    {
+      "added": "IDXX",
+      "date": "2017-01-05",
+      "removed": "STJ"
+    },
+    {
+      "added": "MAA",
+      "date": "2016-12-02",
+      "removed": "OI"
+    },
+    {
+      "added": "EVHC",
+      "date": "2016-12-02",
+      "removed": "LM"
+    },
+    {
+      "added": "ARNC",
+      "date": "2016-11-01",
+      "removed": "AA"
+    },
+    {
+      "added": "COTY",
+      "date": "2016-09-30",
+      "removed": "DO"
+    },
+    {
+      "added": "COO",
+      "date": "2016-09-22",
+      "removed": "HOT"
+    },
+    {
+      "added": "CHTR",
+      "date": "2016-09-08",
+      "removed": "EMC"
+    },
+    {
+      "added": "MTD",
+      "date": "2016-09-06",
+      "removed": "TYC"
+    },
+    {
+      "added": "FTV",
+      "date": "2016-07-05",
+      "removed": "CPGX"
+    },
+    {
+      "added": "LNT",
+      "date": "2016-07-01",
+      "removed": "GAS"
+    },
+    {
+      "added": "ALB",
+      "date": "2016-07-01",
+      "removed": "TE"
+    },
+    {
+      "added": "FBHS",
+      "date": "2016-06-22",
+      "removed": "CVC"
+    },
+    {
+      "added": "TDG",
+      "date": "2016-06-03",
+      "removed": "BXLT"
+    },
+    {
+      "added": "AJG",
+      "date": "2016-05-31",
+      "removed": "CCE"
+    },
+    {
+      "added": "LKQ",
+      "date": "2016-05-23",
+      "removed": "ARG"
+    },
+    {
+      "added": "DLR",
+      "date": "2016-05-18",
+      "removed": "TWC"
+    },
+    {
+      "added": "ALK",
+      "date": "2016-05-13",
+      "removed": "SNDK"
+    },
+    {
+      "added": "AYI",
+      "date": "2016-05-03",
+      "removed": "ADT"
+    },
+    {
+      "added": "GPN",
+      "date": "2016-04-25",
+      "removed": "GME"
+    },
+    {
+      "added": "ULTA",
+      "date": "2016-04-18",
+      "removed": "THC"
+    },
+    {
+      "added": "UA",
+      "date": "2016-04-08",
+      "removed": ""
+    },
+    {
+      "added": "FL",
+      "date": "2016-04-04",
+      "removed": "CAM"
+    },
+    {
+      "added": "HOLX",
+      "date": "2016-03-30",
+      "removed": "POM"
+    },
+    {
+      "added": "CNC",
+      "date": "2016-03-30",
+      "removed": "ESV"
+    },
+    {
+      "added": "UDR",
+      "date": "2016-03-07",
+      "removed": "GMCR"
+    },
+    {
+      "added": "AWK",
+      "date": "2016-03-04",
+      "removed": "CNX"
+    },
+    {
+      "added": "CXO",
+      "date": "2016-02-22",
+      "removed": "PCL"
+    },
+    {
+      "added": "CFG",
+      "date": "2016-02-01",
+      "removed": "PCP"
+    },
+    {
+      "added": "FRT",
+      "date": "2016-02-01",
+      "removed": "BRCM"
+    },
+    {
+      "added": "EXR",
+      "date": "2016-01-19",
+      "removed": "ACE"
+    },
+    {
+      "added": "WLTW",
+      "date": "2016-01-05",
+      "removed": "FOSL"
+    },
+    {
+      "added": "CHD",
+      "date": "2015-12-29",
+      "removed": "ALTR"
+    },
+    {
+      "added": "",
+      "date": "2015-12-15",
+      "removed": "CMCSK"
+    },
+    {
+      "added": "CSRA",
+      "date": "2015-12-01",
+      "removed": "CSC"
+    },
+    {
+      "added": "ILMN",
+      "date": "2015-11-19",
+      "removed": "SIAL"
+    },
+    {
+      "added": "SYF",
+      "date": "2015-11-18",
+      "removed": "GNW"
+    },
+    {
+      "added": "HPE",
+      "date": "2015-11-02",
+      "removed": "HCBK"
+    },
+    {
+      "added": "VRSK",
+      "date": "2015-10-07",
+      "removed": "JOY"
+    },
+    {
+      "added": "CMCSK",
+      "date": "2015-09-18",
+      "removed": ""
+    },
+    {
+      "added": "FOX",
+      "date": "2015-09-18",
+      "removed": ""
+    },
+    {
+      "added": "NWS",
+      "date": "2015-09-18",
+      "removed": ""
+    },
+    {
+      "added": "UAL",
+      "date": "2015-09-02",
+      "removed": "HSP"
+    },
+    {
+      "added": "ATVI",
+      "date": "2015-08-28",
+      "removed": "PLL"
+    },
+    {
+      "added": "SIG",
+      "date": "2015-07-29",
+      "removed": "DTV"
+    },
+    {
+      "added": "PYPL",
+      "date": "2015-07-20",
+      "removed": "NE"
+    },
+    {
+      "added": "AAP",
+      "date": "2015-07-08",
+      "removed": "FDO"
+    },
+    {
+      "added": "KHC",
+      "date": "2015-07-06",
+      "removed": "KRFT"
+    },
+    {
+      "added": "CPGX",
+      "date": "2015-07-02",
+      "removed": "ATI"
+    },
+    {
+      "added": "JBHT",
+      "date": "2015-07-01",
+      "removed": "TEG"
+    },
+    {
+      "added": "BXLT",
+      "date": "2015-07-01",
+      "removed": "QEP"
+    },
+    {
+      "added": "QRVO",
+      "date": "2015-06-11",
+      "removed": "LO"
+    },
+    {
+      "added": "O",
+      "date": "2015-04-07",
+      "removed": "WIN"
+    },
+    {
+      "added": "AAL",
+      "date": "2015-03-23",
+      "removed": "AGN"
+    },
+    {
+      "added": "EQIX",
+      "date": "2015-03-23",
+      "removed": "DNR"
+    },
+    {
+      "added": "SLG",
+      "date": "2015-03-23",
+      "removed": "NBR"
+    },
+    {
+      "added": "HBI",
+      "date": "2015-03-23",
+      "removed": "AVP"
+    },
+    {
+      "added": "HSIC",
+      "date": "2015-03-18",
+      "removed": "CFN"
+    },
+    {
+      "added": "SWKS",
+      "date": "2015-03-12",
+      "removed": "PETM"
+    },
+    {
+      "added": "HCA",
+      "date": "2015-01-27",
+      "removed": "SWY"
+    },
+    {
+      "added": "ENDP",
+      "date": "2015-01-27",
+      "removed": "COV"
+    },
+    {
+      "added": "RCL",
+      "date": "2014-12-05",
+      "removed": "BMS"
+    },
+    {
+      "added": "LVLT",
+      "date": "2014-11-05",
+      "removed": "JBL"
+    },
+    {
+      "added": "URI",
+      "date": "2014-09-20",
+      "removed": "BTU"
+    },
+    {
+      "added": "UHS",
+      "date": "2014-09-20",
+      "removed": "GHC"
+    },
+    {
+      "added": "MNK",
+      "date": "2014-08-18",
+      "removed": "RDC"
+    },
+    {
+      "added": "DISCK",
+      "date": "2014-08-06",
+      "removed": ""
+    },
+    {
+      "added": "MLM",
+      "date": "2014-07-02",
+      "removed": "X"
+    },
+    {
+      "added": "AMG",
+      "date": "2014-07-01",
+      "removed": "FRX"
+    },
+    {
+      "added": "XEC",
+      "date": "2014-06-20",
+      "removed": "IGT"
+    },
+    {
+      "added": "AVGO",
+      "date": "2014-05-08",
+      "removed": "LSI"
+    },
+    {
+      "added": "UA",
+      "date": "2014-05-01",
+      "removed": "BEAM"
+    },
+    {
+      "added": "NAVI",
+      "date": "2014-05-01",
+      "removed": "SLM"
+    },
+    {
+      "added": "GOOGL",
+      "date": "2014-04-03",
+      "removed": ""
+    },
+    {
+      "added": "ESS",
+      "date": "2014-04-02",
+      "removed": "CLF"
+    },
+    {
+      "added": "GMCR",
+      "date": "2014-03-21",
+      "removed": "WPX"
+    },
+    {
+      "added": "TSCO",
+      "date": "2014-01-24",
+      "removed": "LIFE"
+    },
+    {
+      "added": "ADS",
+      "date": "2013-12-23",
+      "removed": "ANF"
+    },
+    {
+      "added": "MHK",
+      "date": "2013-12-23",
+      "removed": "JDSU"
+    },
+    {
+      "added": "FB",
+      "date": "2013-12-23",
+      "removed": "TER"
+    },
+    {
+      "added": "GGP",
+      "date": "2013-12-10",
+      "removed": "MOLX"
+    },
+    {
+      "added": "ALLE",
+      "date": "2013-12-02",
+      "removed": "JCP"
+    },
+    {
+      "added": "KORS",
+      "date": "2013-11-13",
+      "removed": "NYX"
+    },
+    {
+      "added": "RIG",
+      "date": "2013-10-29",
+      "removed": "DELL"
+    },
+    {
+      "added": "VRTX",
+      "date": "2013-09-20",
+      "removed": "AMD"
+    },
+    {
+      "added": "AME",
+      "date": "2013-09-20",
+      "removed": "SAI"
+    },
+    {
+      "added": "DAL",
+      "date": "2013-09-10",
+      "removed": "BMC"
+    },
+    {
+      "added": "NLSN",
+      "date": "2013-07-08",
+      "removed": "S"
+    },
+    {
+      "added": "NWSA",
+      "date": "2013-07-01",
+      "removed": "APOL"
+    },
+    {
+      "added": "ZTS",
+      "date": "2013-06-21",
+      "removed": "FHN"
+    },
+    {
+      "added": "GM",
+      "date": "2013-06-06",
+      "removed": "HNZ"
+    },
+    {
+      "added": "KSU",
+      "date": "2013-05-23",
+      "removed": "DF"
+    },
+    {
+      "added": "MAC",
+      "date": "2013-05-08",
+      "removed": "CVH"
+    },
+    {
+      "added": "REGN",
+      "date": "2013-04-30",
+      "removed": "PCS"
+    },
+    {
+      "added": "PVH",
+      "date": "2013-02-15",
+      "removed": "BIG"
+    },
+    {
+      "added": "ABBV",
+      "date": "2013-01-02",
+      "removed": "FII"
+    },
+    {
+      "added": "DLPH",
+      "date": "2012-12-21",
+      "removed": "TIE"
+    },
+    {
+      "added": "GRMN",
+      "date": "2012-12-11",
+      "removed": "RRD"
+    },
+    {
+      "added": "DG",
+      "date": "2012-12-03",
+      "removed": "CBE"
+    },
+    {
+      "added": "PETM",
+      "date": "2012-10-10",
+      "removed": "SUN"
+    },
+    {
+      "added": "KRFT",
+      "date": "2012-10-02",
+      "removed": "ANR"
+    },
+    {
+      "added": "MDLZ",
+      "date": "2012-10-02",
+      "removed": "KFT"
+    },
+    {
+      "added": "ADT",
+      "date": "2012-10-01",
+      "removed": "LXK"
+    },
+    {
+      "added": "PNR",
+      "date": "2012-10-01",
+      "removed": "DV"
+    },
+    {
+      "added": "LYB",
+      "date": "2012-09-05",
+      "removed": "SHLD"
+    },
+    {
+      "added": "ESV",
+      "date": "2012-07-31",
+      "removed": "GR"
+    },
+    {
+      "added": "STX",
+      "date": "2012-07-02",
+      "removed": "PGN"
+    },
+    {
+      "added": "MNST",
+      "date": "2012-06-29",
+      "removed": "SLE"
+    },
+    {
+      "added": "LRCX",
+      "date": "2012-06-05",
+      "removed": "NVLS"
+    },
+    {
+      "added": "ALXN",
+      "date": "2012-05-21",
+      "removed": "MMI"
+    },
+    {
+      "added": "KMI",
+      "date": "2012-05-17",
+      "removed": "EP"
+    },
+    {
+      "added": "PSX",
+      "date": "2012-04-23",
+      "removed": "SVU"
+    },
+    {
+      "added": "FOSL",
+      "date": "2012-04-03",
+      "removed": "MHS"
+    },
+    {
+      "added": "CCI",
+      "date": "2012-03-13",
+      "removed": "CEG"
+    },
+    {
+      "added": "WPX",
+      "date": "2011-12-31",
+      "removed": "CPWR"
+    },
+    {
+      "added": "TRIP",
+      "date": "2011-12-20",
+      "removed": "TLAB"
+    },
+    {
+      "added": "BWA",
+      "date": "2011-12-16",
+      "removed": "AKS"
+    },
+    {
+      "added": "PRGO",
+      "date": "2011-12-16",
+      "removed": "MWW"
+    },
+    {
+      "added": "DLTR",
+      "date": "2011-12-16",
+      "removed": "WFR"
+    },
+    {
+      "added": "GAS",
+      "date": "2011-12-12",
+      "removed": "GAS"
+    },
+    {
+      "added": "CBE",
+      "date": "2011-11-18",
+      "removed": "JNS"
+    },
+    {
+      "added": "XYL",
+      "date": "2011-10-31",
+      "removed": "ITT"
+    },
+    {
+      "added": "TEL",
+      "date": "2011-10-14",
+      "removed": "CEPH"
+    },
+    {
+      "added": "MOS",
+      "date": "2011-09-23",
+      "removed": "NSM"
+    },
+    {
+      "added": "ACN",
+      "date": "2011-07-05",
+      "removed": "MI"
+    },
+    {
+      "added": "MPC",
+      "date": "2011-06-30",
+      "removed": "RSH"
+    },
+    {
+      "added": "ANR",
+      "date": "2011-06-01",
+      "removed": "MEE"
+    },
+    {
+      "added": "CMG",
+      "date": "2011-04-27",
+      "removed": "NOVL"
+    },
+    {
+      "added": "BLK",
+      "date": "2011-04-01",
+      "removed": "GENZ"
+    },
+    {
+      "added": "EW",
+      "date": "2011-03-31",
+      "removed": "Q"
+    },
+    {
+      "added": "COV",
+      "date": "2011-02-28",
+      "removed": "MFE"
+    },
+    {
+      "added": "JOYG",
+      "date": "2011-02-25",
+      "removed": "AYE"
+    },
+    {
+      "added": "MMI",
+      "date": "2011-01-03",
+      "removed": "MDP"
+    },
+    {
+      "added": "CVC",
+      "date": "2010-12-17",
+      "removed": "KG"
+    },
+    {
+      "added": "FFIV",
+      "date": "2010-12-17",
+      "removed": "EK"
+    },
+    {
+      "added": "NFLX",
+      "date": "2010-12-17",
+      "removed": "ODP"
+    },
+    {
+      "added": "NFX",
+      "date": "2010-12-17",
+      "removed": "NYT"
+    },
+    {
+      "added": "IR",
+      "date": "2010-11-17",
+      "removed": "PTV"
+    },
+    {
+      "added": "TYC",
+      "date": "2010-08-26",
+      "removed": "SII"
+    },
+    {
+      "added": "CB",
+      "date": "2010-07-14",
+      "removed": "MIL"
+    },
+    {
+      "added": "QEP",
+      "date": "2010-06-30",
+      "removed": "STR"
+    },
+    {
+      "added": "KMX",
+      "date": "2010-06-28",
+      "removed": "XTO"
+    },
+    {
+      "added": "CERN",
+      "date": "2010-04-29",
+      "removed": "BJS"
+    },
+    {
+      "added": "HP",
+      "date": "2010-02-26",
+      "removed": "RX"
+    },
+    {
+      "added": "V",
+      "date": "2009-12-18",
+      "removed": "CIEN"
+    },
+    {
+      "added": "MJN",
+      "date": "2009-12-18",
+      "removed": "DYN"
+    },
+    {
+      "added": "CLF",
+      "date": "2009-12-18",
+      "removed": "KBH"
+    },
+    {
+      "added": "SAI",
+      "date": "2009-12-18",
+      "removed": "CVG"
+    },
+    {
+      "added": "ROST",
+      "date": "2009-12-18",
+      "removed": "MBI"
+    },
+    {
+      "added": "PCLN",
+      "date": "2009-11-03",
+      "removed": "SGP"
+    },
+    {
+      "added": "ARG",
+      "date": "2009-09-28",
+      "removed": "CBE"
+    },
+    {
+      "added": "FMC",
+      "date": "2009-08-19",
+      "removed": "CTX"
+    },
+    {
+      "added": "PCS",
+      "date": "2009-06-29",
+      "removed": ""
+    },
+    {
+      "added": "",
+      "date": "2009-06-25",
+      "removed": "TEL"
+    },
+    {
+      "added": "FTI",
+      "date": "2009-06-05",
+      "removed": "COV"
+    },
+    {
+      "added": "HRL",
+      "date": "2009-03-03",
+      "removed": "ACAS"
+    },
+    {
+      "added": "VTR",
+      "date": "2009-03-03",
+      "removed": "JNY"
+    },
+    {
+      "added": "OI",
+      "date": "2008-12-31",
+      "removed": "WB"
+    },
+    {
+      "added": "HRS",
+      "date": "2008-09-16",
+      "removed": "LEH"
+    },
+    {
+      "added": "CRM",
+      "date": "2008-09-12",
+      "removed": "FRE"
+    },
+    {
+      "added": "FAST",
+      "date": "2008-09-12",
+      "removed": "FNM"
+    },
+    {
+      "added": "AKS",
+      "date": "2008-07-01",
+      "removed": "CFC"
+    },
+    {
+      "added": "COG",
+      "date": "2008-06-23",
+      "removed": "BC"
+    },
+    {
+      "added": "MEE",
+      "date": "2008-06-23",
+      "removed": "OMX"
+    },
+    {
+      "added": "LO",
+      "date": "2008-06-10",
+      "removed": "ABK"
+    },
+    {
+      "added": "RRC",
+      "date": "2007-12-20",
+      "removed": "TRB"
+    },
+    {
+      "added": "GME",
+      "date": "2007-12-13",
+      "removed": "DJ"
+    },
+    {
+      "added": "JEC",
+      "date": "2007-10-26",
+      "removed": "AV"
+    },
+    {
+      "added": "EXPE",
+      "date": "2007-10-02",
+      "removed": "SLR"
+    },
+    {
+      "added": "TDC",
+      "date": "2007-10-01",
+      "removed": "NCR"
+    },
+    {
+      "added": "TSO",
+      "date": "2007-09-27",
+      "removed": "MXIM"
+    },
+    {
+      "added": "ICE",
+      "date": "2007-09-26",
+      "removed": "FDC"
+    },
+    {
+      "added": "LUK",
+      "date": "2007-08-24",
+      "removed": "KSE"
+    },
+    {
+      "added": "DFS",
+      "date": "2007-07-02",
+      "removed": "ADCT"
+    },
+    {
+      "added": "KFT",
+      "date": "2007-03-30",
+      "removed": "TSG"
+    },
+    {
+      "added": "AVB",
+      "date": "2007-01-10",
+      "removed": "SBL"
+    },
+    {
+      "added": "JNPR",
+      "date": "2006-06-02",
+      "removed": "ABS"
+    },
+    {
+      "added": "AMZN",
+      "date": "2005-11-18",
+      "removed": "T"
+    },
+    {
+      "added": "STZ",
+      "date": "2005-07-01",
+      "removed": "GLK"
+    },
+    {
+      "added": "ESRX",
+      "date": "2003-09-25",
+      "removed": "QTRN"
+    },
+    {
+      "added": "INTU",
+      "date": "2000-12-05",
+      "removed": "BS"
+    },
+    {
+      "added": "SBL",
+      "date": "2000-12-05",
+      "removed": "OI"
+    },
+    {
+      "added": "AYE",
+      "date": "2000-12-05",
+      "removed": "GRA"
+    },
+    {
+      "added": "ABK",
+      "date": "2000-12-05",
+      "removed": "CCK"
+    },
+    {
+      "added": "JDSU",
+      "date": "2000-07-27",
+      "removed": "RAD"
+    },
+    {
+      "added": "CVG",
+      "date": "2000-06-12",
+      "removed": "TMC"
+    },
+    {
+      "added": "SBUX",
+      "date": "2000-06-07",
+      "removed": "SMS"
+    },
+    {
+      "added": "YHOO",
+      "date": "1999-12-08",
+      "removed": "LDW"
+    },
+    {
+      "added": "WLP",
+      "date": "1999-06-09",
+      "removed": "HPH"
+    },
+    {
+      "added": "ACT",
+      "date": "1999-04-12",
+      "removed": ""
+    },
+    {
+      "added": "FSR",
+      "date": "1998-12-11",
+      "removed": "AN"
+    },
+    {
+      "added": "CCL",
+      "date": "1998-12-11",
+      "removed": "GRN"
+    },
+    {
+      "added": "CPWR",
+      "date": "1998-12-11",
+      "removed": "SUN"
+    },
+    {
+      "added": "CCR",
+      "date": "1997-06-17",
+      "removed": "USL"
+    },
+    {
+      "added": "NCC",
+      "date": "1994-09-30",
+      "removed": "MCK"
+    },
+    {
+      "added": "BUD",
+      "date": "1976-07-01",
+      "removed": "HNG"
+    },
+    {
+      "added": "DIS",
+      "date": "1976-07-01",
+      "removed": "AYE"
+    },
+    {
+      "added": "FERG",
+      "date": "2026-08-05",
+      "removed": "EA",
+      "source": "https://press.spglobal.com/2026-07-31-Ferguson-Enterprises-Set-to-Join-S-P-500-and-ADI-Global-Distribution-to-Join-S-P-SmallCap-600"
+    },
+    {
+      "added": "RDDT",
+      "date": "2026-08-18",
+      "removed": "AVB",
+      "source": "https://press.spglobal.com/2026-08-13-Reddit-Set-to-Join-S-P-500-and-Sun-Communities-to-Join-S-P-MidCap-400"
+    }
+  ],
+  "current": [
+    "A",
+    "AAPL",
+    "ABBV",
+    "ABNB",
+    "ABT",
+    "ACGL",
+    "ACN",
+    "ADBE",
+    "ADI",
+    "ADM",
+    "ADP",
+    "ADSK",
+    "AEE",
+    "AEP",
+    "AES",
+    "AFL",
+    "AIG",
+    "AIZ",
+    "AJG",
+    "AKAM",
+    "ALB",
+    "ALGN",
+    "ALL",
+    "ALLE",
+    "AMAT",
+    "AMCR",
+    "AMD",
+    "AME",
+    "AMGN",
+    "AMP",
+    "AMT",
+    "AMZN",
+    "ANET",
+    "AON",
+    "AOS",
+    "APA",
+    "APD",
+    "APH",
+    "APO",
+    "APP",
+    "APTV",
+    "ARE",
+    "ARES",
+    "ATO",
+    "AVGO",
+    "AVY",
+    "AWK",
+    "AXON",
+    "AXP",
+    "AZO",
+    "BA",
+    "BAC",
+    "BALL",
+    "BAX",
+    "BBY",
+    "BDX",
+    "BEN",
+    "BF.B",
+    "BG",
+    "BIIB",
+    "BKNG",
+    "BKR",
+    "BLDR",
+    "BLK",
+    "BMY",
+    "BNY",
+    "BR",
+    "BRK.B",
+    "BRO",
+    "BSX",
+    "BX",
+    "BXP",
+    "C",
+    "CAH",
+    "CARR",
+    "CASY",
+    "CAT",
+    "CB",
+    "CBOE",
+    "CBRE",
+    "CCI",
+    "CCL",
+    "CDNS",
+    "CDW",
+    "CEG",
+    "CF",
+    "CFG",
+    "CHD",
+    "CHRW",
+    "CHTR",
+    "CI",
+    "CIEN",
+    "CINF",
+    "CL",
+    "CLX",
+    "CMCSA",
+    "CME",
+    "CMG",
+    "CMI",
+    "CMS",
+    "CNC",
+    "CNP",
+    "COF",
+    "COHR",
+    "COIN",
+    "COO",
+    "COP",
+    "COR",
+    "COST",
+    "CPAY",
+    "CPRT",
+    "CPT",
+    "CRH",
+    "CRL",
+    "CRM",
+    "CRWD",
+    "CSCO",
+    "CSGP",
+    "CSX",
+    "CTAS",
+    "CTSH",
+    "CTVA",
+    "CVNA",
+    "CVS",
+    "CVX",
+    "D",
+    "DAL",
+    "DASH",
+    "DD",
+    "DDOG",
+    "DE",
+    "DECK",
+    "DELL",
+    "DG",
+    "DGX",
+    "DHI",
+    "DHR",
+    "DIS",
+    "DLR",
+    "DLTR",
+    "DOC",
+    "DOV",
+    "DOW",
+    "DPZ",
+    "DRI",
+    "DTE",
+    "DUK",
+    "DVA",
+    "DVN",
+    "DXCM",
+    "EBAY",
+    "ECHO",
+    "ECL",
+    "ED",
+    "EFX",
+    "EG",
+    "EIX",
+    "EL",
+    "ELV",
+    "EME",
+    "EMR",
+    "EOG",
+    "EQIX",
+    "EQR",
+    "EQT",
+    "ERIE",
+    "ES",
+    "ESS",
+    "ETN",
+    "ETR",
+    "EVRG",
+    "EW",
+    "EXC",
+    "EXE",
+    "EXPD",
+    "EXPE",
+    "EXR",
+    "F",
+    "FANG",
+    "FAST",
+    "FCX",
+    "FDS",
+    "FDX",
+    "FDXF",
+    "FE",
+    "FERG",
+    "FFIV",
+    "FICO",
+    "FIS",
+    "FISV",
+    "FITB",
+    "FIX",
+    "FLEX",
+    "FOX",
+    "FOXA",
+    "FRT",
+    "FSLR",
+    "FTNT",
+    "FTV",
+    "GD",
+    "GDDY",
+    "GE",
+    "GEHC",
+    "GEN",
+    "GEV",
+    "GILD",
+    "GIS",
+    "GL",
+    "GLW",
+    "GM",
+    "GNRC",
+    "GOOG",
+    "GOOGL",
+    "GPC",
+    "GPN",
+    "GRMN",
+    "GS",
+    "GWW",
+    "HAL",
+    "HAS",
+    "HBAN",
+    "HCA",
+    "HD",
+    "HIG",
+    "HII",
+    "HLT",
+    "HON",
+    "HONA",
+    "HOOD",
+    "HPE",
+    "HPQ",
+    "HRL",
+    "HSIC",
+    "HST",
+    "HSY",
+    "HUBB",
+    "HUM",
+    "HWM",
+    "IBKR",
+    "IBM",
+    "ICE",
+    "IDXX",
+    "IEX",
+    "IFF",
+    "INCY",
+    "INTC",
+    "INTU",
+    "INVH",
+    "IP",
+    "IQV",
+    "IR",
+    "IRM",
+    "ISRG",
+    "IT",
+    "ITW",
+    "IVZ",
+    "J",
+    "JBHT",
+    "JBL",
+    "JCI",
+    "JKHY",
+    "JNJ",
+    "JPM",
+    "KDP",
+    "KEY",
+    "KEYS",
+    "KHC",
+    "KIM",
+    "KKR",
+    "KLAC",
+    "KMB",
+    "KMI",
+    "KO",
+    "KR",
+    "KVUE",
+    "L",
+    "LDOS",
+    "LEN",
+    "LH",
+    "LHX",
+    "LII",
+    "LIN",
+    "LITE",
+    "LLY",
+    "LMT",
+    "LNT",
+    "LOW",
+    "LRCX",
+    "LULU",
+    "LUV",
+    "LVS",
+    "LYB",
+    "LYV",
+    "MA",
+    "MAA",
+    "MAR",
+    "MAS",
+    "MCD",
+    "MCHP",
+    "MCK",
+    "MCO",
+    "MDLZ",
+    "MDT",
+    "MET",
+    "META",
+    "MGM",
+    "MKC",
+    "MLM",
+    "MMM",
+    "MNST",
+    "MO",
+    "MOS",
+    "MPC",
+    "MPWR",
+    "MRK",
+    "MRNA",
+    "MRSH",
+    "MRVL",
+    "MS",
+    "MSCI",
+    "MSFT",
+    "MSI",
+    "MTB",
+    "MTD",
+    "MU",
+    "NCLH",
+    "NDAQ",
+    "NDSN",
+    "NEE",
+    "NEM",
+    "NFLX",
+    "NI",
+    "NKE",
+    "NOC",
+    "NOW",
+    "NRG",
+    "NSC",
+    "NTAP",
+    "NTRS",
+    "NUE",
+    "NVDA",
+    "NVR",
+    "NWS",
+    "NWSA",
+    "NXPI",
+    "O",
+    "ODFL",
+    "OKE",
+    "OMC",
+    "ON",
+    "ORCL",
+    "ORLY",
+    "OTIS",
+    "OXY",
+    "PANW",
+    "PAYX",
+    "PCAR",
+    "PCG",
+    "PEG",
+    "PEP",
+    "PFE",
+    "PFG",
+    "PG",
+    "PGR",
+    "PH",
+    "PHM",
+    "PKG",
+    "PLD",
+    "PLTR",
+    "PM",
+    "PNC",
+    "PNR",
+    "PNW",
+    "PODD",
+    "PPG",
+    "PPL",
+    "PRU",
+    "PSA",
+    "PSKY",
+    "PSX",
+    "PTC",
+    "PWR",
+    "PYPL",
+    "Q",
+    "QCOM",
+    "RCL",
+    "RDDT",
+    "REG",
+    "REGN",
+    "RF",
+    "RJF",
+    "RL",
+    "RMD",
+    "ROK",
+    "ROL",
+    "ROP",
+    "ROST",
+    "RSG",
+    "RTX",
+    "RVTY",
+    "SBAC",
+    "SBUX",
+    "SCHW",
+    "SHW",
+    "SJM",
+    "SLB",
+    "SMCI",
+    "SNA",
+    "SNDK",
+    "SNPS",
+    "SO",
+    "SOLV",
+    "SPG",
+    "SPGI",
+    "SRE",
+    "STE",
+    "STLD",
+    "STT",
+    "STX",
+    "STZ",
+    "SW",
+    "SWK",
+    "SWKS",
+    "SYF",
+    "SYK",
+    "SYY",
+    "T",
+    "TAP",
+    "TDG",
+    "TDY",
+    "TECH",
+    "TEL",
+    "TER",
+    "TFC",
+    "TGT",
+    "TJX",
+    "TKO",
+    "TMO",
+    "TMUS",
+    "TPL",
+    "TPR",
+    "TRGP",
+    "TRMB",
+    "TROW",
+    "TRV",
+    "TSCO",
+    "TSLA",
+    "TSN",
+    "TT",
+    "TTD",
+    "TTWO",
+    "TXN",
+    "TXT",
+    "TYL",
+    "UAL",
+    "UBER",
+    "UDR",
+    "UHS",
+    "ULTA",
+    "UNH",
+    "UNP",
+    "UPS",
+    "URI",
+    "USB",
+    "V",
+    "VEEV",
+    "VICI",
+    "VLO",
+    "VLTO",
+    "VMC",
+    "VRSK",
+    "VRSN",
+    "VRT",
+    "VRTX",
+    "VST",
+    "VTR",
+    "VTRS",
+    "VZ",
+    "WAB",
+    "WAT",
+    "WBD",
+    "WDAY",
+    "WDC",
+    "WEC",
+    "WELL",
+    "WFC",
+    "WM",
+    "WMB",
+    "WMT",
+    "WRB",
+    "WSM",
+    "WST",
+    "WTW",
+    "WY",
+    "WYNN",
+    "XEL",
+    "XOM",
+    "XYL",
+    "XYZ",
+    "YUM",
+    "ZBH",
+    "ZBRA",
+    "ZTS"
+  ],
+  "schema_version": 1,
+  "source": {
+    "commit": "212cf6354a0fad30965cad6047b335b935562cfc",
+    "coverage_end": "2026-08-27",
+    "current_snapshot_source_date": "2026-06-30",
+    "date_semantics": "source-reported selected-change dates; not assumed to be exact S&P effective timestamps unless separately sourced",
+    "license": "CC BY 4.0 data; MIT code; derived from Wikipedia CC BY-SA",
+    "membership_sha256": "6bedcb36dbf5713bec084f8b4c44ea7d59680a0a05a39a1214d712c52f00df19",
+    "membership_url": "https://raw.githubusercontent.com/joeyfife/point-in-time-sp500/212cf6354a0fad30965cad6047b335b935562cfc/data/membership.json",
+    "methodology_sha256": "6c33aab6370d1a64211ff71345265d3fa3c254e82028e5c0480164607b6eb0df",
+    "methodology_url": "https://raw.githubusercontent.com/joeyfife/point-in-time-sp500/212cf6354a0fad30965cad6047b335b935562cfc/METHODOLOGY.md",
+    "official_extensions": [
+      {
+        "added": "FERG",
+        "date": "2026-08-05",
+        "removed": "EA",
+        "source": "https://press.spglobal.com/2026-07-31-Ferguson-Enterprises-Set-to-Join-S-P-500-and-ADI-Global-Distribution-to-Join-S-P-SmallCap-600"
+      },
+      {
+        "added": "RDDT",
+        "date": "2026-08-18",
+        "removed": "AVB",
+        "source": "https://press.spglobal.com/2026-08-13-Reddit-Set-to-Join-S-P-500-and-Sun-Communities-to-Join-S-P-MidCap-400"
+      }
+    ],
+    "repository": "joeyfife/point-in-time-sp500",
+    "ticker_aliases": [
+      {
+        "historical": "FB",
+        "price_provider": "META",
+        "reason": "Facebook renamed its ticker to META; Alpaca historical META bars are continuous.",
+        "source": "https://www.sec.gov/ixviewer/doc/action?doc=/Archives/edgar/data/1326801/000132680122000033/meta-20220331.htm"
+      }
+    ]
+  },
+  "symbol_aliases": {
+    "FB": "META"
+  }
+}

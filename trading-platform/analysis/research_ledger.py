@@ -30,8 +30,33 @@ CREATE TABLE IF NOT EXISTS research_ledger (
     went_live        BOOLEAN NOT NULL DEFAULT FALSE,
     went_live_at     TIMESTAMPTZ,
     notes            TEXT,
-    backfilled       BOOLEAN NOT NULL DEFAULT FALSE
+    backfilled       BOOLEAN NOT NULL DEFAULT FALSE,
+    sizing_model     TEXT CHECK (
+        sizing_model IS NULL
+        OR sizing_model IN ('cash_constrained', 'event_compounded', 'unknown')
+    )
 );
+
+ALTER TABLE research_ledger
+    ADD COLUMN IF NOT EXISTS sizing_model TEXT;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'research_ledger_sizing_model_check'
+          AND conrelid = 'research_ledger'::regclass
+    ) THEN
+        ALTER TABLE research_ledger
+            ADD CONSTRAINT research_ledger_sizing_model_check
+            CHECK (
+                sizing_model IS NULL
+                OR sizing_model IN ('cash_constrained', 'event_compounded', 'unknown')
+            );
+    END IF;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION research_ledger_spec_immutable()
 RETURNS TRIGGER
@@ -57,6 +82,11 @@ CREATE TRIGGER research_ledger_spec_immutable_trigger
 BEFORE UPDATE ON research_ledger
 FOR EACH ROW EXECUTE FUNCTION research_ledger_spec_immutable();
 
+DROP FUNCTION IF EXISTS register_experiment(
+    TEXT, TEXT, TEXT, JSONB, JSONB, JSONB, INT, TEXT, BOOLEAN,
+    TIMESTAMPTZ, TEXT, BOOLEAN
+);
+
 CREATE OR REPLACE FUNCTION register_experiment(
     p_strategy_family TEXT,
     p_bot_id TEXT,
@@ -65,6 +95,7 @@ CREATE OR REPLACE FUNCTION register_experiment(
     p_pass_bar JSONB,
     p_data_window JSONB,
     p_variations_tested INT,
+    p_sizing_model TEXT,
     p_spec_hash TEXT DEFAULT NULL,
     p_went_live BOOLEAN DEFAULT FALSE,
     p_went_live_at TIMESTAMPTZ DEFAULT NULL,
@@ -77,14 +108,21 @@ AS $$
 DECLARE
     new_id BIGINT;
 BEGIN
+    IF p_sizing_model IS NULL
+       OR p_sizing_model NOT IN ('cash_constrained', 'event_compounded', 'unknown')
+    THEN
+        RAISE EXCEPTION
+            'research_ledger sizing_model must be cash_constrained, event_compounded, or unknown';
+    END IF;
+
     INSERT INTO research_ledger (
         strategy_family, bot_id, hypothesis, parameters, pass_bar,
         data_window, variations_tested, spec_hash, went_live, went_live_at,
-        notes, backfilled
+        notes, backfilled, sizing_model
     ) VALUES (
         p_strategy_family, p_bot_id, p_hypothesis, p_parameters, p_pass_bar,
         p_data_window, p_variations_tested, p_spec_hash, p_went_live,
-        p_went_live_at, p_notes, p_backfilled
+        p_went_live_at, p_notes, p_backfilled, p_sizing_model
     )
     RETURNING experiment_id INTO new_id;
     RETURN new_id;
@@ -181,6 +219,7 @@ def register_experiment(
     pass_bar: dict[str, Any],
     data_window: dict[str, Any],
     variations_tested: int,
+    sizing_model: str,
     went_live: bool = False,
     went_live_at: datetime | None = None,
     notes: str | None = None,
@@ -196,12 +235,12 @@ def register_experiment(
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT register_experiment(
-                    %s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s
+                    %s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s
                 )""",
                 (
                     strategy_family, bot_id, hypothesis,
                     json.dumps(parameters), json.dumps(pass_bar),
-                    json.dumps(data_window), variations_tested, spec_hash,
+                    json.dumps(data_window), variations_tested, sizing_model, spec_hash,
                     went_live, went_live_at, notes, backfilled,
                 ),
             )

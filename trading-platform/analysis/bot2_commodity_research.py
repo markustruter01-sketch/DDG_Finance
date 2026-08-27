@@ -1045,6 +1045,7 @@ def main() -> int:
                 "earnings_source": "existing bot2_earnings_dates",
             },
             variations_tested=1,
+            sizing_model="cash_constrained",
             went_live=False,
             notes="Development-only research; no live strategy or broker orders.",
         )

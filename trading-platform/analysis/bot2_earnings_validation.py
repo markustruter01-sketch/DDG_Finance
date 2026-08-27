@@ -644,6 +644,7 @@ def _find_or_register_experiment() -> int:
         pass_bar=pass_bar,
         data_window=data_window,
         variations_tested=2,
+            sizing_model="event_compounded",
         went_live=False,
         notes="Development-only validation. No orders, live module, runner, or deployment changes permitted.",
     )

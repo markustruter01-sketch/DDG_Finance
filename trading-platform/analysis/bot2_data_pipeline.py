@@ -32,10 +32,14 @@ from db.postgres import get_conn  # noqa: E402
 EARNINGS_TABLE = "bot2_earnings_dates"
 PRICES_TABLE = "bot2_prices"
 START_DATE = date(2021, 1, 1)
-STOCKS = ("BRK-B", "BLK", "V", "MA", "PYPL", "LMT", "RTX", "NVDA", "TSM", "JPM")
+EARNINGS_START_DATE = date(2018, 1, 1)
+LEGACY_STOCKS = ("BRK-B", "BLK", "V", "MA", "PYPL", "LMT", "RTX", "NVDA", "TSM", "JPM")
+STOCKS = LEGACY_STOCKS
+VALIDATION_STOCKS = ("MSFT", "AAPL", "V", "MA", "COST", "PG", "JNJ", "LIN", "WM", "BRK-B")
 ETFS = ("SCHD", "VYM", "DGRO", "VIG", "HDV", "VYMI", "SPHD", "VNQ", "PFF", "SGOV")
 COMMODITY_ETFS = ("PDBC", "DBC", "COMT", "DBA", "DBB", "DBE", "CPER", "XLE", "MOO")
-ALL_SYMBOLS = STOCKS + ETFS + COMMODITY_ETFS
+EARNINGS_SYMBOLS = tuple(dict.fromkeys(LEGACY_STOCKS + VALIDATION_STOCKS))
+ALL_SYMBOLS = tuple(dict.fromkeys(EARNINGS_SYMBOLS + ETFS + COMMODITY_ETFS))
 ORIGINAL_SYMBOLS = STOCKS + ETFS
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
@@ -43,7 +47,7 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 EARNINGS_DDL = f"""
 CREATE TABLE IF NOT EXISTS {EARNINGS_TABLE} (
     id                  BIGSERIAL PRIMARY KEY,
-    symbol              TEXT NOT NULL CHECK (symbol IN ({", ".join(repr(s) for s in STOCKS)})),
+    symbol              TEXT NOT NULL CHECK (symbol IN ({", ".join(repr(s) for s in EARNINGS_SYMBOLS)})),
     reported_date       DATE NOT NULL,
     fiscal_date_ending  DATE,
     reported_eps        DOUBLE PRECISION,
@@ -100,6 +104,17 @@ def ensure_tables() -> None:
             # already-created Bot 2 table.  This is the one additive schema
             # change required for the isolated commodity research dataset.
             cur.execute(
+                f"ALTER TABLE {EARNINGS_TABLE} "
+                "DROP CONSTRAINT IF EXISTS bot2_earnings_dates_symbol_check"
+            )
+            cur.execute(
+                f"""
+                ALTER TABLE {EARNINGS_TABLE}
+                ADD CONSTRAINT bot2_earnings_dates_symbol_check
+                CHECK (symbol IN ({", ".join(repr(s) for s in EARNINGS_SYMBOLS)}))
+                """
+            )
+            cur.execute(
                 f"ALTER TABLE {PRICES_TABLE} "
                 "DROP CONSTRAINT IF EXISTS bot2_prices_symbol_check"
             )
@@ -141,7 +156,10 @@ def _parse_date(value: Any) -> date | None:
         return None
 
 
-def fetch_earnings(symbol: str) -> list[dict[str, Any]]:
+def fetch_earnings(
+    symbol: str,
+    start_date: date = START_DATE,
+) -> list[dict[str, Any]]:
     key = os.environ.get("ALPHA_VANTAGE_API_KEY")
     if not key:
         raise RuntimeError("ALPHA_VANTAGE_API_KEY is required")
@@ -158,7 +176,7 @@ def fetch_earnings(symbol: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in payload.get("quarterlyEarnings") or []:
         reported_date = _parse_date(item.get("reportedDate"))
-        if reported_date is None or reported_date < START_DATE:
+        if reported_date is None or reported_date < start_date:
             continue
         rows.append(
             {
@@ -175,14 +193,17 @@ def fetch_earnings(symbol: str) -> list[dict[str, Any]]:
     return rows
 
 
-def ingest_earnings() -> dict[str, int]:
+def ingest_earnings(
+    symbols: tuple[str, ...] = STOCKS,
+    start_date: date = START_DATE,
+) -> dict[str, int]:
     counts: dict[str, int] = {}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for index, symbol in enumerate(STOCKS):
+            for index, symbol in enumerate(symbols):
                 if index:
                     time.sleep(12.5)
-                rows = fetch_earnings(symbol)
+                rows = fetch_earnings(symbol, start_date)
                 if not rows:
                     raise RuntimeError(f"Alpha Vantage {symbol}: no qualifying quarterly rows")
                 psycopg2.extras.execute_values(
@@ -219,11 +240,15 @@ def ingest_earnings() -> dict[str, int]:
     return counts
 
 
-def fetch_yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
+def fetch_yahoo_daily(
+    symbol: str,
+    end_exclusive: date,
+    start_date: date = START_DATE,
+) -> list[dict[str, Any]]:
     payload = _json_get(
         f"{YAHOO_CHART_URL}/{symbol}",
         {
-            "period1": _unix_midnight(START_DATE),
+            "period1": _unix_midnight(start_date),
             "period2": _unix_midnight(end_exclusive),
             "interval": "1d",
             "events": "history",
@@ -240,7 +265,7 @@ def fetch_yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
     timestamps = result.get("timestamp") or []
     quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
     columns = {name: quote.get(name) or [] for name in ("open", "high", "low", "close", "volume")}
-    if symbol in STOCKS:
+    if symbol in EARNINGS_SYMBOLS:
         asset_type = "stock"
     elif symbol in COMMODITY_ETFS:
         asset_type = "commodity_etf"
@@ -249,7 +274,7 @@ def fetch_yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
     bars: list[dict[str, Any]] = []
     for index, timestamp in enumerate(timestamps):
         bar_date = datetime.fromtimestamp(timestamp, timezone.utc).date()
-        if bar_date < START_DATE or bar_date >= end_exclusive:
+        if bar_date < start_date or bar_date >= end_exclusive:
             continue
         values = {
             name: columns[name][index] if index < len(columns[name]) else None
@@ -269,13 +294,16 @@ def fetch_yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
     return sorted(bars, key=lambda row: row["date"])
 
 
-def ingest_prices() -> dict[str, int]:
+def ingest_prices(
+    symbols: tuple[str, ...] = ORIGINAL_SYMBOLS,
+    start_date: date = START_DATE,
+) -> dict[str, int]:
     counts: dict[str, int] = {}
     end_exclusive = date.today() + timedelta(days=1)
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for symbol in ORIGINAL_SYMBOLS:
-                bars = fetch_yahoo_daily(symbol, end_exclusive)
+            for symbol in symbols:
+                bars = fetch_yahoo_daily(symbol, end_exclusive, start_date)
                 if not bars:
                     raise RuntimeError(f"Yahoo {symbol}: no complete bars returned")
                 psycopg2.extras.execute_values(
@@ -317,7 +345,7 @@ def ingest_commodity_prices() -> dict[str, int]:
     with get_conn() as conn:
         with conn.cursor() as cur:
             for symbol in COMMODITY_ETFS:
-                bars = fetch_yahoo_daily(symbol, end_exclusive)
+                bars = fetch_yahoo_daily(symbol, end_exclusive, START_DATE)
                 if not bars:
                     raise RuntimeError(f"Yahoo {symbol}: no complete bars returned")
                 psycopg2.extras.execute_values(

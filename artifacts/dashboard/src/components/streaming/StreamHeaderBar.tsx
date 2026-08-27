@@ -1,15 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import type {
   FleetEquityData,
   VaultState,
   TradeJournal,
   MathAuditSummary,
 } from "@/hooks/use-trading";
-
-const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-const hdrApi = axios.create({ baseURL: BASE });
+import { api as hdrApi } from "@/hooks/use-trading-client";
 
 const INTERVAL = 3_000;
 

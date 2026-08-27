@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from core import kill_switch as ks
@@ -117,12 +119,18 @@ def test_trip_pauses_bots_and_only_cancels_non_protective_orders(monkeypatch):
     assert "protective_stops_preserved" in result["action"]
 
 
-def test_reset_requires_exact_confirmation_when_latched():
+def test_reset_requires_exact_confirmation_when_latched(monkeypatch):
     ks._state["tripped"] = True
-    with pytest.raises(ValueError):
+    monkeypatch.delenv("KILL_SWITCH_RESET_CONFIRMATION", raising=False)
+    with pytest.raises(ValueError, match="not configured"):
         ks.reset()
-    ks.reset(confirmation_token=ks.RESET_CONFIRMATION)
+
+    monkeypatch.setenv("KILL_SWITCH_RESET_CONFIRMATION", "unit-test-confirmation")
+    with pytest.raises(ValueError, match="Invalid"):
+        ks.reset(confirmation_token="wrong")
+    ks.reset(confirmation_token=os.environ["KILL_SWITCH_RESET_CONFIRMATION"])
     assert ks.is_tripped() is False
+    assert "reset_confirmation" not in ks.get_state()
 
 
 @pytest.mark.parametrize(

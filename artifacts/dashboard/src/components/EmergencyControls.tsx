@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, RefreshCw, X, Zap, ShieldOff, RotateCcw, FileText } from "lucide-react";
 import { useLiquidateAll, useSystemRestart, useForceRebalance } from "@/hooks/use-trading";
 import { useFleetHaltStatus, useFleetHalt, useFleetResume } from "@/hooks/use-trading";
+import { api } from "@/hooks/use-trading-client";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -198,10 +199,7 @@ function ClaudeBriefButton() {
   const handleDownload = async () => {
     setLoading(true);
     try {
-      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/claude-context`);
-      if (!res.ok) throw new Error("Request failed");
-      const data = await res.json();
+      const { data } = await api.get("/claude-context");
       const text = data.prompt as string;
       const date = new Date().toISOString().slice(0, 10);
       const blob = new Blob([text], { type: "text/plain" });

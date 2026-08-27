@@ -282,7 +282,7 @@ async def reset_kill_switch(request: KillResetRequest) -> dict:
     return {
         "status": "reset",
         "kill_switch": ks_get_state(),
-        "procedure": "POST /trading-api/kill/reset with confirmation_token=RESET-KILL-SWITCH",
+        "procedure": "POST /trading-api/kill/reset with the server-configured confirmation token.",
     }
 
 

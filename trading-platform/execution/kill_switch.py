@@ -4,7 +4,6 @@ Existing pipeline and route imports remain valid.  The implementation lives
 in ``core.kill_switch`` and never liquidates positions.
 """
 from core.kill_switch import (
-    RESET_CONFIRMATION,
     acknowledge,
     check,
     get_state,

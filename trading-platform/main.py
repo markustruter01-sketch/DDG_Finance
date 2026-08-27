@@ -11,6 +11,7 @@ All endpoint handlers live in ``routes/`` sub-modules.  This file keeps only:
 """
 
 import asyncio
+import hmac
 import os
 import subprocess as _subprocess
 import sys
@@ -398,7 +399,7 @@ router = APIRouter(prefix=API_PREFIX)
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
+from starlette.responses import JSONResponse, Response as StarletteResponse
 
 # Audit fix H8: degradation tracker now captures ALL 5xx, not a hardcoded
 # whitelist.  Tracebacks are captured when the route raises an unhandled
@@ -447,6 +448,43 @@ class DegradationCaptureMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(DegradationCaptureMiddleware)
+
+
+TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
+
+
+def _health_path() -> str:
+    prefix = API_PREFIX.rstrip("/")
+    return f"{prefix}/health" if prefix else "/health"
+
+
+class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
+    """Require the shared API secret for every route except liveness health."""
+
+    async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
+        if request.url.path == _health_path():
+            return await call_next(request)
+
+        expected_secret = os.getenv("TRADING_API_SECRET", "").strip()
+        if not expected_secret:
+            logger.error("Trading API authentication is not configured; rejecting protected request")
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Trading API authentication is not configured."},
+            )
+
+        supplied_secret = request.headers.get(TRADING_API_SECRET_HEADER, "")
+        if not supplied_secret or not hmac.compare_digest(supplied_secret, expected_secret):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing trading API secret."},
+                headers={"WWW-Authenticate": TRADING_API_SECRET_HEADER},
+            )
+
+        return await call_next(request)
+
+
+app.add_middleware(TradingAPIAuthMiddleware)
 
 
 @app.get("/trading-api/version", tags=["System"])

@@ -8,10 +8,7 @@ import {
   AreaChart, Area, ResponsiveContainer, Tooltip, YAxis, CartesianGrid,
 } from "recharts";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
-
-const BASE = (import.meta.env.VITE_API_BASE_URL as string) || "/trading-api";
-const api  = axios.create({ baseURL: BASE });
+import { api } from "@/hooks/use-trading-client";
 
 interface HistoryPoint { date: string; total_equity: number }
 interface HistoryResponse { history: HistoryPoint[] }

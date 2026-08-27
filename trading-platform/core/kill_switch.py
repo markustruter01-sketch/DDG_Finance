@@ -7,6 +7,7 @@ non-protective pending orders.  It never liquidates positions.
 from __future__ import annotations
 
 import json
+import hmac
 import os
 import time
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from core.bot_config import load_bot_profiles
 DUST_QTY = 1e-6
 MISSING_STOP_SECONDS = 60.0
 MISMATCH_REQUIRED_CHECKS = 2
-RESET_CONFIRMATION = "RESET-KILL-SWITCH"
+RESET_CONFIRMATION_ENV_VAR = "KILL_SWITCH_RESET_CONFIRMATION"
 ACTIVE_BOTS = ("oracle", "spy_qqq_trend", "jerome_macro")
 ACCOUNT_ENV = {
     "oracle": ("ALPACA_API_KEY", "ALPACA_SECRET_KEY"),
@@ -241,8 +242,12 @@ def trip(triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, 
 
 
 def reset(opening_equity: float | None = None, confirmation_token: str | None = None) -> None:
-    if _state["tripped"] and confirmation_token != RESET_CONFIRMATION:
-        raise ValueError(f"Explicit confirmation token required: {RESET_CONFIRMATION}")
+    if _state["tripped"]:
+        expected_confirmation = os.getenv(RESET_CONFIRMATION_ENV_VAR, "").strip()
+        if not expected_confirmation:
+            raise ValueError("Kill-switch reset confirmation is not configured.")
+        if not confirmation_token or not hmac.compare_digest(confirmation_token, expected_confirmation):
+            raise ValueError("Invalid kill-switch reset confirmation.")
     _state["tripped"] = False
     _state["last_snapshot"] = {}
     _state["missing_stop_since"] = {}
@@ -262,7 +267,6 @@ def manual_trip(reason: str = "manual_emergency") -> dict[str, Any]:
 def get_state() -> dict[str, Any]:
     return {
         "tripped": bool(_state["tripped"]),
-        "reset_confirmation": RESET_CONFIRMATION,
         "missing_stop_seconds": MISSING_STOP_SECONDS,
         "last_snapshot": _state.get("last_snapshot", {}),
     }

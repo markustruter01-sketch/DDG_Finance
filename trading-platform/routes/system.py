@@ -30,35 +30,7 @@ system_router = APIRouter(tags=["System"])
 
 @system_router.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict:
-    jobs = get_job_status()
-    last = get_last_run()
-
-    job_count = len(jobs)
-    last_status = last.get("last_run_status", "never")
-    error_count = last.get("error_count", 0)
-
-    if job_count < EXPECTED_JOB_COUNT:
-        system_status = "degraded"
-        status_reason = f"Only {job_count}/{EXPECTED_JOB_COUNT} scheduler jobs registered"
-    elif last_status in ("error", "analysis_failed", "execution_failed", "kill_switch_tripped"):
-        system_status = "degraded"
-        status_reason = f"Last run failed ({error_count} total errors)"
-    elif last_status in ("never", "never_run"):
-        system_status = "online"
-        status_reason = "Scheduler running — no analysis run yet today"
-    else:
-        system_status = "online"
-        status_reason = "All systems operational"
-
-    return {
-        "status": "ok",
-        "version": "3.0.0",
-        "system_status": system_status,
-        "status_reason": status_reason,
-        "scheduler_job_count": job_count,
-        "last_run_status": last_status,
-        "error_count": error_count,
-    }
+    return {"status": "ok"}
 
 
 def _get_signal_guard_status() -> dict | None:

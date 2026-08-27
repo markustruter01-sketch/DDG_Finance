@@ -2,24 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { X, Activity, Wifi, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Info, Brain, Globe, Target, Bell } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-
-const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/trading-api";
-const api = {
-  get: async (path: string) => {
-    const res = await fetch(`${API_PREFIX}${path}`);
-    if (!res.ok) throw new Error(`${res.status}`);
-    return { data: await res.json() };
-  },
-  post: async (path: string, body?: unknown) => {
-    const res = await fetch(`${API_PREFIX}${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) throw new Error(`${res.status}`);
-    return { data: await res.json() };
-  },
-};
+import { api } from "@/hooks/use-trading-client";
 
 type Level = "green" | "yellow" | "red";
 

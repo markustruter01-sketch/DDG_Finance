@@ -1,9 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { isNYSEOpen } from "@/lib/dashboard-shared";
-
-const BASE = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-const fleetApi = axios.create({ baseURL: BASE });
+import { api as fleetApi } from "@/hooks/use-trading-client";
 
 // ── Canonical types ───────────────────────────────────────────────────────────
 

@@ -2,15 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Activity, Server, Shield, Database, Anchor, AlertTriangle, CheckCircle2, XCircle, Clock, Brain, Globe, Target, Bell, Wifi, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { DDGBadge } from "@/components/DDGBadge";
-
-const API_PREFIX = import.meta.env.VITE_API_PREFIX ?? "/trading-api";
-const api = {
-  get: async (path: string) => {
-    const res = await fetch(`${API_PREFIX}${path}`);
-    if (!res.ok) throw new Error(`${res.status}`);
-    return { data: await res.json() };
-  },
-};
+import { api } from "@/hooks/use-trading-client";
 
 type Level = "green" | "yellow" | "red";
 

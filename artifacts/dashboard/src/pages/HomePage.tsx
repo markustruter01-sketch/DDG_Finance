@@ -13,6 +13,7 @@ import {
   type BotSlice, type BotStatus, type LivePos, type EntryWindow,
 } from "@/hooks/useFleetData";
 import { useExportReport } from "@/hooks/use-report";
+import { api } from "@/hooks/use-trading-client";
 import { useToast } from "@/hooks/use-toast";
 import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
@@ -639,10 +640,7 @@ function ExportDropdown({
   const handleClaudeBrief = useCallback(async () => {
     setBusy("brief");
     try {
-      const base = import.meta.env.VITE_API_BASE_URL || "/trading-api";
-      const res = await fetch(`${base}/claude-context`);
-      if (!res.ok) throw new Error("Request failed");
-      const data = await res.json();
+      const { data } = await api.get("/claude-context");
       const text = data.prompt as string;
       const date = new Date().toISOString().slice(0, 10);
       const blob = new Blob([text], { type: "text/plain" });

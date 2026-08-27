@@ -3,7 +3,8 @@
 
 This module is deliberately isolated from all strategies, runners, broker
 execution, the ETF fleet, Bot 3, and migration utilities.  It creates and
-populates only the two dedicated Bot 2 tables when --ingest is requested.
+populates only the two dedicated Bot 2 tables when an ingest option is
+requested.
 """
 
 from __future__ import annotations
@@ -33,7 +34,9 @@ PRICES_TABLE = "bot2_prices"
 START_DATE = date(2021, 1, 1)
 STOCKS = ("BRK-B", "BLK", "V", "MA", "PYPL", "LMT", "RTX", "NVDA", "TSM", "JPM")
 ETFS = ("SCHD", "VYM", "DGRO", "VIG", "HDV", "VYMI", "SPHD", "VNQ", "PFF", "SGOV")
-ALL_SYMBOLS = STOCKS + ETFS
+COMMODITY_ETFS = ("PDBC", "DBC", "COMT", "DBA", "DBB", "DBE", "CPER", "XLE", "MOO")
+ALL_SYMBOLS = STOCKS + ETFS + COMMODITY_ETFS
+ORIGINAL_SYMBOLS = STOCKS + ETFS
 ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart"
 
@@ -66,7 +69,7 @@ CREATE TABLE IF NOT EXISTS {PRICES_TABLE} (
     close       DOUBLE PRECISION NOT NULL,
     volume      DOUBLE PRECISION NOT NULL,
     source      TEXT NOT NULL DEFAULT 'yahoo' CHECK (source = 'yahoo'),
-    asset_type  TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf')),
+    asset_type  TEXT NOT NULL CHECK (asset_type IN ('stock', 'etf', 'commodity_etf')),
     CONSTRAINT bot2_prices_uq UNIQUE (symbol, date, source)
 );
 CREATE INDEX IF NOT EXISTS idx_bot2_prices_symbol_date
@@ -93,6 +96,31 @@ def ensure_tables() -> None:
         with conn.cursor() as cur:
             cur.execute(EARNINGS_DDL)
             cur.execute(PRICES_DDL)
+            # CREATE TABLE IF NOT EXISTS does not update constraints on the
+            # already-created Bot 2 table.  This is the one additive schema
+            # change required for the isolated commodity research dataset.
+            cur.execute(
+                f"ALTER TABLE {PRICES_TABLE} "
+                "DROP CONSTRAINT IF EXISTS bot2_prices_symbol_check"
+            )
+            cur.execute(
+                f"""
+                ALTER TABLE {PRICES_TABLE}
+                ADD CONSTRAINT bot2_prices_symbol_check
+                CHECK (symbol IN ({", ".join(repr(s) for s in ALL_SYMBOLS)}))
+                """
+            )
+            cur.execute(
+                f"ALTER TABLE {PRICES_TABLE} "
+                "DROP CONSTRAINT IF EXISTS bot2_prices_asset_type_check"
+            )
+            cur.execute(
+                f"""
+                ALTER TABLE {PRICES_TABLE}
+                ADD CONSTRAINT bot2_prices_asset_type_check
+                CHECK (asset_type IN ('stock', 'etf', 'commodity_etf'))
+                """
+            )
 
 
 def _number(value: Any) -> float | None:
@@ -212,7 +240,12 @@ def fetch_yahoo_daily(symbol: str, end_exclusive: date) -> list[dict[str, Any]]:
     timestamps = result.get("timestamp") or []
     quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
     columns = {name: quote.get(name) or [] for name in ("open", "high", "low", "close", "volume")}
-    asset_type = "stock" if symbol in STOCKS else "etf"
+    if symbol in STOCKS:
+        asset_type = "stock"
+    elif symbol in COMMODITY_ETFS:
+        asset_type = "commodity_etf"
+    else:
+        asset_type = "etf"
     bars: list[dict[str, Any]] = []
     for index, timestamp in enumerate(timestamps):
         bar_date = datetime.fromtimestamp(timestamp, timezone.utc).date()
@@ -241,7 +274,7 @@ def ingest_prices() -> dict[str, int]:
     end_exclusive = date.today() + timedelta(days=1)
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for symbol in ALL_SYMBOLS:
+            for symbol in ORIGINAL_SYMBOLS:
                 bars = fetch_yahoo_daily(symbol, end_exclusive)
                 if not bars:
                     raise RuntimeError(f"Yahoo {symbol}: no complete bars returned")
@@ -274,6 +307,48 @@ def ingest_prices() -> dict[str, int]:
                 )
                 counts[symbol] = len(bars)
                 print(f"price_ingest | {symbol} | fetched={len(bars)}")
+    return counts
+
+
+def ingest_commodity_prices() -> dict[str, int]:
+    """Fetch only the new commodity ETF rows into the existing Bot 2 table."""
+    counts: dict[str, int] = {}
+    end_exclusive = date.today() + timedelta(days=1)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for symbol in COMMODITY_ETFS:
+                bars = fetch_yahoo_daily(symbol, end_exclusive)
+                if not bars:
+                    raise RuntimeError(f"Yahoo {symbol}: no complete bars returned")
+                psycopg2.extras.execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {PRICES_TABLE}
+                        (symbol, date, open, high, low, close, volume, source, asset_type)
+                    VALUES %s
+                    ON CONFLICT (symbol, date, source)
+                    DO UPDATE SET
+                        open = EXCLUDED.open, high = EXCLUDED.high,
+                        low = EXCLUDED.low, close = EXCLUDED.close,
+                        volume = EXCLUDED.volume, asset_type = EXCLUDED.asset_type
+                    """,
+                    [
+                        (
+                            bar["symbol"],
+                            bar["date"],
+                            bar["open"],
+                            bar["high"],
+                            bar["low"],
+                            bar["close"],
+                            bar["volume"],
+                            bar["source"],
+                            bar["asset_type"],
+                        )
+                        for bar in bars
+                    ],
+                )
+                counts[symbol] = len(bars)
+                print(f"commodity_price_ingest | {symbol} | fetched={len(bars)}")
     return counts
 
 
@@ -478,11 +553,12 @@ def earnings_counts() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ingest", action="store_true")
+    parser.add_argument("--ingest-commodities", action="store_true")
     parser.add_argument("--verify", action="store_true")
     parser.add_argument("--print-ddl", action="store_true")
     args = parser.parse_args()
-    if not any((args.ingest, args.verify, args.print_ddl)):
-        parser.error("choose --ingest, --verify, or --print-ddl")
+    if not any((args.ingest, args.ingest_commodities, args.verify, args.print_ddl)):
+        parser.error("choose --ingest, --ingest-commodities, --verify, or --print-ddl")
 
     if args.print_ddl:
         print(f"CREATE TABLE {EARNINGS_TABLE}:")
@@ -496,6 +572,11 @@ def main() -> int:
         ingest_earnings()
         print("Bot 2 price ingest: Yahoo Chart API, 20 symbols")
         ingest_prices()
+
+    if args.ingest_commodities:
+        ensure_tables()
+        print("Bot 2 commodity price ingest: Yahoo Chart API, 9 symbols")
+        ingest_commodity_prices()
 
     if args.verify:
         ensure_tables()

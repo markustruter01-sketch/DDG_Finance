@@ -14,6 +14,7 @@
 - [Phase J ratchet_stops cleanup](phase-j-ratchet-stops.md) — Jun-26 autopsy fix: 12 stale rows deleted, ARM/MS/MU/PANW stop_order_ids linked, MRVL cleared. DB now matches broker exactly (6 rows, 5 with live GTC stops).
 - [Jul-7 reconciler mass-orphan incident](jul7-reconciler-incident.md) — Alpaca returned [] → all 5 Active trades orphaned; kill switch saved; RECON rows self-repaired; empty-response guard added to pipeline.
 - [Bot2 safety fixes](bot2-safety-fixes.md) — Three post-OOS fixes: empty-response entry guard, 3-day exit last-3-bars, multi-lot TP dedup.
+- [Bot 2 commodity research](bot2-commodity-research.md) — commodity research is dev-only, uses DATABASE_URL, and must remain separate from live strategy execution.
 - [SPY/QQQ OOS results](spy-qqq-oos-results.md) — MARGINAL: Sharpe 0.877 ✓, MaxDD ≤9% ✓, 2020 ✓, 2022 ✗ (−5.0%), 4/5 positive ✓. 3-day exit (all-80-bars) dominated turnover.
 - [ARC 2 walk-forward validation](arc2-walk-forward.md) — nightly WF job at 17:30 ET; Arc-0 filters; Phase K/L schema; oracle floor=-0.153, spy floor=-1.889; jerome/buck DISQUALIFIED.
 - [ARC 4 data model cleanup](arc4-data-model.md) — reconciliation_events table + is_recon_tracking column replace LIKE 'RECON-%' hack; shadow_signals ledger wired into all 4 bots.

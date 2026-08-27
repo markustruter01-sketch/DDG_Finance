@@ -47,10 +47,17 @@ _auto_trading_enabled: bool = True
 _last_reset_date: date | None = None
 _runner_liveness_failures: int = 0
 _runner_liveness_alerted: bool = False
+_trading_api_liveness_failures: int = 0
+_trading_api_liveness_alerted: bool = False
 RUNNER_HEALTH_URL = os.environ.get(
     "RUNNER_HEALTH_URL",
     "http://127.0.0.1:8085/health",
 )
+TRADING_API_HEALTH_URL = os.environ.get(
+    "TRADING_API_HEALTH_URL",
+    "http://127.0.0.1:8000/trading-api/fleet/equity",
+)
+TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
 RUNNER_HEALTH_TIMEOUT_SECONDS = float(
     os.environ.get("RUNNER_HEALTH_TIMEOUT_SECONDS", "5")
 )
@@ -149,6 +156,22 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         logger.info(
             f"Scheduler | Registered: published_runner_liveness (1 min, "
             f"url={RUNNER_HEALTH_URL})"
+        )
+        scheduler.add_job(
+            func=_probe_trading_api_liveness,
+            trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
+                minutes=1
+            ),
+            id="published_trading_api_liveness",
+            name="Published Trading API Authenticated Liveness Probe",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=120,
+        )
+        logger.info(
+            f"Scheduler | Registered: published_trading_api_liveness (1 min, "
+            f"url={TRADING_API_HEALTH_URL})"
         )
 
     # ── ONE-TIME: oracle residual cleanup (2026-08-17 09:31 ET) ──────────────
@@ -440,6 +463,79 @@ async def _probe_runner_liveness() -> None:
             except Exception as alert_exc:
                 logger.error(
                     f"Scheduler | runner liveness alert failed: {alert_exc}"
+                )
+
+
+async def _probe_trading_api_liveness() -> None:
+    """Probe a protected API endpoint so auth failures cannot look healthy."""
+    global _trading_api_liveness_failures, _trading_api_liveness_alerted
+    try:
+        secret = os.environ.get("TRADING_API_SECRET", "").strip()
+        headers = (
+            {TRADING_API_SECRET_HEADER: secret}
+            if secret
+            else {}
+        )
+        async with httpx.AsyncClient(timeout=RUNNER_HEALTH_TIMEOUT_SECONDS) as client:
+            response = await client.get(
+                TRADING_API_HEALTH_URL,
+                headers={
+                    **headers,
+                    "User-Agent": "trading-api-authenticated-liveness",
+                },
+            )
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}")
+            if not isinstance(response.json(), dict):
+                raise RuntimeError("unexpected trading API response payload")
+        recovered = _trading_api_liveness_failures > 0
+        _trading_api_liveness_failures = 0
+        if recovered:
+            logger.warning(
+                "Scheduler | protected trading API liveness recovered: "
+                f"{TRADING_API_HEALTH_URL}"
+            )
+        _trading_api_liveness_alerted = False
+    except Exception as exc:
+        _trading_api_liveness_failures += 1
+        logger.error(
+            "Scheduler | protected trading API liveness failure "
+            f"{_trading_api_liveness_failures}/{RUNNER_HEALTH_FAILURE_THRESHOLD}: {exc}"
+        )
+        if (
+            _trading_api_liveness_failures >= RUNNER_HEALTH_FAILURE_THRESHOLD
+            and not _trading_api_liveness_alerted
+        ):
+            _trading_api_liveness_alerted = True
+            message = (
+                "Published trading API protected endpoint has failed "
+                f"{_trading_api_liveness_failures} consecutive checks. "
+                f"URL: {TRADING_API_HEALTH_URL}. Latest error: {exc}"
+            )
+            logger.critical(
+                f"Scheduler | TRADING API LIVENESS ALERT | {message}"
+            )
+            try:
+                from notifications.discord import alert_critical
+                alert_critical(
+                    "Published trading API protected endpoint unhealthy",
+                    message,
+                    fields=[
+                        {
+                            "name": "Consecutive failures",
+                            "value": str(_trading_api_liveness_failures),
+                            "inline": True,
+                        },
+                        {
+                            "name": "Probe timeout",
+                            "value": f"{RUNNER_HEALTH_TIMEOUT_SECONDS}s",
+                            "inline": True,
+                        },
+                    ],
+                )
+            except Exception as alert_exc:
+                logger.error(
+                    f"Scheduler | trading API liveness alert failed: {alert_exc}"
                 )
 
 

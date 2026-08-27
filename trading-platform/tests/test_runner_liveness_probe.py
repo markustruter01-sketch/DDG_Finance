@@ -12,6 +12,13 @@ class _Response:
         return {"service": "kraken-bot-runner"}
 
 
+class _ApiResponse:
+    status_code = 200
+
+    def json(self):
+        return {"fleet_total": {"equity": 123}}
+
+
 class _HealthyClient:
     async def __aenter__(self):
         return self
@@ -26,6 +33,11 @@ class _HealthyClient:
 class _FailingClient(_HealthyClient):
     async def get(self, *_args, **_kwargs):
         raise TimeoutError("simulated runner outage")
+
+
+class _ApiClient(_HealthyClient):
+    async def get(self, *_args, **_kwargs):
+        return _ApiResponse()
 
 
 def test_runner_probe_alerts_after_threshold(monkeypatch):
@@ -66,3 +78,35 @@ def test_runner_probe_clears_failure_state_on_recovery(monkeypatch):
 
     assert scheduler._runner_liveness_failures == 0
     assert scheduler._runner_liveness_alerted is False
+
+
+def test_authenticated_api_probe_fails_closed_when_secret_missing(monkeypatch):
+    scheduler._trading_api_liveness_failures = 0
+    scheduler._trading_api_liveness_alerted = False
+    monkeypatch.delenv("TRADING_API_SECRET", raising=False)
+    monkeypatch.setattr(
+        scheduler.httpx,
+        "AsyncClient",
+        lambda **_kwargs: _FailingClient(),
+    )
+
+    asyncio.run(scheduler._probe_trading_api_liveness())
+
+    assert scheduler._trading_api_liveness_failures == 1
+    assert scheduler._trading_api_liveness_alerted is False
+
+
+def test_authenticated_api_probe_recovers_with_secret(monkeypatch):
+    scheduler._trading_api_liveness_failures = 1
+    scheduler._trading_api_liveness_alerted = True
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setattr(
+        scheduler.httpx,
+        "AsyncClient",
+        lambda **_kwargs: _ApiClient(),
+    )
+
+    asyncio.run(scheduler._probe_trading_api_liveness())
+
+    assert scheduler._trading_api_liveness_failures == 0
+    assert scheduler._trading_api_liveness_alerted is False

@@ -30,6 +30,7 @@ from analysis.bot2_data_pipeline import (  # noqa: E402
     EARNINGS_START_DATE,
     EARNINGS_SYMBOLS,
     EARNINGS_TABLE,
+    ALL_SYMBOLS,
     LEGACY_STOCKS,
     PRICES_TABLE,
     VALIDATION_STOCKS,
@@ -37,8 +38,8 @@ from analysis.bot2_data_pipeline import (  # noqa: E402
     ingest_earnings,
     ingest_prices,
     ensure_tables,
+    _nyse_holidays,
 )
-from analysis.bot2_commodity_research import _nyse_holidays  # noqa: E402
 from analysis.research_ledger import (  # noqa: E402
     ensure_research_tables,
     record_results,
@@ -90,7 +91,10 @@ def print_schema_statements() -> None:
         f"(symbol IN ({', '.join(repr(s) for s in EARNINGS_SYMBOLS)}));"
     )
     print("ALTER TABLE bot2_prices DROP CONSTRAINT IF EXISTS bot2_prices_symbol_check;")
-    print("ALTER TABLE bot2_prices ADD CONSTRAINT bot2_prices_symbol_check ...;")
+    print(
+        "ALTER TABLE bot2_prices ADD CONSTRAINT bot2_prices_symbol_check CHECK "
+        f"(symbol IN ({', '.join(repr(s) for s in ALL_SYMBOLS)}));"
+    )
 
 
 def _load_data() -> tuple[dict[str, list[PriceBar]], list[EarningsEvent]]:
@@ -504,17 +508,6 @@ def run_validation(ingest: bool = True) -> dict[str, Any]:
         record for record in new_records
         if SELECTION_START <= record["event"].reported_date <= SELECTION_END
     ]
-    ranking = sorted(
-        (
-            {
-                "symbol": symbol,
-                **new_stats[symbol],
-            }
-            for symbol in VALIDATION_STOCKS
-        ),
-        key=lambda row: (row["gap_expectancy"] is not None, row["gap_expectancy"] or -math.inf),
-        reverse=True,
-    )
     # Use only the selection window for ranking, never validation observations.
     selection_by_symbol: dict[str, dict[str, Any]] = {}
     for symbol in VALIDATION_STOCKS:

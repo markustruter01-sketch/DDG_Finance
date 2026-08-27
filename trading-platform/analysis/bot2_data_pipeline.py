@@ -428,6 +428,9 @@ def _nyse_holidays(year: int) -> set[date]:
     }
     if year == 2025:
         holidays.add(date(2025, 1, 9))
+    if year == 2018:
+        # National Day of Mourning for President George H. W. Bush.
+        holidays.add(date(2018, 12, 5))
     return holidays
 
 

@@ -410,6 +410,12 @@ def _raw_stats(records: list[dict[str, Any]]) -> dict[str, Any]:
     values = [float(record["raw_gap"]) for record in records]
     result = _returns_stats(values, 1)
     result["positive_gap_rate"] = sum(value > 0 for value in values) / len(values) if values else None
+    close_values = [float(record["close_to_close"]) for record in records]
+    result["close_to_close"] = _returns_stats(close_values, 1)
+    result["gap_sd"] = statistics.stdev(values) if len(values) > 1 else 0.0
+    result["close_to_close_sd"] = (
+        statistics.stdev(close_values) if len(close_values) > 1 else 0.0
+    )
     return result
 
 
@@ -419,7 +425,10 @@ def _print_universe_stats(
     symbols: Iterable[str],
 ) -> dict[str, dict[str, Any]]:
     print(f"=== {title} RAW EARNINGS BASE RATE (2018-PRESENT) ===")
-    print("symbol | events | positive_gap_rate | gap_expectancy | median_gap")
+    print(
+        "symbol | events | positive_gap_rate | mean_gap | median_gap | gap_sd | "
+        "close_to_close_mean | close_to_close_median | close_to_close_sd"
+    )
     per_symbol: dict[str, dict[str, Any]] = {}
     for symbol in symbols:
         own = [record for record in records if record["event"].symbol == symbol]
@@ -429,16 +438,30 @@ def _print_universe_stats(
             "positive_gap_rate": sum(value > 0 for value in values) / len(values) if values else None,
             "gap_expectancy": statistics.fmean(values) if values else None,
             "median_gap": statistics.median(values) if values else None,
+            "gap_sd": statistics.stdev(values) if len(values) > 1 else 0.0,
+            "close_to_close_mean": statistics.fmean(
+                [record["close_to_close"] for record in own]
+            ) if own else None,
+            "close_to_close_median": statistics.median(
+                [record["close_to_close"] for record in own]
+            ) if own else None,
+            "close_to_close_sd": statistics.stdev(
+                [record["close_to_close"] for record in own]
+            ) if len(own) > 1 else 0.0,
         }
         per_symbol[symbol] = row
         print(
             f"{symbol} | {row['events']} | {_fmt(row['positive_gap_rate'])} | "
-            f"{_fmt(row['gap_expectancy'])} | {_fmt(row['median_gap'])}"
+            f"{_fmt(row['gap_expectancy'])} | {_fmt(row['median_gap'])} | "
+            f"{_fmt(row['gap_sd'])} | {_fmt(row['close_to_close_mean'])} | "
+            f"{_fmt(row['close_to_close_median'])} | {_fmt(row['close_to_close_sd'])}"
         )
     aggregate = _raw_stats(records)
     print(
         f"aggregate | {aggregate['trades']} | {_fmt(aggregate['positive_gap_rate'])} | "
-        f"{_fmt(aggregate['expectancy'])} | —"
+        f"{_fmt(aggregate['expectancy'])} | — | {_fmt(aggregate['gap_sd'])} | "
+        f"{_fmt(aggregate['close_to_close']['expectancy'])} | — | "
+        f"{_fmt(aggregate['close_to_close_sd'])}"
     )
     return per_symbol
 

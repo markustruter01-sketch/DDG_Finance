@@ -71,8 +71,12 @@ class PriceBar:
 class EarningsEvent:
     symbol: str
     reported_date: date
+    fiscal_date_ending: date | None
+    reported_eps: float | None
+    estimated_eps: float | None
     surprise: float | None
     report_time: str
+    source: str
 
 
 def _fmt(value: Any) -> str:
@@ -89,6 +93,15 @@ def print_schema_statements() -> None:
         "ALTER TABLE bot2_earnings_dates ADD CONSTRAINT "
         "bot2_earnings_dates_symbol_check CHECK "
         f"(symbol IN ({', '.join(repr(s) for s in EARNINGS_SYMBOLS)}));"
+    )
+    print(
+        "ALTER TABLE bot2_earnings_dates ADD COLUMN IF NOT EXISTS "
+        "source TEXT NOT NULL DEFAULT 'alphavantage';"
+    )
+    print("ALTER TABLE bot2_earnings_dates DROP CONSTRAINT IF EXISTS bot2_earnings_dates_source_check;")
+    print(
+        "ALTER TABLE bot2_earnings_dates ADD CONSTRAINT "
+        "bot2_earnings_dates_source_check CHECK (source IN ('alphavantage', 'manual'));"
     )
     print("ALTER TABLE bot2_prices DROP CONSTRAINT IF EXISTS bot2_prices_symbol_check;")
     print(
@@ -112,19 +125,33 @@ def _load_data() -> tuple[dict[str, list[PriceBar]], list[EarningsEvent]]:
             for symbol, day, opening, closing in cur.fetchall():
                 prices[symbol].append(PriceBar(day, float(opening), float(closing)))
             cur.execute(
-                f"""SELECT symbol, reported_date, surprise, report_time
+                f"""SELECT symbol, reported_date, fiscal_date_ending,
+                           reported_eps, estimated_eps, surprise, report_time, source
                     FROM {EARNINGS_TABLE}
                     WHERE reported_date >= %s
                     ORDER BY symbol, reported_date, id""",
                 (EARNINGS_START_DATE,),
             )
-            for symbol, reported_date, surprise, report_time in cur.fetchall():
+            for (
+                symbol,
+                reported_date,
+                fiscal_date_ending,
+                reported_eps,
+                estimated_eps,
+                surprise,
+                report_time,
+                source,
+            ) in cur.fetchall():
                 earnings.append(
                     EarningsEvent(
                         symbol=symbol,
                         reported_date=reported_date,
+                        fiscal_date_ending=fiscal_date_ending,
+                        reported_eps=float(reported_eps) if reported_eps is not None else None,
+                        estimated_eps=float(estimated_eps) if estimated_eps is not None else None,
                         surprise=float(surprise) if surprise is not None else None,
                         report_time=(report_time or "").strip().lower(),
+                        source=source or "alphavantage",
                     )
                 )
     return dict(prices), earnings
@@ -152,7 +179,10 @@ def _integrity_gate(
         by_symbol[event.symbol].append(event)
 
     print("=== DATA INTEGRITY GATES ===")
-    print("symbol | earnings_rows | first_earnings | last_earnings | price_rows | first_price | last_price")
+    print(
+        "symbol | earnings_rows | first_earnings | last_earnings | "
+        "missing_fiscal_quarters | nulls | fiscal_year_type | price_rows | first_price | last_price"
+    )
     for symbol in EARNINGS_SYMBOLS:
         events = by_symbol[symbol]
         bars = prices.get(symbol, [])
@@ -169,17 +199,35 @@ def _integrity_gate(
                     and day + timedelta(days=1) in {bar.day for bar in bars}
                 )
             )
-        event_gap_count = 0
         sorted_events = sorted(events, key=lambda event: event.reported_date)
-        for before, after in zip(sorted_events, sorted_events[1:]):
-            if (after.reported_date - before.reported_date).days > 140:
-                event_gap_count += 1
-        null_count = 0  # DB columns used here are non-null where required.
+        fiscal_events = sorted(
+            (event for event in events if event.fiscal_date_ending is not None),
+            key=lambda event: event.fiscal_date_ending,
+        )
+        fiscal_gap_count = 0
+        for before, after in zip(fiscal_events, fiscal_events[1:]):
+            month_delta = (
+                (after.fiscal_date_ending.year - before.fiscal_date_ending.year) * 12
+                + after.fiscal_date_ending.month - before.fiscal_date_ending.month
+            )
+            if month_delta > 4:
+                fiscal_gap_count += max(1, round(month_delta / 3) - 1)
+        null_count = sum(
+            event.fiscal_date_ending is None or not event.report_time
+            for event in events
+        )
+        eps_null_count = sum(
+            event.reported_eps is None or event.estimated_eps is None
+            for event in events
+        )
+        fiscal_year_type = _fiscal_year_type(symbol)
         print(
             f"{symbol} | {len(events)} | "
             f"{sorted_events[0].reported_date if sorted_events else None} | "
             f"{sorted_events[-1].reported_date if sorted_events else None} | "
-            f"{len(bars)} | {bars[0].day if bars else None} | {bars[-1].day if bars else None}"
+            f"{fiscal_gap_count} | required={null_count},eps={eps_null_count} | "
+            f"{fiscal_year_type} | {len(bars)} | {bars[0].day if bars else None} | "
+            f"{bars[-1].day if bars else None}"
         )
         if (
             not events
@@ -187,7 +235,7 @@ def _integrity_gate(
             or duplicate_events
             or duplicate_prices
             or null_count
-            or event_gap_count
+            or fiscal_gap_count
             or price_missing
             or (bars and bars[0].day > date(2018, 1, 15))
         ):
@@ -195,7 +243,8 @@ def _integrity_gate(
             print(
                 f"  gate_detail | duplicate_earnings={duplicate_events} "
                 f"duplicate_prices={duplicate_prices} missing_weekday_sessions={price_missing} "
-                f"earnings_gaps={event_gap_count} nulls={null_count}"
+                f"missing_fiscal_quarters={fiscal_gap_count} required_nulls={null_count} "
+                f"eps_nulls={eps_null_count}"
             )
 
     report_times = defaultdict(int)
@@ -211,6 +260,17 @@ def _integrity_gate(
         "price_rows": sum(len(bars) for bars in prices.values()),
         "report_time_counts": dict(sorted(report_times.items())),
     }
+
+
+def _fiscal_year_type(symbol: str) -> str:
+    known_offsets = {
+        "COST": "offset (Sep-Aug)",
+        "MSFT": "offset (Jul-Jun)",
+        "PG": "offset (Jul-Jun)",
+        "AAPL": "offset (Oct-Sep)",
+        "V": "offset (Oct-Sep)",
+    }
+    return known_offsets.get(symbol, "calendar (Jan-Dec)")
 
 
 def _bars_by_day(bars: Iterable[PriceBar]) -> tuple[list[date], dict[date, PriceBar]]:

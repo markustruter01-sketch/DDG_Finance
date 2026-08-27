@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS {EARNINGS_TABLE} (
     surprise            DOUBLE PRECISION,
     surprise_percentage DOUBLE PRECISION,
     report_time         TEXT,
+    source              TEXT NOT NULL DEFAULT 'alphavantage',
     CONSTRAINT bot2_earnings_dates_uq
         UNIQUE (symbol, fiscal_date_ending, reported_date)
 );
@@ -101,8 +102,8 @@ def ensure_tables() -> None:
             cur.execute(EARNINGS_DDL)
             cur.execute(PRICES_DDL)
             # CREATE TABLE IF NOT EXISTS does not update constraints on the
-            # already-created Bot 2 table.  This is the one additive schema
-            # change required for the isolated commodity research dataset.
+            # already-created Bot 2 tables.  Keep the isolated earnings
+            # validation universe and provenance columns aligned as well.
             cur.execute(
                 f"ALTER TABLE {EARNINGS_TABLE} "
                 "DROP CONSTRAINT IF EXISTS bot2_earnings_dates_symbol_check"
@@ -112,6 +113,21 @@ def ensure_tables() -> None:
                 ALTER TABLE {EARNINGS_TABLE}
                 ADD CONSTRAINT bot2_earnings_dates_symbol_check
                 CHECK (symbol IN ({", ".join(repr(s) for s in EARNINGS_SYMBOLS)}))
+                """
+            )
+            cur.execute(
+                f"ALTER TABLE {EARNINGS_TABLE} "
+                "ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'alphavantage'"
+            )
+            cur.execute(
+                f"ALTER TABLE {EARNINGS_TABLE} "
+                "DROP CONSTRAINT IF EXISTS bot2_earnings_dates_source_check"
+            )
+            cur.execute(
+                f"""
+                ALTER TABLE {EARNINGS_TABLE}
+                ADD CONSTRAINT bot2_earnings_dates_source_check
+                CHECK (source IN ('alphavantage', 'manual'))
                 """
             )
             cur.execute(

@@ -51,6 +51,7 @@ ASSETS = ("BTC/USD", "ETH/USD", "GLD", "SLV")
 CRYPTO = frozenset({"BTC/USD", "ETH/USD"})
 METALS = frozenset({"GLD", "SLV"})
 VAULT_SYMBOLS = frozenset({"BIL", "VOO"})
+DEFAULT_MAX_DEPLOYMENT = 1.0
 TARGET_WEIGHT = 0.25
 VOL_LOOKBACK = 60
 WEIGHT_FLOOR = 0.10
@@ -281,7 +282,16 @@ class AlpacaBot3:
 
     def account(self) -> dict[str, float]:
         raw = self._request("GET", "/v2/account")
-        return {key: float(raw[key]) for key in ("equity", "cash", "buying_power")}
+        account = {
+            key: float(raw[key])
+            for key in ("equity", "cash", "buying_power")
+        }
+        # Alpaca's long_market_value includes vault and other long holdings.
+        # Preserve its absence for test doubles/broker responses that omit it;
+        # _fresh_buy_guard then obtains a fresh position snapshot instead.
+        if raw.get("long_market_value") is not None:
+            account["long_market_value"] = float(raw["long_market_value"])
+        return account
 
     def positions(self) -> list[dict[str, Any]]:
         raw = self._request("GET", "/v2/positions")
@@ -404,6 +414,107 @@ def _record_open(
                 """,
                 (BOT_ID, fill["symbol"], qty, entry, qty * entry, stop_price, stop_order_id),
             )
+
+
+def _position_market_value(position: dict[str, Any]) -> float:
+    """Return a non-negative marked value for an account position."""
+    try:
+        return max(0.0, float(position.get("market_value", 0.0) or 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _long_market_value(positions: list[dict[str, Any]]) -> float:
+    """Sum the long exposure represented by a broker position snapshot."""
+    return sum(
+        _position_market_value(position)
+        for position in positions
+        if str(position.get("direction", "long")).lower() != "short"
+    )
+
+
+def _max_deployment(profile: dict[str, Any] | None) -> float:
+    """Read and validate the account deployment ceiling.
+
+    Bot 3's normal profile is always-invested (1.00), but the value must still
+    be consumed by the planner and order-boundary guard. Invalid configuration
+    fails closed rather than silently changing the risk envelope.
+    """
+    raw_value = (profile or {}).get("MAX_DEPLOYMENT", DEFAULT_MAX_DEPLOYMENT)
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid MAX_DEPLOYMENT={raw_value!r}") from exc
+    if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+        raise ValueError(f"MAX_DEPLOYMENT must be between 0 and 1, got {raw_value!r}")
+    return value
+
+
+def _allocation_bases(
+    account: dict[str, float],
+    positions: list[dict[str, Any]],
+    max_deployment: float,
+) -> tuple[float, float, float]:
+    """Return total equity, vault-excluded equity, and capped target base."""
+    equity = max(0.0, float(account.get("equity", 0.0) or 0.0))
+    vault_market_value = sum(
+        _position_market_value(position)
+        for position in positions
+        if _canonical_symbol(position.get("symbol")) in VAULT_SYMBOLS
+    )
+    investable_base = max(0.0, equity - vault_market_value)
+    deployment_headroom = max(0.0, equity * max_deployment - vault_market_value)
+    target_base = min(investable_base, deployment_headroom)
+    return equity, investable_base, target_base
+
+
+def _fresh_buy_guard(
+    client: AlpacaBot3,
+    item: dict[str, Any],
+    max_deployment: float,
+) -> tuple[bool, dict[str, float]]:
+    """Check one buy against freshly fetched account state.
+
+    The account's long-market-value field includes vault holdings and any other
+    long positions. If a broker response omits it, fall back to a fresh
+    position snapshot rather than assuming the strategy is the whole account.
+    """
+    fresh_account = client.account()
+    fresh_equity = float(fresh_account.get("equity", 0.0) or 0.0)
+    fresh_cash = float(fresh_account.get("cash", 0.0) or 0.0)
+    fresh_long_market_value = fresh_account.get("long_market_value")
+    if fresh_long_market_value is None:
+        fresh_long_market_value = _long_market_value(client.positions())
+    else:
+        fresh_long_market_value = float(fresh_long_market_value or 0.0)
+
+    qty = max(0.0, float(item.get("qty", 0.0) or 0.0))
+    price = max(0.0, float(item.get("price", 0.0) or 0.0))
+    estimated_notional = qty * price
+    projected_cash = fresh_cash - estimated_notional
+    projected_long_market_value = fresh_long_market_value + estimated_notional
+    projected_deployment = (
+        projected_long_market_value / fresh_equity
+        if fresh_equity > 0
+        else float("inf")
+    )
+    projection = {
+        "fresh_equity": fresh_equity,
+        "fresh_cash": fresh_cash,
+        "fresh_long_market_value": fresh_long_market_value,
+        "estimated_notional": estimated_notional,
+        "projected_cash": projected_cash,
+        "projected_long_market_value": projected_long_market_value,
+        "projected_deployment": projected_deployment,
+        "max_deployment": max_deployment,
+    }
+    allowed = (
+        fresh_equity > 0
+        and projected_cash >= 0
+        and projected_long_market_value <= fresh_equity
+        and projected_deployment <= max_deployment
+    )
+    return allowed, projection
 
 
 def _arm_stop(client: AlpacaBot3, symbol: str, qty: float, entry_price: float) -> dict[str, Any]:
@@ -620,38 +731,64 @@ def _plan_orders(
     targets: dict[str, float],
     cycle_id: str,
     current_prices: dict[str, float],
+    max_deployment: float = DEFAULT_MAX_DEPLOYMENT,
 ) -> list[dict[str, Any]]:
-    equity = account["equity"]
+    equity, investable_base, target_base = _allocation_bases(
+        account, positions, max_deployment
+    )
     position_by_symbol = {
         _canonical_symbol(position["symbol"]): position for position in positions
+        if _canonical_symbol(position.get("symbol")) in ASSETS
     }
     plan = []
     for symbol in ASSETS:
         position = position_by_symbol.get(symbol)
-        current_value = position["market_value"] if position else 0.0
-        current_weight = current_value / equity if equity > 0 else 0.0
-        target_value = equity * targets[symbol]
+        current_value = _position_market_value(position) if position else 0.0
+        current_weight = current_value / target_base if target_base > 0 else 0.0
+        target_weight = float(targets[symbol])
+        target_value = target_base * target_weight
         delta = target_value - current_value
-        if abs(current_weight - targets[symbol]) <= DRIFT_BAND and position:
+        if abs(current_weight - target_weight) <= DRIFT_BAND and position:
             decision = "HOLD_WITHIN_DRIFT_BAND"
         elif delta > 0:
             price = position["current_price"] if position else current_prices[symbol]
             qty = delta / price if price > 0 else 0.0
             decision = "BUY_TO_TARGET"
-            plan.append({"symbol": symbol, "side": "buy", "qty": qty})
+            plan.append({
+                "symbol": symbol,
+                "side": "buy",
+                "qty": qty,
+                "price": price,
+                "notional": qty * price,
+            })
         else:
             price = position["current_price"] if position else current_prices[symbol]
             qty = min(position["qty"], abs(delta) / price) if position and price > 0 else 0.0
             decision = "SELL_TO_TARGET"
-            plan.append({"symbol": symbol, "side": "sell", "qty": qty})
+            if qty > 0:
+                plan.append({
+                    "symbol": symbol,
+                    "side": "sell",
+                    "qty": qty,
+                    "price": price,
+                    "notional": qty * price,
+                })
         _log_decision(
             cycle_id, decision, symbol=symbol, current_weight=current_weight,
-            target_weight=targets[symbol],
+            target_weight=target_weight,
             current_price=position["current_price"] if position else None,
             planned_qty=plan[-1]["qty"] if plan and plan[-1]["symbol"] == symbol else None,
             reason="quarterly target comparison",
+            context={
+                "equity": equity,
+                "investable_base": investable_base,
+                "target_base": target_base,
+                "max_deployment": max_deployment,
+            },
         )
-    return plan
+    # Always liquidate reductions before submitting increases. If a sell has
+    # not settled yet, the fresh buy guard below will refuse the buy safely.
+    return sorted(plan, key=lambda item: 0 if item["side"] == "sell" else 1)
 
 
 def run_bot3_cycle(
@@ -665,6 +802,11 @@ def run_bot3_cycle(
         return {"status": "paused", "orders": 0}
 
     profile = profile or {}
+    try:
+        max_deployment = _max_deployment(profile)
+    except ValueError as exc:
+        logger.critical(f"Bot 3 | invalid deployment configuration — fail closed: {exc}")
+        return {"status": "error", "orders": 0, "reason": "invalid_deployment_config"}
     now = now or datetime.now(timezone.utc)
     cycle_id = uuid.uuid4().hex
     ensure_bot3_tables()
@@ -726,17 +868,48 @@ def run_bot3_cycle(
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
     closes = _load_recent_closes()
     targets, volatility = inverse_vol_targets(closes)
-    plan = _plan_orders(account, positions, targets, cycle_id, client.latest_prices())
+    plan = _plan_orders(
+        account,
+        raw_positions,
+        targets,
+        cycle_id,
+        client.latest_prices(),
+        max_deployment=max_deployment,
+    )
     orders = 0
     for item in plan:
-        if item["side"] == "buy":
-            _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
-        else:
+        if item["side"] == "sell":
             symbol = _canonical_symbol(item["symbol"])
             broker_qty = _broker_position_qty(client, symbol)
             sell_qty = min(float(item["qty"]), broker_qty)
             if sell_qty > 0:
-                client.submit(symbol, "sell", sell_qty, "market")
+                sell_order = client.submit(symbol, "sell", sell_qty, "market")
+                client.wait_for_fill(sell_order["id"])
+                orders += 1
+            continue
+
+        allowed, projection = _fresh_buy_guard(client, item, max_deployment)
+        if not allowed:
+            _log_decision(
+                cycle_id,
+                "BUY_BLOCKED",
+                symbol=item["symbol"],
+                planned_qty=item["qty"],
+                current_price=item.get("price"),
+                reason="cash_or_deployment_guard",
+                context=projection,
+            )
+            logger.critical(
+                "Bot 3 | BUY BLOCKED by cash/deployment guard | "
+                f"symbol={item['symbol']} qty={item['qty']:.8f} "
+                f"projected_cash=${projection['projected_cash']:,.2f} "
+                f"projected_long=${projection['projected_long_market_value']:,.2f} "
+                f"projected_deployment={projection['projected_deployment']:.2%} "
+                f"max_deployment={max_deployment:.2%}"
+            )
+            continue
+
+        _place_confirmed_entry(client, item["symbol"], item["qty"], cycle_id)
         orders += 1
     return {
         "status": "complete",
@@ -784,9 +957,26 @@ def dry_run_cycle() -> dict[str, Any]:
     current_prices = {
         symbol: values[-1] for symbol, values in closes.items()
     }
-    plan = _plan_orders(account, positions, targets, cycle_id, current_prices)
+    plan = _plan_orders(
+        account,
+        positions,
+        targets,
+        cycle_id,
+        current_prices,
+        max_deployment=DEFAULT_MAX_DEPLOYMENT,
+    )
+    _, investable_base, target_base = _allocation_bases(
+        account, positions, DEFAULT_MAX_DEPLOYMENT
+    )
     for item in plan:
-        print(f"WOULD_SUBMIT | {item['side'].upper()} | {item['symbol']} | qty={item['qty']:.8f}")
+        print(
+            f"WOULD_SUBMIT | {item['side'].upper()} | {item['symbol']} | "
+            f"qty={item['qty']:.8f} | notional=${item['notional']:,.2f}"
+        )
+    print(
+        f"DRY_RUN_BASES | investable_equity=${investable_base:,.2f} | "
+        f"target_base=${target_base:,.2f} | max_deployment={DEFAULT_MAX_DEPLOYMENT:.2%}"
+    )
     print("DRY_RUN_ORDERS | 0 submitted | simulation plan only")
     return {"targets": targets, "volatility": volatility, "plan": plan, "orders": 0}
 

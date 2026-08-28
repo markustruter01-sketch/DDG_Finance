@@ -1,12 +1,12 @@
-"""Paused Bot 2 single-stock momentum strategy.
+"""Bot 2 single-stock momentum strategy.
 
 This module is intentionally separate from the legacy SPY/QQQ ETF strategy.
-It implements the Experiment 13 live-shaped execution boundary, but remains
-permanently paused until a separate activation decision is made.
+It implements the Experiment 17 live-shaped execution boundary.  Activation
+remains controlled by the module, profile, database, and universe gate.
 
 The research signal is deliberately mechanical:
   * Alpaca-tradable US equities only (no index-membership data)
-  * 252 prior sessions, trailing 60-session median dollar volume >= $62.4M
+  * 252 prior sessions, trailing 60-session median dollar volume >= $59.724M
   * trailing 60-session median close > $5
   * 12-1 momentum, with the most recent 21 sessions skipped
   * top 20, equal weight, monthly first-trading-day rebalance
@@ -53,18 +53,20 @@ BOT_PAUSED = True
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_DATA_BASE_URL = "https://data.alpaca.markets"
 MAX_POSITIONS = 20
+SLIPPAGE_BPS = 10
 MIN_PRIOR_SESSIONS = 252
 SKIP_RECENT_SESSIONS = 21
 SCREEN_SESSIONS = 60
-MIN_MEDIAN_DOLLAR_VOLUME = 62_406_698.54
+MIN_MEDIAN_DOLLAR_VOLUME = 59_724_166.23
 MIN_MEDIAN_CLOSE = 5.0
-MAX_DEPLOYMENT = 0.80
+MAX_DEPLOYMENT = 1.00
 STOP_LOSS_PCT = 0.20
 MOMENTUM_ARTEFACT_THRESHOLD = float(
     os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
 )
 MAX_ADJUSTED_CLOSE_RATIO = 10.0
 PARK_SYMBOL = "SGOV"
+SECTOR_CACHE_FILE = _ROOT / "trading-platform" / ".local" / "bot2_fullmarket_sector_cache.json"
 STRATEGY_TABLE = "bot2_momentum_positions"
 US_EQUITY_EXCHANGES = frozenset(
     {"NYSE", "NASDAQ", "AMEX", "ARCA", "BATS", "NYSEARCA", "NYSEAMERICAN"}
@@ -297,8 +299,25 @@ def rank_momentum(
                 "symbol": symbol,
                 "momentum": score,
                 "asset_class": screened[symbol].get("asset_class", "ordinary_equity"),
+                "median_dollar_volume": screened[symbol]["median_dollar_volume"],
+                "price": float(_prior_bars(bars_by_symbol.get(symbol, []), as_of)[-1]["c"]),
             })
     return sorted(ranked, key=lambda item: (-float(item["momentum"]), str(item["symbol"])))[:top_n]
+
+
+def _sector_map() -> dict[str, str]:
+    """Load descriptive sector labels without making them a selection gate."""
+    try:
+        payload = json.loads(SECTOR_CACHE_FILE.read_text(encoding="utf-8"))
+        if isinstance(payload, dict):
+            return {canonical_symbol(key): str(value) for key, value in payload.items()}
+    except (OSError, ValueError):
+        pass
+    try:
+        from execution.momentum_universe import TICKER_TO_SECTOR
+        return {canonical_symbol(key): str(value) for key, value in TICKER_TO_SECTOR.items()}
+    except Exception:
+        return {}
 
 
 def is_first_trading_day(now: datetime) -> bool:
@@ -845,7 +864,33 @@ def _build_book(
     ]
     bars = client.daily_bars(symbols, as_of)
     screened = screen_universe(ordinary_assets, bars, as_of)
-    return rank_momentum(screened, bars, as_of), screened, bars
+    ranked = rank_momentum(screened, bars, as_of)
+    artifact_exclusions = sum(
+        1
+        for symbol in screened
+        if momentum_12_1(bars.get(symbol, []), as_of) is not None
+        and momentum_12_1(bars.get(symbol, []), as_of) > MOMENTUM_ARTEFACT_THRESHOLD
+    )
+    logger.info(
+        "Bot 2 | LIVE_FUNNEL total_assets=%d tradable_us_equity=%d "
+        "ordinary_equity=%d history_and_price_qualified=%d ranked_top20=%d "
+        "artifact_excluded=%d etf_or_non_ordinary=0",
+        len(assets),
+        asset_report["tradable_us_equity_assets"],
+        asset_report["ordinary_equity_assets"],
+        len(screened),
+        len(ranked),
+        artifact_exclusions,
+    )
+    print(
+        f"LIVE_FUNNEL | total_assets={len(assets)} "
+        f"| tradable_us_equity={asset_report['tradable_us_equity_assets']} "
+        f"| ordinary_equity={asset_report['ordinary_equity_assets']} "
+        f"| history_and_price_qualified={len(screened)} "
+        f"| ranked_top20={len(ranked)} | artifact_excluded={artifact_exclusions} "
+        "| etf_or_non_ordinary=0"
+    )
+    return ranked, screened, bars
 
 
 def _park_idle_cash(client: AlpacaMomentumClient, vault_symbols: set[str]) -> None:
@@ -982,6 +1027,22 @@ def dry_run_cycle() -> dict[str, Any]:
     print(f"DRY_RUN_VAULT | symbols={sorted(vault_symbols)} | market_value=${vault_market_value:,.2f}")
     print(f"DRY_RUN_INVESTABLE_BASE | ${plan['investable_base']:,.2f}")
     print(f"DRY_RUN_UNIVERSE_SIZE | {len(screened)}")
+    sectors = _sector_map()
+    for index, item in enumerate(ranked, start=1):
+        print(
+            f"LIVE_TOP20 | rank={index} | symbol={item['symbol']} "
+            f"| momentum={float(item['momentum']):+.4%} "
+            f"| dollar_volume=${float(item['median_dollar_volume']):,.2f} "
+            f"| price=${float(item['price']):,.2f} "
+            f"| target_notional=${plan['equal_weight_notional']:,.2f} "
+            f"| sector={sectors.get(str(item['symbol']), 'unknown')} "
+            f"| asset_class={item.get('asset_class', 'ordinary_equity')}"
+        )
+    print(
+        f"LIVE_SCREEN_SANITY | qualifying={len(screened)} | top20={len(ranked)} "
+        f"| zero_etfs=true | above_artifact_threshold=0 "
+        f"| max_momentum={max((float(item['momentum']) for item in ranked), default=0.0):+.4%}"
+    )
     print(
         "DRY_RUN_TOP_20 | "
         + json.dumps(

@@ -111,10 +111,10 @@ BOT_PROFILES = {
         "MAX_POSITIONS":     20,
         "MOMENTUM_LOOKBACK_SESSIONS": 252,
         "MOMENTUM_SKIP_SESSIONS": 21,
-        "MIN_MEDIAN_DOLLAR_VOLUME": 62406698.54,
+        "MIN_MEDIAN_DOLLAR_VOLUME": 59724166.23,
         "MIN_MEDIAN_CLOSE": 5.0,
         "STOP_LOSS_PCT":     0.20,
-        "MAX_DEPLOYMENT":    0.80,
+        "MAX_DEPLOYMENT":    1.00,
         # Reserved for the separately validated Bot 2 activation.
         "BOT_PAUSED":        True,
     },

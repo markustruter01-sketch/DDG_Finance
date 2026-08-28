@@ -7,4 +7,4 @@ Bot 2's ordinary-equity screen must remain positive and fail-closed: Alpaca expo
 
 **Why:** The expanded development ingestion can complete successfully while historical parity still fails; treating missing history as a passing or silently substituting a ticker blocklist would invalidate the research.
 
-**How to apply:** Keep the local universe gate at STOP until a concrete reference-ticker/security-master source (such as Polygon/Massive reference tickers or a licensed equivalent) supplies security type, lineage, and historical coverage.
+**How to apply:** Keep the local universe gate at STOP until a concrete reference-ticker/security-master source (such as Polygon/Massive reference tickers or a licensed equivalent) supplies security type, lineage, and historical coverage. A current Alpaca live run at the calibrated $59,724,166.23 floor produced only 37 qualified names versus 500 in the development calibration, so research PASS must not activate live Bot 2 without resolving that parity gap.

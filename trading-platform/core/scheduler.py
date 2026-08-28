@@ -49,6 +49,7 @@ _runner_liveness_failures: int = 0
 _runner_liveness_alerted: bool = False
 _trading_api_liveness_failures: int = 0
 _trading_api_liveness_alerted: bool = False
+_trading_api_liveness_checks: int = 0
 RUNNER_HEALTH_URL = os.environ.get(
     "RUNNER_HEALTH_URL",
     "http://127.0.0.1:8085/health",
@@ -68,6 +69,13 @@ RUNNER_HEALTH_FAILURE_THRESHOLD = int(
 def _is_published_deployment() -> bool:
     """True only in a Replit published deployment, never in a dev workflow."""
     return os.environ.get("REPLIT_DEPLOYMENT") == "1"
+
+
+def _trading_api_liveness_enabled() -> bool:
+    """Allow the published artifact to opt in even if its platform flag is absent."""
+    return _is_published_deployment() or os.environ.get(
+        "TRADING_API_LIVENESS_ENABLED", ""
+    ).strip() == "1"
 
 
 def _kill_switch_enforced() -> bool:
@@ -157,6 +165,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
             f"Scheduler | Registered: published_runner_liveness (1 min, "
             f"url={RUNNER_HEALTH_URL})"
         )
+    if _trading_api_liveness_enabled():
         scheduler.add_job(
             func=_probe_trading_api_liveness,
             trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
@@ -171,7 +180,13 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         )
         logger.info(
             f"Scheduler | Registered: published_trading_api_liveness (1 min, "
-            f"url={TRADING_API_HEALTH_URL})"
+            f"url={TRADING_API_HEALTH_URL}, "
+            f"auth_header={TRADING_API_SECRET_HEADER})"
+        )
+    else:
+        logger.info(
+            "Scheduler | Published Trading API liveness probe skipped "
+            "(not enabled outside published deployment)"
         )
 
     # ── ONE-TIME: oracle residual cleanup (2026-08-17 09:31 ET) ──────────────
@@ -468,14 +483,14 @@ async def _probe_runner_liveness() -> None:
 
 async def _probe_trading_api_liveness() -> None:
     """Probe a protected API endpoint so auth failures cannot look healthy."""
-    global _trading_api_liveness_failures, _trading_api_liveness_alerted
+    global _trading_api_liveness_failures
+    global _trading_api_liveness_alerted
+    global _trading_api_liveness_checks
     try:
         secret = os.environ.get("TRADING_API_SECRET", "").strip()
-        headers = (
-            {TRADING_API_SECRET_HEADER: secret}
-            if secret
-            else {}
-        )
+        if not secret:
+            raise RuntimeError("TRADING_API_SECRET is not configured")
+        headers = {TRADING_API_SECRET_HEADER: secret}
         async with httpx.AsyncClient(timeout=RUNNER_HEALTH_TIMEOUT_SECONDS) as client:
             response = await client.get(
                 TRADING_API_HEALTH_URL,
@@ -488,8 +503,14 @@ async def _probe_trading_api_liveness() -> None:
                 raise RuntimeError(f"HTTP {response.status_code}")
             if not isinstance(response.json(), dict):
                 raise RuntimeError("unexpected trading API response payload")
+        _trading_api_liveness_checks += 1
         recovered = _trading_api_liveness_failures > 0
         _trading_api_liveness_failures = 0
+        logger.info(
+            "Scheduler | protected trading API liveness result=healthy "
+            f"check={_trading_api_liveness_checks} status=200 "
+            f"auth_header={TRADING_API_SECRET_HEADER}"
+        )
         if recovered:
             logger.warning(
                 "Scheduler | protected trading API liveness recovered: "
@@ -497,10 +518,13 @@ async def _probe_trading_api_liveness() -> None:
             )
         _trading_api_liveness_alerted = False
     except Exception as exc:
+        _trading_api_liveness_checks += 1
         _trading_api_liveness_failures += 1
         logger.error(
             "Scheduler | protected trading API liveness failure "
-            f"{_trading_api_liveness_failures}/{RUNNER_HEALTH_FAILURE_THRESHOLD}: {exc}"
+            f"{_trading_api_liveness_failures}/{RUNNER_HEALTH_FAILURE_THRESHOLD} "
+            f"check={_trading_api_liveness_checks} "
+            f"auth_header={TRADING_API_SECRET_HEADER}: {exc}"
         )
         if (
             _trading_api_liveness_failures >= RUNNER_HEALTH_FAILURE_THRESHOLD

@@ -24,6 +24,7 @@ import threading
 import importlib
 import traceback
 import urllib.request
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
@@ -138,6 +139,9 @@ if RUNNER_EXECUTION_MODE not in {"live", "read_only"}:
 _runner_can_trade = RUNNER_EXECUTION_MODE == "live"
 _runner_lock_ready = False
 _owned_lock_bot_ids: set[str] = set()
+# PID values can be reused during a deployment handoff. The token makes every
+# process instance distinct even when the platform assigns it the old PID.
+RUNNER_OWNER_TOKEN = uuid.uuid4().hex
 
 FAILURE_ALERT_EVERY = 3
 API_LIVENESS_INTERVAL_SECONDS = 60
@@ -226,6 +230,7 @@ def _prepare_runner_locks() -> bool:
                 RUNNER_ENVIRONMENT,
                 os.getpid(),
                 3 * _lock_interval_seconds(bot_id),
+                owner_token=RUNNER_OWNER_TOKEN,
             )
             if not result.get("owned"):
                 holder = result.get("lock") or {}
@@ -273,6 +278,7 @@ def _refresh_bot_lock(bot_id: str) -> bool:
             lock_bot_id,
             RUNNER_ENVIRONMENT,
             os.getpid(),
+            owner_token=RUNNER_OWNER_TOKEN,
         )
     except Exception as exc:
         logger.critical(f"[{bot_id}] Runner lock heartbeat failed: {exc}")
@@ -811,66 +817,80 @@ def _shutdown_handler(signum, frame):
     _shutdown_event.set()
 
 
+def _release_owned_runner_locks() -> None:
+    """Release only this runner instance's leases, without masking shutdown."""
+    if not _runner_lock_ready or _release_runner_locks is None:
+        return
+    try:
+        released = _release_runner_locks(
+            RUNNER_ENVIRONMENT,
+            os.getpid(),
+            owner_token=RUNNER_OWNER_TOKEN,
+        )
+        _owned_lock_bot_ids.clear()
+        logger.info(
+            f"Runner lock | released={released} environment={RUNNER_ENVIRONMENT}"
+        )
+    except Exception as exc:
+        logger.critical(f"Runner lock | release failed: {exc}")
+
+
 def main():
     global _pause_alignment_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
-    _prepare_runner_locks()
-
-    logger.info("=" * 60)
-    logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
-    logger.info(f"Bots: {', '.join(b[0] for b in BOTS)}")
-    logger.info("=" * 60)
-    _pause_alignment_ok = _assert_pause_alignment()
-    logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
-
-    # Start health server BEFORE bot threads so port binds fast
-    _start_health_server()
-    threading.Thread(
-        target=_probe_trading_api,
-        daemon=True,
-        name="trading-api-liveness",
-    ).start()
-    logger.info(
-        "Runner | Trading API liveness probe started "
-        f"(interval={API_LIVENESS_INTERVAL_SECONDS}s, "
-        f"timeout={API_LIVENESS_TIMEOUT_SECONDS}s, "
-        f"threshold={API_LIVENESS_FAILURE_THRESHOLD}, url={API_HEALTH_URL})"
-    )
-
-    # Spawn one thread per bot
     threads = []
-    for bot_id, module_name, fn_name in BOTS:
-        t = threading.Thread(
-            target=_run_bot_loop,
-            args=(bot_id, module_name, fn_name),
-            daemon=False,
-            name=f"bot-{bot_id}"
-        )
-        t.start()
-        threads.append(t)
-        _update_status(bot_id, status="starting")
-        time.sleep(0.5)  # small stagger to avoid thundering herd on imports
-
-    logger.info(f"Runner | {len(threads)} bot threads started")
-
-    # Main thread waits for shutdown
     try:
+        _prepare_runner_locks()
+
+        logger.info("=" * 60)
+        logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
+        logger.info(f"Bots: {', '.join(b[0] for b in BOTS)}")
+        logger.info("=" * 60)
+        _pause_alignment_ok = _assert_pause_alignment()
+        logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
+
+        # Start health server BEFORE bot threads so port binds fast
+        _start_health_server()
+        threading.Thread(
+            target=_probe_trading_api,
+            daemon=True,
+            name="trading-api-liveness",
+        ).start()
+        logger.info(
+            "Runner | Trading API liveness probe started "
+            f"(interval={API_LIVENESS_INTERVAL_SECONDS}s, "
+            f"timeout={API_LIVENESS_TIMEOUT_SECONDS}s, "
+            f"threshold={API_LIVENESS_FAILURE_THRESHOLD}, url={API_HEALTH_URL})"
+        )
+
+        # Spawn one thread per bot
+        for bot_id, module_name, fn_name in BOTS:
+            t = threading.Thread(
+                target=_run_bot_loop,
+                args=(bot_id, module_name, fn_name),
+                daemon=False,
+                name=f"bot-{bot_id}"
+            )
+            t.start()
+            threads.append(t)
+            _update_status(bot_id, status="starting")
+            time.sleep(0.5)  # small stagger to avoid thundering herd on imports
+
+        logger.info(f"Runner | {len(threads)} bot threads started")
+
+        # Main thread waits for shutdown
         while not _shutdown_event.is_set():
             time.sleep(5)
     except KeyboardInterrupt:
         _shutdown_event.set()
-
-    logger.info("Runner | Shutting down all bot threads...")
-    for t in threads:
-        t.join(timeout=10)
-    if _runner_lock_ready and _release_runner_locks is not None:
-        try:
-            released = _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
-            logger.info(f"Runner lock | released={released} environment={RUNNER_ENVIRONMENT}")
-        except Exception as exc:
-            logger.critical(f"Runner lock | release failed: {exc}")
+    finally:
+        _shutdown_event.set()
+        logger.info("Runner | Shutting down all bot threads...")
+        for t in threads:
+            t.join(timeout=10)
+        _release_owned_runner_locks()
     logger.info("Runner | All threads stopped. Goodbye.")
 
 

@@ -40,6 +40,22 @@ class _ApiClient(_HealthyClient):
         return _ApiResponse()
 
 
+class _CapturingApiClient(_HealthyClient):
+    request_headers = None
+
+    async def get(self, *_args, **kwargs):
+        self.request_headers = kwargs.get("headers")
+        return _ApiResponse()
+
+
+class _RecordingScheduler:
+    def __init__(self):
+        self.jobs = []
+
+    def add_job(self, **kwargs):
+        self.jobs.append(kwargs)
+
+
 def test_runner_probe_alerts_after_threshold(monkeypatch):
     alerts = []
     scheduler._runner_liveness_failures = 0
@@ -110,3 +126,30 @@ def test_authenticated_api_probe_recovers_with_secret(monkeypatch):
 
     assert scheduler._trading_api_liveness_failures == 0
     assert scheduler._trading_api_liveness_alerted is False
+
+
+def test_authenticated_api_probe_sends_secret_header_without_logging_value(monkeypatch):
+    client = _CapturingApiClient()
+    scheduler._trading_api_liveness_failures = 0
+    scheduler._trading_api_liveness_alerted = False
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setattr(scheduler.httpx, "AsyncClient", lambda **_kwargs: client)
+
+    asyncio.run(scheduler._probe_trading_api_liveness())
+
+    assert client.request_headers == {
+        "X-Trading-API-Secret": "test-api-secret",
+        "User-Agent": "trading-api-authenticated-liveness",
+    }
+    assert scheduler._trading_api_liveness_failures == 0
+
+
+def test_authenticated_api_probe_is_registered_when_published_flag_is_enabled(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_trading_api_liveness" in job_ids

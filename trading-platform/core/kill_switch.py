@@ -316,6 +316,14 @@ def report(snapshot: dict[str, Any]) -> dict[str, Any]:
     result = {"mode": "report_only", "would_trip": bool(triggers), "triggers": triggers, "snapshot": public_snapshot}
     _state["last_snapshot"] = result
     logger.warning(f"Kill switch report-only | would_trip={bool(triggers)} triggers={len(triggers)}")
+    for trigger in triggers:
+        logger.warning(
+            "Kill switch report-only trigger | "
+            f"bot={trigger.get('bot_id', 'unknown')} "
+            f"symbol={trigger.get('symbol', 'unknown')} "
+            f"kind={trigger.get('kind', trigger.get('trigger', 'unknown'))} "
+            f"detail={trigger.get('detail', '')}"
+        )
     return result
 
 

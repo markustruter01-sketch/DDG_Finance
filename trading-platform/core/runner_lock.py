@@ -6,16 +6,19 @@ so only one live runner can own each canonical bot at a time.
 """
 from __future__ import annotations
 
+import os
+from datetime import datetime, timezone
 from typing import Any
 
 
 LOCK_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS runner_account_locks (
-    bot_id        TEXT PRIMARY KEY,
-    environment   TEXT NOT NULL,
-    pid           INTEGER NOT NULL,
-    heartbeat_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    acquired_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    bot_id       TEXT PRIMARY KEY,
+    environment  TEXT NOT NULL,
+    pid          INTEGER NOT NULL,
+    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    acquired_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    owner_token  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_runner_account_locks_heartbeat
     ON runner_account_locks (heartbeat_at);
@@ -31,6 +34,36 @@ def ensure_lock_table() -> bool:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(LOCK_TABLE_DDL)
+            # Existing deployments predate owner tokens. Backfill deterministically
+            # before making the column non-null so a schema upgrade is safe.
+            cur.execute(
+                """
+                ALTER TABLE runner_account_locks
+                ADD COLUMN IF NOT EXISTS owner_token TEXT
+                """
+            )
+            cur.execute(
+                """
+                UPDATE runner_account_locks
+                SET owner_token = CONCAT(
+                    'legacy:', environment, ':', pid, ':',
+                    EXTRACT(EPOCH FROM heartbeat_at)::bigint
+                )
+                WHERE owner_token IS NULL OR owner_token = ''
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE runner_account_locks
+                ALTER COLUMN owner_token SET DEFAULT ''
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE runner_account_locks
+                ALTER COLUMN owner_token SET NOT NULL
+                """
+            )
     return True
 
 
@@ -44,6 +77,29 @@ def _lock_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
         "heartbeat_at": row[3].isoformat() if row[3] else None,
         "acquired_at": row[4].isoformat() if row[4] else None,
     }
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Return whether this environment can still observe the recorded PID."""
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # The process exists but this process cannot signal it.
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _heartbeat_is_stale(heartbeat_at: Any, stale_after_seconds: float) -> bool:
+    if heartbeat_at is None:
+        return True
+    if heartbeat_at.tzinfo is None:
+        heartbeat_at = heartbeat_at.replace(tzinfo=timezone.utc)
+    age_seconds = (datetime.now(timezone.utc) - heartbeat_at).total_seconds()
+    return age_seconds > float(stale_after_seconds)
 
 
 def list_locks() -> list[dict[str, Any]]:
@@ -71,75 +127,136 @@ def claim_lock(
     environment: str,
     pid: int,
     stale_after_seconds: float,
+    owner_token: str | None = None,
 ) -> dict[str, Any]:
-    """Atomically claim a bot lease, or return the fresh current owner."""
+    """Atomically claim a bot lease, or return the current owner.
+
+    A unique owner token distinguishes a replacement process from a reused PID.
+    A live owner is never displaced. Same-environment dead PIDs are reclaimed
+    immediately; other owners must also be stale before takeover.
+    """
     from db.postgres import get_conn
 
+    requested_token = owner_token or f"legacy:{environment}:{int(pid)}"
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO runner_account_locks
-                    (bot_id, environment, pid, heartbeat_at, acquired_at)
-                VALUES (%s, %s, %s, NOW(), NOW())
-                ON CONFLICT (bot_id) DO UPDATE SET
-                    environment  = EXCLUDED.environment,
-                    pid          = EXCLUDED.pid,
-                    heartbeat_at = EXCLUDED.heartbeat_at,
-                    acquired_at  = EXCLUDED.acquired_at
-                WHERE runner_account_locks.heartbeat_at
-                      < NOW() - (%s * INTERVAL '1 second')
-                   OR (
-                        runner_account_locks.environment = EXCLUDED.environment
-                        AND runner_account_locks.pid = EXCLUDED.pid
-                   )
-                RETURNING bot_id, environment, pid, heartbeat_at, acquired_at
-                """,
-                (bot_id, environment, int(pid), float(stale_after_seconds)),
-            )
-            row = cur.fetchone()
-            if row is not None:
-                return {"owned": True, "lock": _lock_row(row)}
-
-            cur.execute(
-                """
-                SELECT bot_id, environment, pid, heartbeat_at, acquired_at
+                SELECT bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
                 FROM runner_account_locks
                 WHERE bot_id = %s
+                FOR UPDATE
                 """,
                 (bot_id,),
             )
-            return {"owned": False, "lock": _lock_row(cur.fetchone())}
+            current = cur.fetchone()
+            if current is None:
+                cur.execute(
+                    """
+                    INSERT INTO runner_account_locks
+                        (bot_id, environment, pid, heartbeat_at, acquired_at, owner_token)
+                    VALUES (%s, %s, %s, NOW(), NOW(), %s)
+                    RETURNING bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
+                    """,
+                    (bot_id, environment, int(pid), requested_token),
+                )
+                return {"owned": True, "lock": _lock_row(cur.fetchone())}
+
+            current_environment = current[1]
+            current_pid = int(current[2])
+            current_token = current[5] if len(current) > 5 else ""
+            current_token = current_token or ""
+            same_owner = (
+                current_environment == environment
+                and current_pid == int(pid)
+                and (
+                    owner_token is None
+                    or current_token == requested_token
+                )
+            )
+            owner_alive = _pid_is_alive(current_pid)
+            stale = _heartbeat_is_stale(current[3], stale_after_seconds)
+            dead_same_environment = (
+                current_environment == environment and not owner_alive
+            )
+            can_takeover = dead_same_environment or (stale and not owner_alive)
+
+            if same_owner or can_takeover:
+                cur.execute(
+                    """
+                    UPDATE runner_account_locks
+                    SET environment = %s,
+                        pid = %s,
+                        heartbeat_at = NOW(),
+                        acquired_at = NOW(),
+                        owner_token = %s
+                    WHERE bot_id = %s
+                    RETURNING bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
+                    """,
+                    (environment, int(pid), requested_token, bot_id),
+                )
+                return {"owned": True, "lock": _lock_row(cur.fetchone())}
+
+            return {"owned": False, "lock": _lock_row(current)}
 
 
-def refresh_lock(bot_id: str, environment: str, pid: int) -> bool:
-    """Refresh only the lease currently owned by this exact process."""
+def refresh_lock(
+    bot_id: str,
+    environment: str,
+    pid: int,
+    owner_token: str | None = None,
+) -> bool:
+    """Refresh only the lease currently owned by this exact process instance."""
     from db.postgres import get_conn
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                UPDATE runner_account_locks
-                SET heartbeat_at = NOW()
-                WHERE bot_id = %s AND environment = %s AND pid = %s
-                """,
-                (bot_id, environment, int(pid)),
-            )
+            if owner_token:
+                cur.execute(
+                    """
+                    UPDATE runner_account_locks
+                    SET heartbeat_at = NOW()
+                    WHERE bot_id = %s AND environment = %s
+                      AND pid = %s AND owner_token = %s
+                    """,
+                    (bot_id, environment, int(pid), owner_token),
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE runner_account_locks
+                    SET heartbeat_at = NOW()
+                    WHERE bot_id = %s AND environment = %s AND pid = %s
+                    """,
+                    (bot_id, environment, int(pid)),
+                )
             return cur.rowcount == 1
 
 
-def release_locks(environment: str, pid: int) -> int:
-    """Release only leases owned by this exact process."""
+def release_locks(
+    environment: str,
+    pid: int,
+    owner_token: str | None = None,
+) -> int:
+    """Release only leases owned by this exact process instance."""
     from db.postgres import get_conn
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                DELETE FROM runner_account_locks
-                WHERE environment = %s AND pid = %s
-                """,
-                (environment, int(pid)),
-            )
+            if owner_token:
+                cur.execute(
+                    """
+                    DELETE FROM runner_account_locks
+                    WHERE environment = %s AND pid = %s AND owner_token = %s
+                    """,
+                    (environment, int(pid), owner_token),
+                )
+            else:
+                cur.execute(
+                    """
+                    DELETE FROM runner_account_locks
+                    WHERE environment = %s AND pid = %s
+                    """,
+                    (environment, int(pid)),
+                )
             return cur.rowcount

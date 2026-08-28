@@ -45,6 +45,7 @@ kind = "web"
 
   [services.production.run.env]
   API_PREFIX = "/trading-api"
+  TRADING_API_LIVENESS_ENABLED = "1"
 
   [services.production.health.startup]
   path = "/trading-api/health"

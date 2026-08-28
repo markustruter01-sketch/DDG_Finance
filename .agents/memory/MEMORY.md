@@ -40,4 +40,5 @@
 - [Published/dev runner collision](published-dev-runner-collision.md) — published owns DB leases and Dev is read-only; API independently probes published runner health.
 - [Stop ledger replacement](stop-ledger-replacement.md) — every broker stop replacement/restore must persist both live order ID and price in the open ETF ledger.
 - [Published runner lease handoff](published-runner-lease-handoff.md) — publishing can leave same-environment leases that make the replacement runner fail closed until lease ownership is explicitly reclaimed.
+- [Full-market research memory](fullmarket-research-memory.md) — compute broad-universe screens in SQL and load only the backtest warmup panel; full-panel Python materialization can hit memory limits.
 - [Bot 2 Alpaca reference coverage](bot2-alpaca-reference-coverage.md) — Alpaca metadata/history can be insufficient for historical universe parity; keep the gate fail-closed until a richer reference source is added.

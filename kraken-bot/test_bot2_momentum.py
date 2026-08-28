@@ -16,6 +16,7 @@ sys.modules[_SPEC.name] = bot2
 _SPEC.loader.exec_module(bot2)
 from core.equity_universe import (  # noqa: E402
     asset_is_eligible,
+    eligible_asset_records,
     screen_universe as shared_screen_universe,
     set_screen_data,
 )
@@ -59,7 +60,13 @@ def test_screen_requires_tradable_us_equity_and_mechanical_liquidity_gates() -> 
         "NOTRADE": _bars(),
     }
 
-    screened = bot2.screen_universe(assets, bars, as_of)
+    set_screen_data(assets, bars)
+    screened, _ = shared_screen_universe(
+        as_of,
+        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.MIN_PRIOR_SESSIONS,
+        bot2.MIN_MEDIAN_CLOSE,
+    )
 
     assert set(screened) == {"GOOD"}
 
@@ -71,12 +78,10 @@ def test_instrument_filter_is_metadata_based_and_fail_closed_for_unknowns() -> N
         _asset("UNKNOWN", name="Example Security"),
     ]
 
-    ordinary, report = bot2.filter_ordinary_equity_assets(assets)
+    ordinary, report = eligible_asset_records(assets)
 
     assert {asset["symbol"] for asset in ordinary} == {"COMMON", "UNKNOWN"}
     assert report["excluded_name"] == 1
-    assert report["metadata_complete"] is True
-    assert "ETF" in report["excluded_symbols"]
 
 
 def test_shared_exclusion_screener_keeps_required_real_share_shapes() -> None:
@@ -125,7 +130,13 @@ def test_rank_is_descending_with_deterministic_symbol_tie_break() -> None:
     as_of = date(2026, 1, 1)
     assets = [_asset("BBB"), _asset("AAA")]
     bars = {"AAA": _bars(close=100), "BBB": _bars(close=100)}
-    screened = bot2.screen_universe(assets, bars, as_of)
+    set_screen_data(assets, bars)
+    screened, _ = shared_screen_universe(
+        as_of,
+        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.MIN_PRIOR_SESSIONS,
+        bot2.MIN_MEDIAN_CLOSE,
+    )
 
     ranked = bot2.rank_momentum(screened, bars, as_of)
 
@@ -138,9 +149,16 @@ def test_rank_rejects_extreme_adjusted_momentum_artifact() -> None:
     spike = _bars(close=100)
     spike[-22]["c"] = 50_000
     normal = _bars(close=100)
-    screened = bot2.screen_universe(assets, {"SPIKE": spike, "NORMAL": normal}, as_of)
+    bars = {"SPIKE": spike, "NORMAL": normal}
+    set_screen_data(assets, bars)
+    screened, _ = shared_screen_universe(
+        as_of,
+        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.MIN_PRIOR_SESSIONS,
+        bot2.MIN_MEDIAN_CLOSE,
+    )
 
-    ranked = bot2.rank_momentum(screened, {"SPIKE": spike, "NORMAL": normal}, as_of)
+    ranked = bot2.rank_momentum(screened, bars, as_of)
 
     assert [item["symbol"] for item in ranked] == ["NORMAL"]
 

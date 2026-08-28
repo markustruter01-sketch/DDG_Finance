@@ -60,7 +60,7 @@ MAX_POSITIONS = 20
 SLIPPAGE_BPS = 10
 MIN_PRIOR_SESSIONS = 252
 SKIP_RECENT_SESSIONS = 21
-MIN_MEDIAN_DOLLAR_VOLUME = 182_165_736.51
+MIN_MEDIAN_DOLLAR_VOLUME = 223_555_361.895
 MIN_MEDIAN_CLOSE = 5.0
 MAX_DEPLOYMENT = 1.00
 STOP_LOSS_PCT = 0.20
@@ -128,53 +128,6 @@ def universe_gate_is_passed() -> bool:
     return payload.get("status") == "PASS" and bool(
         payload.get("historical_parity_required")
     )
-
-
-def screen_universe(
-    assets: list[dict[str, Any]],
-    bars_by_symbol: dict[str, list[dict[str, Any]]],
-    as_of: date,
-) -> set[str]:
-    """Compatibility adapter for older pure Bot 2 tests.
-
-    Production code calls the four-argument core function directly.  This
-    adapter only supplies the core's normalized input boundary and contains
-    no screening rules of its own.
-    """
-    set_screen_data(assets, bars_by_symbol)
-    symbols, _ = shared_screen_universe(
-        as_of,
-        MIN_MEDIAN_DOLLAR_VOLUME,
-        MIN_PRIOR_SESSIONS,
-        MIN_MEDIAN_CLOSE,
-    )
-    return symbols
-
-
-def filter_ordinary_equity_assets(
-    assets: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Compatibility adapter; static eligibility lives in the shared core."""
-    eligible, counts = eligible_asset_records(assets)
-    report = {
-        **counts,
-        "tradable_us_equity_assets": counts["asset_eligible_records"],
-        "ordinary_equity_assets": len(eligible),
-        "excluded_non_ordinary": (
-            counts["non_us_equity"]
-            + counts["not_tradable"]
-            + counts["unapproved_exchange"]
-        ),
-        "excluded_unknown_metadata": counts["excluded_name"],
-        "metadata_complete": True,
-        "provider_limitation": None,
-        "excluded_symbols": sorted(
-            str(asset.get("symbol", "")).upper()
-            for asset in assets
-            if asset not in eligible
-        ),
-    }
-    return eligible, report
 
 
 def momentum_12_1(bars: list[dict[str, Any]], as_of: date) -> float | None:

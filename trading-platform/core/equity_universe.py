@@ -244,8 +244,14 @@ def screen_universe(
         if len(prior) < min_sessions:
             continue
         funnel["history_eligible"] += 1
+        # Live screening only requests a bounded recent history window.  A
+        # research panel may contain older split artifacts that the live
+        # caller cannot observe; artifact detection must therefore be
+        # point-in-time over the same lookback used for eligibility.
+        artifact_window = prior[-min_sessions:]
         valid_closes = [
             close for bar in prior
+            if bar in artifact_window
             if (close := _bar_number(bar, "c", "close")) is not None and close > 0
         ]
         artifact = any(

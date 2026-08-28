@@ -19,13 +19,11 @@ import json
 import logging
 import math
 import os
-import re
 import sys
 import time
 import uuid
 from datetime import date, datetime, time as dt_time, timedelta, timezone
 from pathlib import Path
-from statistics import median
 from typing import Any
 
 import requests
@@ -37,6 +35,12 @@ if _TRADING_PLATFORM in sys.path:
 sys.path.insert(0, _TRADING_PLATFORM)
 
 from db.postgres import get_conn  # noqa: E402
+from core.equity_universe import (  # noqa: E402
+    eligible_asset_records,
+    last_screen_observations,
+    screen_universe as shared_screen_universe,
+    set_screen_data,
+)
 
 try:
     from core.order_ids import submit_with_unique_client_order_id
@@ -56,29 +60,18 @@ MAX_POSITIONS = 20
 SLIPPAGE_BPS = 10
 MIN_PRIOR_SESSIONS = 252
 SKIP_RECENT_SESSIONS = 21
-SCREEN_SESSIONS = 60
-MIN_MEDIAN_DOLLAR_VOLUME = 59_724_166.23
+MIN_MEDIAN_DOLLAR_VOLUME = 182_165_736.51
 MIN_MEDIAN_CLOSE = 5.0
 MAX_DEPLOYMENT = 1.00
 STOP_LOSS_PCT = 0.20
 MOMENTUM_ARTEFACT_THRESHOLD = float(
     os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
 )
-MAX_ADJUSTED_CLOSE_RATIO = 10.0
 PARK_SYMBOL = "SGOV"
 SECTOR_CACHE_FILE = _ROOT / "trading-platform" / ".local" / "bot2_fullmarket_sector_cache.json"
 STRATEGY_TABLE = "bot2_momentum_positions"
-US_EQUITY_EXCHANGES = frozenset(
-    {"NYSE", "NASDAQ", "AMEX", "ARCA", "BATS", "NYSEARCA", "NYSEAMERICAN"}
-)
 EQUITY_SESSION_OPEN = dt_time(9, 30)
 EQUITY_SESSION_CLOSE = dt_time(16, 0)
-ORDINARY_SHARE_NAME_PATTERNS = (
-    re.compile(r"\bcommon stock\b", re.IGNORECASE),
-    re.compile(r"\bcommon shares?\b", re.IGNORECASE),
-    re.compile(r"\bordinary shares?\b", re.IGNORECASE),
-    re.compile(r"\bamerican depositary shares?\b", re.IGNORECASE),
-)
 
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {STRATEGY_TABLE} (
@@ -121,87 +114,6 @@ def _prior_bars(bars: list[dict[str, Any]], as_of: date) -> list[dict[str, Any]]
     )
 
 
-def has_adjusted_price_artifact(bars: list[dict[str, Any]]) -> bool:
-    """Flag impossible-looking adjusted-price discontinuities for review."""
-    ordered = sorted(bars, key=_bar_date)
-    for previous, current in zip(ordered, ordered[1:]):
-        previous_close = float(previous.get("c", 0) or 0)
-        current_close = float(current.get("c", 0) or 0)
-        if previous_close <= 0 or current_close <= 0:
-            continue
-        ratio = current_close / previous_close
-        if ratio > MAX_ADJUSTED_CLOSE_RATIO or ratio < 1 / MAX_ADJUSTED_CLOSE_RATIO:
-            return True
-    return False
-
-
-def asset_instrument_class(asset: dict[str, Any]) -> str:
-    """Classify from provider metadata, never from a symbol blocklist.
-
-    Alpaca's asset endpoint exposes a descriptive security name but no
-    dedicated ETF/common-stock type.  The positive ordinary-share patterns are
-    intentionally conservative; unknown instruments are excluded and reported.
-    """
-    explicit_type = str(
-        asset.get("instrument_type")
-        or asset.get("security_type")
-        or asset.get("asset_type")
-        or ""
-    ).strip().lower()
-    if explicit_type in {"common_stock", "ordinary_share", "stock", "equity"}:
-        return "ordinary_equity"
-    if explicit_type in {
-        "etf", "etn", "fund", "mutual_fund", "preferred", "warrant",
-        "right", "unit", "closed_end_fund",
-    }:
-        return "non_ordinary"
-    name = str(asset.get("name") or "").strip()
-    if name and any(pattern.search(name) for pattern in ORDINARY_SHARE_NAME_PATTERNS):
-        return "ordinary_equity"
-    return "unknown"
-
-
-def filter_ordinary_equity_assets(
-    assets: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Return only ordinary operating-company shares and an audit report."""
-    base_candidates = [
-        asset for asset in assets
-        if (
-            str(asset.get("status", "active")).lower() == "active"
-            and str(asset.get("asset_class", asset.get("class", "us_equity"))).lower()
-            == "us_equity"
-            and bool(asset.get("tradable"))
-            and str(asset.get("exchange", "")).upper() in US_EQUITY_EXCHANGES
-        )
-    ]
-    ordinary = [asset for asset in base_candidates if asset_instrument_class(asset) == "ordinary_equity"]
-    non_ordinary = [
-        asset for asset in base_candidates if asset_instrument_class(asset) == "non_ordinary"
-    ]
-    unknown = [
-        asset for asset in base_candidates if asset_instrument_class(asset) == "unknown"
-    ]
-    report = {
-        "total_assets": len(assets),
-        "tradable_us_equity_assets": len(base_candidates),
-        "ordinary_equity_assets": len(ordinary),
-        "excluded_non_ordinary": len(non_ordinary),
-        "excluded_unknown_metadata": len(unknown),
-        "metadata_complete": not unknown,
-        "provider_limitation": (
-            "Alpaca does not expose a dedicated ETF/common-stock type; "
-            "unknown instruments are excluded until Polygon/Massive reference "
-            "tickers or a licensed security master supplies a security type."
-            if unknown else None
-        ),
-        "excluded_symbols": sorted(
-            canonical_symbol(asset.get("symbol")) for asset in non_ordinary + unknown
-        ),
-    }
-    return ordinary, report
-
-
 UNIVERSE_GATE_FILE = (
     _ROOT / "trading-platform" / ".local" / "bot2_universe_gate.json"
 )
@@ -218,53 +130,51 @@ def universe_gate_is_passed() -> bool:
     )
 
 
-def _asset_is_tradable_us_equity(asset: dict[str, Any]) -> bool:
-    return (
-        str(asset.get("status", "active")).lower() == "active"
-        and str(asset.get("asset_class", asset.get("class", "us_equity"))).lower()
-        == "us_equity"
-        and bool(asset.get("tradable"))
-        and str(asset.get("exchange", "")).upper() in US_EQUITY_EXCHANGES
-        and asset_instrument_class(asset) == "ordinary_equity"
-    )
-
-
 def screen_universe(
     assets: list[dict[str, Any]],
     bars_by_symbol: dict[str, list[dict[str, Any]]],
     as_of: date,
-) -> dict[str, dict[str, float]]:
-    """Apply the mechanical, point-in-time universe gates."""
-    screened: dict[str, dict[str, Any]] = {}
-    for asset in assets:
-        if not _asset_is_tradable_us_equity(asset):
-            continue
-        symbol = canonical_symbol(asset.get("symbol"))
-        bars = _prior_bars(bars_by_symbol.get(symbol, []), as_of)
-        if len(bars) < MIN_PRIOR_SESSIONS:
-            continue
-        if has_adjusted_price_artifact(bars):
-            logger.warning(
-                "Bot 2 | adjusted-price artefact excluded symbol=%s", symbol
-            )
-            continue
-        trailing = bars[-SCREEN_SESSIONS:]
-        closes = [float(bar.get("c", 0) or 0) for bar in trailing]
-        dollar_volumes = [
-            float(bar.get("v", 0) or 0) * float(bar.get("c", 0) or 0)
-            for bar in trailing
-        ]
-        if (
-            median(dollar_volumes) < MIN_MEDIAN_DOLLAR_VOLUME
-            or median(closes) <= MIN_MEDIAN_CLOSE
-        ):
-            continue
-        screened[symbol] = {
-            "median_dollar_volume": float(median(dollar_volumes)),
-            "median_close": float(median(closes)),
-            "asset_class": "ordinary_equity",
-        }
-    return screened
+) -> set[str]:
+    """Compatibility adapter for older pure Bot 2 tests.
+
+    Production code calls the four-argument core function directly.  This
+    adapter only supplies the core's normalized input boundary and contains
+    no screening rules of its own.
+    """
+    set_screen_data(assets, bars_by_symbol)
+    symbols, _ = shared_screen_universe(
+        as_of,
+        MIN_MEDIAN_DOLLAR_VOLUME,
+        MIN_PRIOR_SESSIONS,
+        MIN_MEDIAN_CLOSE,
+    )
+    return symbols
+
+
+def filter_ordinary_equity_assets(
+    assets: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Compatibility adapter; static eligibility lives in the shared core."""
+    eligible, counts = eligible_asset_records(assets)
+    report = {
+        **counts,
+        "tradable_us_equity_assets": counts["asset_eligible_records"],
+        "ordinary_equity_assets": len(eligible),
+        "excluded_non_ordinary": (
+            counts["non_us_equity"]
+            + counts["not_tradable"]
+            + counts["unapproved_exchange"]
+        ),
+        "excluded_unknown_metadata": counts["excluded_name"],
+        "metadata_complete": True,
+        "provider_limitation": None,
+        "excluded_symbols": sorted(
+            str(asset.get("symbol", "")).upper()
+            for asset in assets
+            if asset not in eligible
+        ),
+    }
+    return eligible, report
 
 
 def momentum_12_1(bars: list[dict[str, Any]], as_of: date) -> float | None:
@@ -280,11 +190,12 @@ def momentum_12_1(bars: list[dict[str, Any]], as_of: date) -> float | None:
 
 
 def rank_momentum(
-    screened: dict[str, dict[str, Any]],
+    screened: set[str],
     bars_by_symbol: dict[str, list[dict[str, Any]]],
     as_of: date,
     top_n: int = MAX_POSITIONS,
 ) -> list[dict[str, float | str]]:
+    observations = last_screen_observations()
     ranked = []
     for symbol in screened:
         score = momentum_12_1(bars_by_symbol.get(symbol, []), as_of)
@@ -298,8 +209,8 @@ def rank_momentum(
             ranked.append({
                 "symbol": symbol,
                 "momentum": score,
-                "asset_class": screened[symbol].get("asset_class", "ordinary_equity"),
-                "median_dollar_volume": screened[symbol]["median_dollar_volume"],
+                "asset_class": observations[symbol].get("asset_class", "us_equity"),
+                "median_dollar_volume": observations[symbol]["median_dollar_volume_60"],
                 "price": float(_prior_bars(bars_by_symbol.get(symbol, []), as_of)[-1]["c"]),
             })
     return sorted(ranked, key=lambda item: (-float(item["momentum"]), str(item["symbol"])))[:top_n]
@@ -489,10 +400,9 @@ class AlpacaMomentumClient:
         return result
 
     def assets(self) -> list[dict[str, Any]]:
-        return self._request(
-            "GET", "/v2/assets",
-            params={"status": "active", "asset_class": "us_equity"},
-        ) or []
+        # The shared screener needs the full catalogue so its funnel can
+        # audit inactive, non-equity, OTC, and excluded-product records.
+        return self._request("GET", "/v2/assets") or []
 
     def daily_bars(
         self, symbols: list[str], as_of: date, batch_size: int = 100
@@ -510,7 +420,7 @@ class AlpacaMomentumClient:
                     "end": as_of.isoformat(),
                     "limit": 10000,
                     "adjustment": "all",
-                    "feed": os.environ.get("BOT2_ALPACA_DATA_FEED", "iex"),
+                    "feed": os.environ.get("BOT2_ALPACA_DATA_FEED", "sip"),
                     "sort": "asc",
                 }
                 if token:
@@ -844,51 +754,39 @@ def _sell_confirmed(
 
 def _build_book(
     client: AlpacaMomentumClient, as_of: date
-) -> tuple[list[dict[str, float | str]], dict[str, dict[str, float]], dict[str, list[dict[str, Any]]]]:
+) -> tuple[list[dict[str, float | str]], set[str], dict[str, list[dict[str, Any]]]]:
     assets = client.assets()
-    ordinary_assets, asset_report = filter_ordinary_equity_assets(assets)
+    candidate_assets, asset_report = eligible_asset_records(assets)
     logger.info(
-        "Bot 2 | asset filter total=%d tradable_us_equity=%d ordinary_equity=%d "
-        "excluded_non_ordinary=%d excluded_unknown=%d",
+        "Bot 2 | shared asset filter total=%d asset_eligible=%d "
+        "excluded_name=%d excluded_symbol_structure=%d",
         asset_report["total_assets"],
-        asset_report["tradable_us_equity_assets"],
-        asset_report["ordinary_equity_assets"],
-        asset_report["excluded_non_ordinary"],
-        asset_report["excluded_unknown_metadata"],
+        asset_report["asset_eligible_records"],
+        asset_report["excluded_name"],
+        asset_report["excluded_symbol_structure"],
     )
-    if asset_report["provider_limitation"]:
-        logger.error("Bot 2 | asset metadata limitation: %s", asset_report["provider_limitation"])
     symbols = [
         canonical_symbol(asset["symbol"])
-        for asset in ordinary_assets
+        for asset in candidate_assets
     ]
     bars = client.daily_bars(symbols, as_of)
-    screened = screen_universe(ordinary_assets, bars, as_of)
-    ranked = rank_momentum(screened, bars, as_of)
-    artifact_exclusions = sum(
-        1
-        for symbol in screened
-        if momentum_12_1(bars.get(symbol, []), as_of) is not None
-        and momentum_12_1(bars.get(symbol, []), as_of) > MOMENTUM_ARTEFACT_THRESHOLD
+    set_screen_data(assets, bars)
+    screened, funnel = shared_screen_universe(
+        as_of,
+        MIN_MEDIAN_DOLLAR_VOLUME,
+        MIN_PRIOR_SESSIONS,
+        MIN_MEDIAN_CLOSE,
     )
+    ranked = rank_momentum(screened, bars, as_of)
     logger.info(
-        "Bot 2 | LIVE_FUNNEL total_assets=%d tradable_us_equity=%d "
-        "ordinary_equity=%d history_and_price_qualified=%d ranked_top20=%d "
-        "artifact_excluded=%d etf_or_non_ordinary=0",
-        len(assets),
-        asset_report["tradable_us_equity_assets"],
-        asset_report["ordinary_equity_assets"],
-        len(screened),
+        "Bot 2 | LIVE_FUNNEL %s ranked_top20=%d",
+        " ".join(f"{key}={value}" for key, value in sorted(funnel.items())),
         len(ranked),
-        artifact_exclusions,
     )
     print(
-        f"LIVE_FUNNEL | total_assets={len(assets)} "
-        f"| tradable_us_equity={asset_report['tradable_us_equity_assets']} "
-        f"| ordinary_equity={asset_report['ordinary_equity_assets']} "
-        f"| history_and_price_qualified={len(screened)} "
-        f"| ranked_top20={len(ranked)} | artifact_excluded={artifact_exclusions} "
-        "| etf_or_non_ordinary=0"
+        "LIVE_FUNNEL | "
+        + " | ".join(f"{key}={value}" for key, value in sorted(funnel.items()))
+        + f" | ranked_top20={len(ranked)}"
     )
     return ranked, screened, bars
 
@@ -1036,7 +934,7 @@ def dry_run_cycle() -> dict[str, Any]:
             f"| price=${float(item['price']):,.2f} "
             f"| target_notional=${plan['equal_weight_notional']:,.2f} "
             f"| sector={sectors.get(str(item['symbol']), 'unknown')} "
-            f"| asset_class={item.get('asset_class', 'ordinary_equity')}"
+                f"| asset_class={item.get('asset_class', 'us_equity')}"
         )
     print(
         f"LIVE_SCREEN_SANITY | qualifying={len(screened)} | top20={len(ranked)} "
@@ -1050,7 +948,7 @@ def dry_run_cycle() -> dict[str, Any]:
                 {
                     "symbol": item["symbol"],
                     "momentum": item["momentum"],
-                    "asset_class": item.get("asset_class", "ordinary_equity"),
+                    "asset_class": item.get("asset_class", "us_equity"),
                 }
                 for item in ranked
             ],

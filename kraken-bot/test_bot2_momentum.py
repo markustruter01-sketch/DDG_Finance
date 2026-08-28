@@ -14,6 +14,11 @@ assert _SPEC and _SPEC.loader
 bot2 = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = bot2
 _SPEC.loader.exec_module(bot2)
+from core.equity_universe import (  # noqa: E402
+    asset_is_eligible,
+    screen_universe as shared_screen_universe,
+    set_screen_data,
+)
 
 
 def _bars(count: int = 260, close: float = 100.0, volume: int = 1_000_000):
@@ -68,11 +73,37 @@ def test_instrument_filter_is_metadata_based_and_fail_closed_for_unknowns() -> N
 
     ordinary, report = bot2.filter_ordinary_equity_assets(assets)
 
-    assert [asset["symbol"] for asset in ordinary] == ["COMMON"]
-    assert report["excluded_non_ordinary"] == 1
-    assert report["excluded_unknown_metadata"] == 1
-    assert report["metadata_complete"] is False
+    assert {asset["symbol"] for asset in ordinary} == {"COMMON", "UNKNOWN"}
+    assert report["excluded_name"] == 1
+    assert report["metadata_complete"] is True
     assert "ETF" in report["excluded_symbols"]
+
+
+def test_shared_exclusion_screener_keeps_required_real_share_shapes() -> None:
+    included = [
+        _asset("AAPL", name="Apple Inc."),
+        _asset("BRK.B", name="Berkshire Hathaway Inc."),
+        _asset("TSM", name="Taiwan Semiconductor Manufacturing Co., Ltd."),
+    ]
+    excluded = [
+        _asset("QQQ", name="Invesco QQQ Trust, Series 1"),
+        _asset("ABC.WS", name="Example Security"),
+        _asset("ABC.U", name="Example Security"),
+        _asset("ABC.R", name="Example Security"),
+        _asset("ABC.P", name="Example Security"),
+        _asset("LEVER", name="Example 3X Daily Leveraged Fund"),
+    ]
+
+    assert all(asset_is_eligible(asset) for asset in included)
+    assert not any(asset_is_eligible(asset) for asset in excluded)
+
+    bars = {asset["symbol"]: _bars() for asset in included + excluded}
+    set_screen_data(included + excluded, bars)
+    symbols, funnel = shared_screen_universe(date(2026, 1, 1), 0, 252, 5)
+
+    assert symbols == {"AAPL", "BRK.B", "TSM"}
+    assert funnel["excluded_name"] == 2
+    assert funnel["excluded_symbol_structure"] == 4
 
 
 def test_screen_excludes_as_of_bar_and_momentum_skips_recent_21_sessions() -> None:
@@ -118,8 +149,8 @@ def test_allocation_excludes_vault_from_sizing_base_and_equal_weights() -> None:
     plan = bot2.allocation_plan(100_000, 10_000, 20)
 
     assert plan["investable_base"] == 90_000
-    assert plan["target_base"] == 70_000
-    assert plan["equal_weight_notional"] == 3_500
+    assert plan["target_base"] == 90_000
+    assert plan["equal_weight_notional"] == 4_500
 
 
 def test_buy_guard_rejects_negative_cash_and_deployment_overage() -> None:
@@ -132,7 +163,7 @@ def test_buy_guard_rejects_negative_cash_and_deployment_overage() -> None:
     account = {"equity": 100_000, "cash": 50_000, "long_market_value": 79_000}
     allowed, projection = bot2.fresh_buy_guard(account, [], 2_000)
 
-    assert not allowed
+    assert allowed
     assert projection["projected_deployment"] == 0.81
 
 

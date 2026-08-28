@@ -183,14 +183,19 @@ def _log_runner_locks(prefix: str) -> None:
     if not _runner_lock_import_ok or _list_runner_locks is None:
         logger.critical(f"Runner lock | {prefix} | lock module unavailable")
         return
+    incoming_pid = os.getpid()
     try:
         locks = _list_runner_locks()
         if not locks:
-            logger.info(f"Runner lock | {prefix} | no lock rows")
+            logger.info(
+                f"Runner lock | {prefix} | incoming_pid={incoming_pid} "
+                "no lock rows"
+            )
         for lock in locks:
             logger.info(
                 f"Runner lock | {prefix} | bot={lock['bot_id']} "
-                f"environment={lock['environment']} pid={lock['pid']} "
+                f"environment={lock['environment']} "
+                f"incoming_pid={incoming_pid} holder_pid={lock['pid']} "
                 f"heartbeat={lock['heartbeat_at']} "
                 f"owner_token={lock.get('owner_token', 'unknown')}"
             )

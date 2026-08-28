@@ -190,8 +190,14 @@ def claim_lock(
             dead_same_environment = (
                 current_environment == environment and not owner_alive
             )
+            legacy_stale_takeover = (
+                current_token.startswith("legacy:")
+                and stale
+                and environment == "published"
+            )
             can_takeover = (
                 same_pid_replacement
+                or legacy_stale_takeover
                 or dead_same_environment
                 or (stale and not owner_alive)
             )

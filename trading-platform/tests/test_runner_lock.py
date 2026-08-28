@@ -182,6 +182,56 @@ def test_replacement_with_reused_pid_is_taken_over_by_new_token(monkeypatch):
     assert result["lock"]["owner_token"] == "new-process-token"
 
 
+def test_stale_legacy_published_lease_is_taken_over_with_different_pid(monkeypatch):
+    conn, cursor = _fake_conn()
+    old = _lock_row(
+        heartbeat_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        environment="published",
+        pid=22,
+        token="legacy:published:22:1787874045",
+    )
+    replacement = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        environment="published",
+        pid=23,
+        token="new-process-token",
+    )
+    cursor.fetchone.side_effect = [old, replacement]
+    # The stale legacy PID can belong to another published artifact process.
+    monkeypatch.setattr(runner_lock, "_pid_is_alive", lambda _pid: True)
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle", "published", 23, 10800, owner_token="new-process-token"
+        )
+
+    assert result["owned"] is True
+    assert result["lock"]["pid"] == 23
+    assert result["lock"]["owner_token"] == "new-process-token"
+
+
+def test_fresh_legacy_published_lease_is_refused(monkeypatch):
+    conn, cursor = _fake_conn()
+    current = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        environment="published",
+        pid=22,
+        token="legacy:published:22:1787874045",
+    )
+    cursor.fetchone.return_value = current
+    monkeypatch.setattr(runner_lock, "_pid_is_alive", lambda _pid: True)
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle", "published", 23, 10800, owner_token="new-process-token"
+        )
+
+    assert result["owned"] is False
+    assert result["lock"]["owner_token"] == "legacy:published:22:1787874045"
+
+
 def test_runner_shutdown_release_is_scoped_to_instance_token(monkeypatch):
     sys.path.insert(0, "/home/runner/workspace/kraken-bot")
     import runner

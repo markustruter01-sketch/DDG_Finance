@@ -19,6 +19,7 @@ import json
 import math
 import os
 import random
+import re
 import statistics
 import sys
 from bisect import bisect_left
@@ -53,9 +54,14 @@ from analysis.research_ledger import (  # noqa: E402
 
 ANALYSIS_START = date(2018, 1, 1)
 ANALYSIS_END = date.today() - timedelta(days=1)
+UNIVERSE_GATE_FILE = (
+    Path(__file__).resolve().parents[1] / ".local" / "bot2_universe_gate.json"
+)
 CALIBRATION_DATE = date(2019, 6, 3)
 LOOKBACK_SESSIONS = 252
 LIQUIDITY_SESSIONS = 60
+LOCKED_LIQUIDITY_FLOOR = 62_406_698.54
+MAX_ADJUSTED_CLOSE_RATIO = 10.0
 TARGET_UNIVERSE = 500
 TOP_N = 20
 SLIPPAGE_BPS = 10.0
@@ -66,12 +72,16 @@ RANDOM_SEED = 271_2026
 PEAD_SYMBOLS = EARNINGS_SYMBOLS
 SAMPLE_DATES = (
     date(2019, 6, 3),
-    date(2020, 6, 1),
-    date(2021, 6, 1),
     date(2022, 6, 1),
     date(2024, 6, 3),
-    date(2026, 1, 2),
+    date(2026, 6, 1),
 )
+PARITY_REFERENCE_COUNTS = {
+    date(2019, 6, 3): 500,
+    date(2022, 6, 1): 575,
+    date(2024, 6, 3): 571,
+    date(2026, 6, 1): 603,
+}
 WINDOWS: tuple[tuple[str, date, date], ...] = (
     ("selection_2018_2022", date(2018, 1, 1), date(2022, 12, 30)),
     ("validation_2023_present", date(2023, 1, 3), ANALYSIS_END),
@@ -79,6 +89,15 @@ WINDOWS: tuple[tuple[str, date, date], ...] = (
 )
 
 ASSET_TABLE = "bot2_mechanical_assets"
+ASSET_AUDIT_TABLE = "bot2_mechanical_asset_audit"
+ASSET_COVERAGE_TABLE = "bot2_mechanical_asset_coverage"
+MOMENTUM_ARTEFACT_THRESHOLD = 3.0
+ORDINARY_SHARE_NAME_PATTERNS = (
+    re.compile(r"\bcommon stock\b", re.IGNORECASE),
+    re.compile(r"\bcommon shares?\b", re.IGNORECASE),
+    re.compile(r"\bordinary shares?\b", re.IGNORECASE),
+    re.compile(r"\bamerican depositary shares?\b", re.IGNORECASE),
+)
 ASSET_DDL = f"""
 CREATE TABLE IF NOT EXISTS {ASSET_TABLE} (
     symbol       TEXT PRIMARY KEY,
@@ -87,7 +106,32 @@ CREATE TABLE IF NOT EXISTS {ASSET_TABLE} (
     exchange     TEXT,
     tradable     BOOLEAN NOT NULL,
     fractionable BOOLEAN,
+    name         TEXT,
+    instrument_classification TEXT NOT NULL DEFAULT 'unknown',
     source       TEXT NOT NULL DEFAULT 'alpaca_trading_assets',
+    observed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE {ASSET_TABLE} ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE {ASSET_TABLE}
+    ADD COLUMN IF NOT EXISTS instrument_classification TEXT NOT NULL DEFAULT 'unknown';
+CREATE TABLE IF NOT EXISTS {ASSET_AUDIT_TABLE} (
+    symbol       TEXT PRIMARY KEY,
+    asset_class  TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    exchange     TEXT,
+    tradable     BOOLEAN NOT NULL,
+    name         TEXT,
+    instrument_classification TEXT NOT NULL,
+    included     BOOLEAN NOT NULL,
+    observed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS {ASSET_COVERAGE_TABLE} (
+    symbol       TEXT PRIMARY KEY,
+    row_count    INTEGER NOT NULL,
+    first_date   DATE,
+    last_date    DATE,
+    category     TEXT NOT NULL,
+    source_count INTEGER NOT NULL DEFAULT 0,
     observed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 """
@@ -122,14 +166,40 @@ class Asset:
     exchange: str
     tradable: bool
     fractionable: bool | None
+    name: str = ""
+    instrument_classification: str = "unknown"
 
 
 def _enum_value(value: Any) -> str:
     return str(getattr(value, "value", value) or "")
 
 
+def classify_alpaca_asset(raw: Any) -> str:
+    """Use provider metadata, with a conservative positive ordinary-share test."""
+    explicit = _enum_value(
+        getattr(raw, "instrument_type", None)
+        or getattr(raw, "security_type", None)
+        or getattr(raw, "asset_type", None)
+    ).lower()
+    if explicit in {"common_stock", "ordinary_share", "stock", "equity"}:
+        return "ordinary_equity"
+    if explicit in {
+        "etf", "etn", "fund", "mutual_fund", "preferred", "warrant",
+        "right", "unit", "closed_end_fund",
+    }:
+        return "non_ordinary"
+    name = _enum_value(getattr(raw, "name", ""))
+    if name and any(pattern.search(name) for pattern in ORDINARY_SHARE_NAME_PATTERNS):
+        return "ordinary_equity"
+    return "unknown"
+
+
+LAST_ASSET_FILTER_REPORT: dict[str, Any] = {}
+
+
 def fetch_tradable_us_equities() -> list[Asset]:
     """Read the Alpaca asset catalogue; this never calls an order endpoint."""
+    global LAST_ASSET_FILTER_REPORT
     from alpaca.trading.client import TradingClient
 
     api_key = os.environ.get("ALPACA_API_KEY", "")
@@ -137,28 +207,63 @@ def fetch_tradable_us_equities() -> list[Asset]:
     if not api_key or not secret_key:
         raise RuntimeError("ALPACA_API_KEY/ALPACA_SECRET_KEY are required for asset discovery")
     client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+    raw_assets = list(client.get_all_assets())
     output: list[Asset] = []
-    for raw in client.get_all_assets():
+    included = 0
+    non_ordinary = 0
+    unknown = 0
+    us_equities = 0
+    for raw in raw_assets:
         asset_class = _enum_value(getattr(raw, "asset_class", ""))
-        if asset_class != "us_equity" or not bool(getattr(raw, "tradable", False)):
+        if asset_class != "us_equity":
             continue
+        us_equities += 1
+        classification = classify_alpaca_asset(raw)
+        if classification == "non_ordinary":
+            non_ordinary += 1
+        elif classification == "unknown":
+            unknown += 1
         symbol = str(getattr(raw, "symbol", "")).strip().upper()
-        if not symbol:
+        if not symbol or classification != "ordinary_equity":
             continue
+        included += 1
         output.append(
             Asset(
                 symbol=symbol,
                 asset_class=asset_class,
                 status=_enum_value(getattr(raw, "status", "")),
                 exchange=_enum_value(getattr(raw, "exchange", "")),
-                tradable=True,
+                tradable=bool(getattr(raw, "tradable", False)),
                 fractionable=(
                     bool(getattr(raw, "fractionable"))
                     if getattr(raw, "fractionable", None) is not None
                     else None
                 ),
+                name=_enum_value(getattr(raw, "name", "")),
+                instrument_classification=classification,
             )
         )
+    LAST_ASSET_FILTER_REPORT = {
+        "total_assets": len(raw_assets),
+        "alpaca_us_equity_assets": us_equities,
+        "ordinary_equity_assets": included,
+        "excluded_non_ordinary": non_ordinary,
+        "excluded_unknown_metadata": unknown,
+        "metadata_complete": unknown == 0,
+        "provider_limitation": (
+            "Alpaca exposes descriptive names but no dedicated security-type "
+            "field; unknown instruments are excluded until Polygon/Massive "
+            "reference tickers or a licensed security master supplies a type."
+            if unknown else None
+        ),
+    }
+    print(
+        f"asset_filter | total={len(raw_assets)} | us_equity={us_equities} "
+        f"| ordinary_equity={included} | excluded_non_ordinary={non_ordinary} "
+        f"| excluded_unknown={unknown}"
+    )
+    if unknown:
+        print(f"asset_filter | LIMITATION | {LAST_ASSET_FILTER_REPORT['provider_limitation']}")
     return sorted({asset.symbol: asset for asset in output}.values(), key=lambda item: item.symbol)
 
 
@@ -177,6 +282,8 @@ def persist_assets(assets: Iterable[Asset]) -> None:
             asset.exchange,
             asset.tradable,
             asset.fractionable,
+            asset.name,
+            asset.instrument_classification,
         )
         for asset in assets
     ]
@@ -187,7 +294,8 @@ def persist_assets(assets: Iterable[Asset]) -> None:
                 cur,
                 f"""
                 INSERT INTO {ASSET_TABLE}
-                    (symbol, asset_class, status, exchange, tradable, fractionable)
+                    (symbol, asset_class, status, exchange, tradable, fractionable,
+                     name, instrument_classification)
                 VALUES %s
                 ON CONFLICT (symbol) DO UPDATE SET
                     asset_class=EXCLUDED.asset_class,
@@ -195,6 +303,8 @@ def persist_assets(assets: Iterable[Asset]) -> None:
                     exchange=EXCLUDED.exchange,
                     tradable=EXCLUDED.tradable,
                     fractionable=EXCLUDED.fractionable,
+                    name=EXCLUDED.name,
+                    instrument_classification=EXCLUDED.instrument_classification,
                     observed_at=NOW()
                 """,
                 rows,
@@ -233,9 +343,83 @@ def load_asset_symbols() -> set[str]:
         with conn.cursor() as cur:
             cur.execute(
                 f"SELECT symbol FROM {ASSET_TABLE} "
-                "WHERE asset_class='us_equity' AND tradable=true"
+                "WHERE asset_class='us_equity' "
+                "AND instrument_classification='ordinary_equity'"
             )
             return {row[0] for row in cur.fetchall()}
+
+
+def coverage_report(candidate_symbols: Iterable[str]) -> dict[str, Any]:
+    """Report stored per-symbol history coverage without fetching new data."""
+    symbols = set(candidate_symbols)
+    coverage_rows: dict[str, tuple[int, date | None, date | None, int]] = {}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT symbol, COUNT(*), MIN(date), MAX(date), COUNT(DISTINCT source)
+                  FROM {PRICE_TABLE}
+                 WHERE symbol = ANY(%s) AND source = ANY(%s)
+                 GROUP BY symbol
+                """,
+                (sorted(symbols), list(PRICE_SOURCES)),
+            )
+            coverage_rows = {
+                str(symbol): (int(row_count), first_date, last_date, int(source_count))
+                for symbol, row_count, first_date, last_date, source_count in cur.fetchall()
+            }
+            persisted_rows = []
+            for symbol in sorted(symbols):
+                row_count, first_date, last_date, source_count = coverage_rows.get(
+                    symbol, (0, None, None, 0)
+                )
+                category = (
+                    "no_price_data"
+                    if row_count == 0
+                    else "partial_history"
+                    if row_count < LOOKBACK_SESSIONS
+                    else "history_eligible"
+                )
+                persisted_rows.append(
+                    (symbol, row_count, first_date, last_date, category, source_count)
+                )
+            if persisted_rows:
+                psycopg2.extras.execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {ASSET_COVERAGE_TABLE}
+                        (symbol, row_count, first_date, last_date, category, source_count)
+                    VALUES %s
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        row_count=EXCLUDED.row_count,
+                        first_date=EXCLUDED.first_date,
+                        last_date=EXCLUDED.last_date,
+                        category=EXCLUDED.category,
+                        source_count=EXCLUDED.source_count,
+                        observed_at=NOW()
+                    """,
+                    persisted_rows,
+                )
+    counts = {symbol: row[0] for symbol, row in coverage_rows.items()}
+    complete = sorted(symbol for symbol in symbols if counts.get(symbol, 0) >= LOOKBACK_SESSIONS)
+    partial = sorted(symbol for symbol in symbols if 0 < counts.get(symbol, 0) < LOOKBACK_SESSIONS)
+    none = sorted(symbol for symbol in symbols if counts.get(symbol, 0) == 0)
+    report = {
+        "total_symbols": len(symbols),
+        "symbols_with_at_least_252_sessions": len(complete),
+        "symbols_with_partial_history": len(partial),
+        "symbols_with_no_history": len(none),
+        "complete_examples": complete[:20],
+        "partial_examples": partial[:20],
+        "none_examples": none[:20],
+    }
+    print(
+        f"history_coverage | total={report['total_symbols']} "
+        f"| >=252={report['symbols_with_at_least_252_sessions']} "
+        f"| partial={report['symbols_with_partial_history']} "
+        f"| none={report['symbols_with_no_history']}"
+    )
+    return report
 
 
 def ingest_expanded_prices(
@@ -256,9 +440,17 @@ def ingest_expanded_prices(
     if not api_key or not secret_key:
         raise RuntimeError("Alpaca credentials are required for expanded price ingestion")
     headers = {"APCA-API-KEY-ID": api_key, "APCA-API-SECRET-KEY": secret_key}
-    counts = {"batches": 0, "bars": 0, "failed_batches": 0}
-    for offset in range(0, len(symbols), max(1, batch_size)):
-        batch = symbols[offset : offset + batch_size]
+    counts = {
+        "batches": 0,
+        "bars": 0,
+        "failed_batches": 0,
+        "quarantined_symbols": 0,
+        "rate_limit_retries": 0,
+        "split_batches": 0,
+    }
+
+    def fetch_rows(batch: list[str], label: str) -> list[tuple[Any, ...]]:
+        """Fetch a batch, splitting 400 responses so one bad symbol cannot poison it."""
         params = {
             "symbols": ",".join(batch),
             "timeframe": "1Day",
@@ -268,55 +460,86 @@ def ingest_expanded_prices(
             "feed": "sip",
             "limit": 10_000,
         }
-        try:
-            page_token: str | None = None
-            batch_bars = 0
-            while True:
-                if page_token:
-                    params["page_token"] = page_token
-                response = requests.get(
-                    ALPACA_BARS_URL, headers=headers, params=params, timeout=90
-                )
-                response.raise_for_status()
-                payload = response.json()
-                rows: list[tuple[Any, ...]] = []
-                for symbol, raw_bars in (payload.get("bars") or {}).items():
-                    for raw in raw_bars or []:
-                        rows.append(
-                            (
-                                symbol,
-                                str(raw["t"])[:10],
-                                float(raw["o"]),
-                                float(raw["h"]),
-                                float(raw["l"]),
-                                float(raw["c"]),
-                                float(raw["v"]),
-                                "alpaca_sip_adjusted",
-                            )
+        rows: list[tuple[Any, ...]] = []
+        page_token: str | None = None
+        while True:
+            if page_token:
+                params["page_token"] = page_token
+            try:
+                for attempt in range(6):
+                    response = requests.get(
+                        ALPACA_BARS_URL, headers=headers, params=params, timeout=90
+                    )
+                    if response.status_code != 429:
+                        response.raise_for_status()
+                        break
+                    if attempt == 5:
+                        response.raise_for_status()
+                    wait_seconds = min(32, 2 ** attempt)
+                    counts["rate_limit_retries"] += 1
+                    print(f"expanded_price_rate_limit | batch={label} | retry_in={wait_seconds}s")
+                    time.sleep(wait_seconds)
+            except requests.HTTPError as exc:
+                status = getattr(exc.response, "status_code", None)
+                if status == 400 and len(batch) > 1:
+                    counts["split_batches"] += 1
+                    midpoint = len(batch) // 2
+                    return (
+                        fetch_rows(batch[:midpoint], f"{label}a")
+                        + fetch_rows(batch[midpoint:], f"{label}b")
+                    )
+                if status == 400 and len(batch) == 1:
+                    counts["quarantined_symbols"] += 1
+                    print(
+                        f"expanded_price_symbol | symbol={batch[0]} "
+                        "| ERROR=HTTP 400 | action=quarantined"
+                    )
+                    return []
+                raise
+            payload = response.json()
+            for symbol, raw_bars in (payload.get("bars") or {}).items():
+                for raw in raw_bars or []:
+                    rows.append(
+                        (
+                            symbol,
+                            str(raw["t"])[:10],
+                            float(raw["o"]),
+                            float(raw["h"]),
+                            float(raw["l"]),
+                            float(raw["c"]),
+                            float(raw["v"]),
+                            "alpaca_sip_adjusted",
                         )
-                if rows:
-                    with get_conn() as conn:
-                        with conn.cursor() as cur:
-                            psycopg2.extras.execute_values(
-                                cur,
-                                f"""
-                                INSERT INTO {PRICE_TABLE}
-                                    (symbol,date,open,high,low,close,volume,source)
-                                VALUES %s
-                                ON CONFLICT (symbol,date,source) DO UPDATE SET
-                                    open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
-                                    close=EXCLUDED.close, volume=EXCLUDED.volume
-                                """,
-                                rows,
-                            )
-                batch_bars += len(rows)
-                page_token = payload.get("next_page_token")
-                if not page_token:
-                    break
+                    )
+            page_token = payload.get("next_page_token")
+            if not page_token:
+                return rows
+
+    for offset in range(0, len(symbols), max(1, batch_size)):
+        batch = symbols[offset : offset + batch_size]
+        try:
+            label = f"{offset + 1}-{offset + len(batch)}"
+            rows = fetch_rows(batch, label)
+            if rows:
+                with get_conn() as conn:
+                    with conn.cursor() as cur:
+                        psycopg2.extras.execute_values(
+                            cur,
+                            f"""
+                            INSERT INTO {PRICE_TABLE}
+                                (symbol,date,open,high,low,close,volume,source)
+                            VALUES %s
+                            ON CONFLICT (symbol,date,source) DO UPDATE SET
+                                open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
+                                close=EXCLUDED.close, volume=EXCLUDED.volume
+                            """,
+                            rows,
+                        )
+            batch_bars = len(rows)
             counts["bars"] += batch_bars
             counts["batches"] += 1
             print(
-                f"expanded_price_batch | {offset + 1}-{offset + len(batch)}/{len(symbols)} "
+                f"expanded_price_batch | {label}/{len(symbols)} "
                 f"| rows={batch_bars}"
             )
         except (requests.RequestException, KeyError, TypeError, ValueError) as exc:
@@ -330,6 +553,17 @@ def ingest_expanded_prices(
 
 def _asof_bars(series: Series, as_of: date) -> list[Bar]:
     return [bar for bar in series.bars if bar.day < as_of]
+
+
+def has_adjusted_price_artifact(bars: list[Bar]) -> bool:
+    """Flag impossible-looking adjusted-price discontinuities for review."""
+    for previous, current in zip(bars, bars[1:]):
+        if previous.close <= 0 or current.close <= 0:
+            continue
+        ratio = current.close / previous.close
+        if ratio > MAX_ADJUSTED_CLOSE_RATIO or ratio < 1 / MAX_ADJUSTED_CLOSE_RATIO:
+            return True
+    return False
 
 
 def _screen_observation(series: Series, as_of: date) -> dict[str, Any] | None:
@@ -392,6 +626,136 @@ def screen_universe(
     return qualified, observations
 
 
+def screen_funnel(
+    series: dict[str, Series],
+    candidates: Iterable[str],
+    as_of: date,
+    liquidity_floor: float = LOCKED_LIQUIDITY_FLOOR,
+) -> dict[str, Any]:
+    """Apply gates in order and retain counts for the data-parity report."""
+    counts = {
+        "total_candidates": len(set(candidates)),
+        "no_price_data": 0,
+        "fewer_than_252_sessions": 0,
+        "below_liquidity_floor": 0,
+        "median_close_le_5": 0,
+        "corporate_action_artifacts": 0,
+        "qualifying": 0,
+    }
+    qualified: set[str] = set()
+    observations: dict[str, dict[str, Any]] = {}
+    for symbol in sorted(set(candidates)):
+        data = series.get(symbol)
+        prior = _asof_bars(data, as_of) if data else []
+        if not prior:
+            counts["no_price_data"] += 1
+            continue
+        if len(prior) < LOOKBACK_SESSIONS:
+            counts["fewer_than_252_sessions"] += 1
+            continue
+        if has_adjusted_price_artifact(prior):
+            counts["corporate_action_artifacts"] += 1
+            continue
+        trailing = prior[-LIQUIDITY_SESSIONS:]
+        med_close = statistics.median(bar.close for bar in trailing)
+        med_dollar_volume = statistics.median(bar.close * bar.volume for bar in trailing)
+        observations[symbol] = {
+            "last_data_day": prior[-1].day,
+            "sessions_available": len(prior),
+            "median_close_60": med_close,
+            "median_dollar_volume_60": med_dollar_volume,
+            "uses_future_data": any(bar.day >= as_of for bar in prior),
+        }
+        if med_dollar_volume < liquidity_floor:
+            counts["below_liquidity_floor"] += 1
+            continue
+        if med_close <= 5:
+            counts["median_close_le_5"] += 1
+            continue
+        qualified.add(symbol)
+    counts["qualifying"] = len(qualified)
+    return {"counts": counts, "qualified": qualified, "observations": observations}
+
+
+def current_screen_report(
+    series: dict[str, Series],
+    candidates: Iterable[str],
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Print today's fixed-pipeline funnel and safe diagnostic top 20."""
+    as_of = as_of or date.today()
+    funnel = screen_funnel(series, candidates, as_of, LOCKED_LIQUIDITY_FLOOR)
+    ranked: list[dict[str, Any]] = []
+    for symbol in sorted(funnel["qualified"]):
+        data = series[symbol]
+        prior = _asof_bars(data, as_of)
+        momentum = prior[-22].close / prior[-252].close - 1
+        if not math.isfinite(momentum):
+            continue
+        if momentum > MOMENTUM_ARTEFACT_THRESHOLD:
+            print(
+                f"momentum_artifact | symbol={symbol} | momentum={momentum:.6f} "
+                f"| threshold={MOMENTUM_ARTEFACT_THRESHOLD:.6f} "
+                "| action=excluded_pending_review"
+            )
+            continue
+        ranked.append(
+            {
+                "symbol": symbol,
+                "momentum": momentum,
+                "median_dollar_volume": funnel["observations"][symbol][
+                    "median_dollar_volume_60"
+                ],
+                "median_close": funnel["observations"][symbol]["median_close_60"],
+                "asset_class": "ordinary_equity",
+            }
+        )
+    ranked.sort(key=lambda item: (-item["momentum"], item["symbol"]))
+    print(
+        f"today_funnel | as_of={as_of} | "
+        f"{json.dumps(funnel['counts'], sort_keys=True)}"
+    )
+    print(
+        "today_top_20 | symbol | momentum | median_dollar_volume | "
+        "median_close | target_notional | asset_class"
+    )
+    target_notional = STARTING_EQUITY / TOP_N
+    for item in ranked[:TOP_N]:
+        print(
+            f"today_top_20 | {item['symbol']} | {item['momentum']:+.4%} | "
+            f"${item['median_dollar_volume']:,.2f} | "
+            f"${item['median_close']:,.2f} | ${target_notional:,.2f} | "
+            f"{item['asset_class']}"
+        )
+    included_non_ordinary = sum(
+        item["asset_class"] != "ordinary_equity" for item in ranked
+    )
+    print(
+        f"today_sanity | included_non_ordinary={included_non_ordinary} "
+        f"| artifact_excluded={len(funnel['qualified']) - len(ranked)} "
+        f"| sector_concentration_review=required"
+    )
+    return {"funnel": funnel["counts"], "top_20": ranked[:TOP_N]}
+
+
+def persist_universe_gate(valid: bool, report: dict[str, Any]) -> None:
+    """Write a local development gate consumed by the paused live module."""
+    UNIVERSE_GATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    UNIVERSE_GATE_FILE.write_text(
+        json.dumps(
+            {
+                "status": "PASS" if valid else "STOP",
+                "historical_parity_required": True,
+                "report": _jsonable(report),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _first_available_day(series: dict[str, Series], year: int, month: int = 6) -> date:
     wanted = date(year, month, 1)
     days = sorted({day for data in series.values() for day in data.days if day >= wanted})
@@ -404,10 +768,10 @@ def mechanical_gate(
     series: dict[str, Series],
     candidate_symbols: set[str],
 ) -> tuple[bool, float, dict[str, Any]]:
-    floor = choose_liquidity_floor(series)
+    floor = LOCKED_LIQUIDITY_FLOOR
     print(
-        f"liquidity_calibration | as_of={CALIBRATION_DATE} | target={TARGET_UNIVERSE} "
-        f"| floor_usd={floor:.2f} | source=trailing_data_only"
+        f"liquidity_floor | locked_usd={floor:.2f} "
+        f"| source=experiment_13 | retuning=disabled"
     )
     snapshots: dict[str, Any] = {}
     valid = True
@@ -416,9 +780,9 @@ def mechanical_gate(
         "median_dollar_volume_floor | future_rows"
     )
     for as_of in SAMPLE_DATES:
-        qualified, observations = screen_universe(
-            series, candidate_symbols, as_of, floor
-        )
+        funnel = screen_funnel(series, candidate_symbols, as_of, floor)
+        qualified = funnel["qualified"]
+        observations = funnel["observations"]
         future_rows = sum(
             int(item["uses_future_data"]) for item in observations.values()
         )
@@ -428,13 +792,27 @@ def mechanical_gate(
             "history_eligible": len(observations),
             "future_rows": future_rows,
             "observations": observations,
+            "funnel": funnel["counts"],
         }
         print(
             f"mechanical_sample | {as_of} | {len(qualified)} | {len(observations)} | "
-            f"{floor:.2f} | {future_rows}"
+            f"{floor:.2f} | {future_rows} | funnel={json.dumps(funnel['counts'], sort_keys=True)}"
         )
         if future_rows or len(qualified) == 0:
             valid = False
+
+        expected = PARITY_REFERENCE_COUNTS.get(as_of)
+        if expected is not None:
+            lower = expected * 0.80
+            upper = expected * 1.20
+            parity_ok = lower <= len(qualified) <= upper
+            print(
+                f"parity_gate | as_of={as_of} | expected={expected} "
+                f"| observed={len(qualified)} | tolerance=20% "
+                f"| {'PASS' if parity_ok else 'FAIL'}"
+            )
+            if not parity_ok:
+                valid = False
 
     first_set = set(snapshots[SAMPLE_DATES[0].isoformat()]["qualified"])
     last_set = set(snapshots[SAMPLE_DATES[-1].isoformat()]["qualified"])
@@ -609,6 +987,13 @@ def _momentum_candidates(
             if data.bars[index - 1].close > 0
         ]
         volatility = statistics.pstdev(returns) * math.sqrt(252) if returns else 0.0
+        if momentum > MOMENTUM_ARTEFACT_THRESHOLD:
+            print(
+                f"momentum_artifact | symbol={symbol} | "
+                f"momentum={momentum:.6f} | threshold={MOMENTUM_ARTEFACT_THRESHOLD:.6f} "
+                "| action=excluded_pending_review"
+            )
+            continue
         if momentum > 0 and volatility > 0:
             ranked.append((symbol, momentum, volatility))
     return sorted(ranked, key=lambda item: (-item[1], item[0]))
@@ -1078,7 +1463,6 @@ def run_research(
 ) -> dict[str, Any]:
     ensure_asset_table()
     series = load_panel()
-    panel_symbols = set(series)
     if refresh_assets:
         assets = fetch_tradable_us_equities()
         persist_assets(assets)
@@ -1087,9 +1471,10 @@ def run_research(
             Asset(symbol, "us_equity", "active", "", True, None)
             for symbol in load_asset_symbols()
         ]
-    candidate_symbols = set(asset.symbol for asset in assets) | panel_symbols
+    candidate_symbols = set(asset.symbol for asset in assets)
+    panel_symbols = set(series) & candidate_symbols
     print(
-        f"asset_expansion | alpaca_tradable_us_equity={len(set(asset.symbol for asset in assets))} "
+        f"asset_expansion | ordinary_equity_assets={len(candidate_symbols)} "
         f"| historical_panel_symbols={len(panel_symbols)} "
         f"| candidate_union={len(candidate_symbols)}"
     )
@@ -1097,7 +1482,18 @@ def run_research(
         print(f"expanded_price_ingest | {ingest_expanded_prices(assets)}")
 
     series = load_panel()
+    panel_symbols = set(series) & candidate_symbols
+    coverage = coverage_report(candidate_symbols)
+    print(
+        f"asset_coverage | total={coverage['total_symbols']} "
+        f"| >=252={coverage['symbols_with_at_least_252_sessions']} "
+        f"| partial={coverage['symbols_with_partial_history']} "
+        f"| none={coverage['symbols_with_no_history']}"
+    )
+    today_report = current_screen_report(series, candidate_symbols)
     gate_ok, liquidity_floor, gate_report = mechanical_gate(series, candidate_symbols)
+    gate_report["today"] = today_report
+    persist_universe_gate(gate_ok, gate_report)
     earnings_report = audit_earnings()
     if not gate_ok:
         print("STOP: mechanical universe gate failed; registration/backtests skipped.")
@@ -1156,7 +1552,8 @@ def run_research(
         "price_table": PRICE_TABLE,
         "price_sources": list(PRICE_SOURCES),
         "earnings_table": EARNINGS_TABLE,
-        "mechanical_gate": "six-date lookahead proof plus dropout proof",
+        "mechanical_gate": "four historical parity dates within 20% plus dropout proof",
+        "momentum_artifact_threshold": MOMENTUM_ARTEFACT_THRESHOLD,
     }
     ensure_research_tables()
     experiment_id = _find_experiment()

@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 import time
 import uuid
@@ -59,6 +60,10 @@ MIN_MEDIAN_DOLLAR_VOLUME = 62_406_698.54
 MIN_MEDIAN_CLOSE = 5.0
 MAX_DEPLOYMENT = 0.80
 STOP_LOSS_PCT = 0.20
+MOMENTUM_ARTEFACT_THRESHOLD = float(
+    os.environ.get("BOT2_MOMENTUM_ARTEFACT_THRESHOLD", "3.0")
+)
+MAX_ADJUSTED_CLOSE_RATIO = 10.0
 PARK_SYMBOL = "SGOV"
 STRATEGY_TABLE = "bot2_momentum_positions"
 US_EQUITY_EXCHANGES = frozenset(
@@ -66,6 +71,12 @@ US_EQUITY_EXCHANGES = frozenset(
 )
 EQUITY_SESSION_OPEN = dt_time(9, 30)
 EQUITY_SESSION_CLOSE = dt_time(16, 0)
+ORDINARY_SHARE_NAME_PATTERNS = (
+    re.compile(r"\bcommon stock\b", re.IGNORECASE),
+    re.compile(r"\bcommon shares?\b", re.IGNORECASE),
+    re.compile(r"\bordinary shares?\b", re.IGNORECASE),
+    re.compile(r"\bamerican depositary shares?\b", re.IGNORECASE),
+)
 
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS {STRATEGY_TABLE} (
@@ -108,12 +119,111 @@ def _prior_bars(bars: list[dict[str, Any]], as_of: date) -> list[dict[str, Any]]
     )
 
 
+def has_adjusted_price_artifact(bars: list[dict[str, Any]]) -> bool:
+    """Flag impossible-looking adjusted-price discontinuities for review."""
+    ordered = sorted(bars, key=_bar_date)
+    for previous, current in zip(ordered, ordered[1:]):
+        previous_close = float(previous.get("c", 0) or 0)
+        current_close = float(current.get("c", 0) or 0)
+        if previous_close <= 0 or current_close <= 0:
+            continue
+        ratio = current_close / previous_close
+        if ratio > MAX_ADJUSTED_CLOSE_RATIO or ratio < 1 / MAX_ADJUSTED_CLOSE_RATIO:
+            return True
+    return False
+
+
+def asset_instrument_class(asset: dict[str, Any]) -> str:
+    """Classify from provider metadata, never from a symbol blocklist.
+
+    Alpaca's asset endpoint exposes a descriptive security name but no
+    dedicated ETF/common-stock type.  The positive ordinary-share patterns are
+    intentionally conservative; unknown instruments are excluded and reported.
+    """
+    explicit_type = str(
+        asset.get("instrument_type")
+        or asset.get("security_type")
+        or asset.get("asset_type")
+        or ""
+    ).strip().lower()
+    if explicit_type in {"common_stock", "ordinary_share", "stock", "equity"}:
+        return "ordinary_equity"
+    if explicit_type in {
+        "etf", "etn", "fund", "mutual_fund", "preferred", "warrant",
+        "right", "unit", "closed_end_fund",
+    }:
+        return "non_ordinary"
+    name = str(asset.get("name") or "").strip()
+    if name and any(pattern.search(name) for pattern in ORDINARY_SHARE_NAME_PATTERNS):
+        return "ordinary_equity"
+    return "unknown"
+
+
+def filter_ordinary_equity_assets(
+    assets: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Return only ordinary operating-company shares and an audit report."""
+    base_candidates = [
+        asset for asset in assets
+        if (
+            str(asset.get("status", "active")).lower() == "active"
+            and str(asset.get("asset_class", asset.get("class", "us_equity"))).lower()
+            == "us_equity"
+            and bool(asset.get("tradable"))
+            and str(asset.get("exchange", "")).upper() in US_EQUITY_EXCHANGES
+        )
+    ]
+    ordinary = [asset for asset in base_candidates if asset_instrument_class(asset) == "ordinary_equity"]
+    non_ordinary = [
+        asset for asset in base_candidates if asset_instrument_class(asset) == "non_ordinary"
+    ]
+    unknown = [
+        asset for asset in base_candidates if asset_instrument_class(asset) == "unknown"
+    ]
+    report = {
+        "total_assets": len(assets),
+        "tradable_us_equity_assets": len(base_candidates),
+        "ordinary_equity_assets": len(ordinary),
+        "excluded_non_ordinary": len(non_ordinary),
+        "excluded_unknown_metadata": len(unknown),
+        "metadata_complete": not unknown,
+        "provider_limitation": (
+            "Alpaca does not expose a dedicated ETF/common-stock type; "
+            "unknown instruments are excluded until Polygon/Massive reference "
+            "tickers or a licensed security master supplies a security type."
+            if unknown else None
+        ),
+        "excluded_symbols": sorted(
+            canonical_symbol(asset.get("symbol")) for asset in non_ordinary + unknown
+        ),
+    }
+    return ordinary, report
+
+
+UNIVERSE_GATE_FILE = (
+    _ROOT / "trading-platform" / ".local" / "bot2_universe_gate.json"
+)
+
+
+def universe_gate_is_passed() -> bool:
+    """Require a development parity artifact before any future activation."""
+    try:
+        payload = json.loads(UNIVERSE_GATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return payload.get("status") == "PASS" and bool(
+        payload.get("historical_parity_required")
+    )
+
+
 def _asset_is_tradable_us_equity(asset: dict[str, Any]) -> bool:
     return (
         str(asset.get("status", "active")).lower() == "active"
-        and str(asset.get("asset_class", "us_equity")).lower() == "us_equity"
+        and str(asset.get("asset_class", asset.get("class", "us_equity"))).lower()
+        == "us_equity"
         and bool(asset.get("tradable"))
         and str(asset.get("exchange", "")).upper() in US_EQUITY_EXCHANGES
+        and asset_instrument_class(asset) == "ordinary_equity"
     )
 
 
@@ -123,13 +233,18 @@ def screen_universe(
     as_of: date,
 ) -> dict[str, dict[str, float]]:
     """Apply the mechanical, point-in-time universe gates."""
-    screened: dict[str, dict[str, float]] = {}
+    screened: dict[str, dict[str, Any]] = {}
     for asset in assets:
         if not _asset_is_tradable_us_equity(asset):
             continue
         symbol = canonical_symbol(asset.get("symbol"))
         bars = _prior_bars(bars_by_symbol.get(symbol, []), as_of)
         if len(bars) < MIN_PRIOR_SESSIONS:
+            continue
+        if has_adjusted_price_artifact(bars):
+            logger.warning(
+                "Bot 2 | adjusted-price artefact excluded symbol=%s", symbol
+            )
             continue
         trailing = bars[-SCREEN_SESSIONS:]
         closes = [float(bar.get("c", 0) or 0) for bar in trailing]
@@ -145,6 +260,7 @@ def screen_universe(
         screened[symbol] = {
             "median_dollar_volume": float(median(dollar_volumes)),
             "median_close": float(median(closes)),
+            "asset_class": "ordinary_equity",
         }
     return screened
 
@@ -162,7 +278,7 @@ def momentum_12_1(bars: list[dict[str, Any]], as_of: date) -> float | None:
 
 
 def rank_momentum(
-    screened: dict[str, dict[str, float]],
+    screened: dict[str, dict[str, Any]],
     bars_by_symbol: dict[str, list[dict[str, Any]]],
     as_of: date,
     top_n: int = MAX_POSITIONS,
@@ -171,7 +287,17 @@ def rank_momentum(
     for symbol in screened:
         score = momentum_12_1(bars_by_symbol.get(symbol, []), as_of)
         if score is not None and math.isfinite(score):
-            ranked.append({"symbol": symbol, "momentum": score})
+            if score > MOMENTUM_ARTEFACT_THRESHOLD:
+                logger.warning(
+                    "Bot 2 | momentum artefact flagged and excluded symbol=%s score=%.4f threshold=%.4f",
+                    symbol, score, MOMENTUM_ARTEFACT_THRESHOLD,
+                )
+                continue
+            ranked.append({
+                "symbol": symbol,
+                "momentum": score,
+                "asset_class": screened[symbol].get("asset_class", "ordinary_equity"),
+            })
     return sorted(ranked, key=lambda item: (-float(item["momentum"]), str(item["symbol"])))[:top_n]
 
 
@@ -307,11 +433,22 @@ class AlpacaMomentumClient:
         return response.json() if response.content else None
 
     def _data_request(self, method: str, path: str, **kwargs: Any) -> Any:
-        response = self.session.request(
-            method, ALPACA_DATA_BASE_URL + path, timeout=30, **kwargs
-        )
-        response.raise_for_status()
-        return response.json() if response.content else None
+        for attempt in range(6):
+            response = self.session.request(
+                method, ALPACA_DATA_BASE_URL + path, timeout=30, **kwargs
+            )
+            if response.status_code != 429:
+                response.raise_for_status()
+                return response.json() if response.content else None
+            if attempt == 5:
+                response.raise_for_status()
+            wait_seconds = min(16, 2 ** attempt)
+            logger.warning(
+                "Bot 2 | Alpaca data rate limit path=%s retry_in=%ss",
+                path, wait_seconds,
+            )
+            time.sleep(wait_seconds)
+        raise RuntimeError(f"Alpaca data request exhausted retries: {path}")
 
     def account(self) -> dict[str, float]:
         raw = self._request("GET", "/v2/account")
@@ -353,8 +490,8 @@ class AlpacaMomentumClient:
                     "start": start.isoformat(),
                     "end": as_of.isoformat(),
                     "limit": 10000,
-                    "adjustment": "raw",
-                    "feed": "iex",
+                    "adjustment": "all",
+                    "feed": os.environ.get("BOT2_ALPACA_DATA_FEED", "iex"),
                     "sort": "asc",
                 }
                 if token:
@@ -690,13 +827,24 @@ def _build_book(
     client: AlpacaMomentumClient, as_of: date
 ) -> tuple[list[dict[str, float | str]], dict[str, dict[str, float]], dict[str, list[dict[str, Any]]]]:
     assets = client.assets()
+    ordinary_assets, asset_report = filter_ordinary_equity_assets(assets)
+    logger.info(
+        "Bot 2 | asset filter total=%d tradable_us_equity=%d ordinary_equity=%d "
+        "excluded_non_ordinary=%d excluded_unknown=%d",
+        asset_report["total_assets"],
+        asset_report["tradable_us_equity_assets"],
+        asset_report["ordinary_equity_assets"],
+        asset_report["excluded_non_ordinary"],
+        asset_report["excluded_unknown_metadata"],
+    )
+    if asset_report["provider_limitation"]:
+        logger.error("Bot 2 | asset metadata limitation: %s", asset_report["provider_limitation"])
     symbols = [
         canonical_symbol(asset["symbol"])
-        for asset in assets
-        if _asset_is_tradable_us_equity(asset)
+        for asset in ordinary_assets
     ]
     bars = client.daily_bars(symbols, as_of)
-    screened = screen_universe(assets, bars, as_of)
+    screened = screen_universe(ordinary_assets, bars, as_of)
     return rank_momentum(screened, bars, as_of), screened, bars
 
 
@@ -731,6 +879,11 @@ def run_bot2_cycle(
     now = now or datetime.now(timezone.utc)
     if not us_equity_session_open(now):
         return {"status": "deferred", "orders": 0, "reason": "US_equity_market_closed"}
+    if not universe_gate_is_passed():
+        logger.critical(
+            "Bot 2 | historical universe parity gate is not PASS — execution blocked"
+        )
+        return {"status": "blocked", "orders": 0, "reason": "universe_parity_gate"}
     ensure_schema()
     client = AlpacaMomentumClient(
         profile.get("ALPACA_API_KEY") or os.environ.get("ALPACA_BB_API_KEY", ""),
@@ -829,7 +982,20 @@ def dry_run_cycle() -> dict[str, Any]:
     print(f"DRY_RUN_VAULT | symbols={sorted(vault_symbols)} | market_value=${vault_market_value:,.2f}")
     print(f"DRY_RUN_INVESTABLE_BASE | ${plan['investable_base']:,.2f}")
     print(f"DRY_RUN_UNIVERSE_SIZE | {len(screened)}")
-    print(f"DRY_RUN_TOP_20 | {[item['symbol'] for item in ranked]}")
+    print(
+        "DRY_RUN_TOP_20 | "
+        + json.dumps(
+            [
+                {
+                    "symbol": item["symbol"],
+                    "momentum": item["momentum"],
+                    "asset_class": item.get("asset_class", "ordinary_equity"),
+                }
+                for item in ranked
+            ],
+            sort_keys=True,
+        )
+    )
     print(f"DRY_RUN_EQUAL_WEIGHT_NOTIONAL | ${plan['equal_weight_notional']:,.2f}")
     projected = plan["target_base"]
     desired_symbols = {str(item["symbol"]) for item in ranked}

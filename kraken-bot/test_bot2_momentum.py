@@ -30,6 +30,7 @@ def _bars(count: int = 260, close: float = 100.0, volume: int = 1_000_000):
 def _asset(symbol: str, **overrides):
     return {
         "symbol": symbol,
+        "name": "Example Common Stock",
         "status": "active",
         "asset_class": "us_equity",
         "tradable": True,
@@ -58,6 +59,22 @@ def test_screen_requires_tradable_us_equity_and_mechanical_liquidity_gates() -> 
     assert set(screened) == {"GOOD"}
 
 
+def test_instrument_filter_is_metadata_based_and_fail_closed_for_unknowns() -> None:
+    assets = [
+        _asset("COMMON", name="Example Common Stock"),
+        _asset("ETF", name="Example Index ETF", instrument_type="ETF"),
+        _asset("UNKNOWN", name="Example Security"),
+    ]
+
+    ordinary, report = bot2.filter_ordinary_equity_assets(assets)
+
+    assert [asset["symbol"] for asset in ordinary] == ["COMMON"]
+    assert report["excluded_non_ordinary"] == 1
+    assert report["excluded_unknown_metadata"] == 1
+    assert report["metadata_complete"] is False
+    assert "ETF" in report["excluded_symbols"]
+
+
 def test_screen_excludes_as_of_bar_and_momentum_skips_recent_21_sessions() -> None:
     as_of = date(2026, 1, 1)
     bars = _bars()
@@ -82,6 +99,19 @@ def test_rank_is_descending_with_deterministic_symbol_tie_break() -> None:
     ranked = bot2.rank_momentum(screened, bars, as_of)
 
     assert [item["symbol"] for item in ranked] == ["AAA", "BBB"]
+
+
+def test_rank_rejects_extreme_adjusted_momentum_artifact() -> None:
+    as_of = date(2026, 1, 1)
+    assets = [_asset("SPIKE"), _asset("NORMAL")]
+    spike = _bars(close=100)
+    spike[-22]["c"] = 50_000
+    normal = _bars(close=100)
+    screened = bot2.screen_universe(assets, {"SPIKE": spike, "NORMAL": normal}, as_of)
+
+    ranked = bot2.rank_momentum(screened, {"SPIKE": spike, "NORMAL": normal}, as_of)
+
+    assert [item["symbol"] for item in ranked] == ["NORMAL"]
 
 
 def test_allocation_excludes_vault_from_sizing_base_and_equal_weights() -> None:

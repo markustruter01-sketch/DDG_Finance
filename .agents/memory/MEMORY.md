@@ -39,3 +39,4 @@
 - [Current fleet monitoring](monitoring-current-fleet.md) — monitor canonical equity tables only; paused is PAUSED and empty active metrics are UNKNOWN/FAIL.
 - [Published/dev runner collision](published-dev-runner-collision.md) — published owns DB leases and Dev is read-only; API independently probes published runner health.
 - [Stop ledger replacement](stop-ledger-replacement.md) — every broker stop replacement/restore must persist both live order ID and price in the open ETF ledger.
+- [Published runner lease handoff](published-runner-lease-handoff.md) — publishing can leave same-environment leases that make the replacement runner fail closed until lease ownership is explicitly reclaimed.

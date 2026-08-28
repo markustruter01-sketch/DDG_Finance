@@ -99,17 +99,23 @@ BOT_PROFILES = {
     #   3. Restart the relevant workflow.
 
     "bot2_spy_qqq": {
-        "display_name":      "SPY/QQQ Trend",
+        "display_name":      "Single-Stock Momentum",
         "db_id":             1,              # replaces Davy Jones (id=1)
-        "strategy_type":     "etf_trend",
-        "strategy_label":    "SPY/QQQ Long-Only Trend",
+        "strategy_type":     "single_stock_momentum",
+        "strategy_label":    "Bot 2 Single-Stock 12-1 Momentum",
         "ALPACA_API_KEY":    os.environ.get("ALPACA_BB_API_KEY", ""),
         "ALPACA_SECRET_KEY": os.environ.get("ALPACA_BB_SECRET_KEY", ""),
         "ALPACA_BASE_URL":   "https://paper-api.alpaca.markets",
         "STARTING_CAPITAL":  100_000,
         "LOOP_SLEEP_SECONDS": 3600,          # hourly check (exits + 4:30 PM entry)
+        "MAX_POSITIONS":     20,
+        "MOMENTUM_LOOKBACK_SESSIONS": 252,
+        "MOMENTUM_SKIP_SESSIONS": 21,
+        "MIN_MEDIAN_DOLLAR_VOLUME": 62406698.54,
+        "MIN_MEDIAN_CLOSE": 5.0,
+        "STOP_LOSS_PCT":     0.20,
         "MAX_DEPLOYMENT":    0.80,
-        # Reserved for Phase 3 Bot 2; activation follows separate validation.
+        # Reserved for the separately validated Bot 2 activation.
         "BOT_PAUSED":        True,
     },
 

@@ -122,7 +122,7 @@ BOTS = [
     # explicit activation. It owns the same reserved Jerome profile/account
     # but ignores the legacy EM universe and vault symbols.
     ("jerome_macro",  "bot3_hard_assets_strategy", "run_bot3_cycle"),
-    ("bot2_spy_qqq",  "bot2_spy_qqq",        "run_bot2_cycle"),
+    ("spy_qqq_trend", "bot2_momentum_strategy", "run_bot2_cycle"),
 ]
 
 RUNNER_ENVIRONMENT = os.environ.get(
@@ -174,8 +174,18 @@ def _canonical_lock_bot_id(bot_id: str) -> str:
         return bot_id
 
 
+def _profile_for_bot(bot_id: str) -> dict[str, Any]:
+    """Resolve the legacy profile key while the runner uses canonical IDs."""
+    profile = BOT_PROFILES.get(bot_id)
+    if profile is not None:
+        return profile
+    if _canonical_lock_bot_id(bot_id) == "spy_qqq_trend":
+        return BOT_PROFILES.get("bot2_spy_qqq", {})
+    return {}
+
+
 def _lock_interval_seconds(bot_id: str) -> float:
-    profile = BOT_PROFILES.get(bot_id, {})
+    profile = _profile_for_bot(bot_id)
     return max(60.0, float(profile.get("LOOP_SLEEP_SECONDS", 3600)))
 
 
@@ -308,7 +318,7 @@ def _assert_pause_alignment() -> bool:
     """Require module, profile, and canonical DB pause sources to agree."""
     aligned = True
     for bot_id, module_name, _ in BOTS:
-        profile = BOT_PROFILES.get(bot_id, {})
+        profile = _profile_for_bot(bot_id)
         canonical = _bs_normalise(bot_id) or bot_id
         state = _bs_get_state(canonical) if _heartbeat_ok else {}
         static_paused = bool(profile.get("BOT_PAUSED", False))
@@ -595,7 +605,7 @@ def _run_bot_loop(bot_id: str, module_name: str, fn_name: str):
         return
 
     # Lazy load the bot profile — BOT_PROFILES loaded at module level via importlib
-    profile = BOT_PROFILES.get(bot_id)
+    profile = _profile_for_bot(bot_id)
     if not profile:
         logger.error(f"[{bot_id}] Profile not found in BOT_PROFILES")
         _update_status(bot_id, status="error", error="profile_not_found")

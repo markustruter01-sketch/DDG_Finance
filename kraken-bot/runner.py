@@ -191,7 +191,8 @@ def _log_runner_locks(prefix: str) -> None:
             logger.info(
                 f"Runner lock | {prefix} | bot={lock['bot_id']} "
                 f"environment={lock['environment']} pid={lock['pid']} "
-                f"heartbeat={lock['heartbeat_at']}"
+                f"heartbeat={lock['heartbeat_at']} "
+                f"owner_token={lock.get('owner_token', 'unknown')}"
             )
     except Exception as exc:
         logger.critical(f"Runner lock | {prefix} | could not read locks: {exc}")
@@ -238,7 +239,8 @@ def _prepare_runner_locks() -> bool:
                     f"Runner lock | REFUSED | bot={lock_bot_id} "
                     f"holder_environment={holder.get('environment', 'unknown')} "
                     f"holder_pid={holder.get('pid', 'unknown')} "
-                    f"holder_heartbeat={holder.get('heartbeat_at', 'unknown')}"
+                    f"holder_heartbeat={holder.get('heartbeat_at', 'unknown')} "
+                    f"holder_owner_token={holder.get('owner_token', 'unknown')}"
                 )
                 if _release_runner_locks is not None and claimed:
                     _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
@@ -250,7 +252,8 @@ def _prepare_runner_locks() -> bool:
             logger.info(
                 f"Runner lock | CLAIMED | bot={lock_bot_id} "
                 f"environment={lock.get('environment')} pid={lock.get('pid')} "
-                f"heartbeat={lock.get('heartbeat_at')}"
+                f"heartbeat={lock.get('heartbeat_at')} "
+                f"owner_token={lock.get('owner_token', 'unknown')}"
             )
         _runner_lock_ready = True
         _log_runner_locks("after-claim")

@@ -153,6 +153,35 @@ def test_same_process_instance_can_refresh_stale_lease(monkeypatch):
     assert result["owned"] is True
 
 
+def test_replacement_with_reused_pid_is_taken_over_by_new_token(monkeypatch):
+    conn, cursor = _fake_conn()
+    old = _lock_row(
+        heartbeat_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        environment="published",
+        pid=22,
+        token="legacy:published:22:1787873030",
+    )
+    replacement = _lock_row(
+        heartbeat_at=datetime.now(timezone.utc),
+        environment="published",
+        pid=22,
+        token="new-process-token",
+    )
+    cursor.fetchone.side_effect = [old, replacement]
+    # The PID is visible because it is the replacement process itself.
+    monkeypatch.setattr(runner_lock, "_pid_is_alive", lambda _pid: True)
+
+    with patch("db.postgres.get_conn") as get_conn:
+        get_conn.return_value.__enter__.return_value = conn
+        result = runner_lock.claim_lock(
+            "oracle", "published", 22, 10800, owner_token="new-process-token"
+        )
+
+    assert result["owned"] is True
+    assert result["lock"]["pid"] == 22
+    assert result["lock"]["owner_token"] == "new-process-token"
+
+
 def test_runner_shutdown_release_is_scoped_to_instance_token(monkeypatch):
     sys.path.insert(0, "/home/runner/workspace/kraken-bot")
     import runner

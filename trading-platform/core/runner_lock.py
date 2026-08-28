@@ -76,6 +76,7 @@ def _lock_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
         "pid": int(row[2]),
         "heartbeat_at": row[3].isoformat() if row[3] else None,
         "acquired_at": row[4].isoformat() if row[4] else None,
+        "owner_token": row[5] if len(row) > 5 else None,
     }
 
 
@@ -110,7 +111,7 @@ def list_locks() -> list[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT bot_id, environment, pid, heartbeat_at, acquired_at
+                SELECT bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
                 FROM runner_account_locks
                 ORDER BY bot_id
                 """
@@ -174,12 +175,26 @@ def claim_lock(
                     or current_token == requested_token
                 )
             )
+            # A replacement process can inherit the exact PID of its predecessor
+            # in a restarted container. Since that PID is now this caller's PID,
+            # os.kill(pid, 0) sees the replacement itself and cannot distinguish
+            # the old instance. The token mismatch is the proof of a new instance.
+            same_pid_replacement = (
+                owner_token is not None
+                and current_environment == environment
+                and current_pid == int(pid)
+                and current_token != requested_token
+            )
             owner_alive = _pid_is_alive(current_pid)
             stale = _heartbeat_is_stale(current[3], stale_after_seconds)
             dead_same_environment = (
                 current_environment == environment and not owner_alive
             )
-            can_takeover = dead_same_environment or (stale and not owner_alive)
+            can_takeover = (
+                same_pid_replacement
+                or dead_same_environment
+                or (stale and not owner_alive)
+            )
 
             if same_owner or can_takeover:
                 cur.execute(

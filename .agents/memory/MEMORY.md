@@ -46,3 +46,4 @@
 - [Bot 2 regime-filter experiment](bot2-regime-experiment.md) — prior-SPY-200-day-SMA filter stayed RISK_ON in Feb 2021 and failed to reduce 2021–2022 drawdown; keep Bot 2 paused.
 - [Strategy bench isolation](strategy-bench-isolation.md) — the bench is a static development-only research surface and must remain isolated from live trading and streaming navigation.
 - [Research registry result shapes](research-registry-result-shapes.md) — pooled metrics may be direct or nested; ambiguous multi-strategy windows must remain NULL.
+- [Bot 3 plan history source](bot3-plan-history-source.md) — production price tables are empty; use verified explicit-range Alpaca bars, never silent dev fallback.

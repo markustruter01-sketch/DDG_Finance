@@ -21,6 +21,7 @@ import re
 import statistics
 from contextvars import ContextVar
 from dataclasses import dataclass
+from bisect import bisect_left
 from datetime import date, datetime
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -107,6 +108,8 @@ def _bar_number(bar: Any, mapping_key: str, attribute: str) -> float | None:
 def _bars_for(value: Any) -> list[Any]:
     if value is None:
         return []
+    if getattr(value, "bars_sorted", False):
+        return value.bars
     bars = getattr(value, "bars", value)
     try:
         return sorted(list(bars), key=_bar_date)
@@ -248,14 +251,24 @@ def screen_universe(
 
     for asset in asset_records:
         symbol = _canonical_symbol(_asset_value(asset, "symbol"))
-        bars = _bars_for(data.bars_by_symbol.get(symbol))
+        source = data.bars_by_symbol.get(symbol)
+        bars = _bars_for(source)
         if not bars:
             funnel["no_price_data"] += 1
             continue
-        if require_current_bar and not any(_bar_date(bar) == as_of_date for bar in bars):
-            funnel["missing_current_bar"] += 1
-            continue
-        prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
+        source_days = getattr(source, "days", None)
+        if source_days is not None:
+            cutoff = bisect_left(source_days, as_of_date)
+            has_current_bar = cutoff < len(source_days) and source_days[cutoff] == as_of_date
+            if require_current_bar and not has_current_bar:
+                funnel["missing_current_bar"] += 1
+                continue
+            prior = bars[:cutoff]
+        else:
+            if require_current_bar and not any(_bar_date(bar) == as_of_date for bar in bars):
+                funnel["missing_current_bar"] += 1
+                continue
+            prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
         if len(prior) < min_sessions:
             funnel["fewer_than_min_sessions"] += 1
             continue
@@ -266,8 +279,7 @@ def screen_universe(
         # point-in-time over the same lookback used for eligibility.
         artifact_window = prior[-min_sessions:]
         valid_closes = [
-            close for bar in prior
-            if bar in artifact_window
+            close for bar in artifact_window
             if (close := _bar_number(bar, "c", "close")) is not None and close > 0
         ]
         artifact = any(

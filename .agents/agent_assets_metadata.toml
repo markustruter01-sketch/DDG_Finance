@@ -55,3 +55,10 @@ uri = "file://trading-platform/.local/bot2_sip_coverage_report.md"
 type = "text"
 title = "Bot 2 SIP coverage report"
 description = "Full 2018-01-02 through 2026-08-27 SIP coverage, per-year counts, monthly point-in-time screening, recalibrated floor, and safety interpretation."
+
+[[outputs]]
+id = "aGFmentutayxJIg9_PiTq"
+uri = "file://trading-platform/.local/bot2_momentum_rank500_backtest_report.md"
+type = "text"
+title = "Bot 2 rank-500 backtest report"
+description = "Raw labelled development-only output for immutable experiment 18, including window metrics, benchmarks, 1,000 random controls, sector diagnostics, largest drawdown holdings, and June snapshots."

@@ -48,3 +48,4 @@
 - [Research registry result shapes](research-registry-result-shapes.md) — pooled metrics may be direct or nested; ambiguous multi-strategy windows must remain NULL.
 - [Bot 3 plan history source](bot3-plan-history-source.md) — production price tables are empty; use verified explicit-range Alpaca bars, never silent dev fallback.
 - [Alpaca order numeric confirmation](alpaca-order-numeric-confirmation.md) — compare broker quantities/prices numerically; trailing zeros may be omitted.
+- [Alpaca wash-trade ordering](alpaca-wash-trade-ordering.md) — an open sell stop can reject an add-on buy; use complex orders or explicit cancel-buy-replace sequencing.

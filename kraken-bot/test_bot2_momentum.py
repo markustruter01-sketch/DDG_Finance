@@ -63,12 +63,12 @@ def test_screen_requires_tradable_us_equity_and_mechanical_liquidity_gates() -> 
     set_screen_data(assets, bars)
     screened, _ = shared_screen_universe(
         as_of,
-        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.UNIVERSE_SIZE,
         bot2.MIN_PRIOR_SESSIONS,
         bot2.MIN_MEDIAN_CLOSE,
     )
 
-    assert set(screened) == {"GOOD"}
+    assert set(screened) == {"GOOD", "LOWVOL"}
 
 
 def test_instrument_filter_is_metadata_based_and_fail_closed_for_unknowns() -> None:
@@ -104,7 +104,7 @@ def test_shared_exclusion_screener_keeps_required_real_share_shapes() -> None:
 
     bars = {asset["symbol"]: _bars() for asset in included + excluded}
     set_screen_data(included + excluded, bars)
-    symbols, funnel = shared_screen_universe(date(2026, 1, 1), 0, 252, 5)
+    symbols, funnel = shared_screen_universe(date(2026, 1, 1), 500, 252, 5)
 
     assert symbols == {"AAPL", "BRK.B", "TSM"}
     assert funnel["excluded_name"] == 2
@@ -133,7 +133,7 @@ def test_rank_is_descending_with_deterministic_symbol_tie_break() -> None:
     set_screen_data(assets, bars)
     screened, _ = shared_screen_universe(
         as_of,
-        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.UNIVERSE_SIZE,
         bot2.MIN_PRIOR_SESSIONS,
         bot2.MIN_MEDIAN_CLOSE,
     )
@@ -141,6 +141,26 @@ def test_rank_is_descending_with_deterministic_symbol_tie_break() -> None:
     ranked = bot2.rank_momentum(screened, bars, as_of)
 
     assert [item["symbol"] for item in ranked] == ["AAA", "BBB"]
+
+
+def test_rank_screen_selects_exactly_top_500_and_reports_cutoff() -> None:
+    as_of = date(2026, 1, 1)
+    assets = [_asset(f"S{index:03d}") for index in range(501)]
+    bars = {
+        asset["symbol"]: _bars(volume=501 - index)
+        for index, asset in enumerate(assets)
+    }
+
+    set_screen_data(assets, bars)
+    screened, funnel = shared_screen_universe(
+        as_of, 500, bot2.MIN_PRIOR_SESSIONS, bot2.MIN_MEDIAN_CLOSE
+    )
+
+    assert len(screened) == 500
+    assert "S500" not in screened
+    assert funnel["ranked_candidates"] == 501
+    assert funnel["qualifying_symbols"] == 500
+    assert funnel["rank_cutoff_dollar_volume"] == 659.0
 
 
 def test_rank_rejects_extreme_adjusted_momentum_artifact() -> None:
@@ -153,7 +173,7 @@ def test_rank_rejects_extreme_adjusted_momentum_artifact() -> None:
     set_screen_data(assets, bars)
     screened, _ = shared_screen_universe(
         as_of,
-        bot2.MIN_MEDIAN_DOLLAR_VOLUME,
+        bot2.UNIVERSE_SIZE,
         bot2.MIN_PRIOR_SESSIONS,
         bot2.MIN_MEDIAN_CLOSE,
     )

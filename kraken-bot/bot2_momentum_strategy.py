@@ -6,7 +6,7 @@ remains controlled by the module, profile, database, and universe gate.
 
 The research signal is deliberately mechanical:
   * Alpaca-tradable US equities only (no index-membership data)
-  * 252 prior sessions, trailing 60-session median dollar volume >= $59.724M
+   * 252 prior sessions, top 500 by trailing 60-session median dollar volume
   * trailing 60-session median close > $5
   * 12-1 momentum, with the most recent 21 sessions skipped
   * top 20, equal weight, monthly first-trading-day rebalance
@@ -60,7 +60,7 @@ MAX_POSITIONS = 20
 SLIPPAGE_BPS = 10
 MIN_PRIOR_SESSIONS = 252
 SKIP_RECENT_SESSIONS = 21
-MIN_MEDIAN_DOLLAR_VOLUME = 223_555_361.895
+UNIVERSE_SIZE = 500
 MIN_MEDIAN_CLOSE = 5.0
 MAX_DEPLOYMENT = 1.00
 STOP_LOSS_PCT = 0.20
@@ -726,7 +726,7 @@ def _build_book(
     set_screen_data(assets, bars)
     screened, funnel = shared_screen_universe(
         as_of,
-        MIN_MEDIAN_DOLLAR_VOLUME,
+        UNIVERSE_SIZE,
         MIN_PRIOR_SESSIONS,
         MIN_MEDIAN_CLOSE,
     )

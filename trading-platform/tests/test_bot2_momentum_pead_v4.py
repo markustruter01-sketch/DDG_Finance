@@ -28,7 +28,7 @@ def test_current_screen_requires_a_bar_on_the_asof_date():
     data.__post_init__()
 
     qualified, observations = screen_universe_current(
-        {"AAA": data}, {"AAA"}, as_of, liquidity_floor=1.0
+        {"AAA": data}, {"AAA"}, as_of, universe_size=500
     )
 
     assert qualified == set()
@@ -57,7 +57,7 @@ def test_event_schedule_assigns_same_cluster_to_adjacent_entry_sessions():
     ]
 
     scheduled = build_event_schedule(
-        events, data, set(data), floor=1.0, hold_sessions=5, calendar=calendar
+        events, data, set(data), universe_size=500, hold_sessions=5, calendar=calendar
     )
 
     assert len(scheduled) == 2
@@ -69,7 +69,7 @@ def test_event_schedule_assigns_same_cluster_to_adjacent_entry_sessions():
 def test_true_rotation_transfers_one_book_and_reenters_after_pead_closes():
     data = {"MOM": _series("MOM", slope=0.40), "AAA": _series("AAA", slope=0.15)}
     symbols = set(data)
-    cache = build_momentum_cache(data, symbols, floor=1.0, end=date(2019, 3, 31))
+    cache = build_momentum_cache(data, symbols, universe_size=500, end=date(2019, 3, 31))
     report_day = data["AAA"].bars[300].day
     events = [
         {
@@ -84,7 +84,7 @@ def test_true_rotation_transfers_one_book_and_reenters_after_pead_closes():
     result = simulate_true_rotation(
         data,
         symbols,
-        floor=1.0,
+        universe_size=500,
         start=data["MOM"].bars[260].day,
         end=data["MOM"].bars[380].day,
         hold_sessions=5,
@@ -108,7 +108,7 @@ def test_equal_weight_benchmark_pays_costs_without_negative_cash():
     result = simulate_equal_weight_universe(
         data,
         set(data),
-        floor=1.0,
+        universe_size=500,
         start=data["AAA"].bars[260].day,
         end=data["AAA"].bars[380].day,
     )

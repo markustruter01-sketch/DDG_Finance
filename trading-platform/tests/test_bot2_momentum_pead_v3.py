@@ -4,7 +4,6 @@ from analysis.bot2_momentum_pead_v3 import (
     Bar,
     PEAD_SYMBOLS,
     Series,
-    choose_liquidity_floor,
     _is_signal_earnings_event,
     screen_universe,
     simulate_momentum,
@@ -25,7 +24,7 @@ def test_screen_uses_only_bars_strictly_before_as_of():
     data = _series("AAA")
     as_of = data.bars[280].day
     qualified, observations = screen_universe(
-        {"AAA": data}, {"AAA"}, as_of, liquidity_floor=1.0
+        {"AAA": data}, {"AAA"}, as_of, universe_size=500
     )
 
     assert qualified == {"AAA"}
@@ -34,17 +33,20 @@ def test_screen_uses_only_bars_strictly_before_as_of():
     assert observations["AAA"]["sessions_available"] == 280
 
 
-def test_liquidity_floor_is_calibrated_from_the_targetth_largest_observation():
+def test_rank_screen_selects_top_n_by_dollar_volume():
     series = {
         f"S{index}": _series(f"S{index}", volume=(index + 1) * 1_000_000)
         for index in range(4)
     }
 
-    floor = choose_liquidity_floor(
-        series, as_of=date(2018, 10, 20), target=2
+    qualified, observations = screen_universe(
+        series, set(series), date(2018, 10, 20), universe_size=2
     )
 
-    assert 300_000_000 < floor < 600_000_000
+    assert qualified == {"S3", "S2"}
+    assert observations["S2"]["median_dollar_volume_60"] < (
+        observations["S3"]["median_dollar_volume_60"]
+    )
 
 
 def test_mechanical_screen_rejects_insufficient_history_and_low_price():
@@ -60,7 +62,7 @@ def test_mechanical_screen_rejects_insufficient_history_and_low_price():
         {"SHORT": short, "LOW": low},
         {"SHORT", "LOW"},
         date(2018, 10, 20),
-        liquidity_floor=1.0,
+        universe_size=500,
     )
 
     assert qualified == set()
@@ -73,7 +75,7 @@ def test_cash_constrained_momentum_never_exceeds_full_deployment():
     result = simulate_momentum(
         {"AAA": data},
         {"AAA"},
-        liquidity_floor=1.0,
+        universe_size=500,
         start=date(2018, 1, 1),
         end=data.bars[-1].day,
     )

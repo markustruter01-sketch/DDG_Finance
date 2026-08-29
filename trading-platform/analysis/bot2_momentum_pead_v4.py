@@ -32,6 +32,11 @@ if str(_REPO_ROOT / "trading-platform") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "trading-platform"))
 
 from db.postgres import get_conn  # noqa: E402
+from core.equity_universe import (  # noqa: E402
+    last_screen_observations,
+    screen_universe as shared_screen_universe,
+    set_screen_data,
+)
 from analysis.bot2_data_pipeline import EARNINGS_SYMBOLS, EARNINGS_TABLE  # noqa: E402
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     ALPACA_BARS_URL,
@@ -159,83 +164,73 @@ def _first_day_on_or_after(series: dict[str, Series], target: date) -> date:
     raise RuntimeError(f"no price session on or after {target}")
 
 
-def _screen_observation_current(data: Series, as_of: date) -> dict[str, Any] | None:
-    """Require a current bar as well as strictly prior trailing observations."""
-    current = data.by_date.get(as_of)
-    cutoff = bisect_left(data.days, as_of)
-    if current is None or cutoff < LOOKBACK_SESSIONS:
-        return None
-    trailing = data.bars[cutoff - LIQUIDITY_SESSIONS : cutoff]
-    return {
-        "last_data_day": data.bars[cutoff - 1].day,
-        "current_data_day": current.day,
-        "sessions_available": cutoff,
-        "median_close_60": statistics.median(bar.close for bar in trailing),
-        "median_dollar_volume_60": statistics.median(
-            bar.close * bar.volume for bar in trailing
-        ),
-        "uses_future_data": any(bar.day >= as_of for bar in data.bars[:cutoff]),
-    }
-
-
 def screen_universe_current(
     series: dict[str, Series],
     candidates: Iterable[str],
     as_of: date,
-    liquidity_floor: float,
+    universe_size: int = TARGET_UNIVERSE,
 ) -> tuple[set[str], dict[str, dict[str, Any]]]:
-    qualified: set[str] = set()
-    observations: dict[str, dict[str, Any]] = {}
-    for symbol in sorted(set(candidates)):
-        data = series.get(symbol)
-        observation = _screen_observation_current(data, as_of) if data else None
-        if observation is None:
-            continue
-        observations[symbol] = observation
-        if (
-            observation["median_dollar_volume_60"] >= liquidity_floor
-            and observation["median_close_60"] > 5
-            and not observation["uses_future_data"]
-        ):
-            qualified.add(symbol)
+    assets = [
+        {
+            "symbol": symbol,
+            "status": "active",
+            "asset_class": "us_equity",
+            "tradable": True,
+            "exchange": "NASDAQ",
+        }
+        for symbol in sorted(set(candidates))
+    ]
+    set_screen_data(assets, series)
+    qualified, funnel = shared_screen_universe(
+        as_of,
+        universe_size,
+        LOOKBACK_SESSIONS,
+        5.0,
+        require_current_bar=True,
+    )
+    observations = last_screen_observations()
+    for symbol in qualified:
+        if symbol in series and as_of in series[symbol].by_date:
+            observations[symbol]["current_data_day"] = as_of
+            observations[symbol]["uses_future_data"] = False
     return qualified, observations
 
 
-def choose_liquidity_floor_current(
+def implied_liquidity_floor_current(
     series: dict[str, Series],
+    candidates: Iterable[str] | None = None,
     as_of: date = CALIBRATION_DATE,
-    target: int = TARGET_UNIVERSE,
-) -> float:
-    observations = [
-        item["median_dollar_volume_60"]
-        for data in series.values()
-        if (item := _screen_observation_current(data, as_of)) is not None
-        and item["median_close_60"] > 5
-    ]
-    if len(observations) < target:
-        raise RuntimeError(
-            f"liquidity calibration has only {len(observations)} candidates; needs {target}"
-        )
-    return float(sorted(observations, reverse=True)[target - 1])
+) -> float | None:
+    _, observations = screen_universe_current(
+        series, candidates or set(series), as_of, TARGET_UNIVERSE
+    )
+    if len(observations) < TARGET_UNIVERSE:
+        return None
+    return sorted(
+        (item["median_dollar_volume_60"] for item in observations.values()),
+        reverse=True,
+    )[TARGET_UNIVERSE - 1]
 
 
 def mechanical_gate(
     series: dict[str, Series],
     candidate_symbols: set[str],
-) -> tuple[bool, float, dict[str, Any]]:
-    floor = choose_liquidity_floor_current(series)
+) -> tuple[bool, int, dict[str, Any]]:
+    universe_size = TARGET_UNIVERSE
     print(
-        f"liquidity_calibration | as_of={CALIBRATION_DATE} | target={TARGET_UNIVERSE} "
-        f"| floor_usd={floor:.2f} | source=trailing_data_only"
+        f"universe_rule | rank=trailing_{LIQUIDITY_SESSIONS}_session_median_dollar_volume "
+        f"| top_n={universe_size} | source=trailing_data_only"
     )
     snapshots: dict[str, Any] = {}
     valid = True
     print("mechanical_sample | as_of | qualified | current_history | future_rows")
     for as_of in SAMPLE_DATES:
         qualified, observations = screen_universe_current(
-            series, candidate_symbols, as_of, floor
+            series, candidate_symbols, as_of, universe_size
         )
-        future_rows = sum(int(item["uses_future_data"]) for item in observations.values())
+        future_rows = sum(
+            int(item.get("uses_future_data", False)) for item in observations.values()
+        )
         snapshots[as_of.isoformat()] = {
             "qualified": sorted(qualified),
             "qualified_count": len(qualified),
@@ -275,9 +270,9 @@ def mechanical_gate(
     previous: set[str] = set()
     print("year | as_of | universe_count | additions | drops | median_dollar_volume | artifacts")
     for year in range(2019, ANALYSIS_END.year + 1):
-        as_of = _first_day_on_or_after(series, date(year, 6, 1))
+        as_of = _first_day_on_or_after(series, date(year, 1, 1))
         current, observations = screen_universe_current(
-            series, candidate_symbols, as_of, floor
+            series, candidate_symbols, as_of, universe_size
         )
         additions = len(current - previous) if previous else len(current)
         drops = len(previous - current)
@@ -317,8 +312,8 @@ def mechanical_gate(
         f"| missing_price_history={artifacts['missing_price_history']} "
         f"| panel_empty={len(artifacts['panel_symbols_with_no_bars'])}"
     )
-    return valid, floor, {
-        "liquidity_floor": floor,
+    return valid, universe_size, {
+        "universe_size": universe_size,
         "sample_dates": snapshots,
         "annual": annual,
         "true_dropouts": true_dropouts,
@@ -403,7 +398,7 @@ def _load_earnings_events() -> list[dict[str, Any]]:
 def build_momentum_cache(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     end: date,
 ) -> dict[date, list[tuple[str, float, float]]]:
     days = _all_days(series, end)
@@ -415,7 +410,9 @@ def build_momentum_cache(
             for key in cache
         ):
             continue
-        screened, _ = screen_universe_current(series, symbols, rebalance_day, floor)
+        screened, _ = screen_universe_current(
+            series, symbols, rebalance_day, universe_size
+        )
         ranked: list[tuple[str, float, float]] = []
         for symbol in screened:
             data = series[symbol]
@@ -466,7 +463,7 @@ def build_event_schedule(
     events: list[dict[str, Any]],
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     hold_sessions: int,
     calendar: list[date],
 ) -> list[EarningsEvent]:
@@ -485,7 +482,7 @@ def build_event_schedule(
         entry_day = entry_candidates[0]
         if entry_day not in screened_by_day:
             screened_by_day[entry_day] = screen_universe_current(
-                series, symbols, entry_day, floor
+                series, symbols, entry_day, universe_size
             )[0]
         screened = screened_by_day[entry_day]
         if event["symbol"] not in screened:
@@ -690,7 +687,7 @@ def _holding_value(
 def simulate_true_rotation(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     start: date,
     end: date,
     hold_sessions: int,
@@ -700,7 +697,9 @@ def simulate_true_rotation(
 ) -> dict[str, Any]:
     calendar = _all_days(series, end)
     scheduled = (
-        build_event_schedule(events, series, symbols, floor, hold_sessions, calendar)
+        build_event_schedule(
+            events, series, symbols, universe_size, hold_sessions, calendar
+        )
         if scheduled_events is None
         else scheduled_events
     )
@@ -919,7 +918,7 @@ def simulate_true_rotation(
 def simulate_momentum(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     start: date,
     end: date,
     ranking_cache: dict[date, list[tuple[str, float, float]]],
@@ -1004,7 +1003,7 @@ def simulate_pead_alone(
     events: list[dict[str, Any]],
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     hold_sessions: int,
     start: date,
     end: date,
@@ -1013,7 +1012,9 @@ def simulate_pead_alone(
     """One-cash PEAD-only book using the same progressive cash constraints."""
     calendar = _all_days(series, end)
     scheduled = (
-        build_event_schedule(events, series, symbols, floor, hold_sessions, calendar)
+        build_event_schedule(
+            events, series, symbols, universe_size, hold_sessions, calendar
+        )
         if scheduled_events is None
         else scheduled_events
     )
@@ -1160,7 +1161,7 @@ def simulate_buy_and_hold(
 def simulate_equal_weight_universe(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     start: date,
     end: date,
 ) -> dict[str, Any]:
@@ -1169,7 +1170,9 @@ def simulate_equal_weight_universe(
     for day in _all_days(series, end):
         if day < start:
             continue
-        qualified, _ = screen_universe_current(series, symbols, day, floor)
+        qualified, _ = screen_universe_current(
+            series, symbols, day, universe_size
+        )
         candidate = sorted(
             symbol for symbol in qualified if series[symbol].by_date.get(day)
         )
@@ -1320,12 +1323,12 @@ def _random_window_control(
     args: tuple[
         dict[str, Series],
         set[str],
-        float,
+        int,
         tuple[str, date, date],
         dict[date, list[tuple[str, float, float]]],
     ],
 ) -> tuple[str, dict[str, Any]]:
-    series, symbols, floor, window, ranking_cache = args
+    series, symbols, universe_size, window, ranking_cache = args
     name, start, end = window
     returns = [
         _fast_random_return(
@@ -1355,13 +1358,13 @@ def _random_window_control(
 def random_controls(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     windows: tuple[tuple[str, date, date], ...],
     ranking_cache: dict[date, list[tuple[str, float, float]]],
 ) -> dict[str, Any]:
     output: dict[str, Any] = {}
     jobs = [
-        (series, symbols, floor, window, ranking_cache)
+        (series, symbols, universe_size, window, ranking_cache)
         for window in windows
     ]
     with ProcessPoolExecutor(
@@ -1535,7 +1538,7 @@ def run_research(
         print(f"expanded_price_ingest | {ingest_expanded_prices(assets)}")
         series = load_panel()
 
-    gate_ok, floor, gate_report = mechanical_gate(series, candidate_symbols)
+    gate_ok, universe_size, gate_report = mechanical_gate(series, candidate_symbols)
     earnings_report = audit_earnings()
     if not gate_ok:
         print("STOP: mechanical universe gate failed; registration/backtests skipped.")
@@ -1548,7 +1551,7 @@ def run_research(
         }
 
     ranking_cache = build_momentum_cache(
-        series, panel_symbols, floor, ANALYSIS_END
+        series, panel_symbols, universe_size, ANALYSIS_END
     )
     events = _load_earnings_events()
     spy = _spy_series()
@@ -1562,9 +1565,8 @@ def run_research(
             "minimum_prior_sessions": LOOKBACK_SESSIONS,
             "trailing_liquidity_sessions": LIQUIDITY_SESSIONS,
             "trailing_median_close_min": 5.0,
-            "liquidity_floor_usd": floor,
-            "liquidity_floor_calibration_date": CALIBRATION_DATE.isoformat(),
-            "liquidity_floor_calibration_target": TARGET_UNIVERSE,
+            "universe_size": universe_size,
+            "ranking_metric": "trailing_60_session_median_dollar_volume",
             "true_dropout_definition": "early qualified and absent from final qualified snapshot",
         },
         "momentum": {
@@ -1686,34 +1688,34 @@ def run_research(
     full_calendar = _all_days(series, ANALYSIS_END)
     scheduled_by_hold = {
         hold: build_event_schedule(
-            events, series, panel_symbols, floor, hold, full_calendar
+            events, series, panel_symbols, universe_size, hold, full_calendar
         )
         for hold in (5, 20)
     }
 
     for name, start, end in WINDOWS:
         momentum = simulate_momentum(
-            series, panel_symbols, floor, start, end, ranking_cache
+            series, panel_symbols, universe_size, start, end, ranking_cache
         )
         pead5 = simulate_pead_alone(
-            events, series, panel_symbols, floor, 5, start, end,
+            events, series, panel_symbols, universe_size, 5, start, end,
             scheduled_events=scheduled_by_hold[5],
         )
         pead20 = simulate_pead_alone(
-            events, series, panel_symbols, floor, 20, start, end,
+            events, series, panel_symbols, universe_size, 20, start, end,
             scheduled_events=scheduled_by_hold[20],
         )
         rotation5 = simulate_true_rotation(
-            series, panel_symbols, floor, start, end, 5, ranking_cache, events,
+            series, panel_symbols, universe_size, start, end, 5, ranking_cache, events,
             scheduled_events=scheduled_by_hold[5],
         )
         rotation20 = simulate_true_rotation(
-            series, panel_symbols, floor, start, end, 20, ranking_cache, events,
+            series, panel_symbols, universe_size, start, end, 20, ranking_cache, events,
             scheduled_events=scheduled_by_hold[20],
         )
         spy_result = simulate_buy_and_hold(spy, start, end)
         universe_result = simulate_equal_weight_universe(
-            series, panel_symbols, floor, start, end
+            series, panel_symbols, universe_size, start, end
         )
         results_momentum["windows"][name] = {
             "momentum_alone": momentum,
@@ -1746,7 +1748,7 @@ def run_research(
         _print_transfer_proof(rotation20, 20)
 
     controls = random_controls(
-        series, panel_symbols, floor, WINDOWS, ranking_cache
+        series, panel_symbols, universe_size, WINDOWS, ranking_cache
     )
     for name, control in controls.items():
         actual = results_momentum["windows"][name]["momentum_alone"]["return"]

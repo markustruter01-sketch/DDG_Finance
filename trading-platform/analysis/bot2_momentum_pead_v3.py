@@ -5,7 +5,7 @@ The candidate universe is the union of Alpaca's currently tradable US-equity
 symbols and the retained historical price panel.  Membership is never inferred
 from a constituent list: a symbol qualifies on a rebalance date only when its
 own observations strictly before that date contain 252 sessions, a trailing
-60-session median close above $5, and a locked liquidity floor.
+60-session median close above $5, and rank in the top 500 by dollar volume.
 
 This module has no live-strategy or order-placement imports.  Its only database
 writes are the asset-list audit and the single immutable research-ledger result
@@ -24,7 +24,7 @@ import statistics
 import sys
 import time
 from bisect import bisect_left
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -38,6 +38,11 @@ if str(_REPO_ROOT / "trading-platform") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "trading-platform"))
 
 from db.postgres import get_conn  # noqa: E402
+from core.equity_universe import (  # noqa: E402
+    last_screen_observations,
+    screen_universe as shared_screen_universe,
+    set_screen_data,
+)
 
 from analysis.bot2_data_pipeline import EARNINGS_SYMBOLS, EARNINGS_TABLE  # noqa: E402
 from analysis.bot2_sp500_data import (  # noqa: E402
@@ -61,9 +66,9 @@ UNIVERSE_GATE_FILE = (
 CALIBRATION_DATE = date(2019, 6, 3)
 LOOKBACK_SESSIONS = 252
 LIQUIDITY_SESSIONS = 60
-LOCKED_LIQUIDITY_FLOOR = 62_406_698.54
+UNIVERSE_SIZE = 500
 MAX_ADJUSTED_CLOSE_RATIO = 10.0
-TARGET_UNIVERSE = 500
+TARGET_UNIVERSE = UNIVERSE_SIZE
 TOP_N = 20
 SLIPPAGE_BPS = 10.0
 STOP_LOSS = 0.20
@@ -350,6 +355,35 @@ def load_asset_symbols() -> set[str]:
             return {row[0] for row in cur.fetchall()}
 
 
+def load_stored_assets() -> list[Asset]:
+    """Load the audited ordinary-equity metadata without loading price bars."""
+    ensure_asset_table()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT symbol, asset_class, status, exchange, tradable,
+                       fractionable, name
+                  FROM {ASSET_TABLE}
+                 WHERE asset_class='us_equity'
+                   AND instrument_classification='ordinary_equity'
+                """
+            )
+            return [
+                Asset(
+                    str(symbol),
+                    str(asset_class),
+                    str(status),
+                    str(exchange or ""),
+                    bool(tradable),
+                    fractionable,
+                    str(name or ""),
+                )
+                for symbol, asset_class, status, exchange, tradable, fractionable, name
+                in cur.fetchall()
+            ]
+
+
 def coverage_report(candidate_symbols: Iterable[str]) -> dict[str, Any]:
     """Report stored per-symbol history coverage without fetching new data."""
     symbols = set(candidate_symbols)
@@ -583,47 +617,65 @@ def _screen_observation(series: Series, as_of: date) -> dict[str, Any] | None:
     }
 
 
-def choose_liquidity_floor(
+_RESEARCH_ASSET_RECORDS: dict[str, dict[str, Any]] = {}
+
+
+def _set_research_screen_data(
     series: dict[str, Series],
+    candidates: Iterable[str],
+) -> None:
+    records = []
+    for symbol in sorted(set(candidates)):
+        asset = _RESEARCH_ASSET_RECORDS.get(symbol, {})
+        records.append(
+            {
+                "symbol": symbol,
+                "name": asset.get("name", ""),
+                "status": "active",
+                "asset_class": "us_equity",
+                "tradable": True,
+                "exchange": asset.get("exchange") or "NASDAQ",
+            }
+        )
+    set_screen_data(records, series)
+
+
+def _screen_with_shared_universe(
+    series: dict[str, Series],
+    candidates: Iterable[str],
+    as_of: date,
+    universe_size: int = UNIVERSE_SIZE,
+) -> tuple[set[str], dict[str, Any], dict[str, dict[str, Any]]]:
+    _set_research_screen_data(series, candidates)
+    selected, funnel = shared_screen_universe(
+        as_of, universe_size, LOOKBACK_SESSIONS, 5.0
+    )
+    return selected, funnel, last_screen_observations()
+
+
+def implied_liquidity_floor(
+    series: dict[str, Series],
+    candidates: Iterable[str],
     as_of: date = CALIBRATION_DATE,
-    target: int = TARGET_UNIVERSE,
-) -> float:
-    observations = [
-        item["median_dollar_volume_60"]
-        for item in (
-            _screen_observation(value, as_of) for value in series.values()
-        )
-        if item is not None and item["median_close_60"] > 5
-    ]
-    if len(observations) < target:
-        raise RuntimeError(
-            f"liquidity calibration has only {len(observations)} candidates; "
-            f"needs {target}"
-        )
-    ordered = sorted(observations, reverse=True)
-    return float(ordered[target - 1])
+    universe_size: int = UNIVERSE_SIZE,
+) -> float | None:
+    """Return the selected pool's lowest ranked dollar-volume observation."""
+    _, funnel, _ = _screen_with_shared_universe(
+        series, candidates, as_of, universe_size
+    )
+    value = funnel["rank_cutoff_dollar_volume"]
+    return float(value) if value is not None else None
 
 
 def screen_universe(
     series: dict[str, Series],
     candidates: Iterable[str],
     as_of: date,
-    liquidity_floor: float,
+    universe_size: int = UNIVERSE_SIZE,
 ) -> tuple[set[str], dict[str, dict[str, Any]]]:
-    qualified: set[str] = set()
-    observations: dict[str, dict[str, Any]] = {}
-    for symbol in sorted(set(candidates)):
-        data = series.get(symbol)
-        observation = _screen_observation(data, as_of) if data else None
-        if observation is None:
-            continue
-        observations[symbol] = observation
-        if (
-            observation["median_dollar_volume_60"] >= liquidity_floor
-            and observation["median_close_60"] > 5
-            and not observation["uses_future_data"]
-        ):
-            qualified.add(symbol)
+    qualified, _, observations = _screen_with_shared_universe(
+        series, candidates, as_of, universe_size
+    )
     return qualified, observations
 
 
@@ -631,51 +683,21 @@ def screen_funnel(
     series: dict[str, Series],
     candidates: Iterable[str],
     as_of: date,
-    liquidity_floor: float = LOCKED_LIQUIDITY_FLOOR,
+    universe_size: int = UNIVERSE_SIZE,
 ) -> dict[str, Any]:
-    """Apply gates in order and retain counts for the data-parity report."""
-    counts = {
-        "total_candidates": len(set(candidates)),
-        "no_price_data": 0,
-        "fewer_than_252_sessions": 0,
-        "below_liquidity_floor": 0,
-        "median_close_le_5": 0,
-        "corporate_action_artifacts": 0,
-        "qualifying": 0,
+    """Apply the shared rank-based screen and retain its audit funnel."""
+    qualified, funnel, observations = _screen_with_shared_universe(
+        series, candidates, as_of, universe_size
+    )
+    return {
+        "counts": {
+            **funnel,
+            "fewer_than_252_sessions": funnel["fewer_than_min_sessions"],
+            "qualifying": funnel["qualifying_symbols"],
+        },
+        "qualified": qualified,
+        "observations": observations,
     }
-    qualified: set[str] = set()
-    observations: dict[str, dict[str, Any]] = {}
-    for symbol in sorted(set(candidates)):
-        data = series.get(symbol)
-        prior = _asof_bars(data, as_of) if data else []
-        if not prior:
-            counts["no_price_data"] += 1
-            continue
-        if len(prior) < LOOKBACK_SESSIONS:
-            counts["fewer_than_252_sessions"] += 1
-            continue
-        if has_adjusted_price_artifact(prior):
-            counts["corporate_action_artifacts"] += 1
-            continue
-        trailing = prior[-LIQUIDITY_SESSIONS:]
-        med_close = statistics.median(bar.close for bar in trailing)
-        med_dollar_volume = statistics.median(bar.close * bar.volume for bar in trailing)
-        observations[symbol] = {
-            "last_data_day": prior[-1].day,
-            "sessions_available": len(prior),
-            "median_close_60": med_close,
-            "median_dollar_volume_60": med_dollar_volume,
-            "uses_future_data": any(bar.day >= as_of for bar in prior),
-        }
-        if med_dollar_volume < liquidity_floor:
-            counts["below_liquidity_floor"] += 1
-            continue
-        if med_close <= 5:
-            counts["median_close_le_5"] += 1
-            continue
-        qualified.add(symbol)
-    counts["qualifying"] = len(qualified)
-    return {"counts": counts, "qualified": qualified, "observations": observations}
 
 
 def current_screen_report(
@@ -683,9 +705,19 @@ def current_screen_report(
     candidates: Iterable[str],
     as_of: date | None = None,
 ) -> dict[str, Any]:
-    """Print today's fixed-pipeline funnel and safe diagnostic top 20."""
+    """Print today's rank-based funnel and safe diagnostic top 20."""
     as_of = as_of or date.today()
-    funnel = screen_funnel(series, candidates, as_of, LOCKED_LIQUIDITY_FLOOR)
+    funnel = screen_funnel(series, candidates, as_of, UNIVERSE_SIZE)
+    sector_map: dict[str, str] = {}
+    try:
+        payload = json.loads(
+            (Path(__file__).resolve().parents[1] / ".local" /
+             "bot2_fullmarket_sector_cache.json").read_text(encoding="utf-8")
+        )
+        if isinstance(payload, dict):
+            sector_map = {str(key).upper(): str(value) for key, value in payload.items()}
+    except (OSError, ValueError):
+        pass
     ranked: list[dict[str, Any]] = []
     for symbol in sorted(funnel["qualified"]):
         data = series[symbol]
@@ -707,7 +739,8 @@ def current_screen_report(
                 "median_dollar_volume": funnel["observations"][symbol][
                     "median_dollar_volume_60"
                 ],
-                "median_close": funnel["observations"][symbol]["median_close_60"],
+                "median_close": prior[-1].close,
+                "sector": sector_map.get(symbol, "unknown"),
                 "asset_class": "ordinary_equity",
             }
         )
@@ -717,16 +750,16 @@ def current_screen_report(
         f"{json.dumps(funnel['counts'], sort_keys=True)}"
     )
     print(
-        "today_top_20 | symbol | momentum | median_dollar_volume | "
-        "median_close | target_notional | asset_class"
+        "today_top_20 | symbol | momentum | dollar_volume | price | "
+        "sector | target_notional | asset_class"
     )
     target_notional = STARTING_EQUITY / TOP_N
     for item in ranked[:TOP_N]:
         print(
             f"today_top_20 | {item['symbol']} | {item['momentum']:+.4%} | "
             f"${item['median_dollar_volume']:,.2f} | "
-            f"${item['median_close']:,.2f} | ${target_notional:,.2f} | "
-            f"{item['asset_class']}"
+            f"${item['median_close']:,.2f} | {item['sector']} | "
+            f"${target_notional:,.2f} | {item['asset_class']}"
         )
     included_non_ordinary = sum(
         item["asset_class"] != "ordinary_equity" for item in ranked
@@ -737,6 +770,292 @@ def current_screen_report(
         f"| sector_concentration_review=required"
     )
     return {"funnel": funnel["counts"], "top_20": ranked[:TOP_N]}
+
+
+def _stored_rank_audit(
+    candidate_symbols: set[str],
+) -> dict[str, Any]:
+    """Run the coverage audit with bounded memory over the stored SIP panel."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT DISTINCT date
+                  FROM {PRICE_TABLE}
+                 WHERE source = ANY(%s)
+                 ORDER BY date
+                """,
+                (list(PRICE_SOURCES),),
+            )
+            all_days = [row[0] for row in cur.fetchall()]
+
+    monthly_days: list[date] = []
+    seen_months: set[tuple[int, int]] = set()
+    for day in all_days:
+        key = (day.year, day.month)
+        if day >= ANALYSIS_START and day <= ANALYSIS_END and key not in seen_months:
+            monthly_days.append(day)
+            seen_months.add(key)
+    annual_days: dict[int, date] = {}
+    for day in all_days:
+        if day >= ANALYSIS_START and day <= ANALYSIS_END:
+            annual_days.setdefault(day.year, day)
+    targets = sorted(
+        set(monthly_days)
+        | set(annual_days.values())
+        | {CALIBRATION_DATE, date.today()}
+    )
+    snapshots: dict[str, dict[str, Any]] = {}
+    histories: dict[str, deque[tuple[date, float, float]]] = {}
+    candidate_list = sorted(candidate_symbols)
+
+    def snapshot(as_of: date) -> None:
+        observations: dict[str, dict[str, Any]] = {}
+        no_price_data = 0
+        fewer_than_252 = 0
+        artifacts = 0
+        below_min_price = 0
+        ranked: list[tuple[str, float]] = []
+        for symbol in candidate_list:
+            history = histories.get(symbol)
+            if not history:
+                no_price_data += 1
+                continue
+            if len(history) < LOOKBACK_SESSIONS:
+                fewer_than_252 += 1
+                continue
+            window = list(history)
+            if any(
+                previous_close > 0
+                and current_close > 0
+                and (
+                    current_close / previous_close > MAX_ADJUSTED_CLOSE_RATIO
+                    or current_close / previous_close < 1 / MAX_ADJUSTED_CLOSE_RATIO
+                )
+                for (_, previous_close, _), (_, current_close, _) in zip(
+                    window, window[1:]
+                )
+            ):
+                artifacts += 1
+                continue
+            trailing = window[-LIQUIDITY_SESSIONS:]
+            median_close = float(statistics.median(item[1] for item in trailing))
+            median_dollar_volume = float(
+                statistics.median(item[1] * item[2] for item in trailing)
+            )
+            observations[symbol] = {
+                "last_data_day": window[-1][0],
+                "sessions_available": len(history),
+                "median_close_60": median_close,
+                "median_dollar_volume_60": median_dollar_volume,
+                "uses_future_data": False,
+                "name": _RESEARCH_ASSET_RECORDS.get(symbol, {}).get("name", ""),
+            }
+            if median_close <= 5:
+                below_min_price += 1
+            else:
+                ranked.append((symbol, median_dollar_volume))
+        ranked.sort(key=lambda item: (-item[1], item[0]))
+        selected = {symbol for symbol, _ in ranked[:UNIVERSE_SIZE]}
+        cutoff = ranked[UNIVERSE_SIZE - 1][1] if len(ranked) >= UNIVERSE_SIZE else None
+        funnel = {
+            "total_assets": len(candidate_list),
+            "asset_eligible_records": len(candidate_list),
+            "history_eligible": len(observations) + artifacts,
+            "no_price_data": no_price_data,
+            "fewer_than_min_sessions": fewer_than_252,
+            "missing_current_bar": 0,
+            "adjusted_price_artifacts": artifacts,
+            "below_min_price": below_min_price,
+            "ranked_candidates": len(ranked),
+            "rank_cutoff_dollar_volume": cutoff,
+            "qualifying_symbols": len(selected),
+        }
+        snapshots[as_of.isoformat()] = {
+            "qualified": sorted(selected),
+            "qualified_count": len(selected),
+            "history_eligible": funnel["history_eligible"],
+            "future_rows": 0,
+            "observations": {symbol: observations[symbol] for symbol in selected},
+            "funnel": funnel,
+        }
+
+    with get_conn() as conn:
+        with conn.cursor(name="bot2_rank_audit") as cur:
+            cur.execute(
+                f"""
+                SELECT symbol, date, close, volume
+                  FROM {PRICE_TABLE}
+                 WHERE symbol = ANY(%s) AND source = ANY(%s)
+                 ORDER BY date, symbol
+                """,
+                (candidate_list, list(PRICE_SOURCES)),
+            )
+            rows = iter(cur)
+            next_row = next(rows, None)
+            for target in targets:
+                while next_row is not None and next_row[1] < target:
+                    symbol, day, close, volume = next_row
+                    if close is not None and volume is not None:
+                        histories.setdefault(
+                            str(symbol), deque(maxlen=LOOKBACK_SESSIONS)
+                        ).append((day, float(close), float(volume)))
+                    next_row = next(rows, None)
+                snapshot(target)
+
+    def sector_map(symbols: set[str]) -> dict[str, str]:
+        path = Path(__file__).resolve().parents[1] / ".local" / "bot2_fullmarket_sector_cache.json"
+        result: dict[str, str] = {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            result.update({
+                symbol: str(payload.get(symbol, "unknown"))
+                for symbol in symbols
+                if isinstance(payload, dict)
+            })
+        except (OSError, ValueError):
+            pass
+        try:
+            from execution.momentum_universe import TICKER_TO_SECTOR
+            result.update(
+                {
+                    symbol: TICKER_TO_SECTOR[symbol]
+                    for symbol in symbols
+                    if symbol in TICKER_TO_SECTOR
+                }
+            )
+        except Exception:
+            pass
+        return result
+
+    current = snapshots[date.today().isoformat()]
+    current_rows = []
+    current_history = histories
+    sectors = sector_map(set(current["qualified"]))
+    for symbol in current["qualified"]:
+        history = list(current_history.get(symbol, ()))
+        if len(history) < LOOKBACK_SESSIONS:
+            continue
+        momentum = history[-22][1] / history[-252][1] - 1
+        if math.isfinite(momentum) and momentum <= MOMENTUM_ARTEFACT_THRESHOLD:
+            observation = current["observations"][symbol]
+            current_rows.append(
+                {
+                    "symbol": symbol,
+                    "momentum": momentum,
+                    "dollar_volume": observation["median_dollar_volume_60"],
+                    "price": history[-1][1],
+                    "sector": sectors.get(symbol, "unknown"),
+                    "asset_class": "ordinary_equity",
+                }
+            )
+    current_rows.sort(key=lambda row: (-row["momentum"], row["symbol"]))
+    print("universe_rule | rank=trailing_60_session_median_dollar_volume | top_n=500")
+    print("monthly | as_of | count")
+    monthly = {}
+    for day in monthly_days:
+        count = snapshots[day.isoformat()]["qualified_count"]
+        monthly[day.isoformat()] = count
+        print(f"monthly | {day} | {count}")
+    first_full = next(
+        (day for day in monthly_days if monthly[day.isoformat()] == UNIVERSE_SIZE),
+        None,
+    )
+    print(
+        f"monthly_first_full_500 | as_of={first_full or 'NONE'} "
+        f"| count={UNIVERSE_SIZE if first_full else 0}"
+    )
+    print(
+        f"today_rank_cutoff | dollar_volume="
+        f"{current['funnel']['rank_cutoff_dollar_volume'] or 'NONE'}"
+    )
+    print("annual_implied_floor | year | as_of | rank_500_dollar_volume")
+    annual = {}
+    previous: set[str] = set()
+    for year in sorted(annual_days):
+        day = annual_days[year]
+        row = snapshots[day.isoformat()]
+        selected = set(row["qualified"])
+        medians = [
+            row["observations"][symbol]["median_dollar_volume_60"]
+            for symbol in selected
+            if symbol in row["observations"]
+        ]
+        annual[str(year)] = {
+            "as_of": day.isoformat(),
+            "universe_count": len(selected),
+            "additions": len(selected - previous) if previous else len(selected),
+            "drops": len(previous - selected),
+            "median_dollar_volume": statistics.median(medians) if medians else None,
+            "implied_rank_500_dollar_volume": row["funnel"][
+                "rank_cutoff_dollar_volume"
+            ],
+        }
+        print(
+            f"annual_implied_floor | {year} | {day} | "
+            f"{annual[str(year)]['implied_rank_500_dollar_volume'] or 'NONE'}"
+        )
+        previous = selected
+    sample = snapshots[CALIBRATION_DATE.isoformat()]
+    sample_rows = sorted(
+        (
+            {
+                "symbol": symbol,
+                "dollar_volume": row["median_dollar_volume_60"],
+                "price": row["median_close_60"],
+                "name": row.get("name", ""),
+            }
+            for symbol, row in sample["observations"].items()
+        ),
+        key=lambda row: (-row["dollar_volume"], row["symbol"]),
+    )[:TOP_N]
+    print("sample_2019 | symbol | dollar_volume | price | name")
+    for row in sample_rows:
+        print(
+            f"sample_2019 | {row['symbol']} | ${row['dollar_volume']:,.2f} "
+            f"| ${row['price']:,.2f} | {row['name'] or 'unknown'}"
+        )
+    print("today_top_20 | symbol | momentum | dollar_volume | price | sector | asset_class")
+    for row in current_rows[:TOP_N]:
+        print(
+            f"today_top_20 | {row['symbol']} | {row['momentum']:+.4%} "
+            f"| ${row['dollar_volume']:,.2f} | ${row['price']:,.2f} "
+            f"| {row['sector']} | {row['asset_class']}"
+        )
+    non_ordinary = sum(row["asset_class"] != "ordinary_equity" for row in current_rows[:TOP_N])
+    print(
+        f"today_sanity | count={len(current_rows[:TOP_N])} "
+        f"| included_non_ordinary={non_ordinary} | etf_count=0"
+    )
+    first_snapshot = snapshots.get(SAMPLE_DATES[0].isoformat(), {})
+    last_snapshot = snapshots.get(SAMPLE_DATES[-1].isoformat(), {})
+    first_set = set(first_snapshot.get("qualified", []))
+    last_set = set(last_snapshot.get("qualified", []))
+    early_delisted = sorted(
+        symbol
+        for symbol in first_set
+        if symbol in histories
+        and histories[symbol]
+        and histories[symbol][-1][0] < SAMPLE_DATES[-1]
+    )
+    print(
+        f"delisted_era_members | early_date={SAMPLE_DATES[0]} "
+        f"| late_date={SAMPLE_DATES[-1]} | count={len(early_delisted)}"
+    )
+    return {
+        "universe_size": UNIVERSE_SIZE,
+        "monthly": monthly,
+        "first_full_500": first_full.isoformat() if first_full else None,
+        "annual": annual,
+        "sample_2019": sample_rows,
+        "today": {
+            "funnel": current["funnel"],
+            "top_20": current_rows[:TOP_N],
+            "etf_count": 0,
+        },
+        "sample_dates": snapshots,
+        "early_delisted": early_delisted,
+    }
 
 
 def persist_universe_gate(valid: bool, report: dict[str, Any]) -> None:
@@ -768,24 +1087,24 @@ def _first_available_day(series: dict[str, Series], year: int, month: int = 6) -
 def mechanical_gate(
     series: dict[str, Series],
     candidate_symbols: set[str],
-) -> tuple[bool, float, dict[str, Any]]:
-    floor = LOCKED_LIQUIDITY_FLOOR
+) -> tuple[bool, int, dict[str, Any]]:
+    universe_size = UNIVERSE_SIZE
     print(
-        f"liquidity_floor | locked_usd={floor:.2f} "
-        f"| source=experiment_13 | retuning=disabled"
+        f"universe_rule | rank=trailing_{LIQUIDITY_SESSIONS}_session_median_dollar_volume "
+        f"| top_n={universe_size} | retuning=disabled"
     )
     snapshots: dict[str, Any] = {}
     valid = True
     print(
         "mechanical_sample | as_of | qualified | history_eligible | "
-        "median_dollar_volume_floor | future_rows"
+        "rank_cutoff_dollar_volume | future_rows"
     )
     for as_of in SAMPLE_DATES:
-        funnel = screen_funnel(series, candidate_symbols, as_of, floor)
+        funnel = screen_funnel(series, candidate_symbols, as_of, universe_size)
         qualified = funnel["qualified"]
         observations = funnel["observations"]
         future_rows = sum(
-            int(item["uses_future_data"]) for item in observations.values()
+            int(item.get("uses_future_data", False)) for item in observations.values()
         )
         snapshots[as_of.isoformat()] = {
             "qualified": sorted(qualified),
@@ -797,7 +1116,8 @@ def mechanical_gate(
         }
         print(
             f"mechanical_sample | {as_of} | {len(qualified)} | {len(observations)} | "
-            f"{floor:.2f} | {future_rows} | funnel={json.dumps(funnel['counts'], sort_keys=True)}"
+            f"{funnel['counts']['rank_cutoff_dollar_volume']} | {future_rows} "
+            f"| funnel={json.dumps(funnel['counts'], sort_keys=True)}"
         )
         if future_rows or len(qualified) == 0:
             valid = False
@@ -844,12 +1164,37 @@ def mechanical_gate(
     else:
         print(f"mechanical_delisted_gate | PASS | observed={len(early_delisted)}")
 
+    monthly: dict[str, int] = {}
+    first_full_500: str | None = None
+    print("monthly | as_of | count")
+    for as_of in _monthly_rebalance_days(_daily_dates(series)):
+        if as_of < ANALYSIS_START or as_of > ANALYSIS_END:
+            continue
+        funnel = screen_funnel(series, candidate_symbols, as_of, universe_size)
+        count = len(funnel["qualified"])
+        monthly[as_of.isoformat()] = count
+        print(f"monthly | {as_of} | {count}")
+        if first_full_500 is None and count == universe_size:
+            first_full_500 = as_of.isoformat()
+    print(
+        f"monthly_first_full_500 | as_of={first_full_500 or 'NONE'} "
+        f"| count={universe_size if first_full_500 else 0}"
+    )
+    if first_full_500 is None:
+        valid = False
+
     annual: dict[str, Any] = {}
     previous: set[str] = set()
+    print("annual_implied_floor | year | as_of | rank_500_dollar_volume")
     print("year | as_of | universe_count | additions | drops | median_dollar_volume | artifacts")
-    for year in range(2019, ANALYSIS_END.year + 1):
-        as_of = _first_available_day(series, year)
-        current, observations = screen_universe(series, candidate_symbols, as_of, floor)
+    for year in range(ANALYSIS_START.year, ANALYSIS_END.year + 1):
+        as_of = _first_available_day(series, year, month=1)
+        current, observations = screen_universe(
+            series, candidate_symbols, as_of, universe_size
+        )
+        annual_funnel = screen_funnel(
+            series, candidate_symbols, as_of, universe_size
+        )
         additions = len(current - previous) if previous else len(current)
         drops = len(previous - current)
         medians = [
@@ -864,8 +1209,16 @@ def mechanical_gate(
             "additions": additions,
             "drops": drops,
             "median_dollar_volume": statistics.median(medians) if medians else None,
+            "implied_rank_500_dollar_volume": annual_funnel["counts"][
+                "rank_cutoff_dollar_volume"
+            ],
             "data_artifact_symbols": artifacts,
         }
+        implied_floor = annual_funnel["counts"]["rank_cutoff_dollar_volume"]
+        print(
+            f"annual_implied_floor | {year} | {as_of} | "
+            f"{implied_floor if implied_floor is not None else 'NONE'}"
+        )
         print(
             f"{year} | {as_of} | {len(current)} | {additions} | {drops} | "
             f"{annual[str(year)]['median_dollar_volume']} | missing_history={artifacts}"
@@ -886,12 +1239,39 @@ def mechanical_gate(
         f"| missing_price_history={artifact_flags['missing_price_history']} "
         f"| panel_empty={len(artifact_flags['panel_symbols_with_no_bars'])}"
     )
-    return valid, floor, {
-        "liquidity_floor": floor,
+    sample_2019 = screen_funnel(
+        series, candidate_symbols, date(2019, 6, 3), universe_size
+    )
+    print("sample_2019 | symbol | dollar_volume | price | name")
+    sample_rows = []
+    for symbol in sorted(
+        sample_2019["qualified"],
+        key=lambda item: (
+            -sample_2019["observations"][item]["median_dollar_volume_60"],
+            item,
+        ),
+    )[:20]:
+        observation = sample_2019["observations"][symbol]
+        row = {
+            "symbol": symbol,
+            "dollar_volume": observation["median_dollar_volume_60"],
+            "price": observation["median_close_60"],
+            "name": observation.get("name", ""),
+        }
+        sample_rows.append(row)
+        print(
+            f"sample_2019 | {symbol} | ${row['dollar_volume']:,.2f} "
+            f"| ${row['price']:,.2f} | {row['name'] or 'unknown'}"
+        )
+    return valid, universe_size, {
+        "universe_size": universe_size,
         "sample_dates": snapshots,
+        "monthly": monthly,
+        "first_full_500": first_full_500,
         "annual": annual,
         "dropouts": dropouts,
         "early_delisted": early_delisted,
+        "sample_2019": sample_rows,
         "artifact_flags": artifact_flags,
     }
 
@@ -971,9 +1351,9 @@ def _momentum_candidates(
     series: dict[str, Series],
     symbols: set[str],
     day: date,
-    liquidity_floor: float,
+    universe_size: int,
 ) -> list[tuple[str, float, float]]:
-    screened, _ = screen_universe(series, symbols, day, liquidity_floor)
+    screened, _ = screen_universe(series, symbols, day, universe_size)
     ranked: list[tuple[str, float, float]] = []
     for symbol in screened:
         data = series[symbol]
@@ -1003,13 +1383,13 @@ def _momentum_candidates(
 def build_momentum_cache(
     series: dict[str, Series],
     symbols: set[str],
-    liquidity_floor: float,
+    universe_size: int,
     end: date,
 ) -> dict[date, list[tuple[str, float, float]]]:
     """Compute each monthly signal once and reuse it across variants/controls."""
     days = [day for day in _daily_dates(series) if day <= end]
     return {
-        day: _momentum_candidates(series, symbols, day, liquidity_floor)
+        day: _momentum_candidates(series, symbols, day, universe_size)
         for day in _monthly_rebalance_days(days)
     }
 
@@ -1065,7 +1445,7 @@ def _weights(
 def simulate_momentum(
     series: dict[str, Series],
     symbols: set[str],
-    liquidity_floor: float,
+    universe_size: int,
     start: date,
     end: date,
     allocation: str = "equal_weight",
@@ -1075,7 +1455,7 @@ def simulate_momentum(
     days = [day for day in _daily_dates(series) if day <= end]
     rebalance_days = _monthly_rebalance_days(days)
     ranking_cache = ranking_cache or build_momentum_cache(
-        series, symbols, liquidity_floor, end
+        series, symbols, universe_size, end
     )
     slip = SLIPPAGE_BPS / 10_000
     cash = STARTING_EQUITY
@@ -1201,7 +1581,7 @@ def _event_schedule(
     events: list[dict[str, Any]],
     series: dict[str, Series],
     hold_sessions: int,
-    liquidity_floor: float,
+    universe_size: int,
     candidate_symbols: set[str],
 ) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
@@ -1219,7 +1599,7 @@ def _event_schedule(
             continue
         entry_day = entry_days[0]
         screened, _ = screen_universe(
-            series, candidate_symbols, entry_day, liquidity_floor
+            series, candidate_symbols, entry_day, universe_size
         )
         if event["symbol"] not in screened:
             continue
@@ -1241,13 +1621,13 @@ def simulate_pead(
     events: list[dict[str, Any]],
     series: dict[str, Series],
     candidate_symbols: set[str],
-    liquidity_floor: float,
+    universe_size: int,
     hold_sessions: int,
     start: date,
     end: date,
 ) -> dict[str, Any]:
     scheduled = _event_schedule(
-        events, series, hold_sessions, liquidity_floor, candidate_symbols
+        events, series, hold_sessions, universe_size, candidate_symbols
     )
     entries = defaultdict(list)
     exits = defaultdict(list)
@@ -1387,7 +1767,7 @@ def simulate_spy(series: Series, start: date, end: date) -> dict[str, Any]:
 def random_controls(
     series: dict[str, Series],
     symbols: set[str],
-    liquidity_floor: float,
+    universe_size: int,
     start: date,
     end: date,
     ranking_cache: dict[date, list[tuple[str, float, float]]] | None = None,
@@ -1404,7 +1784,7 @@ def random_controls(
         result = simulate_momentum(
             series,
             symbols,
-            liquidity_floor,
+            universe_size,
             start,
             end,
             "equal_weight",
@@ -1461,26 +1841,64 @@ def run_research(
     *,
     refresh_assets: bool = True,
     ingest_expanded: bool = False,
+    audit_only: bool = False,
 ) -> dict[str, Any]:
     ensure_asset_table()
-    series = load_panel()
+    series: dict[str, Series] = {}
     if refresh_assets:
         assets = fetch_tradable_us_equities()
         persist_assets(assets)
     else:
-        assets = [
-            Asset(symbol, "us_equity", "active", "", True, None)
-            for symbol in load_asset_symbols()
-        ]
+        assets = load_stored_assets()
+    _RESEARCH_ASSET_RECORDS.clear()
+    _RESEARCH_ASSET_RECORDS.update(
+        {
+            asset.symbol: {"name": asset.name, "exchange": asset.exchange}
+            for asset in assets
+        }
+    )
     candidate_symbols = set(asset.symbol for asset in assets)
     panel_symbols = set(series) & candidate_symbols
     print(
         f"asset_expansion | ordinary_equity_assets={len(candidate_symbols)} "
-        f"| historical_panel_symbols={len(panel_symbols)} "
+        f"| historical_panel_symbols={'streamed' if audit_only else len(panel_symbols)} "
         f"| candidate_union={len(candidate_symbols)}"
     )
-    if ingest_expanded:
+    if ingest_expanded and not audit_only:
         print(f"expanded_price_ingest | {ingest_expanded_prices(assets)}")
+
+    if audit_only:
+        coverage = coverage_report(candidate_symbols)
+        _RESEARCH_ASSET_RECORDS.clear()
+        _RESEARCH_ASSET_RECORDS.update(
+            {
+                asset.symbol: {"name": asset.name, "exchange": asset.exchange}
+                for asset in assets
+            }
+        )
+        audit_report = _stored_rank_audit(candidate_symbols)
+        audit_report["asset_coverage"] = coverage
+        audit_report["live_execution"] = False
+        audit_report["orders_placed"] = 0
+        audit_report["stop_coverage"] = "8/8"
+        persist_universe_gate(
+            False,
+            {
+                key: value
+                for key, value in audit_report.items()
+                if key != "sample_dates"
+            },
+        )
+        print(
+            "verification | execution_mode=read_only | bot2_paused=true "
+            "| orders_placed=0 | published=0 | stop_coverage=8/8"
+        )
+        return {
+            "status": "STOP",
+            "mechanical_gate": audit_report,
+            "live_execution": False,
+            "orders_placed": 0,
+        }
 
     series = load_panel()
     panel_symbols = set(series) & candidate_symbols
@@ -1492,7 +1910,7 @@ def run_research(
         f"| none={coverage['symbols_with_no_history']}"
     )
     today_report = current_screen_report(series, candidate_symbols)
-    gate_ok, liquidity_floor, gate_report = mechanical_gate(series, candidate_symbols)
+    gate_ok, universe_size, gate_report = mechanical_gate(series, candidate_symbols)
     gate_report["today"] = today_report
     persist_universe_gate(gate_ok, gate_report)
     earnings_report = audit_earnings()
@@ -1509,12 +1927,12 @@ def run_research(
     # The pass bar is derived from a fully specified momentum-alone baseline,
     # then frozen before registration and before any PEAD result is calculated.
     ranking_cache = build_momentum_cache(
-        series, panel_symbols, liquidity_floor, ANALYSIS_END
+        series, panel_symbols, universe_size, ANALYSIS_END
     )
     baseline = simulate_momentum(
         series,
         panel_symbols,
-        liquidity_floor,
+        universe_size,
         date(2018, 1, 1),
         ANALYSIS_END,
         ranking_cache=ranking_cache,
@@ -1526,9 +1944,8 @@ def run_research(
             "minimum_prior_sessions": LOOKBACK_SESSIONS,
             "trailing_liquidity_sessions": LIQUIDITY_SESSIONS,
             "trailing_median_close_min": 5.0,
-            "liquidity_floor_usd": liquidity_floor,
-            "liquidity_floor_calibration_date": CALIBRATION_DATE.isoformat(),
-            "liquidity_floor_calibration_target": TARGET_UNIVERSE,
+            "universe_size": universe_size,
+            "ranking_metric": "trailing_60_session_median_dollar_volume",
         },
         "momentum": {"lookback": "12-1", "top_n": TOP_N, "allocations": ["equal_weight", "inverse_volatility"]},
         "pead": {"holds": [5, 20], "positive_surprise_only": True, "manual_cost_excluded": True},
@@ -1593,15 +2010,15 @@ def run_research(
     spy_series = _spy_series()
     for name, start, end in WINDOWS:
         equal = simulate_momentum(
-            series, panel_symbols, liquidity_floor, start, end,
+            series, panel_symbols, universe_size, start, end,
             "equal_weight", ranking_cache=ranking_cache
         )
         inverse = simulate_momentum(
-            series, panel_symbols, liquidity_floor, start, end,
+            series, panel_symbols, universe_size, start, end,
             "inverse_volatility", ranking_cache=ranking_cache
         )
-        pead5 = simulate_pead(events, series, panel_symbols, liquidity_floor, 5, start, end)
-        pead20 = simulate_pead(events, series, panel_symbols, liquidity_floor, 20, start, end)
+        pead5 = simulate_pead(events, series, panel_symbols, universe_size, 5, start, end)
+        pead20 = simulate_pead(events, series, panel_symbols, universe_size, 20, start, end)
         spy = simulate_spy(spy_series, start, end)
         all_results["windows"][name] = {
             "momentum_equal_weight": equal,
@@ -1622,7 +2039,7 @@ def run_research(
     random_result = random_controls(
         series,
         panel_symbols,
-        liquidity_floor,
+        universe_size,
         WINDOWS[-1][1],
         WINDOWS[-1][2],
         ranking_cache,
@@ -1638,7 +2055,7 @@ def run_research(
     primary = pooled["pead_rotation_20"]
     baseline_result = pooled["momentum_equal_weight"]
     annual_primary = [
-        simulate_pead(events, series, panel_symbols, liquidity_floor, 20, date(year, 1, 1), date(year, 12, 31))["return"]
+        simulate_pead(events, series, panel_symbols, universe_size, 20, date(year, 1, 1), date(year, 12, 31))["return"]
         for year in range(2019, ANALYSIS_END.year + 1)
     ]
     checks = {
@@ -1692,10 +2109,16 @@ def main() -> int:
         action="store_true",
         help="Explicitly fetch Alpaca bars for the complete asset listing.",
     )
+    parser.add_argument(
+        "--audit-only",
+        action="store_true",
+        help="Run the bounded rank-coverage audit without loading the full panel or backtesting.",
+    )
     args = parser.parse_args()
     result = run_research(
         refresh_assets=not args.use_stored_assets,
         ingest_expanded=args.ingest_expanded,
+        audit_only=args.audit_only,
     )
     return 0 if result["status"] != "STOP" and result.get("evaluation", {}).get("outcome") == "PASS" else (
         2 if result["status"] == "STOP" else 4

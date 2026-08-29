@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Development-only full-market Bot 2 momentum experiment.
 
-Experiment 13 is read-only here.  This run recalibrates the liquidity floor
+Experiment 13 is read-only here.  This run applies the top-500 rank rule
 against the shared mechanically screened Alpaca-tradable equity universe,
 chooses a data-supported start date, registers a new immutable ledger row,
 then runs the locked cash-constrained 12-1 momentum simulator.
@@ -133,44 +133,36 @@ def _load_recent_panel(start: date, end: date) -> dict[str, Series]:
 
 def _calibrate(
     latest: date,
-) -> tuple[float, dict[str, Any]]:
-    _, zero_floor_funnel = screen_universe(latest, 0.0, LOOKBACK_SESSIONS, 5.0)
+) -> tuple[int, dict[str, Any]]:
+    qualifying, funnel = screen_universe(
+        latest, TARGET_UNIVERSE, LOOKBACK_SESSIONS, 5.0
+    )
     observations = last_screen_observations()
-    eligible = [
-        value for value in observations.values()
-        if value["median_close_60"] > 5
-    ]
-    if len(eligible) < TARGET_UNIVERSE:
-        raise RuntimeError(f"only {len(eligible)} full-market calibration observations")
-    ordered = sorted(
-        (value["median_dollar_volume_60"] for value in eligible), reverse=True
-    )
-    floor = float(ordered[TARGET_UNIVERSE - 1])
-    qualifying, floor_funnel = screen_universe(
-        latest, floor, LOOKBACK_SESSIONS, 5.0
-    )
+    cutoff = funnel["rank_cutoff_dollar_volume"]
     print(
-        f"liquidity_calibration | as_of={latest} | target={TARGET_UNIVERSE} "
-        f"| eligible_price_history={len(eligible)} "
-        f"| zero_floor_history_eligible={zero_floor_funnel['history_eligible']} "
-        f"| floor_usd={floor:.8f} | qualifying_at_floor={len(qualifying)}"
+        f"rank_calibration | as_of={latest} | target={TARGET_UNIVERSE} "
+        f"| ranked_candidates={funnel['ranked_candidates']} "
+        f"| rank_cutoff_dollar_volume={cutoff} "
+        f"| qualifying_at_rank={len(qualifying)}"
     )
-    return floor, {
+    return TARGET_UNIVERSE, {
         "as_of": latest,
         "target": TARGET_UNIVERSE,
-        "eligible_price_history": len(eligible),
-        "qualifying_at_floor": len(qualifying),
-        "floor_usd": floor,
-        "funnel": floor_funnel,
+        "ranked_candidates": funnel["ranked_candidates"],
+        "qualifying_at_rank": len(qualifying),
+        "rank_cutoff_dollar_volume": cutoff,
+        "funnel": funnel,
     }
 
 
 def _print_requested_snapshots(
-    floor: float, dates: Iterable[date]
+    universe_size: int, dates: Iterable[date]
 ) -> dict[str, dict[str, Any]]:
     output: dict[str, dict[str, Any]] = {}
     for as_of in dates:
-        qualified, funnel = screen_universe(as_of, floor, LOOKBACK_SESSIONS, 5.0)
+        qualified, funnel = screen_universe(
+            as_of, universe_size, LOOKBACK_SESSIONS, 5.0
+        )
         row = {
             "qualified_count": len(qualified),
             "history_eligible": funnel["history_eligible"],
@@ -200,12 +192,14 @@ def _monthly_days(series: dict[str, Series], start: date, end: date) -> list[dat
 
 
 def _find_window(
-    series: dict[str, Series], symbols: set[str], floor: float, latest: date
+    series: dict[str, Series], symbols: set[str], universe_size: int, latest: date
 ) -> tuple[date, dict[str, int]]:
     counts: dict[str, int] = {}
     first: date | None = None
     for day in _monthly_days(series, date(2024, 1, 1), latest):
-        qualified, funnel = screen_universe(day, floor, LOOKBACK_SESSIONS, 5.0)
+        qualified, funnel = screen_universe(
+            day, universe_size, LOOKBACK_SESSIONS, 5.0
+        )
         qualified &= symbols
         counts[day.isoformat()] = len(qualified)
         print(
@@ -228,13 +222,15 @@ def _find_window(
 def _build_shared_momentum_cache(
     series: dict[str, Series],
     symbols: set[str],
-    floor: float,
+    universe_size: int,
     end: date,
 ) -> dict[date, list[tuple[str, float, float]]]:
     """Build rankings only from dates accepted by the shared universe screen."""
     cache: dict[date, list[tuple[str, float, float]]] = {}
     for day in _monthly_days(series, date(2024, 1, 1), end):
-        screened, _ = screen_universe(day, floor, LOOKBACK_SESSIONS, 5.0)
+        screened, _ = screen_universe(
+            day, universe_size, LOOKBACK_SESSIONS, 5.0
+        )
         screened &= symbols
         observations = last_screen_observations()
         ranked: list[tuple[str, float, float]] = []
@@ -257,9 +253,9 @@ def _build_shared_momentum_cache(
 
 
 def _safe_cache(
-    series: dict[str, Series], symbols: set[str], floor: float, end: date
+    series: dict[str, Series], symbols: set[str], universe_size: int, end: date
 ) -> dict[date, list[tuple[str, float, float]]]:
-    raw = _build_shared_momentum_cache(series, symbols, floor, end)
+    raw = _build_shared_momentum_cache(series, symbols, universe_size, end)
     removed = sum(
         1 for ranked in raw.values()
         for _, momentum, _ in ranked
@@ -298,7 +294,7 @@ def _load_spec13() -> dict[str, Any]:
 
 
 def _register(
-    spec13: dict[str, Any], floor: float, start: date, end: date
+    spec13: dict[str, Any], universe_size: int, start: date, end: date
 ) -> int:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -324,9 +320,8 @@ def _register(
                 "available adjusted "
                 "history is used only when the point-in-time screen has it"
             ),
-            "liquidity_floor_usd": floor,
-            "liquidity_floor_calibration_date": end.isoformat(),
-            "liquidity_floor_calibration_target": TARGET_UNIVERSE,
+            "universe_size": universe_size,
+            "ranking_metric": "trailing_60_session_median_dollar_volume",
             "full_market_calibration": True,
             "earliest_usable_date": start.isoformat(),
         }
@@ -359,7 +354,7 @@ def _register(
         "beats_random_entry": True,
     }
     notes = (
-        "Supersedes experiment 13's universe. Experiment 13's floor was "
+        "Supersedes experiment 13's universe. Experiment 13's fixed floor was "
         "calibrated against a 667-symbol panel and yielded only 93 names live. "
         "Experiment 13's Sharpe 1.184 does not describe a tradable universe."
     )
@@ -642,10 +637,12 @@ def run() -> dict[str, Any]:
         f"| panel_backed_assets={len(panel_symbols)} | loaded_series={len(series)} "
         f"| history_loaded_from={warmup_start}"
     )
-    floor, calibration = _calibrate(latest)
+    universe_size, calibration = _calibrate(latest)
     monthly_dates = _monthly_days(series, date(2024, 1, 1), latest)
-    requested = _print_requested_snapshots(floor, monthly_dates[-24:])
-    earliest, monthly_counts = _find_window(series, panel_symbols, floor, latest)
+    requested = _print_requested_snapshots(universe_size, monthly_dates[-24:])
+    earliest, monthly_counts = _find_window(
+        series, panel_symbols, universe_size, latest
+    )
     print(
         f"window_decision | earliest_date={earliest} "
         "| start_earlier_than_this_would_not_have_a_within_20pct_universe=true"
@@ -653,8 +650,8 @@ def run() -> dict[str, Any]:
 
     ensure_research_tables()
     experiment13 = _load_spec13()
-    experiment_id = _register(experiment13, floor, earliest, latest)
-    ranking_cache = _safe_cache(series, panel_symbols, floor, latest)
+    experiment_id = _register(experiment13, universe_size, earliest, latest)
+    ranking_cache = _safe_cache(series, panel_symbols, universe_size, latest)
     windows = (
         ("fullmarket_2025_Q4", date(2025, 10, 1), date(2025, 12, 31)),
         ("fullmarket_2026_H1", date(2026, 1, 2), date(2026, 6, 30)),
@@ -690,9 +687,13 @@ def run() -> dict[str, Any]:
         "orders_placed": 0,
     }
     for name, start, end in windows:
-        momentum = simulate_momentum(series, panel_symbols, floor, start, end, ranking_cache)
+        momentum = simulate_momentum(
+            series, panel_symbols, universe_size, start, end, ranking_cache
+        )
         spy = simulate_buy_and_hold(spy_series, start, end)
-        universe = simulate_equal_weight_universe(series, panel_symbols, floor, start, end)
+        universe = simulate_equal_weight_universe(
+            series, panel_symbols, universe_size, start, end
+        )
         results["windows"][name] = {
             "momentum_alone": momentum,
             "spy_buy_and_hold": spy,
@@ -748,7 +749,7 @@ def run() -> dict[str, Any]:
             "| individual_returns_stored=true"
         )
 
-    today = _rank_today(series, panel_symbols, latest, floor)
+    today = _rank_today(series, panel_symbols, latest, universe_size)
     selected_symbols = set(item["symbol"] for item in today)
     selected_symbols.update(
         symbol for ranked in ranking_cache.values() for symbol, _, _ in ranked[:TOP_N]
@@ -779,7 +780,9 @@ def run() -> dict[str, Any]:
     print(
         f"experiment_comparison | experiment_13_floor={old['floor']:.8f} "
         f"| experiment_13_pooled_sharpe={old['sharpe']:.6f} "
-        f"| new_floor={floor:.8f} | new_pooled_sharpe={pooled['sharpe']:.6f} "
+        f"| new_universe_size={universe_size} "
+        f"| new_rank_cutoff={calibration['rank_cutoff_dollar_volume']} "
+        f"| new_pooled_sharpe={pooled['sharpe']:.6f} "
         f"| widening_universe={effect} "
         "| caveat=windows_differ_because_full_market_is_usable_from_2025-10-01"
     )
@@ -812,9 +815,11 @@ def run() -> dict[str, Any]:
 
 
 def _rank_today(
-    series: dict[str, Series], symbols: set[str], as_of: date, floor: float
+    series: dict[str, Series], symbols: set[str], as_of: date, universe_size: int
 ) -> list[dict[str, Any]]:
-    qualified, _ = screen_universe(as_of, floor, LOOKBACK_SESSIONS, 5.0)
+    qualified, _ = screen_universe(
+        as_of, universe_size, LOOKBACK_SESSIONS, 5.0
+    )
     qualified &= symbols
     observations = last_screen_observations()
     rows = []

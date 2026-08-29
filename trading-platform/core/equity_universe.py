@@ -8,7 +8,7 @@ prevents the two callers from quietly growing different universes.
 ``screen_universe`` intentionally has a small, stable public contract:
 
     set_screen_data(assets, bars_by_symbol)
-    symbols, funnel = screen_universe(as_of_date, floor, min_sessions, min_price)
+    symbols, funnel = screen_universe(as_of_date, universe_size, min_sessions, min_price)
 
 The input setter is an adapter boundary, not a second implementation of the
 screen.  It also lets tests use small in-memory Alpaca-shaped fixtures.
@@ -205,43 +205,59 @@ def last_screen_observations() -> dict[str, dict[str, Any]]:
 
 def screen_universe(
     as_of_date: date,
-    liquidity_floor: float,
-    min_sessions: int,
-    min_price: float,
-) -> tuple[set[str], dict[str, int]]:
+    universe_size: int = 500,
+    min_sessions: int = 252,
+    min_price: float = 5.0,
+    *,
+    require_current_bar: bool = False,
+) -> tuple[set[str], dict[str, Any]]:
     """Apply one point-in-time screen to the configured asset/bar data.
 
     All bars used for history, price, liquidity, and artifact checks are
-    strictly earlier than ``as_of_date``.  The result is a set to make symbol
-    identity deterministic even if a provider returns duplicate asset rows.
+    strictly earlier than ``as_of_date``.  The result is a deterministic
+    top-ranked set, ordered by trailing median dollar volume and then symbol.
+    ``require_current_bar`` is available to callers whose execution day must
+    also be present in the supplied panel; it never permits current-day data
+    into the screening observations.
     """
     data = _SCREEN_DATA.get()
     if data is None:
         raise RuntimeError("set_screen_data must be called before screen_universe")
+    if universe_size < 1:
+        raise ValueError("universe_size must be positive")
     if min_sessions < LIQUIDITY_SESSIONS:
         raise ValueError("min_sessions must be at least the liquidity window")
-    if liquidity_floor < 0 or min_price < 0:
-        raise ValueError("liquidity_floor and min_price must be non-negative")
+    if min_price < 0:
+        raise ValueError("min_price must be non-negative")
 
     asset_records, asset_counts = eligible_asset_records(data.assets)
     funnel = dict(asset_counts)
     funnel.update({
         "history_eligible": 0,
+        "no_price_data": 0,
+        "fewer_than_min_sessions": 0,
+        "missing_current_bar": 0,
         "adjusted_price_artifacts": 0,
         "below_min_price": 0,
-        "below_liquidity_floor": 0,
+        "ranked_candidates": 0,
+        "rank_cutoff_dollar_volume": None,
         "qualifying_symbols": 0,
     })
     observations: dict[str, dict[str, Any]] = {}
-    qualifying: set[str] = set()
+    ranked_candidates: list[tuple[str, float]] = []
 
     for asset in asset_records:
         symbol = _canonical_symbol(_asset_value(asset, "symbol"))
-        prior = [
-            bar for bar in _bars_for(data.bars_by_symbol.get(symbol))
-            if _bar_date(bar) < as_of_date
-        ]
+        bars = _bars_for(data.bars_by_symbol.get(symbol))
+        if not bars:
+            funnel["no_price_data"] += 1
+            continue
+        if require_current_bar and not any(_bar_date(bar) == as_of_date for bar in bars):
+            funnel["missing_current_bar"] += 1
+            continue
+        prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
         if len(prior) < min_sessions:
+            funnel["fewer_than_min_sessions"] += 1
             continue
         funnel["history_eligible"] += 1
         # Live screening only requests a bounded recent history window.  A
@@ -284,16 +300,24 @@ def screen_universe(
             "median_close_60": median_close,
             "median_dollar_volume_60": median_dollar_volume,
             "asset_class": "us_equity",
+            "name": str(_asset_value(asset, "name", default="") or ""),
+            "exchange": str(_asset_value(asset, "exchange", default="") or ""),
+            "uses_future_data": False,
         }
         observations[symbol] = observation
         if median_close <= min_price:
             funnel["below_min_price"] += 1
             continue
-        if median_dollar_volume < liquidity_floor:
-            funnel["below_liquidity_floor"] += 1
-            continue
-        qualifying.add(symbol)
+        ranked_candidates.append((symbol, median_dollar_volume))
 
+    ranked_candidates.sort(key=lambda item: (-item[1], item[0]))
+    funnel["ranked_candidates"] = len(ranked_candidates)
+    if ranked_candidates:
+        selected = ranked_candidates[:universe_size]
+        funnel["rank_cutoff_dollar_volume"] = selected[-1][1]
+    else:
+        selected = []
+    qualifying = {symbol for symbol, _ in selected}
     funnel["qualifying_symbols"] = len(qualifying)
     _LAST_OBSERVATIONS.set(observations)
     return qualifying, funnel

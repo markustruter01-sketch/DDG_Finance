@@ -43,3 +43,4 @@
 - [Full-market research memory](fullmarket-research-memory.md) — compute broad-universe screens in SQL and load only the backtest warmup panel; full-panel Python materialization can hit memory limits.
 - [Bot 2 Alpaca reference coverage](bot2-alpaca-reference-coverage.md) — Alpaca metadata/history can be insufficient for historical universe parity; keep the gate fail-closed until a richer reference source is added.
 - [Rank audit streaming](rank-audit-streaming.md) — broad SIP audits must retain only per-symbol 252-session windows; full-panel Python materialization exceeds the development container’s memory.
+- [Bot 2 regime-filter experiment](bot2-regime-experiment.md) — prior-SPY-200-day-SMA filter stayed RISK_ON in Feb 2021 and failed to reduce 2021–2022 drawdown; keep Bot 2 paused.

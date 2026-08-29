@@ -62,3 +62,10 @@ uri = "file://trading-platform/.local/bot2_momentum_rank500_backtest_report.md"
 type = "text"
 title = "Bot 2 rank-500 backtest report"
 description = "Raw labelled development-only output for immutable experiment 18, including window metrics, benchmarks, 1,000 random controls, sector diagnostics, largest drawdown holdings, and June snapshots."
+
+[[outputs]]
+id = "ZkBDDvnqMHiN3eEBrSjYN"
+uri = "file://trading-platform/.local/bot2_momentum_rank500_regime_report.md"
+type = "text"
+title = "Bot 2 rank-500 regime-filter experiment 19 report"
+description = "Raw labelled development-only report with per-window metrics, 1,000 random-entry return vectors and exact percentiles, SPY comparison, 2021-2022 regime trace, diagnostics, and immutable FAIL evaluation."

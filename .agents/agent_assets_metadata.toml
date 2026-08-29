@@ -69,3 +69,10 @@ uri = "file://trading-platform/.local/bot2_momentum_rank500_regime_report.md"
 type = "text"
 title = "Bot 2 rank-500 regime-filter experiment 19 report"
 description = "Raw labelled development-only report with per-window metrics, 1,000 random-entry return vectors and exact percentiles, SPY comparison, 2021-2022 regime trace, diagnostics, and immutable FAIL evaluation."
+
+[[outputs]]
+id = "YEQDBTxudkeOsTki0bmPW"
+uri = "file://trading-platform/.local/bot2_strategy_bench.json"
+type = "unspecified"
+title = "Bot 2 strategy backtest bench dataset"
+description = "Development read-only monthly browser backtest dataset from the stored adjusted SIP/IEX panel and shared 500-symbol screener, with strictly prior-data momentum, next-month forward returns, six-month monthly volatility, and SPY regime state."

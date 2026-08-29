@@ -48,3 +48,10 @@ id = "w34mW7xFPcBvRZQWHBKXG"
 uri = "file://report-p4.txt"
 type = "text"
 title = "Part 4: Fleet Risk + Combined Summary + Journal + Strategy"
+
+[[outputs]]
+id = "_Nsy87JoeQZUTm51Tkpf5"
+uri = "file://trading-platform/.local/bot2_sip_coverage_report.md"
+type = "text"
+title = "Bot 2 SIP coverage report"
+description = "Full 2018-01-02 through 2026-08-27 SIP coverage, per-year counts, monthly point-in-time screening, recalibrated floor, and safety interpretation."

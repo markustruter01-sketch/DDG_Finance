@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { LayoutDashboard, Radio } from "lucide-react";
+import { FlaskConical, LayoutDashboard, Radio } from "lucide-react";
 
 const NAV_ITEMS = [
   {
@@ -16,6 +16,14 @@ const NAV_ITEMS = [
     path:  "/stream",
     icon:  Radio,
     color: "#f43f5e",
+    pulse: false,
+  },
+  {
+    id:    "bench",
+    label: "Bench",
+    path:  "/bench",
+    icon:  FlaskConical,
+    color: "#e9ae57",
     pulse: false,
   },
 ];
@@ -42,6 +50,7 @@ export function GlobalNav() {
           return (
             <button
               key={item.id}
+              data-testid={`button-global-nav-${item.id}`}
               onClick={() => navigate(item.path)}
               className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 select-none"
               style={{

@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/HomePage";
 import StreamPage from "@/pages/StreamPage";
+import BenchPage from "@/pages/BenchPage";
 import Design1Vaudeville from "@/pages/design/Design1Vaudeville";
 import Design2Terminal from "@/pages/design/Design2Terminal";
 import Design3MissionControl from "@/pages/design/Design3MissionControl";
@@ -63,6 +64,7 @@ function Router() {
             </Suspense>
           </ErrorBoundary>
         </Route>
+        <Route path="/bench" component={BenchPage} />
         <Route path="/streaming">
           <Redirect to="/stream?sub=a" />
         </Route>

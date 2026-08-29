@@ -47,3 +47,4 @@
 - [Strategy bench isolation](strategy-bench-isolation.md) — the bench is a static development-only research surface and must remain isolated from live trading and streaming navigation.
 - [Research registry result shapes](research-registry-result-shapes.md) — pooled metrics may be direct or nested; ambiguous multi-strategy windows must remain NULL.
 - [Bot 3 plan history source](bot3-plan-history-source.md) — production price tables are empty; use verified explicit-range Alpaca bars, never silent dev fallback.
+- [Alpaca order numeric confirmation](alpaca-order-numeric-confirmation.md) — compare broker quantities/prices numerically; trailing zeros may be omitted.

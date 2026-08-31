@@ -111,6 +111,178 @@ async def status() -> dict:
 from core.scheduler import is_auto_trading_enabled
 
 
+_HEALTH_ACTIVE_BOTS = (
+    ("oracle", "Oracle / US Core"),
+    ("spy_qqq_trend", "SPY/QQQ Trend"),
+    ("jerome_macro", "Jerome Macro"),
+)
+_HEALTH_STALE_THRESHOLDS = {
+    "oracle": 108000,
+    "spy_qqq_trend": 108000,
+    "jerome_macro": 50000,
+}
+_HEALTH_CYCLE_STALE_THRESHOLD = 3 * 3600
+_HEALTH_HIGH_SEVERITIES = ("high", "critical", "error")
+
+
+def _health_row_dicts(cursor) -> list[dict[str, Any]]:
+    columns = [description[0] for description in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def _load_health_operational_inputs() -> dict[str, Any]:
+    """Read the canonical liveness and open-degradation inputs in one DB read."""
+    from db.postgres import get_conn
+
+    with get_conn() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT active.bot_id,
+                       p.last_updated,
+                       EXTRACT(EPOCH FROM (NOW() - p.last_updated)) AS portfolio_age_s,
+                       COALESCE(s.paused, FALSE) AS paused,
+                       COALESCE(s.pause_reason, '') AS pause_reason,
+                       h.last_success_at,
+                       EXTRACT(EPOCH FROM (NOW() - h.last_success_at)) AS cycle_age_s,
+                       h.cycle_count,
+                       h.consecutive_failures,
+                       h.status AS cycle_status,
+                       h.last_error
+                  FROM (
+                      VALUES ('oracle'), ('spy_qqq_trend'), ('jerome_macro')
+                  ) AS active(bot_id)
+                  LEFT JOIN bot_portfolio p ON p.bot_id = active.bot_id
+                  LEFT JOIN bots_state s ON s.bot_id = active.bot_id
+                  LEFT JOIN bot_cycle_health h ON h.bot_id = active.bot_id
+                 ORDER BY active.bot_id
+                """
+            )
+            bot_rows = _health_row_dicts(cursor)
+
+            cursor.execute(
+                """
+                SELECT id, ts, bot_id, component, severity, error_type, message
+                  FROM system_degradations
+                 WHERE resolved_at IS NULL
+                   AND severity = ANY(%s)
+                 ORDER BY ts DESC
+                """,
+                (list(_HEALTH_HIGH_SEVERITIES),),
+            )
+            degradation_rows = _health_row_dicts(cursor)
+
+    return {
+        "bot_rows": {row["bot_id"]: row for row in bot_rows},
+        "degradation_rows": degradation_rows,
+    }
+
+
+def _health_event_matches_bot(event: dict[str, Any], bot_id: str) -> bool:
+    event_bot_id = event.get("bot_id")
+    if event_bot_id == bot_id:
+        return True
+    haystack = " ".join(
+        str(event.get(field) or "").lower()
+        for field in ("component", "error_type", "message")
+    )
+    return bot_id.lower() in haystack
+
+
+def _build_health_bot_node(
+    bot_id: str,
+    label: str,
+    row: dict[str, Any] | None,
+    degradation_rows: list[dict[str, Any]],
+    read_error: str | None = None,
+) -> dict[str, Any]:
+    if read_error:
+        return {
+            "label": label,
+            "level": "unknown",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"Canonical liveness read failed: {read_error}",
+        }
+
+    if not row or row.get("last_updated") is None:
+        return {
+            "label": label,
+            "level": "unknown",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": "Canonical bot portfolio timestamp unavailable",
+        }
+
+    portfolio_age = row.get("portfolio_age_s")
+    cycle_age = row.get("cycle_age_s")
+    portfolio_age = float(portfolio_age) if portfolio_age is not None else None
+    cycle_age = float(cycle_age) if cycle_age is not None else None
+    stale_reasons: list[str] = []
+
+    if portfolio_age is None:
+        stale_reasons.append("portfolio age unavailable")
+    elif portfolio_age > _HEALTH_STALE_THRESHOLDS[bot_id]:
+        stale_reasons.append(
+            f"portfolio {portfolio_age:.0f}s old > "
+            f"{_HEALTH_STALE_THRESHOLDS[bot_id]}s threshold"
+        )
+
+    paused = bool(row.get("paused")) or row.get("cycle_status") == "paused"
+    if not paused:
+        if cycle_age is None:
+            stale_reasons.append("last successful cycle unavailable")
+        elif cycle_age > _HEALTH_CYCLE_STALE_THRESHOLD:
+            stale_reasons.append(
+                f"last success {cycle_age:.0f}s old > "
+                f"{_HEALTH_CYCLE_STALE_THRESHOLD}s threshold"
+            )
+
+    bot_events = [
+        event for event in degradation_rows
+        if _health_event_matches_bot(event, bot_id)
+    ]
+    critical_events = [
+        event for event in bot_events
+        if event.get("severity") in ("critical", "error")
+    ]
+    if critical_events:
+        level = "red"
+    elif bot_events:
+        level = "yellow"
+    elif stale_reasons:
+        level = "yellow"
+    elif row.get("cycle_status") in ("error", "execution_failed") or int(row.get("consecutive_failures") or 0) > 0:
+        level = "red"
+    elif not paused and row.get("last_success_at") is None:
+        level = "unknown"
+    else:
+        level = "yellow" if paused else "green"
+
+    details: list[str] = []
+    if paused:
+        details.append(f"paused{': ' + str(row.get('pause_reason')) if row.get('pause_reason') else ''}")
+    if stale_reasons:
+        details.extend(stale_reasons)
+    if bot_events:
+        details.append(f"{len(bot_events)} open high-severity degradation(s)")
+    if row.get("cycle_status") in ("error", "execution_failed") or int(row.get("consecutive_failures") or 0) > 0:
+        details.append(
+            f"cycle status={row.get('cycle_status') or 'unknown'} "
+            f"failures={int(row.get('consecutive_failures') or 0)}"
+        )
+
+    return {
+        "label": label,
+        "level": level,
+        "latency_ms": None,
+        "data_age_s": max(
+            age for age in (portfolio_age, cycle_age) if age is not None
+        ) if portfolio_age is not None or cycle_age is not None else None,
+        "detail": " · ".join(details) if details else "Canonical liveness checks passing",
+    }
+
+
 @system_router.get("/system/health-architecture")
 async def system_health_architecture() -> dict:
     import json as _json, time as _time
@@ -119,39 +291,23 @@ async def system_health_architecture() -> dict:
     now = _time.time()
     nodes: dict[str, dict] = {}
 
-    # Phase 2 contract: this endpoint is a live architecture model, not a
-    # historical inventory. Keep retired broker/strategy checks out of the
-    # model entirely so they cannot create false degraded states.
-    active_ids = ("oracle", "spy_qqq_trend", "jerome_macro")
+    health_inputs: dict[str, Any] = {}
+    health_read_error: str | None = None
     try:
-        from core.bot_state import get_all_portfolios
-        portfolios = {
-            p.get("bot_id"): p
-            for p in get_all_portfolios()
-            if p.get("bot_id") in active_ids
-        }
-    except Exception:
-        portfolios = {}
+        health_inputs = _load_health_operational_inputs()
+    except Exception as exc:
+        health_read_error = str(exc)[:160]
 
-    for bot_id, label in (
-        ("oracle", "Oracle / US Core"),
-        ("spy_qqq_trend", "SPY/QQQ Trend"),
-        ("jerome_macro", "Jerome Macro"),
-    ):
-        portfolio = portfolios.get(bot_id)
-        paused = bool(portfolio and portfolio.get("paused"))
-        stale = bool(portfolio and portfolio.get("stale"))
-        nodes[f"bot_{bot_id}"] = {
-            "label": label,
-            "level": "yellow" if paused or stale or not portfolio else "green",
-            "latency_ms": None,
-            "data_age_s": None,
-            "detail": (
-                "Active Alpaca ETF bot"
-                + (" · paused" if paused else "")
-                + (" · stale heartbeat" if stale else "")
-            ),
-        }
+    bot_rows = health_inputs.get("bot_rows", {})
+    degradation_rows = health_inputs.get("degradation_rows", [])
+    for bot_id, label in _HEALTH_ACTIVE_BOTS:
+        nodes[f"bot_{bot_id}"] = _build_health_bot_node(
+            bot_id,
+            label,
+            bot_rows.get(bot_id),
+            degradation_rows,
+            health_read_error,
+        )
 
     try:
         jobs = get_job_status()
@@ -161,6 +317,39 @@ async def system_health_architecture() -> dict:
     except Exception as exc:
         scheduler_level, scheduler_detail = "red", str(exc)[:80]
     nodes["scheduler"] = {"label": "Scheduler", "level": scheduler_level, "latency_ms": None, "data_age_s": None, "detail": scheduler_detail}
+
+    if health_read_error:
+        nodes["platform_core"] = {
+            "label": "Platform Core",
+            "level": "unknown",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"Health inputs unavailable: {health_read_error}",
+        }
+    elif degradation_rows:
+        highest = "red" if any(
+            event.get("severity") in ("critical", "error")
+            for event in degradation_rows
+        ) else "yellow"
+        latest = degradation_rows[0]
+        nodes["platform_core"] = {
+            "label": "Platform Core",
+            "level": highest,
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": (
+                f"{len(degradation_rows)} open high-severity degradation(s); "
+                f"latest {latest.get('error_type')}: {latest.get('message')}"
+            )[:240],
+        }
+    else:
+        nodes["platform_core"] = {
+            "label": "Platform Core",
+            "level": "green",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": "No open high-severity degradations",
+        }
 
     try:
         t0 = _time.time()
@@ -205,7 +394,11 @@ async def system_health_architecture() -> dict:
     ):
         nodes[key] = {"label": label, "level": "green", "latency_ms": None, "data_age_s": None, "detail": detail}
 
-    return {"timestamp": now, "nodes": nodes}
+    return {
+        "timestamp": now,
+        "nodes": nodes,
+        "open_high_severity_degradations": len(degradation_rows),
+    }
 
     try:
         jobs = get_job_status()

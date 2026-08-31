@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { DDGBadge } from "@/components/DDGBadge";
 import { api } from "@/hooks/use-trading-client";
 
-type Level = "green" | "yellow" | "red";
+type Level = "green" | "yellow" | "red" | "unknown";
 
 interface NodeHealth {
   label: string;
@@ -47,6 +47,15 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
     text: "text-red-400",
     bg: "bg-red-500/10",
     border: "border-red-500/25",
+  },
+  unknown: {
+    fill: "rgba(148,163,184,0.08)",
+    stroke: "rgba(148,163,184,0.55)",
+    glow: "rgba(148,163,184,0.35)",
+    wire: "#94a3b8",
+    text: "text-slate-300",
+    bg: "bg-slate-500/10",
+    border: "border-slate-400/25",
   },
 };
 
@@ -239,7 +248,7 @@ function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
               )}
               <span className="text-[7px] font-mono uppercase ml-0.5"
                 style={{ color: colors.wire, opacity: 0.7 }}>
-                {node.level === "green" ? "OK" : node.level === "yellow" ? "WARN" : "ERR"}
+                {node.level === "green" ? "OK" : node.level === "yellow" ? "WARN" : node.level === "red" ? "ERR" : "UNKNOWN"}
               </span>
               {node.data_age_s != null && (
                 <span className="text-[7px] font-mono"
@@ -265,6 +274,7 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
 
   const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
   const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
+  const unknownCount = alerts.filter(([, n]) => n.level === "unknown").length;
   const hiddenCount = Math.max(0, alerts.length - 3);
   const visibleAlerts = alerts.slice(0, 3);
 
@@ -289,6 +299,8 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
           {criticalCount > 0 && <span className="text-red-400">{criticalCount} critical</span>}
           {criticalCount > 0 && degradedCount > 0 && <span style={{ color: "rgba(148,163,184,0.4)" }}> · </span>}
           {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
+          {(criticalCount > 0 || degradedCount > 0) && unknownCount > 0 && <span style={{ color: "rgba(148,163,184,0.4)" }}> · </span>}
+          {unknownCount > 0 && <span className="text-slate-300">{unknownCount} unknown</span>}
         </span>
         <span className="ml-auto text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>READ-ONLY · STREAMING VIEW</span>
       </div>
@@ -303,7 +315,7 @@ function StreamingAlertDigest({ nodes }: { nodes: Record<string, NodeHealth> }) 
                 {node.label.split("(")[0].trim()}
               </span>
               <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${colors.bg} ${colors.text} ${colors.border}`}>
-                {node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                {node.level === "yellow" ? "DEGRADED" : node.level === "red" ? "CRITICAL" : "UNKNOWN"}
               </span>
               {node.kick_pending && (
                 <span className="text-[7px] font-mono px-1.5 py-0.5 rounded border"
@@ -340,7 +352,7 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
     return Object.entries(nodes)
       .filter(([, n]) => n.level !== "green")
       .sort(([, a], [, b]) => {
-        const rank = (l: Level) => l === "red" ? 0 : l === "yellow" ? 1 : 2;
+        const rank = (l: Level) => l === "red" ? 0 : l === "yellow" ? 1 : l === "unknown" ? 2 : 3;
         return rank(a.level) - rank(b.level);
       });
   }, [nodes]);
@@ -388,7 +400,7 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
                     {node.label.split("(")[0].trim()}
                   </span>
                   <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${colors.bg} ${colors.text} ${colors.border}`}>
-                    {node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                    {node.level === "yellow" ? "DEGRADED" : node.level === "red" ? "CRITICAL" : "UNKNOWN"}
                   </span>
                   {node.kick_pending && (
                     <span className="text-[7px] font-mono px-1.5 py-0.5 rounded border"

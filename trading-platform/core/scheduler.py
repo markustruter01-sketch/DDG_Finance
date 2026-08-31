@@ -1,7 +1,7 @@
 """
 APScheduler — Job Definitions
 -------------------------------------
-Seven recurring jobs:
+Recurring jobs include:
 
   Job 1 | Every 15 min ET (09:01–15:46 Mon-Fri) — Pure momentum scan + execution
   Job 2 | 16:10 ET daily (Mon-Fri)              — Post-mortem P&L reconciliation
@@ -146,7 +146,22 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: automated_kill_switch (5 min) + scheduled_reconciliation (hourly)")
+    scheduler.add_job(
+        func=_standing_invariants_job,
+        trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
+            minutes=15
+        ),
+        id="standing_invariants",
+        name="Standing Invariants (LOG ONLY)",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
+    )
+    logger.info(
+        "Scheduler | Registered: automated_kill_switch (5 min) + "
+        "scheduled_reconciliation (hourly) + standing_invariants (15 min, LOG ONLY)"
+    )
 
     if _is_published_deployment():
         scheduler.add_job(
@@ -417,6 +432,26 @@ async def _scheduled_reconciliation() -> None:
         )
     except Exception as exc:
         logger.critical(f"Scheduler | scheduled_reconciliation FAILED: {exc}")
+
+
+async def _standing_invariants_job() -> None:
+    """Run read-only invariants and log results without alerting or repair."""
+    logger.info("Scheduler | JOB STARTING: standing_invariants (LOG ONLY)")
+    try:
+        from core.invariants import format_report, run_all_invariants
+
+        report = await asyncio.to_thread(run_all_invariants)
+        log_method = logger.info if report["overall"] == "PASS" else logger.warning
+        for line in format_report(report).splitlines():
+            log_method(f"Scheduler | standing_invariants | {line}")
+        logger.info(
+            "Scheduler | standing_invariants complete: "
+            f"overall={report['overall']} alerting=DISABLED"
+        )
+    except Exception as exc:
+        # This job is deliberately LOG ONLY.  Enabling alerts requires a
+        # separate policy change; no alert_critical call belongs here.
+        logger.error(f"Scheduler | standing_invariants CRASHED: {exc}")
 
 
 async def _probe_runner_liveness() -> None:

@@ -716,11 +716,17 @@ def _place_confirmed_entry(
                 f"Bot 3 aborted after stop failure for {symbol}: {second_exc}"
             ) from second_exc
     recorded_fill = {**fill, "symbol": _canonical_symbol(symbol)}
-    _record_open(recorded_fill, broker_qty, stop_price, stop_order.get("id"))
+    stop_order_id = stop_order.get("id")
+    _record_open(recorded_fill, broker_qty, stop_price, stop_order_id)
+    if stop_order_id:
+        # Keep the explicit write-back next to every accepted stop ID. The
+        # insert above handles new rows; this also covers any existing open row
+        # restored during a retry/reconciliation path.
+        _remember_stop(symbol, stop_order_id)
     _log_decision(
         cycle_id, "ENTRY_FILLED", symbol=symbol, planned_qty=qty,
         current_price=filled_price, order_id=order["id"], outcome="FILLED",
-        context={"stop_order_id": stop_order.get("id")},
+        context={"stop_order_id": stop_order_id},
     )
     return fill
 

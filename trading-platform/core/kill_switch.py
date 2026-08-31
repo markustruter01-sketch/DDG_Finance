@@ -238,6 +238,31 @@ def trip(triggers: list[dict[str, Any]], snapshot: dict[str, Any]) -> dict[str, 
     for trigger in triggers:
         logger.critical(f"KILL SWITCH TRIGGERED | {trigger}")
         _write_event(str(trigger.get("trigger")), snapshot, action)
+        try:
+            from notifications.condition_alerts import alert_condition
+
+            bot_id = trigger.get("bot_id")
+            alert_condition(
+                source="kill_switch",
+                condition=str(trigger.get("trigger") or "unknown"),
+                bot_id=str(bot_id) if bot_id else None,
+                title=f"Kill switch triggered: {trigger.get('trigger', 'unknown')}",
+                description=(
+                    "The kill switch latched and paused all bots. "
+                    f"Trigger evidence: {json.dumps(trigger, default=str, sort_keys=True)}"
+                ),
+                fields=[
+                    {
+                        "name": "Action",
+                        "value": action,
+                        "inline": False,
+                    }
+                ],
+            )
+        except Exception as exc:
+            logger.critical(
+                f"Kill switch | alert dispatch failed: {type(exc).__name__}"
+            )
     return {"tripped": True, "triggers": triggers, "cancelled": cancelled, "action": action}
 
 

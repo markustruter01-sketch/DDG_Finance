@@ -194,6 +194,54 @@ def test_reconcile_persists_clean_run(monkeypatch):
     assert params[0] is True
 
 
+def test_reconcile_dry_run_returns_would_alert_without_persisting(monkeypatch):
+    connection = _Connection()
+    snapshot = {
+        "accounts": [],
+        "mismatches": [{"bot_id": "oracle", "kind": "ledger_orphan", "symbol": "SPY"}],
+        "account_summaries": [],
+        "account_findings": [],
+        "pause_state_disagreements": [],
+        "liveness_findings": [],
+        "fleet_equity": 100,
+        "fleet_hwm": 100,
+        "captured_at": "2026-08-31T00:00:00+00:00",
+    }
+    monkeypatch.setattr(reconciliation, "collect_live_snapshot", lambda: snapshot)
+    monkeypatch.setattr(
+        "core.kill_switch._load_acknowledgements",
+        lambda: {},
+    )
+    monkeypatch.setattr(
+        "core.kill_switch.evaluate_snapshot",
+        lambda snapshot: [
+            {
+                "bot_id": "oracle",
+                "trigger": "broker_ledger_mismatch",
+                "kind": "ledger_orphan",
+                "symbol": "SPY",
+            }
+        ],
+    )
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    result = reconciliation.reconcile(
+        report_only=True,
+        cycle_id="dry-run-cycle",
+        dry_run=True,
+    )
+
+    assert result["mode"] == "dry_run"
+    assert result["clean"] is False
+    assert result["would_alert"][0]["error_type"] == "reconciliation_mismatch"
+    assert connection.cursor_instance.calls == []
+
+
 @pytest.mark.parametrize(
     ("bot_id", "table"),
     [

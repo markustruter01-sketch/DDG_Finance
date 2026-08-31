@@ -299,6 +299,7 @@ def run_degradation_resolver(*, dry_run: bool | None = None) -> dict[str, Any]:
                 str(event["error_type"]),
                 candidate["reason"],
                 event_id=int(event["id"]),
+                bot_id=str(event["bot_id"]) if event.get("bot_id") else None,
             )
 
     by_type: dict[str, int] = {}

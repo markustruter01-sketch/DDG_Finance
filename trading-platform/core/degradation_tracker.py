@@ -45,18 +45,30 @@ _recent_keys: dict[str, float] = {}
 _escalation_counts: dict[str, int] = {}
 
 
-def _dedup_key(component: str, error_type: str) -> str:
+def _dedup_key(
+    component: str,
+    error_type: str,
+    bot_id: str | None = None,
+) -> str:
     # Key is intentionally stable — it does NOT include message text.
     # Messages for persistent incidents often contain volatile numeric values
     # (e.g. "status file is 147s old") that change every poll cycle.  Including
     # them would create a fresh key each cycle, bypassing TTL/escalation logic
     # entirely.  Diagnostic context goes into the `detail` DB column instead.
-    return f"{component}::{error_type}"
+    if bot_id is None:
+        return f"{component}::{error_type}"
+    scope = str(bot_id).strip() or "fleet"
+    return f"{component}::{error_type}::{scope}"
 
 
-def _should_record(component: str, error_type: str, message: str) -> bool:
+def _should_record(
+    component: str,
+    error_type: str,
+    message: str,
+    bot_id: str | None = None,
+) -> bool:
     import time
-    key = _dedup_key(component, error_type)
+    key = _dedup_key(component, error_type, bot_id)
     now = time.time()
     last = _recent_keys.get(key, 0)
 
@@ -78,9 +90,14 @@ def _should_record(component: str, error_type: str, message: str) -> bool:
     return True
 
 
-def reset_dedup_key(component: str, error_type: str, message: str = "") -> None:
+def reset_dedup_key(
+    component: str,
+    error_type: str,
+    message: str = "",
+    bot_id: str | None = None,
+) -> None:
     """Reset escalation state for a component/error_type when it resolves."""
-    key = _dedup_key(component, error_type)
+    key = _dedup_key(component, error_type, bot_id)
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)
 
@@ -103,7 +120,7 @@ def record_degradation(
     Component: 'platform_core' | 'data_pipeline' | 'kraken_api' | 'groq'
                | 'alpaca' | 'http' | 'database' | 'scheduler'
     """
-    if not _should_record(component, error_type, message):
+    if not _should_record(component, error_type, message, bot_id):
         return False
 
     try:
@@ -123,6 +140,28 @@ def record_degradation(
                      detail[:2000] if detail else None, bot_id, cycle_id),
                 )
         logger.debug(f"[DEGRADATION] Recorded: [{severity}] {component}/{error_type} — {message[:80]}")
+        if severity.lower() in {"critical", "error", "high"}:
+            from notifications.condition_alerts import alert_condition
+
+            alert_condition(
+                source=component,
+                condition=error_type,
+                bot_id=bot_id,
+                title=f"{severity.upper()}: {component}/{error_type}",
+                description=message,
+                fields=[
+                    {
+                        "name": "Bot",
+                        "value": str(bot_id or "fleet"),
+                        "inline": True,
+                    },
+                    {
+                        "name": "Severity",
+                        "value": severity.upper(),
+                        "inline": True,
+                    },
+                ],
+            )
         return True
     except Exception as exc:
         logger.debug(f"[DEGRADATION] Failed to record event: {exc}")
@@ -151,6 +190,7 @@ def mark_resolved(
     error_type: str,
     reason: str = "condition cleared",
     event_id: Optional[int] = None,
+    bot_id: Optional[str] = None,
 ) -> int:
     """
     Mark one unresolved event as resolved with an auditable reason.
@@ -206,9 +246,17 @@ def mark_resolved(
     # Always reset in-memory escalation, even when DB is unavailable.
     # This ensures a later independent incident starts at the base TTL
     # rather than an elevated window from the now-resolved incident.
-    key = _dedup_key(component, error_type)
+    key = _dedup_key(component, error_type, bot_id)
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)
+    try:
+        from notifications.condition_alerts import clear_condition
+
+        clear_condition(component, error_type, bot_id)
+    except Exception as exc:
+        logger.debug(
+            f"[DEGRADATION] alert state reset failed: {type(exc).__name__}"
+        )
     logger.debug(f"[DEGRADATION] Escalation state cleared for {component}/{error_type}")
     return resolved_count
 

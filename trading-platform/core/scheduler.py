@@ -25,6 +25,7 @@ so it is torn down cleanly on shutdown.
 
 import asyncio
 import ipaddress
+import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
@@ -225,7 +226,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
             minutes=15
         ),
         id="standing_invariants",
-        name="Standing Invariants (LOG ONLY)",
+        name="Standing Invariants (alerting)",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
@@ -245,7 +246,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info(
         "Scheduler | Registered: automated_kill_switch (5 min) + "
-        "scheduled_reconciliation (hourly) + standing_invariants (15 min, LOG ONLY) + "
+        "scheduled_reconciliation (hourly) + standing_invariants (15 min, alerting) + "
         "degradation_resolver (15 min)"
     )
 
@@ -544,23 +545,47 @@ async def _scheduled_reconciliation() -> None:
 
 
 async def _standing_invariants_job() -> None:
-    """Run read-only invariants and log results without alerting or repair."""
-    logger.info("Scheduler | JOB STARTING: standing_invariants (LOG ONLY)")
+    """Run read-only invariants and alert failures through the shared policy."""
+    logger.info("Scheduler | JOB STARTING: standing_invariants")
     try:
+        from core.degradation_tracker import mark_resolved, record_degradation
         from core.invariants import format_report, run_all_invariants
 
         report = await asyncio.to_thread(run_all_invariants)
         log_method = logger.info if report["overall"] == "PASS" else logger.warning
         for line in format_report(report).splitlines():
             log_method(f"Scheduler | standing_invariants | {line}")
+        for result in report["results"]:
+            name = str(result["name"])
+            status = str(result["status"])
+            if status in {"FAIL", "UNKNOWN"}:
+                record_degradation(
+                    component="invariant",
+                    severity="critical" if status == "FAIL" else "error",
+                    error_type=name,
+                    message=f"{status}: {result['message']}",
+                    detail=json.dumps(
+                        {
+                            "actual": result.get("actual"),
+                            "expected": result.get("expected"),
+                            "difference": result.get("difference"),
+                        },
+                        default=str,
+                        sort_keys=True,
+                    ),
+                )
+            else:
+                mark_resolved(
+                    "invariant",
+                    name,
+                    f"standing invariant returned {status}",
+                )
         logger.info(
             "Scheduler | standing_invariants complete: "
-            f"overall={report['overall']} alerting=DISABLED"
+            f"overall={report['overall']} alerting=ENABLED"
         )
     except Exception as exc:
-        # This job is deliberately LOG ONLY.  Enabling alerts requires a
-        # separate policy change; no alert_critical call belongs here.
-        logger.error(f"Scheduler | standing_invariants CRASHED: {exc}")
+        logger.critical(f"Scheduler | standing_invariants CRASHED: {exc}")
 
 
 async def _degradation_resolver_job() -> None:

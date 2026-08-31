@@ -54,3 +54,4 @@
 - [External reference source separation](reference-source-separation.md) — keep vendor-sourced SPY/SGOV references out of ordinary equity panel filters and compare immutable curves with source-aware tolerance.
 - [Health liveness sources](health-liveness-sources.md) — snapshot-writer activity does not prove bot cycle or portfolio heartbeat liveness; health must read both canonical sources.
 - [Degradation lifecycle policy](degradation-lifecycle-policy.md) — auto-resolution requires explicit live recovery evidence; paused bots are not stale.
+- [Condition alert identity](condition-alert-identity.md) — safety alert deduplication must exclude volatile diagnostic text and reset only after recovery evidence.

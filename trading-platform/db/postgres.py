@@ -727,6 +727,41 @@ CREATE TABLE IF NOT EXISTS fleet_equity_history (
 CREATE INDEX IF NOT EXISTS idx_fleet_equity_history_date
     ON fleet_equity_history (snapshot_date DESC);
 
+-- Passwordless operator authentication.  Only public credential material and
+-- hashed opaque session/challenge identifiers are persisted.
+CREATE TABLE IF NOT EXISTS fleet_passkey_credentials (
+    credential_id  BYTEA PRIMARY KEY,
+    clerk_user_id  TEXT NOT NULL,
+    public_key     BYTEA NOT NULL,
+    sign_count     BIGINT NOT NULL DEFAULT 0,
+    label          TEXT NOT NULL DEFAULT 'This device',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_passkey_credentials_user
+    ON fleet_passkey_credentials (clerk_user_id);
+
+CREATE TABLE IF NOT EXISTS fleet_passkey_challenges (
+    challenge_id   TEXT PRIMARY KEY,
+    flow           TEXT NOT NULL CHECK (flow IN ('registration', 'authentication')),
+    clerk_user_id  TEXT,
+    challenge      BYTEA NOT NULL,
+    expires_at     TIMESTAMPTZ NOT NULL,
+    used_at        TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_passkey_challenges_expiry
+    ON fleet_passkey_challenges (expires_at);
+
+CREATE TABLE IF NOT EXISTS fleet_passkey_sessions (
+    session_hash   TEXT PRIMARY KEY,
+    clerk_user_id  TEXT NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at     TIMESTAMPTZ NOT NULL,
+    revoked_at     TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_passkey_sessions_expiry
+    ON fleet_passkey_sessions (expires_at);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

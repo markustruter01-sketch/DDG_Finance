@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
-import { FlaskConical, LayoutDashboard, LogOut, Radio } from "lucide-react";
+import { FlaskConical, KeyRound, LayoutDashboard, LogOut, Radio } from "lucide-react";
 import { useClerk } from "@clerk/react";
+import { signOutPasskey } from "@/hooks/use-passkey-auth";
 
 const NAV_ITEMS = [
   {
@@ -25,6 +26,14 @@ const NAV_ITEMS = [
     path:  "/bench",
     icon:  FlaskConical,
     color: "#e9ae57",
+    pulse: false,
+  },
+  {
+    id:    "security",
+    label: "Security",
+    path:  "/security",
+    icon:  KeyRound,
+    color: "#a78bfa",
     pulse: false,
   },
 ];
@@ -112,9 +121,13 @@ export function GlobalNav() {
           aria-label="Sign out"
           title="Sign out"
           data-testid="button-sign-out"
-          onClick={() =>
-            signOut({ redirectUrl: `${window.location.origin}${basePath}/` })
-          }
+          onClick={async () => {
+            try {
+              await signOutPasskey();
+            } finally {
+              await signOut({ redirectUrl: `${window.location.origin}${basePath}/` });
+            }
+          }}
           className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 select-none"
           style={{
             minWidth: 62,

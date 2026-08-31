@@ -452,6 +452,12 @@ app.add_middleware(DegradationCaptureMiddleware)
 
 
 INTERNAL_API_SECRET_HEADER = "X-Trading-API-Internal-Secret"
+PASSKEY_PUBLIC_PATH_SUFFIXES = (
+    "/auth/passkey/authentication/options",
+    "/auth/passkey/authentication/verify",
+    "/auth/passkey/session",
+    "/auth/passkey/logout",
+)
 
 
 def _health_path() -> str:
@@ -471,6 +477,12 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
         if request.url.path == _health_path():
             return await call_next(request)
 
+        if any(
+            request.url.path.rstrip("/").endswith(suffix)
+            for suffix in PASSKEY_PUBLIC_PATH_SUFFIXES
+        ):
+            return await call_next(request)
+
         expected_internal_secret = os.getenv("TRADING_API_SECRET", "").strip()
         supplied_internal_secret = request.headers.get(INTERNAL_API_SECRET_HEADER, "")
         if (
@@ -479,6 +491,22 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
             and hmac.compare_digest(supplied_internal_secret, expected_internal_secret)
         ):
             request.state.auth_method = "internal_secret"
+            return await call_next(request)
+
+        passkey_session_user_id = None
+        try:
+            from core.passkey_auth import PASSKEY_SESSION_COOKIE, session_user_id
+
+            passkey_session_user_id = await asyncio.to_thread(
+                session_user_id,
+                request.cookies.get(PASSKEY_SESSION_COOKIE),
+            )
+        except Exception:
+            passkey_session_user_id = None
+
+        if passkey_session_user_id:
+            request.state.auth_method = "passkey"
+            request.state.clerk_user_id = passkey_session_user_id
             return await call_next(request)
 
         clerk_secret_key = os.getenv("CLERK_SECRET_KEY", "").strip()

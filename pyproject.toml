@@ -23,5 +23,6 @@ dependencies = [
     "requests>=2.33.0",
     "tenacity==9.0.0",
     "uvicorn[standard]==0.32.1",
+    "webauthn>=2.5.1",
     "yfinance==0.2.50",
 ]

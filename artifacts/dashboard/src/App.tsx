@@ -9,9 +9,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   ClerkProvider,
-  SignIn,
-  SignUp,
-  Show,
+  useAuth,
   useClerk,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
@@ -28,8 +26,11 @@ import Design2Terminal from "@/pages/design/Design2Terminal";
 import Design3MissionControl from "@/pages/design/Design3MissionControl";
 import Design4Arcade from "@/pages/design/Design4Arcade";
 import Design5SpaceFleet from "@/pages/design/Design5SpaceFleet";
+import PasskeySignInPage from "@/pages/PasskeySignInPage";
+import SecurityPage from "@/pages/SecurityPage";
 import { GlobalNav } from "@/components/GlobalNav";
 import { RefreshCw } from "lucide-react";
+import { usePasskeySession } from "@/hooks/use-passkey-auth";
 
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
@@ -127,15 +128,16 @@ function StreamingLoader() {
 }
 
 function HomeRoute() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const passkeySession = usePasskeySession();
+
+  if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
+  if (isSignedIn || passkeySession.authenticated) {
+    return <Redirect to="/dashboard" />;
+  }
+
   return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/dashboard" />
-      </Show>
-      <Show when="signed-out">
-        <PublicLanding />
-      </Show>
-    </>
+    <PublicLanding />
   );
 }
 
@@ -144,6 +146,7 @@ function AuthenticatedRouter() {
     <>
       <Switch>
         <Route path="/dashboard" component={HomePage} />
+        <Route path="/security" component={SecurityPage} />
         <Route path="/home"><Redirect to="/dashboard" /></Route>
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
@@ -172,16 +175,12 @@ function AuthenticatedRouter() {
 }
 
 function ProtectedRoute() {
-  return (
-    <>
-      <Show when="signed-in">
-        <AuthenticatedRouter />
-      </Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
+  const { isLoaded, isSignedIn } = useAuth();
+  const passkeySession = usePasskeySession();
+
+  if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
+  if (isSignedIn || passkeySession.authenticated) return <AuthenticatedRouter />;
+  return <Redirect to="/" />;
 }
 
 function PublicLanding() {
@@ -211,30 +210,6 @@ function PublicLanding() {
         </div>
       </div>
     </main>
-  );
-}
-
-function SignInPage() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4">
-      <SignIn
-        routing="path"
-        path={`${basePath}/sign-in`}
-        signUpUrl={`${basePath}/sign-up`}
-      />
-    </div>
-  );
-}
-
-function SignUpPage() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4">
-      <SignUp
-        routing="path"
-        path={`${basePath}/sign-up`}
-        signInUrl={`${basePath}/sign-in`}
-      />
-    </div>
   );
 }
 
@@ -268,7 +243,6 @@ function ClerkProviderWithRoutes() {
       proxyUrl={clerkProxyUrl}
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
       localization={{
         signIn: {
           start: {
@@ -291,8 +265,10 @@ function ClerkProviderWithRoutes() {
         <VisibilityRefetcher />
         <TooltipProvider>
           <Switch>
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
+            <Route
+              path="/sign-in/*?"
+              component={() => <PasskeySignInPage basePath={basePath} />}
+            />
             <Route path="/" component={HomeRoute} />
             <Route component={ProtectedRoute} />
           </Switch>

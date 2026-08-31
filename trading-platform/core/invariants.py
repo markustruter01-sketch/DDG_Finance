@@ -12,7 +12,9 @@ Threshold sources
 * ``3 * cycle interval``: the established threshold in ``core.bot_liveness``.
 * ``high``/``critical``/``error``: the established health severity set.
 * ``5%`` crypto exposure: task policy; no existing configuration source was
-  found, so it is explicitly labelled as task policy in every result.
+  found, so it remains the unchanged hard cap.
+* ``5.5%`` crypto exposure: proposed appreciation drift band, explicitly
+  labelled as proposed in every crypto result.
 * ``90 minutes`` reconciliation freshness: proposed policy.  The scheduler
   runs hourly, but no existing freshness threshold was found; the extra
   half-hour is only a proposed grace period.
@@ -328,6 +330,10 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
 def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
     name = "crypto_market_value_within_fleet_cap"
     expected = {
+        # Keep the original field names for callers that consume the monitor
+        # report, while making the hard cap and proposed band explicit.
+        "maximum_fraction": CRYPTO_EXPOSURE_LIMIT,
+        "maximum_percent": CRYPTO_EXPOSURE_LIMIT * 100,
         "hard_cap_fraction": CRYPTO_EXPOSURE_LIMIT,
         "hard_cap_percent": CRYPTO_EXPOSURE_LIMIT * 100,
         "drift_band_fraction": PROPOSED_CRYPTO_DRIFT_BAND,
@@ -354,6 +360,7 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
             actual={"fleet_equity": inputs.fleet_equity, "crypto_market_value": None},
             expected=expected,
             difference={
+                "ratio_minus_limit": None,
                 "ratio_minus_hard_cap": None,
                 "ratio_minus_drift_band": None,
             },
@@ -380,6 +387,7 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
             actual={"source_error": f"invalid broker market value: {exc}"},
             expected=expected,
             difference={
+                "ratio_minus_limit": None,
                 "ratio_minus_hard_cap": None,
                 "ratio_minus_drift_band": None,
             },
@@ -395,6 +403,7 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
         "crypto_positions": crypto_rows,
     }
     difference = {
+        "ratio_minus_limit": ratio - CRYPTO_EXPOSURE_LIMIT,
         "ratio_minus_hard_cap": ratio - CRYPTO_EXPOSURE_LIMIT,
         "ratio_minus_drift_band": ratio - PROPOSED_CRYPTO_DRIFT_BAND,
     }

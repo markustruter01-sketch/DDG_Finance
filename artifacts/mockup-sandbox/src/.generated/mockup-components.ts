@@ -18,13 +18,13 @@ export const modules: ModuleMap = {
   "./components/mockups/learning-journal/ScrollInk.tsx": () => import("../components/mockups/learning-journal/ScrollInk.tsx"),
   "./components/mockups/learning-journal/TerminalFeed.tsx": () => import("../components/mockups/learning-journal/TerminalFeed.tsx"),
   "./components/mockups/learning-journal/XPLedger.tsx": () => import("../components/mockups/learning-journal/XPLedger.tsx"),
+  "./components/mockups/orb-glass/GlassOrb.tsx": () => import("../components/mockups/orb-glass/GlassOrb.tsx"),
+  "./components/mockups/stream-header/StreamHeaderConcept.tsx": () => import("../components/mockups/stream-header/StreamHeaderConcept.tsx"),
   "./components/mockups/math-auditor-concepts/Concept1ReactorControl.tsx": () => import("../components/mockups/math-auditor-concepts/Concept1ReactorControl.tsx"),
   "./components/mockups/math-auditor-concepts/Concept1ReactorOrbital.tsx": () => import("../components/mockups/math-auditor-concepts/Concept1ReactorOrbital.tsx"),
   "./components/mockups/math-auditor-concepts/Concept2NeuralMatrix.tsx": () => import("../components/mockups/math-auditor-concepts/Concept2NeuralMatrix.tsx"),
   "./components/mockups/math-auditor-concepts/Concept2NeuralSynaptic.tsx": () => import("../components/mockups/math-auditor-concepts/Concept2NeuralSynaptic.tsx"),
   "./components/mockups/math-auditor-concepts/Concept2NeuralSynapticV2.tsx": () => import("../components/mockups/math-auditor-concepts/Concept2NeuralSynapticV2.tsx"),
   "./components/mockups/math-auditor-concepts/Concept5FormulaBeautiful.tsx": () => import("../components/mockups/math-auditor-concepts/Concept5FormulaBeautiful.tsx"),
-  "./components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx": () => import("../components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx"),
-  "./components/mockups/orb-glass/GlassOrb.tsx": () => import("../components/mockups/orb-glass/GlassOrb.tsx"),
-  "./components/mockups/stream-header/StreamHeaderConcept.tsx": () => import("../components/mockups/stream-header/StreamHeaderConcept.tsx")
+  "./components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx": () => import("../components/mockups/math-auditor-concepts/Concept5FormulaBloomberg.tsx")
 };

@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from db.postgres import get_conn
+from core.operator_auth import require_operator_allowed
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -278,6 +279,7 @@ def delete_credential(credential_id: bytes, clerk_user_id: str) -> bool:
 
 
 def create_session(clerk_user_id: str) -> str:
+    require_operator_allowed(clerk_user_id, context="passkey_session_creation")
     token = _new_id()
     expires_at = _now() + timedelta(seconds=PASSKEY_SESSION_TTL_SECONDS)
     with get_conn() as conn:

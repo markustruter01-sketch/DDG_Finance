@@ -44,6 +44,7 @@ if _REPO_ROOT not in sys.path:
 
 from config.settings import settings
 from core.scheduler import get_scheduler
+from core.operator_auth import OperatorAccessDenied, require_operator_allowed
 from execution.broker import get_account
 from analysis.trade_journal import init_db
 
@@ -505,6 +506,16 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
             passkey_session_user_id = None
 
         if passkey_session_user_id:
+            try:
+                require_operator_allowed(
+                    passkey_session_user_id,
+                    context="passkey_middleware",
+                )
+            except OperatorAccessDenied:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Operator access is not authorized."},
+                )
             request.state.auth_method = "passkey"
             request.state.clerk_user_id = passkey_session_user_id
             return await call_next(request)
@@ -523,6 +534,16 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
                 clerk_user_id = None
 
             if clerk_user_id:
+                try:
+                    require_operator_allowed(
+                        clerk_user_id,
+                        context="clerk_middleware",
+                    )
+                except OperatorAccessDenied:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "Operator access is not authorized."},
+                    )
                 request.state.auth_method = "clerk"
                 request.state.clerk_user_id = clerk_user_id
                 return await call_next(request)

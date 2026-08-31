@@ -65,6 +65,7 @@ def test_passkey_options_route_is_public_and_reports_missing_setup(monkeypatch):
 def test_verified_passkey_session_can_access_protected_routes(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "user_operator")
     monkeypatch.setattr(passkey_auth, "session_user_id", lambda token: "user_operator")
 
     client = TestClient(app)
@@ -79,6 +80,7 @@ def test_verified_passkey_session_can_access_protected_routes(monkeypatch):
 def test_invalid_passkey_session_does_not_bypass_api_auth(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "user_operator")
     monkeypatch.setattr(passkey_auth, "session_user_id", lambda token: None)
 
     client = TestClient(app)
@@ -87,3 +89,63 @@ def test_invalid_passkey_session_does_not_bypass_api_auth(monkeypatch):
     client.close()
 
     assert response.status_code == 401
+
+
+def test_non_allowlisted_passkey_session_is_rejected_at_middleware(monkeypatch):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "user_operator")
+    monkeypatch.setattr(passkey_auth, "session_user_id", lambda token: "user_other")
+
+    client = TestClient(app)
+    client.cookies.set(passkey_auth.PASSKEY_SESSION_COOKIE, "opaque-session")
+    response = client.get("/trading-api/version")
+    client.close()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Operator access is not authorized."}
+
+
+def test_passkey_registration_rejects_non_allowlisted_clerk_user(monkeypatch):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setenv("CLERK_SECRET_KEY", "clerk-test-secret")
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "user_operator")
+
+    import core.clerk_auth as clerk_auth
+
+    monkeypatch.setattr(
+        clerk_auth,
+        "clerk_user_id_from_headers",
+        lambda headers, secret_key: "user_other",
+    )
+
+    client = TestClient(app)
+    response = client.post(
+        "/auth/passkey/registration/options",
+        headers={"cookie": "__session=verified-other"},
+    )
+    client.close()
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Operator access is not authorized."}
+
+
+def test_passkey_session_creation_rejects_non_allowlisted_user(monkeypatch):
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "user_operator")
+
+    import pytest
+    from core.operator_auth import OperatorAccessDenied
+
+    with pytest.raises(OperatorAccessDenied):
+        passkey_auth.create_session("user_other")
+
+
+def test_unset_allowlist_in_published_context_rejects_passkey_user(monkeypatch):
+    monkeypatch.setenv("TRADING_API_OPERATOR_ALLOWLIST", "")
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+
+    import pytest
+    from core.operator_auth import OperatorAccessDenied
+
+    with pytest.raises(OperatorAccessDenied):
+        passkey_auth.create_session("user_operator")

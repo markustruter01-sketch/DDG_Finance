@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
 
+from core.operator_auth import OperatorAccessDenied, require_operator_allowed
 from core.passkey_auth import (
     PASSKEY_FLOW_COOKIE,
     PASSKEY_SESSION_COOKIE,
@@ -98,6 +99,13 @@ async def passkey_registration_options(request: Request) -> JSONResponse:
     user_id = _auth_user_id(request)
     if not user_id:
         raise HTTPException(status_code=401, detail="Authentication required.")
+    try:
+        require_operator_allowed(user_id, context="passkey_registration_options")
+    except OperatorAccessDenied as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Operator access is not authorized.",
+        ) from exc
     rp_id, _ = webauthn_context(request.headers, request.url.hostname or "localhost")
     credentials = list_credentials(user_id)
     challenge, options_json = registration_options(
@@ -127,6 +135,13 @@ async def passkey_registration_verify(
 ) -> JSONResponse:
     user_id = _auth_user_id(request)
     flow_id = request.cookies.get(PASSKEY_FLOW_COOKIE, "")
+    try:
+        require_operator_allowed(user_id, context="passkey_registration_verify")
+    except OperatorAccessDenied as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Operator access is not authorized.",
+        ) from exc
     challenge_record = get_challenge(flow_id)
     if (
         not user_id
@@ -281,6 +296,13 @@ async def passkey_session(request: Request) -> JSONResponse:
     user_id = session_user_id(request.cookies.get(PASSKEY_SESSION_COOKIE))
     if not user_id:
         raise HTTPException(status_code=401, detail="No active passkey session.")
+    try:
+        require_operator_allowed(user_id, context="passkey_session_route")
+    except OperatorAccessDenied as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Operator access is not authorized.",
+        ) from exc
     response = JSONResponse(content={"authenticated": True})
     response.headers["Cache-Control"] = "no-store"
     return response

@@ -38,6 +38,15 @@ def _read_git_hash() -> str:
 _RUNNING_HASH: str = _read_git_hash()
 _STARTED_AT: str   = datetime.now(_tz.utc).isoformat()
 
+
+def _clerk_publishable_key_prefix() -> str:
+    publishable_key = os.getenv("VITE_CLERK_PUBLISHABLE_KEY", "").strip()
+    if publishable_key.startswith("pk_test_"):
+        return "pk_test"
+    if publishable_key.startswith("pk_live_"):
+        return "pk_live"
+    return "unknown"
+
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
@@ -71,6 +80,7 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("TRADING PLATFORM STARTING")
     logger.info("=" * 60)
+    logger.info("clerk_publishable_key_prefix={}", _clerk_publishable_key_prefix())
 
     init_db()
     logger.info("Trade journal database initialised")
@@ -566,6 +576,17 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
                 request.state.clerk_user_id = clerk_user_id
                 return await call_next(request)
 
+            cookie_header = request.headers.get("cookie")
+            authorization_header = request.headers.get("authorization")
+            logger.warning(
+                "path={} cookie_header_present={} contains_session_cookie={} "
+                "authorization_header_present={} clerk_secret_key_present={}",
+                request.url.path,
+                str(cookie_header is not None).lower(),
+                str(cookie_header is not None and "__session" in cookie_header).lower(),
+                str(authorization_header is not None).lower(),
+                str(bool(clerk_secret_key)).lower(),
+            )
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authentication required."},

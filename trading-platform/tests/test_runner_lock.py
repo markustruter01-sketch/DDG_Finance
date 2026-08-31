@@ -405,6 +405,6 @@ def test_live_runner_exits_nonzero_when_lease_preparation_fails(monkeypatch):
     start_health = MagicMock()
     monkeypatch.setattr(runner, "_start_health_server", start_health)
 
-    assert runner.main() == 1
+    assert runner.main() == runner.EXIT_REFUSAL
     assert alerts
     assert start_health.call_count == 0

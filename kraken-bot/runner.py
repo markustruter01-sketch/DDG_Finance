@@ -38,6 +38,13 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "trading-platform")) # trading-platf
 
 from loguru import logger
 
+# PROPOSED supervisor contract. Replit's documented automatic restart does not
+# currently expose exit-code filtering, but these codes make the distinction
+# explicit for any future supported supervisor.
+EXIT_SUCCESS = 0
+EXIT_CRASH = 70       # unexpected process failure / startup infrastructure failure
+EXIT_REFUSAL = 78     # deliberate fail-closed refusal (leases or pause alignment)
+
 # Bridge stdlib logging → loguru so that jerome_alpaca / etf_engine
 # logger.error() calls are visible in the workflow output.
 import logging as _stdlib_logging
@@ -62,7 +69,11 @@ import importlib.util as _ilu
 _KRAKEN_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.py")
 _cfg_spec = _ilu.spec_from_file_location("_kraken_local_config", _KRAKEN_CONFIG_PATH)
 _cfg_mod = _ilu.module_from_spec(_cfg_spec)
-_cfg_spec.loader.exec_module(_cfg_mod)
+try:
+    _cfg_spec.loader.exec_module(_cfg_mod)
+except Exception as exc:
+    logger.critical(f"Runner | configuration import failed: {exc}")
+    raise SystemExit(EXIT_CRASH) from exc
 BOT_PROFILES = _cfg_mod.BOT_PROFILES
 
 # Heartbeat and pause helpers — loaded after sys.path is configured so
@@ -921,7 +932,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _shutdown_handler)
 
     threads = []
-    exit_code = 0
+    exit_code = EXIT_SUCCESS
     try:
         locks_ready = _prepare_runner_locks()
         if _runner_can_trade and not locks_ready:
@@ -955,7 +966,7 @@ def main() -> int:
                 logger.critical(
                     f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
                 )
-            exit_code = 1
+            exit_code = EXIT_REFUSAL
             return exit_code
 
         logger.info("=" * 60)
@@ -964,6 +975,12 @@ def main() -> int:
         logger.info("=" * 60)
         _pause_alignment_ok = _assert_pause_alignment()
         logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
+        if not _pause_alignment_ok:
+            logger.critical(
+                "Runner | pause alignment failed; refusing to start bot threads"
+            )
+            exit_code = EXIT_REFUSAL
+            return exit_code
 
         runner_loop_count = 0
         if not _record_runner_heartbeat(runner_loop_count, "starting"):
@@ -1011,6 +1028,9 @@ def main() -> int:
             _shutdown_event.wait(_RUNNER_LOOP_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         _shutdown_event.set()
+    except Exception as exc:
+        logger.exception(f"Runner | uncaught process failure: {exc}")
+        exit_code = EXIT_CRASH
     finally:
         _shutdown_event.set()
         logger.info("Runner | Shutting down all bot threads...")

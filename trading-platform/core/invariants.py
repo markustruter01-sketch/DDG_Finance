@@ -38,9 +38,13 @@ from core.bot_liveness import (
 from core.symbols import canonical_symbol, is_crypto_symbol
 
 
-Status = Literal["PASS", "FAIL", "UNKNOWN"]
+Status = Literal["PASS", "DRIFT", "FAIL", "UNKNOWN"]
 
 QUANTITY_TOLERANCE = 1e-8
+# PROPOSED — 0.5 percentage-point appreciation allowance above the hard cap.
+# This avoids alert flapping between scheduled rebalances; it does not permit
+# a new position to breach the 5% cap before submission.
+PROPOSED_CRYPTO_DRIFT_BAND = 0.055
 CRYPTO_EXPOSURE_LIMIT = 0.05
 CYCLE_FRESHNESS_MULTIPLIER = 3.0
 PROPOSED_RECON_MAX_AGE_MINUTES = 90.0
@@ -50,7 +54,7 @@ UNRESOLVED_HIGH_SEVERITIES = frozenset({"high", "critical", "error"})
 
 THRESHOLD_SOURCES = {
     "stop_coverage": "TASK POLICY: quantity tolerance is 1e-8; vault and dust exclusions are explicit task rules",
-    "crypto_exposure": "TASK POLICY: 5% cap; no existing code/config source was found",
+    "crypto_exposure": "PROPOSED: 5.5% drift band for appreciation between scheduled rebalances; 5% hard cap remains task policy",
     "cycle_freshness": "ESTABLISHED: core.bot_liveness uses 3 × configured cycle interval",
     "reconciliation": "PROPOSED: 90 minutes; hourly scheduler plus 30-minute proposed grace period",
     "degradations": "ESTABLISHED: system health treats high, critical, and error as non-green",
@@ -138,6 +142,26 @@ def _failed(
     return _result(
         name,
         "FAIL",
+        actual=actual,
+        expected=expected,
+        difference=difference,
+        message=message,
+        threshold_source=THRESHOLD_SOURCES[source_key],
+    )
+
+
+def _drift(
+    name: str,
+    *,
+    actual: Any,
+    expected: Any,
+    difference: Any,
+    message: str,
+    source_key: str,
+) -> dict[str, Any]:
+    return _result(
+        name,
+        "DRIFT",
         actual=actual,
         expected=expected,
         difference=difference,
@@ -304,8 +328,10 @@ def check_stop_coverage(inputs: InvariantInputs) -> dict[str, Any]:
 def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
     name = "crypto_market_value_within_fleet_cap"
     expected = {
-        "maximum_fraction": CRYPTO_EXPOSURE_LIMIT,
-        "maximum_percent": CRYPTO_EXPOSURE_LIMIT * 100,
+        "hard_cap_fraction": CRYPTO_EXPOSURE_LIMIT,
+        "hard_cap_percent": CRYPTO_EXPOSURE_LIMIT * 100,
+        "drift_band_fraction": PROPOSED_CRYPTO_DRIFT_BAND,
+        "drift_band_percent": PROPOSED_CRYPTO_DRIFT_BAND * 100,
         "vault_in_denominator": True,
     }
     problem = _source_problem(inputs, "broker_positions", "fleet_equity")
@@ -327,7 +353,10 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
             name,
             actual={"fleet_equity": inputs.fleet_equity, "crypto_market_value": None},
             expected=expected,
-            difference={"ratio_minus_limit": None},
+            difference={
+                "ratio_minus_hard_cap": None,
+                "ratio_minus_drift_band": None,
+            },
             message="Fleet equity is unavailable or non-positive, so the denominator cannot be trusted.",
             source_key="crypto_exposure",
         )
@@ -350,7 +379,10 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
             name,
             actual={"source_error": f"invalid broker market value: {exc}"},
             expected=expected,
-            difference={"ratio_minus_limit": None},
+            difference={
+                "ratio_minus_hard_cap": None,
+                "ratio_minus_drift_band": None,
+            },
             message="A crypto market value could not be read as a number.",
             source_key="crypto_exposure",
         )
@@ -362,14 +394,33 @@ def check_crypto_exposure(inputs: InvariantInputs) -> dict[str, Any]:
         "crypto_fraction": ratio,
         "crypto_positions": crypto_rows,
     }
-    difference = {"ratio_minus_limit": ratio - CRYPTO_EXPOSURE_LIMIT}
-    if ratio > CRYPTO_EXPOSURE_LIMIT:
+    difference = {
+        "ratio_minus_hard_cap": ratio - CRYPTO_EXPOSURE_LIMIT,
+        "ratio_minus_drift_band": ratio - PROPOSED_CRYPTO_DRIFT_BAND,
+    }
+    if ratio > PROPOSED_CRYPTO_DRIFT_BAND:
         return _failed(
             name,
             actual=actual,
             expected=expected,
             difference=difference,
-            message=f"Crypto market value is {ratio:.8f} of fleet equity, above the 5% cap.",
+            message=(
+                f"Crypto market value is {ratio:.8f} of fleet equity, "
+                f"above the proposed {PROPOSED_CRYPTO_DRIFT_BAND:.2%} drift band."
+            ),
+            source_key="crypto_exposure",
+        )
+    if ratio > CRYPTO_EXPOSURE_LIMIT:
+        return _drift(
+            name,
+            actual=actual,
+            expected=expected,
+            difference=difference,
+            message=(
+                f"Crypto market value is {ratio:.8f} of fleet equity, above the "
+                f"5% hard cap but within the proposed {PROPOSED_CRYPTO_DRIFT_BAND:.2%} "
+                "appreciation drift band; it will be corrected at the next scheduled rebalance."
+            ),
             source_key="crypto_exposure",
         )
     return _passed(
@@ -1087,6 +1138,10 @@ def run_all_invariants(
         inputs = collect_inputs(now)
     results = [function(inputs) for function in INVARIANT_FUNCTIONS]
     statuses = {result["status"] for result in results}
+    counts = {
+        status: sum(1 for result in results if result["status"] == status)
+        for status in ("PASS", "DRIFT", "FAIL", "UNKNOWN")
+    }
     if "FAIL" in statuses:
         overall: Status = "FAIL"
     elif "UNKNOWN" in statuses:
@@ -1096,6 +1151,8 @@ def run_all_invariants(
     return {
         "checked_at": inputs.now.astimezone(timezone.utc).isoformat(),
         "overall": overall,
+        "counts": counts,
+        "drift_count": counts["DRIFT"],
         "results": results,
     }
 
@@ -1114,7 +1171,14 @@ def _json_safe(value: Any) -> Any:
 
 def format_report(report: dict[str, Any]) -> str:
     """Return stable one-line-per-invariant output for operators and logs."""
-    lines = [f"OVERALL status={report['overall']} checked_at={report['checked_at']}"]
+    counts = report.get("counts", {})
+    lines = [
+        f"OVERALL status={report['overall']} "
+        f"drifts={counts.get('DRIFT', report.get('drift_count', 0))} "
+        f"failures={counts.get('FAIL', 0)} "
+        f"unknowns={counts.get('UNKNOWN', 0)} "
+        f"checked_at={report['checked_at']}"
+    ]
     for result in report["results"]:
         lines.append(
             f"{result['status']} {result['name']} "

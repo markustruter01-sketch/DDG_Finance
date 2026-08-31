@@ -7,6 +7,8 @@ from copy import deepcopy
 import pytest
 
 from core.invariants import (
+    CRYPTO_EXPOSURE_LIMIT,
+    PROPOSED_CRYPTO_DRIFT_BAND,
     InvariantInputs,
     check_crypto_exposure,
     check_cycle_freshness,
@@ -116,20 +118,71 @@ def test_stop_coverage_unknown_when_input_is_unreadable(base_inputs):
     assert result["status"] == "UNKNOWN"
 
 
-def test_crypto_exposure_fires_above_five_percent(base_inputs):
+def _with_crypto_exposure(base_inputs, market_value: float) -> InvariantInputs:
     inputs = _copy(base_inputs)
-    inputs.broker_positions["jerome_macro"] = [
+    crypto_position = {
+        "symbol": "BTC/USD",
+        "qty": 0.1,
+        "side": "long",
+        "market_value": market_value,
+    }
+    inputs.broker_positions["jerome_macro"] = [crypto_position]
+    inputs.broker_orders["jerome_macro"] = [
         {
             "symbol": "BTC/USD",
             "qty": 0.1,
-            "side": "long",
-            "market_value": 5001.0,
+            "side": "sell",
+            "type": "stop",
         }
     ]
+    inputs.ledger_positions["jerome_macro"] = [
+        {"symbol": "BTC/USD", "qty": 0.1}
+    ]
+    return inputs
+
+
+def test_crypto_exposure_passes_at_hard_cap(base_inputs):
+    result = check_crypto_exposure(
+        _with_crypto_exposure(base_inputs, base_inputs.fleet_equity * CRYPTO_EXPOSURE_LIMIT)
+    )
+    assert result["status"] == "PASS"
+    assert result["actual"]["crypto_fraction"] == CRYPTO_EXPOSURE_LIMIT
+    assert result["difference"]["ratio_minus_hard_cap"] == 0
+
+
+def test_crypto_exposure_reports_drift_above_hard_cap(base_inputs):
+    inputs = _with_crypto_exposure(base_inputs, 5001.0)
+    result = check_crypto_exposure(inputs)
+    assert result["status"] == "DRIFT"
+    assert CRYPTO_EXPOSURE_LIMIT < result["actual"]["crypto_fraction"] <= PROPOSED_CRYPTO_DRIFT_BAND
+    assert result["difference"]["ratio_minus_hard_cap"] > 0
+    assert result["difference"]["ratio_minus_drift_band"] < 0
+
+
+def test_crypto_exposure_reports_drift_at_proposed_band_boundary(base_inputs):
+    result = check_crypto_exposure(
+        _with_crypto_exposure(
+            base_inputs, base_inputs.fleet_equity * PROPOSED_CRYPTO_DRIFT_BAND
+        )
+    )
+    assert result["status"] == "DRIFT"
+    assert result["difference"]["ratio_minus_drift_band"] == 0
+
+
+def test_crypto_exposure_fails_above_proposed_drift_band(base_inputs):
+    inputs = _with_crypto_exposure(base_inputs, 5501.0)
     result = check_crypto_exposure(inputs)
     assert result["status"] == "FAIL"
-    assert result["actual"]["crypto_fraction"] > 0.05
-    assert result["difference"]["ratio_minus_limit"] > 0
+    assert result["actual"]["crypto_fraction"] > PROPOSED_CRYPTO_DRIFT_BAND
+    assert result["difference"]["ratio_minus_drift_band"] > 0
+
+
+def test_crypto_drift_does_not_fail_overall(base_inputs):
+    inputs = _with_crypto_exposure(base_inputs, 5001.0)
+    report = run_all_invariants(inputs)
+    assert report["overall"] == "PASS"
+    assert report["counts"]["DRIFT"] == 1
+    assert report["counts"]["FAIL"] == 0
 
 
 def test_crypto_exposure_unknown_when_equity_is_unreadable(base_inputs):

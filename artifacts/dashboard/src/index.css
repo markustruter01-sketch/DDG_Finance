@@ -381,6 +381,12 @@
   letter-spacing: 0.1em;
 }
 
+.home-live-state.is-unknown {
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.10);
+}
+
 .home-live-dot {
   width: 6px;
   height: 6px;
@@ -392,6 +398,11 @@
 .home-live-dot.is-alert {
   background: #f87171;
   box-shadow: 0 0 9px #f87171;
+}
+
+.home-live-dot.is-unknown {
+  background: #f59e0b;
+  box-shadow: 0 0 9px #f59e0b;
 }
 
 .home-command-summary {

@@ -205,7 +205,9 @@ export function useFleetData() {
     positionsByBot,
     wfMap,
     regime:      market?.regime,
-    killTripped: summary?.kill_switch?.tripped ?? summary?.kill_switch_tripped,
+    killTripped: summary == null
+      ? null
+      : summary.kill_switch?.tripped ?? summary.kill_switch_tripped ?? null,
     lastCycle:   fleet?.generated_at,
     entryWindows: entryWindowData?.windows,
   };

@@ -23,7 +23,7 @@ export default function Design5SpaceFleet() {
           <div><FleetTotals data={data} /><div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] uppercase text-cyan-100/50"><div className="border border-cyan-300/20 p-3">Bots<br /><strong className="text-xl text-white">{rows.length}</strong></div><div className="border border-cyan-300/20 p-3">Cargo<br /><strong className="text-xl text-white">{data.allPos.length}</strong></div><div className="border border-cyan-300/20 p-3">WF checks<br /><strong className="text-xl text-white">{rows.filter(r => r.wf === "PASS").length}</strong></div></div></div>
         </div>
         <div className="mt-8 space-y-3">{rows.map(row => <BotLine key={row.id} row={row} />)}</div>
-        <div className="mt-5 border border-cyan-300/20 bg-cyan-300/[.04] p-4 text-[10px] uppercase tracking-[.2em] text-cyan-100/45">Telemetry stream · last update {data.lastCycle ? new Date(data.lastCycle).toLocaleTimeString() : "waiting"} · kill switch {data.killTripped ? "TRIPPED" : "ARMED"}</div>
+        <div className={`mt-5 border border-cyan-300/20 bg-cyan-300/[.04] p-4 text-[10px] uppercase tracking-[.2em] ${data.killTripped == null ? "text-amber-300" : "text-cyan-100/45"}`}>Telemetry stream · last update {data.lastCycle ? new Date(data.lastCycle).toLocaleTimeString() : "waiting"} · kill switch {data.killTripped == null ? "UNKNOWN" : data.killTripped ? "TRIPPED" : "ARMED"}</div>
       </section>
     </main>
   );

@@ -872,9 +872,9 @@ export default function HomePage() {
             </div>
           </div>
           <div className="home-header-actions">
-            <div className="home-live-state">
-              <span className={`home-live-dot ${killTripped ? "is-alert" : ""}`} />
-              <span>{killTripped ? "KILL SWITCH" : "SYSTEM ARMED"}</span>
+            <div className={`home-live-state ${killTripped == null ? "is-unknown" : ""}`}>
+              <span className={`home-live-dot ${killTripped == null ? "is-unknown" : killTripped ? "is-alert" : ""}`} />
+              <span>{killTripped == null ? "KILL SWITCH UNKNOWN" : killTripped ? "KILL SWITCH" : "SYSTEM ARMED"}</span>
             </div>
             <RegimeChip regime={regime} />
             <ExportDropdown

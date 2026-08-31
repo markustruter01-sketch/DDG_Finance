@@ -48,7 +48,12 @@ def _compute_market_fear_greed() -> dict:
         from data.yfinance_client import get_cached_market_data
         market_data = get_cached_market_data()
         if not market_data:
-            return {"value": 50, "label": "Neutral", "source": "default_no_data"}
+            return {
+                "value": None,
+                "label": "unavailable",
+                "source": "unavailable",
+                "error": "market data unavailable",
+            }
 
         by_ticker = market_data.get("by_ticker", {})
         spy = by_ticker.get("SPY", {})
@@ -127,7 +132,12 @@ def _compute_market_fear_greed() -> dict:
         }
     except Exception as exc:
         logger.warning(f"Sentiment | Market F&G computation failed: {exc}")
-        return {"value": 50, "label": "Neutral", "error": str(exc)}
+        return {
+            "value": None,
+            "label": "unavailable",
+            "source": "unavailable",
+            "error": str(exc),
+        }
 
 
 def get_sentiment(force: bool = False) -> dict:

@@ -76,3 +76,38 @@ uri = "file://trading-platform/.local/bot2_strategy_bench.json"
 type = "unspecified"
 title = "Bot 2 strategy backtest bench dataset"
 description = "Development read-only monthly browser backtest dataset from the stored adjusted SIP/IEX panel and shared 500-symbol screener, with strictly prior-data momentum, next-month forward returns, six-month monthly volatility, and SPY regime state."
+
+[[outputs]]
+id = "-d-6T3Y3DeRmvywu39986"
+uri = "file://screenshots/dashboard-unknown-home.jpg"
+type = "image"
+title = "Dashboard unknown home state"
+description = "Home/Observatory with missing API data and an amber KILL SWITCH UNKNOWN indicator."
+
+[[outputs]]
+id = "RUzWH53QcpShxDQQfpDuk"
+uri = "file://screenshots/dashboard-unknown-math-audit.jpg"
+type = "image"
+title = "Dashboard unavailable math audit"
+description = "Math audit tab with the explicit Audit feed unavailable message and no invented event IDs."
+
+[[outputs]]
+id = "Ci2qjzXwdaOwyPGYJ_lOq"
+uri = "file://screenshots/dashboard-unknown-performance.jpg"
+type = "image"
+title = "Dashboard unknown performance state"
+description = "Performance tab with unavailable sentiment and an amber UNKNOWN kill-switch status."
+
+[[outputs]]
+id = "gfnuljT31xClhi4IKZi6a"
+uri = "file://screenshots/dashboard-unknown-design4.jpg"
+type = "image"
+title = "Dashboard unknown arcade state"
+description = "Design 4 with the visually distinct UNKNOWN · DATA UNAVAILABLE kill-switch state."
+
+[[outputs]]
+id = "0Cdnx6DDxljSFgtqjSSh_"
+uri = "file://screenshots/dashboard-unknown-design5.jpg"
+type = "image"
+title = "Dashboard unknown space-fleet state"
+description = "Design 5 with the visually distinct UNKNOWN kill-switch state."

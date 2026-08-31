@@ -365,24 +365,10 @@ export default function SynapticAuditScreen() {
                 </div>
               ))
             : (
-              [
-                { id: "CHK-8842", t: "12ms ago", fail: false },
-                { id: "CHK-8841", t: "45ms ago", fail: false },
-                { id: "CHK-8840", t: "120ms ago", fail: false },
-                { id: "CHK-8839", t: "240ms ago", fail: false },
-                { id: "CHK-8838", t: "450ms ago", fail: false },
-                { id: "CHK-8836", t: "1.2s ago",  fail: true  },
-              ].map((ev) => (
-                <div key={ev.id} className={`flex flex-col gap-0.5 border-l-2 pl-2.5 py-1 shrink-0 ${ev.fail ? "border-red-500/80" : "border-cyan-500/40"}`}>
-                  <div className="flex items-center gap-1.5">
-                    {ev.fail
-                      ? <AlertTriangle className="w-2.5 h-2.5 text-red-500" />
-                      : <CheckCircle2 className="w-2.5 h-2.5 text-cyan-500" />}
-                    <span className={`text-[10px] font-medium ${ev.fail ? "text-red-200" : "text-cyan-100"}`}>{ev.id}</span>
-                  </div>
-                  <span className="text-[9px] text-slate-600 font-mono">{ev.t}</span>
-                </div>
-              ))
+              <div className="flex items-center gap-2 text-[10px] font-mono text-amber-300">
+                <AlertTriangle className="w-3 h-3 shrink-0" />
+                <span>Audit feed unavailable</span>
+              </div>
             )}
           <div className="flex-1 h-px bg-gradient-to-r from-cyan-900/40 to-transparent" />
         </div>

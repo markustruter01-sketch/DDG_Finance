@@ -395,7 +395,7 @@ export default function StreamingPerformanceScreen() {
                 { label: "Regime",      value: regime,                                           color: regime === "Bull" ? C.green : regime === "Bear" ? C.red : C.amber },
                 { label: "System",      value: (st?.system_health.system_status ?? "—").toUpperCase(), color: st?.system_health.system_status === "online" ? C.green : C.red },
                 { label: "Market",      value: st?.market_open ? "OPEN" : "CLOSED",               color: st?.market_open ? C.green : C.dim },
-                { label: "Kill Switch", value: st?.kill_switch_tripped ? "TRIPPED" : "SAFE",      color: st?.kill_switch_tripped ? C.red : C.green },
+                { label: "Kill Switch", value: st?.kill_switch_tripped == null ? "UNKNOWN" : st.kill_switch_tripped ? "TRIPPED" : "SAFE", color: st?.kill_switch_tripped == null ? C.amber : st.kill_switch_tripped ? C.red : C.green },
                 { label: "Positions",   value: String(st?.position_count ?? "—"),                 color: C.text },
                 { label: "Auto-Trade",  value: st?.auto_trading ? "ON" : "OFF",                   color: st?.auto_trading ? C.green : C.amber },
               ].map(({ label, value, color }) => (

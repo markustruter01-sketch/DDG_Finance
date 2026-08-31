@@ -61,8 +61,14 @@ export function FleetTotals({ data, className = "" }: { data: DesignFleetData; c
       </div>
       <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
         <span className="rounded-full bg-white/10 px-3 py-1">Regime · {data.regime ?? "SYNCING"}</span>
-        <span className={`rounded-full px-3 py-1 ${data.killTripped ? "bg-rose-400/20 text-rose-200" : "bg-emerald-400/15 text-emerald-200"}`}>
-          Kill switch · {data.killTripped ? "TRIPPED" : "ARMED"}
+        <span className={`rounded-full px-3 py-1 ${
+          data.killTripped == null
+            ? "bg-amber-400/20 text-amber-200"
+            : data.killTripped
+              ? "bg-rose-400/20 text-rose-200"
+              : "bg-emerald-400/15 text-emerald-200"
+        }`}>
+          Kill switch · {data.killTripped == null ? "UNKNOWN" : data.killTripped ? "TRIPPED" : "ARMED"}
         </span>
       </div>
     </div>

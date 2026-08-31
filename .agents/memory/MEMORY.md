@@ -51,3 +51,4 @@
 - [Alpaca order numeric confirmation](alpaca-order-numeric-confirmation.md) — compare broker quantities/prices numerically; trailing zeros may be omitted.
 - [Alpaca wash-trade ordering](alpaca-wash-trade-ordering.md) — an open sell stop can reject an add-on buy; use complex orders or explicit cancel-buy-replace sequencing.
 - [Alpaca cancel pending behavior](alpaca-cancel-pending.md) — HTTP 204 is not confirmation; wait for an actual canceled status before buying.
+- [External reference source separation](reference-source-separation.md) — keep vendor-sourced SPY/SGOV references out of ordinary equity panel filters and compare immutable curves with source-aware tolerance.

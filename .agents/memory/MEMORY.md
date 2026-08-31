@@ -55,3 +55,4 @@
 - [Health liveness sources](health-liveness-sources.md) — snapshot-writer activity does not prove bot cycle or portfolio heartbeat liveness; health must read both canonical sources.
 - [Degradation lifecycle policy](degradation-lifecycle-policy.md) — auto-resolution requires explicit live recovery evidence; paused bots are not stale.
 - [Condition alert identity](condition-alert-identity.md) — safety alert deduplication must exclude volatile diagnostic text and reset only after recovery evidence.
+- [Lease freshness versus process liveness](lease-freshness-vs-process-liveness.md) — a healthy runner heartbeat does not prove account leases are being refreshed; keep lease refresh cadence independently observable.

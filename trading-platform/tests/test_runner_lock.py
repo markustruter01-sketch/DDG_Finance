@@ -384,6 +384,7 @@ def test_live_runner_exits_nonzero_when_lease_preparation_fails(monkeypatch):
 
     alerts = []
     monkeypatch.setattr(runner, "_runner_can_trade", True)
+    monkeypatch.setattr(runner, "RUNNER_ENVIRONMENT", "published")
     monkeypatch.setattr(runner, "RUNNER_EXECUTION_MODE", "live")
     monkeypatch.setattr(runner, "_runner_lock_ready", False)
     monkeypatch.setattr(runner, "_shutdown_event", Event())
@@ -396,7 +397,13 @@ def test_live_runner_exits_nonzero_when_lease_preparation_fails(monkeypatch):
     monkeypatch.setattr(
         runner,
         "_list_runner_locks",
-        lambda: [{"bot_id": "oracle", "pid": 22, "owner_token": "old-token"}],
+        lambda: [{
+            "bot_id": "oracle",
+            "environment": "published",
+            "pid": 22,
+            "owner_token": "old-token",
+            "heartbeat_at": "2026-09-01T02:42:00+00:00",
+        }],
     )
     monkeypatch.setattr(
         "notifications.discord.alert_critical",

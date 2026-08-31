@@ -152,6 +152,7 @@ _runner_can_trade = RUNNER_EXECUTION_MODE == "live"
 _runner_lock_ready = False
 _owned_lock_bot_ids: set[str] = set()
 _runner_lock_failure_reason: str | None = None
+_runner_lock_failure_detail: dict[str, Any] | None = None
 # PID values can be reused during a deployment handoff. The token carries the
 # kernel process identity and a unique nonce, so the lease can distinguish a
 # reused PID from the original runner instance.
@@ -231,24 +232,109 @@ def _log_runner_locks(prefix: str) -> None:
         logger.critical(f"Runner lock | {prefix} | could not read locks: {exc}")
 
 
+def _lease_row_with_age(row: dict[str, Any]) -> dict[str, Any]:
+    """Return the alert-safe lease fields, including age at read time."""
+    heartbeat_at = row.get("heartbeat_at")
+    heartbeat_age_seconds: float | None = None
+    if heartbeat_at:
+        try:
+            parsed = (
+                heartbeat_at
+                if isinstance(heartbeat_at, datetime)
+                else datetime.fromisoformat(str(heartbeat_at).replace("Z", "+00:00"))
+            )
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            heartbeat_age_seconds = max(
+                0.0,
+                round((datetime.now(timezone.utc) - parsed).total_seconds(), 3),
+            )
+        except (TypeError, ValueError):
+            heartbeat_age_seconds = None
+    return {
+        "bot_id": row.get("bot_id"),
+        "environment": row.get("environment"),
+        "pid": row.get("pid"),
+        "owner_token": row.get("owner_token"),
+        "heartbeat_at": heartbeat_at,
+        "heartbeat_age_seconds": heartbeat_age_seconds,
+    }
+
+
+def _lease_refusal_evidence() -> tuple[list[dict[str, Any]], str | None]:
+    """Read lease evidence without ever turning an unavailable read into []."""
+    detail = _runner_lock_failure_detail or {}
+    claim_result = detail.get("claim_result") or {}
+    claim_holder = claim_result.get("lock")
+
+    try:
+        if not _runner_lock_import_ok or _list_runner_locks is None:
+            raise RuntimeError("lock listing is unavailable")
+        listed_rows = _list_runner_locks()
+    except Exception as exc:
+        if isinstance(claim_holder, dict):
+            return [_lease_row_with_age(claim_holder)], (
+                f"whole-table lease read failed ({exc}); using the failed claim result"
+            )
+        return [], f"lease listing failed: {exc}"
+
+    valid_rows = [
+        _lease_row_with_age(row)
+        for row in listed_rows
+        if isinstance(row, dict)
+    ]
+    if valid_rows:
+        return valid_rows, None
+    if listed_rows:
+        return [], (
+            "lease listing returned rows in an unexpected format; no usable lease "
+            "row could be read"
+        )
+
+    if isinstance(claim_holder, dict):
+        return [_lease_row_with_age(claim_holder)], (
+            "whole-table lease read returned no rows; using the failed claim result "
+            "because it contains the refusing claim's holder"
+        )
+
+    return [], (
+        "whole-table lease read returned no rows and the claim result contained no "
+        "holder row; the lease was released or the refusal was not an occupied lease"
+    )
+
+
 def _prepare_runner_locks() -> bool:
     """Claim all live bot leases before any strategy thread can trade."""
-    global _runner_lock_ready, _runner_lock_failure_reason
+    global _runner_lock_ready, _runner_lock_failure_reason, _runner_lock_failure_detail
     _runner_lock_ready = False
     _runner_lock_failure_reason = None
+    _runner_lock_failure_detail = None
 
     if not _runner_lock_import_ok or _ensure_runner_lock_table is None:
         _runner_lock_failure_reason = "lock module unavailable"
+        _runner_lock_failure_detail = {
+            "cause": "lock_module_unavailable",
+            "claim_result": None,
+        }
         logger.critical("Runner lock | fail closed: lock module unavailable")
         return False
     try:
         table_ready = _ensure_runner_lock_table()
     except Exception as exc:
         _runner_lock_failure_reason = f"table bootstrap failed: {exc}"
+        _runner_lock_failure_detail = {
+            "cause": "table_bootstrap_failed",
+            "error": str(exc),
+            "claim_result": None,
+        }
         logger.critical(f"Runner lock | fail closed: table bootstrap failed: {exc}")
         return False
     if not table_ready:
         _runner_lock_failure_reason = "PostgreSQL unavailable"
+        _runner_lock_failure_detail = {
+            "cause": "postgresql_unavailable",
+            "claim_result": None,
+        }
         logger.critical("Runner lock | fail closed: PostgreSQL unavailable")
         return False
 
@@ -273,12 +359,14 @@ def _prepare_runner_locks() -> bool:
             )
             if not result.get("owned"):
                 holder = result.get("lock") or {}
+                _runner_lock_failure_detail = {
+                    "cause": "occupied_lease" if holder else "claim_refused_without_holder",
+                    "bot_id": lock_bot_id,
+                    "claim_result": result,
+                }
                 _runner_lock_failure_reason = (
-                    f"lease refused for {lock_bot_id}: "
-                    f"holder_environment={holder.get('environment', 'unknown')} "
-                    f"holder_pid={holder.get('pid', 'unknown')} "
-                    f"holder_heartbeat={holder.get('heartbeat_at', 'unknown')} "
-                    f"holder_owner_token={holder.get('owner_token', 'unknown')}"
+                    f"claim returned owned={result.get('owned')!r} for {lock_bot_id}; "
+                    f"refusal_cause={_runner_lock_failure_detail['cause']}"
                 )
                 logger.critical(
                     f"Runner lock | REFUSED | bot={lock_bot_id} "
@@ -309,6 +397,11 @@ def _prepare_runner_locks() -> bool:
         return True
     except Exception as exc:
         _runner_lock_failure_reason = f"claim failed: {exc}"
+        _runner_lock_failure_detail = {
+            "cause": "claim_exception",
+            "error": str(exc),
+            "claim_result": None,
+        }
         logger.critical(f"Runner lock | fail closed during claim: {exc}")
         if _release_runner_locks is not None and claimed:
             try:
@@ -939,32 +1032,48 @@ def main() -> int:
             reason = _runner_lock_failure_reason
             if reason is None:
                 reason = "unknown lease preparation failure"
-            try:
-                if not _runner_lock_import_ok or _list_runner_locks is None:
-                    raise RuntimeError("lock listing is unavailable")
-                current_locks = _list_runner_locks()
-            except Exception as exc:
-                current_locks = [{"error": f"could not read lease rows: {exc}"}]
+            lease_rows, lease_read_note = _lease_refusal_evidence()
+            if lease_rows:
+                lease_evidence = json.dumps(lease_rows, default=str)
+            else:
+                lease_evidence = f"lease rows unreadable: {lease_read_note}"
             logger.critical(
                 "Runner | LIVE STARTUP ABORTED — lease preparation failed; "
-                f"reason={reason}; current_leases={json.dumps(current_locks, default=str)}"
+                f"reason={reason}; lease_evidence={lease_evidence}"
             )
-            try:
-                from notifications.discord import alert_critical
-                alert_critical(
-                    "Runner startup blocked by lease refusal",
-                    "Live runner refused to start because it could not claim all "
-                    f"required leases. Reason: {reason}",
-                    fields=[
-                        {
-                            "name": "Current lease rows",
-                            "value": json.dumps(current_locks, default=str)[:1000],
-                        }
-                    ],
-                )
-            except Exception as exc:
+            if str(RUNNER_ENVIRONMENT).lower() == "published":
+                try:
+                    from notifications.discord import alert_critical
+                    if lease_rows:
+                        alert_fields = [
+                            {
+                                "name": f"Lease row {index}",
+                                "value": json.dumps(row, default=str),
+                            }
+                            for index, row in enumerate(lease_rows, start=1)
+                        ]
+                    else:
+                        alert_fields = [
+                            {
+                                "name": "Lease evidence",
+                                "value": lease_evidence,
+                            }
+                        ]
+                    alert_critical(
+                        "Runner startup blocked by lease refusal",
+                        "Live runner refused to start because the lease claim returned "
+                        f"owned=False. Reason: {reason}",
+                        fields=alert_fields,
+                    )
+                except Exception as exc:
+                    logger.critical(
+                        f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
+                    )
+            else:
                 logger.critical(
-                    f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
+                    "Runner | lease-refusal Discord alert suppressed; "
+                    f"environment={RUNNER_ENVIRONMENT}; reason={reason}; "
+                    f"lease_evidence={lease_evidence}"
                 )
             exit_code = EXIT_REFUSAL
             return exit_code

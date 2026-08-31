@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import threading
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
@@ -25,6 +26,51 @@ _lock = threading.Lock()
 # every 30 min so a stop failing every 15-min cycle doesn't spam the channel.
 _CAPITAL_RISK_LAST_FIRED: dict[str, float] = {}
 _CAPITAL_RISK_COOLDOWN = 1800  # seconds (30 min)
+
+
+def is_published_environment() -> bool:
+    """Return True only for the Replit published deployment."""
+    return os.environ.get("REPLIT_DEPLOYMENT") == "1"
+
+
+def environment_name() -> str:
+    """Return a safe, human-readable environment label for Discord messages."""
+    if is_published_environment():
+        return "published"
+    runner_environment = os.environ.get("RUNNER_ENVIRONMENT", "").strip().lower()
+    execution_mode = os.environ.get("RUNNER_EXECUTION_MODE", "").strip().lower()
+    if runner_environment and execution_mode and runner_environment != execution_mode:
+        return f"{runner_environment}/{execution_mode}"
+    return runner_environment or execution_mode or "development"
+
+
+def _environment_prefix() -> str:
+    return f"[environment: {environment_name()}]"
+
+
+def _with_environment_label(payload: dict) -> dict:
+    """Copy a Discord payload and label every supported message surface."""
+    labelled = deepcopy(payload)
+    prefix = _environment_prefix()
+    content = labelled.get("content")
+    if content:
+        labelled["content"] = f"{prefix} {content}"
+
+    embeds = labelled.get("embeds")
+    if isinstance(embeds, list):
+        for embed in embeds:
+            if not isinstance(embed, dict):
+                continue
+            if embed.get("title"):
+                embed["title"] = f"{prefix} {embed['title']}"
+            elif embed.get("description"):
+                embed["description"] = f"{prefix} {embed['description']}"
+            else:
+                embed["description"] = prefix
+
+    if not content and not embeds:
+        labelled["content"] = prefix
+    return labelled
 
 
 def _audit_start(alert_type: str, title: str) -> int | None:
@@ -69,6 +115,15 @@ def _send(
 ) -> None:
     if event_id is None:
         event_id = _audit_start(alert_type, title)
+    payload = _with_environment_label(payload)
+    if not is_published_environment():
+        error = "Discord delivery blocked outside the published environment"
+        _audit_finish(event_id, "skipped_not_published", error=error)
+        logger.critical(
+            "Discord | delivery blocked outside published environment | "
+            f"environment={environment_name()} alert_type={alert_type} title={title}"
+        )
+        return
     if not _WEBHOOK_URL:
         _audit_finish(event_id, "skipped_not_configured", error="DISCORD_WEBHOOK_URL is not configured")
         logger.warning("Discord | DISCORD_WEBHOOK_URL not set — skipping alert")
@@ -112,6 +167,16 @@ def _send_async(
         logger.warning(f"Discord | Failed to start delivery thread: {safe_error}")
 
 
+def send_payload(
+    payload: dict,
+    *,
+    alert_type: str = "general",
+    title: str = "Discord alert",
+) -> None:
+    """Send an arbitrary Discord payload through the audited policy boundary."""
+    _send_async(payload, alert_type=alert_type, title=title)
+
+
 def alert_critical(title: str, description: str, fields: list[dict] | None = None) -> None:
     """
     Send a capital-safety CRITICAL alert directly via webhook.
@@ -126,12 +191,13 @@ def alert_critical(title: str, description: str, fields: list[dict] | None = Non
 
 def notify_capital_risk(msg: str, symbol: str | None = None) -> None:
     """
-    Post a capital-risk alert string directly to Discord.
+    Persist a capital-risk finding for the daily digest.
 
     Rate-limited: the same symbol fires at most once every 30 minutes so a
     stop that keeps failing every 15-min cycle does not spam the channel.
     Never raises — failures are logged and swallowed.
-    NOT gated on the degradation tracker.
+    Capital-risk findings are routine delivery after the published-only policy;
+    the real-time naked-position invariant remains the immediate safety path.
 
     Used by: ratchet_stop (B-1/B-2), executor (B-3/B-5),
              oracle_exit_manager (B-4).
@@ -141,11 +207,19 @@ def notify_capital_risk(msg: str, symbol: str | None = None) -> None:
     now = _time.time()
     if now - _CAPITAL_RISK_LAST_FIRED.get(key, 0.0) < _CAPITAL_RISK_COOLDOWN:
         return  # rate-limited: same symbol already alerted within 30 min
-    _CAPITAL_RISK_LAST_FIRED[key] = now
     try:
-        _send_async({"content": msg}, alert_type="capital_risk", title="Capital risk")
+        _CAPITAL_RISK_LAST_FIRED[key] = now
+        from core.degradation_tracker import record_degradation
+
+        record_degradation(
+            component="execution",
+            severity="error",
+            error_type="capital_risk",
+            message=msg,
+            bot_id=None,
+        )
     except Exception as _e:
-        logger.error(f"notify_capital_risk | send failed ({key}): {_e}")
+        logger.error(f"notify_capital_risk | persistence failed ({key}): {type(_e).__name__}")
 
 
 def _embed(
@@ -339,6 +413,205 @@ def notify_daily_pnl_report() -> None:
         f"24h: {sign_pct}{pnl_24h_pct:.2f}% / {sign_usd}${pnl_24h:,.0f} / {regime_label}"
         + (f" / {len(warning_lines)} warning(s)" if warning_lines else "")
     )
+
+
+def _compact_json(value: Any, limit: int = 360) -> str:
+    import json
+
+    text = json.dumps(value, default=str, sort_keys=True, separators=(",", ":"))
+    return text if len(text) <= limit else f"{text[:limit - 3]}..."
+
+
+def _digest_database_state() -> dict[str, Any]:
+    """Read durable cycle and reconciliation state for the daily digest."""
+    state: dict[str, Any] = {"cycles": [], "reconciliation": None, "readable": True}
+    try:
+        from db.postgres import get_conn, is_pg_available
+
+        if not is_pg_available():
+            state["readable"] = False
+            return state
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT bot_id, last_success_at, status, consecutive_failures
+                    FROM bot_cycle_health
+                    ORDER BY bot_id
+                    """
+                )
+                state["cycles"] = [
+                    {
+                        "bot_id": row[0],
+                        "last_success_at": row[1],
+                        "status": row[2],
+                        "consecutive_failures": row[3],
+                    }
+                    for row in cur.fetchall()
+                ]
+                cur.execute(
+                    """
+                    SELECT run_ts, clean, flags
+                    FROM reconciliation_log
+                    ORDER BY run_ts DESC
+                    LIMIT 1
+                    """
+                )
+                row = cur.fetchone()
+                if row:
+                    state["reconciliation"] = {
+                        "run_ts": row[0],
+                        "clean": row[1],
+                        "flags": row[2],
+                    }
+    except Exception as exc:
+        logger.warning(f"Discord | digest database read failed: {type(exc).__name__}")
+        state["readable"] = False
+    return state
+
+
+def build_daily_health_digest(now: datetime | None = None) -> str:
+    """Build the health digest without sending it."""
+    import json
+    from collections import Counter
+
+    observed_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    try:
+        from core.invariants import run_all_invariants
+
+        report = run_all_invariants(now=observed_at)
+    except Exception as exc:
+        report = {
+            "overall": "UNKNOWN",
+            "results": [],
+            "error": type(exc).__name__,
+        }
+
+    try:
+        from core.degradation_tracker import get_recent_events
+
+        events = get_recent_events(limit=500, hours=24)
+    except Exception as exc:
+        logger.warning(f"Discord | digest degradation read failed: {type(exc).__name__}")
+        events = []
+
+    database_state = _digest_database_state()
+    try:
+        from core.runner_heartbeat import get_runner_status
+
+        heartbeat = get_runner_status(now=observed_at)
+    except Exception as exc:
+        heartbeat = {"verdict": "UNKNOWN", "error": type(exc).__name__}
+
+    failures = [
+        result for result in report.get("results", [])
+        if result.get("status") == "FAIL"
+    ]
+    unknowns = [
+        result for result in report.get("results", [])
+        if result.get("status") == "UNKNOWN"
+    ]
+    counts = Counter(str(event.get("error_type") or "unknown") for event in events)
+    recovered = [event for event in events if event.get("resolved_at")]
+    lines = [
+        "Daily platform health digest (last 24h)",
+        f"Overall: {report.get('overall', 'UNKNOWN')} | "
+        f"failures={len(failures)} unknowns={len(unknowns)} "
+        f"degradations={len(events)} recovered={len(recovered)}",
+    ]
+
+    if failures:
+        lines.append("Currently failing invariants:")
+        for result in failures:
+            lines.append(
+                f"- {result.get('name', 'unknown')}: {result.get('message', '')[:180]} "
+                f"actual={_compact_json(result.get('actual'))} "
+                f"difference={_compact_json(result.get('difference'))}"
+            )
+    else:
+        lines.append("Currently failing invariants: none")
+    if unknowns:
+        lines.append(
+            "Invariant inputs unavailable: "
+            + ", ".join(str(result.get("name", "unknown")) for result in unknowns)
+        )
+
+    lines.append("Degradations by error_type:")
+    if counts:
+        lines.extend(f"- {error_type}: {count}" for error_type, count in counts.most_common())
+    else:
+        lines.append("- none")
+
+    lines.append("Bot cycle ages:")
+    if database_state["cycles"]:
+        for cycle in database_state["cycles"]:
+            last_success = cycle["last_success_at"]
+            if last_success is None:
+                age = "never"
+            else:
+                if last_success.tzinfo is None:
+                    last_success = last_success.replace(tzinfo=timezone.utc)
+                age = f"{max(0.0, (observed_at - last_success).total_seconds()):.0f}s"
+            lines.append(
+                f"- {cycle['bot_id']}: {age} status={cycle['status']} "
+                f"failures={cycle['consecutive_failures']}"
+            )
+    else:
+        lines.append("- unavailable")
+
+    heartbeat_age = heartbeat.get("age_seconds")
+    heartbeat_age_text = (
+        "unknown" if heartbeat_age is None else f"{float(heartbeat_age):.0f}s"
+    )
+    lines.append(
+        f"Runner heartbeat: {heartbeat.get('verdict', 'UNKNOWN')} "
+        f"age={heartbeat_age_text}"
+    )
+    reconciliation = database_state.get("reconciliation")
+    if reconciliation:
+        lines.append(
+            f"Reconciliation: {'CLEAN' if reconciliation['clean'] else 'DIRTY'} "
+            f"at={reconciliation['run_ts']} "
+            f"flags={_compact_json(reconciliation.get('flags', []), 240)}"
+        )
+    else:
+        lines.append("Reconciliation: unavailable")
+
+    if recovered:
+        lines.append("Recovered conditions:")
+        for event in recovered[:10]:
+            lines.append(
+                f"- {event.get('component', 'unknown')}/{event.get('error_type', 'unknown')}"
+                f"{'/' + str(event['bot_id']) if event.get('bot_id') else ''}"
+            )
+    else:
+        lines.append("Recovered conditions: none")
+
+    if not database_state["readable"]:
+        lines.append("Database reads: unavailable")
+    if report.get("error"):
+        lines.append(f"Invariant evaluation error: {report['error']}")
+
+    return "\n".join(lines)[:1900]
+
+
+def notify_daily_health_digest() -> None:
+    """Build and deliver the daily health digest through the shared policy."""
+    title = "Daily platform health digest"
+    audit_id = _audit_start("daily_health_digest", title)
+    try:
+        content = build_daily_health_digest()
+    except Exception as exc:
+        _audit_finish(audit_id, "failed", error=type(exc).__name__)
+        logger.warning(f"Discord | daily health digest build failed: {type(exc).__name__}")
+        return
+    _send(
+        {"content": content},
+        event_id=audit_id,
+        alert_type="daily_health_digest",
+        title=title,
+    )
+    logger.info("Discord | daily health digest prepared")
 
 
 def is_configured() -> bool:

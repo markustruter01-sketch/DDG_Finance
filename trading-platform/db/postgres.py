@@ -374,7 +374,10 @@ CREATE TABLE IF NOT EXISTS discord_alert_events (
     http_status    INTEGER,
     error          TEXT,
     CONSTRAINT discord_alert_events_status_check
-        CHECK (status IN ('attempted', 'sent', 'skipped_not_configured', 'failed')),
+        CHECK (status IN (
+            'attempted', 'sent', 'skipped_not_configured',
+            'skipped_not_published', 'failed'
+        )),
     CONSTRAINT discord_alert_events_completion_check
         CHECK (
             (status = 'attempted' AND completed_at IS NULL)
@@ -409,6 +412,28 @@ BEGIN
                 OR
                 (status <> 'attempted' AND completed_at IS NOT NULL)
             );
+    END IF;
+END
+$$;
+-- Add the published-environment suppression outcome to databases created
+-- before the delivery policy was introduced.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'discord_alert_events_status_check'
+          AND conrelid = 'discord_alert_events'::regclass
+          AND pg_get_constraintdef(oid) NOT LIKE '%skipped_not_published%'
+    ) THEN
+        ALTER TABLE discord_alert_events
+            DROP CONSTRAINT discord_alert_events_status_check;
+        ALTER TABLE discord_alert_events
+            ADD CONSTRAINT discord_alert_events_status_check
+            CHECK (status IN (
+                'attempted', 'sent', 'skipped_not_configured',
+                'skipped_not_published', 'failed'
+            ));
     END IF;
 END
 $$;
@@ -1848,7 +1873,12 @@ def complete_discord_alert_event(
     """Finalize an alert audit row while keeping failures non-fatal."""
     if event_id is None or not is_pg_available():
         return
-    if status not in {"sent", "skipped_not_configured", "failed"}:
+    if status not in {
+        "sent",
+        "skipped_not_configured",
+        "skipped_not_published",
+        "failed",
+    }:
         raise ValueError(f"invalid Discord alert status: {status}")
     try:
         with get_conn() as conn:

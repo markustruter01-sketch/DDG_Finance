@@ -991,6 +991,7 @@ INVARIANT_FUNCTIONS: tuple[Callable[[InvariantInputs], dict[str, Any]], ...] = (
 
 def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
     """Read all database inputs using SELECT statements only."""
+    timestamp = now or datetime.now(timezone.utc)
     dsn = os.environ.get("INVARIANTS_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
         raise RuntimeError("no database connection is configured")

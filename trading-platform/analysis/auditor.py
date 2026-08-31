@@ -1039,11 +1039,6 @@ def _notify(
         else:
             logger.info(line)
 
-    # ── Discord webhook (optional) ───────────────────────────────────────────
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
-    if not webhook_url:
-        return
-
     color = 0xFF0000 if alerts else (0xFFA500 if failed else 0x00FF00)
     fields = [
         {
@@ -1065,12 +1060,18 @@ def _notify(
         }]
     }
 
+    # Use the shared delivery boundary so this legacy auditor cannot bypass
+    # published-only delivery or the durable Discord audit.
     try:
-        resp = http_requests.post(webhook_url, json=payload, timeout=10)
-        resp.raise_for_status()
-        logger.info("Auditor | Discord notification sent")
+        from notifications.discord import send_payload
+
+        send_payload(
+            payload,
+            alert_type="auditor_report",
+            title=f"Auditor Agent — {overall}",
+        )
     except Exception as exc:
-        logger.warning(f"Auditor | Discord webhook failed: {exc}")
+        logger.warning(f"Auditor | Discord delivery setup failed: {type(exc).__name__}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

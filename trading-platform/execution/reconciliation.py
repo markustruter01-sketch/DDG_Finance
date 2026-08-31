@@ -775,6 +775,45 @@ def reconcile(
 def run_kill_switch_check(report_only: bool = True) -> dict[str, Any]:
     """Run the five-minute safety check; DEV and unarmed production are report-only."""
     from core.kill_switch import evaluate_snapshot, report, trip, _load_acknowledgements
+
+    def _alert_missing_stops(flags: list[dict[str, Any]]) -> None:
+        from notifications.condition_alerts import alert_condition, clear_condition
+
+        active_bots = {
+            str(account.get("bot_id"))
+            for account in snapshot.get("accounts", [])
+            if account.get("bot_id")
+        }
+        missing_by_bot = {
+            str(flag.get("bot_id"))
+            for flag in flags
+            if flag.get("trigger") == "missing_protective_stop"
+            and flag.get("bot_id")
+        }
+        for bot_id in missing_by_bot:
+            bot_flags = [
+                flag for flag in flags
+                if flag.get("trigger") == "missing_protective_stop"
+                and str(flag.get("bot_id")) == bot_id
+            ]
+            alert_condition(
+                source="kill_switch",
+                condition="missing_protective_stop",
+                bot_id=bot_id,
+                title="Naked position detected",
+                description=(
+                    "A non-dust position has no covering protective stop. "
+                    f"Evidence: {json.dumps(bot_flags, default=str, sort_keys=True)}"
+                ),
+            )
+        for bot_id in active_bots - missing_by_bot:
+            clear_condition(
+                "kill_switch",
+                "missing_protective_stop",
+                bot_id,
+                notify_recovery=True,
+            )
+
     snapshot = collect_live_snapshot()
     acknowledgements = _load_acknowledgements()
     for account in snapshot["accounts"]:
@@ -782,6 +821,7 @@ def run_kill_switch_check(report_only: bool = True) -> dict[str, Any]:
             f"deployment:{account['bot_id']}" in acknowledgements
         )
     flags = evaluate_snapshot(snapshot)
+    _alert_missing_stops(flags)
     if report_only or not flags:
         return report(snapshot)
     return trip(flags, snapshot)

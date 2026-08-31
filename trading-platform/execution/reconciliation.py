@@ -19,6 +19,11 @@ from core.symbols import canonical_symbol
 _LEDGER_ACCOUNT_ALIASES = {"buck_futures": "oracle"}
 _TRADES_DEFAULT_ACCOUNT = "oracle"
 _MATERIAL_NOTIONAL = 0.01
+_AUTHORITATIVE_POSITION_TABLES = {
+    "oracle": "alpaca_etf_positions",
+    "jerome_macro": "bot3_positions",
+}
+_TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
 
 
 def _client_for(bot_id: str):
@@ -39,6 +44,7 @@ def _orders(client) -> list[dict[str, Any]]:
         result.append({
             "id": str(order.id), "symbol": str(order.symbol), "side": getattr(order.side, "value", order.side),
             "type": getattr(order.type, "value", order.type), "qty": float(order.qty or 0),
+            "status": getattr(order.status, "value", order.status),
         })
     return result
 
@@ -63,6 +69,64 @@ def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.warning(f"Reconciliation | ledger read failed for {bot_id}: {exc}")
     return []
+
+
+def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
+    """Read active strategy positions from the bot's authoritative table.
+
+    ``bot_portfolio`` remains a useful aggregate mirror and is checked
+    separately.  These rows are the strategy source of truth; durable BIL/VOO
+    vault holdings are explicitly excluded so they cannot become strategy
+    quantity findings.
+    """
+    bot_id = resolve_bot_id(bot_id)
+    table = _AUTHORITATIVE_POSITION_TABLES.get(bot_id)
+    if table is None:
+        # Bot 2 is paused and intentionally has no authoritative strategy path
+        # until it is reactivated.
+        return []
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT
+                        symbol,
+                        qty::double precision AS qty
+                    FROM {table} AS position
+                    WHERE position.bot_id = %s
+                      AND lower(position.status) = 'open'
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM per_bot_vault_holdings AS vault
+                          WHERE vault.bot_id = position.bot_id
+                            AND vault.symbol = position.symbol
+                      )
+                    """,
+                    (bot_id,),
+                )
+                return [
+                    {
+                        "table": table,
+                        "bot_id": bot_id,
+                        "symbol": row[0],
+                        "qty": row[1],
+                    }
+                    for row in cur.fetchall()
+                ]
+    except Exception as exc:
+        logger.warning(
+            f"Reconciliation | authoritative ledger read failed for {bot_id}: {exc}"
+        )
+        return [
+            {
+                "bot_id": bot_id,
+                "table": table,
+                "kind": "authoritative_ledger_unavailable",
+                "detail": str(exc),
+            }
+        ]
 
 
 def _ledger_account_id(row: dict[str, Any]) -> str | None:
@@ -244,7 +308,11 @@ def _account_summaries(
     return summaries
 
 
-def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _mismatches(
+    bot_id: str,
+    broker: list[dict[str, Any]],
+    ledger: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     bot_id = resolve_bot_id(bot_id)
     b = {canonical_symbol(p.get("symbol")): abs(float(p.get("qty") or 0)) for p in broker if abs(float(p.get("qty") or 0)) >= DUST_QTY}
     l = {canonical_symbol(p.get("symbol")): abs(float(p.get("qty") or 0)) for p in ledger if abs(float(p.get("qty") or 0)) >= DUST_QTY}
@@ -255,46 +323,197 @@ def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str
         elif symbol not in l:
             results.append({"bot_id": bot_id, "symbol": symbol, "kind": "broker_without_ledger"})
         elif abs(b[symbol] - l[symbol]) > DUST_QTY:
-            results.append({"bot_id": bot_id, "symbol": symbol, "kind": "quantity_mismatch", "broker_qty": b[symbol], "ledger_qty": l[symbol]})
+            results.append({
+                "bot_id": bot_id,
+                "table": "bot_portfolio.positions",
+                "symbol": symbol,
+                "kind": "quantity_mismatch",
+                "broker_qty": b[symbol],
+                "ledger_qty": l[symbol],
+            })
     return results
 
 
-def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Compare live order IDs with the durable stop/order ledger."""
+def _authoritative_quantity_mismatches(
+    bot_id: str,
+    broker: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compare broker quantities with the authoritative strategy ledger.
+
+    This intentionally checks only symbols present in both sources.  Symbol
+    presence and orphan detection remain the responsibility of ``_mismatches``
+    and ``_ledger_orphan_findings``; vault holdings are not strategy rows.
+    """
+    resolved_bot_id = resolve_bot_id(bot_id)
+    if resolved_bot_id not in _AUTHORITATIVE_POSITION_TABLES:
+        return []
+
+    ledger = _authoritative_ledger_positions(resolved_bot_id)
+    if ledger and "kind" in ledger[0]:
+        return ledger
+
+    broker_by_symbol: dict[str, float] = {}
+    for position in broker:
+        qty = abs(float(position.get("qty") or 0))
+        if qty >= DUST_QTY:
+            symbol = canonical_symbol(position.get("symbol"))
+            broker_by_symbol[symbol] = broker_by_symbol.get(symbol, 0.0) + qty
+
+    ledger_by_symbol: dict[str, float] = {}
+    for position in ledger:
+        qty = abs(float(position.get("qty") or 0))
+        if qty >= DUST_QTY:
+            symbol = canonical_symbol(position.get("symbol"))
+            ledger_by_symbol[symbol] = ledger_by_symbol.get(symbol, 0.0) + qty
+
+    table = _AUTHORITATIVE_POSITION_TABLES[resolved_bot_id]
+    return [
+        {
+            "bot_id": resolved_bot_id,
+            "table": table,
+            "symbol": symbol,
+            "kind": "quantity_mismatch",
+            "broker_qty": broker_by_symbol[symbol],
+            "ledger_qty": ledger_by_symbol[symbol],
+        }
+        for symbol in sorted(set(broker_by_symbol) & set(ledger_by_symbol))
+        if abs(broker_by_symbol[symbol] - ledger_by_symbol[symbol]) > DUST_QTY
+    ]
+
+
+def _is_live_protective_order(order: dict[str, Any]) -> bool:
+    """Treat pending cancellation as live until a terminal status is confirmed."""
+    order_type = str(order.get("type") or "").lower()
+    side = str(order.get("side") or "").lower()
+    status = str(order.get("status") or "").lower()
+    # new, accepted, held, and pending_cancel are LIVE. Only the terminal
+    # statuses below count as not-live for the ledger-stop comparison.
+    return (
+        side in {"buy", "sell"}
+        and order_type in {"stop", "stop_limit", "trailing_stop"}
+        and status not in _TERMINAL_ORDER_STATUSES
+    )
+
+
+def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
+    """Load owned stop IDs with bot/symbol identity preserved.
+
+    Legacy ratchet rows have no bot column and are retained for Oracle's
+    forward broker-order check, but only active authoritative position rows
+    participate in the reverse stale-ledger check.
+    """
     bot_id = resolve_bot_id(bot_id)
+    rows: list[dict[str, Any]] = []
     try:
         from db.postgres import get_conn
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT stop_order_id FROM ratchet_stops WHERE stop_order_id IS NOT NULL")
-                ledger_ids = {str(row[0]) for row in cur.fetchall()}
                 if bot_id == "oracle":
                     cur.execute(
-                        "SELECT stop_order_id FROM alpaca_etf_positions "
+                        "SELECT symbol, stop_order_id FROM ratchet_stops "
                         "WHERE stop_order_id IS NOT NULL"
                     )
-                    ledger_ids.update(str(row[0]) for row in cur.fetchall())
-                if bot_id == "jerome_macro":
-                    # Bot 3's crypto/ETF stop ownership is recorded in its
-                    # dedicated ledger, not in the legacy ratchet table.
+                    rows.extend(
+                        {
+                            "bot_id": bot_id,
+                            "symbol": row[0],
+                            "stop_order_id": str(row[1]),
+                            "table": "ratchet_stops",
+                            "reverse_check": False,
+                        }
+                        for row in cur.fetchall()
+                    )
+                if bot_id == "oracle":
                     cur.execute(
-                        "SELECT stop_order_id FROM bot3_positions "
-                        "WHERE stop_order_id IS NOT NULL"
+                        "SELECT bot_id, symbol, stop_order_id "
+                        "FROM alpaca_etf_positions "
+                        "WHERE bot_id = %s AND status = 'open' "
+                        "AND stop_order_id IS NOT NULL",
+                        (bot_id,),
                     )
-                    ledger_ids.update(str(row[0]) for row in cur.fetchall())
-        return [
-            {
-                "bot_id": bot_id,
-                "order_id": order["id"],
-                "symbol": order["symbol"],
-                "kind": "broker_open_order_without_ledger",
-            }
-            for order in orders
-            if str(order["id"]) not in ledger_ids
-        ]
+                    rows.extend(
+                        {
+                            "bot_id": row[0],
+                            "symbol": row[1],
+                            "stop_order_id": str(row[2]),
+                            "table": "alpaca_etf_positions",
+                            "reverse_check": True,
+                        }
+                        for row in cur.fetchall()
+                    )
+                elif bot_id == "jerome_macro":
+                    cur.execute(
+                        "SELECT bot_id, symbol, stop_order_id "
+                        "FROM bot3_positions "
+                        "WHERE bot_id = %s AND status = 'open' "
+                        "AND stop_order_id IS NOT NULL",
+                        (bot_id,),
+                    )
+                    rows.extend(
+                        {
+                            "bot_id": row[0],
+                            "symbol": row[1],
+                            "stop_order_id": str(row[2]),
+                            "table": "bot3_positions",
+                            "reverse_check": True,
+                        }
+                        for row in cur.fetchall()
+                    )
+        return rows
     except Exception as exc:
-        logger.warning(f"Reconciliation | order ledger read failed for {bot_id}: {exc}")
+        logger.warning(f"Reconciliation | stop ledger read failed for {bot_id}: {exc}")
         return []
+
+
+def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compare live owned stops in both directions, per bot and per symbol."""
+    bot_id = resolve_bot_id(bot_id)
+    ledger_rows = _stop_ledger_rows(bot_id)
+    live_orders = [order for order in orders if _is_live_protective_order(order)]
+    ledger_keys = {
+        (
+            row["bot_id"],
+            canonical_symbol(row["symbol"]),
+            str(row["stop_order_id"]),
+        )
+        for row in ledger_rows
+        if row["symbol"] is not None
+    }
+    live_keys = {
+        (bot_id, canonical_symbol(order["symbol"]), str(order["id"]))
+        for order in live_orders
+    }
+    findings = [
+        {
+            "bot_id": bot_id,
+            "order_id": order["id"],
+            "symbol": order["symbol"],
+            "kind": "broker_open_order_without_ledger",
+        }
+        for order in live_orders
+        if (
+            bot_id,
+            canonical_symbol(order["symbol"]),
+            str(order["id"]),
+        ) not in ledger_keys
+        ]
+    findings.extend(
+        {
+            "bot_id": row["bot_id"],
+            "table": row["table"],
+            "symbol": row["symbol"],
+            "stop_order_id": row["stop_order_id"],
+            "kind": "ledger_stop_without_broker",
+        }
+        for row in ledger_rows
+        if row["reverse_check"]
+        and (
+            row["bot_id"],
+            canonical_symbol(row["symbol"]),
+            str(row["stop_order_id"]),
+        ) not in live_keys
+    )
+    return findings
 
 
 def _stale_portfolio(bot_id: str) -> list[dict[str, Any]]:
@@ -386,6 +605,7 @@ def collect_live_snapshot() -> dict[str, Any]:
             "_client": client,
         })
         mismatches.extend(_mismatches(bot_id, positions, ledger))
+        mismatches.extend(_authoritative_quantity_mismatches(bot_id, positions))
         mismatches.extend(_order_mismatches(bot_id, orders))
         mismatches.extend(_stale_portfolio(bot_id))
         fleet_equity += equity

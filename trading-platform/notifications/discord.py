@@ -1,13 +1,11 @@
 """
 Discord Webhook Notifications
--------------------------------
-Single automated notification: Daily fleet P&L report at 05:00 AEST (Brisbane).
-
-All other event-driven Discord notifications (trade placed, kill switch, audit,
-profit sweep, blackout) have been removed — Discord is now a daily digest only.
+-----------------------------
+Sends the daily fleet P&L report plus direct capital-safety alerts.
 
 Requires DISCORD_WEBHOOK_URL in environment secrets.
-If not set, all calls are silent no-ops.
+Every delivery attempt is audited without storing webhook URLs or payloads.
+If the webhook is absent, the call is skipped and recorded as such.
 """
 
 from __future__ import annotations
@@ -29,20 +27,89 @@ _CAPITAL_RISK_LAST_FIRED: dict[str, float] = {}
 _CAPITAL_RISK_COOLDOWN = 1800  # seconds (30 min)
 
 
-def _send(payload: dict) -> None:
+def _audit_start(alert_type: str, title: str) -> int | None:
+    try:
+        from db.postgres import create_discord_alert_event
+        return create_discord_alert_event(alert_type, title)
+    except Exception as exc:
+        logger.warning(f"Discord | audit start failed: {exc}")
+        return None
+
+
+def _audit_finish(
+    event_id: int | None,
+    status: str,
+    *,
+    http_status: int | None = None,
+    error: str | None = None,
+) -> None:
+    try:
+        from db.postgres import complete_discord_alert_event
+        complete_discord_alert_event(
+            event_id,
+            status,
+            http_status=http_status,
+            error=error,
+        )
+    except Exception as exc:
+        logger.warning(f"Discord | audit completion failed: {exc}")
+
+
+def _safe_error(exc: Exception) -> str:
+    """Return a credential-safe error label; request exceptions can contain URLs."""
+    return type(exc).__name__
+
+
+def _send(
+    payload: dict,
+    *,
+    event_id: int | None = None,
+    alert_type: str = "general",
+    title: str = "Discord alert",
+) -> None:
+    if event_id is None:
+        event_id = _audit_start(alert_type, title)
     if not _WEBHOOK_URL:
+        _audit_finish(event_id, "skipped_not_configured", error="DISCORD_WEBHOOK_URL is not configured")
+        logger.warning("Discord | DISCORD_WEBHOOK_URL not set — skipping alert")
         return
     try:
         resp = requests.post(_WEBHOOK_URL, json=payload, timeout=10)
         if resp.status_code >= 400:
-            logger.warning(f"Discord | Webhook returned {resp.status_code}: {resp.text[:200]}")
+            _audit_finish(
+                event_id,
+                "failed",
+                http_status=resp.status_code,
+                error=f"HTTP {resp.status_code}",
+            )
+            logger.warning(f"Discord | Webhook returned HTTP {resp.status_code}")
+        else:
+            _audit_finish(event_id, "sent", http_status=resp.status_code)
     except Exception as exc:
-        logger.warning(f"Discord | Failed to send webhook: {exc}")
+        safe_error = _safe_error(exc)
+        _audit_finish(event_id, "failed", error=safe_error)
+        logger.warning(f"Discord | Failed to send webhook: {safe_error}")
 
 
-def _send_async(payload: dict) -> None:
-    t = threading.Thread(target=_send, args=(payload,), daemon=True)
-    t.start()
+def _send_async(
+    payload: dict,
+    *,
+    alert_type: str = "general",
+    title: str = "Discord alert",
+) -> None:
+    event_id = _audit_start(alert_type, title)
+    try:
+        t = threading.Thread(
+            target=_send,
+            args=(payload,),
+            kwargs={"event_id": event_id, "alert_type": alert_type, "title": title},
+            daemon=True,
+        )
+        t.start()
+    except Exception as exc:
+        safe_error = _safe_error(exc)
+        _audit_finish(event_id, "failed", error=safe_error)
+        logger.warning(f"Discord | Failed to start delivery thread: {safe_error}")
 
 
 def alert_critical(title: str, description: str, fields: list[dict] | None = None) -> None:
@@ -54,7 +121,7 @@ def alert_critical(title: str, description: str, fields: list[dict] | None = Non
     tracker — the webhook call fires even if the tracker itself is unavailable.
     """
     payload = {"embeds": [_embed(title, description, COLOR_RED, fields=fields)]}
-    _send_async(payload)
+    _send_async(payload, alert_type="critical", title=title)
 
 
 def notify_capital_risk(msg: str, symbol: str | None = None) -> None:
@@ -76,7 +143,7 @@ def notify_capital_risk(msg: str, symbol: str | None = None) -> None:
         return  # rate-limited: same symbol already alerted within 30 min
     _CAPITAL_RISK_LAST_FIRED[key] = now
     try:
-        _send_async({"content": msg})
+        _send_async({"content": msg}, alert_type="capital_risk", title="Capital risk")
     except Exception as _e:
         logger.error(f"notify_capital_risk | send failed ({key}): {_e}")
 
@@ -187,8 +254,14 @@ def notify_daily_pnl_report() -> None:
     One `content` POST, no embed, no per-bot breakdown.
     Called by APScheduler every day at 05:00 AEST (Brisbane).
     """
+    audit_id = _audit_start("daily_report", "Daily fleet P&L report")
     if not _WEBHOOK_URL:
-        logger.info("Discord | DISCORD_WEBHOOK_URL not set — skipping daily report")
+        _send(
+            {},
+            event_id=audit_id,
+            alert_type="daily_report",
+            title="Daily fleet P&L report",
+        )
         return
 
     # ── Fleet data ─────────────────────────────────────────────────────────
@@ -196,11 +269,13 @@ def notify_daily_pnl_report() -> None:
         from routes.fleet_equity import _fetch_fleet_equity
         fleet = _fetch_fleet_equity()
     except Exception as exc:
+        _audit_finish(audit_id, "failed", error="fleet_equity_unavailable")
         logger.warning(f"Discord | fleet equity fetch failed — skipping: {exc}")
         return
 
     fleet_total = fleet.get("fleet_total", {})
     if not fleet_total:
+        _audit_finish(audit_id, "failed", error="fleet_total_missing")
         logger.warning("Discord | fleet_total missing — skipping")
         return
 
@@ -253,7 +328,12 @@ def notify_daily_pnl_report() -> None:
                     warning_lines.append(f"⚠️ {display}: no trades {_WARN_NO_TRADE_HOURS}h")
 
     content_lines = [line1, line2, line3] + warning_lines
-    _send({"content": "\n".join(content_lines)})
+    _send(
+        {"content": "\n".join(content_lines)},
+        event_id=audit_id,
+        alert_type="daily_report",
+        title="Daily fleet P&L report",
+    )
     logger.info(
         f"Discord | {len(content_lines)}-line report sent — "
         f"24h: {sign_pct}{pnl_24h_pct:.2f}% / {sign_usd}${pnl_24h:,.0f} / {regime_label}"

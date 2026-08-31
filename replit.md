@@ -47,6 +47,10 @@ liveness, postmortem, audit, benchmark, walk-forward, snapshot, and vault jobs.
 The old `intraday_cycle` function remains as compatibility code but is not
 registered as an active job and returns before running the retired stock scanner.
 `evening_postmortem` is registered on weekdays at 16:10 ET.
+Published monitoring registers both the authenticated trading-API probe and the
+runner probe from the same explicit liveness enablement. The runner probe accepts
+the fixed colocated health URL or an HTTPS `/health` URL whose hostname exactly
+matches `RUNNER_HEALTH_ALLOWED_HOST`; arbitrary endpoints are rejected.
 
 ## Persistence and learning
 
@@ -86,6 +90,9 @@ The alert subsystem is implemented in
 `discord.py`, with routes in `trading-platform/routes/alerts.py`. Discord is
 optional and uses the configured webhook for the daily fleet P&L digest and
 critical liveness, kill-switch, exit, and deployment-hash alerts.
+Discord delivery lifecycle outcomes are stored in `discord_alert_events` without
+webhook URLs or payloads. The protected `GET /trading-api/alerts/audit` endpoint
+returns recent attempted, sent, skipped, and failed outcomes.
 
 ## Fleet Commander
 

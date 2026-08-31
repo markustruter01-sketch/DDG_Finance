@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Generator
 
 from loguru import logger
@@ -340,6 +341,59 @@ ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS bot_id TEXT;
 ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS cycle_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_sys_deg_ts        ON system_degradations (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_sys_deg_component ON system_degradations (component, ts DESC);
+
+-- ── Discord Alert Audit ────────────────────────────────────────────────────
+-- Durable delivery outcome for Discord alerts. Never stores webhook URLs or
+-- full payloads; an attempted row remains queryable if the process dies before
+-- the asynchronous delivery thread finishes.
+CREATE TABLE IF NOT EXISTS discord_alert_events (
+    id             BIGSERIAL PRIMARY KEY,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at   TIMESTAMPTZ,
+    alert_type     TEXT NOT NULL,
+    title          TEXT NOT NULL,
+    status         TEXT NOT NULL,
+    http_status    INTEGER,
+    error          TEXT,
+    CONSTRAINT discord_alert_events_status_check
+        CHECK (status IN ('attempted', 'sent', 'skipped_not_configured', 'failed')),
+    CONSTRAINT discord_alert_events_completion_check
+        CHECK (
+            (status = 'attempted' AND completed_at IS NULL)
+            OR
+            (status <> 'attempted' AND completed_at IS NOT NULL)
+        )
+);
+CREATE INDEX IF NOT EXISTS idx_discord_alert_events_created
+    ON discord_alert_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_discord_alert_events_status
+    ON discord_alert_events (status, created_at DESC);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'discord_alert_events_status_check'
+          AND conrelid = 'discord_alert_events'::regclass
+    ) THEN
+        ALTER TABLE discord_alert_events
+            ADD CONSTRAINT discord_alert_events_status_check
+            CHECK (status IN ('attempted', 'sent', 'skipped_not_configured', 'failed'));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'discord_alert_events_completion_check'
+          AND conrelid = 'discord_alert_events'::regclass
+    ) THEN
+        ALTER TABLE discord_alert_events
+            ADD CONSTRAINT discord_alert_events_completion_check
+            CHECK (
+                (status = 'attempted' AND completed_at IS NULL)
+                OR
+                (status <> 'attempted' AND completed_at IS NOT NULL)
+            );
+    END IF;
+END
+$$;
 
 -- ── LLM Learning Journal ───────────────────────────────────────────────────
 -- Consolidated insights extracted from every LLM analysis output.
@@ -1670,6 +1724,98 @@ def get_oracle_profit_reserve() -> dict:
     except Exception as exc:
         logger.error(f"OraclePR | get_oracle_profit_reserve failed: {exc}")
         return {"total_usd": 0.0, "contributions": 0, "last_contribution": 0.0, "last_ts": None}
+
+
+# ── Discord alert audit ────────────────────────────────────────────────────────
+
+def create_discord_alert_event(alert_type: str, title: str) -> int | None:
+    """Persist an alert attempt without ever persisting its webhook payload."""
+    if not is_pg_available():
+        logger.warning("Discord audit | PostgreSQL unavailable; alert attempt is not durable")
+        return None
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO discord_alert_events (alert_type, title, status)
+                    VALUES (%s, %s, 'attempted')
+                    RETURNING id
+                    """,
+                    (alert_type[:64], title[:300]),
+                )
+                row = cur.fetchone()
+                return int(row[0]) if row else None
+    except Exception as exc:
+        logger.warning(f"Discord audit | create failed: {exc}")
+        return None
+
+
+def complete_discord_alert_event(
+    event_id: int | None,
+    status: str,
+    *,
+    http_status: int | None = None,
+    error: str | None = None,
+) -> None:
+    """Finalize an alert audit row while keeping failures non-fatal."""
+    if event_id is None or not is_pg_available():
+        return
+    if status not in {"sent", "skipped_not_configured", "failed"}:
+        raise ValueError(f"invalid Discord alert status: {status}")
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE discord_alert_events
+                    SET completed_at = NOW(),
+                        status = %s,
+                        http_status = %s,
+                        error = %s
+                    WHERE id = %s
+                      AND status = 'attempted'
+                    """,
+                    (status, http_status, error[:500] if error else None, event_id),
+                )
+    except Exception as exc:
+        logger.warning(f"Discord audit | completion failed for event {event_id}: {exc}")
+
+
+def get_discord_alert_events(hours: int = 168, limit: int = 100) -> list[dict]:
+    """Return recent Discord outcomes without exposing webhook credentials."""
+    if not is_pg_available():
+        return []
+    hours = max(1, min(int(hours), 720))
+    limit = max(1, min(int(limit), 500))
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, created_at, completed_at, alert_type, title,
+                           status, http_status, error
+                    FROM discord_alert_events
+                    WHERE created_at >= NOW() - (%s * INTERVAL '1 hour')
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (hours, limit),
+                )
+                columns = [desc[0] for desc in cur.description]
+                rows = cur.fetchall()
+        return [
+            {
+                **{
+                    key: (value.isoformat() if isinstance(value, datetime) else value)
+                    for key, value in zip(columns, row)
+                }
+            }
+            for row in rows
+        ]
+    except Exception as exc:
+        logger.warning(f"Discord audit | read failed: {exc}")
+        return []
 
 
 # ── ARC 4: Reconciliation event writer ────────────────────────────────────────

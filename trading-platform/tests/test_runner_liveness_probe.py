@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from core import scheduler
 
 
@@ -54,6 +56,22 @@ class _RecordingScheduler:
 
     def add_job(self, **kwargs):
         self.jobs.append(kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _configured_runner_url(monkeypatch):
+    monkeypatch.delenv("RUNNER_HEALTH_URL", raising=False)
+    monkeypatch.delenv("RUNNER_HEALTH_ALLOWED_HOST", raising=False)
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_URL",
+        "https://runner.example.test/health",
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_ALLOWED_HOST",
+        "runner.example.test",
+    )
 
 
 def test_runner_probe_alerts_after_threshold(monkeypatch):
@@ -152,4 +170,87 @@ def test_authenticated_api_probe_is_registered_when_published_flag_is_enabled(mo
     scheduler._register_jobs(recording_scheduler)
 
     job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_trading_api_liveness" in job_ids
+
+
+def test_runner_probe_is_registered_with_explicit_published_monitoring(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_runner_liveness" in job_ids
+
+
+def test_runner_probe_is_not_registered_for_loopback_endpoint(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_URL",
+        "https://127.0.0.2/health",
+    )
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_ALLOWED_HOST",
+        "127.0.0.2",
+    )
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_runner_liveness" not in job_ids
+    assert "published_trading_api_liveness" in job_ids
+
+
+def test_runner_probe_is_not_registered_for_unlisted_host(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_URL",
+        "https://unexpected.example.test/health",
+    )
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_runner_liveness" not in job_ids
+
+
+def test_trusted_local_runner_endpoint_is_registered(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_URL",
+        scheduler.TRUSTED_LOCAL_RUNNER_HEALTH_URL,
+    )
+    monkeypatch.setattr(scheduler, "RUNNER_HEALTH_ALLOWED_HOST", "")
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_runner_liveness" in job_ids
+
+
+def test_malformed_runner_port_does_not_crash_registration(monkeypatch):
+    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
+    monkeypatch.setenv("TRADING_API_LIVENESS_ENABLED", "1")
+    monkeypatch.setattr(
+        scheduler,
+        "RUNNER_HEALTH_URL",
+        "https://runner.example.test:99999/health",
+    )
+    recording_scheduler = _RecordingScheduler()
+
+    scheduler._register_jobs(recording_scheduler)
+
+    job_ids = {job["id"] for job in recording_scheduler.jobs}
+    assert "published_runner_liveness" not in job_ids
     assert "published_trading_api_liveness" in job_ids

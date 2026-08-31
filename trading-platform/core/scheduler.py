@@ -24,8 +24,10 @@ so it is torn down cleanly on shutdown.
 """
 
 import asyncio
+import ipaddress
 import os
 from datetime import date, datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import httpx
 import pytz
@@ -50,10 +52,15 @@ _runner_liveness_alerted: bool = False
 _trading_api_liveness_failures: int = 0
 _trading_api_liveness_alerted: bool = False
 _trading_api_liveness_checks: int = 0
+TRUSTED_LOCAL_RUNNER_HEALTH_URL = "http://127.0.0.1:8085/health"
 RUNNER_HEALTH_URL = os.environ.get(
     "RUNNER_HEALTH_URL",
-    "http://127.0.0.1:8085/health",
+    TRUSTED_LOCAL_RUNNER_HEALTH_URL,
 )
+RUNNER_HEALTH_ALLOWED_HOST = os.environ.get(
+    "RUNNER_HEALTH_ALLOWED_HOST",
+    "",
+).strip().lower()
 TRADING_API_HEALTH_URL = os.environ.get(
     "TRADING_API_HEALTH_URL",
     "http://127.0.0.1:8000/trading-api/fleet/equity",
@@ -76,6 +83,47 @@ def _trading_api_liveness_enabled() -> bool:
     return _is_published_deployment() or os.environ.get(
         "TRADING_API_LIVENESS_ENABLED", ""
     ).strip() == "1"
+
+
+def _runner_health_url() -> str | None:
+    """Return the trusted local URL or an explicitly allowlisted public URL."""
+    url = os.environ.get("RUNNER_HEALTH_URL", RUNNER_HEALTH_URL).strip()
+    if url == TRUSTED_LOCAL_RUNNER_HEALTH_URL:
+        return url
+    try:
+        allowed_host = os.environ.get(
+            "RUNNER_HEALTH_ALLOWED_HOST",
+            RUNNER_HEALTH_ALLOWED_HOST,
+        ).strip().lower()
+        parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or not allowed_host
+        or hostname != allowed_host
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in {None, 443}
+        or parsed.path.rstrip("/") != "/health"
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    try:
+        ipaddress.ip_address(hostname)
+        return None
+    except ValueError:
+        pass
+    return url
+
+
+def _runner_liveness_enabled() -> bool:
+    """Use the same explicit published-monitor opt-in as the API probe."""
+    return _trading_api_liveness_enabled() and _runner_health_url() is not None
 
 
 def _kill_switch_enforced() -> bool:
@@ -163,7 +211,7 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         "scheduled_reconciliation (hourly) + standing_invariants (15 min, LOG ONLY)"
     )
 
-    if _is_published_deployment():
+    if _runner_liveness_enabled():
         scheduler.add_job(
             func=_probe_runner_liveness,
             trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
@@ -178,7 +226,13 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         )
         logger.info(
             f"Scheduler | Registered: published_runner_liveness (1 min, "
-            f"url={RUNNER_HEALTH_URL})"
+            f"url={_runner_health_url()})"
+        )
+    elif _trading_api_liveness_enabled():
+        logger.warning(
+            "Scheduler | Published runner liveness probe skipped: "
+            "RUNNER_HEALTH_URL must be the trusted local runner endpoint or "
+            "an HTTPS /health URL matching RUNNER_HEALTH_ALLOWED_HOST"
         )
     if _trading_api_liveness_enabled():
         scheduler.add_job(
@@ -457,10 +511,16 @@ async def _standing_invariants_job() -> None:
 async def _probe_runner_liveness() -> None:
     """Independent API-process probe for the separately hosted runner."""
     global _runner_liveness_failures, _runner_liveness_alerted
+    runner_url = _runner_health_url()
     try:
+        if runner_url is None:
+            raise RuntimeError(
+                "runner health URL is not the trusted local endpoint or an "
+                "allowlisted HTTPS /health URL"
+            )
         async with httpx.AsyncClient(timeout=RUNNER_HEALTH_TIMEOUT_SECONDS) as client:
             response = await client.get(
-                RUNNER_HEALTH_URL,
+                runner_url,
                 headers={"User-Agent": "trading-api-runner-liveness"},
             )
             if response.status_code != 200:
@@ -472,7 +532,7 @@ async def _probe_runner_liveness() -> None:
         _runner_liveness_failures = 0
         if recovered:
             logger.warning(
-                f"Scheduler | published runner liveness recovered: {RUNNER_HEALTH_URL}"
+                f"Scheduler | published runner liveness recovered: {runner_url}"
             )
         _runner_liveness_alerted = False
     except Exception as exc:
@@ -489,7 +549,7 @@ async def _probe_runner_liveness() -> None:
             message = (
                 f"Published trading runner has failed "
                 f"{_runner_liveness_failures} consecutive health checks. "
-                f"URL: {RUNNER_HEALTH_URL}. Latest error: {exc}"
+                f"URL: {runner_url or 'not configured'}. Latest error: {exc}"
             )
             logger.critical(f"Scheduler | RUNNER LIVENESS ALERT | {message}")
             try:

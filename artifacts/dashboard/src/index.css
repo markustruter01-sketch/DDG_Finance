@@ -765,6 +765,34 @@
   font-family: "IBM Plex Sans", sans-serif;
 }
 
+.bench-shell-loading .bench-content { min-height: 100vh; }
+.bench-shell-loading .bench-rail-button { cursor: default; }
+.bench-loading-panel {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding: 42px;
+  border: 1px solid var(--bench-line);
+  background: linear-gradient(145deg, rgba(20,33,41,.92), rgba(12,19,24,.82));
+}
+.bench-loading-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  color: var(--bench-warm);
+  border: 1px solid rgba(233,174,87,.35);
+  background: rgba(233,174,87,.08);
+  box-shadow: 0 0 28px rgba(233,174,87,.12);
+}
+.bench-loading-panel h2 { margin: 0; color: #edf2f1; font-family: "Space Grotesk", sans-serif; font-size: clamp(25px, 3vw, 40px); letter-spacing: -.04em; }
+.bench-loading-panel p { max-width: 540px; margin: 0; color: var(--bench-muted); line-height: 1.7; }
+.bench-loading-panel .bench-loading-bar { width: min(460px, 100%); margin-top: 14px; }
+
 .bench-shell::before {
   content: "";
   position: fixed;
@@ -857,6 +885,7 @@
 .bench-control-grid { display: grid; grid-template-columns: repeat(6, minmax(100px, 1fr)); gap: 13px 15px; padding: 22px 18px 18px; }
 .bench-field, .bench-range-field { display: flex; min-width: 0; flex-direction: column; gap: 7px; color: #819199; font-family: "IBM Plex Mono", monospace; font-size: 9px; letter-spacing: .04em; }
 .bench-field > span, .bench-range-field > span { min-height: 12px; }
+.bench-readonly-field { display: flex; align-items: center; min-height: 31px; overflow: hidden; padding: 0 9px; color: #8b9a9e; border: 1px solid #263840; background: #101a1f; font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
 .bench-range-field > span { display: flex; justify-content: space-between; gap: 5px; }
 .bench-range-field b { color: var(--bench-warm); font-weight: 500; white-space: nowrap; }
 .bench-select-wrap { position: relative; }
@@ -942,6 +971,9 @@
 .bench-compare-rule { display: flex; align-items: center; gap: 10px; margin: 0 32px; color: #61747c; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
 .bench-compare-rule i { flex: 1; height: 1px; background: #24353d; }
 .bench-fallback { display: flex; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: #a9b8ba; background: #0b1115; font-family: "IBM Plex Sans", sans-serif; text-align: center; }
+.bench-unverified { color: #727d82; }
+.bench-unverified strong { padding: 6px 8px; color: #858d90; border: 1px solid #3a4448; background: #161d20; font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .08em; }
+.bench-unverified p { max-width: 520px; color: #667378; }
 .bench-fallback svg { color: var(--bench-warm); }
 .bench-fallback h1 { margin: 0; color: #edf3f0; font-family: "Space Grotesk", sans-serif; font-size: 21px; }
 .bench-fallback p { margin: 0; color: #71838b; font-family: "IBM Plex Mono", monospace; font-size: 11px; }

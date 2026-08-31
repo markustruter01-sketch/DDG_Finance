@@ -14,6 +14,7 @@ from .claude_report import router as claude_report_router
 from .scorecard import scorecard_router
 from .market_state_route import router as market_state_router
 from .entry_windows import router as entry_windows_router
+from .strategy_bench import router as strategy_bench_router
 
 ALL_ROUTERS = [
     system_router,
@@ -32,4 +33,5 @@ ALL_ROUTERS = [
     scorecard_router,
     market_state_router,
     entry_windows_router,
+    strategy_bench_router,
 ]

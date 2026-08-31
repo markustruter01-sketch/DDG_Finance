@@ -54,6 +54,7 @@ from routes._deps import (
 from routes import ALL_ROUTERS
 from routes.bot_registry_route import router as bot_registry_router
 from routes.reports import router as reports_router
+from routes.strategy_bench import router as strategy_bench_router
 
 
 @asynccontextmanager
@@ -515,5 +516,10 @@ for sub_router in ALL_ROUTERS:
     router.include_router(sub_router)
 
 app.include_router(router)
+# Local development normally supplies API_PREFIX through the deployment
+# environment.  Keep the proxied /trading-api path available when running the
+# API directly from a shell or from the test suite where API_PREFIX is empty.
+if not API_PREFIX:
+    app.include_router(strategy_bench_router, prefix="/trading-api")
 app.include_router(bot_registry_router, prefix="/trading-api", tags=["bot-registry"])
 app.include_router(reports_router)

@@ -451,7 +451,7 @@ class DegradationCaptureMiddleware(BaseHTTPMiddleware):
 app.add_middleware(DegradationCaptureMiddleware)
 
 
-TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
+INTERNAL_API_SECRET_HEADER = "X-Trading-API-Internal-Secret"
 
 
 def _health_path() -> str:
@@ -460,29 +460,66 @@ def _health_path() -> str:
 
 
 class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
-    """Require the shared API secret for every route except liveness health."""
+    """Require a Clerk session or server-to-server secret.
+
+    The internal secret is retained only for trusted scheduler probes. It is
+    never compiled into the dashboard bundle. Browser requests must carry a
+    verified Clerk session cookie.
+    """
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
         if request.url.path == _health_path():
             return await call_next(request)
 
-        expected_secret = os.getenv("TRADING_API_SECRET", "").strip()
-        if not expected_secret:
-            logger.error("Trading API authentication is not configured; rejecting protected request")
+        expected_internal_secret = os.getenv("TRADING_API_SECRET", "").strip()
+        supplied_internal_secret = request.headers.get(INTERNAL_API_SECRET_HEADER, "")
+        if (
+            expected_internal_secret
+            and supplied_internal_secret
+            and hmac.compare_digest(supplied_internal_secret, expected_internal_secret)
+        ):
+            request.state.auth_method = "internal_secret"
+            return await call_next(request)
+
+        clerk_secret_key = os.getenv("CLERK_SECRET_KEY", "").strip()
+        if clerk_secret_key:
+            try:
+                from core.clerk_auth import clerk_user_id_from_headers
+
+                clerk_user_id = await asyncio.to_thread(
+                    clerk_user_id_from_headers,
+                    request.headers,
+                    clerk_secret_key,
+                )
+            except Exception:
+                clerk_user_id = None
+
+            if clerk_user_id:
+                request.state.auth_method = "clerk"
+                request.state.clerk_user_id = clerk_user_id
+                return await call_next(request)
+
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required."},
+                headers={"WWW-Authenticate": "Clerk"},
+            )
+
+        if not expected_internal_secret:
+            logger.error(
+                "Trading API authentication is not configured; "
+                "rejecting protected request"
+            )
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Trading API authentication is not configured."},
             )
 
-        supplied_secret = request.headers.get(TRADING_API_SECRET_HEADER, "")
-        if not supplied_secret or not hmac.compare_digest(supplied_secret, expected_secret):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Invalid or missing trading API secret."},
-                headers={"WWW-Authenticate": TRADING_API_SECRET_HEADER},
-            )
-
-        return await call_next(request)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid or missing internal API secret."},
+            headers={"WWW-Authenticate": INTERNAL_API_SECRET_HEADER},
+        )
 
 
 app.add_middleware(TradingAPIAuthMiddleware)

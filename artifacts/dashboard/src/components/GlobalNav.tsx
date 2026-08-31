@@ -1,11 +1,12 @@
 import { useLocation } from "wouter";
-import { FlaskConical, LayoutDashboard, Radio } from "lucide-react";
+import { FlaskConical, LayoutDashboard, LogOut, Radio } from "lucide-react";
+import { useClerk } from "@clerk/react";
 
 const NAV_ITEMS = [
   {
     id:    "home",
     label: "Home",
-    path:  "/",
+    path:  "/dashboard",
     icon:  LayoutDashboard,
     color: "#3b82f6",
     pulse: false,
@@ -30,7 +31,13 @@ const NAV_ITEMS = [
 
 export function GlobalNav() {
   const [location, navigate] = useLocation();
-  const isHomeRoute = location === "/" || location === "" || location === "/home";
+  const { signOut } = useClerk();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const isHomeRoute =
+    location === "/" ||
+    location === "" ||
+    location === "/dashboard" ||
+    location === "/home";
 
   return (
     <nav
@@ -42,10 +49,8 @@ export function GlobalNav() {
       >
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive =
-            item.path === "/"
-              ? location === "/" || location === "" || location === "/home"
-              : location === item.path || location.startsWith(item.path + "/");
+            const isActive =
+              location === item.path || location.startsWith(item.path + "/");
 
           return (
             <button
@@ -102,6 +107,49 @@ export function GlobalNav() {
             </button>
           );
         })}
+        <button
+          type="button"
+          aria-label="Sign out"
+          title="Sign out"
+          data-testid="button-sign-out"
+          onClick={() =>
+            signOut({ redirectUrl: `${window.location.origin}${basePath}/` })
+          }
+          className="relative flex flex-col items-center justify-center rounded-2xl transition-all duration-300 select-none"
+          style={{
+            minWidth: 62,
+            paddingTop: 10,
+            paddingBottom: 10,
+            paddingLeft: 14,
+            paddingRight: 14,
+            backdropFilter: isHomeRoute ? "blur(24px)" : undefined,
+            WebkitBackdropFilter: isHomeRoute ? "blur(24px)" : undefined,
+            background: isHomeRoute
+              ? "rgba(255,255,255,0.12)"
+              : "rgba(15, 23, 42, 0.80)",
+            border: isHomeRoute
+              ? "1px solid rgba(100,116,139,0.20)"
+              : "1px solid rgba(255,255,255,0.075)",
+            boxShadow: isHomeRoute
+              ? "0 8px 24px rgba(15,23,42,0.16)"
+              : "0 4px 16px rgba(0,0,0,0.50), 0 1px 0 rgba(255,255,255,0.04) inset",
+          }}
+        >
+          <LogOut
+            className="h-5 w-5"
+            style={{
+              color: isHomeRoute ? "#000000" : "rgba(148,163,184,0.65)",
+            }}
+          />
+          <span
+            className="mt-1 text-[9px] font-black uppercase tracking-widest"
+            style={{
+              color: isHomeRoute ? "#000000" : "rgba(100,116,139,0.85)",
+            }}
+          >
+            Exit
+          </span>
+        </button>
       </div>
     </nav>
   );

@@ -66,7 +66,7 @@ TRADING_API_HEALTH_URL = os.environ.get(
     "TRADING_API_HEALTH_URL",
     "http://127.0.0.1:8000/trading-api/fleet/equity",
 )
-TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
+TRADING_API_SECRET_HEADER = "X-Trading-API-Internal-Secret"
 RUNNER_HEALTH_TIMEOUT_SECONDS = float(
     os.environ.get("RUNNER_HEALTH_TIMEOUT_SECONDS", "5")
 )

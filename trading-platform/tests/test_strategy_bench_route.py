@@ -93,7 +93,7 @@ def test_strategy_bench_returns_verified_engine_result_and_records_once(monkeypa
     client = TestClient(app)
     response = client.post(
         "/trading-api/research/strategy-bench/run",
-        headers={"X-Trading-API-Secret": "test-api-secret"},
+    headers={"X-Trading-API-Internal-Secret": "test-api-secret"},
         json=_request(),
     )
     client.close()
@@ -127,7 +127,7 @@ def test_strategy_bench_validation_failure_is_recorded_once(monkeypatch):
     client = TestClient(app)
     response = client.post(
         "/trading-api/research/strategy-bench/run",
-        headers={"X-Trading-API-Secret": "test-api-secret"},
+        headers={"X-Trading-API-Internal-Secret": "test-api-secret"},
         json=_request(),
     )
     client.close()

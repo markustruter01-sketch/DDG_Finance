@@ -84,7 +84,6 @@ const DEFAULT_PARAMS: Params = { universe_size: 500, engine: "momentum" };
 const BASE_URL = `${import.meta.env.BASE_URL}trading-api/`;
 const API_HEADERS = {
   "Content-Type": "application/json",
-  "X-Trading-API-Secret": import.meta.env.VITE_TRADING_API_SECRET ?? "",
 };
 
 const nf = new Intl.NumberFormat("en-US");

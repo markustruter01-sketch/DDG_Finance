@@ -16,6 +16,7 @@ interface NodeHealth {
 
 interface HealthData {
   timestamp: number;
+  status?: "healthy" | "degraded" | "unknown";
   nodes: Record<string, NodeHealth>;
 }
 
@@ -55,7 +56,13 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
 
 const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server }> = {
   platform_core:  { x: 400, y: 80,  icon: Server },
+  bot_oracle:     { x: 140, y: 80,  icon: Target },
+  bot_spy_qqq_trend: { x: 400, y: 80, icon: Target },
+  bot_jerome_macro:  { x: 660, y: 80, icon: Target },
   equity_manager: { x: 140, y: 230, icon: Shield },
+  scheduler:      { x: 400, y: 230, icon: Server },
+  degradation_events: { x: 660, y: 230, icon: AlertTriangle },
+  database:       { x: 400, y: 400, icon: Database },
   alpaca_api:     { x: 140, y: 400, icon: Wifi },
   kraken_api:     { x: 400, y: 230, icon: Anchor },
   options_bot:    { x: 660, y: 230, icon: Target },
@@ -92,6 +99,12 @@ const COMPONENT_LABELS: Record<string, string> = {
   options_bot: "Options Engine",
   forex_bot: "Forex Gump",
   alert_system: "Alert System",
+  bot_oracle: "Oracle / US Core",
+  bot_spy_qqq_trend: "SPY/QQQ Trend",
+  bot_jerome_macro: "Jerome Macro",
+  scheduler: "Scheduler",
+  database: "Database",
+  degradation_events: "Degradation Events",
   kraken_davy_jones: "SPY/QQQ Trend",
   kraken_blackbeard: "Jerome",
   kraken_poseidon: "Poseidon",
@@ -616,8 +629,9 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   const overallLevel: Level = useMemo(() => {
     if (!mergedNodes) return "yellow";
     const levels = Object.values(mergedNodes).map((n) => n.level);
+    if (data?.status === "unknown") return "red";
     if (levels.includes("red")) return "red";
-    if (levels.includes("yellow")) return "yellow";
+    if (data?.status === "degraded" || levels.includes("yellow")) return "yellow";
     return "green";
   }, [mergedNodes]);
 

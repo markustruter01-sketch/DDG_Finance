@@ -554,11 +554,7 @@ def _build_metrics_30d(errors: list) -> list[dict]:
     return metrics
 
 # ── Stale-bot thresholds (seconds) ────────────────────────────────────────────
-_BOT_STALE_THRESHOLDS: dict[str, int] = {
-    "oracle":          108000,  # 30h — covers weekends and market holidays
-    "spy_qqq_trend":   108000,  # 30h — same
-    "jerome_macro":     50000,  # ~14h, between 09:00 and 21:00 UTC cycles
-}
+from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS as _BOT_STALE_THRESHOLDS
 
 
 def _build_stale_flags(errors: list) -> list[dict]:

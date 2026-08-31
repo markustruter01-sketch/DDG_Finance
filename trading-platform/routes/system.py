@@ -116,11 +116,9 @@ _HEALTH_ACTIVE_BOTS = (
     ("spy_qqq_trend", "SPY/QQQ Trend"),
     ("jerome_macro", "Jerome Macro"),
 )
-_HEALTH_STALE_THRESHOLDS = {
-    "oracle": 108000,
-    "spy_qqq_trend": 108000,
-    "jerome_macro": 50000,
-}
+from core.bot_liveness import PORTFOLIO_STALE_THRESHOLDS
+
+_HEALTH_STALE_THRESHOLDS = PORTFOLIO_STALE_THRESHOLDS
 _HEALTH_CYCLE_STALE_THRESHOLD = 3 * 3600
 _HEALTH_HIGH_SEVERITIES = ("high", "critical", "error")
 
@@ -195,17 +193,20 @@ def _build_health_bot_node(
     row: dict[str, Any] | None,
     degradation_rows: list[dict[str, Any]],
     read_error: str | None = None,
+    observed_at: datetime | None = None,
 ) -> dict[str, Any]:
     if read_error:
         return {
             "label": label,
-            "level": "unknown",
+            "level": "red",
             "latency_ms": None,
             "data_age_s": None,
             "detail": f"Canonical liveness read failed: {read_error}",
         }
 
-    if not row or row.get("last_updated") is None:
+    portfolio_at = (row or {}).get("last_updated") or (row or {}).get("portfolio_last_updated")
+    cycle_at = (row or {}).get("last_success_at") or (row or {}).get("cycle_last_success")
+    if not row or portfolio_at is None:
         return {
             "label": label,
             "level": "unknown",
@@ -216,6 +217,14 @@ def _build_health_bot_node(
 
     portfolio_age = row.get("portfolio_age_s")
     cycle_age = row.get("cycle_age_s")
+    if portfolio_age is None and isinstance(portfolio_at, datetime) and observed_at is not None:
+        if portfolio_at.tzinfo is None:
+            portfolio_at = portfolio_at.replace(tzinfo=timezone.utc)
+        portfolio_age = (observed_at - portfolio_at.astimezone(timezone.utc)).total_seconds()
+    if cycle_age is None and isinstance(cycle_at, datetime) and observed_at is not None:
+        if cycle_at.tzinfo is None:
+            cycle_at = cycle_at.replace(tzinfo=timezone.utc)
+        cycle_age = (observed_at - cycle_at.astimezone(timezone.utc)).total_seconds()
     portfolio_age = float(portfolio_age) if portfolio_age is not None else None
     cycle_age = float(cycle_age) if cycle_age is not None else None
     stale_reasons: list[str] = []
@@ -224,7 +233,7 @@ def _build_health_bot_node(
         stale_reasons.append("portfolio age unavailable")
     elif portfolio_age > _HEALTH_STALE_THRESHOLDS[bot_id]:
         stale_reasons.append(
-            f"portfolio {portfolio_age:.0f}s old > "
+            f"portfolio age {portfolio_age:.0f}s old > "
             f"{_HEALTH_STALE_THRESHOLDS[bot_id]}s threshold"
         )
 
@@ -254,7 +263,7 @@ def _build_health_bot_node(
         level = "yellow"
     elif row.get("cycle_status") in ("error", "execution_failed") or int(row.get("consecutive_failures") or 0) > 0:
         level = "red"
-    elif not paused and row.get("last_success_at") is None:
+    elif not paused and cycle_at is None:
         level = "unknown"
     else:
         level = "yellow" if paused else "green"
@@ -283,30 +292,66 @@ def _build_health_bot_node(
     }
 
 
+def _overall_health_status(
+    nodes: dict[str, dict], *, required_read_failed: bool
+) -> str:
+    """Resolve the public health state without ever treating failed reads as healthy."""
+    if required_read_failed:
+        return "unknown"
+    return "degraded" if any(node["level"] != "green" for node in nodes.values()) else "healthy"
+
+
 @system_router.get("/system/health-architecture")
 async def system_health_architecture() -> dict:
-    import json as _json, time as _time
-    from pathlib import Path as _Path
+    import time as _time
+    from core.bot_liveness import get_architecture_liveness
 
     now = _time.time()
+    observed_at = datetime.now(timezone.utc)
     nodes: dict[str, dict] = {}
+    required_read_failed = False
 
-    health_inputs: dict[str, Any] = {}
-    health_read_error: str | None = None
+    liveness_rows: list[dict[str, Any]] = []
+    liveness_read_error: str | None = None
     try:
-        health_inputs = _load_health_operational_inputs()
+        liveness_rows = get_architecture_liveness()
     except Exception as exc:
-        health_read_error = str(exc)[:160]
+        liveness_read_error = str(exc)[:160]
+        required_read_failed = True
 
-    bot_rows = health_inputs.get("bot_rows", {})
-    degradation_rows = health_inputs.get("degradation_rows", [])
+    bot_rows = {row.get("bot_id"): row for row in liveness_rows}
+    degradation_rows: list[dict[str, Any]] = []
+    degradation_read_error: str | None = None
+    try:
+        from db.postgres import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, ts, bot_id, component, severity, error_type, message
+                    FROM system_degradations
+                    WHERE resolved_at IS NULL
+                      AND severity = ANY(%s)
+                    ORDER BY ts DESC
+                    """,
+                    (list(_HEALTH_HIGH_SEVERITIES),),
+                )
+                columns = [description[0] for description in cur.description]
+                degradation_rows = [
+                    dict(zip(columns, row)) for row in cur.fetchall()
+                ]
+    except Exception as exc:
+        degradation_read_error = str(exc)[:160]
+        required_read_failed = True
+
     for bot_id, label in _HEALTH_ACTIVE_BOTS:
         nodes[f"bot_{bot_id}"] = _build_health_bot_node(
             bot_id,
             label,
             bot_rows.get(bot_id),
             degradation_rows,
-            health_read_error,
+            liveness_read_error,
+            observed_at,
         )
 
     try:
@@ -315,16 +360,18 @@ async def system_health_architecture() -> dict:
         scheduler_level = "red" if last.get("last_run_status") in ("error", "execution_failed") else "green"
         scheduler_detail = f"{len(jobs)}/{EXPECTED_JOB_COUNT} jobs · last: {last.get('last_run_status', 'never')}"
     except Exception as exc:
+        required_read_failed = True
         scheduler_level, scheduler_detail = "red", str(exc)[:80]
     nodes["scheduler"] = {"label": "Scheduler", "level": scheduler_level, "latency_ms": None, "data_age_s": None, "detail": scheduler_detail}
 
-    if health_read_error:
+    if liveness_read_error or degradation_read_error:
+        health_detail = liveness_read_error or degradation_read_error
         nodes["platform_core"] = {
             "label": "Platform Core",
             "level": "unknown",
             "latency_ms": None,
             "data_age_s": None,
-            "detail": f"Health inputs unavailable: {health_read_error}",
+            "detail": f"Health inputs unavailable: {health_detail}",
         }
     elif degradation_rows:
         highest = "red" if any(
@@ -351,6 +398,34 @@ async def system_health_architecture() -> dict:
             "detail": "No open high-severity degradations",
         }
 
+    if degradation_read_error:
+        nodes["degradation_events"] = {
+            "label": "Degradation Events",
+            "level": "unknown",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": f"Required degradation read failed: {degradation_read_error}",
+        }
+    elif degradation_rows:
+        nodes["degradation_events"] = {
+            "label": "Degradation Events",
+            "level": "red",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": (
+                f"{len(degradation_rows)} unresolved high-severity event(s); "
+                f"latest: {degradation_rows[0].get('message') or degradation_rows[0].get('error_type', 'unknown')}"
+            )[:300],
+        }
+    else:
+        nodes["degradation_events"] = {
+            "label": "Degradation Events",
+            "level": "green",
+            "latency_ms": None,
+            "data_age_s": None,
+            "detail": "No unresolved high-severity events",
+        }
+
     try:
         t0 = _time.time()
         account = get_account()
@@ -363,6 +438,7 @@ async def system_health_architecture() -> dict:
             "detail": f"Equity ${float(account['equity']):,.2f}",
         }
     except Exception as exc:
+        required_read_failed = True
         nodes["alpaca_api"] = {"label": "Alpaca API", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
@@ -372,6 +448,7 @@ async def system_health_architecture() -> dict:
                 cur.execute("SELECT 1")
         nodes["database"] = {"label": "Database", "level": "green", "latency_ms": None, "data_age_s": 0, "detail": "PostgreSQL reachable"}
     except Exception as exc:
+        required_read_failed = True
         nodes["database"] = {"label": "Database", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
@@ -385,6 +462,7 @@ async def system_health_architecture() -> dict:
             "detail": "Webhook configured" if discord_ok else "Webhook not configured",
         }
     except Exception as exc:
+        required_read_failed = True
         nodes["discord_alerts"] = {"label": "Discord Alerts", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     for key, label, detail in (
@@ -394,10 +472,17 @@ async def system_health_architecture() -> dict:
     ):
         nodes[key] = {"label": label, "level": "green", "latency_ms": None, "data_age_s": None, "detail": detail}
 
+    overall_status = _overall_health_status(
+        nodes,
+        required_read_failed=required_read_failed
+        or any(node["level"] == "unknown" for node in nodes.values()),
+    )
     return {
         "timestamp": now,
+        "status": overall_status,
         "nodes": nodes,
         "open_high_severity_degradations": len(degradation_rows),
+        "unresolved_high_severity_count": len(degradation_rows),
     }
 
     try:

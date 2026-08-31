@@ -12,6 +12,14 @@ DEFAULT_CYCLE_INTERVALS = {
     "spy_qqq_trend": 3600,
     "jerome_macro": 3600,
 }
+# Portfolio heartbeats have deliberately different tolerances because the
+# equity bots and Jerome do not run on identical market-hour schedules.
+# Keep these values aligned with the reporting stale-bot check.
+PORTFOLIO_STALE_THRESHOLDS = {
+    "oracle": 108000,
+    "spy_qqq_trend": 108000,
+    "jerome_macro": 50000,
+}
 
 
 def _canonical(bot_id: str) -> str:
@@ -68,6 +76,36 @@ def write_cycle(
     except Exception as exc:
         logger.critical(f"Liveness | durable cycle write failed for {canonical}: {exc}")
         return False
+
+
+def get_architecture_liveness() -> list[dict[str, Any]]:
+    """Read the canonical bot heartbeat sources for the health architecture.
+
+    Unlike the general portfolio helper, this function deliberately lets
+    database errors propagate. A health endpoint must not turn a failed
+    required read into a green response.
+    """
+    from db.postgres import get_conn
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT b.bot_id,
+                       p.last_updated AS portfolio_last_updated,
+                       h.last_success_at AS cycle_last_success,
+                       h.status AS cycle_status,
+                       h.consecutive_failures,
+                       COALESCE(s.paused, FALSE) AS paused
+                FROM (VALUES ('oracle'), ('spy_qqq_trend'), ('jerome_macro')) AS b(bot_id)
+                LEFT JOIN bot_portfolio p ON p.bot_id = b.bot_id
+                LEFT JOIN bot_cycle_health h ON h.bot_id = b.bot_id
+                LEFT JOIN bots_state s ON s.bot_id = b.bot_id
+                ORDER BY b.bot_id
+                """
+            )
+            columns = [description[0] for description in cur.description]
+            return [dict(zip(columns, row)) for row in cur.fetchall()]
 
 
 def evaluate_liveness(

@@ -17,6 +17,7 @@ interface NodeHealth {
 
 interface HealthData {
   timestamp: number;
+  status?: "healthy" | "degraded" | "unknown";
   nodes: Record<string, NodeHealth>;
 }
 
@@ -62,11 +63,12 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
 const NODE_POSITIONS: Record<string, { x: number; y: number; icon: typeof Server }> = {
   platform_core:  { x: 400, y: 80,  icon: Server },
   bot_oracle:     { x: 140, y: 230, icon: Target },
-  bot_spy_qqq:    { x: 400, y: 230, icon: Target },
-  bot_jerome:     { x: 660, y: 230, icon: Target },
+  bot_spy_qqq_trend: { x: 400, y: 230, icon: Target },
+  bot_jerome_macro:  { x: 660, y: 230, icon: Target },
   alpaca_api:     { x: 140, y: 400, icon: Wifi },
   data_pipeline:  { x: 400, y: 400, icon: Database },
   alert_system:   { x: 660, y: 400, icon: Bell },
+  degradation_events: { x: 400, y: 530, icon: AlertTriangle },
   equity_manager: { x: 140, y: 530, icon: Shield },
   analysis_layer: { x: 660, y: 530, icon: Brain },
 };
@@ -78,11 +80,11 @@ type WireSpec = { from: string; to: string; bend?: "h-first" | "v-first" };
 
 const WIRES: WireSpec[] = [
   { from: "platform_core",  to: "bot_oracle",     bend: "v-first" },
-  { from: "platform_core",  to: "bot_spy_qqq",    bend: "v-first" },
-  { from: "platform_core",  to: "bot_jerome",     bend: "v-first" },
+  { from: "platform_core",  to: "bot_spy_qqq_trend", bend: "v-first" },
+  { from: "platform_core",  to: "bot_jerome_macro",  bend: "v-first" },
   { from: "bot_oracle",     to: "alpaca_api",     bend: "v-first" },
-  { from: "bot_spy_qqq",    to: "data_pipeline",  bend: "v-first" },
-  { from: "bot_jerome",     to: "alert_system",   bend: "v-first" },
+  { from: "bot_spy_qqq_trend", to: "data_pipeline", bend: "v-first" },
+  { from: "bot_jerome_macro",  to: "alert_system",  bend: "v-first" },
   { from: "data_pipeline",  to: "equity_manager", bend: "h-first" },
   { from: "data_pipeline",  to: "analysis_layer", bend: "h-first" },
   { from: "data_pipeline",  to: "alert_system",   bend: "h-first" },
@@ -93,8 +95,9 @@ const COMPONENT_LABELS: Record<string, string> = {
   platform_core: "Platform Core",
   data_pipeline: "Data Pipeline",
   bot_oracle: "Oracle / US Core",
-  bot_spy_qqq: "SPY/QQQ Trend",
-  bot_jerome: "Jerome Macro",
+  bot_spy_qqq_trend: "SPY/QQQ Trend",
+  bot_jerome_macro: "Jerome Macro",
+  degradation_events: "Degradation Events",
   alpaca_api: "Alpaca API",
   equity_manager: "Equity Manager",
   analysis_layer: "Analysis Layer",
@@ -210,7 +213,7 @@ function ArchitectureNode({ nodeKey, health }: { nodeKey: string; health: NodeHe
 
 /* ── Per-Bot Fleet Strip ──────────────────────────────────────────────────── */
 function PerBotFleetStrip({ nodes }: { nodes: Record<string, NodeHealth> }) {
-  const perBotNodes = Object.entries(nodes).filter(([k]) => ["bot_oracle", "bot_spy_qqq", "bot_jerome"].includes(k));
+  const perBotNodes = Object.entries(nodes).filter(([k]) => ["bot_oracle", "bot_spy_qqq_trend", "bot_jerome_macro"].includes(k));
   if (perBotNodes.length === 0) return null;
 
   return (
@@ -453,8 +456,9 @@ export default function StreamingHealthScreen() {
   const overallLevel: Level = useMemo(() => {
     if (!nodes) return "yellow";
     const levels = Object.values(nodes).map((n) => n.level);
+    if (data?.status === "unknown") return "red";
     if (levels.includes("red")) return "red";
-    if (levels.includes("yellow")) return "yellow";
+    if (data?.status === "degraded" || levels.includes("yellow")) return "yellow";
     return "green";
   }, [nodes]);
 

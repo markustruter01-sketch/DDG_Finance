@@ -610,22 +610,43 @@ def _maintain_protective_stops(
         symbol = position["symbol"]
         if symbol in open_sell_symbols:
             continue
-        if symbol in METALS and not equity_session_open:
-            _log_decision(
-                cycle_id, "PROTECTIVE_STOP_DEFERRED", symbol=symbol,
-                reason="US equity market closed",
+        raw_response = None
+        try:
+            stop_order = _arm_stop(
+                client, symbol, position["qty"], position["entry_price"]
             )
-            continue
-        stop_order = _arm_stop(
-            client, symbol, position["qty"], position["entry_price"]
-        )
-        stop_id = stop_order.get("id")
-        if stop_id:
-            _remember_stop(symbol, stop_id)
-        _log_decision(
-            cycle_id, "PROTECTIVE_STOP_REARMED", symbol=symbol,
-            order_id=stop_id, outcome=stop_order.get("status", "submitted"),
-        )
+            stop_status = str(stop_order.get("status", "")).lower()
+            if stop_status in {"rejected", "failed", "error", "canceled", "cancelled"}:
+                raw_response = repr(stop_order)
+                raise RuntimeError(
+                    f"broker rejected protective stop with status={stop_status}"
+                )
+            stop_id = stop_order.get("id")
+            if stop_id:
+                _remember_stop(symbol, stop_id)
+            _log_decision(
+                cycle_id, "PROTECTIVE_STOP_REARMED", symbol=symbol,
+                order_id=stop_id, outcome=stop_order.get("status", "submitted"),
+            )
+        except Exception as exc:
+            if raw_response is None:
+                broker_response = getattr(exc, "response", None)
+                raw_response = getattr(broker_response, "text", None)
+                if raw_response is None:
+                    raw_response = repr(exc)
+            error = f"{type(exc).__name__}: {exc}"
+            logger.critical(
+                "Bot 3 | protective stop arm failed | "
+                f"symbol={symbol} error={error} raw_broker_response={raw_response}"
+            )
+            _log_decision(
+                cycle_id,
+                "PROTECTIVE_STOP_ARM_FAILED",
+                symbol=symbol,
+                reason=error,
+                context={"error": error, "raw_broker_response": raw_response},
+            )
+            raise
 
 
 def _software_backstop(

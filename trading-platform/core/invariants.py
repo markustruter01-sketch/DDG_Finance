@@ -37,6 +37,9 @@ from core.bot_liveness import (
     ACTIVE_BOTS,
     DEFAULT_CYCLE_INTERVALS,
 )
+from core.runner_heartbeat import (
+    RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
+)
 from core.symbols import canonical_symbol, is_crypto_symbol
 
 
@@ -64,6 +67,7 @@ THRESHOLD_SOURCES = {
     "ledger_broker_presence": "TASK POLICY: every material strategy row must exist in both sources; vault and dust excluded",
     "ledger_broker_quantity": "TASK POLICY: quantity tolerance is 1e-8; vault and dust excluded",
     "published_runner_liveness": "ESTABLISHED: durable bot cycle records compared with 3 × configured cycle interval",
+    "runner_heartbeat": "ESTABLISHED: core.runner_heartbeat uses 3 × the runner loop interval",
 }
 
 
@@ -88,6 +92,7 @@ class InvariantInputs:
     kill_switch_runtime: bool | None = None
     kill_switch_config: bool | None = None
     published_runner: bool | None = None
+    runner_heartbeat: dict[str, Any] | None = None
     source_errors: dict[str, str] = field(default_factory=dict)
 
 
@@ -894,6 +899,82 @@ def check_published_runner_liveness(inputs: InvariantInputs) -> dict[str, Any]:
     )
 
 
+def check_runner_heartbeat_fresh(inputs: InvariantInputs) -> dict[str, Any]:
+    name = "runner_heartbeat_is_fresh"
+    expected = {
+        "verdict": "ALIVE",
+        "maximum_age_seconds": RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
+        "source": "runner_heartbeat.last_beat_at",
+    }
+    problem = _source_problem(inputs, "runner_heartbeat")
+    if inputs.runner_heartbeat is None:
+        return _unknown(
+            name,
+            actual={"source_error": problem or "runner heartbeat table unreadable"},
+            expected=expected,
+            difference={"unreadable_sources": 1},
+            message="Cannot verify runner heartbeat freshness because the table could not be read.",
+            source_key="runner_heartbeat",
+        )
+
+    verdict = inputs.runner_heartbeat.get("verdict")
+    actual = {
+        "verdict": verdict,
+        "age_seconds": inputs.runner_heartbeat.get("age_seconds"),
+        "threshold_seconds": inputs.runner_heartbeat.get(
+            "threshold_seconds", RUNNER_HEARTBEAT_THRESHOLD_SECONDS
+        ),
+        "row": inputs.runner_heartbeat.get("row"),
+    }
+    if verdict == "ABSENT":
+        return _failed(
+            name,
+            actual=actual,
+            expected=expected,
+            difference={"missing_runner_rows": 1},
+            message="No durable runner heartbeat row exists.",
+            source_key="runner_heartbeat",
+        )
+    if verdict == "STALE":
+        return _failed(
+            name,
+            actual=actual,
+            expected=expected,
+            difference={
+                "age_minus_threshold_seconds": (
+                    float(actual["age_seconds"]) - float(actual["threshold_seconds"])
+                )
+                if actual["age_seconds"] is not None
+                else None
+            },
+            message="The latest durable runner heartbeat is stale.",
+            source_key="runner_heartbeat",
+        )
+    if verdict != "ALIVE":
+        return _unknown(
+            name,
+            actual=actual,
+            expected=expected,
+            difference={"invalid_verdict": verdict},
+            message="The durable runner heartbeat returned an unreadable verdict.",
+            source_key="runner_heartbeat",
+        )
+    return _passed(
+        name,
+        actual=actual,
+        expected=expected,
+        difference={
+            "age_minus_threshold_seconds": (
+                float(actual["age_seconds"]) - float(actual["threshold_seconds"])
+            )
+            if actual["age_seconds"] is not None
+            else None
+        },
+        message="The latest durable runner heartbeat is fresh.",
+        source_key="runner_heartbeat",
+    )
+
+
 INVARIANT_FUNCTIONS: tuple[Callable[[InvariantInputs], dict[str, Any]], ...] = (
     check_stop_coverage,
     check_crypto_exposure,
@@ -904,6 +985,7 @@ INVARIANT_FUNCTIONS: tuple[Callable[[InvariantInputs], dict[str, Any]], ...] = (
     check_ledger_broker_presence,
     check_ledger_broker_quantities,
     check_published_runner_liveness,
+    check_runner_heartbeat_fresh,
 )
 
 
@@ -1035,6 +1117,53 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                 }
                 for row in cur.fetchall()
             ]
+
+    # Keep this read independent from the legacy database inputs above.  A
+    # production database that predates this feature should produce UNKNOWN for
+    # this invariant without hiding all of the other read-only audit results.
+    try:
+        with psycopg2.connect(dsn) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT instance_token, pid, environment, execution_mode,
+                           started_at, last_beat_at, loop_count, bots_registered, status
+                    FROM runner_heartbeat
+                    ORDER BY last_beat_at DESC
+                    LIMIT 1
+                    """
+                )
+                columns = [description[0] for description in cur.description]
+                row = cur.fetchone()
+        if row is None:
+            result["runner_heartbeat"] = {
+                "verdict": "ABSENT",
+                "age_seconds": None,
+                "threshold_seconds": RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
+                "row": None,
+            }
+        else:
+            heartbeat_row = dict(zip(columns, row))
+            last_beat_at = _parse_datetime(heartbeat_row["last_beat_at"])
+            age_seconds = (
+                max(0.0, (timestamp.astimezone(timezone.utc) - last_beat_at).total_seconds())
+                if last_beat_at is not None
+                else None
+            )
+            result["runner_heartbeat"] = {
+                "verdict": (
+                    "ALIVE"
+                    if age_seconds is not None
+                    and age_seconds <= RUNNER_HEARTBEAT_THRESHOLD_SECONDS
+                    else "STALE"
+                ),
+                "age_seconds": age_seconds,
+                "threshold_seconds": RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
+                "row": heartbeat_row,
+            }
+    except Exception as exc:
+        result["runner_heartbeat"] = None
+        result["_runner_heartbeat_error"] = str(exc)
     return result
 
 
@@ -1112,7 +1241,10 @@ def collect_inputs(now: datetime | None = None) -> InvariantInputs:
     try:
         database = read_database_inputs(timestamp)
         for key, value in database.items():
-            setattr(inputs, key, value)
+            if key == "_runner_heartbeat_error":
+                inputs.source_errors["runner_heartbeat"] = value
+            elif key != "_runner_heartbeat_error":
+                setattr(inputs, key, value)
     except Exception as exc:
         inputs.source_errors["database"] = str(exc)
         logger.error(f"Invariants | database read failed: {exc}")

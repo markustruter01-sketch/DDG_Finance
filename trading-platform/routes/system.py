@@ -33,6 +33,24 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@system_router.get("/runner/status")
+async def runner_status() -> dict:
+    """Return durable process-level runner liveness without contacting the runner."""
+    from core.runner_heartbeat import RunnerHeartbeatReadError, get_runner_status
+
+    try:
+        return get_runner_status()
+    except RunnerHeartbeatReadError as exc:
+        logger.error(f"Runner heartbeat | status read failed: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "verdict": "UNKNOWN",
+                "error": "runner heartbeat table unreadable",
+            },
+        ) from exc
+
+
 def _get_signal_guard_status() -> dict | None:
     try:
         from analysis.signal_guard import get_last_guard_result

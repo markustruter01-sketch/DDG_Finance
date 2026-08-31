@@ -322,6 +322,22 @@ CREATE TABLE IF NOT EXISTS bot_cycle_health (
 CREATE INDEX IF NOT EXISTS idx_bot_cycle_health_success
     ON bot_cycle_health (last_success_at);
 
+-- Durable process-level runner liveness. Each unique instance token represents
+-- one runner process; bot lease heartbeats are intentionally not a substitute.
+CREATE TABLE IF NOT EXISTS runner_heartbeat (
+    instance_token   TEXT PRIMARY KEY,
+    pid              INTEGER NOT NULL,
+    environment      TEXT NOT NULL,
+    execution_mode   TEXT NOT NULL,
+    started_at       TIMESTAMPTZ NOT NULL,
+    last_beat_at     TIMESTAMPTZ NOT NULL,
+    loop_count       INTEGER NOT NULL DEFAULT 0,
+    bots_registered  INTEGER NOT NULL DEFAULT 0,
+    status           TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_runner_heartbeat_last_beat
+    ON runner_heartbeat (last_beat_at DESC);
+
 -- ── System Degradation Log ─────────────────────────────────────────────────
 -- Persistent record of every detected system failure or degradation event.
 -- Written by the auto-heal monitor, HTTP middleware, and manual captures.

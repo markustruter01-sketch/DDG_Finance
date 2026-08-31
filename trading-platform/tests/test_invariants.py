@@ -18,6 +18,7 @@ from core.invariants import (
     check_ledger_broker_quantities,
     check_published_runner_liveness,
     check_reconciliation_health,
+    check_runner_heartbeat_fresh,
     check_stop_coverage,
     run_all_invariants,
 )
@@ -87,6 +88,12 @@ def base_inputs() -> InvariantInputs:
         kill_switch_runtime=False,
         kill_switch_config=False,
         published_runner=True,
+        runner_heartbeat={
+            "verdict": "ALIVE",
+            "age_seconds": 4.0,
+            "threshold_seconds": 15.0,
+            "row": {"instance_token": "runner:v2:test"},
+        },
     )
 
 
@@ -97,7 +104,7 @@ def _copy(inputs: InvariantInputs) -> InvariantInputs:
 def test_all_invariants_pass_with_clean_inputs(base_inputs):
     report = run_all_invariants(base_inputs)
     assert report["overall"] == "PASS"
-    assert len(report["results"]) == 9
+    assert len(report["results"]) == 10
     assert all(
         {"name", "status", "actual", "expected", "difference", "message"}
         <= set(result)

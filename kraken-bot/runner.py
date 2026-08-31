@@ -344,6 +344,37 @@ except Exception as _live_exc:
     logger.critical(f"Runner | liveness layer unavailable: {_live_exc}")
     _write_cycle_liveness = None
 
+try:
+    from core.runner_heartbeat import (
+        RUNNER_LOOP_INTERVAL_SECONDS as _RUNNER_LOOP_INTERVAL_SECONDS,
+        write_runner_heartbeat as _write_runner_heartbeat,
+    )
+    _runner_heartbeat_import_ok = True
+except Exception as _runner_hb_exc:
+    logger.critical(f"Runner | process heartbeat layer unavailable: {_runner_hb_exc}")
+    _runner_heartbeat_import_ok = False
+    _RUNNER_LOOP_INTERVAL_SECONDS = 5.0
+    _write_runner_heartbeat = None
+
+_runner_started_at = datetime.now(timezone.utc)
+
+
+def _record_runner_heartbeat(loop_count: int, status: str) -> bool:
+    """Attempt a durable process heartbeat without altering bot execution."""
+    if not _runner_heartbeat_import_ok or _write_runner_heartbeat is None:
+        logger.critical("Runner heartbeat | unavailable; durable aliveness is not established")
+        return False
+    return _write_runner_heartbeat(
+        instance_token=RUNNER_OWNER_TOKEN,
+        pid=os.getpid(),
+        environment=RUNNER_ENVIRONMENT,
+        execution_mode=RUNNER_EXECUTION_MODE,
+        started_at=_runner_started_at,
+        loop_count=loop_count,
+        bots_registered=len(BOTS),
+        status=status,
+    )
+
 
 def _assert_pause_alignment() -> bool:
     """Require module, profile, and canonical DB pause sources to agree."""
@@ -934,6 +965,13 @@ def main() -> int:
         _pause_alignment_ok = _assert_pause_alignment()
         logger.info(f"Pause alignment assertion: {'PASS' if _pause_alignment_ok else 'FAIL — fail closed'}")
 
+        runner_loop_count = 0
+        if not _record_runner_heartbeat(runner_loop_count, "starting"):
+            logger.critical(
+                "Runner heartbeat | startup write failed; "
+                "continuing without presenting process aliveness as healthy"
+            )
+
         # Start health server BEFORE bot threads so port binds fast
         _start_health_server()
         threading.Thread(
@@ -965,7 +1003,12 @@ def main() -> int:
 
         # Main thread waits for shutdown
         while not _shutdown_event.is_set():
-            time.sleep(5)
+            runner_loop_count += 1
+            if not _record_runner_heartbeat(runner_loop_count, "running"):
+                logger.critical(
+                    f"Runner heartbeat | loop write failed at loop_count={runner_loop_count}"
+                )
+            _shutdown_event.wait(_RUNNER_LOOP_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         _shutdown_event.set()
     finally:

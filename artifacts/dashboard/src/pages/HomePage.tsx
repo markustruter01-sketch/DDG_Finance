@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
 import ObservatoryHome from "@/components/ObservatoryHome";
+import RunnerStatusIndicator from "@/components/RunnerStatusIndicator";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -795,6 +796,7 @@ export default function HomePage() {
     fleet, oracle, spy, jerome, total,
     positionsByBot, wfMap,
     regime, killTripped, lastCycle, mktOpen, entryWindows,
+    runnerStatus, runnerStatusError,
   } = useFleetData();
 
   // Observatory is intentionally limited to pointer-capable desktop browsers and
@@ -852,7 +854,9 @@ export default function HomePage() {
 
   const regimeColor = regime === "BULL" ? "#16a34a" : "#000000";
 
-  if (showObservatory) return <ObservatoryHome />;
+  if (showObservatory) {
+    return <ObservatoryHome runnerStatus={runnerStatus} runnerStatusError={runnerStatusError} />;
+  }
 
   return (
     <div className="min-h-screen font-mono text-white mobile-home-shell" style={{ background: "#e8eef2", position: "relative" }}>
@@ -909,6 +913,10 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+
+      <div className="mx-auto px-4 pt-4" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
+        <RunnerStatusIndicator status={runnerStatus} isError={runnerStatusError} />
+      </div>
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>

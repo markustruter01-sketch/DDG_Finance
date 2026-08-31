@@ -80,6 +80,24 @@ export interface EntryWindowsResponse {
   windows: Partial<Record<"oracle" | "spy_qqq_trend" | "jerome_macro", EntryWindow>>;
 }
 
+export type RunnerVerdict = "ALIVE" | "STALE" | "ABSENT";
+
+export interface RunnerStatusResponse {
+  verdict: RunnerVerdict;
+  age_seconds: number | null;
+  threshold_seconds: number;
+  instance_token: string | null;
+  pid: number | null;
+  environment: string | null;
+  execution_mode: string | null;
+  started_at: string | null;
+  last_beat_at: string | null;
+  loop_count: number | null;
+  bots_registered: number | null;
+  status: string | null;
+  row: Record<string, unknown> | null;
+}
+
 // ── Status logic (market-hours aware, Rule 27-safe) ──────────────────────────
 
 export type BotStatus = "LIVE" | "MKT_CLOSED" | "DOWN" | "IDLE";
@@ -189,6 +207,14 @@ export function useFleetData() {
     retry: 1,
   });
 
+  const runnerStatusQuery = useQuery<RunnerStatusResponse>({
+    queryKey: ["runner-status"],
+    queryFn: () => fleetApi.get("/runner/status").then((r) => r.data),
+    refetchInterval: 5_000,
+    staleTime: 2_000,
+    retry: false,
+  });
+
   const allPos   = livePosResp?.positions ?? [];
   const positionsByBot = livePosResp?.positions_by_bot;
   const wfMap    = new Map(
@@ -211,5 +237,7 @@ export function useFleetData() {
       : summary.kill_switch?.tripped ?? summary.kill_switch_tripped ?? null,
     lastCycle:   fleet?.generated_at,
     entryWindows: entryWindowData?.windows,
+    runnerStatus: runnerStatusQuery.data,
+    runnerStatusError: runnerStatusQuery.isError,
   };
 }

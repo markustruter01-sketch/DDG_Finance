@@ -2,9 +2,9 @@
 """Development-only point-in-time S&P 500 data gate for Bot 2 v3.
 
 This module is deliberately separate from the live runners and the existing
-Bot 2 earnings tables.  It stores only research membership events and Alpaca
-SIP daily bars in dedicated tables.  No order, portfolio, runner, or
-production-database code is imported.
+Bot 2 earnings tables.  It stores only research membership events and
+development-only daily bars in dedicated tables.  No order, portfolio, runner,
+or production-database code is imported.
 
 The public membership bundle is pinned to a GitHub commit and extended with
 two official S&P Dow Jones announcements that occurred after that snapshot.
@@ -18,10 +18,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -47,11 +48,14 @@ PRICE_TABLE = "bot2_sp500_prices"
 EVENT_TABLE = "bot2_sp500_membership_events"
 META_TABLE = "bot2_sp500_price_meta"
 ALPACA_BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 ANALYSIS_START = date(2018, 1, 1)
 DEFAULT_END = date.today() - timedelta(days=1)
 PRICE_SOURCE = "alpaca_sip_adjusted"
 RECENT_PRICE_SOURCE = "alpaca_iex_adjusted"
 PRICE_SOURCES = (PRICE_SOURCE, RECENT_PRICE_SOURCE)
+YAHOO_PRICE_SOURCE = "yahoo_chart_adjusted"
+REFERENCE_PRICE_SOURCES = PRICE_SOURCES + (YAHOO_PRICE_SOURCE,)
 RECENT_SIP_CUTOFF = date(2026, 1, 1)
 SLICE_SIZE = 250
 
@@ -519,6 +523,176 @@ def _fetch_one_symbol(
     return symbol, sorted(historical + recent, key=lambda bar: bar.day), None
 
 
+def _epoch_seconds(day: date) -> int:
+    return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp())
+
+
+def _fetch_yahoo_symbol(
+    symbol: str,
+    start: date,
+    end: date,
+) -> tuple[str, list[PriceBar], str | None]:
+    """Fetch Yahoo chart history and apply its split/dividend adjustment factor."""
+    try:
+        response = requests.get(
+            YAHOO_CHART_URL.format(symbol=symbol),
+            params={
+                "period1": _epoch_seconds(start),
+                "period2": _epoch_seconds(end + timedelta(days=1)),
+                "interval": "1d",
+                "events": "div,splits",
+                "includeAdjustedClose": "true",
+            },
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=45,
+        )
+        if response.status_code != 200:
+            return symbol, [], f"HTTP {response.status_code}: {response.text[:240]}"
+        payload = response.json()
+        chart = payload.get("chart") or {}
+        if chart.get("error"):
+            return symbol, [], f"Yahoo chart error: {chart['error']}"
+        result = (chart.get("result") or [None])[0]
+        if not isinstance(result, dict):
+            return symbol, [], "Yahoo chart response has no result"
+        timestamps = result.get("timestamp") or []
+        quote = ((result.get("indicators") or {}).get("quote") or [None])[0]
+        adjusted = ((result.get("indicators") or {}).get("adjclose") or [None])[0]
+        if not isinstance(quote, dict) or not isinstance(adjusted, dict):
+            return symbol, [], "Yahoo chart response lacks quote or adjusted-close data"
+        adjusted_closes = adjusted.get("adjclose") or []
+        bars: list[PriceBar] = []
+        for index, timestamp in enumerate(timestamps):
+            try:
+                raw_open = float((quote.get("open") or [])[index])
+                raw_high = float((quote.get("high") or [])[index])
+                raw_low = float((quote.get("low") or [])[index])
+                raw_close = float((quote.get("close") or [])[index])
+                volume = float((quote.get("volume") or [])[index])
+                adjusted_close = float(adjusted_closes[index])
+                if raw_close == 0:
+                    raise ValueError("raw close is zero")
+                factor = adjusted_close / raw_close
+                values = (
+                    raw_open * factor,
+                    raw_high * factor,
+                    raw_low * factor,
+                    adjusted_close,
+                    volume,
+                )
+                if not all(math.isfinite(value) for value in values):
+                    raise ValueError("bar contains a non-finite value")
+                bars.append(
+                    PriceBar(
+                        symbol=symbol,
+                        day=datetime.fromtimestamp(
+                            int(timestamp), tz=timezone.utc
+                        ).date(),
+                        open=values[0],
+                        high=values[1],
+                        low=values[2],
+                        close=values[3],
+                        volume=values[4],
+                        source=YAHOO_PRICE_SOURCE,
+                    )
+                )
+            except (IndexError, TypeError, ValueError, OverflowError) as exc:
+                return symbol, [], f"invalid Yahoo bar at index {index}: {exc}"
+        bars.sort(key=lambda bar: bar.day)
+        return symbol, bars, None
+    except (requests.RequestException, ValueError, TypeError) as exc:
+        return symbol, [], f"{type(exc).__name__}: {exc}"
+
+
+def _reference_data_summary(
+    bars: list[PriceBar],
+    end: date,
+) -> dict[str, Any]:
+    """Return pre-insert integrity findings for one reference series."""
+    if not bars:
+        return {
+            "duplicate_dates": [],
+            "missing_nyse_sessions": [],
+            "moves_over_20pct": [],
+            "empty": True,
+        }
+    dates = [bar.day for bar in bars]
+    duplicate_dates = sorted(
+        day for day, count in Counter(dates).items() if count > 1
+    )
+    expected = expected_sessions(min(dates), end)
+    missing = sorted(expected - set(dates))
+    large_moves = []
+    ordered = sorted(bars, key=lambda bar: bar.day)
+    for previous, current in zip(ordered, ordered[1:]):
+        if previous.close == 0:
+            large_moves.append(f"zero_previous_close={previous.day}")
+            continue
+        move = current.close / previous.close - 1
+        if abs(move) > 0.20:
+            large_moves.append(f"{current.day.isoformat()}:{move:.6f}")
+    return {
+        "duplicate_dates": duplicate_dates,
+        "missing_nyse_sessions": missing,
+        "moves_over_20pct": large_moves,
+        "empty": False,
+    }
+
+
+def _reference_data_issues(
+    bars: list[PriceBar],
+    end: date,
+) -> list[str]:
+    """Return all pre-insert integrity failures for one reference series."""
+    summary = _reference_data_summary(bars, end)
+    if summary["empty"]:
+        return ["no bars returned"]
+    issues: list[str] = []
+    duplicate_dates = summary["duplicate_dates"]
+    missing = summary["missing_nyse_sessions"]
+    large_moves = summary["moves_over_20pct"]
+    if duplicate_dates:
+        issues.append(
+            "duplicate_dates=" + ",".join(day.isoformat() for day in duplicate_dates)
+        )
+    if missing:
+        issues.append(
+            "missing_nyse_sessions=" + ",".join(day.isoformat() for day in missing)
+        )
+    if large_moves:
+        issues.append("moves_over_20pct=" + ",".join(large_moves))
+    return issues
+
+
+def _assert_reference_symbols_empty(
+    existing_counts: dict[str, int],
+) -> None:
+    conflicts = sorted(
+        symbol for symbol, count in existing_counts.items() if int(count) > 0
+    )
+    if conflicts:
+        detail = ", ".join(
+            f"{symbol}={int(existing_counts[symbol])}" for symbol in conflicts
+        )
+        raise RuntimeError(
+            "refusing reference load because existing rows would be modified: "
+            + detail
+        )
+
+
+def _reference_symbol_counts(symbols: Iterable[str]) -> dict[str, int]:
+    requested = sorted({str(symbol).upper() for symbol in symbols})
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT symbol, COUNT(*) FROM {PRICE_TABLE} "
+                "WHERE symbol = ANY(%s) GROUP BY symbol",
+                (requested,),
+            )
+            found = {str(symbol).upper(): int(count) for symbol, count in cur.fetchall()}
+    return {symbol: found.get(symbol, 0) for symbol in requested}
+
+
 def ingest_prices(
     bundle: dict[str, Any],
     start: date = ANALYSIS_START,
@@ -613,6 +787,113 @@ def ingest_prices(
                         print(f"price_ingest | {index}/{len(wanted)} | {symbol} | ERROR={error}")
     print(f"price_ingest_complete | successes={successes} | failures={failures}")
     return {"successes": successes, "failures": failures}
+
+
+def ingest_reference_prices(
+    start: date = date(2017, 1, 1),
+    end: date | None = None,
+    symbols: Iterable[str] = ("SPY", "SGOV"),
+) -> dict[str, int]:
+    """Load validated Yahoo reference bars without changing existing symbols."""
+    requested = sorted({str(symbol).strip().upper() for symbol in symbols})
+    if set(requested) != {"SGOV", "SPY"}:
+        raise ValueError("reference ingestion is limited to SPY and SGOV")
+    end = end or (date.today().replace(day=1) - timedelta(days=1))
+    if end < start:
+        raise ValueError("reference ingestion end precedes start")
+    ensure_tables()
+    existing_counts = _reference_symbol_counts(requested)
+    print(f"reference_existing_counts | {existing_counts}")
+    _assert_reference_symbols_empty(existing_counts)
+    print(
+        f"reference_price_ingest_start | symbols={requested} | start={start} "
+        f"| end={end} | provider=Yahoo Finance chart API "
+        f"| source={YAHOO_PRICE_SOURCE} | adjusted_ohlcv=yes"
+    )
+
+    fetched: dict[str, list[PriceBar]] = {}
+    for symbol in requested:
+        fetched_symbol, bars, error = _fetch_yahoo_symbol(symbol, start, end)
+        if error:
+            raise RuntimeError(f"{fetched_symbol} Yahoo fetch failed: {error}")
+        fetched[symbol] = bars
+        summary = _reference_data_summary(bars, end)
+        issues = _reference_data_issues(bars, end)
+        actual_start = bars[0].day if bars else None
+        actual_end = bars[-1].day if bars else None
+        first_close = bars[0].close if bars else None
+        last_close = bars[-1].close if bars else None
+        print(
+            f"reference_fetch | symbol={symbol} | rows={len(bars)} "
+            f"| first={actual_start} | last={actual_end} "
+            f"| first_close={first_close} | last_close={last_close}"
+        )
+        print(
+            f"reference_sanity | symbol={symbol} | "
+            f"missing_nyse_sessions={len(summary['missing_nyse_sessions'])} "
+            f"| duplicate_dates={summary['duplicate_dates'] or 'none'} "
+            f"| moves_over_20pct={summary['moves_over_20pct'] or 'none'}"
+        )
+        if issues:
+            raise RuntimeError(
+                f"{symbol} reference-data sanity check failed: {'; '.join(issues)}"
+            )
+
+    inserted: dict[str, int] = {}
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for symbol in requested:
+                bars = fetched[symbol]
+                for offset in range(0, len(bars), SLICE_SIZE):
+                    inserted_rows = psycopg2.extras.execute_values(
+                        cur,
+                        f"""
+                        INSERT INTO {PRICE_TABLE}
+                            (symbol, date, open, high, low, close, volume, source)
+                        VALUES %s
+                        ON CONFLICT (symbol, date, source) DO NOTHING
+                        RETURNING symbol
+                        """,
+                        [
+                            (
+                                bar.symbol,
+                                bar.day,
+                                bar.open,
+                                bar.high,
+                                bar.low,
+                                bar.close,
+                                bar.volume,
+                                bar.source,
+                            )
+                            for bar in bars[offset : offset + SLICE_SIZE]
+                        ],
+                        fetch=True,
+                    )
+                    inserted[symbol] = inserted.get(symbol, 0) + len(inserted_rows or [])
+                cur.execute(
+                    f"""
+                    INSERT INTO {META_TABLE}
+                        (symbol, row_count, first_date, last_date, source_mix, status, error)
+                    VALUES (%s,%s,%s,%s,%s,'ok',NULL)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        row_count=EXCLUDED.row_count,
+                        first_date=EXCLUDED.first_date,
+                        last_date=EXCLUDED.last_date,
+                        source_mix=EXCLUDED.source_mix,
+                        status='ok', error=NULL, fetched_at=NOW()
+                    """,
+                    (
+                        symbol,
+                        len(bars),
+                        bars[0].day,
+                        bars[-1].day,
+                        YAHOO_PRICE_SOURCE,
+                    ),
+                )
+    for symbol in requested:
+        print(f"reference_price_insert | symbol={symbol} | rows_inserted={inserted[symbol]}")
+    print(f"reference_price_ingest_complete | inserted={inserted}")
+    return inserted
 
 
 def price_coverage_report(
@@ -757,6 +1038,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--start", type=date.fromisoformat, default=ANALYSIS_START)
     parser.add_argument("--end", type=date.fromisoformat, default=DEFAULT_END)
     parser.add_argument("--ingest-prices", action="store_true")
+    parser.add_argument("--ingest-reference-prices", action="store_true")
+    parser.add_argument(
+        "--reference-start", type=date.fromisoformat, default=date(2017, 1, 1)
+    )
     parser.add_argument("--symbols", nargs="*", default=None)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--skip-prices", action="store_true")
@@ -767,6 +1052,8 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     bundle = load_bundle(args.source)
+    if args.ingest_reference_prices:
+        ingest_reference_prices(args.reference_start, args.end)
     if args.ingest_prices:
         ingest_prices(bundle, args.start, args.end, args.symbols, args.workers)
     ensure_tables()

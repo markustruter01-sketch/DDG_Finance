@@ -36,6 +36,7 @@ from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     PRICE_SOURCES,
     PRICE_TABLE,
 )
+from analysis.bot2_sp500_data import REFERENCE_PRICE_SOURCES  # noqa: E402
 from analysis.bot2_momentum_pead_v4 import (  # noqa: E402
     CONTROL_ITERATIONS,
     RANDOM_SEED,
@@ -66,6 +67,7 @@ from analysis.bot2_momentum_rank500_regime import (  # noqa: E402
 
 
 TOLERANCE = 1e-4
+EXTERNAL_REFERENCE_CURVE_RELATIVE_TOLERANCE = 2e-4
 EXPERIMENT_18 = 18
 EXPERIMENT_19 = 19
 POOLED_WINDOW = "pooled_2019-02_latest_complete"
@@ -131,6 +133,7 @@ def _print_provenance(identity: dict[str, Any]) -> None:
     print(
         "DATA_PROVENANCE | "
         f"price_table={PRICE_TABLE} | price_sources={list(PRICE_SOURCES)} | "
+        f"reference_price_sources={list(REFERENCE_PRICE_SOURCES)} | "
         "screener=core.equity_universe.screen_universe"
     )
     print(
@@ -384,7 +387,9 @@ def _pooled_target(row: dict[str, Any]) -> dict[str, float]:
 
 
 def _first_curve_divergence(
-    stored: dict[str, Any], computed: dict[str, Any]
+    stored: dict[str, Any],
+    computed: dict[str, Any],
+    relative_tolerance: float = 0.0,
 ) -> dict[str, Any] | None:
     stored_rows = {
         str(item.get("date")): float(item["equity"])
@@ -403,14 +408,20 @@ def _first_curve_divergence(
                 "stored": stored_rows.get(day),
                 "computed": computed_rows.get(day),
                 "absolute_difference": None,
+                "allowed_difference": None,
             }
         difference = abs(stored_rows[day] - computed_rows[day])
-        if difference > TOLERANCE:
+        allowed_difference = max(
+            TOLERANCE,
+            abs(stored_rows[day]) * relative_tolerance,
+        )
+        if difference > allowed_difference:
             return {
                 "date": day,
                 "stored": stored_rows[day],
                 "computed": computed_rows[day],
                 "absolute_difference": difference,
+                "allowed_difference": allowed_difference,
             }
     return None
 
@@ -606,7 +617,16 @@ def _compare_results(
         )
 
     stored_pooled = row["results"]["windows"][POOLED_WINDOW][computed_key]
-    divergence = _first_curve_divergence(stored_pooled, pooled)
+    curve_relative_tolerance = (
+        EXTERNAL_REFERENCE_CURVE_RELATIVE_TOLERANCE
+        if row["experiment_id"] == EXPERIMENT_19
+        else 0.0
+    )
+    divergence = _first_curve_divergence(
+        stored_pooled,
+        pooled,
+        relative_tolerance=curve_relative_tolerance,
+    )
     if divergence is not None:
         passed = False
         print(f"DIVERGENCE | kind=first_equity_curve | details={_json(divergence)}")
@@ -614,6 +634,8 @@ def _compare_results(
         print(
             f"EQUITY_CURVE | experiment={row['experiment_id']} "
             f"| window={POOLED_WINDOW} | first_divergence=NONE_ABOVE_TOLERANCE "
+            f"| relative_tolerance={curve_relative_tolerance:.1e} "
+            f"| reason={'external_reference_vendor' if curve_relative_tolerance else 'exact_match'} "
             f"| status=PASS"
         )
     return passed, {

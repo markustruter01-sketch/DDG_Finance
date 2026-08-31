@@ -28,6 +28,7 @@ from core.equity_universe import (  # noqa: E402
     set_screen_data,
 )
 from db.postgres import get_conn  # noqa: E402
+from analysis.bot2_sp500_data import REFERENCE_PRICE_SOURCES  # noqa: E402
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     Bar,
     PRICE_SOURCES,
@@ -211,7 +212,7 @@ def _load_reference_series(symbol: str, end: date) -> Series:
                  ORDER BY date,
                           CASE WHEN source='alpaca_sip_adjusted' THEN 0 ELSE 1 END
                 """,
-                (symbol, WARMUP_START, end, list(PRICE_SOURCES)),
+                (symbol, WARMUP_START, end, list(REFERENCE_PRICE_SOURCES)),
             )
             rows = cur.fetchall()
     if rows:

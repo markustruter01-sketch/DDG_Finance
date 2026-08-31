@@ -397,3 +397,55 @@ def test_new_finding_types_make_reconciliation_non_clean(
     result = reconciliation.reconcile(report_only=True, cycle_id="finding-cycle")
 
     assert result["clean"] is False
+
+
+def test_stop_ledger_read_failure_is_reported_and_not_clean(monkeypatch):
+    connection = _Connection()
+
+    def fail_stop_ledger_read(_bot_id):
+        raise RuntimeError("stop ledger database unavailable")
+
+    monkeypatch.setattr(
+        reconciliation,
+        "_stop_ledger_rows",
+        fail_stop_ledger_read,
+    )
+    findings = reconciliation._order_mismatches("oracle", [])
+
+    assert findings == [
+        {
+            "bot_id": "oracle",
+            "kind": "reconciliation_check_failed",
+            "check": "stop_ledger_read",
+            "error": "stop ledger database unavailable",
+        }
+    ]
+
+    snapshot = {
+        "accounts": [],
+        "mismatches": findings,
+        "account_summaries": [],
+        "account_findings": [],
+        "pause_state_disagreements": [],
+        "liveness_findings": [],
+        "fleet_equity": 100,
+        "fleet_hwm": 100,
+        "captured_at": "2026-08-31T00:00:00+00:00",
+    }
+    monkeypatch.setattr(reconciliation, "collect_live_snapshot", lambda: snapshot)
+    monkeypatch.setattr("core.kill_switch._load_acknowledgements", lambda: {})
+    monkeypatch.setattr("core.kill_switch.evaluate_snapshot", lambda snapshot: [])
+
+    @contextmanager
+    def fake_get_conn():
+        yield connection
+
+    monkeypatch.setattr("db.postgres.get_conn", fake_get_conn)
+
+    result = reconciliation.reconcile(
+        report_only=True,
+        cycle_id="stop-ledger-read-failure",
+    )
+
+    assert result["clean"] is False
+    assert result["snapshot"]["mismatches"] == findings

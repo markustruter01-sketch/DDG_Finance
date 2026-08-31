@@ -26,6 +26,21 @@ _AUTHORITATIVE_POSITION_TABLES = {
 _TERMINAL_ORDER_STATUSES = {"canceled", "filled", "expired", "rejected"}
 
 
+def _reconciliation_check_failed(
+    check: str,
+    exc: Exception,
+    bot_id: str | None = None,
+) -> dict[str, Any]:
+    finding: dict[str, Any] = {
+        "kind": "reconciliation_check_failed",
+        "check": check,
+        "error": str(exc),
+    }
+    if bot_id is not None:
+        finding["bot_id"] = bot_id
+    return finding
+
+
 def _client_for(bot_id: str):
     bot_id = resolve_bot_id(bot_id)
     from alpaca.trading.client import TradingClient
@@ -68,7 +83,7 @@ def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
                     return row[0] if isinstance(row[0], list) else json.loads(row[0])
     except Exception as exc:
         logger.warning(f"Reconciliation | ledger read failed for {bot_id}: {exc}")
-    return []
+        return [_reconciliation_check_failed("bot_portfolio_read", exc, bot_id)]
 
 
 def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
@@ -119,14 +134,7 @@ def _authoritative_ledger_positions(bot_id: str) -> list[dict[str, Any]]:
         logger.warning(
             f"Reconciliation | authoritative ledger read failed for {bot_id}: {exc}"
         )
-        return [
-            {
-                "bot_id": bot_id,
-                "table": table,
-                "kind": "authoritative_ledger_unavailable",
-                "detail": str(exc),
-            }
-        ]
+        return [_reconciliation_check_failed("authoritative_position_read", exc, bot_id)]
 
 
 def _ledger_account_id(row: dict[str, Any]) -> str | None:
@@ -228,7 +236,7 @@ def _active_ledger_rows() -> list[dict[str, Any]]:
                 ]
     except Exception as exc:
         logger.warning(f"Reconciliation | active ledger scan failed: {exc}")
-        return []
+        return [_reconciliation_check_failed("active_ledger_scan", exc)]
 
 
 def _is_material_ledger_row(row: dict[str, Any]) -> bool:
@@ -250,7 +258,15 @@ def _ledger_orphan_findings(
         }
         for bot_id, positions in broker_positions.items()
     }
-    for row in _active_ledger_rows():
+    ledger_rows = _active_ledger_rows()
+    check_failures = [
+        row
+        for row in ledger_rows
+        if row.get("kind") == "reconciliation_check_failed"
+    ]
+    if check_failures:
+        return check_failures
+    for row in ledger_rows:
         if not _is_material_ledger_row(row):
             continue
         account_bot_id = _ledger_account_id(row)
@@ -462,13 +478,23 @@ def _stop_ledger_rows(bot_id: str) -> list[dict[str, Any]]:
         return rows
     except Exception as exc:
         logger.warning(f"Reconciliation | stop ledger read failed for {bot_id}: {exc}")
-        return []
+        return [_reconciliation_check_failed("stop_ledger_read", exc, bot_id)]
 
 
 def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Compare live owned stops in both directions, per bot and per symbol."""
     bot_id = resolve_bot_id(bot_id)
-    ledger_rows = _stop_ledger_rows(bot_id)
+    try:
+        ledger_rows = _stop_ledger_rows(bot_id)
+    except Exception as exc:
+        return [_reconciliation_check_failed("stop_ledger_read", exc, bot_id)]
+    check_failures = [
+        row
+        for row in ledger_rows
+        if row.get("kind") == "reconciliation_check_failed"
+    ]
+    if check_failures:
+        return check_failures
     live_orders = [order for order in orders if _is_live_protective_order(order)]
     ledger_keys = {
         (
@@ -496,7 +522,7 @@ def _order_mismatches(bot_id: str, orders: list[dict[str, Any]]) -> list[dict[st
             canonical_symbol(order["symbol"]),
             str(order["id"]),
         ) not in ledger_keys
-        ]
+    ]
     findings.extend(
         {
             "bot_id": row["bot_id"],
@@ -535,6 +561,7 @@ def _stale_portfolio(bot_id: str) -> list[dict[str, Any]]:
             return [{"bot_id": bot_id, "kind": "stale_bot_portfolio", "detail": f"age_hours={age_hours:.2f}"}]
     except Exception as exc:
         logger.warning(f"Reconciliation | portfolio freshness read failed for {bot_id}: {exc}")
+        return [_reconciliation_check_failed("portfolio_freshness_read", exc, bot_id)]
     return []
 
 
@@ -596,6 +623,14 @@ def collect_live_snapshot() -> dict[str, Any]:
         positions = _positions(client)
         orders = _orders(client)
         ledger = _ledger_positions(bot_id)
+        ledger_failures = [
+            row
+            for row in ledger
+            if row.get("kind") == "reconciliation_check_failed"
+        ]
+        if ledger_failures:
+            mismatches.extend(ledger_failures)
+            ledger = []
         equity = float(acct.equity)
         lmv = sum(float(p["market_value"]) for p in positions if p["side"] == "long")
         accounts.append({
@@ -624,8 +659,8 @@ def collect_live_snapshot() -> dict[str, Any]:
             with conn.cursor() as cur:
                 cur.execute("SELECT COALESCE(MAX(total), %s) FROM (SELECT SUM(equity_usd) AS total FROM fleet_equity_snapshots GROUP BY snapshot_ts) s", (fleet_equity,))
                 fleet_hwm = float(cur.fetchone()[0] or fleet_equity)
-    except Exception:
-        pass
+    except Exception as exc:
+        mismatches.append(_reconciliation_check_failed("fleet_hwm_read", exc))
     try:
         from core.bot_liveness import evaluate_liveness
         liveness_findings = evaluate_liveness()

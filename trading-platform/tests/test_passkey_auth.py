@@ -11,6 +11,32 @@ def test_passkey_encoding_round_trips_binary_values():
     assert passkey_auth.b64url_decode(passkey_auth.b64url_encode(value)) == value
 
 
+def test_webauthn_context_uses_public_browser_origin_behind_a_proxy(monkeypatch):
+    monkeypatch.delenv("WEBAUTHN_RP_ID", raising=False)
+    monkeypatch.delenv("WEBAUTHN_ORIGIN", raising=False)
+
+    rp_id, origin = passkey_auth.webauthn_context(
+        {"origin": "https://fleet.example.test"},
+        fallback_host="localhost:8000",
+    )
+
+    assert rp_id == "fleet.example.test"
+    assert origin == "https://fleet.example.test"
+
+
+def test_published_webauthn_requires_an_explicit_origin(monkeypatch):
+    monkeypatch.delenv("WEBAUTHN_RP_ID", raising=False)
+    monkeypatch.delenv("WEBAUTHN_ORIGIN", raising=False)
+    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
+
+    try:
+        passkey_auth.webauthn_context({"origin": "https://fleet.example.test"})
+    except RuntimeError as exc:
+        assert "WEBAUTHN_ORIGIN" in str(exc)
+    else:
+        raise AssertionError("published passkey context must fail closed")
+
+
 def test_passkey_session_route_is_public_but_requires_a_valid_cookie(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)

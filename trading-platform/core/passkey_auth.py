@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -34,6 +35,7 @@ PASSKEY_SESSION_COOKIE = "fleet_passkey_session"
 PASSKEY_FLOW_COOKIE = "fleet_passkey_flow"
 PASSKEY_SESSION_TTL_SECONDS = 12 * 60 * 60
 PASSKEY_FLOW_TTL_SECONDS = 5 * 60
+logger = logging.getLogger(__name__)
 
 
 def b64url_encode(value: bytes) -> str:
@@ -61,15 +63,38 @@ def webauthn_context(headers: Any, fallback_host: str = "localhost") -> tuple[st
     development naturally uses the request host.
     """
 
-    host = _forwarded_host(headers, fallback_host)
+    request_origin = str(headers.get("origin") or "").strip().rstrip("/")
+    parsed_origin = urlsplit(request_origin) if request_origin else None
+    if (
+        parsed_origin
+        and parsed_origin.scheme in {"http", "https"}
+        and parsed_origin.hostname
+        and not parsed_origin.path
+        and not parsed_origin.query
+        and not parsed_origin.fragment
+    ):
+        origin_host = parsed_origin.netloc
+        origin_scheme = parsed_origin.scheme
+    else:
+        origin_host = _forwarded_host(headers, fallback_host)
+        origin_scheme = (
+            str(headers.get("x-forwarded-proto") or "http")
+            .split(",", 1)[0]
+            .strip()
+        )
+
+    host = origin_host
     rp_id = os.getenv("WEBAUTHN_RP_ID", "").strip()
     if not rp_id:
         rp_id = urlsplit(f"//{host}").hostname or "localhost"
 
     origin = os.getenv("WEBAUTHN_ORIGIN", "").strip()
     if not origin:
-        scheme = str(headers.get("x-forwarded-proto") or "http").split(",", 1)[0].strip()
-        origin = f"{scheme}://{host}"
+        if os.getenv("REPLIT_DEPLOYMENT") == "1":
+            raise RuntimeError(
+                "WEBAUTHN_ORIGIN must be configured for published passkey authentication"
+            )
+        origin = f"{origin_scheme}://{host}"
     return rp_id, origin
 
 
@@ -91,6 +116,13 @@ def create_challenge(
     expires_at = _now() + timedelta(seconds=PASSKEY_FLOW_TTL_SECONDS)
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM fleet_passkey_challenges
+                WHERE expires_at <= CURRENT_TIMESTAMP
+                   OR used_at IS NOT NULL
+                """
+            )
             cur.execute(
                 """
                 INSERT INTO fleet_passkey_challenges
@@ -252,6 +284,13 @@ def create_session(clerk_user_id: str) -> str:
         with conn.cursor() as cur:
             cur.execute(
                 """
+                DELETE FROM fleet_passkey_sessions
+                WHERE expires_at <= CURRENT_TIMESTAMP
+                   OR revoked_at IS NOT NULL
+                """
+            )
+            cur.execute(
+                """
                 INSERT INTO fleet_passkey_sessions
                     (session_hash, clerk_user_id, expires_at)
                 VALUES (%s, %s, %s)
@@ -293,6 +332,36 @@ def revoke_session(token: str | None) -> None:
                 """,
                 (_hash_token(token),),
             )
+
+
+def record_event(
+    *,
+    event_type: str,
+    success: bool,
+    clerk_user_id: str | None = None,
+    credential_id: bytes | None = None,
+    failure_code: str | None = None,
+) -> None:
+    """Persist a non-sensitive passkey audit event without blocking auth."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO fleet_passkey_events
+                        (event_type, clerk_user_id, credential_id, success, failure_code)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        event_type[:80],
+                        clerk_user_id,
+                        credential_id,
+                        success,
+                        failure_code[:120] if failure_code else None,
+                    ),
+                )
+    except Exception as exc:
+        logger.warning("Passkey audit event was not persisted: %s", type(exc).__name__)
 
 
 def registration_options(

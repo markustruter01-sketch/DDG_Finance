@@ -466,11 +466,11 @@ def _health_path() -> str:
 
 
 class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
-    """Require a Clerk session or server-to-server secret.
+    """Require a passkey/Clerk session or server-to-server secret.
 
     The internal secret is retained only for trusted scheduler probes. It is
     never compiled into the dashboard bundle. Browser requests must carry a
-    verified Clerk session cookie.
+    verified passkey or Clerk session cookie.
     """
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:

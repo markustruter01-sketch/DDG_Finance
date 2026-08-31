@@ -23,6 +23,7 @@ from core.passkey_auth import (
     get_credential,
     list_credentials,
     registration_options,
+    record_event,
     revoke_session,
     save_credential,
     session_user_id,
@@ -36,10 +37,20 @@ router = APIRouter(prefix="/auth/passkey", tags=["Passkey authentication"])
 
 
 def _secure_cookie(request: Request) -> bool:
-    return request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0] == "https"
+    origin = request.headers.get("origin", "").strip()
+    if origin:
+        return origin.lower().startswith("https://")
+    return (
+        request.headers.get("x-forwarded-proto", request.url.scheme)
+        .split(",", 1)[0]
+        .strip()
+        .lower()
+        == "https"
+    )
 
 
 def _set_flow_cookie(response: JSONResponse, request: Request, challenge_id: str) -> None:
+    response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
         PASSKEY_FLOW_COOKIE,
         challenge_id,
@@ -52,6 +63,7 @@ def _set_flow_cookie(response: JSONResponse, request: Request, challenge_id: str
 
 
 def _set_session_cookie(response: JSONResponse, request: Request, token: str) -> None:
+    response.headers["Cache-Control"] = "no-store"
     response.set_cookie(
         PASSKEY_SESSION_COOKIE,
         token,
@@ -98,6 +110,11 @@ async def passkey_registration_options(request: Request) -> JSONResponse:
         clerk_user_id=user_id,
         challenge=challenge,
     )
+    record_event(
+        event_type="registration_options_issued",
+        clerk_user_id=user_id,
+        success=True,
+    )
     response = JSONResponse(content=json.loads(options_json))
     _set_flow_cookie(response, request, challenge_id)
     return response
@@ -117,6 +134,12 @@ async def passkey_registration_verify(
         or challenge_record["flow"] != "registration"
         or challenge_record["clerk_user_id"] != user_id
     ):
+        record_event(
+            event_type="registration_failed",
+            clerk_user_id=user_id,
+            success=False,
+            failure_code="expired_or_mismatched_challenge",
+        )
         raise HTTPException(status_code=400, detail="Passkey setup expired. Start again.")
     try:
         rp_id, origin = webauthn_context(request.headers, request.url.hostname or "localhost")
@@ -135,9 +158,27 @@ async def passkey_registration_verify(
             sign_count=verified.sign_count,
             label="This device",
         )
+        record_event(
+            event_type="registration_succeeded",
+            clerk_user_id=user_id,
+            credential_id=verified.credential_id,
+            success=True,
+        )
     except HTTPException:
+        record_event(
+            event_type="registration_failed",
+            clerk_user_id=user_id,
+            success=False,
+            failure_code="verification_rejected",
+        )
         raise
     except Exception as exc:
+        record_event(
+            event_type="registration_failed",
+            clerk_user_id=user_id,
+            success=False,
+            failure_code=type(exc).__name__,
+        )
         logger.warning(f"Passkey registration rejected: {type(exc).__name__}")
         raise HTTPException(status_code=400, detail="Passkey registration failed.") from exc
     response = JSONResponse(content={"registered": True})
@@ -163,6 +204,10 @@ async def passkey_authentication_options(request: Request) -> JSONResponse:
         clerk_user_id=None,
         challenge=challenge,
     )
+    record_event(
+        event_type="authentication_options_issued",
+        success=True,
+    )
     response = JSONResponse(content=json.loads(options_json))
     _set_flow_cookie(response, request, challenge_id)
     return response
@@ -180,6 +225,11 @@ async def passkey_authentication_verify(
         or challenge_record["flow"] != "authentication"
         or challenge_record["used_at"] is not None
     ):
+        record_event(
+            event_type="authentication_failed",
+            success=False,
+            failure_code="expired_or_mismatched_challenge",
+        )
         raise HTTPException(status_code=400, detail="Passkey sign-in expired. Start again.")
     try:
         credential = _json_body(body)
@@ -199,9 +249,25 @@ async def passkey_authentication_verify(
             raise HTTPException(status_code=400, detail="Passkey sign-in expired. Start again.")
         update_sign_count(credential_id, verified.new_sign_count)
         token = create_session(stored["clerk_user_id"])
+        record_event(
+            event_type="authentication_succeeded",
+            clerk_user_id=stored["clerk_user_id"],
+            credential_id=credential_id,
+            success=True,
+        )
     except HTTPException:
+        record_event(
+            event_type="authentication_failed",
+            success=False,
+            failure_code="verification_rejected",
+        )
         raise
     except Exception as exc:
+        record_event(
+            event_type="authentication_failed",
+            success=False,
+            failure_code=type(exc).__name__,
+        )
         logger.warning(f"Passkey authentication rejected: {type(exc).__name__}")
         raise HTTPException(status_code=401, detail="Passkey sign-in failed.") from exc
     response = JSONResponse(content={"authenticated": True})
@@ -215,13 +281,27 @@ async def passkey_session(request: Request) -> JSONResponse:
     user_id = session_user_id(request.cookies.get(PASSKEY_SESSION_COOKIE))
     if not user_id:
         raise HTTPException(status_code=401, detail="No active passkey session.")
-    return JSONResponse(content={"authenticated": True, "user_id": user_id})
+    response = JSONResponse(content={"authenticated": True})
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.post("/logout")
 async def passkey_logout(request: Request) -> JSONResponse:
-    revoke_session(request.cookies.get(PASSKEY_SESSION_COOKIE))
+    try:
+        revoke_session(request.cookies.get(PASSKEY_SESSION_COOKIE))
+    except Exception as exc:
+        # Clearing the browser cookie is still useful if the database is
+        # temporarily unavailable. The persisted session remains bounded by
+        # its expiry and cannot be reused from this browser afterward.
+        logger.warning(f"Passkey logout revocation deferred: {type(exc).__name__}")
+    record_event(
+        event_type="logout",
+        clerk_user_id=_auth_user_id(request),
+        success=True,
+    )
     response = JSONResponse(content={"signed_out": True})
+    response.headers["Cache-Control"] = "no-store"
     _clear_session_cookie(response)
     _clear_flow_cookie(response)
     return response
@@ -260,5 +340,18 @@ async def passkey_credential_delete(request: Request, credential_id: str) -> JSO
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid passkey identifier.") from exc
     if not delete_credential(decoded_id, user_id):
+        record_event(
+            event_type="credential_revocation_failed",
+            clerk_user_id=user_id,
+            credential_id=decoded_id,
+            success=False,
+            failure_code="not_found",
+        )
         raise HTTPException(status_code=404, detail="Passkey not found.")
+    record_event(
+        event_type="credential_revoked",
+        clerk_user_id=user_id,
+        credential_id=decoded_id,
+        success=True,
+    )
     return JSONResponse(content={"deleted": True})

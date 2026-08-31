@@ -762,6 +762,18 @@ CREATE TABLE IF NOT EXISTS fleet_passkey_sessions (
 CREATE INDEX IF NOT EXISTS idx_fleet_passkey_sessions_expiry
     ON fleet_passkey_sessions (expires_at);
 
+CREATE TABLE IF NOT EXISTS fleet_passkey_events (
+    id             BIGSERIAL PRIMARY KEY,
+    event_type     TEXT NOT NULL,
+    clerk_user_id  TEXT,
+    credential_id  BYTEA,
+    success        BOOLEAN NOT NULL,
+    failure_code   TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fleet_passkey_events_created
+    ON fleet_passkey_events (created_at DESC);
+
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base

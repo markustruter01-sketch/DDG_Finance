@@ -186,12 +186,14 @@ files.
 Never write `x or fallback_value`. Absence of data is a finding, never a healthy
 result.
 
-## SINGLE COPY BLOCK
-Wrap the entire task report — every step, all raw output, and the FACTS block — in one
-fenced code block. Never split a report across multiple blocks. The operator copies
-reports by hand, and a single block is one action instead of several pages of dragging.
-If the report contains code that would break the fence, use a longer fence delimiter
-rather than splitting the report.
+## FINAL REPORT IN ONE COPY BLOCK
+Every task ends with a written report, separate from any progress narration. Progress
+commentary does not satisfy this. The report answers each numbered step in the task in
+order, contains the raw output requested, and ends with the FACTS block.
+The entire report goes in ONE fenced code block so it can be copied in a single action.
+Never split it across multiple blocks. If the content contains backticks, use a longer
+fence delimiter rather than splitting.
+If a task is long, the report is still required. Length is not a reason to summarise.
 
 ## `kraken-bot/` EDIT BOUNDARY
 

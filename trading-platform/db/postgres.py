@@ -397,6 +397,28 @@ BEGIN
 END
 $$;
 
+-- ── Published Runner Liveness Audit ───────────────────────────────────────
+-- Append-only evidence for the API process monitoring the separately hosted
+-- runner. This table is intentionally independent of broker/order state.
+CREATE TABLE IF NOT EXISTS runner_liveness_audit (
+    id                   BIGSERIAL PRIMARY KEY,
+    probed_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    endpoint_url         TEXT,
+    result               TEXT NOT NULL,
+    error_class          TEXT,
+    reason               TEXT,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    alert_transition     TEXT NOT NULL DEFAULT 'none',
+    CONSTRAINT runner_liveness_audit_result_check
+        CHECK (result IN ('healthy', 'unreachable', 'invalid_endpoint', 'skipped')),
+    CONSTRAINT runner_liveness_audit_alert_check
+        CHECK (alert_transition IN ('none', 'raised', 'recovered'))
+);
+CREATE INDEX IF NOT EXISTS idx_runner_liveness_audit_probed
+    ON runner_liveness_audit (probed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runner_liveness_audit_result
+    ON runner_liveness_audit (result, probed_at DESC);
+
 -- ── LLM Learning Journal ───────────────────────────────────────────────────
 -- Consolidated insights extracted from every LLM analysis output.
 -- Similar insights are merged (Jaccard ≥ 0.4); confirmed_count grows each time.
@@ -1817,6 +1839,85 @@ def get_discord_alert_events(hours: int = 168, limit: int = 100) -> list[dict]:
         ]
     except Exception as exc:
         logger.warning(f"Discord audit | read failed: {exc}")
+        return []
+
+
+# ── Published runner liveness audit ──────────────────────────────────────────
+
+def record_runner_liveness_probe(
+    result: str,
+    *,
+    endpoint_url: str | None = None,
+    error_class: str | None = None,
+    reason: str | None = None,
+    consecutive_failures: int = 0,
+    alert_transition: str = "none",
+) -> None:
+    """Persist one runner-monitoring outcome without affecting trading state."""
+    valid_results = {"healthy", "unreachable", "invalid_endpoint", "skipped"}
+    valid_transitions = {"none", "raised", "recovered"}
+    if result not in valid_results:
+        raise ValueError(f"invalid runner liveness result: {result}")
+    if alert_transition not in valid_transitions:
+        raise ValueError(
+            f"invalid runner liveness alert transition: {alert_transition}"
+        )
+    try:
+        if not is_pg_available():
+            return
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO runner_liveness_audit
+                        (endpoint_url, result, error_class, reason,
+                         consecutive_failures, alert_transition)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        endpoint_url,
+                        result,
+                        error_class,
+                        reason,
+                        max(0, int(consecutive_failures)),
+                        alert_transition,
+                    ),
+                )
+    except Exception as exc:
+        logger.warning(f"Runner liveness audit | write failed (non-fatal): {exc}")
+
+
+def get_runner_liveness_audit(hours: int = 168, limit: int = 500) -> list[dict]:
+    """Return recent runner-monitoring outcomes for incident diagnosis."""
+    if not is_pg_available():
+        return []
+    hours = max(1, min(int(hours), 720))
+    limit = max(1, min(int(limit), 1000))
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, probed_at, endpoint_url, result, error_class,
+                           reason, consecutive_failures, alert_transition
+                    FROM runner_liveness_audit
+                    WHERE probed_at >= NOW() - (%s * INTERVAL '1 hour')
+                    ORDER BY probed_at DESC
+                    LIMIT %s
+                    """,
+                    (hours, limit),
+                )
+                columns = [desc[0] for desc in cur.description]
+                rows = cur.fetchall()
+        return [
+            {
+                key: (value.isoformat() if isinstance(value, datetime) else value)
+                for key, value in zip(columns, row)
+            }
+            for row in rows
+        ]
+    except Exception as exc:
+        logger.warning(f"Runner liveness audit | read failed: {exc}")
         return []
 
 

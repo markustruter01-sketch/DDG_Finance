@@ -126,6 +126,31 @@ def _runner_liveness_enabled() -> bool:
     return _trading_api_liveness_enabled() and _runner_health_url() is not None
 
 
+def _record_runner_liveness_audit(
+    result: str,
+    *,
+    endpoint_url: str | None = None,
+    error_class: str | None = None,
+    reason: str | None = None,
+    consecutive_failures: int = 0,
+    alert_transition: str = "none",
+) -> None:
+    """Write monitoring evidence without allowing the audit to affect probes."""
+    try:
+        from db.postgres import record_runner_liveness_probe
+
+        record_runner_liveness_probe(
+            result,
+            endpoint_url=endpoint_url,
+            error_class=error_class,
+            reason=reason,
+            consecutive_failures=consecutive_failures,
+            alert_transition=alert_transition,
+        )
+    except Exception as exc:
+        logger.warning(f"Scheduler | runner liveness audit failed: {type(exc).__name__}")
+
+
 def _kill_switch_enforced() -> bool:
     """Enforcement requires both production and explicit operator arming."""
     return _is_published_deployment() and settings.kill_switch_armed
@@ -242,10 +267,27 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
             f"url={_runner_health_url()})"
         )
     elif _trading_api_liveness_enabled():
+        _record_runner_liveness_audit(
+            "invalid_endpoint",
+            endpoint_url=None,
+            error_class="InvalidRunnerHealthEndpoint",
+            reason="runner liveness monitoring skipped because endpoint configuration is invalid",
+            consecutive_failures=0,
+            alert_transition="none",
+        )
         logger.warning(
             "Scheduler | Published runner liveness probe skipped: "
             "RUNNER_HEALTH_URL must be the trusted local runner endpoint or "
             "an HTTPS /health URL matching RUNNER_HEALTH_ALLOWED_HOST"
+        )
+    else:
+        _record_runner_liveness_audit(
+            "skipped",
+            endpoint_url=None,
+            error_class="MonitoringDisabled",
+            reason="published runner liveness monitoring is not enabled",
+            consecutive_failures=0,
+            alert_transition="none",
         )
     if _trading_api_liveness_enabled():
         scheduler.add_job(
@@ -541,12 +583,28 @@ async def _probe_runner_liveness() -> None:
     """Independent API-process probe for the separately hosted runner."""
     global _runner_liveness_failures, _runner_liveness_alerted
     runner_url = _runner_health_url()
+    alert_transition = "none"
+    result = "healthy"
+    error_class = None
+    reason = None
+
+    # Invalid configuration is not an unreachable runner and must not poison
+    # the consecutive-failure counter or trigger an outage alert.
+    if runner_url is None:
+        _record_runner_liveness_audit(
+            "invalid_endpoint",
+            endpoint_url=None,
+            error_class="InvalidRunnerHealthEndpoint",
+            reason="runner health URL is not trusted or allowlisted",
+            consecutive_failures=0,
+            alert_transition="none",
+        )
+        logger.warning(
+            "Scheduler | published runner liveness skipped: invalid endpoint configuration"
+        )
+        return
+
     try:
-        if runner_url is None:
-            raise RuntimeError(
-                "runner health URL is not the trusted local endpoint or an "
-                "allowlisted HTTPS /health URL"
-            )
         async with httpx.AsyncClient(timeout=RUNNER_HEALTH_TIMEOUT_SECONDS) as client:
             response = await client.get(
                 runner_url,
@@ -557,14 +615,19 @@ async def _probe_runner_liveness() -> None:
             payload = response.json()
             if payload.get("service") != "kraken-bot-runner":
                 raise RuntimeError("unexpected runner health payload")
+        was_alerted = _runner_liveness_alerted
         recovered = _runner_liveness_failures > 0
         _runner_liveness_failures = 0
         if recovered:
             logger.warning(
                 f"Scheduler | published runner liveness recovered: {runner_url}"
             )
+        if was_alerted:
+            alert_transition = "recovered"
         _runner_liveness_alerted = False
     except Exception as exc:
+        result = "unreachable"
+        error_class = type(exc).__name__
         _runner_liveness_failures += 1
         logger.error(
             f"Scheduler | published runner liveness failure "
@@ -575,6 +638,7 @@ async def _probe_runner_liveness() -> None:
             and not _runner_liveness_alerted
         ):
             _runner_liveness_alerted = True
+            alert_transition = "raised"
             message = (
                 f"Published trading runner has failed "
                 f"{_runner_liveness_failures} consecutive health checks. "
@@ -603,6 +667,15 @@ async def _probe_runner_liveness() -> None:
                 logger.error(
                     f"Scheduler | runner liveness alert failed: {alert_exc}"
                 )
+    finally:
+        _record_runner_liveness_audit(
+            result,
+            endpoint_url=runner_url,
+            error_class=error_class,
+            reason=reason,
+            consecutive_failures=_runner_liveness_failures,
+            alert_transition=alert_transition,
+        )
 
 
 async def _probe_trading_api_liveness() -> None:

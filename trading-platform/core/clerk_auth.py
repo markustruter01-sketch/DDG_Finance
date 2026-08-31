@@ -28,13 +28,14 @@ def clerk_user_id_from_headers(
 
     cookie_header = headers.get("cookie", "")
     authorization_header = headers.get("authorization", "")
-    if not cookie_header and not authorization_header:
+    sdk_headers: dict[str, str] = {}
+    if cookie_header:
+        sdk_headers["cookie"] = cookie_header
+    if authorization_header:
+        sdk_headers["Authorization"] = authorization_header
+    if not sdk_headers:
         return None
 
-    sdk_headers = {
-        "cookie": cookie_header,
-        "Authorization": authorization_header,
-    }
     try:
         state = authenticate_request(
             sdk_headers,

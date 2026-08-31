@@ -186,6 +186,30 @@ def test_internal_scheduler_secret_is_not_subject_to_operator_allowlist(monkeypa
     assert response.status_code == 200
 
 
+def test_internal_scheduler_secret_is_checked_before_clerk_session(
+    monkeypatch,
+):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setenv("CLERK_SECRET_KEY", "clerk-test-secret")
+    monkeypatch.delenv("TRADING_API_OPERATOR_ALLOWLIST", raising=False)
+
+    import core.clerk_auth as clerk_auth
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("Clerk verification must not run for internal requests")
+
+    monkeypatch.setattr(clerk_auth, "clerk_user_id_from_headers", fail_if_called)
+
+    client = TestClient(app)
+    response = client.get(
+        "/trading-api/version",
+        headers={"X-Trading-API-Internal-Secret": "test-api-secret"},
+    )
+    client.close()
+
+    assert response.status_code == 200
+
+
 def test_unset_allowlist_in_published_context_rejects_clerk_user(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
     monkeypatch.setenv("CLERK_SECRET_KEY", "clerk-test-secret")

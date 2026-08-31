@@ -888,7 +888,7 @@ export default function HomePage() {
           </div>
         </div>
         <div className="home-command-summary">
-          <div>
+          <div className="home-summary-equity">
             <div className="home-summary-label">{fleet ? activeBotCount : "—"}-BOT FLEET <span>·</span> TOTAL ASSETS</div>
             <div className="home-equity-value">{fleetEq != null ? fmtEq(fleetEq) : "—"}</div>
           </div>
@@ -911,12 +911,16 @@ export default function HomePage() {
               </div>
             )}
           </div>
+          <div className="home-summary-runner">
+            <div className="home-summary-label">RUNNER HEARTBEAT</div>
+            <RunnerStatusIndicator
+              status={runnerStatus}
+              isError={runnerStatusError}
+              variant="summary"
+            />
+          </div>
         </div>
       </header>
-
-      <div className="mx-auto px-4 pt-4" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
-        <RunnerStatusIndicator status={runnerStatus} isError={runnerStatusError} />
-      </div>
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>

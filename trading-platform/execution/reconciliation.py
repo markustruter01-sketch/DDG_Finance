@@ -14,6 +14,13 @@ from core.bot_registry import resolve_bot_id
 from core.symbols import canonical_symbol
 
 
+# The retired buck_futures strategy shared Oracle's Alpaca account. Its durable
+# rows still need to be reconciled against that broker account.
+_LEDGER_ACCOUNT_ALIASES = {"buck_futures": "oracle"}
+_TRADES_DEFAULT_ACCOUNT = "oracle"
+_MATERIAL_NOTIONAL = 0.01
+
+
 def _client_for(bot_id: str):
     bot_id = resolve_bot_id(bot_id)
     from alpaca.trading.client import TradingClient
@@ -56,6 +63,185 @@ def _ledger_positions(bot_id: str) -> list[dict[str, Any]]:
     except Exception as exc:
         logger.warning(f"Reconciliation | ledger read failed for {bot_id}: {exc}")
     return []
+
+
+def _ledger_account_id(row: dict[str, Any]) -> str | None:
+    """Resolve a ledger row to the Alpaca account that owns its symbols."""
+    raw_bot_id = str(row.get("bot_id") or "").strip()
+    if not raw_bot_id and row.get("table") == "trades":
+        return _TRADES_DEFAULT_ACCOUNT
+    if raw_bot_id in _LEDGER_ACCOUNT_ALIASES:
+        return _LEDGER_ACCOUNT_ALIASES[raw_bot_id]
+    if not raw_bot_id:
+        return None
+    try:
+        return resolve_bot_id(raw_bot_id)
+    except ValueError:
+        return None
+
+
+def _active_ledger_rows() -> list[dict[str, Any]]:
+    """Read every material active/open position row without mutating state."""
+    try:
+        from db.postgres import get_conn
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        'alpaca_etf_positions' AS table_name,
+                        bot_id,
+                        symbol,
+                        qty::double precision AS qty,
+                        notional_usd::double precision AS notional_usd,
+                        status,
+                        opened_at
+                    FROM alpaca_etf_positions
+                    WHERE lower(status) = 'open'
+                    UNION ALL
+                    SELECT
+                        'bot3_positions',
+                        bot_id,
+                        symbol,
+                        qty::double precision,
+                        notional_usd::double precision,
+                        status,
+                        opened_at
+                    FROM bot3_positions
+                    WHERE lower(status) = 'open'
+                    UNION ALL
+                    SELECT
+                        'jerome_positions',
+                        bot_id,
+                        symbol,
+                        NULL::double precision,
+                        notional_usd::double precision,
+                        status,
+                        opened_at
+                    FROM jerome_positions
+                    WHERE lower(status) = 'open'
+                    UNION ALL
+                    SELECT
+                        'trades',
+                        NULL,
+                        ticker,
+                        qty::double precision,
+                        NULL::double precision,
+                        status,
+                        date::timestamptz
+                    FROM trades
+                    WHERE lower(status) = 'active'
+                    UNION ALL
+                    SELECT
+                        'bot_portfolio.positions',
+                        portfolio.bot_id,
+                        item->>'symbol',
+                        NULLIF(item->>'qty', '')::double precision,
+                        NULLIF(item->>'notional_usd', '')::double precision,
+                        COALESCE(NULLIF(item->>'status', ''), 'Active'),
+                        NULLIF(item->>'opened_at', '')::timestamptz
+                    FROM bot_portfolio AS portfolio
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                        COALESCE(portfolio.positions, '[]'::jsonb)
+                    ) AS item
+                    WHERE lower(COALESCE(item->>'status', 'active'))
+                        IN ('active', 'open')
+                    """
+                )
+                columns = (
+                    "table",
+                    "bot_id",
+                    "symbol",
+                    "qty",
+                    "notional_usd",
+                    "status",
+                    "opened_at",
+                )
+                return [
+                    dict(zip(columns, row, strict=True))
+                    for row in cur.fetchall()
+                ]
+    except Exception as exc:
+        logger.warning(f"Reconciliation | active ledger scan failed: {exc}")
+        return []
+
+
+def _is_material_ledger_row(row: dict[str, Any]) -> bool:
+    qty = abs(float(row.get("qty") or 0))
+    notional = abs(float(row.get("notional_usd") or 0))
+    return qty >= DUST_QTY or notional >= _MATERIAL_NOTIONAL
+
+
+def _ledger_orphan_findings(
+    broker_positions: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Find material active/open ledger rows absent from their broker account."""
+    findings: list[dict[str, Any]] = []
+    broker_symbols = {
+        bot_id: {
+            canonical_symbol(position.get("symbol"))
+            for position in positions
+            if abs(float(position.get("qty") or 0)) >= DUST_QTY
+        }
+        for bot_id, positions in broker_positions.items()
+    }
+    for row in _active_ledger_rows():
+        if not _is_material_ledger_row(row):
+            continue
+        account_bot_id = _ledger_account_id(row)
+        symbol = canonical_symbol(row.get("symbol"))
+        if account_bot_id is not None and symbol in broker_symbols.get(account_bot_id, set()):
+            continue
+        findings.append(
+            {
+                "bot_id": account_bot_id or row.get("bot_id") or "unknown",
+                "ledger_bot_id": row.get("bot_id"),
+                "table": row.get("table"),
+                "symbol": symbol,
+                "ledger_symbol": row.get("symbol"),
+                "qty": row.get("qty"),
+                "notional_usd": row.get("notional_usd"),
+                "status": row.get("status"),
+                "opened_at": row.get("opened_at"),
+                "kind": "ledger_orphan",
+            }
+        )
+    return findings
+
+
+def _account_summaries(
+    accounts: list[dict[str, Any]],
+    mismatches: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Provide per-account counts for raw reconciliation reports."""
+    summaries = []
+    for account in accounts:
+        bot_id = account["bot_id"]
+        account_findings = [
+            finding
+            for finding in mismatches
+            if finding.get("bot_id") == bot_id
+        ]
+        broker_findings = [
+            finding
+            for finding in account_findings
+            if finding.get("kind") != "ledger_orphan"
+        ]
+        orphan_findings = [
+            finding
+            for finding in account_findings
+            if finding.get("kind") == "ledger_orphan"
+        ]
+        summaries.append(
+            {
+                "bot_id": bot_id,
+                "broker_finding_count": len(broker_findings),
+                "orphan_finding_count": len(orphan_findings),
+                "status": "MISMATCH" if account_findings else "CLEAN",
+            }
+        )
+    return summaries
 
 
 def _mismatches(bot_id: str, broker: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -203,6 +389,14 @@ def collect_live_snapshot() -> dict[str, Any]:
         mismatches.extend(_order_mismatches(bot_id, orders))
         mismatches.extend(_stale_portfolio(bot_id))
         fleet_equity += equity
+    mismatches.extend(
+        _ledger_orphan_findings(
+            {
+                account["bot_id"]: account["positions"]
+                for account in accounts
+            }
+        )
+    )
     fleet_hwm = fleet_equity
     try:
         from db.postgres import get_conn
@@ -225,6 +419,7 @@ def collect_live_snapshot() -> dict[str, Any]:
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "accounts": accounts,
         "mismatches": mismatches,
+        "account_summaries": _account_summaries(accounts, mismatches),
         "account_findings": account_findings,
         "pause_state_disagreements": _pause_state_disagreements(),
         "liveness_findings": liveness_findings,

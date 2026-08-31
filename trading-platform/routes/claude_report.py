@@ -567,9 +567,12 @@ def _build_stale_flags(errors: list) -> list[dict]:
     flags: list[dict] = []
     try:
         rows = _pg_rows(
-            "SELECT bot_id, last_updated, "
-            "EXTRACT(EPOCH FROM (NOW() - last_updated)) AS age_s "
-            "FROM bot_portfolio WHERE bot_id = ANY(%s)",
+            "SELECT bp.bot_id, bp.last_updated, "
+            "EXTRACT(EPOCH FROM (NOW() - last_updated)) AS age_s, "
+            "COALESCE(bs.paused, FALSE) AS database_paused "
+            "FROM bot_portfolio bp "
+            "LEFT JOIN bots_state bs ON bs.bot_id = bp.bot_id "
+            "WHERE bp.bot_id = ANY(%s)",
             (list(_BOT_STALE_THRESHOLDS.keys()),),
         )
         for r in rows:
@@ -579,6 +582,12 @@ def _build_stale_flags(errors: list) -> list[dict]:
             age_s = float(age_s)
             bot_id = r["bot_id"]
             threshold = _BOT_STALE_THRESHOLDS[bot_id]
+            if bool(r.get("database_paused")):
+                logger.info(
+                    f"claude_report | {bot_id} paused in database — "
+                    "portfolio staleness is not a degradation"
+                )
+                continue
             if age_s > threshold:
                 flags.append({
                     "type":      "bot_stale",

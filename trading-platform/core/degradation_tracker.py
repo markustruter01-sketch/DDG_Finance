@@ -146,13 +146,22 @@ def record_exception(
     )
 
 
-def mark_resolved(component: str, error_type: str) -> None:
+def mark_resolved(
+    component: str,
+    error_type: str,
+    reason: str = "condition cleared",
+    event_id: Optional[int] = None,
+) -> int:
     """
-    Mark the most recent unresolved event for (component, error_type) as resolved.
-    Called from the auto-heal success path.
+    Mark one unresolved event as resolved with an auditable reason.
+
+    ``event_id`` is preferred by the scheduled resolver because it prevents a
+    multi-bot/error-type batch from resolving the wrong row.  Without it, the
+    historical behavior of resolving only the newest matching row is retained.
     Also clears the in-memory escalation state so the next fresh occurrence of
     the same signature starts with the base TTL rather than an elevated window.
     """
+    resolved_count = 0
     # DB update: mark the most recent open record as resolved.
     # Runs only when the database is available; escalation reset always runs.
     try:
@@ -163,17 +172,34 @@ def mark_resolved(component: str, error_type: str) -> None:
                     cur.execute(
                         """
                         UPDATE system_degradations
-                        SET resolved_at = NOW()
-                        WHERE component = %s
-                          AND error_type = %s
-                          AND resolved_at IS NULL
-                          AND ts = (
-                                SELECT MAX(ts) FROM system_degradations
-                                WHERE component = %s AND error_type = %s AND resolved_at IS NULL
+                        SET resolved_at = NOW(), resolved_reason = %s
+                        WHERE resolved_at IS NULL
+                          AND (
+                                id = %s
+                                OR (
+                                    %s IS NULL
+                                    AND component = %s
+                                    AND error_type = %s
+                                    AND ts = (
+                                        SELECT MAX(ts) FROM system_degradations
+                                        WHERE component = %s
+                                          AND error_type = %s
+                                          AND resolved_at IS NULL
+                                    )
+                                )
                               )
                         """,
-                        (component, error_type, component, error_type),
+                        (
+                            reason[:500],
+                            event_id,
+                            event_id,
+                            component,
+                            error_type,
+                            component,
+                            error_type,
+                        ),
                     )
+                    resolved_count = cur.rowcount
     except Exception as exc:
         logger.debug(f"[DEGRADATION] mark_resolved DB update failed: {exc}")
 
@@ -184,6 +210,7 @@ def mark_resolved(component: str, error_type: str) -> None:
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)
     logger.debug(f"[DEGRADATION] Escalation state cleared for {component}/{error_type}")
+    return resolved_count
 
 
 # ── Queries ──────────────────────────────────────────────────────────────────
@@ -218,7 +245,7 @@ def get_recent_events(
                     f"""
                     SELECT id, ts AT TIME ZONE 'UTC' AS ts,
                            component, severity, error_type, message, detail,
-                           bot_id, cycle_id, resolved_at
+                           bot_id, cycle_id, resolved_at, resolved_reason
                     FROM system_degradations
                     WHERE {where}
                     ORDER BY ts DESC
@@ -229,7 +256,7 @@ def get_recent_events(
                 rows = cur.fetchall()
 
         cols = ["id", "ts", "component", "severity", "error_type", "message",
-                "detail", "bot_id", "cycle_id", "resolved_at"]
+                "detail", "bot_id", "cycle_id", "resolved_at", "resolved_reason"]
         result = []
         for row in rows:
             d = dict(zip(cols, row))

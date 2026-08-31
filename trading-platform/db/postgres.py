@@ -335,10 +335,12 @@ CREATE TABLE IF NOT EXISTS system_degradations (
     detail       TEXT,            -- extra context (stack trace excerpt, endpoint, etc.)
     bot_id       TEXT,
     cycle_id     TEXT,
-    resolved_at  TIMESTAMPTZ      -- filled in when a subsequent heal cycle succeeds
+    resolved_at  TIMESTAMPTZ,     -- filled in when a subsequent heal cycle succeeds
+    resolved_reason TEXT          -- why the condition was observed to have cleared
 );
 ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS bot_id TEXT;
 ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS cycle_id TEXT;
+ALTER TABLE system_degradations ADD COLUMN IF NOT EXISTS resolved_reason TEXT;
 CREATE INDEX IF NOT EXISTS idx_sys_deg_ts        ON system_degradations (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_sys_deg_component ON system_degradations (component, ts DESC);
 

@@ -206,9 +206,22 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         coalesce=True,
         misfire_grace_time=120,
     )
+    scheduler.add_job(
+        func=_degradation_resolver_job,
+        trigger=__import__("apscheduler.triggers.interval", fromlist=["IntervalTrigger"]).IntervalTrigger(
+            minutes=15
+        ),
+        id="degradation_resolver",
+        name="Condition-based degradation resolver",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
+    )
     logger.info(
         "Scheduler | Registered: automated_kill_switch (5 min) + "
-        "scheduled_reconciliation (hourly) + standing_invariants (15 min, LOG ONLY)"
+        "scheduled_reconciliation (hourly) + standing_invariants (15 min, LOG ONLY) + "
+        "degradation_resolver (15 min)"
     )
 
     if _runner_liveness_enabled():
@@ -506,6 +519,22 @@ async def _standing_invariants_job() -> None:
         # This job is deliberately LOG ONLY.  Enabling alerts requires a
         # separate policy change; no alert_critical call belongs here.
         logger.error(f"Scheduler | standing_invariants CRASHED: {exc}")
+
+
+async def _degradation_resolver_job() -> None:
+    """Resolve only degradation rows whose live condition has cleared."""
+    logger.info("Scheduler | JOB STARTING: degradation_resolver")
+    try:
+        from core.degradation_resolver import run_degradation_resolver
+
+        result = await asyncio.to_thread(run_degradation_resolver)
+        logger.info(
+            "Scheduler | degradation_resolver complete: "
+            f"dry_run={result['dry_run']} checked={result['checked']} "
+            f"would_resolve={result['would_resolve']} resolved={result['resolved']}"
+        )
+    except Exception as exc:
+        logger.critical(f"Scheduler | degradation_resolver FAILED: {exc}")
 
 
 async def _probe_runner_liveness() -> None:

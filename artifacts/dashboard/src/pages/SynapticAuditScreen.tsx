@@ -17,14 +17,17 @@ export default function SynapticAuditScreen() {
     return () => clearInterval(pulseInterval);
   }, []);
 
-  const totalChecks = (summary?.pass ?? 0) + (summary?.warn ?? 0) + (summary?.fail ?? 0);
-  const passRate = totalChecks > 0
-    ? ((summary?.pass ?? 0) / totalChecks * 100).toFixed(1)
+  const auditCounts = summary == null ? null : [summary.pass, summary.warn, summary.fail];
+  const totalChecks = auditCounts?.every((count) => count != null)
+    ? auditCounts.reduce((sum, count) => sum + count, 0)
+    : null;
+  const passRate = totalChecks != null && totalChecks > 0 && summary?.pass != null
+    ? ((summary.pass / totalChecks * 100)).toFixed(1)
     : "—";
-  const checksRun = summary?.total_logged ?? 0;
-  const errorsCaught = (summary?.fail ?? 0) + (summary?.warn ?? 0);
-  const activePaths = summary?.pass ?? 312;
-  const hasError = (summary?.fail ?? 0) > 0;
+  const checksRun = summary?.total_logged ?? null;
+  const errorsCaught = summary?.fail != null && summary?.warn != null ? summary.fail + summary.warn : null;
+  const activePaths = summary?.pass ?? null;
+  const hasError = summary?.fail != null && summary.fail > 0;
 
   const events = recentData?.rows?.slice(0, 8) ?? [];
   const riskValue = (value: number | null | undefined) => {
@@ -315,21 +318,21 @@ export default function SynapticAuditScreen() {
           <div className="absolute" style={{ top: "28%", left: "20px" }}>
             <MiniStat
               label="Checks Run"
-              value={checksRun > 0 ? checksRun.toLocaleString() : "—"}
+               value={checksRun == null ? "—" : checksRun.toLocaleString()}
               icon={<ActivitySquare className="w-3.5 h-3.5 text-cyan-400" />}
             />
           </div>
           <div className="absolute" style={{ top: "28%", right: "20px" }}>
             <MiniStat
               label="Active Pathways"
-              value={activePaths > 0 ? activePaths.toLocaleString() : "—"}
+               value={activePaths == null ? "—" : activePaths.toLocaleString()}
               icon={<Activity className="w-3.5 h-3.5 text-cyan-400" />}
             />
           </div>
           <div className="absolute" style={{ bottom: "22%", right: "20px" }}>
             <MiniStat
               label="Errors Caught"
-              value={errorsCaught > 0 ? errorsCaught.toLocaleString() : "0"}
+               value={errorsCaught == null ? "—" : errorsCaught.toLocaleString()}
               error={hasError}
               icon={<AlertTriangle className={`w-3.5 h-3.5 ${hasError ? "text-red-400" : "text-cyan-400"}`} />}
             />

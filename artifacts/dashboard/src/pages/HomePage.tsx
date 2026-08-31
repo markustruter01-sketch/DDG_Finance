@@ -482,9 +482,9 @@ function elapsedStatus(iso: string | null | undefined) {
 function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePositions, strategyPositionCount, posChips = [], entryWindow }: ShipCardProps) {
   const [open, setOpen] = useState(false);
   const st     = STATUS_SHIP[status];
-  const pnl    = bot?.pnl     ?? 0;
-  const pnlPct = bot?.pnl_pct ?? 0;
-  const posClr = pnl >= 0 ? "#16a34a" : "#000000";
+  const pnl    = bot?.pnl     ?? null;
+  const pnlPct = bot?.pnl_pct ?? null;
+  const posClr = pnl == null ? "#64748b" : pnl >= 0 ? "#16a34a" : "#000000";
   const freshness = elapsedStatus(bot?.last_updated);
 
   return (
@@ -527,7 +527,7 @@ function ShipCard({ shipName, callsign, bot, status, wfStatus, accent, livePosit
         </div>
 
         <div className="flex items-baseline gap-2 mb-2">
-          <span className="text-[22px] font-bold tabular-nums text-white leading-none">{fmtEq(bot?.equity ?? 0)}</span>
+          <span className="text-[22px] font-bold tabular-nums text-white leading-none">{fmtEq(bot?.equity)}</span>
           <span className="home-amount-glass text-[13px] font-semibold tabular-nums" style={{ color: posClr }}>{fmtPct(pnlPct)}</span>
            <span className="home-amount-glass text-[10px] tabular-nums" style={{ color: posClr }}>{fmtDollar(pnl)}</span>
           <WFBadge status={wfStatus} />
@@ -660,11 +660,11 @@ function ExportDropdown({
     const lines = [
       `${Object.keys(fleet ?? {}).filter(k => !["fleet_total", "generated_at", "errors"].includes(k)).length}-BOT FLEET STATUS — ${new Date().toLocaleString()}`,
       `──────────────────────────────────`,
-      `FLEET TOTAL  ${fmtEq(total?.equity ?? 0)}  ${fmtPct(total?.pnl_pct ?? 0)}  ${fmtDollar(total?.pnl ?? 0)}`,
+      `FLEET TOTAL  ${fmtEq(total?.equity)}  ${fmtPct(total?.pnl_pct)}  ${fmtDollar(total?.pnl)}`,
       ``,
-      `${getBotIdentity("spy_qqq_trend").displayName.padEnd(16)}  ${fmtEq(spy?.equity ?? 0)}  ${fmtPct(spy?.pnl_pct ?? 0)}  ${fmtDollar(spy?.pnl ?? 0)}`,
-      `${getBotIdentity("oracle").displayName.padEnd(16)}  ${fmtEq(oracle?.equity ?? 0)}  ${fmtPct(oracle?.pnl_pct ?? 0)}  ${fmtDollar(oracle?.pnl ?? 0)}`,
-      `${getBotIdentity("jerome_macro").displayName.padEnd(16)}  ${fmtEq(jerome?.equity ?? 0)}  ${fmtPct(jerome?.pnl_pct ?? 0)}  ${fmtDollar(jerome?.pnl ?? 0)}`,
+      `${getBotIdentity("spy_qqq_trend").displayName.padEnd(16)}  ${fmtEq(spy?.equity)}  ${fmtPct(spy?.pnl_pct)}  ${fmtDollar(spy?.pnl)}`,
+      `${getBotIdentity("oracle").displayName.padEnd(16)}  ${fmtEq(oracle?.equity)}  ${fmtPct(oracle?.pnl_pct)}  ${fmtDollar(oracle?.pnl)}`,
+      `${getBotIdentity("jerome_macro").displayName.padEnd(16)}  ${fmtEq(jerome?.equity)}  ${fmtPct(jerome?.pnl_pct)}  ${fmtDollar(jerome?.pnl)}`,
       ``,
       `REGIME: ${regime ?? "UNKNOWN"}`,
       `KILL SWITCH: ${killTripped == null ? "UNKNOWN" : killTripped ? "TRIPPED ⚠" : "ARMED"}`,
@@ -840,7 +840,7 @@ export default function HomePage() {
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
   const fleetPct = total?.pnl_pct ?? null;
-  const pos = (fleetPnl ?? 0) >= 0;
+  const pos = fleetPnl != null && fleetPnl >= 0;
   const pnlColor = pos ? "#16a34a" : "#000000";
 
   // 24h P&L from server fleet_total — no client arithmetic
@@ -885,7 +885,7 @@ export default function HomePage() {
         </div>
         <div className="home-command-summary">
           <div>
-            <div className="home-summary-label">{activeBotCount || "—"}-BOT FLEET <span>·</span> TOTAL ASSETS</div>
+            <div className="home-summary-label">{fleet ? activeBotCount : "—"}-BOT FLEET <span>·</span> TOTAL ASSETS</div>
             <div className="home-equity-value">{fleetEq != null ? fmtEq(fleetEq) : "—"}</div>
           </div>
           <div className="home-performance-grid">
@@ -893,7 +893,7 @@ export default function HomePage() {
               <div>
                 <div className="home-summary-label">ALL-TIME P&amp;L</div>
                 <div className="home-performance-value home-amount-glass" style={{ color: pnlColor }}>
-                  {fmtDollar(fleetPnl)} <span>({fmtPct(fleetPct ?? 0)})</span>
+                  {fmtDollar(fleetPnl)} <span>({fmtPct(fleetPct)})</span>
                 </div>
               </div>
             )}

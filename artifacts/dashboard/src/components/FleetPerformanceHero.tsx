@@ -14,14 +14,14 @@ export function FleetPerformanceHero() {
   const { data: journal }      = useJournal();
   const { data: perfHistory }  = usePerformanceHistory();
 
-  const grandTotal = fleetEq?.fleet_total?.equity ?? 0;
+  const grandTotal = fleetEq?.fleet_total?.equity ?? null;
 
   // Fleet win rate — server-computed from canonical trade tables (30d window)
   const serverWinRate = fleetEq?.fleet_total?.win_rate;
   const combinedWinRate = serverWinRate != null ? serverWinRate * 100 : null;
 
-  const alpacaWins  = journal?.summary?.wins ?? 0;
-  const alpacaTotal = journal?.summary?.total ?? 0;
+  const alpacaWins  = journal?.summary?.wins ?? null;
+  const alpacaTotal = journal?.summary?.total ?? null;
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -29,9 +29,11 @@ export function FleetPerformanceHero() {
     type Performer = { name: string; icon: string; dailyPnl: number };
     const results: Performer[] = [];
 
-    const oracleTodayTrades = journal?.trades?.filter(t => t.date?.startsWith(todayStr)) ?? [];
-    const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + (t.pnl_percentage ?? 0), 0);
-    results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
+    const oracleTodayTrades = journal?.trades?.filter(t => t.date?.startsWith(todayStr) && t.pnl_percentage != null) ?? [];
+    if (oracleTodayTrades.length > 0) {
+      const oracleDailyPnl = oracleTodayTrades.reduce((sum, t) => sum + t.pnl_percentage, 0);
+      results.push({ name: "Oracle", icon: "🔮", dailyPnl: oracleDailyPnl });
+    }
 
     const sorted = [...results].sort((a, b) => b.dailyPnl - a.dailyPnl);
     const best  = sorted[0] ?? null;
@@ -39,16 +41,17 @@ export function FleetPerformanceHero() {
     return { best, worst };
   }, [journal, todayStr]);
 
-  const alpacaBestPct  = journal?.trades?.length ? Math.max(0, ...journal.trades.map(t => t.pnl_percentage ?? 0)) : 0;
-  const alpacaWorstPct = journal?.trades?.length ? Math.min(0, ...journal.trades.map(t => t.pnl_percentage ?? 0)) : 0;
+  const knownPnlPcts = journal?.trades?.map(t => t.pnl_percentage).filter((value): value is number => value != null) ?? [];
+  const alpacaBestPct  = knownPnlPcts.length > 0 ? Math.max(...knownPnlPcts) : null;
+  const alpacaWorstPct = knownPnlPcts.length > 0 ? Math.min(...knownPnlPcts) : null;
 
   const botSparklines = useMemo(() => {
     const lines: Array<{ id: string; name: string; icon: string; accent: string; curve: number[] }> = [];
 
     const oracleSnapshots = perfHistory?.snapshots ?? [];
-    const oracleCurve = oracleSnapshots.length > 1
+    const oracleCurve = oracleSnapshots.length > 0
       ? oracleSnapshots.slice(-20).map(s => s.cumulative_pnl_pct)
-      : [0];
+      : [];
     lines.push({ id: "oracle", name: "Oracle", icon: "🔮", accent: "#facc15", curve: oracleCurve });
 
     return lines;
@@ -66,9 +69,9 @@ export function FleetPerformanceHero() {
     },
     {
       label: "Total Trades",
-      value: String(totalTrades),
+       value: totalTrades == null ? "—" : String(totalTrades),
       color: "text-white",
-      sub: `${alpacaWins}W / ${totalTrades - alpacaWins}L`,
+       sub: alpacaWins != null && totalTrades != null ? `${alpacaWins}W / ${totalTrades - alpacaWins}L` : "trade summary unavailable",
     },
     {
       label: "Fleet Win Rate",
@@ -90,7 +93,7 @@ export function FleetPerformanceHero() {
     },
     {
       label: "Best/Worst Trade",
-      value: alpacaBestPct > 0 || alpacaWorstPct < 0 ? `+${alpacaBestPct.toFixed(1)}% / ${alpacaWorstPct.toFixed(1)}%` : "—",
+       value: alpacaBestPct != null && alpacaWorstPct != null ? `${alpacaBestPct >= 0 ? "+" : ""}${alpacaBestPct.toFixed(1)}% / ${alpacaWorstPct >= 0 ? "+" : ""}${alpacaWorstPct.toFixed(1)}%` : "—",
       color: "text-amber-400",
       sub: "fleet all-time extremes",
     },

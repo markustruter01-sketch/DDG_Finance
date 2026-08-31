@@ -87,9 +87,12 @@ export function StreamHeaderBar() {
   const worstTradeUsd   = summary?.worst_trade_usd   ?? null;
   const worstTradeSymbol= summary?.worst_trade_symbol ?? null;
 
-  const auditChecked = audit != null ? (audit.pass ?? 0) + (audit.warn ?? 0) + (audit.fail ?? 0) : null;
-  const auditPassRate = auditChecked != null && auditChecked > 0
-    ? (((audit!.pass ?? 0) / auditChecked) * 100).toFixed(1) : null;
+  const auditCounts = audit == null ? null : [audit.pass, audit.warn, audit.fail];
+  const auditChecked = auditCounts?.every((count) => count != null)
+    ? auditCounts.reduce((sum, count) => sum + count, 0)
+    : null;
+  const auditPassRate = auditChecked != null && auditChecked > 0 && audit?.pass != null
+    ? ((audit.pass / auditChecked) * 100).toFixed(1) : null;
   const auditTotal = auditChecked;
 
   // Drive bot dots from the 3-bot color map — dynamic, no hardcoded count

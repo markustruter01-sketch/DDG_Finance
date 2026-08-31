@@ -9,8 +9,8 @@ export type RealTrade = {
   icon: string;
   symbol: string;
   side: string;
-  pnlPct: number;
-  pnlUsd: number;
+  pnlPct: number | null;
+  pnlUsd: number | null;
   isWin: boolean;
   date: string;
   sizeUsd?: number;
@@ -22,19 +22,19 @@ export type OpenPosition = {
   icon: string;
   symbol: string;
   side: string;
-  pnlPct: number;
-  pnlUsd: number;
-  sizeUsd: number;
+  pnlPct: number | null;
+  pnlUsd: number | null;
+  sizeUsd: number | null;
 };
 
 export type BotStats = {
   name: string;
   icon: string;
-  totalPnl: number;
-  totalPnlPct: number;
-  wins: number;
-  losses: number;
-  trades: number;
+  totalPnl: number | null;
+  totalPnlPct: number | null;
+  wins: number | null;
+  losses: number | null;
+  trades: number | null;
   /** Server-computed win rate from /fleet/equity, range 0–1. Use instead of wins/trades arithmetic. */
   winRate?: number;
 };
@@ -78,7 +78,7 @@ export function useRealFeed(maxTrades = 20) {
           icon: _oracle.icon,
           symbol: sym,
           side: t.side || t.direction || "",
-          pnlPct: t.pnl_percentage,
+          pnlPct: t.pnl_percentage ?? null,
           pnlUsd,
           isWin: rawPnlUsd != null ? pnlUsd >= 0 : t.status === "Closed_Win",
           date: t.date,
@@ -92,8 +92,8 @@ export function useRealFeed(maxTrades = 20) {
   }, [journal, maxTrades]);
 
   // wins/losses from journal summary — server-computed, no client aggregation
-  const wins   = journal?.summary?.wins ?? 0;
-  const losses = journal?.summary?.losses ?? 0;
+  const wins   = journal?.summary?.wins ?? null;
+  const losses = journal?.summary?.losses ?? null;
 
   const botStats: BotStats[] = useMemo(() => {
     const stats: BotStats[] = [];
@@ -103,19 +103,22 @@ export function useRealFeed(maxTrades = 20) {
       stats.push({
         name: _oracle.displayName, icon: _oracle.icon,
         // Server-computed P&L from /fleet/equity — avg×total formula was wrong
-        totalPnl:    fleetEq?.oracle?.pnl     ?? 0,
-        totalPnlPct: fleetEq?.oracle?.pnl_pct ?? 0,
-        wins:   jSummary.wins   ?? 0,
-        losses: jSummary.losses ?? 0,
-        trades: jSummary.total  ?? 0,
+        totalPnl:    fleetEq?.oracle?.pnl     ?? null,
+        totalPnlPct: fleetEq?.oracle?.pnl_pct ?? null,
+        wins:   jSummary.wins   ?? null,
+        losses: jSummary.losses ?? null,
+        trades: jSummary.total  ?? null,
         // Server win rate from /fleet/equity — eliminates client wins/trades arithmetic
         winRate: fleetEq?.oracle?.win_rate ?? undefined,
       });
     }
-    return stats.sort((a, b) => b.totalPnl - a.totalPnl || b.totalPnlPct - a.totalPnlPct);
+    return stats.sort((a, b) =>
+      (b.totalPnl ?? -Infinity) - (a.totalPnl ?? -Infinity)
+      || (b.totalPnlPct ?? -Infinity) - (a.totalPnlPct ?? -Infinity)
+    );
   }, [journal, fleetEq]);
 
-  const totalTrades = wins + losses;
+  const totalTrades = wins != null && losses != null ? wins + losses : null;
 
   // Surface null P&L trades in dev tools so they don't silently disappear
   useEffect(() => {
@@ -153,14 +156,14 @@ export function useRealFeed(maxTrades = 20) {
           bot: _oracle.displayName, icon: _oracle.icon,
           symbol: p.symbol,
           side: p.side,
-          pnlPct: (p.unrealized_plpc ?? 0) * 100,
-          pnlUsd: p.unrealized_pl ?? 0,
-          sizeUsd: Math.abs(p.market_value),
+          pnlPct: p.unrealized_plpc == null ? null : p.unrealized_plpc * 100,
+          pnlUsd: p.unrealized_pl ?? null,
+          sizeUsd: p.market_value == null ? null : Math.abs(p.market_value),
         });
       }
     }
 
-    return all.sort((a, b) => Math.abs(b.pnlUsd) - Math.abs(a.pnlUsd));
+    return all.sort((a, b) => (b.pnlUsd == null ? -Infinity : Math.abs(b.pnlUsd)) - (a.pnlUsd == null ? -Infinity : Math.abs(a.pnlUsd)));
   }, [livePositions]);
 
   const seenTradeIds = useRef<Set<string>>(new Set());

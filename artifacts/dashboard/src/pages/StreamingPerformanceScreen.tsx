@@ -129,12 +129,12 @@ export default function StreamingPerformanceScreen() {
   } : {};
 
   /* Full fleet totals from single source of truth (fleet_equity API) */
-  const fleetEquity = fleetEq?.fleet_total?.equity ?? 0;
-  const fleetPnL    = fleetEq?.fleet_total?.pnl ?? 0;
+  const fleetEquity = fleetEq?.fleet_total?.equity ?? null;
+  const fleetPnL    = fleetEq?.fleet_total?.pnl ?? null;
 
   /* Fleet win rate comes from the canonical fleet equity source. */
-  const fleetTrades  = j?.summary.total ?? 0;
-  const fleetWins    = j?.summary.wins  ?? 0;
+  const fleetTrades  = j?.summary?.total ?? null;
+  const fleetWins    = j?.summary?.wins  ?? null;
   const fleetWinRate = fleetEq?.fleet_total?.win_rate != null ? fleetEq.fleet_total.win_rate * 100 : null;
 
   /* Distinct metric: attribution's all-time per-trade rate, server-computed. */
@@ -224,7 +224,7 @@ export default function StreamingPerformanceScreen() {
         <RiskCard
           label="Ann. Return"
           value={fmtPct(rm?.annualised_return_pct)}
-          sub={rm?.insufficient_data ? `Need 30+ days (${rm.data_points ?? 0} pts so far)` : rm?.period_days ? `${rm.period_days}d window · ${rm.data_points ?? 0} pts` : "Awaiting data"}
+          sub={rm?.insufficient_data ? `Need 30+ days (${rm.data_points != null ? rm.data_points : "unavailable"} pts so far)` : rm?.period_days ? `${rm.period_days}d window · ${rm.data_points != null ? rm.data_points : "unavailable"} pts` : "Awaiting data"}
           accent={rm?.annualised_return_pct != null ? (rm.annualised_return_pct >= 0 ? C.green : C.red) : C.dim}
         />
       </div>
@@ -251,8 +251,8 @@ export default function StreamingPerformanceScreen() {
               </span>
               <div style={{ display: "flex", gap: 20 }}>
                 {[
-                  { label: "Fleet Equity", value: fleetEquity > 0 ? `$${(fleetEquity / 1000).toFixed(0)}k` : "—", color: C.cyan },
-                  { label: "Total Trades", value: fleetTrades > 0 ? String(fleetTrades) : "—", color: C.text },
+                  { label: "Fleet Equity", value: fleetEquity != null ? `$${(fleetEquity / 1000).toFixed(0)}k` : "—", color: C.cyan },
+                  { label: "Total Trades", value: fleetTrades != null ? String(fleetTrades) : "—", color: C.text },
                   { label: "Win Rate", value: fleetWinRate != null ? fmtPct(fleetWinRate, 1) : "—", color: fleetWinRate != null ? (fleetWinRate >= 50 ? C.green : C.red) : C.dim },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ textAlign: "right" }}>
@@ -331,9 +331,9 @@ export default function StreamingPerformanceScreen() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
               {[
-                { label: "Total Trades", value: fleetTrades > 0 ? String(fleetTrades) : "—", color: C.text },
+                { label: "Total Trades", value: fleetTrades != null ? String(fleetTrades) : "—", color: C.text },
                 { label: "All-time per-trade win rate (attribution)", value: attributionWinRate != null ? `${attributionWinRate.toFixed(0)}%` : "—", color: attributionWinRate != null ? (attributionWinRate >= 50 ? C.green : C.red) : C.dim },
-                { label: "Total Wins",   value: fleetTrades > 0 ? String(fleetWins) : "—", color: C.green },
+                { label: "Total Wins",   value: fleetWins != null ? String(fleetWins) : "—", color: C.green },
                 { label: "Avg P&L",      value: at?.overall.avg_pnl_pct != null ? `${at.overall.avg_pnl_pct > 0 ? "+" : ""}${at.overall.avg_pnl_pct.toFixed(1)}%` : (j?.summary.avg_pnl != null ? `${j.summary.avg_pnl > 0 ? "+" : ""}${j.summary.avg_pnl.toFixed(1)}%` : "—"), color: pnlColor(at?.overall.avg_pnl_pct ?? j?.summary.avg_pnl) },
               ].map(({ label, value, color }) => (
                 <div key={label}>

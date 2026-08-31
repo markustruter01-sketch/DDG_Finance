@@ -4,13 +4,14 @@ import type { RealTrade, OpenPosition } from "./useRealFeed";
 import { onTradePulse } from "./tradePulseEvents";
 
 interface ScoreboardProps {
-  wins: number;
-  losses: number;
+  wins: number | null;
+  losses: number | null;
   recentTrades: RealTrade[];
   openPositions: OpenPosition[];
 }
 
-function formatPnlUsd(v: number): string {
+function formatPnlUsd(v: number | null): string {
+  if (v == null) return "—";
   const abs = Math.abs(v);
   if (abs >= 1000) return `${v >= 0 ? "+" : "-"}$${(abs / 1000).toFixed(1)}k`;
   if (abs >= 100) return `${v >= 0 ? "+" : "-"}$${abs.toFixed(0)}`;
@@ -54,9 +55,9 @@ function getBotAbbrev(name: string): string {
 }
 
 function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
-  const usdPositive = trade.pnlUsd >= 0;
-  const pctPositive = trade.pnlPct >= 0;
-  const netPositive = trade.pnlUsd !== 0 ? usdPositive : pctPositive;
+  const usdPositive = trade.pnlUsd == null ? true : trade.pnlUsd >= 0;
+  const pctPositive = trade.pnlPct == null ? true : trade.pnlPct >= 0;
+  const netPositive = trade.pnlUsd != null && trade.pnlUsd !== 0 ? usdPositive : pctPositive;
   const usdColor = usdPositive ? "#00ff88" : "#ff8c00";
   const pctColor = netPositive ? "#00ff88" : "#ff8c00";
   const bgColor = netPositive ? "rgba(34,197,94,0.04)" : "rgba(249,115,22,0.04)";
@@ -99,13 +100,13 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
         {trade.symbol}
       </span>
       <span className="ml-auto flex items-center gap-2 shrink-0">
-        {trade.pnlUsd !== 0 && (
+        {trade.pnlUsd != null && trade.pnlUsd !== 0 && (
           <span style={{ fontSize: 12, fontWeight: 700, color: usdColor }}>
             {formatPnlUsd(trade.pnlUsd)}
           </span>
         )}
         <span style={{ fontSize: 12, fontWeight: 700, color: pctColor }}>
-          {pctPositive ? "+" : ""}{trade.pnlPct.toFixed(2)}%
+          {trade.pnlPct == null ? "—" : `${pctPositive ? "+" : ""}${trade.pnlPct.toFixed(2)}%`}
         </span>
         <span style={{ fontSize: 10, color: "rgba(148,163,184,0.4)" }}>
           {timeAgo(trade.date)}
@@ -116,9 +117,9 @@ function TradeRow({ trade, cycle }: { trade: RealTrade; cycle: number }) {
 }
 
 function OpenPositionRow({ position }: { position: OpenPosition }) {
-  const usdPositive = position.pnlUsd >= 0;
-  const pctPositive = position.pnlPct >= 0;
-  const netPositive = position.pnlUsd !== 0 ? usdPositive : pctPositive;
+  const usdPositive = position.pnlUsd == null ? true : position.pnlUsd >= 0;
+  const pctPositive = position.pnlPct == null ? true : position.pnlPct >= 0;
+  const netPositive = position.pnlUsd != null && position.pnlUsd !== 0 ? usdPositive : pctPositive;
   const usdColor = usdPositive ? "#00ff88" : "#ff8c00";
   const pctColor = netPositive ? "#00ff88" : "#ff8c00";
   const bgColor = netPositive ? "rgba(34,197,94,0.03)" : "rgba(249,115,22,0.03)";
@@ -161,13 +162,13 @@ function OpenPositionRow({ position }: { position: OpenPosition }) {
         {position.symbol}
       </span>
       <span className="ml-auto flex items-center gap-2 shrink-0">
-        {position.pnlUsd !== 0 && (
+        {position.pnlUsd != null && position.pnlUsd !== 0 && (
           <span style={{ fontSize: 12, fontWeight: 700, color: usdColor }}>
             {formatPnlUsd(position.pnlUsd)}
           </span>
         )}
         <span style={{ fontSize: 12, fontWeight: 700, color: pctColor }}>
-          {pctPositive ? "+" : ""}{position.pnlPct.toFixed(2)}%
+          {position.pnlPct == null ? "—" : `${pctPositive ? "+" : ""}${position.pnlPct.toFixed(2)}%`}
         </span>
         <LiveDot />
       </span>
@@ -266,7 +267,7 @@ export function Scoreboard({ wins, losses, recentTrades, openPositions }: Scoreb
               className="text-2xl font-mono font-black"
               style={{ color: "#4ade80", textShadow: "0 0 20px rgba(34,197,94,0.6), 0 0 40px rgba(34,197,94,0.3)" }}
             >
-              {wins}
+              {wins == null ? "—" : wins}
             </motion.div>
           </div>
         </motion.div>
@@ -301,7 +302,7 @@ export function Scoreboard({ wins, losses, recentTrades, openPositions }: Scoreb
               className="text-2xl font-mono font-black"
               style={{ color: "#fb923c", textShadow: "0 0 20px rgba(249,115,22,0.6), 0 0 40px rgba(249,115,22,0.3)" }}
             >
-              {losses}
+              {losses == null ? "—" : losses}
             </motion.div>
           </div>
         </motion.div>

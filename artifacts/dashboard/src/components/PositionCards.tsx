@@ -20,8 +20,9 @@ export function KrakenPositionCard({
   compact?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const isUp    = (kpos.unrealized_pnl_usd ?? 0) >= 0;
-  const pnlPct  = kpos.unrealized_pnl_pct ?? 0;
+  const pnlUsd  = typeof kpos.unrealized_pnl_usd === "number" ? kpos.unrealized_pnl_usd : null;
+  const isUp    = pnlUsd == null ? true : pnlUsd >= 0;
+  const pnlPct  = typeof kpos.unrealized_pnl_pct === "number" ? kpos.unrealized_pnl_pct : null;
   const sym     = kpos.symbol.replace("/USD", "");
   const trailActive = kpos.best_price != null && kpos.best_price > kpos.entry_price;
   const hoursIn = kpos.entry_time
@@ -57,8 +58,8 @@ export function KrakenPositionCard({
         )}
         <MarketStatusBadge symbol={kpos.symbol} isCrypto={true} />
         <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
-          {isUp ? "+" : ""}${(kpos.unrealized_pnl_usd ?? 0).toFixed(2)}
-          <span className="text-[8px] opacity-60 ml-1">({isUp ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+          {pnlUsd == null ? "—" : `${isUp ? "+" : ""}$${pnlUsd.toFixed(2)}`}
+          <span className="text-[8px] opacity-60 ml-1">({pnlPct == null ? "—" : `${isUp ? "+" : ""}${pnlPct.toFixed(2)}%`})</span>
         </span>
         <span className="text-[9px] font-mono text-red-400/55 shrink-0 hidden sm:inline">
           SL {formatCryptoPrice(kpos.stop_loss_price)}
@@ -90,7 +91,7 @@ export function KrakenPositionCard({
                   ["Entry", formatCryptoPrice(kpos.entry_price)],
                   ["Current", formatCryptoPrice(kpos.current_price)],
                   ["Size", formatCurrency(kpos.size_usd)],
-                  ["Qty", (kpos.qty ?? 0).toFixed(4)],
+                  ["Qty", kpos.qty == null ? "—" : kpos.qty.toFixed(4)],
                   ["Stop loss", formatCryptoPrice(kpos.stop_loss_price)],
                   ["Trail trigger", formatCryptoPrice(kpos.take_profit_price)],
                   ...(conviction != null ? [["Conviction", `${Math.round(conviction * 100)}%`]] : []),
@@ -123,8 +124,10 @@ export function KrakenPositionsPanel({
   const [open, setOpen] = useState(true);
   if (positions.length === 0) return null;
 
-  const totalPnl = positions.reduce((sum, p) => sum + (p.unrealized_pnl_usd ?? 0), 0);
-  const isPnlUp  = totalPnl >= 0;
+  const totalPnl = positions.every((p) => typeof p.unrealized_pnl_usd === "number")
+    ? positions.reduce((sum, p) => sum + p.unrealized_pnl_usd, 0)
+    : null;
+  const isPnlUp  = totalPnl == null ? true : totalPnl >= 0;
 
   return (
     <div className="border-t border-white/[0.04] bg-cyan-950/[0.03]">
@@ -136,8 +139,8 @@ export function KrakenPositionsPanel({
         <Badge variant="outline" className="text-[8px] px-1 py-0 border-cyan-500/20 text-cyan-400/50">{positions.length}</Badge>
         {isPaper && <Badge variant="outline" className="text-[8px] px-1 py-0 border-amber-500/20 text-amber-400/50">PAPER</Badge>}
         <span className="text-[9px] text-muted-foreground/30 ml-1">crypto positions</span>
-        <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", isPnlUp ? "text-green-400" : "text-red-400")}>
-          {isPnlUp ? "+" : ""}${totalPnl.toFixed(2)}
+        <span className={cn("ml-auto text-[11px] font-mono font-semibold tabular-nums", totalPnl == null ? "text-muted-foreground" : isPnlUp ? "text-green-400" : "text-red-400")}>
+          {totalPnl == null ? "—" : `${isPnlUp ? "+" : ""}$${totalPnl.toFixed(2)}`}
         </span>
         <span className={cn("text-muted-foreground/30 text-[10px] transition-transform duration-200 ml-2", open && "rotate-180")}>▾</span>
       </button>
@@ -180,8 +183,8 @@ export function AlpacaPositionCard({
   const [expanded, setExpanded] = useState(false);
   const isShort = (pos.side ?? "long").toLowerCase() === "short";
   const isBearHedge = (pos.asset_class ?? "").toLowerCase() === "bear_hedge";
-  const isUp  = pos.unrealized_pl >= 0;
-  const pnlPct = (pos.unrealized_plpc ?? 0) * 100;
+  const isUp  = pos.unrealized_pl == null ? true : pos.unrealized_pl >= 0;
+  const pnlPct = pos.unrealized_plpc == null ? null : pos.unrealized_plpc * 100;
 
   return (
     <div
@@ -212,7 +215,7 @@ export function AlpacaPositionCard({
         <MarketStatusBadge symbol={pos.symbol} isCrypto={isAssetCrypto(pos.symbol)} />
         <span className={cn("font-mono font-semibold text-[10px] flex-1 tabular-nums", isUp ? "text-green-400" : "text-red-400")}>
           {isUp ? "+" : ""}{formatCurrency(pos.unrealized_pl)}
-          <span className="text-[8px] opacity-60 ml-1">({isUp ? "+" : ""}{pnlPct.toFixed(2)}%)</span>
+          <span className="text-[8px] opacity-60 ml-1">({pnlPct == null ? "—" : `${isUp ? "+" : ""}${pnlPct.toFixed(2)}%`})</span>
         </span>
         {pos.conviction_score != null && (
           <span className={cn("text-[9px] font-mono shrink-0 hidden sm:inline", pos.conviction_score >= 0.8 ? "text-green-400/60" : pos.conviction_score >= 0.75 ? "text-primary/60" : "text-amber-400/60")}>
@@ -249,7 +252,7 @@ export function AlpacaPositionCard({
                   ["Entry",   formatCurrency(pos.avg_entry_price)],
                   ["Current", formatCurrency(pos.current_price)],
                   ["Notional", formatCurrency(pos.market_value)],
-                  ["Qty",     (pos.qty ?? 0).toFixed(4)],
+                   ["Qty",     pos.qty == null ? "—" : pos.qty.toFixed(4)],
                   pos.stop_loss_price  != null ? ["Stop loss",     formatCurrency(pos.stop_loss_price)]  : null,
                   pos.take_profit_price != null ? ["Trail trigger", formatCurrency(pos.take_profit_price)] : null,
                   pos.conviction_score != null ? ["Conviction", `${Math.round(pos.conviction_score * 100)}%`] : null,
@@ -328,8 +331,8 @@ export function AlpacaPositionsPanel({
   const isAfterhoursMode = tradingMode === "afterhours_crypto";
   const isEquityMode = tradingMode === "full_market";
   const ahData = statusData?.afterhours_crypto;
-  const ahPositionCount = ahData?.position_count ?? 0;
-  const ahUnrealizedPnl = ahData?.unrealized_pnl ?? 0;
+  const ahPositionCount = ahData?.position_count ?? null;
+  const ahUnrealizedPnl = ahData?.unrealized_pnl ?? null;
 
   // Return null only when there are no positions AND no afterhours mode badge to show
   if (positions.length === 0 && !isAfterhoursMode) return null;
@@ -363,14 +366,14 @@ export function AlpacaPositionsPanel({
         )}
         {isAfterhoursMode && (
           <span
-            title={`NYSE is closed — Oracle is in Crypto After-Hours mode${ahPositionCount > 0 ? ` · ${ahPositionCount} crypto position${ahPositionCount !== 1 ? "s" : ""} · P&L: ${ahUnrealizedPnl >= 0 ? "+" : ""}$${Math.abs(ahUnrealizedPnl).toFixed(2)}` : ""}`}
+            title={`NYSE is closed — Oracle is in Crypto After-Hours mode${ahPositionCount != null && ahPositionCount > 0 ? ` · ${ahPositionCount} crypto position${ahPositionCount !== 1 ? "s" : ""}${ahUnrealizedPnl == null ? " · P&L unavailable" : ` · P&L: ${ahUnrealizedPnl >= 0 ? "+" : ""}$${Math.abs(ahUnrealizedPnl).toFixed(2)}`}` : ""}`}
             className="flex items-center gap-1 text-[8px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-400"
           >
             🌙 Crypto After-Hours
-            {ahPositionCount > 0 && (
+            {ahPositionCount != null && ahPositionCount > 0 && (
               <span className="text-indigo-300/70 font-mono">{ahPositionCount}</span>
             )}
-            {ahPositionCount > 0 && ahUnrealizedPnl !== 0 && (
+            {ahPositionCount != null && ahPositionCount > 0 && ahUnrealizedPnl != null && (
               <span className={cn("font-mono", ahUnrealizedPnl >= 0 ? "text-green-400/70" : "text-red-400/70")}>
                 {ahUnrealizedPnl >= 0 ? "+" : ""}{formatCurrency(ahUnrealizedPnl)}
               </span>

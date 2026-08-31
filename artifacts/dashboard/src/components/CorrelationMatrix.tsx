@@ -73,18 +73,18 @@ export function CorrelationMatrix() {
                 <tr key={row}>
                   <td className="px-1 md:px-2 py-0.5 md:py-1 text-muted-foreground font-normal truncate max-w-[40px] md:max-w-[60px]">{row}</td>
                   {data.tickers.map((col) => {
-                    const val = data.matrix[row]?.[col] ?? 0;
+                    const val = data.matrix[row]?.[col] ?? null;
                     const isDiag = row === col;
                     return (
                       <td
                         key={col}
                         className={cn(
                           "px-1 md:px-2 py-0.5 md:py-1 text-center rounded-sm",
-                          isDiag ? "bg-primary/20 text-primary font-bold" : corrColor(val)
+                           isDiag ? "bg-primary/20 text-primary font-bold" : val == null ? "bg-slate-800/40 text-muted-foreground" : corrColor(val)
                         )}
-                        title={`${row} / ${col}: ${val.toFixed(3)}`}
+                        title={`${row} / ${col}: ${val == null ? "unavailable" : val.toFixed(3)}`}
                       >
-                        {isDiag ? "1.00" : val.toFixed(2)}
+                        {isDiag ? "1.00" : val == null ? "—" : val.toFixed(2)}
                       </td>
                     );
                   })}

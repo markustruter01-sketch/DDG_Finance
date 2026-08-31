@@ -21,7 +21,7 @@ export function LivePositionsSection() {
   const marketClosed = !platformStatus?.market.is_open;
   const countdown = useMarketCountdown(marketClosed ? platformStatus?.market.next_open : null);
   const positions = data?.positions ?? [];
-  const totalPnl = fleetEq?.fleet_total?.pnl ?? 0;
+  const totalPnl = fleetEq?.fleet_total?.pnl ?? null;
   const closingSymbol = isClosing ? String(closingVar ?? "") : null;
 
   const handleClose = (symbol: string) => {
@@ -39,7 +39,7 @@ export function LivePositionsSection() {
           <Target className="h-4 w-4 text-primary" />
           <span>Live Open Positions</span>
           {positions.length > 0 && <Badge variant="default" className="text-[10px] px-1.5 py-0">{positions.length}</Badge>}
-          {positions.length > 0 && <span className={cn("text-xs font-mono font-semibold", totalPnl >= 0 ? "text-green-400" : "text-red-400")}>{totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}</span>}
+          {positions.length > 0 && <span className={cn("text-xs font-mono font-semibold", totalPnl == null ? "text-muted-foreground" : totalPnl >= 0 ? "text-green-400" : "text-red-400")}>{totalPnl != null && totalPnl >= 0 ? "+" : ""}{formatCurrency(totalPnl)}</span>}
           {countdown && <span className="ml-1 text-[10px] font-mono text-amber-400/80">Market opens in {countdown}</span>}
           <div className="ml-auto">
             {!confirmRebalance ? (

@@ -15,8 +15,8 @@ export function computeStreak(trades: GamTrade[]): { count: number; direction: "
   if (!trades || trades.length === 0) return { count: 0, direction: "none" };
   const isWin = (t: GamTrade) => {
     if (t.status) return t.status === "Closed_Win";
-    const pct = t.pnl_pct ?? t.pnl_percentage ?? 0;
-    return pct > 0;
+    const pct = t.pnl_pct ?? t.pnl_percentage;
+    return pct != null && pct > 0;
   };
   const direction = isWin(trades[0]) ? "win" : "loss";
   let count = 0;
@@ -164,10 +164,10 @@ export function KillBoardPanel({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isPirate = theme === "pirate";
-  const pnlNum = (t: KillTradeEntry) => t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? 0;
+  const pnlNum = (t: KillTradeEntry) => t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? null;
   const wins = [...trades]
-    .filter(t => (t.pnl_usd ?? t.pnl_pct ?? t.pnl_percentage ?? 0) > 0)
-    .sort((a, b) => pnlNum(b) - pnlNum(a))
+    .filter(t => pnlNum(t) != null && pnlNum(t)! > 0)
+    .sort((a, b) => (pnlNum(b) ?? -Infinity) - (pnlNum(a) ?? -Infinity))
     .slice(0, 10);
   if (wins.length === 0) return null;
   return (
@@ -197,11 +197,11 @@ export function KillBoardPanel({
             <div className="mt-2 space-y-1.5">
               {wins.map((trade, i) => {
                 const sym = (trade.symbol ?? trade.ticker ?? "?").replace("/USD", "");
-                const pct = trade.pnl_pct ?? trade.pnl_percentage ?? 0;
+                const pct = trade.pnl_pct ?? trade.pnl_percentage ?? null;
                 const usd = trade.pnl_usd ?? null;
                 const isBig = usd != null
                   ? usd >= bigWinUsd
-                  : (bigWinPctFallback != null ? pct >= bigWinPctFallback : false);
+                  : (bigWinPctFallback != null && pct != null ? pct >= bigWinPctFallback : false);
                 const reason = trade.exit_reason ?? trade.reason ?? "";
                 return (
                   <motion.div
@@ -217,7 +217,7 @@ export function KillBoardPanel({
                     )}
                   >
                     <span className="font-bold text-white font-mono text-[10px] w-10 shrink-0">{sym}</span>
-                    <span className="text-green-400 font-mono font-semibold text-[10px]">+{pct.toFixed(2)}%</span>
+                    <span className="text-green-400 font-mono font-semibold text-[10px]">{pct == null ? "—" : `+${pct.toFixed(2)}%`}</span>
                     {usd != null && (
                       <span className="text-green-300/70 font-mono text-[9px]">${usd.toFixed(2)}</span>
                     )}

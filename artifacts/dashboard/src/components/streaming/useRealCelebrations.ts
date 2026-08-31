@@ -58,8 +58,8 @@ const WIN_TEMPLATES: Array<{
   { fn: (e) => `${e.bot}'s volume profile analysis wins again — ${e.symbol}`, icon: "📉", color: "#f472b6" },
   { fn: (e) => `Gemini Fleet Commander confirms ${e.bot}'s ${e.symbol} was optimal`, icon: "🌟", color: "#facc15" },
   { fn: (e) => `${e.bot} order flow analysis pays: ${e.symbol} closed in profit`, icon: "💹", color: "#34d399" },
-  { fn: (_e, s) => `Fleet total PnL: $${s.totalPnl.toFixed(2)} across ${s.totalTrades} trades`, icon: "🏆", color: "#facc15" },
-  { fn: (_e, s) => `Win rate holding at ${s.winRate.toFixed(1)}% — AI adapting in real-time`, icon: "📊", color: "#06b6d4" },
+  { fn: (_e, s) => `Fleet total PnL: ${s.totalPnl == null ? "unavailable" : `$${s.totalPnl.toFixed(2)}`} across ${s.totalTrades == null ? "an unavailable number of" : s.totalTrades} trades`, icon: "🏆", color: "#facc15" },
+  { fn: (_e, s) => `Win rate ${s.winRate == null ? "unavailable" : `holding at ${s.winRate.toFixed(1)}%`} — AI adapting in real-time`, icon: "📊", color: "#06b6d4" },
   { fn: (_e, s) => `${s.totalWins} winning trades and counting — fleet performing`, icon: "🔥", color: "#f59e0b" },
   { fn: (e) => `${e.bot} entry timing was surgical — ${e.symbol} profit realized`, icon: "⏱️", color: "#818cf8" },
   { fn: (e) => `Pattern recognition win: ${e.bot} profits on ${e.symbol}`, icon: "🧩", color: "#fb923c" },
@@ -97,7 +97,7 @@ const LOSS_TEMPLATES: Array<{
   { fn: (e) => `Drawdown event: ${e.bot} ${e.symbol} — adjusting parameters for next cycle`, icon: "🔧", color: "#fb923c" },
 ];
 
-type FleetStats = { totalPnl: number; totalTrades: number; totalWins: number; winRate: number };
+type FleetStats = { totalPnl: number | null; totalTrades: number | null; totalWins: number | null; winRate: number | null };
 
 let nextCelebId = 1;
 let nextAchId = 1;
@@ -126,12 +126,13 @@ export function useRealCelebrations() {
         const isWin = t.status === "Closed_Win";
         const isLoss = t.status === "Closed_Loss";
         if (!isWin && !isLoss) continue;
-        const pnl = Math.abs(t.pnl_percentage * 100);
+        const pnl = typeof t.pnl_percentage === "number" ? Math.abs(t.pnl_percentage * 100) : null;
+        if (pnl == null) continue;
         const isForex = t.asset_class === "forex" || t.source === "forex";
         if (isForex) continue;
         const _id = _oracle;
         const sym = (t.ticker || "").replace("USD", "/USD").replace("=X", "");
-        const entry: RealTradeEntry = { bot: _id.displayName, icon: _id.icon, symbol: sym, pnlUsd: pnl > 0 ? pnl : 5 + Math.random() * 30, isWin, source: "journal" };
+        const entry: RealTradeEntry = { bot: _id.displayName, icon: _id.icon, symbol: sym, pnlUsd: pnl, isWin, source: "journal" };
         if (isWin) wins.push(entry);
         else losses.push(entry);
       }
@@ -139,29 +140,15 @@ export function useRealCelebrations() {
 
     if (livePositions?.positions) {
       for (const p of livePositions.positions) {
-        const isWin = (p.unrealized_pl ?? 0) > 0;
-        const pnlUsd = Math.abs(p.unrealized_pl ?? 0);
+        if (p.unrealized_pl == null) continue;
+        const isWin = p.unrealized_pl > 0;
+        const pnlUsd = Math.abs(p.unrealized_pl);
         if (pnlUsd < 0.01) continue;
         const arr = isWin ? wins : losses;
         arr.push({ bot: _oracle.displayName, icon: _oracle.icon, symbol: p.symbol, pnlUsd, isWin, source: "alpaca-open" });
       }
     }
 
-
-    if (wins.length === 0) {
-      wins.push(
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "SPY",     pnlUsd: 12.50, isWin: true, source: "placeholder" },
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "QQQ",     pnlUsd: 24.80, isWin: true, source: "placeholder" },
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "GLD",     pnlUsd: 8.30,  isWin: true, source: "placeholder" },
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "NVDA",    pnlUsd: 15.60, isWin: true, source: "placeholder" },
-      );
-    }
-    if (losses.length === 0) {
-      losses.push(
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "XLF",     pnlUsd: 6.40, isWin: false, source: "placeholder" },
-        { bot: _oracle.displayName, icon: _oracle.icon, symbol: "XLK",     pnlUsd: 4.20, isWin: false, source: "placeholder" },
-      );
-    }
 
     const shuffle = (arr: RealTradeEntry[]) => {
       for (let i = arr.length - 1; i > 0; i--) {
@@ -192,14 +179,14 @@ export function useRealCelebrations() {
   }, [journal, livePositions]);
 
   const fleetStats = useMemo<FleetStats>(() => {
-    const totalWins = journal?.summary?.wins ?? 0;
-    const totalTrades = journal?.summary?.total ?? 0;
+    const totalWins = journal?.summary?.wins ?? null;
+    const totalTrades = journal?.summary?.total ?? null;
     const canonicalWinRate = fleetEquity?.fleet_total?.win_rate;
     return {
-      totalPnl:    0,
+      totalPnl:    fleetEquity?.fleet_total?.pnl ?? null,
       totalTrades,
       totalWins,
-      winRate: canonicalWinRate != null ? canonicalWinRate * 100 : 0,
+      winRate: canonicalWinRate != null ? canonicalWinRate * 100 : null,
     };
   }, [fleetEquity]);
 

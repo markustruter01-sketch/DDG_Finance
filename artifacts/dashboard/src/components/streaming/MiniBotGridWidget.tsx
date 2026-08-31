@@ -112,9 +112,9 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
         {activeBotIds.map(botId => {
           const identity = getBotIdentity(botId);
           const eq       = fleetEq[botId] as BotEquitySlice | undefined;
-          const pnl      = eq?.pnl ?? 0;
+          const pnl      = eq?.pnl ?? null;
           const active   = eq != null && !(eq.stale ?? false);
-          const pnlColor = pnl >= 0 ? "#4ade80" : "#f87171";
+          const pnlColor = pnl == null ? "#64748b" : pnl >= 0 ? "#4ade80" : "#f87171";
           const color    = BOT_COLORS[botId] ?? "#64748b";
 
           return (
@@ -165,7 +165,7 @@ export function MiniBotGridWidget({ fleetEq }: Props) {
                   fontWeight: 700,
                 }}
               >
-                {fmtPnl(pnl)}
+                {pnl == null ? "—" : fmtPnl(pnl)}
               </div>
 
               {/* Active / Stale label */}

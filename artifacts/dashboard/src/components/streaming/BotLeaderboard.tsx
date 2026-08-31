@@ -7,7 +7,7 @@ interface BotLeaderboardProps {
 }
 
 export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
-  const sorted = botStats.filter((b) => b.trades > 0);
+  const sorted = botStats.filter((b) => b.trades != null && b.trades > 0);
 
   if (sorted.length === 0) {
     return (
@@ -26,12 +26,12 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
       <div className="flex flex-col gap-1">
         <AnimatePresence initial={false}>
           {sorted.map((bot, i) => {
-            const totalPnl = bot.totalPnl ?? 0;
-            const totalPnlPct = bot.totalPnlPct ?? 0;
+            const totalPnl = bot.totalPnl;
+            const totalPnlPct = bot.totalPnlPct;
             // Use server-supplied win_rate from /fleet/equity — no client arithmetic
             const winRate = bot.winRate != null ? (bot.winRate * 100).toFixed(0) : "—";
-            const hasPnlUsd = totalPnl !== 0;
-            const pnlPositive = hasPnlUsd ? totalPnl >= 0 : totalPnlPct >= 0;
+            const hasPnlUsd = totalPnl != null;
+            const pnlPositive = totalPnl != null ? totalPnl >= 0 : totalPnlPct != null && totalPnlPct >= 0;
             return (
               <motion.div
                 key={bot.name}
@@ -52,9 +52,11 @@ export function BotLeaderboard({ botStats }: BotLeaderboardProps) {
                   className="text-[11px] font-bold shrink-0 min-w-[50px] text-right"
                   style={{ color: pnlPositive ? "#4ade80" : "#fb923c" }}
                 >
-                  {hasPnlUsd
+                   {totalPnl == null && totalPnlPct == null
+                     ? "—"
+                     : hasPnlUsd
                     ? `${totalPnl >= 0 ? "+" : ""}$${Math.abs(totalPnl).toFixed(0)}`
-                    : `${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(1)}%`
+                     : `${totalPnlPct! >= 0 ? "+" : ""}${totalPnlPct!.toFixed(1)}%`
                   }
                 </span>
               </motion.div>

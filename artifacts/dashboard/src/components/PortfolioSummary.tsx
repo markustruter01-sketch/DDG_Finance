@@ -15,15 +15,15 @@ export function CombinedPortfolioSummary() {
   const { data: registry } = useBotRegistry();
   const exportReport = useExportReport();
   const { toast } = useToast();
-  const total = fleetEq?.fleet_total?.equity ?? 0;
-  const pnl = fleetEq?.fleet_total?.pnl ?? 0;
-  const equity = portfolio?.account.equity ?? total;
-  const cash = portfolio?.account.cash ?? 0;
-  const buying = portfolio?.account.buying_power ?? 0;
+  const total = fleetEq?.fleet_total?.equity ?? null;
+  const pnl = fleetEq?.fleet_total?.pnl ?? null;
+  const equity = portfolio?.account?.equity ?? total;
+  const cash = portfolio?.account?.cash ?? null;
+  const buying = portfolio?.account?.buying_power ?? null;
   const vaultSymbol = vault?.vault_symbol ?? "JEPQ";
   const vaultPos = positions?.positions?.find(p => p.symbol === vaultSymbol);
-  const vaultValue = vaultPos?.market_value ?? vault?.total_vaulted_usd ?? 0;
-  const vaultPnl = vaultPos?.unrealized_pl ?? 0;
+  const vaultValue = vaultPos?.market_value ?? vault?.total_vaulted_usd ?? null;
+  const vaultPnl = vaultPos?.unrealized_pl ?? null;
   const winRate = fleetEq?.fleet_total?.win_rate;
 
   const handleExport = async () => {
@@ -41,12 +41,12 @@ export function CombinedPortfolioSummary() {
   };
 
   const cards = [
-    { label: "Total Equity", value: formatCurrency(equity), sub: `${pnl >= 0 ? "+" : ""}${formatCurrency(pnl)}`, icon: pnl >= 0 ? TrendingUp : TrendingDown, color: pnl >= 0 ? "text-green-400" : "text-red-400" },
-    { label: "Available Cash", value: formatCurrency(cash), sub: equity > 0 ? `${((cash / equity) * 100).toFixed(0)}% liquid` : "—", icon: ArrowUpRight, color: "text-blue-400" },
+    { label: "Total Equity", value: formatCurrency(equity), sub: pnl == null ? "P&L unavailable" : `${pnl >= 0 ? "+" : ""}${formatCurrency(pnl)}`, icon: pnl != null && pnl >= 0 ? TrendingUp : TrendingDown, color: pnl == null ? "text-muted-foreground" : pnl >= 0 ? "text-green-400" : "text-red-400" },
+    { label: "Available Cash", value: formatCurrency(cash), sub: equity == null || cash == null ? "Liquidity unavailable" : equity !== 0 ? `${((cash / equity) * 100).toFixed(0)}% liquid` : "0% liquid", icon: ArrowUpRight, color: "text-blue-400" },
     { label: "Buying Power", value: formatCurrency(buying), sub: "With margin", icon: Zap, color: "text-purple-400" },
     { label: "Fleet Win Rate", value: winRate == null ? "—" : `${(winRate * 100).toFixed(1)}%`, sub: "Canonical /fleet/equity", icon: TrendingUp, color: "text-cyan-400" },
     { label: "Growth Vault", value: formatCurrency(vaultValue), sub: vault?.initialised ? vaultSymbol : "Awaiting first sweep", icon: Vault, color: "text-amber-400" },
-    { label: "Vault P&L", value: `${vaultPnl >= 0 ? "+" : ""}${formatCurrency(vaultPnl)}`, sub: `Unrealised on ${vaultSymbol}`, icon: Coins, color: vaultPnl >= 0 ? "text-green-400" : "text-red-400" },
+    { label: "Vault P&L", value: vaultPnl == null ? "—" : `${vaultPnl >= 0 ? "+" : ""}${formatCurrency(vaultPnl)}`, sub: `Unrealised on ${vaultSymbol}`, icon: Coins, color: vaultPnl == null ? "text-muted-foreground" : vaultPnl >= 0 ? "text-green-400" : "text-red-400" },
   ];
 
   return (

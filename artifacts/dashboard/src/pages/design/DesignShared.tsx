@@ -28,7 +28,7 @@ export function getBotRows(data: DesignFleetData) {
       statusMeta: STATUS_META[status],
       wf: data.wfMap.get(meta.id) ?? "INSUFFICIENT_DATA",
       livePositions,
-      positionCount: positions?.[meta.id]?.strategy_count ?? bot?.positions ?? 0,
+       positionCount: positions?.[meta.id]?.strategy_count ?? bot?.positions ?? null,
     };
   });
 }
@@ -49,7 +49,7 @@ export function DesignNav({ current, mode }: { current: number; mode: string }) 
 
 export function FleetTotals({ data, className = "" }: { data: DesignFleetData; className?: string }) {
   const total = data.total;
-  const positive = (total?.pnl ?? 0) >= 0;
+  const positive = total?.pnl == null ? true : total.pnl >= 0;
   return (
     <div className={className}>
       <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/40">Fleet total assets</div>
@@ -89,7 +89,7 @@ export function PositionChips({ positions, accent = "#fff" }: { positions: Desig
 }
 
 export function BotLine({ row, compact = false }: { row: ReturnType<typeof getBotRows>[number]; compact?: boolean }) {
-  const pnl = row.bot?.pnl ?? 0;
+  const pnl = row.bot?.pnl ?? null;
   return (
     <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.06] ${compact ? "p-3" : "p-4"}`}>
       <div className="absolute inset-y-0 left-0 w-1" style={{ background: row.accent, boxShadow: `0 0 18px ${row.accent}` }} />
@@ -104,9 +104,9 @@ export function BotLine({ row, compact = false }: { row: ReturnType<typeof getBo
         </span>
       </div>
       <div className="mt-3 flex items-baseline gap-2 pl-2">
-        <span className={`${compact ? "text-xl" : "text-2xl"} font-black tabular-nums text-white`}>{fmtEq(row.bot?.equity ?? 0)}</span>
-        <span className={`text-sm font-black ${pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{fmtPct(row.bot?.pnl_pct ?? 0)}</span>
-        <span className="text-[10px] text-white/40">{fmtDollar(pnl)} · WR {row.bot?.win_rate == null ? "—" : `${(row.bot.win_rate * 100).toFixed(1)}%`}</span>
+         <span className={`${compact ? "text-xl" : "text-2xl"} font-black tabular-nums text-white`}>{fmtEq(row.bot?.equity)}</span>
+         <span className={`text-sm font-black ${pnl == null ? "text-white/40" : pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{fmtPct(row.bot?.pnl_pct)}</span>
+         <span className="text-[10px] text-white/40">{fmtDollar(pnl)} · WR {row.bot?.win_rate == null ? "—" : `${(row.bot.win_rate * 100).toFixed(1)}%`}</span>
       </div>
       <div className="mt-3 pl-2"><PositionChips positions={row.livePositions} accent={row.accent} /></div>
     </div>

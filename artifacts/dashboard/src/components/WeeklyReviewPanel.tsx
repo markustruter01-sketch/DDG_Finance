@@ -30,11 +30,11 @@ export function WeeklyReviewPanel() {
   const { data: fleetEq } = useFleetEquity();
   const { data: registry } = useBotRegistry();
 
-  const liveTotal = fleetEq?.fleet_total?.equity ?? 0;
-  const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? 0;
+  const liveTotal = fleetEq?.fleet_total?.equity ?? null;
+  const liveTotalPnl = fleetEq?.fleet_total?.pnl ?? null;
   const startingCapital = getFleetStartingCapital(registry, fleetEq);
-  const liveTotalPnlPct = startingCapital ? (liveTotalPnl / startingCapital) * 100 : null;
-  const equityReady = liveTotal > 0;
+  const liveTotalPnlPct = startingCapital && liveTotalPnl != null ? (liveTotalPnl / startingCapital) * 100 : null;
+  const equityReady = liveTotal != null;
 
   const oracleEquity = fleetEq?.oracle?.equity ?? null;
 
@@ -62,21 +62,23 @@ export function WeeklyReviewPanel() {
   const heartbeat = data.fleet_heartbeat ?? [];
   const oracleWeek = data.oracle_week ?? [];
   const topLosses = data.top_losses_week ?? [];
-  const criticals = data.math_audit_criticals ?? 0;
+  const criticals = data.math_audit_criticals ?? null;
   const vault = data.vault ?? {};
 
-  const pausedCount = summary.bots_paused ?? 0;
-  const staleCount = summary.bots_stale ?? 0;
+  const pausedCount = summary.bots_paused ?? null;
+  const staleCount = summary.bots_stale ?? null;
 
   const oracleWins = oracleWeek.find((r: any) => r.status === "Closed_Win");
   const oracleLosses = oracleWeek.find((r: any) => r.status === "Closed_Loss");
-  const oracleWinCount = oracleWins?.count ?? 0;
-  const oracleLossCount = oracleLosses?.count ?? 0;
-  const oracleWeekPnl = (oracleWins?.total_pnl ?? 0) + (oracleLosses?.total_pnl ?? 0);
+  const oracleWinCount = oracleWeek.length > 0 ? oracleWins?.count ?? 0 : null;
+  const oracleLossCount = oracleWeek.length > 0 ? oracleLosses?.count ?? 0 : null;
+  const oracleWeekPnl = oracleWeek.length > 0 && (oracleWins?.total_pnl != null || oracleLosses?.total_pnl != null)
+    ? (oracleWins?.total_pnl ?? 0) + (oracleLosses?.total_pnl ?? 0)
+    : oracleWeek.length > 0 ? 0 : null;
 
-  const systemOk = pausedCount === 0 && staleCount === 0 && criticals === 0;
-  const systemWarn = pausedCount > 0 || staleCount > 0;
-  const systemCrit = criticals > 0;
+  const systemOk = pausedCount != null && staleCount != null && criticals != null && pausedCount === 0 && staleCount === 0 && criticals === 0;
+  const systemWarn = (pausedCount ?? 0) > 0 || (staleCount ?? 0) > 0;
+  const systemCrit = (criticals ?? 0) > 0;
 
   return (
     <Card className="border-white/5 bg-gradient-to-br from-slate-900 to-slate-950 overflow-hidden">
@@ -115,12 +117,12 @@ export function WeeklyReviewPanel() {
             </div>
             <div className={cn(
               "text-right",
-              liveTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"
+              liveTotalPnl == null ? "text-muted-foreground" : liveTotalPnl >= 0 ? "text-emerald-400" : "text-red-400"
             )}>
               <div className="text-lg font-mono font-bold">
-                {equityReady
-                  ? `${liveTotalPnl >= 0 ? "+" : "−"}${fmt(liveTotalPnl)}`
-                  : "—"}
+                {liveTotalPnl == null
+                  ? "—"
+                  : `${liveTotalPnl >= 0 ? "+" : "−"}${fmt(liveTotalPnl)}`}
               </div>
               <div className="text-xs font-mono">
                 {equityReady ? fmtPct(liveTotalPnlPct) : "—"}

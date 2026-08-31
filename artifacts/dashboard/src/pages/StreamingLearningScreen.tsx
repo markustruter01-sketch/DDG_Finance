@@ -19,7 +19,7 @@ export default function StreamingLearningScreen() {
           {lessons.map(([title, text]) => <article key={title} className="rounded-xl border border-cyan-400/20 bg-slate-900/70 p-4"><h2 className="text-sm font-bold text-cyan-200">{title}</h2><p className="mt-3 text-xs leading-5 text-slate-300">{text}</p></article>)}
         </div>
         <div className="mt-6 rounded-xl border border-violet-400/20 bg-violet-950/20 p-4 text-xs">
-          FLEET TOTAL <strong className="ml-2 text-lg text-white">{total ? `$${Math.round(total.equity).toLocaleString()}` : "—"}</strong>
+           FLEET TOTAL <strong className="ml-2 text-lg text-white">{total?.equity != null ? `$${Math.round(total.equity).toLocaleString()}` : "—"}</strong>
         </div>
       </div>
     </section>

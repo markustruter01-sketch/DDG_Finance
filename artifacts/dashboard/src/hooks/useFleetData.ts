@@ -119,13 +119,14 @@ export const STATUS_LABELS: Record<BotStatus, string> = {
 
 // ── Formatters (no arithmetic — just display helpers) ────────────────────────
 
-export function fmtEq(v: number) {
-  return `$${Math.round(v).toLocaleString()}`;
+export function fmtEq(v: number | null | undefined) {
+  return v == null ? "—" : `$${Math.round(v).toLocaleString()}`;
 }
-export function fmtPct(v: number) {
-  return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+export function fmtPct(v: number | null | undefined) {
+  return v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
 }
-export function fmtDollar(v: number) {
+export function fmtDollar(v: number | null | undefined) {
+  if (v == null) return "—";
   const abs = Math.abs(v);
   const s = v >= 0 ? "+" : "-";
   if (abs >= 1_000_000) return `${s}$${(abs / 1_000_000).toFixed(2)}M`;

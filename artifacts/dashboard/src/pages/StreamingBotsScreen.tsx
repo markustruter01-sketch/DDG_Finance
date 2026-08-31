@@ -68,9 +68,9 @@ interface BotCardData {
   pnl_pct: number | null;
   paused: boolean;
   stale?: boolean;
-  openPositionCount: number;
+  openPositionCount: number | null;
   openPositionSymbols: string[];
-  recentTrades: Array<{ symbol: string; pnl_usd: number }>;
+  recentTrades: Array<{ symbol: string; pnl_usd: number | null }>;
   paramsText: string;
 }
 
@@ -139,12 +139,12 @@ function BotCard({ bot }: { bot: BotCardData }) {
             <span
               className="text-[9px] font-black font-mono px-1.5 py-px rounded"
               style={{
-                background: bot.openPositionCount > 0 ? `${bot.color}22` : "rgba(0,0,0,0.3)",
-                color: bot.openPositionCount > 0 ? bot.color : "#475569",
-                border: `1px solid ${bot.openPositionCount > 0 ? bot.color + "44" : "rgba(255,255,255,0.06)"}`,
+                 background: bot.openPositionCount != null && bot.openPositionCount > 0 ? `${bot.color}22` : "rgba(0,0,0,0.3)",
+                 color: bot.openPositionCount != null && bot.openPositionCount > 0 ? bot.color : "#475569",
+                 border: `1px solid ${bot.openPositionCount != null && bot.openPositionCount > 0 ? bot.color + "44" : "rgba(255,255,255,0.06)"}`,
               }}
             >
-              {bot.openPositionCount}
+              {bot.openPositionCount == null ? "—" : bot.openPositionCount}
             </span>
           </div>
           {bot.openPositionSymbols.length > 0 ? (
@@ -176,8 +176,8 @@ function BotCard({ bot }: { bot: BotCardData }) {
               {bot.recentTrades.slice(0, 3).map((t, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <span className="text-[9px] font-mono font-bold text-slate-300">{t.symbol}</span>
-                  <span className="text-[9px] font-mono font-bold" style={{ color: t.pnl_usd >= 0 ? "#34d399" : "#f87171" }}>
-                    {t.pnl_usd >= 0 ? "+" : ""}${Math.abs(t.pnl_usd).toFixed(0)}
+                   <span className="text-[9px] font-mono font-bold" style={{ color: t.pnl_usd == null ? "#64748b" : t.pnl_usd >= 0 ? "#34d399" : "#f87171" }}>
+                     {t.pnl_usd == null ? "—" : `${t.pnl_usd >= 0 ? "+" : ""}$${Math.abs(t.pnl_usd).toFixed(0)}`}
                   </span>
                 </div>
               ))}
@@ -215,7 +215,7 @@ export default function StreamingBotsScreen() {
   const { data: registry } = useBotRegistry();
   const { data: journal } = useJournal();
 
-  const oraclePositions = (portfolio?.positions ?? []).filter((p) => (p.market_value ?? 0) > 10);
+  const oraclePositions = portfolio?.positions?.filter((p) => p.market_value != null && p.market_value > 10) ?? [];
 
   const fleetTotal   = fleetEq?.fleet_total?.equity ?? null;
   const fleetPnl     = fleetEq?.fleet_total?.pnl ?? null;
@@ -235,7 +235,7 @@ export default function StreamingBotsScreen() {
         .slice(0, 3)
         .map((t) => ({
           symbol: t.ticker,
-          pnl_usd: t.pnl_usd ?? t.realized_pnl ?? 0,
+          pnl_usd: t.pnl_usd ?? t.realized_pnl ?? null,
         })),
     },
     spy_qqq_trend: {
@@ -243,7 +243,7 @@ export default function StreamingBotsScreen() {
       pnl:                fleetEq?.spy_qqq_trend?.pnl ?? null,
       pnl_pct:            fleetEq?.spy_qqq_trend?.pnl_pct ?? null,
       paused:             fleetEq?.spy_qqq_trend?.paused ?? false,
-      openPositionCount:  fleetEq?.spy_qqq_trend?.positions ?? 0,
+      openPositionCount:  fleetEq?.spy_qqq_trend?.positions ?? null,
       openPositionSymbols: [],
       recentTrades: [],
     },
@@ -252,7 +252,7 @@ export default function StreamingBotsScreen() {
       pnl:                fleetEq?.jerome_macro?.pnl ?? null,
       pnl_pct:            fleetEq?.jerome_macro?.pnl_pct ?? null,
       paused:             fleetEq?.jerome_macro?.paused ?? false,
-      openPositionCount:  fleetEq?.jerome_macro?.positions ?? 0,
+      openPositionCount:  fleetEq?.jerome_macro?.positions ?? null,
       openPositionSymbols: [],
       recentTrades: [],
     },
@@ -280,7 +280,7 @@ export default function StreamingBotsScreen() {
       pnl:                null,
       pnl_pct:            null,
       paused:             bot.status !== "active",
-      openPositionCount:  0,
+      openPositionCount:  null,
       openPositionSymbols: [],
       recentTrades:       [],
       paramsText:         PARAMS_TEXT[bot.id] ?? "Strategy parameters unavailable",
@@ -295,7 +295,9 @@ export default function StreamingBotsScreen() {
   });
 
   const liveCount  = bots.filter((b) => !b.paused && !b.stale).length;
-  const totalOpen  = bots.reduce((s, b) => s + b.openPositionCount, 0);
+  const totalOpen  = bots.every((b) => b.openPositionCount != null)
+    ? bots.reduce((s, b) => s + b.openPositionCount!, 0)
+    : null;
   const liveFeedTrades = (journal?.trades ?? [])
     .filter((t) => t.status === "Closed_Win" || t.status === "Closed_Loss")
     .slice(0, 15);
@@ -337,7 +339,7 @@ export default function StreamingBotsScreen() {
               <div className="text-[7px] uppercase tracking-wider font-bold" style={{ color: "rgba(148,163,184,0.35)" }}>
                 Open Pos
               </div>
-              <div className="text-[13px] font-black font-mono text-white">{totalOpen}</div>
+              <div className="text-[13px] font-black font-mono text-white">{totalOpen == null ? "—" : totalOpen}</div>
             </div>
           </div>
         </div>
@@ -381,8 +383,8 @@ export default function StreamingBotsScreen() {
               <div className="text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>No recent trades</div>
             ) : (
               liveFeedTrades.map((t, i) => {
-                const pnlUsd = t.pnl_usd ?? t.realized_pnl ?? 0;
-                const pColor = pnlUsd >= 0 ? "#34d399" : "#f87171";
+                const pnlUsd = t.pnl_usd ?? t.realized_pnl ?? null;
+                const pColor = pnlUsd == null ? "#64748b" : pnlUsd >= 0 ? "#34d399" : "#f87171";
                 return (
                   <div key={t.trade_id ?? i} className="shrink-0">
                     <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.25)" }}>
@@ -391,7 +393,7 @@ export default function StreamingBotsScreen() {
                     <div className="flex items-center justify-between gap-1">
                       <span className="text-[9px] font-mono font-bold text-slate-300 truncate">{t.ticker}</span>
                       <span className="text-[9px] font-mono font-bold shrink-0" style={{ color: pColor }}>
-                        {pnlUsd >= 0 ? "+" : ""}${Math.abs(pnlUsd).toFixed(0)}
+                        {pnlUsd == null ? "—" : `${pnlUsd >= 0 ? "+" : ""}$${Math.abs(pnlUsd).toFixed(0)}`}
                       </span>
                     </div>
                     <div className="text-[7px] font-mono" style={{ color: "rgba(148,163,184,0.3)" }}>Oracle</div>

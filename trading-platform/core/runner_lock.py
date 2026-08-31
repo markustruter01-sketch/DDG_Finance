@@ -7,6 +7,7 @@ so only one live runner can own each canonical bot at a time.
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -80,6 +81,89 @@ def _lock_row(row: tuple[Any, ...] | None) -> dict[str, Any] | None:
     }
 
 
+def _read_process_identity(pid: int) -> dict[str, str | int | None]:
+    """Read the boot ID and kernel start-time ticks for a process.
+
+    Linux exposes both values without requiring ptrace or process cooperation.
+    The pair distinguishes a PID that was reused by a later process, including
+    reuse inside the same container where os.kill(pid, 0) still succeeds.
+    """
+    boot_id: str | None = None
+    start_time_ticks: int | None = None
+    try:
+        with open("/proc/sys/kernel/random/boot_id", encoding="utf-8") as handle:
+            boot_id = handle.read().strip() or None
+    except (FileNotFoundError, OSError):
+        pass
+
+    try:
+        with open(f"/proc/{int(pid)}/stat", encoding="utf-8") as handle:
+            stat_line = handle.read()
+        closing_paren = stat_line.rfind(")")
+        if closing_paren == -1:
+            raise ValueError("malformed process stat")
+        # Fields after the command name start at field 3. Field 22
+        # (starttime) is therefore index 19 in this suffix.
+        stat_fields = stat_line[closing_paren + 2 :].split()
+        start_time_ticks = int(stat_fields[19])
+    except (FileNotFoundError, OSError, IndexError, TypeError, ValueError):
+        pass
+
+    return {
+        "boot_id": boot_id,
+        "start_time_ticks": start_time_ticks,
+    }
+
+
+def _identity_matches(
+    stored_identity: tuple[str | None, int | None],
+    requested_identity: dict[str, str | int | None],
+) -> bool | None:
+    """Return True/False when comparable, otherwise None for unknown."""
+    stored_boot_id, stored_start_time = stored_identity
+    requested_boot_id = requested_identity.get("boot_id")
+    requested_start_time = requested_identity.get("start_time_ticks")
+    if (
+        not stored_boot_id
+        or stored_start_time is None
+        or not requested_boot_id
+        or requested_start_time is None
+    ):
+        return None
+    return (
+        stored_boot_id == requested_boot_id
+        and stored_start_time == int(requested_start_time)
+    )
+
+
+def _token_identity(owner_token: str | None) -> tuple[str | None, int | None]:
+    """Extract the process identity carried by a v2 owner token."""
+    if not owner_token:
+        return None, None
+    parts = owner_token.split(":", 4)
+    if len(parts) != 5 or parts[0] != "runner" or parts[1] != "v2":
+        return None, None
+    if parts[2] == "unknown" or parts[3] == "unknown":
+        return None, None
+    try:
+        return parts[2], int(parts[3])
+    except ValueError:
+        return None, None
+
+
+def make_owner_token(pid: int, nonce: str | None = None) -> str:
+    """Create a unique lease token carrying boot and process start identity."""
+    identity = _read_process_identity(int(pid))
+    boot_id = identity.get("boot_id") or "unknown"
+    start_time_ticks = identity.get("start_time_ticks")
+    start_value = (
+        str(int(start_time_ticks))
+        if start_time_ticks is not None
+        else "unknown"
+    )
+    return f"runner:v2:{boot_id}:{start_value}:{nonce or uuid.uuid4().hex}"
+
+
 def _pid_is_alive(pid: int) -> bool:
     """Return whether this environment can still observe the recorded PID."""
     try:
@@ -132,13 +216,15 @@ def claim_lock(
 ) -> dict[str, Any]:
     """Atomically claim a bot lease, or return the current owner.
 
-    A unique owner token distinguishes a replacement process from a reused PID.
-    A live owner is never displaced. Same-environment dead PIDs are reclaimed
-    immediately; other owners must also be stale before takeover.
+    A unique owner token and the process identity distinguish a replacement
+    process from a reused PID. Fresh owners are never displaced. A stale lease
+    is reclaimable when its stored process identity differs from this caller,
+    even if the recorded PID is currently alive.
     """
     from db.postgres import get_conn
 
     requested_token = owner_token or f"legacy:{environment}:{int(pid)}"
+    requested_identity = _token_identity(requested_token)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -159,7 +245,12 @@ def claim_lock(
                     VALUES (%s, %s, %s, NOW(), NOW(), %s)
                     RETURNING bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
                     """,
-                    (bot_id, environment, int(pid), requested_token),
+                    (
+                        bot_id,
+                        environment,
+                        int(pid),
+                        requested_token,
+                    ),
                 )
                 return {"owned": True, "lock": _lock_row(cur.fetchone())}
 
@@ -167,6 +258,22 @@ def claim_lock(
             current_pid = int(current[2])
             current_token = current[5] if len(current) > 5 else ""
             current_token = current_token or ""
+            stored_identity = _token_identity(current_token)
+            identity = (
+                _identity_matches(
+                    stored_identity,
+                    {
+                        "boot_id": requested_identity[0],
+                        "start_time_ticks": requested_identity[1],
+                    },
+                )
+                if current_pid == int(pid)
+                else False
+            )
+            stored_identity_present = (
+                bool(stored_identity[0])
+                and stored_identity[1] is not None
+            )
             same_owner = (
                 current_environment == environment
                 and current_pid == int(pid)
@@ -175,31 +282,27 @@ def claim_lock(
                     or current_token == requested_token
                 )
             )
-            # A replacement process can inherit the exact PID of its predecessor
-            # in a restarted container. Since that PID is now this caller's PID,
-            # os.kill(pid, 0) sees the replacement itself and cannot distinguish
-            # the old instance. The token mismatch is the proof of a new instance.
-            same_pid_replacement = (
-                owner_token is not None
-                and current_environment == environment
-                and current_pid == int(pid)
-                and current_token != requested_token
-            )
             owner_alive = _pid_is_alive(current_pid)
             stale = _heartbeat_is_stale(current[3], stale_after_seconds)
             dead_same_environment = (
                 current_environment == environment and not owner_alive
             )
-            legacy_stale_takeover = (
-                current_token.startswith("legacy:")
-                and stale
-                and environment == "published"
+            identity_proves_reuse = (
+                stale
+                and identity is False
+                and current_environment == environment
+            )
+            legacy_identity_unknown_takeover = (
+                stale
+                and identity is None
+                and not stored_identity_present
+                and current_environment == environment
             )
             can_takeover = (
-                same_pid_replacement
-                or legacy_stale_takeover
-                or dead_same_environment
+                dead_same_environment
                 or (stale and not owner_alive)
+                or identity_proves_reuse
+                or legacy_identity_unknown_takeover
             )
 
             if same_owner or can_takeover:
@@ -214,7 +317,12 @@ def claim_lock(
                     WHERE bot_id = %s
                     RETURNING bot_id, environment, pid, heartbeat_at, acquired_at, owner_token
                     """,
-                    (environment, int(pid), requested_token, bot_id),
+                    (
+                        environment,
+                        int(pid),
+                        requested_token,
+                        bot_id,
+                    ),
                 )
                 return {"owned": True, "lock": _lock_row(cur.fetchone())}
 

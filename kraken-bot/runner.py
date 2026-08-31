@@ -24,7 +24,6 @@ import threading
 import importlib
 import traceback
 import urllib.request
-import uuid
 from datetime import date, datetime, timedelta, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any
@@ -97,6 +96,7 @@ try:
         claim_lock as _claim_runner_lock,
         ensure_lock_table as _ensure_runner_lock_table,
         list_locks as _list_runner_locks,
+        make_owner_token as _make_runner_owner_token,
         refresh_lock as _refresh_runner_lock,
         release_locks as _release_runner_locks,
     )
@@ -107,6 +107,7 @@ except Exception as _lock_exc:
     _claim_runner_lock = None
     _ensure_runner_lock_table = None
     _list_runner_locks = None
+    _make_runner_owner_token = None
     _refresh_runner_lock = None
     _release_runner_locks = None
 
@@ -139,9 +140,15 @@ if RUNNER_EXECUTION_MODE not in {"live", "read_only"}:
 _runner_can_trade = RUNNER_EXECUTION_MODE == "live"
 _runner_lock_ready = False
 _owned_lock_bot_ids: set[str] = set()
-# PID values can be reused during a deployment handoff. The token makes every
-# process instance distinct even when the platform assigns it the old PID.
-RUNNER_OWNER_TOKEN = uuid.uuid4().hex
+_runner_lock_failure_reason: str | None = None
+# PID values can be reused during a deployment handoff. The token carries the
+# kernel process identity and a unique nonce, so the lease can distinguish a
+# reused PID from the original runner instance.
+RUNNER_OWNER_TOKEN = (
+    _make_runner_owner_token(os.getpid())
+    if _make_runner_owner_token is not None
+    else f"unavailable:{os.getpid()}"
+)
 
 FAILURE_ALERT_EVERY = 3
 API_LIVENESS_INTERVAL_SECONDS = 60
@@ -215,17 +222,22 @@ def _log_runner_locks(prefix: str) -> None:
 
 def _prepare_runner_locks() -> bool:
     """Claim all live bot leases before any strategy thread can trade."""
-    global _runner_lock_ready
+    global _runner_lock_ready, _runner_lock_failure_reason
+    _runner_lock_ready = False
+    _runner_lock_failure_reason = None
 
     if not _runner_lock_import_ok or _ensure_runner_lock_table is None:
+        _runner_lock_failure_reason = "lock module unavailable"
         logger.critical("Runner lock | fail closed: lock module unavailable")
         return False
     try:
         table_ready = _ensure_runner_lock_table()
     except Exception as exc:
+        _runner_lock_failure_reason = f"table bootstrap failed: {exc}"
         logger.critical(f"Runner lock | fail closed: table bootstrap failed: {exc}")
         return False
     if not table_ready:
+        _runner_lock_failure_reason = "PostgreSQL unavailable"
         logger.critical("Runner lock | fail closed: PostgreSQL unavailable")
         return False
 
@@ -250,6 +262,13 @@ def _prepare_runner_locks() -> bool:
             )
             if not result.get("owned"):
                 holder = result.get("lock") or {}
+                _runner_lock_failure_reason = (
+                    f"lease refused for {lock_bot_id}: "
+                    f"holder_environment={holder.get('environment', 'unknown')} "
+                    f"holder_pid={holder.get('pid', 'unknown')} "
+                    f"holder_heartbeat={holder.get('heartbeat_at', 'unknown')} "
+                    f"holder_owner_token={holder.get('owner_token', 'unknown')}"
+                )
                 logger.critical(
                     f"Runner lock | REFUSED | bot={lock_bot_id} "
                     f"holder_environment={holder.get('environment', 'unknown')} "
@@ -258,7 +277,11 @@ def _prepare_runner_locks() -> bool:
                     f"holder_owner_token={holder.get('owner_token', 'unknown')}"
                 )
                 if _release_runner_locks is not None and claimed:
-                    _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
+                    _release_runner_locks(
+                        RUNNER_ENVIRONMENT,
+                        os.getpid(),
+                        owner_token=RUNNER_OWNER_TOKEN,
+                    )
                 _owned_lock_bot_ids.clear()
                 return False
             claimed.append(lock_bot_id)
@@ -274,11 +297,19 @@ def _prepare_runner_locks() -> bool:
         _log_runner_locks("after-claim")
         return True
     except Exception as exc:
+        _runner_lock_failure_reason = f"claim failed: {exc}"
         logger.critical(f"Runner lock | fail closed during claim: {exc}")
         if _release_runner_locks is not None and claimed:
             try:
-                _release_runner_locks(RUNNER_ENVIRONMENT, os.getpid())
+                _release_runner_locks(
+                    RUNNER_ENVIRONMENT,
+                    os.getpid(),
+                    owner_token=RUNNER_OWNER_TOKEN,
+                )
             except Exception as release_exc:
+                _runner_lock_failure_reason = (
+                    f"claim failed: {exc}; release failed: {release_exc}"
+                )
                 logger.critical(f"Runner lock | release after failed claim failed: {release_exc}")
         _owned_lock_bot_ids.clear()
         return False
@@ -853,14 +884,48 @@ def _release_owned_runner_locks() -> None:
         logger.critical(f"Runner lock | release failed: {exc}")
 
 
-def main():
+def main() -> int:
     global _pause_alignment_ok
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
 
     threads = []
+    exit_code = 0
     try:
-        _prepare_runner_locks()
+        locks_ready = _prepare_runner_locks()
+        if _runner_can_trade and not locks_ready:
+            reason = _runner_lock_failure_reason
+            if reason is None:
+                reason = "unknown lease preparation failure"
+            try:
+                if not _runner_lock_import_ok or _list_runner_locks is None:
+                    raise RuntimeError("lock listing is unavailable")
+                current_locks = _list_runner_locks()
+            except Exception as exc:
+                current_locks = [{"error": f"could not read lease rows: {exc}"}]
+            logger.critical(
+                "Runner | LIVE STARTUP ABORTED — lease preparation failed; "
+                f"reason={reason}; current_leases={json.dumps(current_locks, default=str)}"
+            )
+            try:
+                from notifications.discord import alert_critical
+                alert_critical(
+                    "Runner startup blocked by lease refusal",
+                    "Live runner refused to start because it could not claim all "
+                    f"required leases. Reason: {reason}",
+                    fields=[
+                        {
+                            "name": "Current lease rows",
+                            "value": json.dumps(current_locks, default=str)[:1000],
+                        }
+                    ],
+                )
+            except Exception as exc:
+                logger.critical(
+                    f"Runner | failed to send lease-refusal alert: {type(exc).__name__}"
+                )
+            exit_code = 1
+            return exit_code
 
         logger.info("=" * 60)
         logger.info("KRAKEN-BOT RUNNER — multiplexed strategy host")
@@ -910,7 +975,8 @@ def main():
             t.join(timeout=10)
         _release_owned_runner_locks()
     logger.info("Runner | All threads stopped. Goodbye.")
+    return exit_code
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

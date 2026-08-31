@@ -362,6 +362,7 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
 
   const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
   const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
+  const unknownCount = alerts.filter(([, n]) => n.level === "unknown").length;
 
   return (
     <div className="flex flex-col flex-1">
@@ -375,6 +376,8 @@ function AlertPanel({ nodes }: { nodes: Record<string, NodeHealth> }) {
           {criticalCount > 0 && <span className="text-red-400">{criticalCount} critical</span>}
           {criticalCount > 0 && degradedCount > 0 && <span style={{ color: "rgba(148,163,184,0.4)" }}> · </span>}
           {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
+          {(criticalCount > 0 || degradedCount > 0) && unknownCount > 0 && <span style={{ color: "rgba(148,163,184,0.4)" }}> · </span>}
+          {unknownCount > 0 && <span className="text-slate-300">{unknownCount} unknown</span>}
           {alerts.length === 0 && <span className="text-green-400">none</span>}
         </span>
         <span className="ml-auto text-[8px] font-mono" style={{ color: "rgba(148,163,184,0.2)" }}>
@@ -454,11 +457,12 @@ export default function StreamingHealthScreen() {
   const nodes = data?.nodes ?? null;
 
   const overallLevel: Level = useMemo(() => {
-    if (!nodes) return "yellow";
+    if (!nodes) return "unknown";
     const levels = Object.values(nodes).map((n) => n.level);
-    if (data?.status === "unknown") return "red";
+    if (data?.status === "unknown") return "unknown";
     if (levels.includes("red")) return "red";
     if (data?.status === "degraded" || levels.includes("yellow")) return "yellow";
+    if (levels.includes("unknown")) return "unknown";
     return "green";
   }, [nodes]);
 
@@ -490,14 +494,15 @@ export default function StreamingHealthScreen() {
             <span className={`h-1.5 w-1.5 rounded-full ${
               overallLevel === "green" ? "bg-green-400" :
               overallLevel === "yellow" ? "bg-yellow-400 animate-pulse" :
-              "bg-red-400 animate-pulse"
+              overallLevel === "red" ? "bg-red-400 animate-pulse" :
+              "bg-slate-300 animate-pulse"
             }`} />
             <span className="text-[10px] font-mono uppercase tracking-[0.22em]"
               style={{ color: overallColors.wire, textShadow: `0 0 8px ${overallColors.wire}` }}>
               SYS / HEALTH
             </span>
             <span className="text-[9px] font-mono uppercase tracking-widest" style={{ color: "rgba(148,163,184,0.4)" }}>
-              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · manual intervention required" : "Critical · manual intervention required"}
+              — {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded · manual intervention required" : overallLevel === "red" ? "Critical · manual intervention required" : "Unknown · health data unavailable"}
             </span>
           </div>
 

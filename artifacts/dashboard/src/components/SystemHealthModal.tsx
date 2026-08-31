@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { api } from "@/hooks/use-trading-client";
 
-type Level = "green" | "yellow" | "red";
+type Level = "green" | "yellow" | "red" | "unknown";
 
 interface NodeHealth {
   label: string;
@@ -51,6 +51,15 @@ const LEVEL_COLORS: Record<Level, { fill: string; stroke: string; glow: string; 
     text: "text-red-400",
     bg: "bg-red-500/10",
     border: "border-red-500/25",
+  },
+  unknown: {
+    fill: "rgba(148,163,184,0.08)",
+    stroke: "rgba(148,163,184,0.55)",
+    glow: "rgba(148,163,184,0.35)",
+    wire: "#94a3b8",
+    text: "text-slate-300",
+    bg: "bg-slate-500/10",
+    border: "border-slate-400/25",
   },
 };
 
@@ -115,6 +124,7 @@ function buildExplanation(key: string, node: NodeHealth): string {
   const { level, latency_ms, data_age_s, detail } = node;
 
   if (level === "green") return "All checks passing.";
+  if (level === "unknown") return `Health data unavailable for ${node.label.split("(")[0].trim()}. The check failed or did not return a trustworthy timestamp. Detail: ${detail}`;
 
   if (latency_ms != null && latency_ms > 1000)
     return `Round-trip to ${node.label.split("(")[0].trim()} took ${latency_ms}ms — well above the 1,000ms critical threshold. Check network or API availability.`;
@@ -335,6 +345,7 @@ function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const criticalCount = alerts.filter(([, n]) => n.level === "red").length;
   const degradedCount = alerts.filter(([, n]) => n.level === "yellow").length;
+  const unknownCount = alerts.filter(([, n]) => n.level === "unknown").length;
 
   if (alerts.length === 0) {
     return (
@@ -356,7 +367,9 @@ function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
         <span className="ml-1 text-[9px] font-mono text-muted-foreground/40">
           {criticalCount > 0 && <span className="text-red-400">{criticalCount} critical</span>}
           {criticalCount > 0 && degradedCount > 0 && <span className="text-muted-foreground/40"> · </span>}
-          {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
+           {degradedCount > 0 && <span className="text-yellow-400">{degradedCount} degraded</span>}
+           {(criticalCount > 0 || degradedCount > 0) && unknownCount > 0 && <span className="text-muted-foreground/40"> · </span>}
+           {unknownCount > 0 && <span className="text-slate-300">{unknownCount} unknown</span>}
         </span>
       </div>
 
@@ -385,7 +398,7 @@ function AlertsDigest({ nodes }: { nodes: Record<string, NodeHealth> }) {
                         {node.label.split("(")[0].trim()}
                       </span>
                       <span className={cn("text-[8px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider", colors.bg, colors.text, colors.border)}>
-                        {node.level === "green" ? "OK" : node.level === "yellow" ? "DEGRADED" : "CRITICAL"}
+                        {node.level === "green" ? "OK" : node.level === "yellow" ? "DEGRADED" : node.level === "red" ? "CRITICAL" : "UNKNOWN"}
                       </span>
                       {node.latency_ms != null && (
                         <span className="text-[8px] font-mono text-muted-foreground/50">{node.latency_ms}ms</span>
@@ -551,7 +564,7 @@ function TestControlPanel({
           <div key={key} className="space-y-1">
             <div className="text-[9px] font-mono text-white/60">{key.replace(/_/g, " ")}</div>
             <div className="flex gap-1">
-              {(["green", "yellow", "red"] as Level[]).map((lvl) => (
+              {(["green", "yellow", "red", "unknown"] as Level[]).map((lvl) => (
                 <button
                   key={lvl}
                   onClick={() => forceLevel(key, lvl)}
@@ -627,11 +640,12 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
   }, [data, overrides]);
 
   const overallLevel: Level = useMemo(() => {
-    if (!mergedNodes) return "yellow";
+    if (!mergedNodes) return "unknown";
     const levels = Object.values(mergedNodes).map((n) => n.level);
-    if (data?.status === "unknown") return "red";
+    if (data?.status === "unknown") return "unknown";
     if (levels.includes("red")) return "red";
     if (data?.status === "degraded" || levels.includes("yellow")) return "yellow";
+    if (levels.includes("unknown")) return "unknown";
     return "green";
   }, [mergedNodes]);
 
@@ -670,9 +684,10 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                   "bg-green-400": overallLevel === "green",
                   "bg-yellow-400 animate-pulse": overallLevel === "yellow",
                   "bg-red-400 animate-pulse": overallLevel === "red",
+                  "bg-slate-300 animate-pulse": overallLevel === "unknown",
                 })} />
                 <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                  {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — manual intervention required" : "Critical — manual intervention required"}
+                  {overallLevel === "green" ? "All systems nominal" : overallLevel === "yellow" ? "Degraded — manual intervention required" : overallLevel === "red" ? "Critical — manual intervention required" : "Unknown — health data unavailable"}
                 </span>
               </div>
             </div>
@@ -703,7 +718,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
             <>
               {/* Legend — top-left */}
               <div className="absolute top-3 left-5 flex items-center gap-4 z-10">
-                {(["green", "yellow", "red"] as Level[]).map((lvl) => (
+                {(["green", "yellow", "red", "unknown"] as Level[]).map((lvl) => (
                   <div key={lvl} className="flex items-center gap-1.5">
                     <span className={cn("h-2 w-2 rounded-full", {
                       "bg-green-400": lvl === "green",
@@ -815,7 +830,7 @@ export function SystemHealthModal({ onClose }: { onClose: () => void }) {
                           )}
                           <span className="text-[7px] font-mono uppercase"
                             style={{ color: colors.wire, opacity: 0.7 }}>
-                            {node.level === "green" ? "OK" : node.level === "yellow" ? "WARN" : "ERR"}
+                            {node.level === "green" ? "OK" : node.level === "yellow" ? "WARN" : node.level === "red" ? "ERR" : "UNKNOWN"}
                           </span>
                         </div>
                       );

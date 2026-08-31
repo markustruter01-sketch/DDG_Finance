@@ -147,7 +147,7 @@ def test_required_liveness_read_failure_reports_unknown(monkeypatch):
     response = _call_health_endpoint(monkeypatch, [], patch_liveness=False)
 
     assert response["status"] == "unknown"
-    assert response["nodes"]["bot_oracle"]["level"] == "red"
+    assert response["nodes"]["bot_oracle"]["level"] == "unknown"
     assert "read failed" in response["nodes"]["bot_oracle"]["detail"]
 
 
@@ -160,4 +160,4 @@ def test_required_database_read_failure_reports_unknown(monkeypatch):
     )
 
     assert response["status"] == "unknown"
-    assert response["nodes"]["database"]["level"] == "red"
+    assert response["nodes"]["database"]["level"] == "unknown"

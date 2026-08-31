@@ -123,59 +123,6 @@ _HEALTH_CYCLE_STALE_THRESHOLD = 3 * 3600
 _HEALTH_HIGH_SEVERITIES = ("high", "critical", "error")
 
 
-def _health_row_dicts(cursor) -> list[dict[str, Any]]:
-    columns = [description[0] for description in cursor.description]
-    return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-
-def _load_health_operational_inputs() -> dict[str, Any]:
-    """Read the canonical liveness and open-degradation inputs in one DB read."""
-    from db.postgres import get_conn
-
-    with get_conn() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT active.bot_id,
-                       p.last_updated,
-                       EXTRACT(EPOCH FROM (NOW() - p.last_updated)) AS portfolio_age_s,
-                       COALESCE(s.paused, FALSE) AS paused,
-                       COALESCE(s.pause_reason, '') AS pause_reason,
-                       h.last_success_at,
-                       EXTRACT(EPOCH FROM (NOW() - h.last_success_at)) AS cycle_age_s,
-                       h.cycle_count,
-                       h.consecutive_failures,
-                       h.status AS cycle_status,
-                       h.last_error
-                  FROM (
-                      VALUES ('oracle'), ('spy_qqq_trend'), ('jerome_macro')
-                  ) AS active(bot_id)
-                  LEFT JOIN bot_portfolio p ON p.bot_id = active.bot_id
-                  LEFT JOIN bots_state s ON s.bot_id = active.bot_id
-                  LEFT JOIN bot_cycle_health h ON h.bot_id = active.bot_id
-                 ORDER BY active.bot_id
-                """
-            )
-            bot_rows = _health_row_dicts(cursor)
-
-            cursor.execute(
-                """
-                SELECT id, ts, bot_id, component, severity, error_type, message
-                  FROM system_degradations
-                 WHERE resolved_at IS NULL
-                   AND severity = ANY(%s)
-                 ORDER BY ts DESC
-                """,
-                (list(_HEALTH_HIGH_SEVERITIES),),
-            )
-            degradation_rows = _health_row_dicts(cursor)
-
-    return {
-        "bot_rows": {row["bot_id"]: row for row in bot_rows},
-        "degradation_rows": degradation_rows,
-    }
-
-
 def _health_event_matches_bot(event: dict[str, Any], bot_id: str) -> bool:
     event_bot_id = event.get("bot_id")
     if event_bot_id == bot_id:
@@ -198,7 +145,7 @@ def _build_health_bot_node(
     if read_error:
         return {
             "label": label,
-            "level": "red",
+            "level": "unknown",
             "latency_ms": None,
             "data_age_s": None,
             "detail": f"Canonical liveness read failed: {read_error}",
@@ -361,7 +308,7 @@ async def system_health_architecture() -> dict:
         scheduler_detail = f"{len(jobs)}/{EXPECTED_JOB_COUNT} jobs · last: {last.get('last_run_status', 'never')}"
     except Exception as exc:
         required_read_failed = True
-        scheduler_level, scheduler_detail = "red", str(exc)[:80]
+        scheduler_level, scheduler_detail = "unknown", str(exc)[:80]
     nodes["scheduler"] = {"label": "Scheduler", "level": scheduler_level, "latency_ms": None, "data_age_s": None, "detail": scheduler_detail}
 
     if liveness_read_error or degradation_read_error:
@@ -439,7 +386,7 @@ async def system_health_architecture() -> dict:
         }
     except Exception as exc:
         required_read_failed = True
-        nodes["alpaca_api"] = {"label": "Alpaca API", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["alpaca_api"] = {"label": "Alpaca API", "level": "unknown", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         from db.postgres import get_conn
@@ -449,7 +396,7 @@ async def system_health_architecture() -> dict:
         nodes["database"] = {"label": "Database", "level": "green", "latency_ms": None, "data_age_s": 0, "detail": "PostgreSQL reachable"}
     except Exception as exc:
         required_read_failed = True
-        nodes["database"] = {"label": "Database", "level": "red", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["database"] = {"label": "Database", "level": "unknown", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     try:
         from notifications.discord import is_configured as discord_configured
@@ -463,7 +410,7 @@ async def system_health_architecture() -> dict:
         }
     except Exception as exc:
         required_read_failed = True
-        nodes["discord_alerts"] = {"label": "Discord Alerts", "level": "yellow", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
+        nodes["discord_alerts"] = {"label": "Discord Alerts", "level": "unknown", "latency_ms": None, "data_age_s": None, "detail": str(exc)[:80]}
 
     for key, label, detail in (
         ("llm_gemini", "Gemini", "Analysis and critique"),

@@ -74,6 +74,17 @@ async def lifespan(app: FastAPI):
 
     init_db()
     logger.info("Trade journal database initialised")
+    try:
+        from db.postgres import is_pg_available
+        if is_pg_available():
+            from analysis.research_ledger import ensure_research_tables
+            ensure_research_tables()
+            logger.info("Research return tables initialised")
+        else:
+            logger.warning("Research return tables skipped: PostgreSQL unavailable")
+    except Exception as _research_schema_exc:
+        logger.error(f"Research return schema bootstrap failed: {_research_schema_exc}")
+        raise
 
     try:
         from analysis.learning_snapshot import seed_from_snapshot
@@ -128,12 +139,19 @@ async def lifespan(app: FastAPI):
         try:
             from core.bot_state import get_all_portfolios
             from db.postgres import insert_fleet_equity_snapshots
+            from analysis.research_ledger import enriched_snapshot_from_portfolio
             portfolios = get_all_portfolios()
-            rows = [
-                (p["bot_id"], float(p.get("equity_usd") or 0.0))
-                for p in portfolios
-                if p.get("equity_usd") is not None
-            ]
+            rows = []
+            for portfolio in portfolios:
+                row = enriched_snapshot_from_portfolio(portfolio)
+                if row is None:
+                    logger.warning(
+                        "Fleet equity snapshot | skipping %s: "
+                        "equity or position data is unavailable",
+                        portfolio.get("bot_id", "unknown"),
+                    )
+                    continue
+                rows.append(row)
             inserted = insert_fleet_equity_snapshots(rows)
             logger.info(
                 f"Fleet equity snapshot | wrote {inserted}/{len(rows)} active bot rows"

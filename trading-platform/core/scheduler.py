@@ -473,14 +473,14 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger=CronTrigger(
             hour=20,
             minute=15,
-            timezone="UTC",
+            timezone="America/New_York",
         ),
         id="daily_bot_returns_snapshot",
-        name="Daily Per-Bot Return Series (20:15 UTC)",
+        name="Daily Per-Bot Return Series (20:15 ET)",
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 UTC)")
+    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 ET)")
 
     # Per-bot vault jobs are fail-closed by PER_BOT_VAULT_ENABLED. They are
     # registered in development so the schedule is visible, but do nothing

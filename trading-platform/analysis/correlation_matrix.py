@@ -7,9 +7,9 @@ When correlation converges toward 1.0 (all bots winning/losing together),
 this indicates a systemic shock scenario where diversification has failed.
 The system responds by auto-scaling position sizes by 50%.
 
-Data source: equity_snapshots table (PostgreSQL)
-  - Each row has: alpaca_equity, kraken_equity, options_equity, forex_equity
-  - We compute daily returns from equity changes for each bot class
+Data source: canonical bot_daily_returns rows (PostgreSQL).  Dates are
+intersected before pairwise calculations; missing dates are never padded or
+matched by list position.
 
 Output: correlation_state.json with:
   - matrix: dict of bot-pair → correlation coefficient
@@ -24,11 +24,12 @@ from __future__ import annotations
 import json
 import math
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from core.market_clock import ET
 
 _DATA_DIR = Path(__file__).parent.parent / "data"
 _CORR_FILE = _DATA_DIR / "correlation_state.json"
@@ -75,80 +76,25 @@ def _daily_returns(values: list[float]) -> list[float]:
 
 def compute_correlation_matrix() -> dict:
     """
-    Fetch the last 60 days of equity snapshots and compute
-    pair-wise Pearson correlation of daily returns.
+    Compute pair-wise Pearson correlation of canonical daily returns over the
+    exact dates present for every included bot.
     """
     try:
-        from db.postgres import get_conn
-    except ImportError:
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-        from db.postgres import get_conn
-
-    bots = {
-        "oracle": "oracle",
-        "spy_qqq_trend": "spy_qqq_trend",
-        "jerome_macro": "jerome_macro",
-    }
-
-    query = f"""
-        SELECT DATE(snapshot_ts) AS day, bot_id, AVG(equity_usd)::DOUBLE PRECISION
-        FROM fleet_equity_snapshots
-        WHERE snapshot_ts > NOW() - INTERVAL '{ROLLING_WINDOW_DAYS} days'
-          AND bot_id IN ('oracle', 'spy_qqq_trend', 'jerome_macro')
-        GROUP BY DATE(snapshot_ts), bot_id
-        ORDER BY day ASC
-    """
-
-    daily_equity: dict[str, list[float]] = {b: [] for b in bots}
-
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(query)
-                rows = cur.fetchall()
-
-        if not rows:
-            logger.debug("CorrMatrix | No equity snapshots found")
-            return _empty_result("no_data")
-
-        prev_day = None
-        day_sums: dict[str, list[float]] = {b: [] for b in bots}
-        day_counts: dict[str, int] = {b: 0 for b in bots}
-
-        for row in rows:
-            day = row[0]
-            vals = {name: None for name in bots}
-            vals[row[1]] = row[2]
-
-            if prev_day is not None and day != prev_day:
-                for b in bots:
-                    if day_counts[b] > 0:
-                        avg = sum(day_sums[b]) / day_counts[b]
-                        daily_equity[b].append(avg)
-                day_sums = {b: [] for b in bots}
-                day_counts = {b: 0 for b in bots}
-
-            for b in bots:
-                v = vals[b]
-                if v is not None and v > 0:
-                    day_sums[b].append(float(v))
-                    day_counts[b] += 1
-
-            prev_day = day
-
-        for b in bots:
-            if day_counts[b] > 0:
-                avg = sum(day_sums[b]) / day_counts[b]
-                daily_equity[b].append(avg)
-
+        from analysis.research_ledger import (
+            MEANINGFUL_HISTORY_THRESHOLD,
+            get_fleet_daily_returns,
+        )
+        rolling_start = datetime.now(ET).date() - timedelta(
+            days=ROLLING_WINDOW_DAYS
+        )
+        aligned = get_fleet_daily_returns(start_date=rolling_start)
     except Exception as exc:
-        logger.warning(f"CorrMatrix | DB query failed: {exc}")
+        logger.warning(f"CorrMatrix | canonical return query failed: {exc}")
         return _empty_result("db_error")
 
-    returns = {b: _daily_returns(daily_equity[b]) for b in bots}
-
-    bot_names = list(bots.keys())
+    bot_names = list(aligned["bot_ids"])
+    returns = aligned["returns"]
+    common_data_points = int(aligned["common_data_points"])
     matrix: dict[str, float | None] = {}
     max_corr = -1.0
     max_pair = ""
@@ -158,15 +104,11 @@ def compute_correlation_matrix() -> dict:
             a, b = bot_names[i], bot_names[j]
             ra, rb = returns[a], returns[b]
 
-            min_len = min(len(ra), len(rb))
-            if min_len < MIN_DATA_POINTS:
+            if common_data_points < MIN_DATA_POINTS:
                 matrix[f"{a}_vs_{b}"] = None
                 continue
 
-            ra_trim = ra[-min_len:]
-            rb_trim = rb[-min_len:]
-
-            corr = _pearson(ra_trim, rb_trim)
+            corr = _pearson(ra, rb)
             if corr is not None:
                 matrix[f"{a}_vs_{b}"] = round(corr, 4)
                 if corr > max_corr:
@@ -188,7 +130,7 @@ def compute_correlation_matrix() -> dict:
             f"CorrMatrix | max_corr={max_corr:.3f} ({max_pair}) — normal operations"
         )
 
-    data_points = {b: len(returns[b]) for b in bots}
+    data_points = {b: len(returns[b]) for b in bot_names}
 
     result = {
         "matrix": matrix,
@@ -198,6 +140,12 @@ def compute_correlation_matrix() -> dict:
         "position_scale_factor": scale_factor,
         "shock_threshold": SHOCK_THRESHOLD,
         "data_points": data_points,
+        "common_data_points": common_data_points,
+        "meaningful_history": {
+            "threshold": MEANINGFUL_HISTORY_THRESHOLD,
+            "status": "PROPOSED",
+            "met": common_data_points >= MEANINGFUL_HISTORY_THRESHOLD,
+        },
         "rolling_window_days": ROLLING_WINDOW_DAYS,
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -261,6 +209,12 @@ def _empty_result(reason: str) -> dict:
         "position_scale_factor": 1.0,
         "shock_threshold": SHOCK_THRESHOLD,
         "data_points": {},
+        "common_data_points": 0,
+        "meaningful_history": {
+            "threshold": 60,
+            "status": "PROPOSED",
+            "met": False,
+        },
         "rolling_window_days": ROLLING_WINDOW_DAYS,
         "computed_at": datetime.now(timezone.utc).isoformat(),
         "note": reason,

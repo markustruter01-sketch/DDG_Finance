@@ -301,7 +301,11 @@ CREATE TABLE IF NOT EXISTS fleet_equity_snapshots (
     id             BIGSERIAL PRIMARY KEY,
     snapshot_ts    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     bot_id         TEXT NOT NULL,
-    equity_usd     NUMERIC NOT NULL
+    equity_usd     NUMERIC NOT NULL,
+    vault_value_usd NUMERIC,
+    trading_equity_usd NUMERIC,
+    capital_base_usd NUMERIC,
+    snapshot_source TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_ts
     ON fleet_equity_snapshots (snapshot_ts);
@@ -811,6 +815,10 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS is_recon_tracking    BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS recon_event_id       BIGINT;
+ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS vault_value_usd NUMERIC;
+ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS trading_equity_usd NUMERIC;
+ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS capital_base_usd NUMERIC;
+ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS snapshot_source TEXT;
 """
 
 # ARC 4 backfill: tag existing RECON-* rows so WR/expectancy queries can use the
@@ -1637,19 +1645,51 @@ def get_kraken_equity() -> float:
 
 # ── Equity snapshots ───────────────────────────────────────────────────────
 
-def insert_fleet_equity_snapshots(rows: list[tuple[str, float]]) -> int:
-    """Write one current equity snapshot for each active fleet bot."""
+def insert_fleet_equity_snapshots(rows: list[tuple | dict]) -> int:
+    """Write current per-bot snapshots, including vault-exclusion provenance.
+
+    Two-item tuples remain supported for legacy callers, but those rows are
+    intentionally not considered enriched historical sources by the return
+    ledger because they cannot prove vault separation.
+    """
     if not rows or not is_pg_available():
         return 0
     try:
+        normalised = []
+        for row in rows:
+            if isinstance(row, dict):
+                total = row.get("total_equity_usd", row.get("equity_usd"))
+                if total is None:
+                    continue
+                normalised.append((
+                    row["bot_id"],
+                    float(total),
+                    row.get("vault_value_usd"),
+                    row.get("trading_equity_usd"),
+                    row.get("capital_base_usd"),
+                    row.get("snapshot_source", "portfolio_with_vault_exclusion"),
+                    row.get("snapshot_ts"),
+                ))
+            else:
+                if len(row) < 2:
+                    continue
+                normalised.append((row[0], float(row[1]), None, None, None, "legacy", None))
+        if not normalised:
+            return 0
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
                     """
-                    INSERT INTO fleet_equity_snapshots (snapshot_ts, bot_id, equity_usd)
-                    VALUES (NOW(), %s, %s)
+                    INSERT INTO fleet_equity_snapshots
+                        (snapshot_ts, bot_id, equity_usd, vault_value_usd,
+                         trading_equity_usd, capital_base_usd, snapshot_source)
+                    VALUES (COALESCE(%s, NOW()), %s, %s, %s, %s, %s, %s)
                     """,
-                    [(bot_id, float(equity)) for bot_id, equity in rows],
+                    [
+                        (snapshot_ts, bot_id, total, vault, trading, capital, source)
+                        for bot_id, total, vault, trading, capital, source, snapshot_ts
+                        in normalised
+                    ],
                 )
                 return cur.rowcount
     except Exception as exc:

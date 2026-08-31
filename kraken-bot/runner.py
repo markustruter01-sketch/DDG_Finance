@@ -203,11 +203,6 @@ def _profile_for_bot(bot_id: str) -> dict[str, Any]:
     return {}
 
 
-def _lock_interval_seconds(bot_id: str) -> float:
-    profile = _profile_for_bot(bot_id)
-    return max(60.0, float(profile.get("LOOP_SLEEP_SECONDS", 3600)))
-
-
 def _log_runner_locks(prefix: str) -> None:
     if not _runner_lock_import_ok or _list_runner_locks is None:
         logger.critical(f"Runner lock | {prefix} | lock module unavailable")
@@ -354,7 +349,7 @@ def _prepare_runner_locks() -> bool:
                 lock_bot_id,
                 RUNNER_ENVIRONMENT,
                 os.getpid(),
-                3 * _lock_interval_seconds(bot_id),
+                _lease_stale_after_seconds(),
                 owner_token=RUNNER_OWNER_TOKEN,
             )
             if not result.get("owned"):
@@ -451,6 +446,7 @@ except Exception as _live_exc:
 try:
     from core.runner_heartbeat import (
         RUNNER_LOOP_INTERVAL_SECONDS as _RUNNER_LOOP_INTERVAL_SECONDS,
+        freshness_threshold_seconds as _runner_heartbeat_threshold_seconds,
         write_runner_heartbeat as _write_runner_heartbeat,
     )
     _runner_heartbeat_import_ok = True
@@ -458,9 +454,15 @@ except Exception as _runner_hb_exc:
     logger.critical(f"Runner | process heartbeat layer unavailable: {_runner_hb_exc}")
     _runner_heartbeat_import_ok = False
     _RUNNER_LOOP_INTERVAL_SECONDS = 5.0
+    _runner_heartbeat_threshold_seconds = lambda interval: float(interval) * 3.0
     _write_runner_heartbeat = None
 
 _runner_started_at = datetime.now(timezone.utc)
+
+
+def _lease_stale_after_seconds() -> float:
+    """Use the runner heartbeat cadence, not a bot's strategy-cycle cadence."""
+    return _runner_heartbeat_threshold_seconds(_RUNNER_LOOP_INTERVAL_SECONDS)
 
 
 def _record_runner_heartbeat(loop_count: int, status: str) -> bool:

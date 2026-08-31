@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import Event
 from unittest.mock import MagicMock, patch
 
 from core import runner_lock
+from core import runner_heartbeat
 
 
 def _fake_conn():
@@ -79,7 +80,9 @@ def _lock_row(
 def test_stale_dead_owner_is_taken_over(monkeypatch):
     conn, cursor = _fake_conn()
     old = _lock_row(
-        heartbeat_at=datetime(2020, 1, 1, tzinfo=timezone.utc),
+        heartbeat_at=datetime.now(timezone.utc) - timedelta(
+            seconds=runner_heartbeat.RUNNER_HEARTBEAT_THRESHOLD_SECONDS + 1
+        ),
         pid=101,
     )
     replacement = _lock_row(
@@ -93,7 +96,11 @@ def test_stale_dead_owner_is_taken_over(monkeypatch):
     with patch("db.postgres.get_conn") as get_conn:
         get_conn.return_value.__enter__.return_value = conn
         result = runner_lock.claim_lock(
-            "oracle", "published", 202, 10800, owner_token="runner-b"
+            "oracle",
+            "published",
+            202,
+            runner_heartbeat.RUNNER_HEARTBEAT_THRESHOLD_SECONDS,
+            owner_token="runner-b",
         )
 
     assert result["owned"] is True
@@ -314,8 +321,11 @@ def test_stale_owner_with_matching_identity_is_refused(monkeypatch):
     assert result["lock"]["owner_token"] == "runner:v2:boot-a:100:old-process"
 
 
-def test_fresh_legacy_published_lease_is_refused(monkeypatch):
+def test_slow_bot_cycle_does_not_make_fresh_lease_stale(monkeypatch):
     conn, cursor = _fake_conn()
+    slow_bot_cycle_seconds = 3600
+    heartbeat_threshold = runner_heartbeat.RUNNER_HEARTBEAT_THRESHOLD_SECONDS
+    assert slow_bot_cycle_seconds > heartbeat_threshold
     current = _lock_row(
         heartbeat_at=datetime.now(timezone.utc),
         environment="published",
@@ -328,11 +338,55 @@ def test_fresh_legacy_published_lease_is_refused(monkeypatch):
     with patch("db.postgres.get_conn") as get_conn:
         get_conn.return_value.__enter__.return_value = conn
         result = runner_lock.claim_lock(
-            "oracle", "published", 23, 10800, owner_token="new-process-token"
+            "oracle",
+            "published",
+            23,
+            heartbeat_threshold,
+            owner_token="new-process-token",
         )
 
     assert result["owned"] is False
     assert result["lock"]["owner_token"] == "legacy:published:22:1787874045"
+
+
+def test_runner_claim_uses_heartbeat_threshold_for_slow_bot_cycles(monkeypatch):
+    sys.path.insert(0, "/home/runner/workspace/kraken-bot")
+    import runner
+
+    calls = []
+    monkeypatch.setattr(runner, "_runner_can_trade", True)
+    monkeypatch.setattr(runner, "RUNNER_ENVIRONMENT", "published")
+    monkeypatch.setattr(runner, "BOTS", [("oracle", "module", "function")])
+    monkeypatch.setattr(
+        runner,
+        "BOT_PROFILES",
+        {"oracle": {"LOOP_SLEEP_SECONDS": 3600}},
+    )
+    monkeypatch.setattr(runner, "_runner_lock_import_ok", True)
+    monkeypatch.setattr(runner, "_ensure_runner_lock_table", lambda: True)
+    monkeypatch.setattr(runner, "_log_runner_locks", lambda _prefix: None)
+    monkeypatch.setattr(
+        runner,
+        "_claim_runner_lock",
+        lambda *args, **kwargs: (
+            calls.append((args, kwargs))
+            or {
+                "owned": True,
+                "lock": {
+                    "bot_id": "oracle",
+                    "environment": "published",
+                    "pid": runner.os.getpid(),
+                    "heartbeat_at": datetime.now(timezone.utc).isoformat(),
+                    "owner_token": runner.RUNNER_OWNER_TOKEN,
+                },
+            }
+        ),
+    )
+    runner._owned_lock_bot_ids.clear()
+
+    assert runner._prepare_runner_locks() is True
+    assert len(calls) == 1
+    assert calls[0][0][3] == runner_heartbeat.RUNNER_HEARTBEAT_THRESHOLD_SECONDS
 
 
 def test_runner_shutdown_release_is_scoped_to_instance_token(monkeypatch):

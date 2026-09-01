@@ -19,6 +19,7 @@ import { getBotIdentity } from "@/lib/bot-identity";
 import FleetSparkline from "@/components/FleetSparkline";
 import ObservatoryHome from "@/components/ObservatoryHome";
 import RunnerStatusIndicator from "@/components/RunnerStatusIndicator";
+import { useBotRegistry } from "@/hooks/use-portfolio";
 
 // ── Keyframes (injected once) ─────────────────────────────────────────────────
 
@@ -790,6 +791,15 @@ function ExportDropdown({
 
 // ── HomePage ──────────────────────────────────────────────────────────────────
 
+const MOBILE_BOT_IDS = ["spy_qqq_trend", "oracle", "jerome_macro"] as const;
+type MobileBotId = typeof MOBILE_BOT_IDS[number];
+
+const MOBILE_BOT_ACCENTS: Record<MobileBotId, string> = {
+  spy_qqq_trend: "#fbbf24",
+  oracle: "#a78bfa",
+  jerome_macro: "#f87171",
+};
+
 export default function HomePage() {
   const [, navigate] = useLocation();
   const {
@@ -798,6 +808,7 @@ export default function HomePage() {
     regime, killTripped, lastCycle, mktOpen, entryWindows,
     runnerStatus, runnerStatusError,
   } = useFleetData();
+  const { data: botRegistry } = useBotRegistry();
 
   // Observatory is intentionally limited to pointer-capable desktop browsers and
   // iPads.  Android (including large Android phones) keeps the established mobile
@@ -835,10 +846,6 @@ export default function HomePage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const spyStatus    = getBotStatus(spy,    mktOpen, false);
-  const oraStatus    = getBotStatus(oracle, mktOpen, false);
-  const jeromeStatus = getBotStatus(jerome, mktOpen, false);
-
   const fleetEq  = total?.equity  ?? null;
   const fleetPnl = total?.pnl     ?? null;
   const fleetPct = total?.pnl_pct ?? null;
@@ -853,6 +860,23 @@ export default function HomePage() {
   ).length;
 
   const regimeColor = regime === "BULL" ? "#16a34a" : "#000000";
+
+  const fleetByBotId: Record<MobileBotId, BotSlice | undefined> = {
+    oracle,
+    spy_qqq_trend: spy,
+    jerome_macro: jerome,
+  };
+  const mobileBotCards = MOBILE_BOT_IDS.map((id) => {
+    const registryBot = botRegistry?.bots.find((bot) => bot.id === id);
+    const bot = fleetByBotId[id];
+    return {
+      id,
+      name: registryBot?.display_name ?? id,
+      icon: registryBot?.icon ?? "🤖",
+      bot,
+      status: getBotStatus(bot, mktOpen, false),
+    };
+  });
 
   if (showObservatory) {
     return <ObservatoryHome runnerStatus={runnerStatus} runnerStatusError={runnerStatusError} />;
@@ -924,12 +948,20 @@ export default function HomePage() {
 
       {/* ── Ship cards ── */}
       <div className="mx-auto px-4 pt-4 pb-2 space-y-3" style={{ maxWidth: 600, position: "relative", zIndex: 1 }}>
-        <ShipCard shipName={getBotIdentity("spy_qqq_trend").displayName} callsign={getBotIdentity("spy_qqq_trend").icon} bot={spy}    status={spyStatus}
-          wfStatus={wfMap.get("spy_qqq_trend")} accent="#fbbf24" livePositions={positionsByBot?.spy_qqq_trend?.positions} strategyPositionCount={positionsByBot?.spy_qqq_trend?.strategy_count} entryWindow={entryWindows?.spy_qqq_trend} />
-        <ShipCard shipName={getBotIdentity("oracle").displayName}        callsign={getBotIdentity("oracle").icon}        bot={oracle} status={oraStatus}
-          wfStatus={wfMap.get("oracle")}        accent="#a78bfa" livePositions={positionsByBot?.oracle?.positions} strategyPositionCount={positionsByBot?.oracle?.strategy_count} entryWindow={entryWindows?.oracle} />
-        <ShipCard shipName={getBotIdentity("jerome_macro").displayName}  callsign={getBotIdentity("jerome_macro").icon}  bot={jerome} status={jeromeStatus}
-          wfStatus={wfMap.get("jerome_macro")}  accent="#f87171" livePositions={positionsByBot?.jerome_macro?.positions} strategyPositionCount={positionsByBot?.jerome_macro?.strategy_count} entryWindow={entryWindows?.jerome_macro} />
+        {mobileBotCards.map((card) => (
+          <ShipCard
+            key={card.id}
+            shipName={card.name}
+            callsign={card.icon}
+            bot={card.bot}
+            status={card.status}
+            wfStatus={wfMap.get(card.id)}
+            accent={MOBILE_BOT_ACCENTS[card.id]}
+            livePositions={positionsByBot?.[card.id]?.positions}
+            strategyPositionCount={positionsByBot?.[card.id]?.strategy_count}
+            entryWindow={entryWindows?.[card.id]}
+          />
+        ))}
 
         {/* Footer */}
         <div className="flex items-center justify-between text-[9px] py-2 px-1"

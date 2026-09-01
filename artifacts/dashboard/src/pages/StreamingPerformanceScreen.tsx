@@ -277,6 +277,8 @@ export default function StreamingPerformanceScreen() {
               const botEq = fleetEqByBotId[bot.id];
               const equity = botEq?.equity ?? null;
               const pnl    = botEq?.pnl ?? null;
+              const icon  = bot.icon || meta.icon;
+              const label = bot.display_name || meta.label;
               return (
                 <div key={bot.id} style={{
                   display: "grid",
@@ -286,10 +288,10 @@ export default function StreamingPerformanceScreen() {
                   padding: "10px 18px",
                   borderBottom: `1px solid rgba(255,255,255,0.03)`,
                 }}>
-                  <span style={{ fontSize: 18 }}>{meta.icon}</span>
+                  <span style={{ fontSize: 18 }}>{icon}</span>
                   <div>
                     <div style={{ fontSize: 14, fontFamily: "monospace", fontWeight: 800, color: meta.color, letterSpacing: "0.04em" }}>
-                      {meta.label}
+                      {label}
                     </div>
                     <div style={{ fontSize: 9, fontFamily: "monospace", color: C.dim, marginTop: 2 }}>
                       {equity != null ? `$${(equity / 1000).toFixed(1)}k equity` : "— equity"}

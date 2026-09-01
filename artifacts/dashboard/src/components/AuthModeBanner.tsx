@@ -11,7 +11,7 @@ export function AuthModeBanner() {
   return (
     <div
       role="alert"
-      className="fixed left-3 right-3 top-3 z-[10000] flex items-start gap-3 rounded-xl border border-red-400/60 bg-red-950/95 px-4 py-3 text-red-50 shadow-2xl shadow-red-950/40 backdrop-blur sm:left-1/2 sm:right-auto sm:w-[min(620px,calc(100vw-1.5rem))] sm:-translate-x-1/2"
+      className="fixed left-3 right-3 top-20 z-[10000] flex items-start gap-3 rounded-xl border border-red-400/60 bg-red-950/95 px-4 py-3 text-red-50 shadow-2xl shadow-red-950/40 backdrop-blur sm:left-1/2 sm:right-auto sm:top-3 sm:w-[min(620px,calc(100vw-1.5rem))] sm:-translate-x-1/2"
     >
       <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-300" aria-hidden="true" />
       <div className="min-w-0">

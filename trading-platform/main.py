@@ -52,6 +52,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from config.settings import settings
+from core.auth_mode import AUTH_MODE_BYPASS, get_trading_api_auth_mode
 from core.scheduler import get_scheduler
 from core.operator_auth import OperatorAccessDenied, require_operator_allowed
 from execution.broker import get_account
@@ -503,6 +504,13 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
+        auth_mode = get_trading_api_auth_mode()
+        if auth_mode == AUTH_MODE_BYPASS:
+            logger.warning(
+                "Trading API authentication bypassed path={}",
+                request.url.path,
+            )
+
         if request.url.path == _health_path():
             return await call_next(request)
 
@@ -520,6 +528,10 @@ class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
             and hmac.compare_digest(supplied_internal_secret, expected_internal_secret)
         ):
             request.state.auth_method = "internal_secret"
+            return await call_next(request)
+
+        if auth_mode == AUTH_MODE_BYPASS:
+            request.state.auth_method = "bypass"
             return await call_next(request)
 
         passkey_session_user_id = None

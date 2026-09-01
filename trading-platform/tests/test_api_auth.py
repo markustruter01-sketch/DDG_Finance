@@ -2,22 +2,92 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import main
 from main import app
 
 
 def test_health_is_minimal_and_does_not_require_secret(monkeypatch):
     monkeypatch.delenv("TRADING_API_SECRET", raising=False)
+    monkeypatch.delenv("TRADING_API_AUTH_MODE", raising=False)
 
     client = TestClient(app)
     response = client.get("/health")
     client.close()
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "auth_mode": "enforced"}
+
+
+def test_health_reports_bypass_mode_without_requiring_secret(monkeypatch):
+    monkeypatch.delenv("TRADING_API_SECRET", raising=False)
+    monkeypatch.setenv("TRADING_API_AUTH_MODE", "bypass")
+
+    client = TestClient(app)
+    response = client.get("/health")
+    client.close()
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "auth_mode": "bypass"}
 
 
 def test_protected_route_rejects_missing_secret(monkeypatch):
     monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+    monkeypatch.delenv("TRADING_API_AUTH_MODE", raising=False)
+
+    client = TestClient(app)
+    response = client.get("/trading-api/version")
+    client.close()
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid or missing internal API secret."}
+
+
+def test_protected_route_bypasses_user_auth_only_when_explicitly_enabled(monkeypatch):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setenv("TRADING_API_AUTH_MODE", "bypass")
+    monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+
+    client = TestClient(app)
+    response = client.get("/trading-api/version")
+    client.close()
+
+    assert response.status_code == 200
+    assert "running_hash" in response.json()
+
+
+def test_bypass_mode_logs_each_request_and_keeps_internal_secret_first(monkeypatch):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setenv("TRADING_API_AUTH_MODE", "bypass")
+    monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
+    warnings = []
+    monkeypatch.setattr(
+        main.logger,
+        "warning",
+        lambda *args, **kwargs: warnings.append(args),
+    )
+
+    client = TestClient(app)
+    health_response = client.get("/health")
+    internal_response = client.get(
+        "/trading-api/version",
+        headers={"X-Trading-API-Internal-Secret": "test-api-secret"},
+    )
+    client.close()
+
+    assert health_response.status_code == 200
+    assert internal_response.status_code == 200
+    bypass_warnings = [
+        args[0]
+        for args in warnings
+        if args and "Trading API authentication bypassed" in str(args[0])
+    ]
+    assert len(bypass_warnings) == 2
+
+
+def test_invalid_auth_mode_fails_closed(monkeypatch):
+    monkeypatch.setenv("TRADING_API_SECRET", "test-api-secret")
+    monkeypatch.setenv("TRADING_API_AUTH_MODE", "unexpected")
     monkeypatch.delenv("CLERK_SECRET_KEY", raising=False)
 
     client = TestClient(app)

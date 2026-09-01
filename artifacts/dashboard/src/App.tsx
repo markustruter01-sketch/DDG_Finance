@@ -29,8 +29,10 @@ import Design5SpaceFleet from "@/pages/design/Design5SpaceFleet";
 import PasskeySignInPage from "@/pages/PasskeySignInPage";
 import SecurityPage from "@/pages/SecurityPage";
 import { GlobalNav } from "@/components/GlobalNav";
+import { AuthModeBanner } from "@/components/AuthModeBanner";
 import { RefreshCw } from "lucide-react";
 import { usePasskeySession } from "@/hooks/use-passkey-auth";
+import { useSystemHealth } from "@/hooks/use-platform";
 
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
@@ -130,7 +132,11 @@ function StreamingLoader() {
 function HomeRoute() {
   const { isLoaded, isSignedIn } = useAuth();
   const passkeySession = usePasskeySession();
+  const systemHealth = useSystemHealth();
 
+  if (systemHealth.data?.auth_mode === "bypass") {
+    return <Redirect to="/dashboard" />;
+  }
   if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
   if (isSignedIn || passkeySession.authenticated) {
     return <Redirect to="/dashboard" />;
@@ -144,6 +150,7 @@ function HomeRoute() {
 function AuthenticatedRouter() {
   return (
     <>
+      <AuthModeBanner />
       <Switch>
         <Route path="/dashboard" component={HomePage} />
         <Route path="/security" component={SecurityPage} />
@@ -177,7 +184,11 @@ function AuthenticatedRouter() {
 function ProtectedRoute() {
   const { isLoaded, isSignedIn } = useAuth();
   const passkeySession = usePasskeySession();
+  const systemHealth = useSystemHealth();
 
+  if (systemHealth.data?.auth_mode === "bypass") {
+    return <AuthenticatedRouter />;
+  }
   if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
   if (isSignedIn || passkeySession.authenticated) return <AuthenticatedRouter />;
   return <Redirect to="/" />;

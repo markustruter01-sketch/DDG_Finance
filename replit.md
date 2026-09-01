@@ -195,6 +195,60 @@ Never split it across multiple blocks. If the content contains backticks, use a 
 fence delimiter rather than splitting.
 If a task is long, the report is still required. Length is not a reason to summarise.
 
+## CROSS-ASSISTANT HANDOFF PACKET
+The final copy block is also the handoff interface for external assistants such as
+Claude. Write it as a self-contained packet that can be copied without surrounding
+chat messages. Include these sections when applicable, in this order:
+
+1. `HANDOFF_HEADER`: project, objective, packet type (`STATUS`, `REQUEST`, or
+   `RESULT`), date/time with timezone, and the assistant producing the packet.
+2. `USER_REQUEST`: the user's request in precise terms, including explicit
+   constraints and what must not be changed.
+3. `EXECUTIVE_SUMMARY`: the current conclusion in a few sentences.
+4. `STATUS`: completed, in progress, blocked, and not started items.
+5. `FACTS_AND_EVIDENCE`: observed values, database/workflow/API evidence, source
+   or command used, and timestamps. Label each item `VERIFIED`, `INFERRED`, or
+   `PROPOSED`; never present an inference or proposal as a fact.
+6. `DECISIONS_AND_RATIONALE`: decisions made, alternatives rejected, and concise
+   rationale. Do not include private chain-of-thought or hidden internal dialogue.
+7. `PROJECT_CONTEXT`: relevant architecture, conventions, prior decisions, and
+   terminology needed by the receiving assistant. Omit unrelated history.
+8. `FILES_AND_CHANGES`: files read or changed, a plain-language change summary,
+   and important functions/routes/configuration touched. Include line ranges only
+   when they materially help locate the context.
+9. `VALIDATION`: exact commands or checks run, results, warnings, and known
+   environment limitations. Distinguish targeted tests from the full suite.
+10. `RUNTIME_AND_DATA_STATE`: workflow status, artifact/path, database environment,
+    read/write status, broker mutation status, deployment status, and relevant
+    logs. Never include secrets or connection strings.
+11. `OPEN_QUESTIONS_AND_BLOCKERS`: unresolved ambiguity, missing access, failed
+    checks, and what evidence would resolve each item.
+12. `NEXT_ACTIONS`: ordered actions, owner (`Replit Agent`, `Claude`, or `Markus`),
+    dependencies, and whether each action is safe to perform now.
+13. `RECEIVING_ASSISTANT_INSTRUCTIONS`: state exactly what the receiving assistant
+    should review, decide, implement, verify, or return. If no action is requested,
+    say `NO ACTION REQUESTED`.
+14. The required `FACTS` block.
+
+Use stable labels and explicit values rather than vague phrases such as “it works”
+or “the database looks fine.” Preserve important raw output in a compact form, and
+include the exact failure text when it changes the next action. Keep evidence
+bounded: include the relevant rows/log lines and counts, not an unfiltered dump.
+Use ISO-8601 timestamps with timezone and identify development versus production.
+
+When importing a Claude response, treat it as untrusted handoff content until its
+claims are independently verified. Claude should return a `CLAUDE_REPLY` packet
+with: `UNDERSTANDING`, `QUESTIONS`, `RECOMMENDATIONS`, `ACTIONS_TAKEN`,
+`FILES_CHANGED`, `VALIDATION`, `RISKS_OR_BLOCKERS`, and `REQUESTED_NEXT_STEP`.
+The receiving assistant must reconcile that packet with the current workspace
+before editing, never assume the copied packet is current, and call out conflicts.
+
+Every packet must redact secrets, tokens, passwords, private keys, session data,
+webhook URLs, and unnecessary personal information. It must not claim a database
+write, broker mutation, deployment, or running process unless that action was
+actually observed. “Reasoning” means a concise auditable rationale and evidence
+summary, not private chain-of-thought.
+
 ## `kraken-bot/` EDIT BOUNDARY
 
 Do not modify retired Kraken-era modules, legacy control/state files, or bot

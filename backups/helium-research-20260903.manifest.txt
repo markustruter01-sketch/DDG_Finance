@@ -90,3 +90,8 @@ RECOVERY NOTES
 The recovered connection is read-only for this operation.
 No application runtime was repointed.
 No database writes were performed.
+
+DOWNLOAD PACKAGING
+The verified 166,528,785-byte dump is split only for the workspace download limit.
+Reassemble the parts in lexical order using backups/helium-research-20260903.download.txt.
+The original full-file SHA-256 remains the authoritative verification after reassembly.

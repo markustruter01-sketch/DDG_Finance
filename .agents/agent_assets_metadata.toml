@@ -212,3 +212,87 @@ mtime_ms = 1788391913977
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/838c0317-332d-4693-8b17-d719b0a40266/adb97fd5-8e8c-4981-818a-5f5df89833bd"
 storage_version_token = "1788392057717875"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "RWohShmAaZhDhOSYotagg"
+uri = "file://backups/helium-research-20260903.dump.part-00"
+type = "unspecified"
+title = "Helium backup part 1 of 2"
+description = "First 90 MiB part of the verified 166,528,785-byte Helium PostgreSQL dump. Reassemble with part 2."
+logical_id = "e43776fd-7793-4582-86d6-b01ea86bee48"
+content_hash = "sha256:16f6031e65f9abe93d12c51002a18a6083b39fd093d37f4b46d7e30b8d213463"
+size = 94371840
+mtime_ms = 1788393419427
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/e43776fd-7793-4582-86d6-b01ea86bee48/b013f41e-4c6c-4b9a-9bd8-87618c7700e8"
+storage_version_token = "1788393434950488"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "YYXDAzGQwTUPddFf-qUxR"
+uri = "file://backups/helium-research-20260903.dump.part-01"
+type = "unspecified"
+title = "Helium backup part 2 of 2"
+description = "Second part of the verified Helium PostgreSQL dump. Reassemble after part 1."
+logical_id = "d4c1d821-78cf-4137-a596-c56a5e1d2aa5"
+content_hash = "sha256:82fa2dc0834142ee702e982df51f055ee1ca5d7352e4f49d183324c5751f6c94"
+size = 72156945
+mtime_ms = 1788393420891
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/d4c1d821-78cf-4137-a596-c56a5e1d2aa5/6462e451-a34c-4717-a8d3-36a9a5d87486"
+storage_version_token = "1788393437894313"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Us9g07Kbc5M3ShYLVpzyR"
+uri = "file://backups/helium-research-20260903.dump.sha256"
+type = "unspecified"
+title = "Helium backup full-file checksum"
+description = "Authoritative SHA-256 checksum for the reassembled Helium dump."
+logical_id = "b87d277f-5c96-4024-91f3-25bf17101505"
+content_hash = "sha256:3242a4d9fda36ebd7365acb54cdde375ce0b34e146a3652f7c2044f0ed07f608"
+size = 104
+mtime_ms = 1788393079306
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/b87d277f-5c96-4024-91f3-25bf17101505/746dc118-7c7b-48d1-9038-ae709ff8260b"
+storage_version_token = "1788393438705182"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Pd9vfAK2wWjH2xHcE75f2"
+uri = "file://backups/helium-research-20260903.parts.sha256"
+type = "unspecified"
+title = "Helium backup part checksums"
+description = "SHA-256 checksums for both downloadable archive parts."
+logical_id = "10d451a6-f6bd-4f38-9957-637bfb087966"
+content_hash = "sha256:25c0882847a227ae4daf7e2e52d31d789d2a57146d5ee1849236d5641998c1c8"
+size = 224
+mtime_ms = 1788393421571
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/10d451a6-f6bd-4f38-9957-637bfb087966/c1d221ec-70a1-411b-b31a-133ce3428742"
+storage_version_token = "1788393439542845"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "q03C55KJOMNXyjRWE7shG"
+uri = "file://backups/helium-research-20260903.manifest.txt"
+type = "text"
+title = "Helium backup manifest"
+description = "All 68 Helium tables with row counts and required archive comparisons."
+logical_id = "67bded7d-0a71-4553-a717-821b4ee5829b"
+content_hash = "sha256:6605549980f90ce15f590fd93a82d5b1711d67ee73e796a835d7086aa87e102c"
+size = 4761
+mtime_ms = 1788393421579
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/67bded7d-0a71-4553-a717-821b4ee5829b/1f878724-54fe-4481-a8fe-54f5513c696e"
+storage_version_token = "1788393440411567"
+content_type = "text/plain"
+
+[[outputs]]
+id = "DO1ALmWDcjqt1CJXW6YjB"
+uri = "file://backups/helium-research-20260903.download.txt"
+type = "text"
+title = "Helium backup reassembly instructions"
+description = "Commands for reassembling and verifying the two downloadable archive parts."
+logical_id = "7e5c0913-2575-47f7-aaa4-6edd3e75b668"
+content_hash = "sha256:0970d973d29349047f4ce03c81a84672a666295a78fe2f549aff4a697c3088bf"
+size = 705
+mtime_ms = 1788393421579
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/7e5c0913-2575-47f7-aaa4-6edd3e75b668/66e9ea5b-6651-454f-a0be-b3a2300451ed"
+storage_version_token = "1788393441064214"
+content_type = "text/plain"

@@ -42,15 +42,21 @@ three active bot vaults, causing BIL/VOO to be misclassified as strategy positio
 ## Research-database caveat
 
 Research tables can exist with zero rows in the reachable production Neon database
-while the original Helium research database is unavailable. A table's presence is
-therefore not evidence that the research dataset is still attached to the current
-connection.
+while the original Helium research database is available only through an
+authorized workspace environment snapshot. The snapshot at
+`.cache/replit/env/latest.json` contains the historical Helium connection
+reference; a read-only check reaches `heliumdb` and confirms 20 ledger rows and
+10,206,487 Bot 2 price rows. It is recovery evidence, not current application
+configuration.
 
-**Why:** The research ledger and Bot 2 price table were empty on every reachable
-current endpoint; the project documentation still named Helium, but no Helium
-endpoint or credential was present in the current environment.
+**Why:** The reachable current endpoints are different: the authoritative
+`DATABASE_URL` rejects authentication, `DEV_DATABASE_URL` has no research ledger,
+and production `NEON_DATABASE_URL` has empty research tables. Treating any of
+those as Helium would either break the live platform or fabricate a research
+recovery.
 
-**How to apply:** Before publishing, migrating, or re-ingesting research data, record
-the host and `current_database()` from a read-only connection and verify row counts.
-Do not remove `DATABASE_URL` as a discovery tactic: the authoritative live-platform
-guard fails closed when it is absent.
+**How to apply:** Before publishing, migrating, or re-ingesting research data,
+record the host and `current_database()` from a read-only connection and verify
+row counts. Keep the live platform on `DATABASE_URL`; do not remove it or
+replace it with the historical Helium reference. Any future research-only wiring
+must use an explicit, separately managed connection boundary.

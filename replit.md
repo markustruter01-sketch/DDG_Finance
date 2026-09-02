@@ -128,13 +128,28 @@ database schema do not prove that the corresponding retired strategy is running.
 
 # Database separation
 
-The current read-only connection metadata establishes two separate database
-contexts:
+The current environment exposes three different database references and they
+must not be merged, substituted, or used interchangeably:
 
-- Development shell database host: `helium`
-- Production database host: `ep-nameless-hill-am20q7xg.c-5.us-east-1.aws.neon.tech`
+- `DATABASE_URL` is the live platform's authoritative DSN, currently configured
+  for `ep-odd-grass-amdyd29o.c-5.us-east-1.aws.neon.tech`, but its credentials
+  currently reject authentication.
+- `DEV_DATABASE_URL` is `ep-green-dust-ann2oyjg.c-6.us-east-1.aws.neon.tech`;
+  its read-only research-table check reports that `research_ledger` is absent.
+- `NEON_DATABASE_URL` is the production database at
+  `ep-nameless-hill-am20q7xg.c-5.us-east-1.aws.neon.tech`; its
+  `research_ledger` and `bot2_sp500_prices` tables currently contain zero rows.
 
-These databases must not be merged, substituted, or used interchangeably.
+The historical Helium research connection was recovered from the authorized
+workspace environment snapshot at `.cache/replit/env/latest.json`. A
+read-only connection using that snapshot reached configured host `helium`,
+`current_database()` `heliumdb`, and confirmed 20 `research_ledger` rows plus
+10,206,487 `bot2_sp500_prices` rows. The snapshot is recovery evidence, not an
+application override: do not copy it into `DATABASE_URL`, `NEON_DATABASE_URL`,
+or the live trading configuration. `trading-platform/db/postgres.py` resolves
+only `DATABASE_URL`/matching `PG*` variables, and the Strategy Bench currently
+uses that shared connection through `get_conn()`.
+
 When reporting connection diagnostics, log the `HOST` only; never log a
 connection string, password, token, or other credential.
 

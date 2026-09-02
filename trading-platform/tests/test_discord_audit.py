@@ -27,7 +27,6 @@ def _capture_audit(monkeypatch):
 
 def test_missing_webhook_is_recorded_as_skipped(monkeypatch):
     started, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     monkeypatch.setattr(discord, "_WEBHOOK_URL", None)
     monkeypatch.setattr(
         discord.requests,
@@ -49,7 +48,6 @@ def test_missing_webhook_is_recorded_as_skipped(monkeypatch):
 
 def test_successful_webhook_is_recorded_as_sent(monkeypatch):
     started, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     monkeypatch.setattr(discord, "_WEBHOOK_URL", "https://discord.example.test/hook")
     monkeypatch.setattr(
         discord.requests,
@@ -69,7 +67,6 @@ def test_successful_webhook_is_recorded_as_sent(monkeypatch):
 
 def test_http_failure_is_recorded_without_webhook_response_body(monkeypatch):
     _, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     monkeypatch.setattr(discord, "_WEBHOOK_URL", "https://discord.example.test/hook")
     monkeypatch.setattr(
         discord.requests,
@@ -90,7 +87,6 @@ def test_http_failure_is_recorded_without_webhook_response_body(monkeypatch):
 
 def test_network_failure_is_recorded(monkeypatch):
     _, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     monkeypatch.setattr(discord, "_WEBHOOK_URL", "https://discord.example.test/hook")
 
     def fail(*_args, **_kwargs):
@@ -111,7 +107,6 @@ def test_network_failure_is_recorded(monkeypatch):
 
 def test_network_failure_never_persists_webhook_url(monkeypatch):
     _, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     webhook_url = "https://discord.example.test/secret-path"
     monkeypatch.setattr(discord, "_WEBHOOK_URL", webhook_url)
 
@@ -128,53 +123,12 @@ def test_network_failure_never_persists_webhook_url(monkeypatch):
 
 def test_daily_report_without_webhook_is_audited_as_skipped(monkeypatch):
     started, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
     monkeypatch.setattr(discord, "_WEBHOOK_URL", None)
 
     discord.notify_daily_pnl_report()
 
     assert started == [("daily_report", "Daily fleet P&L report")]
     assert completed[0][0:2] == (41, "skipped_not_configured")
-
-
-def test_non_published_delivery_is_blocked_even_with_webhook(monkeypatch):
-    started, completed = _capture_audit(monkeypatch)
-    monkeypatch.delenv("REPLIT_DEPLOYMENT", raising=False)
-    monkeypatch.setenv("RUNNER_ENVIRONMENT", "dev")
-    monkeypatch.setattr(discord, "_WEBHOOK_URL", "https://discord.example.test/hook")
-    monkeypatch.setattr(
-        discord.requests,
-        "post",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("HTTP must not be called outside published")
-        ),
-    )
-
-    discord._send({"content": "test"}, alert_type="general", title="Dev test")
-
-    assert started == [("general", "Dev test")]
-    assert completed[0][0:2] == (41, "skipped_not_published")
-
-
-def test_published_payload_contains_environment_label(monkeypatch):
-    _, completed = _capture_audit(monkeypatch)
-    monkeypatch.setenv("REPLIT_DEPLOYMENT", "1")
-    monkeypatch.setattr(discord, "_WEBHOOK_URL", "https://discord.example.test/hook")
-    captured = []
-    monkeypatch.setattr(
-        discord.requests,
-        "post",
-        lambda _url, **kwargs: (captured.append(kwargs["json"]) or _Response(204)),
-    )
-
-    discord._send(
-        {"embeds": [{"title": "Safety alert", "description": "Details"}]},
-        alert_type="critical",
-        title="Safety alert",
-    )
-
-    assert captured[0]["embeds"][0]["title"].startswith("[environment: published]")
-    assert completed == [(41, "sent", {"http_status": 204})]
 
 
 def test_thread_start_failure_finalizes_attempt(monkeypatch):

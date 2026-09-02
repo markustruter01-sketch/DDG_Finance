@@ -195,22 +195,6 @@ Never split it across multiple blocks. If the content contains backticks, use a 
 fence delimiter rather than splitting.
 If a task is long, the report is still required. Length is not a reason to summarise.
 
-## EVIDENCE LABELS
-Label material claims as `VERIFIED`, `INFERRED`, or `PROPOSED`. Use `VERIFIED` only
-for directly observed code, runtime, data, or command output; never present an
-inference or proposal as a fact.
-
-## SOURCE OF TRUTH ORDER
-For conflicts, use the current user request and current workspace/runtime evidence
-first, then the current checked-in project rules, then persistent memory and older
-summaries. Re-check older claims against current evidence before relying on them.
-
-## DO NOT SUBSTITUTE PROCESS FOR THE TASK
-Perform the requested audit, implementation, and verification directly. Do not
-replace the task with a handoff, status packet, process narration, or request for
-another assistant. Ask only when a real ambiguity or missing permission blocks safe
-progress.
-
 ## `kraken-bot/` EDIT BOUNDARY
 
 Do not modify retired Kraken-era modules, legacy control/state files, or bot

@@ -14,25 +14,8 @@ from loguru import logger
 
 
 CONDITION_ALERT_SUPPRESSION_SECONDS = 15 * 60
-REALTIME_CONDITION_SOURCES = {
-    "kill_switch",
-    "runner_liveness",
-    "runner_heartbeat",
-}
-REALTIME_CONDITION_KEYS = {
-    ("invariant", "strategy_positions_have_covering_stops"),
-    ("invariant", "runner_heartbeat_is_fresh"),
-}
 
 _last_alert_at: dict[str, float] = {}
-
-
-def is_realtime_condition(source: str, condition: str) -> bool:
-    """Return whether a condition is allowed to alert outside the digest."""
-    return (
-        source.strip() in REALTIME_CONDITION_SOURCES
-        or (source.strip(), condition.strip()) in REALTIME_CONDITION_KEYS
-    )
 
 
 def condition_key(
@@ -84,33 +67,11 @@ def clear_condition(
     source: str,
     condition: str,
     bot_id: str | None = None,
-    *,
-    notify_recovery: bool = False,
 ) -> None:
-    """Forget a recovered condition and optionally send one recovery message."""
+    """Forget a recovered condition so its next recurrence alerts immediately."""
     key = condition_key(source, condition, bot_id)
     if _last_alert_at.pop(key, None) is not None:
         logger.info(f"Condition alert cleared | key={key}")
-        if notify_recovery:
-            try:
-                from notifications.discord import alert_critical
-
-                alert_critical(
-                    f"Recovered: {source}/{condition}",
-                    f"The real-time condition `{condition}` has cleared.",
-                    fields=[
-                        {
-                            "name": "Bot",
-                            "value": str(bot_id or "fleet"),
-                            "inline": True,
-                        }
-                    ],
-                )
-            except Exception as exc:
-                logger.error(
-                    "Condition recovery delivery failed | "
-                    f"key={key} error={type(exc).__name__}"
-                )
 
 
 def reset_condition_alerts() -> None:

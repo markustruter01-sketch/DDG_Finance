@@ -206,7 +206,7 @@ def test_authenticated_api_probe_sends_secret_header_without_logging_value(monke
     asyncio.run(scheduler._probe_trading_api_liveness())
 
     assert client.request_headers == {
-        "X-Trading-API-Internal-Secret": "test-api-secret",
+        "X-Trading-API-Secret": "test-api-secret",
         "User-Agent": "trading-api-authenticated-liveness",
     }
     assert scheduler._trading_api_liveness_failures == 0

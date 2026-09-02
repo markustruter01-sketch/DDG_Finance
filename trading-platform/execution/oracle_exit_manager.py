@@ -515,27 +515,21 @@ def execute_exits(exits: list[dict], dry_run: bool = False) -> dict:
         except Exception as exc:
             logger.error(f"ExitManager | Failed to close {symbol}: {exc}")
             result["errors"].append({"symbol": symbol, "error": str(exc)})
-            # Persist the capital-risk failure for the daily digest. The
-            # real-time stop-coverage invariant remains the immediate alert
-            # path, avoiding duplicate routine Discord messages here.
+            # C-6 fix: capital-risk failure — alert directly (not routed through
+            # degradation tracker) so the alert fires even if tracker is down.
             try:
-                from core.degradation_tracker import record_degradation
-
-                record_degradation(
-                    component="oracle_exit",
-                    severity="critical",
-                    error_type="exit_failed",
-                    message=(
-                        f"{symbol} ({exit_reason}): close_position failed; "
-                        "position remains open and the next cycle will retry."
+                from notifications.discord import alert_critical
+                alert_critical(
+                    title=f"🔴 Oracle Exit FAILED | {symbol}",
+                    description=(
+                        f"**{symbol}** ({exit_reason}): `close_position()` raised an exception.\n"
+                        f"Position remains **open at Alpaca** with no stop reattached.\n"
+                        f"Next cycle will retry the exit automatically.\n"
+                        f"```{str(exc)[:300]}```"
                     ),
-                    detail=str(exc)[:500],
                 )
             except Exception as _da:
-                logger.error(
-                    f"ExitManager | failure persistence failed for {symbol}: "
-                    f"{type(_da).__name__}"
-                )
+                logger.error(f"ExitManager | Discord alert failed for {symbol}: {_da}")
             try:
                 from core.degradation_tracker import record_degradation
                 record_degradation(

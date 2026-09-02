@@ -3,7 +3,6 @@ import { api, useVisibleInterval } from "./use-trading-client";
 
 export interface SystemHealth {
   status: string;
-  auth_mode: "enforced" | "bypass";
   version: string;
   system_status: "online" | "degraded" | "offline";
   status_reason: string;

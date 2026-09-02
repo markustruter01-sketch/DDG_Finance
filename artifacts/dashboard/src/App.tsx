@@ -1,19 +1,6 @@
-import { useEffect, useRef, Suspense } from "react";
-import {
-  Switch,
-  Route,
-  Redirect,
-  Router as WouterRouter,
-  useLocation,
-} from "wouter";
+import { useEffect, Suspense } from "react";
+import { Switch, Route, Redirect, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  ClerkProvider,
-  useAuth,
-  useClerk,
-} from "@clerk/react";
-import { publishableKeyFromHost } from "@clerk/react/internal";
-import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -26,13 +13,8 @@ import Design2Terminal from "@/pages/design/Design2Terminal";
 import Design3MissionControl from "@/pages/design/Design3MissionControl";
 import Design4Arcade from "@/pages/design/Design4Arcade";
 import Design5SpaceFleet from "@/pages/design/Design5SpaceFleet";
-import PasskeySignInPage from "@/pages/PasskeySignInPage";
-import SecurityPage from "@/pages/SecurityPage";
 import { GlobalNav } from "@/components/GlobalNav";
-import { AuthModeBanner } from "@/components/AuthModeBanner";
 import { RefreshCw } from "lucide-react";
-import { usePasskeySession } from "@/hooks/use-passkey-auth";
-import { useSystemHealth } from "@/hooks/use-platform";
 
 import { VisibilityContext, useVisibilityProvider, installVisibilityListener } from "@/hooks/use-visibility";
 
@@ -49,66 +31,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-
-if (!clerkPubKey) {
-  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY in environment.");
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: "clerk",
-  options: {
-    logoPlacement: "inside" as const,
-    logoLinkUrl: basePath || "/",
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: "#f2b84b",
-    colorForeground: "#f1f5f9",
-    colorMutedForeground: "#94a3b8",
-    colorDanger: "#f87171",
-    colorBackground: "#0b1120",
-    colorInput: "#111827",
-    colorInputForeground: "#f8fafc",
-    colorNeutral: "#334155",
-    fontFamily: "'IBM Plex Sans', sans-serif",
-    borderRadius: "0.75rem",
-  },
-  elements: {
-    rootBox: "w-full flex justify-center",
-    cardBox: "bg-slate-950 rounded-2xl w-[440px] max-w-full overflow-hidden",
-    card: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-slate-100",
-    headerSubtitle: "text-slate-400",
-    socialButtonsBlockButtonText: "text-slate-100",
-    formFieldLabel: "text-slate-300",
-    footerActionLink: "text-amber-300",
-    footerActionText: "text-slate-400",
-    dividerText: "text-slate-500",
-    identityPreviewEditButton: "text-amber-300",
-    formFieldSuccessText: "text-emerald-300",
-    alertText: "text-red-200",
-    logoBox: "mb-4",
-    logoImage: "max-h-10",
-    socialButtonsBlockButton: "border-slate-700 bg-slate-900 hover:bg-slate-800",
-    formButtonPrimary: "bg-amber-400 text-slate-950 hover:bg-amber-300",
-    formFieldInput: "border-slate-700 bg-slate-900 text-slate-100",
-    footerAction: "text-slate-400",
-    dividerLine: "bg-slate-800",
-    alert: "border-red-500/40 bg-red-950/40",
-    otpCodeFieldInput: "border-slate-700 bg-slate-900 text-slate-100",
-    formFieldRow: "text-slate-100",
-    main: "bg-transparent",
-  },
-};
 
 const CRITICAL_QUERY_KEYS = [
   ["/status/summary"],
@@ -129,32 +51,12 @@ function StreamingLoader() {
   );
 }
 
-function HomeRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const passkeySession = usePasskeySession();
-  const systemHealth = useSystemHealth();
-
-  if (systemHealth.data?.auth_mode === "bypass") {
-    return <Redirect to="/dashboard" />;
-  }
-  if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
-  if (isSignedIn || passkeySession.authenticated) {
-    return <Redirect to="/dashboard" />;
-  }
-
-  return (
-    <PublicLanding />
-  );
-}
-
-function AuthenticatedRouter() {
+function Router() {
   return (
     <>
-      <AuthModeBanner />
       <Switch>
-        <Route path="/dashboard" component={HomePage} />
-        <Route path="/security" component={SecurityPage} />
-        <Route path="/home"><Redirect to="/dashboard" /></Route>
+        <Route path="/" component={HomePage} />
+        <Route path="/home"><Redirect to="/" /></Route>
         <Route path="/stream">
           <ErrorBoundary label="Stream" autoRecoverMs={2000}>
             <Suspense fallback={<StreamingLoader />}>
@@ -179,121 +81,6 @@ function AuthenticatedRouter() {
       <GlobalNav />
     </>
   );
-}
-
-function ProtectedRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const passkeySession = usePasskeySession();
-  const systemHealth = useSystemHealth();
-
-  if (systemHealth.data?.auth_mode === "bypass") {
-    return <AuthenticatedRouter />;
-  }
-  if (!isLoaded || passkeySession.loading) return <StreamingLoader />;
-  if (isSignedIn || passkeySession.authenticated) return <AuthenticatedRouter />;
-  return <Redirect to="/" />;
-}
-
-function PublicLanding() {
-  return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-slate-100">
-      <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col justify-center">
-        <div className="mb-5 flex items-center gap-3 text-amber-300">
-          <img src={`${basePath}/logo.svg`} alt="" className="h-10 w-10" />
-          <span className="font-mono text-xs font-bold tracking-[0.3em]">
-            TRADING PLATFORM
-          </span>
-        </div>
-        <h1 className="max-w-2xl text-4xl font-bold tracking-tight sm:text-6xl">
-          Fleet Command
-        </h1>
-        <p className="mt-5 max-w-xl text-lg leading-8 text-slate-400">
-          Private operator access for live fleet health, positions, research,
-          and audited controls.
-        </p>
-        <div className="mt-9">
-          <a
-            href={`${basePath}/sign-in`}
-            className="inline-flex items-center rounded-xl bg-amber-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-amber-300"
-          >
-            Operator sign in
-          </a>
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const previousUserId = useRef<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (
-        previousUserId.current !== undefined &&
-        previousUserId.current !== userId
-      ) {
-        queryClient.clear();
-      }
-      previousUserId.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener]);
-
-  return null;
-}
-
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-
-  return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      localization={{
-        signIn: {
-          start: {
-            title: "Welcome back, operator",
-            subtitle: "Sign in to access Fleet Command",
-          },
-        },
-        signUp: {
-          start: {
-            title: "Create an operator account",
-            subtitle: "Set up private Fleet Command access",
-          },
-        },
-      }}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <ClerkQueryClientCacheInvalidator />
-        <VisibilityRefetcher />
-        <TooltipProvider>
-          <Switch>
-            <Route
-              path="/sign-in/*?"
-              component={() => <PasskeySignInPage basePath={basePath} />}
-            />
-            <Route path="/" component={HomeRoute} />
-            <Route component={ProtectedRoute} />
-          </Switch>
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
-  );
-}
-
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
 }
 
 function AppCrashFallback() {
@@ -339,9 +126,15 @@ function App() {
   return (
     <ErrorBoundary fallback={<AppCrashFallback />} label="App" autoRecoverMs={3000}>
       <VisibilityContext.Provider value={isVisible}>
-        <WouterRouter base={basePath}>
-          <ClerkProviderWithRoutes />
-        </WouterRouter>
+        <QueryClientProvider client={queryClient}>
+          <VisibilityRefetcher />
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </QueryClientProvider>
       </VisibilityContext.Provider>
     </ErrorBoundary>
   );

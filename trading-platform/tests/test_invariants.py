@@ -125,16 +125,6 @@ def test_stop_coverage_unknown_when_input_is_unreadable(base_inputs):
     assert result["status"] == "UNKNOWN"
 
 
-def test_cycle_freshness_excludes_intentionally_paused_bots(base_inputs):
-    inputs = _copy(base_inputs)
-    inputs.paused_bots = {"spy_qqq_trend"}
-    inputs.cycle_rows["spy_qqq_trend"]["last_success_at"] = None
-    result = check_cycle_freshness(inputs)
-    assert result["status"] == "PASS"
-    assert result["actual"]["paused_bots_excluded"] == ["spy_qqq_trend"]
-    assert result["actual"]["missing_or_unreadable"] == []
-
-
 def _with_crypto_exposure(base_inputs, market_value: float) -> InvariantInputs:
     inputs = _copy(base_inputs)
     crypto_position = {
@@ -245,46 +235,6 @@ def test_degradations_fires_for_unresolved_high_severity_event(base_inputs):
     result = check_degradations(inputs)
     assert result["status"] == "FAIL"
     assert result["actual"]["unresolved_count"] == 1
-
-
-def test_degradations_excludes_derived_invariant_findings(base_inputs):
-    inputs = _copy(base_inputs)
-    inputs.unresolved_degradations = [
-        {
-            "id": 8,
-            "component": "invariant",
-            "error_type": "zero_unresolved_high_severity_degradations",
-            "severity": "critical",
-            "message": "derived finding",
-        },
-        {
-            "id": 9,
-            "component": "broker",
-            "error_type": "api_failure",
-            "severity": "high",
-            "message": "underlying failure",
-        },
-    ]
-    result = check_degradations(inputs)
-    assert result["status"] == "FAIL"
-    assert result["actual"]["unresolved_count"] == 1
-    assert result["actual"]["monitoring_invariant_events_excluded"] == 1
-
-
-def test_degradations_passes_when_only_derived_invariant_findings_remain(base_inputs):
-    inputs = _copy(base_inputs)
-    inputs.unresolved_degradations = [
-        {
-            "id": 10,
-            "component": "invariant",
-            "error_type": "zero_unresolved_high_severity_degradations",
-            "severity": "critical",
-            "message": "derived finding",
-        }
-    ]
-    result = check_degradations(inputs)
-    assert result["status"] == "PASS"
-    assert result["actual"]["unresolved_count"] == 0
 
 
 def test_degradations_unknown_when_log_is_unreadable(base_inputs):

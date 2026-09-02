@@ -55,7 +55,3 @@
 - [Health liveness sources](health-liveness-sources.md) — snapshot-writer activity does not prove bot cycle or portfolio heartbeat liveness; health must read both canonical sources.
 - [Degradation lifecycle policy](degradation-lifecycle-policy.md) — auto-resolution requires explicit live recovery evidence; paused bots are not stale.
 - [Condition alert identity](condition-alert-identity.md) — safety alert deduplication must exclude volatile diagnostic text and reset only after recovery evidence.
-- [Lease freshness versus process liveness](lease-freshness-vs-process-liveness.md) — a healthy runner heartbeat does not prove account leases are being refreshed; keep lease refresh cadence independently observable.
-- [Operator authentication boundary](operator-auth-boundary.md) — browser access uses Clerk cookies; the trading API secret is server-to-server only and never enters the Vite bundle.
-- [Operator allowlist identity](operator-allowlist-identity.md) — operator access is keyed by Clerk user IDs because the verified session exposes only the subject claim.
-- [Discord delivery boundary](discord-delivery-boundary.md) — Discord is published-only, audited, environment-labeled, and routine findings belong in the daily digest.

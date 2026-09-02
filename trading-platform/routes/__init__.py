@@ -15,7 +15,6 @@ from .scorecard import scorecard_router
 from .market_state_route import router as market_state_router
 from .entry_windows import router as entry_windows_router
 from .strategy_bench import router as strategy_bench_router
-from .passkey_auth import router as passkey_auth_router
 
 ALL_ROUTERS = [
     system_router,
@@ -35,5 +34,4 @@ ALL_ROUTERS = [
     market_state_router,
     entry_windows_router,
     strategy_bench_router,
-    passkey_auth_router,
 ]

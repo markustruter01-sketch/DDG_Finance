@@ -58,24 +58,6 @@ def _nyse_holidays(year: int) -> set[date]:
         return _manual_nyse_holidays(year)
 
 
-def is_nyse_session_date(check_date: date) -> bool:
-    """Return whether *check_date* is a regular NYSE session date.
-
-    This is deliberately date-only and does not call Alpaca.  It is shared by
-    historical/reporting jobs where a broker clock request would be both
-    nondeterministic and unnecessarily expensive.
-    """
-    return check_date.weekday() < 5 and check_date not in _nyse_holidays(check_date.year)
-
-
-def previous_nyse_session_date(check_date: date) -> date:
-    """Return the most recent NYSE session before *check_date*."""
-    candidate = check_date - timedelta(days=1)
-    while not is_nyse_session_date(candidate):
-        candidate -= timedelta(days=1)
-    return candidate
-
-
 def _manual_nyse_holidays(year: int) -> set[date]:
     """Minimal hardcoded NYSE holidays when the `holidays` package is absent."""
     holidays = set()

@@ -11,7 +11,6 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 
 from core.pipeline import get_last_run, reset_error_state
-from core.auth_mode import get_trading_api_auth_mode
 from core.scheduler import get_job_status
 from core.market_clock import is_market_open, get_next_open
 from data.cache import get_cache_stats
@@ -31,7 +30,7 @@ system_router = APIRouter(tags=["System"])
 
 @system_router.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict:
-    return {"status": "ok", "auth_mode": get_trading_api_auth_mode()}
+    return {"status": "ok"}
 
 
 @system_router.get("/runner/status")

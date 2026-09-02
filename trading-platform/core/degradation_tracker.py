@@ -140,18 +140,9 @@ def record_degradation(
                      detail[:2000] if detail else None, bot_id, cycle_id),
                 )
         logger.debug(f"[DEGRADATION] Recorded: [{severity}] {component}/{error_type} — {message[:80]}")
-        from notifications.condition_alerts import (
-            alert_condition,
-            is_realtime_condition,
-        )
+        if severity.lower() in {"critical", "error", "high"}:
+            from notifications.condition_alerts import alert_condition
 
-        # Persist every finding, but keep Discord real-time delivery limited to
-        # the three capital-safety condition families. Routine findings belong
-        # in the daily digest.
-        if (
-            severity.lower() in {"critical", "error", "high"}
-            and is_realtime_condition(component, error_type)
-        ):
             alert_condition(
                 source=component,
                 condition=error_type,
@@ -259,17 +250,9 @@ def mark_resolved(
     _recent_keys.pop(key, None)
     _escalation_counts.pop(key, None)
     try:
-        from notifications.condition_alerts import (
-            clear_condition,
-            is_realtime_condition,
-        )
+        from notifications.condition_alerts import clear_condition
 
-        clear_condition(
-            component,
-            error_type,
-            bot_id,
-            notify_recovery=is_realtime_condition(component, error_type),
-        )
+        clear_condition(component, error_type, bot_id)
     except Exception as exc:
         logger.debug(
             f"[DEGRADATION] alert state reset failed: {type(exc).__name__}"

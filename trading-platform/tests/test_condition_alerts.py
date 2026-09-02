@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 
 from core import scheduler
-from execution import reconciliation
 from notifications import condition_alerts
 
 
@@ -86,34 +85,3 @@ def test_stale_cycle_invariant_is_recorded_for_alerting(monkeypatch):
 
     assert recorded[0]["error_type"] == "bot_cycle_success_freshness"
     assert recorded[0]["severity"] == "critical"
-
-
-def test_naked_position_alerts_once_and_sends_recovery(monkeypatch):
-    condition_alerts.reset_condition_alerts()
-    sent = []
-    monkeypatch.setattr(
-        "notifications.discord.alert_critical",
-        lambda *args, **kwargs: sent.append((args, kwargs)),
-    )
-    monkeypatch.setattr("core.kill_switch._load_acknowledgements", lambda: {})
-    monkeypatch.setattr(reconciliation, "collect_live_snapshot", lambda: {
-        "accounts": [{"bot_id": "oracle"}],
-    })
-    flags = [{
-        "trigger": "missing_protective_stop",
-        "bot_id": "oracle",
-        "symbol": "SPY",
-    }]
-    observations = iter([flags, flags, []])
-    monkeypatch.setattr("core.kill_switch.evaluate_snapshot", lambda _snapshot: next(observations))
-    monkeypatch.setattr("core.kill_switch.report", lambda snapshot: {"snapshot": snapshot})
-
-    reconciliation.run_kill_switch_check(report_only=True)
-    reconciliation.run_kill_switch_check(report_only=True)
-    assert len(sent) == 1
-    assert sent[0][0][0] == "Naked position detected"
-
-    reconciliation.run_kill_switch_check(report_only=True)
-
-    assert len(sent) == 2
-    assert sent[1][0][0] == "Recovered: kill_switch/missing_protective_stop"

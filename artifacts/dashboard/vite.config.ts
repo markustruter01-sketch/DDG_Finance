@@ -21,11 +21,20 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const basePath = process.env.BASE_PATH || "/";
+const tradingApiSecret = process.env.TRADING_API_SECRET?.trim() || "";
+
 export default defineConfig({
   base: basePath,
+  // The dashboard is a static artifact, so its API header must be compiled
+  // into the browser bundle. This is intentionally not treated as a
+  // high-security credential; the server remains fail-closed and should
+  // eventually be fronted by real operator authentication.
+  define: {
+    "import.meta.env.VITE_TRADING_API_SECRET": JSON.stringify(tradingApiSecret),
+  },
   plugins: [
     react(),
-    tailwindcss({ optimize: false }),
+    tailwindcss(),
     runtimeErrorOverlay(),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined

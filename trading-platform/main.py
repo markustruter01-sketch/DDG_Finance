@@ -38,23 +38,12 @@ def _read_git_hash() -> str:
 _RUNNING_HASH: str = _read_git_hash()
 _STARTED_AT: str   = datetime.now(_tz.utc).isoformat()
 
-
-def _clerk_publishable_key_prefix() -> str:
-    publishable_key = os.getenv("VITE_CLERK_PUBLISHABLE_KEY", "").strip()
-    if publishable_key.startswith("pk_test_"):
-        return "pk_test"
-    if publishable_key.startswith("pk_live_"):
-        return "pk_live"
-    return "unknown"
-
 _REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from config.settings import settings
-from core.auth_mode import AUTH_MODE_BYPASS, get_trading_api_auth_mode
 from core.scheduler import get_scheduler
-from core.operator_auth import OperatorAccessDenied, require_operator_allowed
 from execution.broker import get_account
 from analysis.trade_journal import init_db
 
@@ -81,21 +70,9 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info("TRADING PLATFORM STARTING")
     logger.info("=" * 60)
-    logger.info("clerk_publishable_key_prefix={}", _clerk_publishable_key_prefix())
 
     init_db()
     logger.info("Trade journal database initialised")
-    try:
-        from db.postgres import is_pg_available
-        if is_pg_available():
-            from analysis.research_ledger import ensure_research_tables
-            ensure_research_tables()
-            logger.info("Research return tables initialised")
-        else:
-            logger.warning("Research return tables skipped: PostgreSQL unavailable")
-    except Exception as _research_schema_exc:
-        logger.error(f"Research return schema bootstrap failed: {_research_schema_exc}")
-        raise
 
     try:
         from analysis.learning_snapshot import seed_from_snapshot
@@ -150,19 +127,12 @@ async def lifespan(app: FastAPI):
         try:
             from core.bot_state import get_all_portfolios
             from db.postgres import insert_fleet_equity_snapshots
-            from analysis.research_ledger import enriched_snapshot_from_portfolio
             portfolios = get_all_portfolios()
-            rows = []
-            for portfolio in portfolios:
-                row = enriched_snapshot_from_portfolio(portfolio)
-                if row is None:
-                    logger.warning(
-                        "Fleet equity snapshot | skipping %s: "
-                        "equity or position data is unavailable",
-                        portfolio.get("bot_id", "unknown"),
-                    )
-                    continue
-                rows.append(row)
+            rows = [
+                (p["bot_id"], float(p.get("equity_usd") or 0.0))
+                for p in portfolios
+                if p.get("equity_usd") is not None
+            ]
             inserted = insert_fleet_equity_snapshots(rows)
             logger.info(
                 f"Fleet equity snapshot | wrote {inserted}/{len(rows)} active bot rows"
@@ -481,13 +451,7 @@ class DegradationCaptureMiddleware(BaseHTTPMiddleware):
 app.add_middleware(DegradationCaptureMiddleware)
 
 
-INTERNAL_API_SECRET_HEADER = "X-Trading-API-Internal-Secret"
-PASSKEY_PUBLIC_PATH_SUFFIXES = (
-    "/auth/passkey/authentication/options",
-    "/auth/passkey/authentication/verify",
-    "/auth/passkey/session",
-    "/auth/passkey/logout",
-)
+TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
 
 
 def _health_path() -> str:
@@ -496,130 +460,29 @@ def _health_path() -> str:
 
 
 class TradingAPIAuthMiddleware(BaseHTTPMiddleware):
-    """Require a passkey/Clerk session or server-to-server secret.
-
-    The internal secret is retained only for trusted scheduler probes. It is
-    never compiled into the dashboard bundle. Browser requests must carry a
-    verified passkey or Clerk session cookie.
-    """
+    """Require the shared API secret for every route except liveness health."""
 
     async def dispatch(self, request: StarletteRequest, call_next) -> StarletteResponse:
-        auth_mode = get_trading_api_auth_mode()
-        if auth_mode == AUTH_MODE_BYPASS:
-            logger.warning(
-                "Trading API authentication bypassed path={}",
-                request.url.path,
-            )
-
         if request.url.path == _health_path():
             return await call_next(request)
 
-        if any(
-            request.url.path.rstrip("/").endswith(suffix)
-            for suffix in PASSKEY_PUBLIC_PATH_SUFFIXES
-        ):
-            return await call_next(request)
-
-        expected_internal_secret = os.getenv("TRADING_API_SECRET", "").strip()
-        supplied_internal_secret = request.headers.get(INTERNAL_API_SECRET_HEADER, "")
-        if (
-            expected_internal_secret
-            and supplied_internal_secret
-            and hmac.compare_digest(supplied_internal_secret, expected_internal_secret)
-        ):
-            request.state.auth_method = "internal_secret"
-            return await call_next(request)
-
-        if auth_mode == AUTH_MODE_BYPASS:
-            request.state.auth_method = "bypass"
-            return await call_next(request)
-
-        passkey_session_user_id = None
-        try:
-            from core.passkey_auth import PASSKEY_SESSION_COOKIE, session_user_id
-
-            passkey_session_user_id = await asyncio.to_thread(
-                session_user_id,
-                request.cookies.get(PASSKEY_SESSION_COOKIE),
-            )
-        except Exception:
-            passkey_session_user_id = None
-
-        if passkey_session_user_id:
-            try:
-                require_operator_allowed(
-                    passkey_session_user_id,
-                    context="passkey_middleware",
-                )
-            except OperatorAccessDenied:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Operator access is not authorized."},
-                )
-            request.state.auth_method = "passkey"
-            request.state.clerk_user_id = passkey_session_user_id
-            return await call_next(request)
-
-        clerk_secret_key = os.getenv("CLERK_SECRET_KEY", "").strip()
-        if clerk_secret_key:
-            try:
-                from core.clerk_auth import clerk_user_id_from_headers
-
-                clerk_user_id = await asyncio.to_thread(
-                    clerk_user_id_from_headers,
-                    request.headers,
-                    clerk_secret_key,
-                )
-            except Exception:
-                clerk_user_id = None
-
-            if clerk_user_id:
-                try:
-                    require_operator_allowed(
-                        clerk_user_id,
-                        context="clerk_middleware",
-                    )
-                except OperatorAccessDenied:
-                    return JSONResponse(
-                        status_code=403,
-                        content={"detail": "Operator access is not authorized."},
-                    )
-                request.state.auth_method = "clerk"
-                request.state.clerk_user_id = clerk_user_id
-                return await call_next(request)
-
-            cookie_header = request.headers.get("cookie")
-            authorization_header = request.headers.get("authorization")
-            logger.warning(
-                "path={} cookie_header_present={} contains_session_cookie={} "
-                "authorization_header_present={} clerk_secret_key_present={}",
-                request.url.path,
-                str(cookie_header is not None).lower(),
-                str(cookie_header is not None and "__session" in cookie_header).lower(),
-                str(authorization_header is not None).lower(),
-                str(bool(clerk_secret_key)).lower(),
-            )
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Authentication required."},
-                headers={"WWW-Authenticate": "Clerk"},
-            )
-
-        if not expected_internal_secret:
-            logger.error(
-                "Trading API authentication is not configured; "
-                "rejecting protected request"
-            )
+        expected_secret = os.getenv("TRADING_API_SECRET", "").strip()
+        if not expected_secret:
+            logger.error("Trading API authentication is not configured; rejecting protected request")
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Trading API authentication is not configured."},
             )
 
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Invalid or missing internal API secret."},
-            headers={"WWW-Authenticate": INTERNAL_API_SECRET_HEADER},
-        )
+        supplied_secret = request.headers.get(TRADING_API_SECRET_HEADER, "")
+        if not supplied_secret or not hmac.compare_digest(supplied_secret, expected_secret):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing trading API secret."},
+                headers={"WWW-Authenticate": TRADING_API_SECRET_HEADER},
+            )
+
+        return await call_next(request)
 
 
 app.add_middleware(TradingAPIAuthMiddleware)

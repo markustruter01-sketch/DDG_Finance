@@ -301,11 +301,7 @@ CREATE TABLE IF NOT EXISTS fleet_equity_snapshots (
     id             BIGSERIAL PRIMARY KEY,
     snapshot_ts    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     bot_id         TEXT NOT NULL,
-    equity_usd     NUMERIC NOT NULL,
-    vault_value_usd NUMERIC,
-    trading_equity_usd NUMERIC,
-    capital_base_usd NUMERIC,
-    snapshot_source TEXT
+    equity_usd     NUMERIC NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_fleet_equity_snapshots_ts
     ON fleet_equity_snapshots (snapshot_ts);
@@ -378,10 +374,7 @@ CREATE TABLE IF NOT EXISTS discord_alert_events (
     http_status    INTEGER,
     error          TEXT,
     CONSTRAINT discord_alert_events_status_check
-        CHECK (status IN (
-            'attempted', 'sent', 'skipped_not_configured',
-            'skipped_not_published', 'failed'
-        )),
+        CHECK (status IN ('attempted', 'sent', 'skipped_not_configured', 'failed')),
     CONSTRAINT discord_alert_events_completion_check
         CHECK (
             (status = 'attempted' AND completed_at IS NULL)
@@ -416,28 +409,6 @@ BEGIN
                 OR
                 (status <> 'attempted' AND completed_at IS NOT NULL)
             );
-    END IF;
-END
-$$;
--- Add the published-environment suppression outcome to databases created
--- before the delivery policy was introduced.
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'discord_alert_events_status_check'
-          AND conrelid = 'discord_alert_events'::regclass
-          AND pg_get_constraintdef(oid) NOT LIKE '%skipped_not_published%'
-    ) THEN
-        ALTER TABLE discord_alert_events
-            DROP CONSTRAINT discord_alert_events_status_check;
-        ALTER TABLE discord_alert_events
-            ADD CONSTRAINT discord_alert_events_status_check
-            CHECK (status IN (
-                'attempted', 'sent', 'skipped_not_configured',
-                'skipped_not_published', 'failed'
-            ));
     END IF;
 END
 $$;
@@ -756,53 +727,6 @@ CREATE TABLE IF NOT EXISTS fleet_equity_history (
 CREATE INDEX IF NOT EXISTS idx_fleet_equity_history_date
     ON fleet_equity_history (snapshot_date DESC);
 
--- Passwordless operator authentication.  Only public credential material and
--- hashed opaque session/challenge identifiers are persisted.
-CREATE TABLE IF NOT EXISTS fleet_passkey_credentials (
-    credential_id  BYTEA PRIMARY KEY,
-    clerk_user_id  TEXT NOT NULL,
-    public_key     BYTEA NOT NULL,
-    sign_count     BIGINT NOT NULL DEFAULT 0,
-    label          TEXT NOT NULL DEFAULT 'This device',
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    last_used_at   TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS idx_fleet_passkey_credentials_user
-    ON fleet_passkey_credentials (clerk_user_id);
-
-CREATE TABLE IF NOT EXISTS fleet_passkey_challenges (
-    challenge_id   TEXT PRIMARY KEY,
-    flow           TEXT NOT NULL CHECK (flow IN ('registration', 'authentication')),
-    clerk_user_id  TEXT,
-    challenge      BYTEA NOT NULL,
-    expires_at     TIMESTAMPTZ NOT NULL,
-    used_at        TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS idx_fleet_passkey_challenges_expiry
-    ON fleet_passkey_challenges (expires_at);
-
-CREATE TABLE IF NOT EXISTS fleet_passkey_sessions (
-    session_hash   TEXT PRIMARY KEY,
-    clerk_user_id  TEXT NOT NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at     TIMESTAMPTZ NOT NULL,
-    revoked_at     TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS idx_fleet_passkey_sessions_expiry
-    ON fleet_passkey_sessions (expires_at);
-
-CREATE TABLE IF NOT EXISTS fleet_passkey_events (
-    id             BIGSERIAL PRIMARY KEY,
-    event_type     TEXT NOT NULL,
-    clerk_user_id  TEXT,
-    credential_id  BYTEA,
-    success        BOOLEAN NOT NULL,
-    failure_code   TEXT,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_fleet_passkey_events_created
-    ON fleet_passkey_events (created_at DESC);
-
 """
 
 # Safe column migrations — run after CREATE TABLE IF NOT EXISTS so the base
@@ -815,10 +739,6 @@ ALTER TABLE trades ADD COLUMN IF NOT EXISTS realized_pnl         DOUBLE PRECISIO
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS slippage_pct         DOUBLE PRECISION;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS is_recon_tracking    BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS recon_event_id       BIGINT;
-ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS vault_value_usd NUMERIC;
-ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS trading_equity_usd NUMERIC;
-ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS capital_base_usd NUMERIC;
-ALTER TABLE fleet_equity_snapshots ADD COLUMN IF NOT EXISTS snapshot_source TEXT;
 """
 
 # ARC 4 backfill: tag existing RECON-* rows so WR/expectancy queries can use the
@@ -1645,51 +1565,19 @@ def get_kraken_equity() -> float:
 
 # ── Equity snapshots ───────────────────────────────────────────────────────
 
-def insert_fleet_equity_snapshots(rows: list[tuple | dict]) -> int:
-    """Write current per-bot snapshots, including vault-exclusion provenance.
-
-    Two-item tuples remain supported for legacy callers, but those rows are
-    intentionally not considered enriched historical sources by the return
-    ledger because they cannot prove vault separation.
-    """
+def insert_fleet_equity_snapshots(rows: list[tuple[str, float]]) -> int:
+    """Write one current equity snapshot for each active fleet bot."""
     if not rows or not is_pg_available():
         return 0
     try:
-        normalised = []
-        for row in rows:
-            if isinstance(row, dict):
-                total = row.get("total_equity_usd", row.get("equity_usd"))
-                if total is None:
-                    continue
-                normalised.append((
-                    row["bot_id"],
-                    float(total),
-                    row.get("vault_value_usd"),
-                    row.get("trading_equity_usd"),
-                    row.get("capital_base_usd"),
-                    row.get("snapshot_source", "portfolio_with_vault_exclusion"),
-                    row.get("snapshot_ts"),
-                ))
-            else:
-                if len(row) < 2:
-                    continue
-                normalised.append((row[0], float(row[1]), None, None, None, "legacy", None))
-        if not normalised:
-            return 0
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
                     """
-                    INSERT INTO fleet_equity_snapshots
-                        (snapshot_ts, bot_id, equity_usd, vault_value_usd,
-                         trading_equity_usd, capital_base_usd, snapshot_source)
-                    VALUES (COALESCE(%s, NOW()), %s, %s, %s, %s, %s, %s)
+                    INSERT INTO fleet_equity_snapshots (snapshot_ts, bot_id, equity_usd)
+                    VALUES (NOW(), %s, %s)
                     """,
-                    [
-                        (snapshot_ts, bot_id, total, vault, trading, capital, source)
-                        for bot_id, total, vault, trading, capital, source, snapshot_ts
-                        in normalised
-                    ],
+                    [(bot_id, float(equity)) for bot_id, equity in rows],
                 )
                 return cur.rowcount
     except Exception as exc:
@@ -1913,12 +1801,7 @@ def complete_discord_alert_event(
     """Finalize an alert audit row while keeping failures non-fatal."""
     if event_id is None or not is_pg_available():
         return
-    if status not in {
-        "sent",
-        "skipped_not_configured",
-        "skipped_not_published",
-        "failed",
-    }:
+    if status not in {"sent", "skipped_not_configured", "failed"}:
         raise ValueError(f"invalid Discord alert status: {status}")
     try:
         with get_conn() as conn:

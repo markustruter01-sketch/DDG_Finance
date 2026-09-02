@@ -66,7 +66,7 @@ TRADING_API_HEALTH_URL = os.environ.get(
     "TRADING_API_HEALTH_URL",
     "http://127.0.0.1:8000/trading-api/fleet/equity",
 )
-TRADING_API_SECRET_HEADER = "X-Trading-API-Internal-Secret"
+TRADING_API_SECRET_HEADER = "X-Trading-API-Secret"
 RUNNER_HEALTH_TIMEOUT_SECONDS = float(
     os.environ.get("RUNNER_HEALTH_TIMEOUT_SECONDS", "5")
 )
@@ -363,20 +363,6 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
     logger.info("Scheduler | Registered: daily_discord_pnl_report (daily 05:00 AEST Brisbane)")
 
     scheduler.add_job(
-        func=_daily_discord_health_digest,
-        trigger=CronTrigger(
-            hour=5,
-            minute=0,
-            timezone="Australia/Brisbane",
-        ),
-        id="daily_discord_health_digest",
-        name="Discord Daily Platform Health Digest (05:00 AEST)",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
-    logger.info("Scheduler | Registered: daily_discord_health_digest (daily 05:00 AEST Brisbane)")
-
-    scheduler.add_job(
         func=_daily_benchmark_snapshot,
         trigger=CronTrigger(
             day_of_week="mon-fri",
@@ -473,14 +459,14 @@ def _register_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger=CronTrigger(
             hour=20,
             minute=15,
-            timezone="America/New_York",
+            timezone="UTC",
         ),
         id="daily_bot_returns_snapshot",
-        name="Daily Per-Bot Return Series (20:15 ET)",
+        name="Daily Per-Bot Return Series (20:15 UTC)",
         replace_existing=True,
         misfire_grace_time=600,
     )
-    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 ET)")
+    logger.info("Scheduler | Registered: daily_bot_returns_snapshot (daily 20:15 UTC)")
 
     # Per-bot vault jobs are fail-closed by PER_BOT_VAULT_ENABLED. They are
     # registered in development so the schedule is visible, but do nothing
@@ -663,17 +649,6 @@ async def _probe_runner_liveness() -> None:
             )
         if was_alerted:
             alert_transition = "recovered"
-            try:
-                from notifications.discord import alert_critical
-
-                alert_critical(
-                    "Recovered: published trading runner",
-                    f"Published trading runner health checks recovered at {runner_url}.",
-                )
-            except Exception as alert_exc:
-                logger.error(
-                    f"Scheduler | runner liveness recovery alert failed: {type(alert_exc).__name__}"
-                )
         _runner_liveness_alerted = False
     except Exception as exc:
         result = "unreachable"
@@ -787,33 +762,27 @@ async def _probe_trading_api_liveness() -> None:
                 f"Scheduler | TRADING API LIVENESS ALERT | {message}"
             )
             try:
-                from core.degradation_tracker import record_degradation
-
-                record_degradation(
-                    component="platform_core",
-                    severity="error",
-                    error_type="trading_api_liveness",
-                    message=message,
-                    detail=f"consecutive_failures={_trading_api_liveness_failures}",
+                from notifications.discord import alert_critical
+                alert_critical(
+                    "Published trading API protected endpoint unhealthy",
+                    message,
+                    fields=[
+                        {
+                            "name": "Consecutive failures",
+                            "value": str(_trading_api_liveness_failures),
+                            "inline": True,
+                        },
+                        {
+                            "name": "Probe timeout",
+                            "value": f"{RUNNER_HEALTH_TIMEOUT_SECONDS}s",
+                            "inline": True,
+                        },
+                    ],
                 )
             except Exception as alert_exc:
                 logger.error(
-                    "Scheduler | trading API liveness finding persistence failed: "
-                    f"{type(alert_exc).__name__}"
+                    f"Scheduler | trading API liveness alert failed: {alert_exc}"
                 )
-    if _trading_api_liveness_failures == 0:
-        try:
-            from core.degradation_tracker import mark_resolved
-
-            mark_resolved(
-                "platform_core",
-                "trading_api_liveness",
-                "protected API liveness recovered",
-            )
-        except Exception as exc:
-            logger.debug(
-                f"Scheduler | trading API liveness recovery persistence failed: {type(exc).__name__}"
-            )
 
 
 async def _deploy_hash_check() -> None:
@@ -842,35 +811,21 @@ async def _deploy_hash_check() -> None:
             _running = "unknown"
 
         if _running == "unknown" or latest != _running:
-            from core.degradation_tracker import record_degradation
-
-            record_degradation(
-                component="platform_core",
-                severity="warning",
-                error_type="deploy_hash_mismatch",
-                message=(
-                    f"Running process {_running} differs from repo HEAD {latest}; "
-                    "trading-api is serving stale code."
+            from notifications.discord import alert_critical
+            alert_critical(
+                title="⚠️ Deploy Hash Mismatch",
+                description=(
+                    f"Running process: `{_running}`\n"
+                    f"Repo HEAD: `{latest}`\n\n"
+                    f"The trading-api is serving stale code. "
+                    f"Restart the workflow to pick up the latest commit."
                 ),
-                detail="Restart the workflow to pick up the latest commit.",
             )
             logger.warning(
                 f"Scheduler | deploy_hash_check: MISMATCH "
                 f"running={_running} latest={latest}"
             )
         else:
-            try:
-                from core.degradation_tracker import mark_resolved
-
-                mark_resolved(
-                    "platform_core",
-                    "deploy_hash_mismatch",
-                    "running hash matches repository HEAD",
-                )
-            except Exception as exc:
-                logger.debug(
-                    f"Scheduler | deploy hash recovery persistence failed: {type(exc).__name__}"
-                )
             logger.info(f"Scheduler | deploy_hash_check: OK — both {latest}")
     except Exception as exc:
         logger.debug(f"Scheduler | deploy_hash_check: failed (non-fatal): {exc}")
@@ -1120,7 +1075,6 @@ def is_auto_trading_enabled() -> bool:
 
 _ALWAYS_ACTIVE_JOBS = {
     "daily_discord_pnl_report",
-    "daily_discord_health_digest",
     "nightly_walk_forward",  # monitoring job — runs even when trading is disabled
 }
 
@@ -1161,21 +1115,6 @@ async def _daily_discord_pnl_report() -> None:
         logger.info("Scheduler | daily_discord_pnl_report: sent successfully")
     except Exception as exc:
         logger.error(f"Scheduler | daily_discord_pnl_report FAILED: {exc}")
-
-
-async def _daily_discord_health_digest() -> None:
-    """
-    Fires every day at 05:00 AEST (Brisbane) and summarizes persisted findings
-    plus current runner, cycle, invariant, and reconciliation state.
-    """
-    logger.info("Scheduler | JOB STARTING: daily_discord_health_digest")
-    try:
-        from notifications.discord import notify_daily_health_digest
-
-        await asyncio.to_thread(notify_daily_health_digest)
-        logger.info("Scheduler | daily_discord_health_digest: prepared successfully")
-    except Exception as exc:
-        logger.error(f"Scheduler | daily_discord_health_digest FAILED: {type(exc).__name__}")
 
 
 async def _per_bot_vault_deployment() -> None:

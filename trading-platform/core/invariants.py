@@ -86,7 +86,6 @@ class InvariantInputs:
     vault_symbols: dict[str, set[str]] | None = None
     fleet_equity: float | None = None
     cycle_rows: dict[str, dict[str, Any]] | None = None
-    paused_bots: set[str] | None = None
     cycle_intervals: dict[str, float] | None = None
     reconciliation_rows: list[dict[str, Any]] | None = None
     unresolved_degradations: list[dict[str, Any]] | None = None
@@ -472,13 +471,7 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
     actual_rows: list[dict[str, Any]] = []
     stale: list[dict[str, Any]] = []
     unreadable: list[dict[str, Any]] = []
-    paused_bots = inputs.paused_bots
-    monitored_bots = [
-        bot_id
-        for bot_id in ACTIVE_BOTS
-        if paused_bots is None or bot_id not in paused_bots
-    ]
-    for bot_id in monitored_bots:
+    for bot_id in ACTIVE_BOTS:
         row = inputs.cycle_rows.get(bot_id)
         success_at = _parse_datetime(row.get("last_success_at")) if row else None
         threshold = CYCLE_FRESHNESS_MULTIPLIER * intervals[bot_id]
@@ -496,14 +489,7 @@ def check_cycle_freshness(inputs: InvariantInputs) -> dict[str, Any]:
         if age > threshold:
             stale.append(item)
 
-    actual = {
-        "bots": actual_rows,
-        "missing_or_unreadable": unreadable,
-        "paused_bots_excluded": sorted(
-            bot_id for bot_id in ACTIVE_BOTS
-            if paused_bots is not None and bot_id in paused_bots
-        ),
-    }
+    actual = {"bots": actual_rows, "missing_or_unreadable": unreadable}
     if unreadable:
         return _unknown(
             name,
@@ -637,16 +623,10 @@ def check_degradations(inputs: InvariantInputs) -> dict[str, Any]:
             message="Cannot verify unresolved degradation events.",
             source_key="degradations",
         )
-    monitoring_events = [
-        event
-        for event in inputs.unresolved_degradations
-        if str(event.get("component", "")).strip().lower() == "invariant"
-    ]
     events = [
         event
         for event in inputs.unresolved_degradations
         if str(event.get("severity", "")).lower() in UNRESOLVED_HIGH_SEVERITIES
-        and str(event.get("component", "")).strip().lower() != "invariant"
     ]
     # Keep operator output bounded while preserving the exact count and a
     # useful sample.  Dumping hundreds of historical rows makes the scheduled
@@ -655,7 +635,6 @@ def check_degradations(inputs: InvariantInputs) -> dict[str, Any]:
         "unresolved_count": len(events),
         "events_sample": events[:10],
         "sample_truncated": len(events) > 10,
-        "monitoring_invariant_events_excluded": len(monitoring_events),
     }
     if events:
         return _failed(
@@ -1012,7 +991,6 @@ INVARIANT_FUNCTIONS: tuple[Callable[[InvariantInputs], dict[str, Any]], ...] = (
 
 def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
     """Read all database inputs using SELECT statements only."""
-    timestamp = now or datetime.now(timezone.utc)
     dsn = os.environ.get("INVARIANTS_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not dsn:
         raise RuntimeError("no database connection is configured")
@@ -1022,7 +1000,6 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
         "ledger_positions": {bot_id: [] for bot_id in ACTIVE_BOTS},
         "vault_symbols": {bot_id: set() for bot_id in ACTIVE_BOTS},
         "cycle_rows": {},
-        "paused_bots": set(),
         "reconciliation_rows": [],
         "unresolved_degradations": [],
     }
@@ -1104,17 +1081,6 @@ def read_database_inputs(now: datetime | None = None) -> dict[str, Any]:
                     "cycle_count": cycle_count,
                     "status": status,
                 }
-
-            cur.execute(
-                """
-                SELECT bot_id
-                FROM bots_state
-                WHERE bot_id = ANY(%s)
-                  AND paused IS TRUE
-                """,
-                (list(ACTIVE_BOTS),),
-            )
-            result["paused_bots"] = {bot_id for (bot_id,) in cur.fetchall()}
 
             cur.execute(
                 """

@@ -4,7 +4,7 @@ import type { RunnerStatusResponse } from "@/hooks/useFleetData";
 type RunnerStatusIndicatorProps = {
   status?: RunnerStatusResponse;
   isError?: boolean;
-  variant?: "mobile" | "observatory" | "summary";
+  variant?: "mobile" | "observatory";
 };
 
 function formatAge(seconds: number | null | undefined) {
@@ -28,7 +28,6 @@ export default function RunnerStatusIndicator({
   variant = "mobile",
 }: RunnerStatusIndicatorProps) {
   const verdict = isError ? "UNKNOWN" : status?.verdict ?? "UNKNOWN";
-  const isSummary = variant === "summary";
   const config = {
     ALIVE: {
       label: "RUNNER ALIVE",
@@ -70,38 +69,23 @@ export default function RunnerStatusIndicator({
       aria-label="Runner status"
       data-testid="runner-status-indicator"
       data-runner-verdict={verdict}
-      className={
-        variant === "observatory"
-          ? "obs-runner-status"
-          : isSummary
-            ? "summary-runner-status"
-            : "runner-status-indicator"
-      }
+      className={variant === "observatory" ? "obs-runner-status" : "runner-status-indicator"}
       style={{
         display: "flex",
-        alignItems: isSummary ? "flex-start" : "center",
-        gap: isSummary ? 8 : 10,
-        padding: isSummary
-          ? 0
-          : variant === "observatory"
-            ? "12px 15px"
-            : "10px 13px",
+        alignItems: "center",
+        gap: 10,
+        padding: variant === "observatory" ? "12px 15px" : "10px 13px",
         color: config.color,
-        background: isSummary ? "transparent" : config.background,
-        border: isSummary ? 0 : `1px solid ${config.border}`,
-        borderRadius: isSummary ? 0 : variant === "observatory" ? 12 : 10,
-        backdropFilter: isSummary ? "none" : "blur(10px)",
-        WebkitBackdropFilter: isSummary ? "none" : "blur(10px)",
+        background: config.background,
+        border: `1px solid ${config.border}`,
+        borderRadius: variant === "observatory" ? 12 : 10,
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
       }}
     >
-      <Icon
-        size={variant === "observatory" ? 18 : 16}
-        aria-hidden="true"
-        className="runner-status-icon"
-      />
+      <Icon size={variant === "observatory" ? 18 : 16} aria-hidden="true" />
       <div style={{ minWidth: 0 }}>
         <div
-          className="runner-status-label"
           style={{
             fontSize: variant === "observatory" ? 11 : 10,
             fontWeight: 900,
@@ -111,13 +95,9 @@ export default function RunnerStatusIndicator({
           {config.label}
         </div>
         <div
-          className="runner-status-detail"
           style={{
             marginTop: 3,
-            color:
-              variant === "observatory"
-                ? "var(--muted, #98b5b1)"
-                : "rgba(15,23,42,0.72)",
+            color: variant === "observatory" ? "var(--muted, #98b5b1)" : "rgba(15,23,42,0.72)",
             fontSize: 10,
             letterSpacing: "0.04em",
           }}
@@ -127,13 +107,9 @@ export default function RunnerStatusIndicator({
       </div>
       {status?.threshold_seconds != null && verdict !== "UNKNOWN" && (
         <span
-          className="runner-status-threshold"
           style={{
             marginLeft: "auto",
-            color:
-              variant === "observatory"
-                ? "var(--dim, #789694)"
-                : "rgba(15,23,42,0.56)",
+            color: variant === "observatory" ? "var(--dim, #789694)" : "rgba(15,23,42,0.56)",
             fontSize: 9,
             whiteSpace: "nowrap",
           }}

@@ -1,0 +1,89 @@
+production BACKUP MANIFEST
+archive_path=/home/runner/workspace/backups/production-neon-20260903.dump
+archive_size_bytes=608145
+archive_sha256=10aa1d571bed896e0b8da40ad005c04db3ebcfad403e4254108a9880b5b4bd07
+database=neondb
+archive_table_data_entries=73
+live_table_count=73
+source=NEON_DATABASE_URL
+
+TABLES (live row count; archive row count; table-data entry)
+_system.replit_database_migrations_v1	329	329	YES
+public.ai_interventions	0	0	YES
+public.alpaca_etf_positions	28	28	YES
+public.benchmark_snapshots	87	87	YES
+public.bot2_earnings_dates	0	0	YES
+public.bot2_mechanical_asset_audit	0	0	YES
+public.bot2_mechanical_asset_coverage	0	0	YES
+public.bot2_mechanical_assets	0	0	YES
+public.bot2_prices	0	0	YES
+public.bot2_sip_ingest_attempts	0	0	YES
+public.bot2_sp500_membership_events	0	0	YES
+public.bot2_sp500_price_meta	0	0	YES
+public.bot2_sp500_prices	0	0	YES
+public.bot3_decision_log	534	534	YES
+public.bot3_inflation_hedge_prices	0	0	YES
+public.bot3_positions	4	4	YES
+public.bot_cycle_health	3	3	YES
+public.bot_daily_returns	24	24	YES
+public.bot_drawdown_hwm	1	1	YES
+public.bot_evaluation_history	135	135	YES
+public.bot_portfolio	3	3	YES
+public.bots_state	7	7	YES
+public.capital_injections	1	1	YES
+public.crypto_historical_prices	0	0	YES
+public.discord_alert_events	43	43	YES
+public.execution_post_mortems	371	371	YES
+public.exploration_runs	2	2	YES
+public.fleet_commander_chat	30	30	YES
+public.fleet_equity_history	12	12	YES
+public.fleet_equity_snapshots	1161	1161	YES
+public.fleet_halt	1	1	YES
+public.fleet_passkey_challenges	0	0	YES
+public.fleet_passkey_credentials	0	0	YES
+public.fleet_passkey_events	1	1	YES
+public.fleet_passkey_sessions	0	0	YES
+public.hardcoded_rules	0	0	YES
+public.historical_prices	3600	3600	YES
+public.jerome_groq_decisions	18	18	YES
+public.jerome_positions	13	13	YES
+public.kill_switch_acknowledgements	0	0	YES
+public.kill_switch_events	0	0	YES
+public.kill_switch_state	1	1	YES
+public.kraken_backtest_results	63	63	YES
+public.kraken_heartbeat	1	1	YES
+public.kraken_wfo_results	54	54	YES
+public.llm_learnings	170	170	YES
+public.market_state	591	591	YES
+public.math_audit_log	1000	1000	YES
+public.oos_envelope	4	4	YES
+public.oracle_profit_reserve	9	9	YES
+public.per_bot_vault_accounts	3	3	YES
+public.per_bot_vault_contributions	0	0	YES
+public.per_bot_vault_deployment_queue	3	3	YES
+public.per_bot_vault_holdings	6	6	YES
+public.per_bot_vault_value_history	0	0	YES
+public.performance_snapshots	110	110	YES
+public.position_entry_times	47	47	YES
+public.ratchet_stops	17	17	YES
+public.reconciliation_events	7	7	YES
+public.reconciliation_log	202	202	YES
+public.regional_scan_log	158	158	YES
+public.research_ledger	0	0	YES
+public.review_flags	7	7	YES
+public.runner_account_locks	3	3	YES
+public.runner_heartbeat	10	10	YES
+public.runner_liveness_audit	3280	3276	YES
+public.saas_users	0	0	YES
+public.shadow_signals	2916	2916	YES
+public.stf_activation_flags	1	1	YES
+public.system_degradations	645	645	YES
+public.trades	612	612	YES
+public.vault_ledger	1	1	YES
+public.vault_migrations	2	2	YES
+
+archive_entries_missing_from_live_inventory=NONE
+archive_entries_not_in_live_inventory=NONE
+
+SENSITIVE DATA SCAN (row data only; values never printed)
+No URL, webhook, credential/token keyword, known token-shape, embedded-credential URL, or sensitive-query URL matches found in row data.

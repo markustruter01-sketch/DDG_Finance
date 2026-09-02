@@ -1,0 +1,63 @@
+development BACKUP MANIFEST
+archive_path=/home/runner/workspace/backups/development-neon-20260903.dump
+archive_size_bytes=312400
+archive_sha256=c3c0218d157979585d73b7853cbc972677b766c78e24f71ab81bbf11f3bea234
+database=neondb
+archive_table_data_entries=47
+live_table_count=47
+source=DEV_DATABASE_URL
+
+TABLES (live row count; archive row count; table-data entry)
+public.algo_short_positions	0	0	YES
+public.capital_injections	0	0	YES
+public.corporate_actions_dividends	0	0	YES
+public.equity_snapshots	2	2	YES
+public.execution_post_mortems	0	0	YES
+public.fleet_commander_chat	0	0	YES
+public.fleet_halt	1	1	YES
+public.forex_heartbeat	0	0	YES
+public.forex_portfolio	0	0	YES
+public.forex_trades	0	0	YES
+public.forex_vault	0	0	YES
+public.hardcoded_rules	0	0	YES
+public.historical_news_rag	0	0	YES
+public.historical_prices	7200	7200	YES
+public.intraday_price_action	0	0	YES
+public.kill_switch_state	0	0	YES
+public.kraken_adaptive_params	4	4	YES
+public.kraken_current_portfolio	1	1	YES
+public.kraken_current_positions	5	5	YES
+public.kraken_current_signal_scan	320	320	YES
+public.kraken_current_trades	0	0	YES
+public.kraken_health_snapshots	0	0	YES
+public.kraken_heartbeat	6	6	YES
+public.kraken_pair_params	0	0	YES
+public.kraken_pair_performance	0	0	YES
+public.kraken_portfolio	5	5	YES
+public.kraken_trades	0	0	YES
+public.kraken_wfo_results	0	0	YES
+public.llm_learnings	28	28	YES
+public.math_audit_log	6	6	YES
+public.oracle_profit_reserve	0	0	YES
+public.oracle_scan_log	0	0	YES
+public.performance_snapshots	0	0	YES
+public.playing_with_neon	20	20	YES
+public.poseidon_momentum_trades	0	0	YES
+public.poseidon_pair_params	0	0	YES
+public.poseidon_portfolio	1	1	YES
+public.poseidon_trades	0	0	YES
+public.position_entry_times	0	0	YES
+public.ratchet_stops	0	0	YES
+public.review_flags	1	1	YES
+public.stf_activation_flags	0	0	YES
+public.system_degradations	0	0	YES
+public.trades	0	0	YES
+public.vault_ledger	0	0	YES
+public.vault_migrations	2	2	YES
+public.vpin_rejections	0	0	YES
+
+archive_entries_missing_from_live_inventory=NONE
+archive_entries_not_in_live_inventory=NONE
+
+SENSITIVE DATA SCAN (row data only; values never printed)
+No URL, webhook, credential/token keyword, known token-shape, embedded-credential URL, or sensitive-query URL matches found in row data.

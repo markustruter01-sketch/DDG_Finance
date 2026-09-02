@@ -6,48 +6,56 @@ id = "15P0TxQcEb7yLvxsKpkB9"
 uri = "file://Technical_Logic_Blueprint.md"
 type = "text"
 title = "Technical Logic Blueprint — AI Trading Platform"
+logical_id = "57b84448-c4f4-43c8-93c2-33e05be3ec5c"
 
 [[outputs]]
 id = "LVpR9Qre07z721iKo44v4"
 uri = "file://.local/platform_technical_overview.md"
 type = "text"
 title = "AlgoEdge Trading Platform — Complete Technical Overview"
+logical_id = "0bdb6e0e-faab-45c0-9798-e0bb05f12d29"
 
 [[outputs]]
 id = "wktTUnkeW_LqKFNR4Wb-E"
 uri = "file://.local/scalp_bot_logic_breakdown.md"
 type = "text"
 title = "Crypto Scalp Bot Logic — Complete Technical Breakdown"
+logical_id = "13a47470-2b27-46ef-ac89-c4f1098c989d"
 
 [[outputs]]
 id = "C9y_tN4PMgMkcMp5bU77q"
 uri = "file://trading-report-2026-04-05_latest.txt"
 type = "text"
 title = "Trading Report (Plain Text)"
+logical_id = "cfc141a3-e494-42e8-a921-d5e67de5a0df"
 
 [[outputs]]
 id = "9O6YPAz4ZKYZfeB1KmOIx"
 uri = "file://report-p1.txt"
 type = "text"
 title = "Part 1: System Status + Oracle/Alpaca"
+logical_id = "0081c370-71c9-4f54-980a-6bbd15170dd5"
 
 [[outputs]]
 id = "yOe9hhUUkppTSHmRm7NlQ"
 uri = "file://report-p2.txt"
 type = "text"
 title = "Part 2: Kraken Fleet + Correlation Matrix"
+logical_id = "e6be876c-5d7a-4dc1-929e-4b09076ce8d3"
 
 [[outputs]]
 id = "Y0r0pUPHhwUYihr1XuWhm"
 uri = "file://report-p3.txt"
 type = "text"
 title = "Part 3: Apex Predator + Navigator + Execution Quality"
+logical_id = "e7cb8e82-6447-45f8-b34d-d4148508725c"
 
 [[outputs]]
 id = "w34mW7xFPcBvRZQWHBKXG"
 uri = "file://report-p4.txt"
 type = "text"
 title = "Part 4: Fleet Risk + Combined Summary + Journal + Strategy"
+logical_id = "626bcd38-a410-432d-b8f7-fa9f3650790b"
 
 [[outputs]]
 id = "_Nsy87JoeQZUTm51Tkpf5"
@@ -55,6 +63,7 @@ uri = "file://trading-platform/.local/bot2_sip_coverage_report.md"
 type = "text"
 title = "Bot 2 SIP coverage report"
 description = "Full 2018-01-02 through 2026-08-27 SIP coverage, per-year counts, monthly point-in-time screening, recalibrated floor, and safety interpretation."
+logical_id = "3c375c20-df50-425f-8947-b6b4ac73e404"
 
 [[outputs]]
 id = "aGFmentutayxJIg9_PiTq"
@@ -62,6 +71,7 @@ uri = "file://trading-platform/.local/bot2_momentum_rank500_backtest_report.md"
 type = "text"
 title = "Bot 2 rank-500 backtest report"
 description = "Raw labelled development-only output for immutable experiment 18, including window metrics, benchmarks, 1,000 random controls, sector diagnostics, largest drawdown holdings, and June snapshots."
+logical_id = "96661ab7-532c-43d4-aa15-58e2186fbb66"
 
 [[outputs]]
 id = "ZkBDDvnqMHiN3eEBrSjYN"
@@ -69,6 +79,7 @@ uri = "file://trading-platform/.local/bot2_momentum_rank500_regime_report.md"
 type = "text"
 title = "Bot 2 rank-500 regime-filter experiment 19 report"
 description = "Raw labelled development-only report with per-window metrics, 1,000 random-entry return vectors and exact percentiles, SPY comparison, 2021-2022 regime trace, diagnostics, and immutable FAIL evaluation."
+logical_id = "84696347-0979-4b75-b0d2-8c748ff1327d"
 
 [[outputs]]
 id = "YEQDBTxudkeOsTki0bmPW"
@@ -76,6 +87,7 @@ uri = "file://trading-platform/.local/bot2_strategy_bench.json"
 type = "unspecified"
 title = "Bot 2 strategy backtest bench dataset"
 description = "Development read-only monthly browser backtest dataset from the stored adjusted SIP/IEX panel and shared 500-symbol screener, with strictly prior-data momentum, next-month forward returns, six-month monthly volatility, and SPY regime state."
+logical_id = "b5036a03-cca6-4aa7-836e-e7a8c4108d60"
 
 [[outputs]]
 id = "-d-6T3Y3DeRmvywu39986"
@@ -83,6 +95,7 @@ uri = "file://screenshots/dashboard-unknown-home.jpg"
 type = "image"
 title = "Dashboard unknown home state"
 description = "Home/Observatory with missing API data and an amber KILL SWITCH UNKNOWN indicator."
+logical_id = "6c84afb1-2e55-40ed-822e-58c51a864e26"
 
 [[outputs]]
 id = "RUzWH53QcpShxDQQfpDuk"
@@ -90,6 +103,7 @@ uri = "file://screenshots/dashboard-unknown-math-audit.jpg"
 type = "image"
 title = "Dashboard unavailable math audit"
 description = "Math audit tab with the explicit Audit feed unavailable message and no invented event IDs."
+logical_id = "4397cea1-1202-4fa0-809a-e4a8acf82467"
 
 [[outputs]]
 id = "Ci2qjzXwdaOwyPGYJ_lOq"
@@ -97,6 +111,7 @@ uri = "file://screenshots/dashboard-unknown-performance.jpg"
 type = "image"
 title = "Dashboard unknown performance state"
 description = "Performance tab with unavailable sentiment and an amber UNKNOWN kill-switch status."
+logical_id = "c7b876fe-93c4-4770-874c-8372fb248c91"
 
 [[outputs]]
 id = "gfnuljT31xClhi4IKZi6a"
@@ -104,6 +119,7 @@ uri = "file://screenshots/dashboard-unknown-design4.jpg"
 type = "image"
 title = "Dashboard unknown arcade state"
 description = "Design 4 with the visually distinct UNKNOWN · DATA UNAVAILABLE kill-switch state."
+logical_id = "7ab2d8ed-5507-4fba-9d85-2b4f066eacfe"
 
 [[outputs]]
 id = "0Cdnx6DDxljSFgtqjSSh_"
@@ -111,3 +127,88 @@ uri = "file://screenshots/dashboard-unknown-design5.jpg"
 type = "image"
 title = "Dashboard unknown space-fleet state"
 description = "Design 5 with the visually distinct UNKNOWN kill-switch state."
+logical_id = "d93dc5f8-e6bf-490d-ace2-c9c788ed60ac"
+
+[[outputs]]
+id = "0N5sfLY2ZjoIsU2fKujXM"
+uri = "file://backups/production-neon-20260903.dump"
+type = "unspecified"
+title = "Production PostgreSQL backup"
+description = "Complete compressed custom-format pg_dump archive from NEON_DATABASE_URL. SHA-256: 10aa1d571bed896e0b67c244ad005c04db3ebcfad403e4254108a9880b5b4bd07."
+logical_id = "61673a74-9447-4447-9fe9-0d3ccf398bb7"
+content_hash = "sha256:10aa1d571bed896e0b8da40ad005c04db3ebcfad403e4254108a9880b5b4bd07"
+size = 608145
+mtime_ms = 1788391767904
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/61673a74-9447-4447-9fe9-0d3ccf398bb7/3638cf14-940b-438f-ad2a-df2b9e2326fb"
+storage_version_token = "1788392053603400"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "jJuHRFAepLi6QRrbAZX4b"
+uri = "file://backups/production-neon-20260903.manifest.txt"
+type = "text"
+title = "Production backup manifest"
+description = "All 73 production tables with live and archive row counts, required-table checks, and sensitive-data scan results."
+logical_id = "2828c7bf-49c1-48c1-a26f-5a2d5235e3ba"
+content_hash = "sha256:c573b1c17ce5d52780dbe8e7a6fde7b6b4716afd6e93909447846f618e44c3af"
+size = 3296
+mtime_ms = 1788392003140
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/2828c7bf-49c1-48c1-a26f-5a2d5235e3ba/ed95f3f5-29b7-4f03-b893-505aaea0a13b"
+storage_version_token = "1788392054205829"
+content_type = "text/plain"
+
+[[outputs]]
+id = "PUc1K79JgPeXhFyJ6XMll"
+uri = "file://backups/production-neon-20260903.dump.sha256"
+type = "unspecified"
+title = "Production backup checksum"
+description = "SHA-256 checksum for independently verifying the production archive after download."
+logical_id = "ae970076-7130-4e42-b818-80c3f0bf05ee"
+content_hash = "sha256:3741da047e374c8997f296cc6e13806da9a8695fe4a39b2f0c55dbcb1b4776e8"
+size = 104
+mtime_ms = 1788391768056
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/ae970076-7130-4e42-b818-80c3f0bf05ee/a8ed1cd4-7708-4217-a982-75f11eb6ccda"
+storage_version_token = "1788392055013447"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "DUU_6lLmfZ53l4YSO-2x9"
+uri = "file://backups/development-neon-20260903.dump"
+type = "unspecified"
+title = "Development PostgreSQL backup"
+description = "Complete compressed custom-format pg_dump archive from DEV_DATABASE_URL. SHA-256: c3c0218d157979585d73b7853cbc972677b766c78e24f71ab81bbf11f3bea234."
+logical_id = "c4329404-a9c4-4920-ba82-4840c5672583"
+content_hash = "sha256:c3c0218d157979585d73b7853cbc972677b766c78e24f71ab81bbf11f3bea234"
+size = 312400
+mtime_ms = 1788391913835
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/c4329404-a9c4-4920-ba82-4840c5672583/d9e7f709-5e0a-48f0-a4b6-1bb068c1b575"
+storage_version_token = "1788392056180007"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "d7MADNW0nuPvn-bbLs3fR"
+uri = "file://backups/development-neon-20260903.manifest.txt"
+type = "text"
+title = "Development backup manifest"
+description = "All 47 development tables with live and archive row counts and sensitive-data scan results."
+logical_id = "2d440124-49f8-4472-8e37-8edad2afdc92"
+content_hash = "sha256:b45f978315e8ef90b7c873ef9bfef57317c9a0160fceb79794fb2ef21775f4b2"
+size = 2246
+mtime_ms = 1788392007682
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/2d440124-49f8-4472-8e37-8edad2afdc92/b8ed24f7-12ff-4284-9fe3-1ca3bf9f27e6"
+storage_version_token = "1788392057128159"
+content_type = "text/plain"
+
+[[outputs]]
+id = "K5yzLPvXIcw3aPYYAU0hf"
+uri = "file://backups/development-neon-20260903.dump.sha256"
+type = "unspecified"
+title = "Development backup checksum"
+description = "SHA-256 checksum for independently verifying the development archive after download."
+logical_id = "838c0317-332d-4693-8b17-d719b0a40266"
+content_hash = "sha256:c67d51eb0199e1049689fcf10791bb8b93d04c3b6b607c9858e2914e488548df"
+size = 105
+mtime_ms = 1788391913977
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/838c0317-332d-4693-8b17-d719b0a40266/adb97fd5-8e8c-4981-818a-5f5df89833bd"
+storage_version_token = "1788392057717875"
+content_type = "application/octet-stream"

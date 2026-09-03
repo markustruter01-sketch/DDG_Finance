@@ -14,6 +14,7 @@ import json
 import random
 import statistics
 import sys
+from array import array
 from bisect import bisect_left
 from collections import defaultdict
 from datetime import date, timedelta
@@ -25,7 +26,7 @@ _PLATFORM = _ROOT / "trading-platform"
 if str(_PLATFORM) not in sys.path:
     sys.path.insert(0, str(_PLATFORM))
 
-from db.postgres import get_conn  # noqa: E402
+from db.research_postgres import get_research_conn as get_conn  # noqa: E402
 from core.equity_universe import (  # noqa: E402
     eligible_asset_records,
     last_screen_observations,
@@ -133,6 +134,90 @@ class CompactSeries:
         self.bars_sorted = True
 
 
+class _PackedDays:
+    """Date sequence backed by four-byte ordinals instead of date objects."""
+
+    __slots__ = ("_ordinals",)
+
+    def __init__(self, ordinals: array) -> None:
+        self._ordinals = ordinals
+
+    def __len__(self) -> int:
+        return len(self._ordinals)
+
+    def __getitem__(self, index: int | slice) -> date | list[date]:
+        if isinstance(index, slice):
+            return [date.fromordinal(value) for value in self._ordinals[index]]
+        return date.fromordinal(self._ordinals[index])
+
+    def __iter__(self):
+        for ordinal in self._ordinals:
+            yield date.fromordinal(ordinal)
+
+
+class _PackedBars:
+    """Bar sequence that materializes only the rows a simulator accesses."""
+
+    __slots__ = ("_days", "_open", "_high", "_low", "_close", "_volume")
+
+    def __init__(
+        self,
+        days: array,
+        opens: array,
+        highs: array,
+        lows: array,
+        closes: array,
+        volumes: array,
+    ) -> None:
+        self._days = days
+        self._open = opens
+        self._high = highs
+        self._low = lows
+        self._close = closes
+        self._volume = volumes
+
+    def __len__(self) -> int:
+        return len(self._days)
+
+    def __getitem__(self, index: int | slice) -> CompactBar | list[CompactBar]:
+        if isinstance(index, slice):
+            return [self[position] for position in range(*index.indices(len(self)))]
+        return CompactBar(
+            date.fromordinal(self._days[index]),
+            self._open[index],
+            self._high[index],
+            self._low[index],
+            self._close[index],
+            self._volume[index],
+        )
+
+    def __iter__(self):
+        for index in range(len(self)):
+            yield self[index]
+
+
+class PackedSeries:
+    """Series-compatible packed storage for large research panels."""
+
+    __slots__ = ("symbol", "bars", "days", "by_date", "bars_sorted")
+
+    def __init__(
+        self,
+        symbol: str,
+        days: array,
+        opens: array,
+        highs: array,
+        lows: array,
+        closes: array,
+        volumes: array,
+    ) -> None:
+        self.symbol = symbol
+        self.days = _PackedDays(days)
+        self.bars = _PackedBars(days, opens, highs, lows, closes, volumes)
+        self.by_date = _DateBarLookup(self.days, self.bars)
+        self.bars_sorted = True
+
+
 def _jsonable(value: Any) -> Any:
     if isinstance(value, date):
         return value.isoformat()
@@ -184,8 +269,8 @@ def _load_assets() -> tuple[list[dict[str, Any]], set[str]]:
 
 def _load_compact_panel(
     symbols: set[str], end: date
-) -> dict[str, CompactSeries]:
-    grouped: dict[str, list[CompactBar]] = defaultdict(list)
+) -> dict[str, PackedSeries]:
+    grouped: dict[str, dict[str, array]] = {}
     with get_conn() as conn:
         with conn.cursor(name="bot2_rank500_backtest_panel") as cur:
             cur.execute(
@@ -208,25 +293,40 @@ def _load_compact_panel(
                 for symbol, day, opn, high, low, close, volume in rows:
                     if any(value is None for value in (opn, high, low, close, volume)):
                         continue
-                    grouped[str(symbol).upper()].append(
-                        CompactBar(
-                            day,
-                            float(opn),
-                            float(high),
-                            float(low),
-                            float(close),
-                            float(volume),
-                        )
-                    )
+                    key = str(symbol).upper()
+                    if key not in grouped:
+                        grouped[key] = {
+                            "days": array("I"),
+                            "open": array("d"),
+                            "high": array("d"),
+                            "low": array("d"),
+                            "close": array("d"),
+                            "volume": array("d"),
+                        }
+                    packed = grouped[key]
+                    packed["days"].append(day.toordinal())
+                    packed["open"].append(float(opn))
+                    packed["high"].append(float(high))
+                    packed["low"].append(float(low))
+                    packed["close"].append(float(close))
+                    packed["volume"].append(float(volume))
     series = {
-        symbol: CompactSeries(symbol, bars)
-        for symbol, bars in grouped.items()
-        if bars
+        symbol: PackedSeries(
+            symbol,
+            values["days"],
+            values["open"],
+            values["high"],
+            values["low"],
+            values["close"],
+            values["volume"],
+        )
+        for symbol, values in grouped.items()
+        if values["days"]
     }
     print(
         f"panel_loaded | symbols={len(series)} "
         f"| bars={sum(len(data.bars) for data in series.values())} "
-        f"| from={WARMUP_START} | through={end} | storage=compact_streamed"
+        f"| from={WARMUP_START} | through={end} | storage=packed_arrays"
     )
     return series
 

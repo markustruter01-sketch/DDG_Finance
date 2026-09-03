@@ -29,7 +29,7 @@ PLATFORM = ROOT / "trading-platform"
 if str(PLATFORM) not in sys.path:
     sys.path.insert(0, str(PLATFORM))
 
-from db.postgres import get_conn  # noqa: E402
+from db.research_postgres import get_research_conn as get_conn  # noqa: E402
 from analysis.bot2_momentum_pead_v4 import (  # noqa: E402
     Bar,
     Holding,

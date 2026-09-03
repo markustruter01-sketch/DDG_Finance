@@ -263,13 +263,18 @@ def screen_universe(
             if require_current_bar and not has_current_bar:
                 funnel["missing_current_bar"] += 1
                 continue
-            prior = bars[:cutoff]
+            # Every downstream eligibility and artifact check is bounded to
+            # the most recent min_sessions bars.  Avoid materializing a
+            # symbol's entire history for each point-in-time screen.
+            sessions_available = cutoff
+            prior = bars[max(0, cutoff - min_sessions):cutoff]
         else:
             if require_current_bar and not any(_bar_date(bar) == as_of_date for bar in bars):
                 funnel["missing_current_bar"] += 1
                 continue
             prior = [bar for bar in bars if _bar_date(bar) < as_of_date]
-        if len(prior) < min_sessions:
+            sessions_available = len(prior)
+        if sessions_available < min_sessions:
             funnel["fewer_than_min_sessions"] += 1
             continue
         funnel["history_eligible"] += 1
@@ -308,7 +313,7 @@ def screen_universe(
         median_dollar_volume = float(statistics.median(dollar_volumes))
         observation = {
             "last_data_day": _bar_date(prior[-1]),
-            "sessions_available": len(prior),
+            "sessions_available": sessions_available,
             "median_close_60": median_close,
             "median_dollar_volume_60": median_dollar_volume,
             "asset_class": "us_equity",

@@ -22,7 +22,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from core.equity_universe import eligible_asset_records, set_screen_data
-from db.postgres import get_conn
+from db.research_postgres import get_research_conn as get_conn, research_dsn_host
 from analysis.bot2_momentum_pead_v3 import ASSET_TABLE, PRICE_SOURCES, PRICE_TABLE
 from analysis.bot2_momentum_pead_v4 import (
     CONTROL_ITERATIONS,
@@ -87,12 +87,9 @@ def _database_identity() -> dict[str, Any]:
                 """
             )
             database, socket_host, socket_port, configured_port = cur.fetchone()
-    configured_host = os.environ.get("PGHOST")
-    if not configured_host:
-        configured_host = urlsplit(os.environ.get("DATABASE_URL", "")).hostname
     return {
         "database": database,
-        "host": socket_host or configured_host or "unix_socket",
+        "host": socket_host or research_dsn_host(),
         "port": socket_port or configured_port,
     }
 

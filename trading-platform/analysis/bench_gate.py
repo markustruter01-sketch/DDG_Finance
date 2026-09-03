@@ -30,7 +30,7 @@ from core.equity_universe import (  # noqa: E402
     eligible_asset_records,
     set_screen_data,
 )
-from db.postgres import get_conn, is_pg_available  # noqa: E402
+from db.research_postgres import get_research_conn as get_conn, is_research_available  # noqa: E402
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     ASSET_TABLE,
     PRICE_SOURCES,
@@ -664,8 +664,8 @@ def main() -> int:
     experiment_ids = args.experiment_ids or [EXPERIMENT_18, EXPERIMENT_19]
     if any(experiment_id not in {EXPERIMENT_18, EXPERIMENT_19} for experiment_id in experiment_ids):
         parser.error("only experiment IDs 18 and 19 are supported")
-    if not is_pg_available():
-        raise SystemExit("refusing to run without the development PostgreSQL connection")
+    if not is_research_available():
+        raise SystemExit("refusing to run without the explicit Helium research connection")
 
     identity = _database_identity()
     _print_provenance(identity)

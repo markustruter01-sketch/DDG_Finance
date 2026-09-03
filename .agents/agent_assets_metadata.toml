@@ -296,3 +296,17 @@ mtime_ms = 1788393421579
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/7e5c0913-2575-47f7-aaa4-6edd3e75b668/66e9ea5b-6651-454f-a0be-b3a2300451ed"
 storage_version_token = "1788393441064214"
 content_type = "text/plain"
+
+[[outputs]]
+id = "i8MA-OUNk_wIQNJPm68an"
+uri = "file://backups/strategy-bench-rank500-sweep-20260903.csv"
+type = "table"
+title = "Strategy Bench rank-500 momentum sweep CSV"
+description = "Complete 64-combination Helium research sweep for lookbacks 3/6/9/12 months, skip months 0/1, top N 10/20/30/50, monthly and quarterly rebalance."
+logical_id = "cce06ba5-8059-49e8-95ee-c68aef83bac6"
+content_hash = "sha256:42a1bea183f5d1e9c7e9e16a1e29aedfd390591a8f47a25077b502059274cd73"
+size = 8799
+mtime_ms = 1788401965704
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:479b9041-b193-4ed4-a556-02be48b883b3/cce06ba5-8059-49e8-95ee-c68aef83bac6/fd76e5ba-c534-4b01-a49b-602d93d8cb34"
+storage_version_token = "1788402405187063"
+content_type = "text/csv"

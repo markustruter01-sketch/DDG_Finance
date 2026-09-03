@@ -27,7 +27,7 @@ from core.equity_universe import (  # noqa: E402
     screen_universe,
     set_screen_data,
 )
-from db.postgres import get_conn  # noqa: E402
+from db.research_postgres import get_research_conn as get_conn  # noqa: E402
 from analysis.bot2_sp500_data import REFERENCE_PRICE_SOURCES  # noqa: E402
 from analysis.bot2_momentum_pead_v3 import (  # noqa: E402
     Bar,

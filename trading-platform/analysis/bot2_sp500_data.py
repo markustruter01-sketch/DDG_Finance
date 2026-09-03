@@ -36,7 +36,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT / "trading-platform") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "trading-platform"))
 
-from db.postgres import get_conn  # noqa: E402
+from db.research_postgres import get_research_conn as get_conn  # noqa: E402
 
 
 SOURCE_BUNDLE = (

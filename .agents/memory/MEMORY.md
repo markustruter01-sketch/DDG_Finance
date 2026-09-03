@@ -56,3 +56,4 @@
 - [Degradation lifecycle policy](degradation-lifecycle-policy.md) — auto-resolution requires explicit live recovery evidence; paused bots are not stale.
 - [Condition alert identity](condition-alert-identity.md) — safety alert deduplication must exclude volatile diagnostic text and reset only after recovery evidence.
 - [Database backup client versions](database-backup-client-versions.md) — pg_dump must match each server major; current dev is PostgreSQL 17 while production is PostgreSQL 16.
+- [Large backup asset packaging](large-backup-asset-packaging.md) — downloadable asset registration caps files at 100 MiB; split larger verified archives and preserve the full-file hash.

@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 
+import pytest
+
 from analysis.bot2_momentum_pead_v4 import (
     Bar,
     Series,
@@ -7,7 +9,9 @@ from analysis.bot2_momentum_pead_v4 import (
     build_momentum_cache,
     screen_universe_current,
     simulate_equal_weight_universe,
+    simulate_momentum,
     simulate_true_rotation,
+    _rebalance_days,
 )
 
 
@@ -19,6 +23,141 @@ def _series(symbol: str, count: int = 420, slope: float = 0.20) -> Series:
         close = 100.0 + index * slope + (index % 7) * 0.05
         bars.append(Bar(day, close, close + 1, close - 1, close, 1_000_000))
     return Series(symbol, bars)
+
+
+def _parameter_series(symbol: str, count: int = 800, late: bool = False) -> Series:
+    first = date(2018, 1, 1)
+    bars = []
+    for index in range(count):
+        day = first + timedelta(days=index)
+        if late:
+            close = 100.0 + max(0, index - 500) * 0.8
+        else:
+            close = 100.0 + min(index, 520) * 0.8
+        bars.append(Bar(day, close, close + 1, close - 1, close, 1_000_000))
+    return Series(symbol, bars)
+
+
+def _parameter_universe() -> dict[str, Series]:
+    return {
+        **{
+            f"OLD{index:02d}": _parameter_series(f"OLD{index:02d}")
+            for index in range(20)
+        },
+        "LATE": _parameter_series("LATE", late=True),
+    }
+
+
+def _momentum_result(
+    data: dict[str, Series],
+    *,
+    lookback_bars: int = 252,
+    top_n: int = 20,
+    rebalance_frequency: str = "monthly",
+) -> dict[str, object]:
+    cache = build_momentum_cache(
+        data,
+        set(data),
+        universe_size=500,
+        end=date(2020, 1, 31),
+        lookback_bars=lookback_bars,
+        skip_bars=22,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+    return simulate_momentum(
+        data,
+        set(data),
+        universe_size=500,
+        start=date(2019, 1, 1),
+        end=date(2020, 1, 31),
+        ranking_cache=cache,
+        lookback_bars=lookback_bars,
+        skip_bars=22,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+
+
+def test_default_arguments_match_explicit_defaults():
+    data = {"AAA": _series("AAA"), "BBB": _series("BBB")}
+    implicit = build_momentum_cache(
+        data, set(data), universe_size=500, end=date(2019, 3, 31)
+    )
+    explicit = build_momentum_cache(
+        data,
+        set(data),
+        universe_size=500,
+        end=date(2019, 3, 31),
+        lookback_bars=252,
+        skip_bars=22,
+        top_n=20,
+        rebalance_frequency="monthly",
+    )
+
+    assert dict(implicit) == dict(explicit)
+    assert implicit.lookback_bars == 252
+    assert implicit.skip_bars == 22
+    assert implicit.top_n == 20
+    assert implicit.rebalance_frequency == "monthly"
+    assert _momentum_result(data) == _momentum_result(
+        data,
+        lookback_bars=252,
+        top_n=20,
+        rebalance_frequency="monthly",
+    )
+
+
+def test_changed_lookback_changes_result():
+    data = _parameter_universe()
+    baseline = _momentum_result(data, lookback_bars=252)
+    changed = _momentum_result(data, lookback_bars=126)
+
+    assert (
+        baseline["return"],
+        baseline["sharpe"],
+        baseline["max_drawdown"],
+    ) != (
+        changed["return"],
+        changed["sharpe"],
+        changed["max_drawdown"],
+    )
+
+
+def test_mismatched_top_n_between_cache_and_simulator_raises():
+    data = {"AAA": _series("AAA"), "BBB": _series("BBB")}
+    cache = build_momentum_cache(
+        data,
+        set(data),
+        universe_size=500,
+        end=date(2019, 3, 31),
+        top_n=20,
+    )
+
+    with pytest.raises(ValueError, match="top_n mismatch"):
+        simulate_momentum(
+            data,
+            set(data),
+            universe_size=500,
+            start=date(2019, 2, 1),
+            end=date(2019, 3, 31),
+            ranking_cache=cache,
+            top_n=50,
+        )
+
+
+def test_quarterly_produces_fewer_rebalances_than_monthly():
+    days = [
+        date(2019, 1, 2) + timedelta(days=index)
+        for index in range(800)
+    ]
+
+    monthly = _rebalance_days(days, "monthly")
+    quarterly = _rebalance_days(days, "quarterly")
+
+    assert len(monthly) == 27
+    assert len(quarterly) == 9
+    assert len(quarterly) < len(monthly)
 
 
 def test_current_screen_requires_a_bar_on_the_asof_date():

@@ -23,7 +23,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Literal
 
 import psycopg2.extras
 
@@ -65,6 +65,7 @@ ANALYSIS_START = date(2018, 1, 1)
 ANALYSIS_END = date.today() - timedelta(days=1)
 CALIBRATION_DATE = date(2019, 6, 3)
 LOOKBACK_SESSIONS = 252
+SKIP_BARS = 22
 LIQUIDITY_SESSIONS = 60
 TARGET_UNIVERSE = 500
 TOP_N = 20
@@ -141,6 +142,27 @@ class Holding:
     mode: str
     entry_day: date
     exit_day: date | None = None
+
+
+RebalanceFrequency = Literal["monthly", "quarterly"]
+
+
+class MomentumCache(dict[date, list[tuple[str, float, float]]]):
+    """Ranking cache carrying the parameters used to build it."""
+
+    def __init__(
+        self,
+        *,
+        lookback_bars: int,
+        skip_bars: int,
+        top_n: int,
+        rebalance_frequency: RebalanceFrequency,
+    ) -> None:
+        super().__init__()
+        self.lookback_bars = lookback_bars
+        self.skip_bars = skip_bars
+        self.top_n = top_n
+        self.rebalance_frequency = rebalance_frequency
 
 
 def _bar_before(data: Series, day: date) -> Bar | None:
@@ -395,21 +417,65 @@ def _load_earnings_events() -> list[dict[str, Any]]:
     return events
 
 
+def _month_start_rebalances(days: Iterable[date]) -> set[date]:
+    """Return the first available trading session in each calendar month."""
+    result: set[date] = set()
+    seen: set[tuple[int, int]] = set()
+    for day in sorted(set(days)):
+        key = (day.year, day.month)
+        if key not in seen:
+            seen.add(key)
+            result.add(day)
+    return result
+
+
+def _rebalance_days(
+    days: Iterable[date],
+    frequency: RebalanceFrequency = "monthly",
+) -> set[date]:
+    if frequency == "monthly":
+        return _month_start_rebalances(days)
+    if frequency == "quarterly":
+        return {
+            day
+            for day in _month_start_rebalances(days)
+            if day.month in (1, 4, 7, 10)
+        }
+    raise ValueError(
+        f"unsupported rebalance frequency {frequency!r}; "
+        "expected 'monthly' or 'quarterly'"
+    )
+
+
 def build_momentum_cache(
     series: dict[str, Series],
     symbols: set[str],
     universe_size: int,
     end: date,
-) -> dict[date, list[tuple[str, float, float]]]:
+    *,
+    lookback_bars: int = LOOKBACK_SESSIONS,
+    skip_bars: int = SKIP_BARS,
+    top_n: int = TOP_N,
+    rebalance_frequency: RebalanceFrequency = "monthly",
+) -> MomentumCache:
+    if lookback_bars <= 0:
+        raise ValueError("lookback_bars must be positive")
+    if skip_bars < 0:
+        raise ValueError("skip_bars must be non-negative")
+    if skip_bars >= lookback_bars:
+        raise ValueError("skip_bars must be less than lookback_bars")
+    if top_n <= 0:
+        raise ValueError("top_n must be positive")
+    _rebalance_days([], rebalance_frequency)
+
     days = _all_days(series, end)
-    cache: dict[date, list[tuple[str, float, float]]] = {}
-    for day in sorted({(d.year, d.month, d) for d in days}):
-        rebalance_day = day[2]
-        if any(
-            (key.year, key.month) == (rebalance_day.year, rebalance_day.month)
-            for key in cache
-        ):
-            continue
+    cache = MomentumCache(
+        lookback_bars=lookback_bars,
+        skip_bars=skip_bars,
+        top_n=top_n,
+        rebalance_frequency=rebalance_frequency,
+    )
+    for rebalance_day in sorted(_rebalance_days(days, rebalance_frequency)):
         screened, _ = screen_universe_current(
             series, symbols, rebalance_day, universe_size
         )
@@ -417,10 +483,12 @@ def build_momentum_cache(
         for symbol in screened:
             data = series[symbol]
             cutoff = bisect_left(data.days, rebalance_day)
-            if cutoff < LOOKBACK_SESSIONS:
+            if cutoff < lookback_bars:
                 continue
             momentum = (
-                data.bars[cutoff - 22].close / data.bars[cutoff - 252].close - 1
+                data.bars[cutoff - skip_bars].close
+                / data.bars[cutoff - lookback_bars].close
+                - 1
             )
             returns = [
                 data.bars[index].close / data.bars[index - 1].close - 1
@@ -435,21 +503,17 @@ def build_momentum_cache(
 
 
 def _monthly_days(days: list[date]) -> set[date]:
-    result: set[date] = set()
-    seen: set[tuple[int, int]] = set()
-    for day in days:
-        key = (day.year, day.month)
-        if key not in seen:
-            seen.add(key)
-            result.add(day)
-    return result
+    return _month_start_rebalances(days)
 
 
 def _weights(
     ranked: list[tuple[str, float, float]],
     allocation: str = "equal_weight",
+    top_n: int = TOP_N,
 ) -> dict[str, float]:
-    chosen = ranked[:TOP_N]
+    if top_n <= 0:
+        raise ValueError("top_n must be positive")
+    chosen = ranked[:top_n]
     if not chosen:
         return {}
     if allocation == "equal_weight":
@@ -926,10 +990,45 @@ def simulate_momentum(
         [list[tuple[str, float, float]]], list[tuple[str, float, float]]
     ]
     | None = None,
+    *,
+    lookback_bars: int = LOOKBACK_SESSIONS,
+    skip_bars: int = SKIP_BARS,
+    top_n: int = TOP_N,
+    rebalance_frequency: RebalanceFrequency = "monthly",
 ) -> dict[str, Any]:
-    """One-cash monthly momentum book; selector is used only for controls."""
+    """One-cash momentum book; selector is used only for controls."""
+    if top_n <= 0:
+        raise ValueError("top_n must be positive")
+    if not isinstance(ranking_cache, MomentumCache):
+        raise TypeError(
+            "ranking_cache must be built by build_momentum_cache so its "
+            "parameters can be verified"
+        )
+    if ranking_cache.lookback_bars != lookback_bars:
+        raise ValueError(
+            "lookback_bars mismatch between ranking_cache and "
+            "simulate_momentum: "
+            f"cache={ranking_cache.lookback_bars}, simulation={lookback_bars}"
+        )
+    if ranking_cache.skip_bars != skip_bars:
+        raise ValueError(
+            "skip_bars mismatch between ranking_cache and simulate_momentum: "
+            f"cache={ranking_cache.skip_bars}, simulation={skip_bars}"
+        )
+    if ranking_cache.top_n != top_n:
+        raise ValueError(
+            "top_n mismatch between ranking_cache and simulate_momentum: "
+            f"cache={ranking_cache.top_n}, simulation={top_n}"
+        )
+    if ranking_cache.rebalance_frequency != rebalance_frequency:
+        raise ValueError(
+            "rebalance_frequency mismatch between ranking_cache and "
+            "simulate_momentum: "
+            f"cache={ranking_cache.rebalance_frequency!r}, "
+            f"simulation={rebalance_frequency!r}"
+        )
     calendar = _all_days(series, end)
-    monthly = _monthly_days(calendar)
+    rebalance_days = _rebalance_days(calendar, rebalance_frequency)
     cash = STARTING_EQUITY
     holdings: dict[str, Holding] = {}
     curve: list[float] = []
@@ -955,7 +1054,7 @@ def simulate_momentum(
                 )
                 del holdings[symbol]
                 stops += 1
-        if day in monthly:
+        if day in rebalance_days:
             for symbol, holding in list(holdings.items()):
                 cash, turnover, cost_paid = _sell(
                     holding, series[symbol], day, cash, trade_returns, event_log,
@@ -964,7 +1063,7 @@ def simulate_momentum(
                 del holdings[symbol]
             ranked = ranking_cache.get(day, [])
             selected = selector(ranked) if selector else ranked
-            for symbol, weight in _weights(selected).items():
+            for symbol, weight in _weights(selected, top_n=top_n).items():
                 equity_open = cash + _holding_value(holdings, series, day)
                 cash, turnover, cost_paid = _buy(
                     symbol, "momentum", equity_open * weight, series[symbol], day,

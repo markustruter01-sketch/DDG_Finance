@@ -8,7 +8,6 @@ Supports multiple bot profiles via BOT_ID environment variable.
 import os
 import sys
 
-import ccxt
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -142,8 +141,6 @@ if PAPER_TRADING:
     print(f"  Simulated ${PAPER_STARTING_BALANCE:,.0f} account")
     print("=" * 65 + "\n")
 
-    exchange = ccxt.kraken({"enableRateLimit": True, "timeout": 10000})
-
 else:
     KRAKEN_API_KEY    = os.environ.get("KRAKEN_API_KEY", "")
     KRAKEN_SECRET_KEY = os.environ.get("KRAKEN_SECRET_KEY", "")
@@ -160,14 +157,6 @@ else:
         print(" safely with a simulated $100K account first.")
         print("=" * 65 + "\n")
         sys.exit(1)
-
-    exchange = ccxt.kraken({
-        "apiKey":          KRAKEN_API_KEY,
-        "secret":          KRAKEN_SECRET_KEY,
-        "enableRateLimit": True,
-        "timeout":         10000,
-    })
-
 
 BLACKLIST = _profile.get("BLACKLIST", ["ALGO/USD", "OP/USD", "RENDER/USD"])
 
